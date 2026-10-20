@@ -1,4 +1,8 @@
-import type { ElementType } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import type {
+  StationType,
+  TicketType,
+} from '@rescue-frontend/data-access/admin';
 
 import type { TicketNeed } from '../ticket/needs/need-claim';
 
@@ -68,7 +72,7 @@ export interface RescueMapBaseLayerConfig {
   attributionApiPath?: string;
   tileSourceType: RescueMapTileSourceType;
   tileSource: RescueMapTileSource;
-  icon: ElementType;
+  icon: LucideIcon;
   /** 授權限制提示，例如非商用或條款未確認；會顯示於圖層面板。 */
   licenseNote?: string;
   /** 暫時從圖層面板與可選清單中隱藏，但設定保留。 */
@@ -79,7 +83,7 @@ export interface RescueMapOverlayLayerConfig {
   label: string;
   description: string;
   color: string;
-  icon: ElementType;
+  icon: LucideIcon;
   sourceLabel?: string;
   disabledReason?: string;
 }
@@ -130,36 +134,41 @@ export interface RescueMapMarkerItem {
    * exactly this ticket is (backend ADR-281). Null/absent means `position` is the real point.
    */
   locationCell?: string | null;
-  stationMeta?: {
-    type?: string | null;
-    name?: string | null;
-    description?: string | null;
-    opHour?: string | null;
-    level?: number | null;
-    comment?: string | null;
-    source?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
-    isDuplicate?: boolean;
-    isTemporary?: boolean;
-    isOfficial?: boolean;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  };
-  ticketMeta?: {
-    status?: string | null;
-    priority?: string | null;
-    taskType?: string | null;
-    contactName?: string | null;
-    contactEmail?: string | null;
-    contactPhone?: string | null;
-    createdBy?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
-    reviewNote?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  };
+  stationMeta?: Partial<
+    Pick<
+      StationType,
+      | 'type'
+      | 'name'
+      | 'description'
+      | 'opHour'
+      | 'level'
+      | 'comment'
+      | 'source'
+      | 'visibility'
+      | 'verificationStatus'
+      | 'isDuplicate'
+      | 'isTemporary'
+      | 'isOfficial'
+      | 'operationalStatus'
+      | 'createdAt'
+      | 'updatedAt'
+    >
+  >;
+  ticketMeta?: Partial<
+    Pick<
+      TicketType,
+      | 'status'
+      | 'priority'
+      | 'taskType'
+      | 'contactName'
+      | 'contactEmail'
+      | 'contactPhone'
+      | 'createdBy'
+      | 'auditStatus'
+      | 'createdAt'
+      | 'updatedAt'
+    >
+  >;
   /**
    * The ticket's needs, each with its own claim button. Only the site list fetches them
    * (`GetTicketsWithNeeds`); a map marker has none, as its popup offers no claiming.

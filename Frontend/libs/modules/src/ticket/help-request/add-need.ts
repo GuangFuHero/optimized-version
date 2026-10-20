@@ -29,6 +29,72 @@ export function canAddNeed({
   );
 }
 
+/** What `createTicketTask` answers, as `CreateTicketTask` in `tickets.graphql` reads it. */
+export type CreateTicketTaskAnswer =
+  | { __typename: 'TicketTaskCreated' }
+  | {
+      __typename: 'DuplicatesSuspected';
+      suspects: ReadonlyArray<{
+        relatedUuid: string;
+        relatedTicketUuid?: string | null;
+      }>;
+    };
+
+/** Another ticket with open needs the one being added looks like. */
+export interface SuspectTicket {
+  ticketUuid: string;
+  /** Which of its needs. */
+  needUuids: string[];
+}
+
+export type AddNeedOutcome =
+  | { kind: 'added' }
+  | {
+      kind: 'held';
+      tickets: SuspectTicket[];
+      /**
+       * What 不是同一件，加上去 sends as `acknowledgedDuplicateOf`. Any suspect will do: the backend
+       * then takes the whole need as looked at (`dedup_submission.py` `submit_new_task`).
+       */
+      acknowledge: string;
+    };
+
+/**
+ * Added, or held with nothing added: the backend found open needs of other tickets it looks like —
+ * never the ticket's own. One entry per ticket, in the order the backend ranked them.
+ */
+export function readAddNeedOutcome(
+  answer: CreateTicketTaskAnswer,
+): AddNeedOutcome {
+  if (answer.__typename === 'TicketTaskCreated') {
+    return { kind: 'added' };
+  }
+
+  const tickets: SuspectTicket[] = [];
+
+  for (const { relatedUuid, relatedTicketUuid } of answer.suspects) {
+    if (!relatedTicketUuid) {
+      continue;
+    }
+
+    const ticket = tickets.find(
+      (item) => item.ticketUuid === relatedTicketUuid,
+    );
+
+    if (ticket) {
+      ticket.needUuids.push(relatedUuid);
+    } else {
+      tickets.push({ ticketUuid: relatedTicketUuid, needUuids: [relatedUuid] });
+    }
+  }
+
+  return {
+    kind: 'held',
+    tickets,
+    acknowledge: answer.suspects[0]?.relatedUuid ?? '',
+  };
+}
+
 /** Null until a kind is chosen. */
 export function toCreateTicketTaskInput(
   ticketUuid: string,

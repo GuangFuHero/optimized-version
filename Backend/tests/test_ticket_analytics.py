@@ -19,7 +19,7 @@ from app.models.ticket_task import TaskAssignment, TicketTask
 from app.schemas.analytics import ChartStyle
 from app.services import ticket_analytics
 from app.services.analytics_common import UNCATEGORIZED_LABEL
-from app.services.chart_render import _render_pivoted, render_chart, resolve
+from app.services.chart_render import _render_pivoted, chart_series, render_chart, resolve
 
 UTC_TZ = ZoneInfo("UTC")
 
@@ -37,8 +37,11 @@ def _make_ticket(
     return Tickets(
         geometry=from_shape(Point(lon, lat), srid=4326),
         created_by=user_uuid,
-        title="t", contact_name="c", status="pending", priority="high",
-        task_type=task_type, visibility="public",
+        title="t",
+        contact_name="c",
+        status="pending",
+        priority="high",
+        task_type=task_type,
     )
 
 
@@ -46,16 +49,25 @@ def _make_task(
     ticket_uuid: str, user_uuid: str, *, status: str = "pending", task_type: str = "rescue"
 ) -> TicketTask:
     return TicketTask(
-        ticket_uuid=ticket_uuid, task_type=task_type, task_name="task",
-        source="user", visibility="public", created_by=user_uuid, status=status,
+        ticket_uuid=ticket_uuid,
+        task_type=task_type,
+        task_name="task",
+        source="user",
+        created_by=user_uuid,
+        status=status,
     )
 
 
 async def _count(db, *, bucket, x=None, x_granularity="day") -> int:
     """Run get_ticket_count(bucket=...) ungrouped and return its single count."""
     rows = await ticket_analytics.get_ticket_count(
-        db, bucket=bucket, x=x, x_granularity=x_granularity,
-        start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        bucket=bucket,
+        x=x,
+        x_granularity=x_granularity,
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     return rows[0]["count"] if rows else 0
 
@@ -87,10 +99,12 @@ async def test_ticket_count_buckets(db):
     db.add_all([task_b, task_c, task_d])
     await db.flush()
 
-    db.add_all([
-        TaskAssignment(task_uuid=task_c.uuid, actor_uuid=user_uuid, status="accepted"),
-        TaskAssignment(task_uuid=task_d.uuid, actor_uuid=user_uuid, status="completed"),
-    ])
+    db.add_all(
+        [
+            TaskAssignment(task_uuid=task_c.uuid, actor_uuid=user_uuid, status="accepted"),
+            TaskAssignment(task_uuid=task_d.uuid, actor_uuid=user_uuid, status="completed"),
+        ]
+    )
     await db.commit()
 
     assert await _count(db, bucket=None) == 4  # total_tickets
@@ -128,14 +142,24 @@ async def test_a_fully_canceled_ticket_leaves_every_open_work_metric(db):
 
     # Excluded from the ratio entirely rather than counted as a delivery failure.
     rate = await ticket_analytics.get_completion_rate(
-        db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x=None,
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert rate[0]["total"] == 0
     assert rate[0]["completed"] == 0
 
     # Entered the backlog as new, left it as canceled, so the day nets out to zero.
     backlog = await ticket_analytics.get_net_backlog_change(
-        db, x="date", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x="date",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert len(backlog) == 1
     assert backlog[0]["new_count"] == 1
@@ -145,14 +169,24 @@ async def test_a_fully_canceled_ticket_leaves_every_open_work_metric(db):
 
     # No longer ageing — there is no outstanding work to be overdue.
     ages = await ticket_analytics.get_age_distribution(
-        db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x=None,
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert sum(row["count"] for row in ages) == 0
 
     # And it appears on the day it was called off, matching the backlog drain series.
     by_day = await ticket_analytics.get_ticket_count(
-        db, bucket="canceled", x="date", x_granularity="day",
-        start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        bucket="canceled",
+        x="date",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert [row["count"] for row in by_day] == [1]
 
@@ -183,8 +217,13 @@ async def test_ticket_count_bucket_with_date_grouping(db):
     await db.commit()
 
     rows = await ticket_analytics.get_ticket_count(
-        db, bucket="ongoing", x="date", x_granularity="day",
-        start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        bucket="ongoing",
+        x="date",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert len(rows) == 2
     assert sum(row["count"] for row in rows) == 2
@@ -252,8 +291,12 @@ async def test_duplicate_count_flags_nearby_same_category_tickets(db):
     # test_duplicate_count_requires_a_date_range) — window it around the fixtures.
     today = now.date()
     rows = await ticket_analytics.get_duplicate_count(
-        db, x=None, x_granularity="day",
-        start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), tz=UTC_TZ,
+        db,
+        x=None,
+        x_granularity="day",
+        start_date=today - timedelta(days=1),
+        end_date=today + timedelta(days=1),
+        tz=UTC_TZ,
     )
     assert rows == [{"count": 2}]
 
@@ -288,16 +331,21 @@ async def test_ticket_count_category_labels_null_task_type(db):
     await db.flush()
 
     rows = await ticket_analytics.get_ticket_count(
-        db, bucket=None, x="category", x_granularity="day",
-        start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        bucket=None,
+        x="category",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     labels = {r["x"] for r in rows}
     assert None not in labels
     assert labels == {"rescue", UNCATEGORIZED_LABEL}
 
     # The whole point: this shape must now render as a line chart without raising.
-    html = render_chart("tickets", "total_tickets", rows, x="category", chart_type="line")
-    assert html.startswith("<div")
+    figure = render_chart("tickets", "total_tickets", rows, x="category", chart_type="line")
+    assert figure["data"][0]["x"] == ["搜救", "未分類"]
 
 
 @pytest.mark.asyncio
@@ -308,7 +356,12 @@ async def test_completion_rate_category_labels_null_task_type(db):
     await db.flush()
 
     rows = await ticket_analytics.get_completion_rate(
-        db, x="category", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x="category",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert [r["x"] for r in rows] == [UNCATEGORIZED_LABEL]
     assert render_chart("tickets", "completion_rate", rows, x="category", chart_type="line")
@@ -339,7 +392,12 @@ async def test_net_backlog_change_skips_tasks_without_completed_at(db):
     await db.flush()
 
     rows = await ticket_analytics.get_net_backlog_change(
-        db, x="date", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x="date",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert all(r["x"] is not None for r in rows)
     # Exactly one ticket has a completion day; the unstamped one is absent from that series.
@@ -362,8 +420,13 @@ async def test_ticket_count_completed_by_date_skips_unstamped(db):
     await db.flush()
 
     rows = await ticket_analytics.get_ticket_count(
-        db, bucket="completed", x="date", x_granularity="day",
-        start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        bucket="completed",
+        x="date",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert all(r["x"] is not None for r in rows)
 
@@ -373,31 +436,69 @@ async def test_duplicate_count_requires_a_date_range(db):
     """duplicate_count refuses an unbounded query — it's an O(n^2) self-join (H3)."""
     with pytest.raises(ValueError, match="requires both start_date and end_date"):
         await ticket_analytics.get_duplicate_count(
-            db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+            db,
+            x=None,
+            x_granularity="day",
+            start_date=None,
+            end_date=None,
+            tz=UTC_TZ,
         )
     with pytest.raises(ValueError, match="requires both start_date and end_date"):
         await ticket_analytics.get_duplicate_count(
-            db, x=None, x_granularity="day",
-            start_date=date(2026, 8, 1), end_date=None, tz=UTC_TZ,
+            db,
+            x=None,
+            x_granularity="day",
+            start_date=date(2026, 8, 1),
+            end_date=None,
+            tz=UTC_TZ,
         )
     # With both bounds it runs normally.
     rows = await ticket_analytics.get_duplicate_count(
-        db, x=None, x_granularity="day",
-        start_date=date(2026, 8, 1), end_date=date(2026, 8, 31), tz=UTC_TZ,
+        db,
+        x=None,
+        x_granularity="day",
+        start_date=date(2026, 8, 1),
+        end_date=date(2026, 8, 31),
+        tz=UTC_TZ,
     )
     assert rows == [{"count": 0}]
 
 
-def test_render_pivoted_line_tolerates_a_none_key():
-    """Backstop at the shared render boundary: a None key sorts last instead of raising."""
-    fig = _render_pivoted(["b", None, "a"], {"v": [1, 2, 3]}, "line", ChartStyle())
-    assert list(fig.data[0].x) == ["a", "b", None]
+def _count_rows(*pairs) -> list[dict]:
+    return [{"x": x, "count": count} for x, count in pairs]
 
 
-def test_render_pivoted_line_orders_categories_by_glossary():
+def test_chart_series_tolerates_a_none_key():
+    """Backstop at the shared series boundary: a None key sorts last instead of raising."""
+    rows = _count_rows(("hr", 1), (None, 2), ("rescue", 3))
+    x_values, series = chart_series("tickets", "total_tickets", rows)
+    assert x_values == ["搜救", "人力", None]
+    assert series == {"任務單": [3, 1, 2]}
+
+
+def test_chart_series_orders_categories_by_glossary():
     """task_type keys sort in _CATEGORY_LABEL order, not alphabetically; 未分類 last."""
-    fig = _render_pivoted(["uncategorized", "hr", "rescue"], {"v": [1, 2, 3]}, "line", ChartStyle())
-    assert list(fig.data[0].x) == ["搜救", "人力", "未分類"]
+    rows = _count_rows(("uncategorized", 1), ("hr", 2), ("rescue", 3))
+    x_values, series = chart_series("tickets", "total_tickets", rows)
+    assert x_values == ["搜救", "人力", "未分類"]
+    assert series == {"任務單": [3, 2, 1]}
+
+
+def test_chart_series_orders_dates_but_keeps_other_keys_as_given():
+    """Dates come back chronological whatever order SQL gave them; age buckets keep theirs."""
+    later, earlier = datetime(2026, 8, 2), datetime(2026, 8, 1)
+    x_values, series = chart_series("tickets", "total_tickets", _count_rows((later, 1), (earlier, 2)))
+    assert (x_values, series) == ([earlier, later], {"任務單": [2, 1]})
+
+    buckets = _count_rows(("<24h", 1), ("24-48h", 2), ("48-72h", 3), (">72h", 4))
+    x_values, _ = chart_series("tickets", "age_distribution", buckets)
+    assert x_values == ["<24h", "24-48h", "48-72h", ">72h"]
+
+
+def test_chart_series_rate_stays_a_fraction_for_the_figure():
+    """The figure's `.0%` tickformat needs the 0–1 fraction, so the series doesn't scale it."""
+    rows = [{"total": 2, "completed": 1, "rate": 0.5}]
+    assert chart_series("tickets", "completion_rate", rows) == (["總計"], {"完成率": [0.5]})
 
 
 def test_render_pivoted_line_marks_a_single_point():

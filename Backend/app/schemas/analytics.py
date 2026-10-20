@@ -1,11 +1,12 @@
-"""Pydantic schemas for the analytics chart REST API (Plotly HTML endpoints).
+"""Pydantic schemas for the analytics chart REST API (Plotly figure and series JSON).
 
 See app/services/chart_render.py for the full x/y model this API exposes, and
 GET /api/v1/analytics/catalog (CatalogResponse below) for its machine-readable form.
 """
 
+from datetime import datetime
 from enum import Enum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -110,9 +111,39 @@ class ChartStyle(BaseModel):
 
 
 class ChartResponse(BaseModel):
-    """A rendered Plotly chart as a partial HTML div (no embedded plotly.js)."""
+    """A Plotly figure as JSON, drawn with `Plotly.react(element, response)`.
 
-    html: str
+    The frontend owns the element and its size; nothing in here is HTML or script.
+    """
+
+    data: list[dict[str, Any]] = Field(description="Plotly traces (https://plotly.com/javascript/reference/).")
+    layout: dict[str, Any] = Field(description="Plotly layout, with `style` and `layout_overrides` applied.")
+    config: dict[str, Any] = Field(description="Plotly config: modebar visibility and responsive resizing.")
+
+
+class ChartSeries(BaseModel):
+    """One line, bar group or pie of a chart."""
+
+    name: str = Field(description="Legend text (zh-TW), e.g. '任務單' or '平均（天）'.")
+    values: list[int | float] = Field(
+        description="One per `x_values` entry, in the metric's catalog `unit`; completion_rate is 0–100."
+    )
+
+
+class DataResponse(BaseModel):
+    """The numbers a chart of the metric plots, for a frontend that draws its own."""
+
+    x: str | None = Field(
+        description="The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' "
+        "(the two metrics with a built-in grouping), or null for one aggregate. "
+        "It can differ from the requested `x`, which is ignored where it doesn't apply."
+    )
+    x_values: list[str | datetime | None] = Field(
+        description="Axis values in display order: bucket starts as wall-clock time in the request's `tz`, "
+        "with no UTC offset, when x is 'date'; otherwise category or bucket names (zh-TW where the glossary "
+        "has them), or ['總計'] for an aggregate."
+    )
+    series: list[ChartSeries]
 
 
 class ValueResponse(BaseModel):
@@ -131,7 +162,7 @@ class YMetricSpec(BaseModel):
     """
 
     label: str = Field(description="Display name (zh-TW).")
-    unit: str = Field(description="Unit suffix for the `/value` number, e.g. '件', '%', '天'.")
+    unit: str = Field(description="Unit of the `/value` and `/data` numbers, e.g. '件', '%', '天'.")
     description: str = Field(description="One-line explanation of what the metric measures.")
     allowed_x: list[str] = Field(
         description="Valid values for the `x` query param on this y-metric: any of "

@@ -45,6 +45,11 @@
 > standalone `work_zones` became `team_zones`, both joined-table children of a new
 > `area_polygons` table under `base_geometries`. 標示區 (`mark_zone`) is a third kind with no
 > table of its own, and `team_zone_assign.zone_uuid` now points at `team_zones`.
+> Dedup fast layer (migration `d4c8b1e07a92`, Spec 022, 2026-10-16): `duplicate_pairs` and
+> `dedup_audit_events` in their own diagram (§4), plus two geography GIST indexes on
+> `base_geometries` for candidate lookup.
+> Drafts (migration `209c4375c3e1`, Spec 007, 2026-10-18): `published_at`, `published_by` and
+> `updated_by` on `announcements` and `briefings`.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -280,6 +285,9 @@ users ||..o{ audit_logs : "acted (logical)"
 announcements {
     uuid uuid PK
     uuid created_by FK "FK to users"
+    uuid updated_by FK "FK to users; last to create, edit, activate or deactivate it"
+    timestamp published_at "nullable; NULL = draft (never activated), else when it last went live"
+    uuid published_by FK "nullable, FK to users; who last activated it"
     boolean active
     int display_order "nullable; non-null iff active and not deleted; unique among live (app-enforced)"
     text placement "admin_page / public_page / all (both); default all; enum enforced in GraphQL, not DB"
@@ -289,6 +297,8 @@ announcements {
     timestamp delete_at
 }
 users ||--o{ announcements : "authors"
+users ||--o{ announcements : "last updated"
+users ||--o{ announcements : "last published"
 
 %% In-app notification feed — one row per (recipient, event), not one per event.
 %% NotificationService.dispatch() fans an event out over a resolved recipient list and
@@ -349,10 +359,15 @@ briefings {
     jsonb tags "string array, server_default '[]'"
     string state "briefing/in_field/debrief, String(50), default briefing"
     uuid created_by FK "FK to users, indexed"
+    uuid updated_by FK "FK to users; last to edit or publish it"
+    timestamp published_at "nullable; NULL = draft, read-only once set"
+    uuid published_by FK "nullable, FK to users"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
 }
+%% Each row is one version: the newest published row per state is the current one, and a
+%% state may hold several drafts at once.
 %% template_uuid is nullable because a briefing may be ad-hoc, and content/tags/state are
 %% COPIED at generation time rather than joined — so deleting or editing a template never
 %% rewrites briefings already sent out.
@@ -360,6 +375,9 @@ briefings {
 %% vocabulary grows without a migration.
 briefing_templates ||--o{ briefings : "generated from"
 users ||--o{ briefings : "authors"
+users ||--o{ briefings : "last updated"
+users ||--o{ briefings : "published"
+users |o--o{ briefings : "published"
 %% ==========================
 %% 4. Project Settings (the deployment's single global settings row, ADR-090)
 %% ==========================
@@ -528,6 +546,8 @@ stations {
     string contact_phone "nullable, String(50)"
     string operational_status "active/temporarily_closed/permanently_closed, String(20), default active, CHECK ck_stations_operational_status"
     timestamp status_changed_at "nullable, stamped only when operational_status actually changes value"
+    string supply_status "nullable, public free text on what the station is short of (ADR-333)"
+    timestamp supply_status_updated_at "nullable, stamped only when supply_status actually changes value"
     string search_text "GENERATED ALWAYS AS left(name, 500) + left(description, 500), STORED"
 }
 %% INDEX: ix_stations_search_text_trgm USING gin (search_text gin_trgm_ops)
@@ -693,9 +713,11 @@ tickets {
     string status "pending/in_progress/completed/canceled/archived"
     string priority "low/medium/high/critical"
     string task_type "search_rescue/medical_support/fire_response/supply_delivery/etc"
-    string visibility "public/restricted/internal"
-    string verification_status "unverified/ai_verified/human_verified/disputed"
-    string review_note "nullable"
+    string audit_status "no_audit/need_audit/audited/audit_issue, default no_audit, CHECK in set; public"
+    string audit_note "nullable; CHECK non-blank when audit_status = audit_issue"
+    timestamp audited_at "nullable, when the last verdict was given; kept after content voids it"
+    uuid audited_by FK "nullable FK to users, who gave the last verdict"
+    jsonb audited_content "nullable, the ticket's content as the last verdict saw it"
     string_array disaster_types "default '{}', references disaster_types.key by string; stored sorted+deduped (ADR-246)"
     string person_trapped_reported "nullable, String(20), yes/no/unknown — reporter's answer, NOT a medical judgement"
     string immediate_danger_reported "nullable, String(20), yes/no/unknown — NOT a triage grade"
@@ -703,6 +725,8 @@ tickets {
 }
 %% INDEX: ix_tickets_search_text_trgm USING gin (search_text gin_trgm_ops)
 %% NOTE: contact_name/contact_email/contact_phone are PII and never enter search_text (ADR-079)
+%% NOTE: a verdict (audited/audit_issue) holds for audited_content; once the ticket's content no
+%% longer matches it, audit_status goes back to no_audit. need_audit is set by the scan only.
 base_geometries ||--|| tickets : "inherits as general ticket"
 %% NOTE: polymorphic_identity = "request" (base_geometries.property_name stores "request" for ticket rows)
 %% NOTE: disaster_types is PLURAL (ADR-246) — one incident is routinely two disasters at once
@@ -768,9 +792,6 @@ ticket_tasks {
     string progress_note "nullable"
     boolean is_duplicate
     string dedup_group_id "nullable"
-    string moderation_status "pending_review/approved/rejected/merged"
-    string visibility "public/restricted/internal"
-    string review_note "nullable"
     uuid created_by FK
     timestamp completed_at "nullable, set when status enters 'fulfilled' and cleared when it leaves"
     timestamp canceled_at "nullable, set when status enters 'canceled' and cleared when it leaves"
@@ -884,6 +905,84 @@ task_assignments {
 ticket_tasks ||--o{ task_assignments : "assigned to"
 users ||--o{ task_assignments : "works on"
 ```
+
+## 4. Dedup Pair Cards & Audit Events
+
+What the duplicate check records. A pair card is one verdict about two entities; an audit
+event is one decision about a pair or a hint. Both tables serve tickets, ticket tasks and
+stations: `entity_kind` says which table the paired uuids point at, so those columns carry no
+FK (one column cannot FK to whichever table a row names). The fast layer writes
+`ticket_task` and `station` cards. The slow-layer tables (groups, rule versions) do not exist
+yet, so `duplicate_group_uuid` / `rule_version_uuid` are plain uuid columns until they land.
+
+```mermaid
+erDiagram
+
+%% Stub — full definition in the Identity diagram above
+users {
+    uuid uuid PK
+}
+
+duplicate_pairs {
+    uuid uuid PK
+    text entity_kind "ticket / ticket_task / station"
+    uuid low_uuid "the smaller uuid of the pair, so a pair always lands on one row; no FK"
+    uuid high_uuid "the larger uuid; no FK"
+    uuid duplicate_group_uuid "nullable, slow layer, no FK yet"
+    uuid rule_version_uuid "nullable, slow layer, no FK yet"
+    numeric similarity "nullable, Numeric(5,4) in 0..1; NULL on a manual card"
+    jsonb evidence "nullable, the engine's opaque verdict data; shape depends on engine_version"
+    text method "fast_rule / slow_vector / slow_hybrid / manual"
+    text engine_version "nullable only when method = manual, e.g. fast-v4"
+    text source_layer "fast / slow / manual / system"
+    text status "dup_ignored / suggested / confirmed / rejected"
+    jsonb reason "nullable"
+    text hint_outcome "nullable, ignored_hint / accepted_hint"
+    boolean rescan_needed "default false"
+    timestamp rescanned_at "nullable"
+    uuid reviewed_by FK "nullable, FK to users"
+    timestamp reviewed_at "nullable"
+    timestamp created_at
+    timestamp updated_at
+    timestamp delete_at "nullable, soft delete keeps an overturned verdict"
+}
+%% CHECK low_uuid < high_uuid -- ck_duplicate_pairs_order
+%% CHECK method = 'manual' OR engine_version IS NOT NULL -- ck_duplicate_pairs_engine_version
+%% UNIQUE(entity_kind, low_uuid, high_uuid) WHERE delete_at IS NULL -- uq_duplicate_pairs_entities:
+%%   at most one live card per pair
+%% INDEX: ix_duplicate_pairs_group (duplicate_group_uuid), ix_duplicate_pairs_status (status) WHERE delete_at IS NULL
+users ||--o{ duplicate_pairs : "reviewed"
+
+dedup_audit_events {
+    uuid uuid PK
+    text entity_kind "ticket / ticket_task / station"
+    text event_type "hint_shown, ignored_by_submitter, suggested, confirmed, rejected, merged, ..."
+    uuid pair_uuid FK "nullable, FK to duplicate_pairs"
+    uuid duplicate_group_uuid "nullable, slow layer, no FK yet"
+    uuid primary_uuid "nullable, the entity the hint pointed at; no FK"
+    uuid duplicate_uuid "nullable, the entity created anyway; NULL when the hint was taken; no FK"
+    uuid actor_uuid FK "nullable, FK to users"
+    text source_layer "fast / slow / manual / system"
+    text decision_reason "nullable"
+    jsonb evidence "nullable"
+    text engine_version "nullable, NULL on non-engine events such as manual_note"
+    jsonb before_state "nullable"
+    jsonb after_state "nullable"
+    jsonb affected_refs "nullable"
+    boolean reversible "default true"
+    timestamp created_at
+}
+%% Append-only. A hint_shown event with no later ignored_by_submitter means the submitter
+%% took the hint; it is the only record of that.
+%% INDEX: ix_dedup_audit_events_pair (pair_uuid), ix_dedup_audit_events_group (duplicate_group_uuid)
+duplicate_pairs ||--o{ dedup_audit_events : "decided"
+users ||--o{ dedup_audit_events : "acted"
+```
+
+Candidate lookup filters on `ST_DWithin(<geography>, ..., metres)`, so the same migration adds
+`ix_base_geometries_geography` (GIST on `geometry::geography`, for tasks via their ticket) and
+`ix_base_geometries_centroid_geography` (GIST on `ST_Centroid(geometry)::geography`, for
+stations) to `base_geometries`.
 
 ## Keyword search columns (feature 011)
 

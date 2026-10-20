@@ -4,7 +4,14 @@ import 'leaflet/dist/leaflet.css';
 import 'react-leaflet-cluster/dist/assets/MarkerCluster.css';
 import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
 
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import { Box, Drawer, GlobalStyles, useMediaQuery } from '@mui/material';
 import dynamic from 'next/dynamic';
@@ -19,6 +26,7 @@ import { RescueMapLayerPanel } from './components/rescue-map-layer-panel';
 import { RescueMapStatusMessage } from './components/rescue-map-status-message';
 import { RescueMapTopBar } from './components/rescue-map-top-bar';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from './constants';
+import { countDetailOpenings } from './detail-openings';
 import { designTokens, displayTextSizeCss, withAlpha } from '@rescue-frontend/ui';
 
 import { useRescueMapController } from './hooks/use-rescue-map-controller';
@@ -250,7 +258,11 @@ export const Map = memo(function Map({
   // 保留最後選取的標記，讓行動版抽屜在關閉動畫期間仍有內容可渲染。
   const [displayMarker, setDisplayMarker] =
     useState<RescueMapDetailItem | null>(selectedMarker);
-  const [detailOpen, setDetailOpen] = useState(Boolean(selectedMarker));
+  const [{ open: detailOpen, openings: detailOpenings }, setDetailOpen] =
+    useReducer(countDetailOpenings, {
+      open: Boolean(selectedMarker),
+      openings: 0,
+    });
   // The phone's drawer opens on a phone only. Hidden by CSS on a wider screen, it was still an open
   // modal, and MUI hid the rest of the page — the map, the detail panel — from screen readers.
   const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
@@ -366,6 +378,8 @@ export const Map = memo(function Map({
             }}
           >
             <RescueMapDetailDrawer
+              // A new panel at each opening, so that a ticket opened again is read again (WG-028).
+              key={detailOpenings}
               marker={displayMarker}
               onClose={closeDetail}
               onSelectMarker={controller.setSelectedMarkerId}

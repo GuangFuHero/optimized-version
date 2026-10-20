@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 
 import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
-import { LAYOUT_DIMENSIONS } from '../shell/layout';
+import { layoutSizes } from '@rescue-frontend/ui';
 import { sessionStorageOrNull } from './end-expired-session';
 import { reloginHref, takeSessionExpired } from './expiry';
 
@@ -49,8 +49,8 @@ export function SessionExpiredNotice() {
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         sx={{
           top: {
-            mobile: `${LAYOUT_DIMENSIONS.mobileTopNavBarHeight + GAP_BELOW_TOP_BAR}px`,
-            tablet: `${LAYOUT_DIMENSIONS.desktopTopNavBarHeight + GAP_BELOW_TOP_BAR}px`,
+            mobile: `${layoutSizes.site.mobileTopNavBarHeight + GAP_BELOW_TOP_BAR}px`,
+            tablet: `${layoutSizes.site.desktopTopNavBarHeight + GAP_BELOW_TOP_BAR}px`,
           },
         }}
       >

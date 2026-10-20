@@ -4,6 +4,7 @@ Same flat-service style as station.py: `db` first, keyword-only args, each funct
 its own authz + validation + persistence (ADR-013/014/015/022).
 """
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -41,6 +42,7 @@ from app.services.geo_validation import (
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 from app.services.photo import normalize_photo_url
+from app.services.ticket_audit import lock_ticket, void_stale_verdict
 from app.services.ticket_status import recompute_ticket_status
 
 # Size limits for `set_ticket_disaster_details` (ADR-267). ADR-092 leaves the vocabulary
@@ -83,28 +85,6 @@ HELP_REQUEST_PHOTO_MAX = 10
 # request could file thousands. Needs added later, one 「再加一件」 at a time, are not counted.
 HELP_REQUEST_NEED_MAX = 20
 
-# What a notice calls each review outcome — the site's own words, never the enum. An unknown
-# value falls through as itself, so a new one shows up rather than vanishing.
-MODERATION_STATUS_LABELS = {"pending_review": "待審核", "approved": "已通過", "rejected": "已退回"}
-
-# What a review decides on a ticket or a need (ADR-312): the back office's to write, under
-# ticket.review, never the requester's, whose ticket.edit `own` covers the rest of what they filed.
-REVIEW_FIELDS = frozenset({"moderation_status", "review_note"})
-
-
-async def _require_edit_or_review(db: AsyncSession, actor: User, fields, resource) -> None:
-    """ticket.review for the review fields among `fields`, ticket.edit for any other (ADR-312).
-
-    A data auditor reviews without holding ticket.edit, so a change made only of review fields
-    asks for ticket.review alone; one with both kinds asks for both. No field at all asks for
-    ticket.edit, as an edit always did.
-    """
-    reviewing = REVIEW_FIELDS & set(fields)
-    if reviewing:
-        await require_scope(actor, Perm.TICKET_REVIEW, db, resource=resource)
-    if not reviewing or set(fields) - REVIEW_FIELDS:
-        await require_scope(actor, Perm.TICKET_EDIT, db, resource=resource)
-
 
 async def _task_scope_target(db: AsyncSession, task: TicketTask) -> SimpleNamespace:
     """Scope target for a ticket task (ADR-052, direction B).
@@ -140,7 +120,22 @@ async def _assignment_scope_target(db: AsyncSession, assignment: TaskAssignment)
     )
 
 
-async def create_ticket(
+@dataclass(frozen=True)
+class TicketFields:
+    """A ticket that passed authz and validation but is not written yet.
+
+    `values` are the normalized column values, ready for `ticket_repository.add`; `point` is
+    the validated GeoJSON Point they were built from. With `building_map_uuid`, the point and
+    address are the building's.
+    """
+
+    point: dict
+    values: dict
+    secondary_location: dict | None
+    building_map_uuid: str | None = None
+
+
+async def validate_ticket(
     db: AsyncSession,
     *,
     actor: User,
@@ -152,29 +147,21 @@ async def create_ticket(
     contact_phone: str | None,
     priority: str,
     task_type: str | None,
-    visibility: str,
     disaster_types: list[str] | None = None,
     person_trapped_reported: str | None = None,
     immediate_danger_reported: str | None = None,
     secondary_location: dict | None = None,
     building_map_uuid: str | None = None,
-) -> Tickets:
-    """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner).
+) -> TicketFields:
+    """Checkpoint 1 plus every input check `create_ticket` makes, without writing anything.
 
     `disaster_types` is validated against the vocabulary table before anything is written: a
     ticket filed under a disaster that does not exist would store cleanly and then render an
     empty disaster-field form, telling the reporter nothing was asked of them.
-
-    `secondary_location` is new in feature 018. Stations have been able to carry an address
-    since they existed; tickets could not, which meant the one record that most needs a door
-    number — somebody asking to be found — had only a map pin. Owns the two-table orchestration
-    and the single commit that makes it atomic, exactly as `station.py::create_station` does.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
     if building_map_uuid:
-        geometry, secondary_location = await place_ticket(
-            db, building_map_uuid, geometry, secondary_location
-        )
+        geometry, secondary_location = await place_ticket(db, building_map_uuid, geometry, secondary_location)
     if geometry is None:
         raise ValueError("geometry or buildingMapUuid is required")
     disaster_types = await validate_disaster_types(db, disaster_types or [])
@@ -190,36 +177,99 @@ async def create_ticket(
         required=frozenset({"contact_name"}),
     )
     check_address_lengths(secondary_location)
-    ticket = await ticket_repository.add(
-        db,
-        obj_in={
-            "property_name": "request",
-            "geometry": geojson_to_geom(geometry),
-            "created_by": str(actor.uuid),
+    return TicketFields(
+        point=geometry,
+        values={
             "title": title,
             "description": description,
             # Normalized, not raw — same reason as create_station in station.py.
             **contacts,
-            "status": "pending",
             "priority": priority,
             "task_type": task_type,
-            "visibility": visibility,
             "disaster_types": disaster_types,
             "person_trapped_reported": person_trapped_reported,
             "immediate_danger_reported": immediate_danger_reported,
         },
+        secondary_location=secondary_location,
+        building_map_uuid=building_map_uuid,
     )
-    if secondary_location:
+
+
+async def insert_ticket(db: AsyncSession, *, actor: User, fields: TicketFields) -> Tickets:
+    """Write a validated ticket and its address, and flush. The caller owns the commit.
+
+    `secondary_location` is new in feature 018. Stations have been able to carry an address
+    since they existed; tickets could not, which meant the one record that most needs a door
+    number — somebody asking to be found — had only a map pin.
+    """
+    ticket = await ticket_repository.add(
+        db,
+        obj_in={
+            "property_name": "request",
+            "geometry": geojson_to_geom(fields.point),
+            "created_by": str(actor.uuid),
+            "status": "pending",
+            **fields.values,
+        },
+    )
+    if fields.secondary_location:
         # A ticket's uuid IS its base_geometries.uuid (joined-table inheritance), which is
         # what secondary_locations.geometry_uuid points at — the same key the station path
         # uses, so one address table serves both.
         await secondary_location_repository.add(
-            db, obj_in={"geometry_uuid": str(ticket.uuid), **secondary_location}
+            db, obj_in={"geometry_uuid": str(ticket.uuid), **fields.secondary_location}
         )
-    if building_map_uuid:
+    if fields.building_map_uuid:
         await building_map_ticket_repository.add(
-            db, obj_in={"ticket_uuid": str(ticket.uuid), "building_map_uuid": building_map_uuid}
+            db,
+            obj_in={"ticket_uuid": str(ticket.uuid), "building_map_uuid": fields.building_map_uuid},
         )
+    return ticket
+
+
+async def create_ticket(
+    db: AsyncSession,
+    *,
+    actor: User,
+    geometry: dict | None,
+    title: str,
+    description: str | None,
+    contact_name: str,
+    contact_email: str | None,
+    contact_phone: str | None,
+    priority: str,
+    task_type: str | None,
+    disaster_types: list[str] | None = None,
+    person_trapped_reported: str | None = None,
+    immediate_danger_reported: str | None = None,
+    secondary_location: dict | None = None,
+    building_map_uuid: str | None = None,
+) -> Tickets:
+    """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner).
+
+    Validate, insert, and one commit that makes the ticket + address pair atomic, exactly as
+    `station.py::create_station` does. Batch import calls this; the interactive GraphQL path
+    goes through `dedup_submission.submit_new_ticket`, which runs the same two steps around a
+    duplicate check.
+    """
+    fields = await validate_ticket(
+        db,
+        actor=actor,
+        geometry=geometry,
+        title=title,
+        description=description,
+        contact_name=contact_name,
+        contact_email=contact_email,
+        contact_phone=contact_phone,
+        priority=priority,
+        task_type=task_type,
+        disaster_types=disaster_types,
+        person_trapped_reported=person_trapped_reported,
+        immediate_danger_reported=immediate_danger_reported,
+        secondary_location=secondary_location,
+        building_map_uuid=building_map_uuid,
+    )
+    ticket = await insert_ticket(db, actor=actor, fields=fields)
     await db.commit()
     await db.refresh(ticket)
     return ticket
@@ -275,6 +325,7 @@ async def create_help_request(
     secondary_location: dict | None,
     tasks: list[dict],
     photo_urls: list[str] | None = None,
+    contact_email: str | None = None,
 ) -> Tickets:
     """File a citizen's request for help: the ticket, every need and photo link, in one commit.
 
@@ -282,9 +333,9 @@ async def create_help_request(
     commits each step on its own, so a failure part-way leaves a ticket with some of its needs
     missing and a retry files a second ticket. Here nothing is written unless all of it is.
 
-    The site never asks how urgent a request is or who may see it: priority is `medium` and
-    visibility `public`, and staff adjust both afterwards. The ticket's own `task_type` is the
-    first need's, as the admin form sets it.
+    The site never asks how urgent a request is: priority is `medium`, and staff adjust it
+    afterwards. The ticket's own `task_type` is the first need's, as the admin form sets it. An
+    email is optional; the account's own is never filled in for it.
 
     Photo links (「現場照片（選填）」) become the ticket's photos, read back by
     `TicketType.photos` and withheld from whoever cannot see the ticket's detail.
@@ -305,7 +356,7 @@ async def create_help_request(
     photo_links = _checked_photo_links(photo_urls)
     validate_point(geometry, entity="Ticket")
     contacts = normalize_contact_fields(
-        {"contact_name": contact_name, "contact_email": None, "contact_phone": contact_phone},
+        {"contact_name": contact_name, "contact_email": contact_email, "contact_phone": contact_phone},
         required=frozenset({"contact_name"}),
     )
     check_address_lengths(secondary_location)
@@ -322,7 +373,6 @@ async def create_help_request(
             "status": "pending",
             "priority": "medium",
             "task_type": tasks[0]["task_type"],
-            "visibility": "public",
         },
     )
     if secondary_location:
@@ -339,7 +389,6 @@ async def create_help_request(
                 "task_description": task.get("task_description"),
                 "quantity": task.get("quantity"),
                 "source": "user",
-                "visibility": "public",
                 "created_by": creator,
                 # One transaction means one `now()` for every need, and the tasks loader
                 # breaks that tie on uuid — random. A microsecond apart keeps them in the order
@@ -383,15 +432,19 @@ async def list_my_tickets(db: AsyncSession, *, actor: User) -> list[Tickets]:
 
 
 async def update_ticket(
-    db: AsyncSession, *, actor: User, uuid: str, changes: dict,
+    db: AsyncSession,
+    *,
+    actor: User,
+    uuid: str,
+    changes: dict,
     secondary_location: dict | None = None,
 ) -> Tickets:
-    """Update a ticket, checked against the loaded ticket.
+    """Update a ticket, checked against the loaded ticket with ticket.edit.
 
-    ticket.edit for what the requester wrote; ticket.review for `review_note`, which is the back
-    office's (ADR-312). `changes` is the already-diffed field dict. It never carries `status`: a
-    ticket's status is worked out from its needs (`ticket_status.recompute_ticket_status`), not
-    set by hand.
+    `changes` is the already-diffed field dict. It never carries `status`: a ticket's status is
+    worked out from its needs (`ticket_status.recompute_ticket_status`), not set by hand. Nor the
+    audit fields, which only `ticket_audit.audit_ticket` writes; a content change here can void
+    the verdict, though (`ticket_audit.void_stale_verdict`).
 
     `secondary_location` replaces the ticket's address, creating the row if the ticket was
     filed without one (ADR-268). Create-only would mean a mistyped door number stays wrong
@@ -400,8 +453,7 @@ async def update_ticket(
     ticket = await ticket_repository.get_by_uuid_active(db, uuid)
     if not ticket:
         raise ValueError("Ticket not found")
-    fields = set(changes) | ({"secondary_location"} if secondary_location is not None else set())
-    await _require_edit_or_review(db, actor, fields, ticket)
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
     if secondary_location is not None:
         check_address_lengths(secondary_location)
         await _replace_secondary_location(db, str(ticket.uuid), secondary_location)
@@ -413,22 +465,25 @@ async def update_ticket(
         obj_in["disaster_types"] = await validate_disaster_types(
             db, obj_in["disaster_types"] or [], keep=ticket.disaster_types or []
         )
-    return await ticket_repository.update(db, db_obj=ticket, obj_in=obj_in)
+    for field, value in obj_in.items():
+        if hasattr(ticket, field):
+            setattr(ticket, field, value)
+    await db.flush()
+    await void_stale_verdict(db, str(ticket.uuid))
+    await db.commit()
+    await db.refresh(ticket)
+    return ticket
 
 
-async def _replace_secondary_location(
-    db: AsyncSession, geometry_uuid: str, values: dict
-) -> None:
+async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, values: dict) -> None:
     """Overwrite the address row for a geometry, or create it when there is none.
 
     A whole-input replacement, so clearing a member means sending it null, not omitting it.
-    Flush only: `update_ticket` always ends in a repository `update()`, which is the commit.
+    Flush only: `update_ticket` commits.
     """
     existing = await secondary_location_repository.get_by_geometry(db, geometry_uuid)
     if existing is None:
-        await secondary_location_repository.add(
-            db, obj_in={"geometry_uuid": geometry_uuid, **values}
-        )
+        await secondary_location_repository.add(db, obj_in={"geometry_uuid": geometry_uuid, **values})
         return
     for field, value in values.items():
         setattr(existing, field, value)
@@ -476,6 +531,8 @@ async def set_ticket_disaster_details(
                     "value": value,
                 },
             )
+    await db.flush()
+    await void_stale_verdict(db, ticket_uuid)
     await db.commit()
     return await ticket_disaster_detail_repository.list_by_ticket(db, ticket_uuid)
 
@@ -490,38 +547,14 @@ def _check_disaster_detail_size(details: dict[str, list[str]]) -> None:
         raise ValueError(f"一次最多只能填寫 {MAX_DISASTER_DETAIL_FIELDS} 個災害欄位")
     for property_name, values in details.items():
         if len(property_name) > MAX_DISASTER_DETAIL_KEY_LENGTH:
-            raise ValueError(
-                f"欄位名稱長度上限為 {MAX_DISASTER_DETAIL_KEY_LENGTH} 字：{property_name[:20]}…"
-            )
+            raise ValueError(f"欄位名稱長度上限為 {MAX_DISASTER_DETAIL_KEY_LENGTH} 字：{property_name[:20]}…")
         if len(values) > MAX_DISASTER_DETAIL_VALUES:
-            raise ValueError(
-                f"欄位「{property_name}」的選項數量上限為 {MAX_DISASTER_DETAIL_VALUES}"
-            )
+            raise ValueError(f"欄位「{property_name}」的選項數量上限為 {MAX_DISASTER_DETAIL_VALUES}")
         for value in values:
             if value is not None and len(value) > MAX_DISASTER_DETAIL_VALUE_LENGTH:
                 raise ValueError(
-                    f"欄位「{property_name}」的單一值長度上限為 "
-                    f"{MAX_DISASTER_DETAIL_VALUE_LENGTH} 字"
+                    f"欄位「{property_name}」的單一值長度上限為 {MAX_DISASTER_DETAIL_VALUE_LENGTH} 字"
                 )
-
-
-async def review_ticket(
-    db: AsyncSession, *, actor: User, uuid: str, verification_status: str, review_note: str | None = None
-) -> Tickets:
-    """Verify/approve a ticket — a *review* action gated by ticket.review, not ticket.edit.
-
-    Setting verification_status (unverified → ai_verified / human_verified) is an approval
-    decision, so it needs the separate `ticket.review` capability (ADR-049 catalog audit),
-    checkpoint 2 against the loaded ticket.
-    """
-    ticket = await ticket_repository.get_by_uuid_active(db, uuid)
-    if not ticket:
-        raise ValueError("Ticket not found")
-    await require_scope(actor, Perm.TICKET_REVIEW, db, resource=ticket)
-    obj_in = {"verification_status": verification_status}
-    if review_note is not None:
-        obj_in["review_note"] = review_note
-    return await ticket_repository.update(db, db_obj=ticket, obj_in=obj_in)
 
 
 async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
@@ -637,7 +670,52 @@ async def delete_ticket_task(db: AsyncSession, *, actor: User, uuid: str) -> Non
     )
 
 
-async def create_ticket_task(
+@dataclass(frozen=True)
+class TaskFields:
+    """A ticket task that passed authz and validation but is not written yet.
+
+    Carries no ticket: a new ticket's tasks are validated before the ticket exists.
+    """
+
+    values: dict
+
+
+async def validate_ticket_task(
+    db: AsyncSession,
+    *,
+    actor: User,
+    task_type: str,
+    task_name: str,
+    task_description: str | None,
+    quantity: int | None,
+    source: str,
+    route_uuid: str | None,
+) -> TaskFields:
+    """Checks for a task filed with a new ticket, without writing: ticket.add, its name and size."""
+    await require_scope(actor, Perm.TICKET_ADD, db)
+    _validate_need_size(task_type, task_name, quantity)
+    return TaskFields(
+        values={
+            "task_type": task_type,
+            "task_name": task_name,
+            "task_description": task_description,
+            "quantity": quantity,
+            "source": source,
+            "route_uuid": route_uuid,
+        }
+    )
+
+
+async def insert_ticket_task(
+    db: AsyncSession, *, actor: User, ticket_uuid: str, fields: TaskFields
+) -> TicketTask:
+    """Write a validated task under `ticket_uuid` and flush. The caller owns the commit."""
+    return await ticket_task_repository.add(
+        db, obj_in={"ticket_uuid": ticket_uuid, "created_by": str(actor.uuid), **fields.values}
+    )
+
+
+async def validate_added_task(
     db: AsyncSession,
     *,
     actor: User,
@@ -647,16 +725,13 @@ async def create_ticket_task(
     task_description: str | None,
     quantity: int | None,
     source: str,
-    visibility: str,
     route_uuid: str | None,
-) -> TicketTask:
-    """Add a need to a ticket — createTicketTask, the site's 「再加一件」 among others.
+) -> TaskFields:
+    """Every check for adding a need to an existing ticket (the site's 「再加一件」), without writing.
 
-    ticket.edit on the ticket, as the team decided, checked before the lock: for a signed-in
-    citizen that means their own ticket only, while back-office roles keep their ticket.edit's
-    reach. A ticket cancelled by hand before statuses were derived takes no need, since cancelled
-    is final and nobody could claim it. The name and quantity are checked before anything is
-    written; the rest is _add_need.
+    ticket.edit on the ticket: a signed-in citizen adds to their own ticket only, while
+    back-office roles keep their ticket.edit's reach. A ticket cancelled by hand before statuses
+    were derived takes no need, since cancelled is final and nobody could claim it.
     """
     ticket = await ticket_repository.get_by_uuid_active(db, ticket_uuid)
     if not ticket:
@@ -665,44 +740,22 @@ async def create_ticket_task(
     if ticket.status == "cancelled":
         raise ValueError("Ticket is no longer open")
     _validate_need_size(task_type, task_name, quantity)
-    need = {
-        "task_type": task_type, "task_name": task_name, "task_description": task_description,
-        "quantity": quantity, "source": source, "visibility": visibility, "route_uuid": route_uuid,
-    }
-    return await _add_need(db, actor=actor, ticket_uuid=ticket_uuid, need=need)
+    return TaskFields(
+        values={
+            "task_type": task_type,
+            "task_name": task_name,
+            "task_description": task_description,
+            "quantity": quantity,
+            "source": source,
+            "route_uuid": route_uuid,
+        }
+    )
 
 
-async def import_ticket_task(
-    db: AsyncSession,
-    *,
-    actor: User,
-    ticket_uuid: str,
-    task_type: str,
-    task_name: str,
-    task_description: str | None,
-    quantity: int | None,
-    source: str,
-    visibility: str,
-    route_uuid: str | None,
+async def insert_added_task(
+    db: AsyncSession, *, actor: User, ticket_uuid: str, fields: TaskFields
 ) -> TicketTask:
-    """Add a need for a bulk import row (ADR-120).
-
-    ticket.add alone, the rule createTicketTask had before 2026-09-28: who may import what is the
-    back office's to decide, not the public site's. The row's columns were checked by the import
-    itself (bulk_columns); the name and quantity are checked again here, as for any need, in case
-    a caller skips that. The rest is _add_need.
-    """
-    await require_scope(actor, Perm.TICKET_ADD, db)
-    _validate_need_size(task_type, task_name, quantity)
-    need = {
-        "task_type": task_type, "task_name": task_name, "task_description": task_description,
-        "quantity": quantity, "source": source, "visibility": visibility, "route_uuid": route_uuid,
-    }
-    return await _add_need(db, actor=actor, ticket_uuid=ticket_uuid, need=need)
-
-
-async def _add_need(db: AsyncSession, *, actor: User, ticket_uuid: str, need: dict) -> TicketTask:
-    """Lock the ticket, add the need, work the ticket's status out, and commit once.
+    """Lock the ticket, add the need, work the ticket's status out, and flush. The caller commits.
 
     The ticket is locked first, the order every writer keeps, and read again under the lock, so a
     ticket deleted meanwhile takes no need. A completed ticket takes one and is open again: left
@@ -716,21 +769,88 @@ async def _add_need(db: AsyncSession, *, actor: User, ticket_uuid: str, need: di
     )
     if ticket is None or ticket.delete_at is not None:
         raise ValueError("Ticket not found")
-    task = await ticket_task_repository.add(
-        db, obj_in={"ticket_uuid": ticket_uuid, **need, "created_by": str(actor.uuid)}
-    )
+    task = await insert_ticket_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
     await recompute_ticket_status(db, ticket_uuid=ticket_uuid)
+    await void_stale_verdict(db, ticket_uuid)
+    return task
+
+
+async def create_ticket_task(
+    db: AsyncSession,
+    *,
+    actor: User,
+    ticket_uuid: str,
+    task_type: str,
+    task_name: str,
+    task_description: str | None,
+    quantity: int | None,
+    source: str,
+    route_uuid: str | None,
+) -> TicketTask:
+    """Add a need to a ticket and commit, without a duplicate check.
+
+    The interactive GraphQL path goes through `dedup_submission.submit_new_task`, which runs the
+    same two steps around a duplicate check.
+    """
+    fields = await validate_added_task(
+        db,
+        actor=actor,
+        ticket_uuid=ticket_uuid,
+        task_type=task_type,
+        task_name=task_name,
+        task_description=task_description,
+        quantity=quantity,
+        source=source,
+        route_uuid=route_uuid,
+    )
+    task = await insert_added_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+async def import_ticket_task(
+    db: AsyncSession,
+    *,
+    actor: User,
+    ticket_uuid: str,
+    task_type: str,
+    task_name: str,
+    task_description: str | None,
+    quantity: int | None,
+    source: str,
+    route_uuid: str | None,
+) -> TicketTask:
+    """Add a need for a bulk import row (ADR-120).
+
+    ticket.add alone, the rule createTicketTask had before 2026-09-28: who may import what is the
+    back office's to decide, not the public site's. The row's columns were checked by the import
+    itself (bulk_columns); the name and quantity are checked again here, as for any need, in case
+    a caller skips that.
+    """
+    await require_scope(actor, Perm.TICKET_ADD, db)
+    _validate_need_size(task_type, task_name, quantity)
+    fields = TaskFields(
+        values={
+            "task_type": task_type,
+            "task_name": task_name,
+            "task_description": task_description,
+            "quantity": quantity,
+            "source": source,
+            "route_uuid": route_uuid,
+        }
+    )
+    task = await insert_added_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
     await db.commit()
     await db.refresh(task)
     return task
 
 
 async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, changes: dict) -> TicketTask:
-    """Update a ticket task, checked against the task.
+    """Update a ticket task, checked against the task with ticket.edit.
 
-    ticket.edit for what was filed; ticket.review for `moderation_status` and `review_note`, the
-    back office's verdict, which a requester's ticket.edit `own` must not reach (ADR-312). A need
-    borrows its ticket's location, so `zone` reaches it (_task_scope_target).
+    A need borrows its ticket's location, so `zone` reaches it (_task_scope_target). A change to
+    what the need asks for can void the ticket's verdict (`ticket_audit.void_stale_verdict`).
 
     A task's status is not editable (ADR-293): it moves only through the actions that own it —
     a claim filling it, a release reopening it, the requester stopping recruitment, a deletion —
@@ -744,36 +864,24 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     task = await ticket_task_repository.get_by_uuid_active(db, uuid)
     if not task:
         raise ValueError("Ticket task not found")
-    await _require_edit_or_review(db, actor, changes, await _task_scope_target(db, task))
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
+    # The ticket before the need, the order every writer keeps: voiding the verdict locks it.
+    await lock_ticket(db, str(task.ticket_uuid))
 
-    old_mod = task.moderation_status
     old_dup = task.is_duplicate
     task_id = task.uuid
     task_name = task.task_name
-    task_created_by = str(task.created_by)
 
     actor_uid = actor.uuid
-    updated_task = await ticket_task_repository.update(db, db_obj=task, obj_in=changes)
-    mod_status = updated_task.moderation_status
+    for field, value in changes.items():
+        if hasattr(task, field):
+            setattr(task, field, value)
+    await db.flush()
+    await void_stale_verdict(db, str(task.ticket_uuid))
+    await db.commit()
+    updated_task = task
 
-    # 1. 審核狀態變更通知 (High)
-    if "moderation_status" in changes and changes["moderation_status"] != old_mod:
-        assignments = await task_assignment_repository.list_by_task(db, str(task_id))
-        recipients = {task_created_by} | {str(a.actor_uuid) for a in assignments}
-        mod_label = MODERATION_STATUS_LABELS.get(mod_status, mod_status)
-        await NotificationService.dispatch(
-            db,
-            event_type="ticket_task_moderation_update",
-            title=f"工單審核狀態更新：{task_name}",
-            body=f"工單任務「{task_name}」審核狀態已變更為【{mod_label}】。",
-            priority="high",
-            actor_uuid=actor_uid,
-            ref_type="ticket_task",
-            ref_uuid=task_id,
-            explicit_recipients=list(recipients),
-        )
-
-    # 2. 重複工單標記通知 (Medium)
+    # 重複工單標記通知 (Medium)
     if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
         "dedup_group_id" in changes and changes["dedup_group_id"]
     ):
@@ -815,8 +923,12 @@ async def create_task_property(
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     return await _add_task_property(
-        db, task_uuid=task_uuid, property_name=property_name, property_value=property_value,
-        quantity=quantity, comment=comment,
+        db,
+        task=task,
+        property_name=property_name,
+        property_value=property_value,
+        quantity=quantity,
+        comment=comment,
     )
 
 
@@ -834,37 +946,53 @@ async def import_task_property(
     matched, and who may import what is the back office's to decide, not the public site's.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
-    if not await ticket_task_repository.get_by_uuid_active(db, task_uuid):
+    task = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
+    if not task:
         raise ValueError("Ticket task not found")
     return await _add_task_property(
-        db, task_uuid=task_uuid, property_name=property_name, property_value=property_value,
-        quantity=None, comment=None,
+        db,
+        task=task,
+        property_name=property_name,
+        property_value=property_value,
+        quantity=None,
+        comment=None,
     )
 
 
 async def _add_task_property(
     db: AsyncSession,
     *,
-    task_uuid: str,
+    task: TicketTask,
     property_name: str,
     property_value: str,
     quantity: int | None,
     comment: str | None,
 ) -> TaskProperty:
-    return await task_property_repository.create(
+    """Write the property, void the ticket's verdict if it no longer holds, and commit."""
+    ticket_uuid = str(task.ticket_uuid)
+    # The ticket before the need, the order every writer keeps: the new row holds the need too.
+    await lock_ticket(db, ticket_uuid)
+    prop = await task_property_repository.add(
         db,
         obj_in={
-            "task_uuid": task_uuid,
+            "task_uuid": str(task.uuid),
             "property_name": property_name,
             "property_value": property_value,
             "quantity": quantity,
             "comment": comment,
         },
     )
+    await void_stale_verdict(db, ticket_uuid)
+    await db.commit()
+    await db.refresh(prop)
+    return prop
 
 
 async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, changes: dict) -> TaskProperty:
-    """Update a task property (checkpoint 2 scope-checked against the *parent* task)."""
+    """Update a task property (checkpoint 2 scope-checked against the *parent* task).
+
+    A new name or value can void the ticket's verdict; quantity, status and comment cannot.
+    """
     prop = await task_property_repository.get_by_uuid_active(db, uuid)
     if not prop:
         raise ValueError("Task property not found")
@@ -872,7 +1000,16 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
     if not task:
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
-    return await task_property_repository.update(db, db_obj=prop, obj_in=changes)
+    ticket_uuid = str(task.ticket_uuid)
+    await lock_ticket(db, ticket_uuid)  # the ticket before the need, as in _add_task_property
+    for field, value in changes.items():
+        if hasattr(prop, field):
+            setattr(prop, field, value)
+    await db.flush()
+    await void_stale_verdict(db, ticket_uuid)
+    await db.commit()
+    await db.refresh(prop)
+    return prop
 
 
 async def assign_task_actor(
@@ -961,14 +1098,24 @@ async def assign_task_actor(
     )
     if requester is not None and requester != target_actor:
         await _notify_claim(
-            db, task_id=task_id, task_name=task_name, ticket_title=ticket_title,
-            requester=requester, actor_uid=actor_uid, assignee_name=assignee_name,
-            claimed=claimed + 1, quantity=quantity,
+            db,
+            task_id=task_id,
+            task_name=task_name,
+            ticket_title=ticket_title,
+            requester=requester,
+            actor_uid=actor_uid,
+            assignee_name=assignee_name,
+            claimed=claimed + 1,
+            quantity=quantity,
         )
     if fills:
         await _notify_need_full(
-            db, task_id=task_id, task_name=task_name, ticket_title=ticket_title,
-            newcomer=target_actor, actor_uid=actor_uid,
+            db,
+            task_id=task_id,
+            task_name=task_name,
+            ticket_title=ticket_title,
+            newcomer=target_actor,
+            actor_uid=actor_uid,
         )
     await db.refresh(assignment)
     return assignment
@@ -1122,8 +1269,16 @@ async def _claim_count(db: AsyncSession, task_uuid) -> int:
 
 
 async def _notify_claim(
-    db: AsyncSession, *, task_id, task_name: str, ticket_title: str, requester: str,
-    actor_uid, assignee_name: str | None, claimed: int, quantity: int | None,
+    db: AsyncSession,
+    *,
+    task_id,
+    task_name: str,
+    ticket_title: str,
+    requester: str,
+    actor_uid,
+    assignee_name: str | None,
+    claimed: int,
+    quantity: int | None,
 ) -> None:
     """Tell the requester someone is coming, and who (prototype site-actions.jsx:473-483).
 
@@ -1145,7 +1300,13 @@ async def _notify_claim(
 
 
 async def _notify_need_full(
-    db: AsyncSession, *, task_id, task_name: str, ticket_title: str, newcomer: str, actor_uid,
+    db: AsyncSession,
+    *,
+    task_id,
+    task_name: str,
+    ticket_title: str,
+    newcomer: str,
+    actor_uid,
 ) -> None:
     """Tell everyone already on a need that this claim completed it (site-actions.jsx:484-496).
 

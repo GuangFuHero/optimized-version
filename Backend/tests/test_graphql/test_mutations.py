@@ -17,7 +17,7 @@ from tests.test_graphql.conftest import test_db as open_db
 
 CREATE_STATION = """
 mutation($input: CreateStationInput!) {
-    createStation(input: $input) { uuid propertyName geometry level }
+    createStation(input: $input) { ... on StationCreated { station { uuid propertyName geometry level } } }
 }
 """
 
@@ -69,7 +69,7 @@ mutation($input: CreateCrowdSourcingInput!) {
 
 CREATE_TICKET = """
 mutation($input: CreateTicketInput!) {
-    createTicket(input: $input) { uuid title status priority }
+    createTicket(input: $input) { ... on TicketCreated { ticket { uuid title status priority } } }
 }
 """
 
@@ -77,7 +77,9 @@ mutation($input: CreateTicketInput!) {
 # above does not — that combination is what the expire_on_commit=False fix made work.
 CREATE_TICKET_WITH_CONTACT = """
 mutation($input: CreateTicketInput!) {
-    createTicket(input: $input) { uuid contactName contactEmail contactPhone }
+    createTicket(input: $input) {
+        ... on TicketCreated { ticket { uuid contactName contactEmail contactPhone } }
+    }
 }
 """
 
@@ -89,7 +91,7 @@ mutation($uuid: UUID!, $input: UpdateTicketInput!) {
 
 CREATE_TICKET_TASK = """
 mutation($input: CreateTicketTaskInput!) {
-    createTicketTask(input: $input) { uuid taskType taskName status }
+    createTicketTask(input: $input) { ... on TicketTaskCreated { task { uuid taskType taskName status } } }
 }
 """
 
@@ -198,7 +200,7 @@ async def test_create_station(client, coordinator_auth):
         headers=auth_header(token),
     )
 
-    data = resp.json()["data"]["createStation"]
+    data = resp.json()["data"]["createStation"]["station"]
     assert data["uuid"] is not None
     assert data["propertyName"] == "station"
     assert data["level"] == 3
@@ -233,7 +235,7 @@ async def test_create_station_accepts_internal_visibility(client, coordinator_au
     )
     body = resp.json()
     assert "errors" not in body
-    assert body["data"]["createStation"]["uuid"] is not None
+    assert body["data"]["createStation"]["station"]["uuid"] is not None
 
 
 @pytest.mark.asyncio
@@ -312,7 +314,7 @@ async def test_update_station_all_scope(client, redis, coordinator_auth):
         },
         headers=auth_header(other_token),
     )
-    station_uuid = resp.json()["data"]["createStation"]["uuid"]
+    station_uuid = resp.json()["data"]["createStation"]["station"]["uuid"]
 
     # Original coordinator edits it
     _, token = coordinator_auth
@@ -348,7 +350,7 @@ async def test_delete_station(client, coordinator_auth):
         },
         headers=auth_header(token),
     )
-    station_uuid = resp.json()["data"]["createStation"]["uuid"]
+    station_uuid = resp.json()["data"]["createStation"]["station"]["uuid"]
 
     resp = await client.post(
         "/graphql",
@@ -374,7 +376,7 @@ async def test_delete_station_excluded_from_queries(client, coordinator_auth):
         },
         headers=auth_header(token),
     )
-    station_uuid = resp.json()["data"]["createStation"]["uuid"]
+    station_uuid = resp.json()["data"]["createStation"]["station"]["uuid"]
 
     await client.post(
         "/graphql",
@@ -712,13 +714,12 @@ async def test_create_ticket(client, coordinator_auth):
                     "contactEmail": "alice@example.com",
                     "priority": "high",
                     "taskType": "hr",
-                    "visibility": "public",
                 }
             },
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["createTicket"]
+    data = resp.json()["data"]["createTicket"]["ticket"]
     assert data["title"] == "Need medics"
     assert data["status"] == "pending"
     assert data["priority"] == "high"
@@ -752,7 +753,7 @@ async def test_create_ticket_rejects_non_point_geometry(client, coordinator_auth
 @pytest.mark.parametrize(
     "field,value",
     [
-        ("contactName", "A" * 300),   # tickets.contact_name is String(100)
+        ("contactName", "A" * 300),  # tickets.contact_name is String(100)
         ("contactEmail", "b" * 300),  # String(100)
         ("contactPhone", "9" * 300),  # String(50)
     ],
@@ -809,8 +810,11 @@ async def test_an_address_part_too_long_for_its_column_is_refused_by_name(
             CREATE_TICKET,
             {
                 "input": {
-                    "title": "Need medics", "geometry": POINT_TAIPEI, "contactName": "Alice",
-                    "priority": "high", "secondaryLocation": address,
+                    "title": "Need medics",
+                    "geometry": POINT_TAIPEI,
+                    "contactName": "Alice",
+                    "priority": "high",
+                    "secondaryLocation": address,
                 }
             },
         ),
@@ -852,7 +856,7 @@ async def test_create_ticket_stores_contact_stripped(client, coordinator_auth):
     )
     body = resp.json()
     assert "errors" not in body, body
-    ticket = body["data"]["createTicket"]
+    ticket = body["data"]["createTicket"]["ticket"]
     # The creator is in ticket.view_pii=own scope, so these come back unmasked.
     assert ticket["contactName"] == "A" * 95
     assert ticket["contactPhone"] == "0912345678"
@@ -971,7 +975,7 @@ async def test_create_ticket_task(client, coordinator_auth, sample_ticket):
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["createTicketTask"]
+    data = resp.json()["data"]["createTicketTask"]["task"]
     assert data["uuid"] is not None
     assert data["taskType"] == "hr"
     assert data["status"] == "pending"
@@ -1020,9 +1024,7 @@ async def test_update_ticket_task_progress_note(client, coordinator_auth, sample
 async def test_update_ticket_task_no_longer_takes_a_status(client, coordinator_auth, sample_ticket_task):
     """A task's status moves only through claims, releases, stopRecruiting and deletion (ADR-293)."""
     _, token = coordinator_auth
-    query = (
-        'mutation($uuid: UUID!) { updateTicketTask(uuid: $uuid, input: {status: "fulfilled"}) { uuid } }'
-    )
+    query = 'mutation($uuid: UUID!) { updateTicketTask(uuid: $uuid, input: {status: "fulfilled"}) { uuid } }'
     resp = await client.post(
         "/graphql",
         json={"query": query, "variables": {"uuid": sample_ticket_task}},
@@ -1030,9 +1032,9 @@ async def test_update_ticket_task_no_longer_takes_a_status(client, coordinator_a
     )
     errors = resp.json()["errors"]
     # graphql-core 3.2 and 3.3 word this differently; both name the field and the input type.
-    assert any(
-        "'status'" in e["message"] and "'UpdateTicketTaskInput'" in e["message"] for e in errors
-    ), errors
+    assert any("'status'" in e["message"] and "'UpdateTicketTaskInput'" in e["message"] for e in errors), (
+        errors
+    )
 
 
 @pytest.mark.asyncio
@@ -1159,8 +1161,11 @@ async def test_a_requester_adds_a_property_to_their_own_need(client, login_user_
             "query": CREATE_TICKET,
             "variables": {
                 "input": {
-                    "title": "一樓積泥", "geometry": POINT_TAIPEI, "contactName": "王小明",
-                    "priority": "high", "taskType": "hr", "visibility": "public",
+                    "title": "一樓積泥",
+                    "geometry": POINT_TAIPEI,
+                    "contactName": "王小明",
+                    "priority": "high",
+                    "taskType": "hr",
                 }
             },
         },
@@ -1172,8 +1177,10 @@ async def test_a_requester_adds_a_property_to_their_own_need(client, login_user_
             "query": CREATE_TICKET_TASK,
             "variables": {
                 "input": {
-                    "ticketUuid": ticket.json()["data"]["createTicket"]["uuid"],
-                    "taskType": "hr", "taskName": "清淤", "quantity": 3,
+                    "ticketUuid": ticket.json()["data"]["createTicket"]["ticket"]["uuid"],
+                    "taskType": "hr",
+                    "taskName": "清淤",
+                    "quantity": 3,
                 }
             },
         },
@@ -1185,7 +1192,7 @@ async def test_a_requester_adds_a_property_to_their_own_need(client, login_user_
             "query": CREATE_TASK_PROPERTY,
             "variables": {
                 "input": {
-                    "taskUuid": task.json()["data"]["createTicketTask"]["uuid"],
+                    "taskUuid": task.json()["data"]["createTicketTask"]["task"]["uuid"],
                     "propertyName": "required_skill",
                     "propertyValue": "medical",
                 }
@@ -1278,27 +1285,30 @@ async def test_upsert_station_property_config_idempotent(client, coordinator_aut
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("query,variables,message", [
-    (
-        UPSERT_STATION_PROPERTY_CONFIG,
-        {"stationType": "x" * 51, "input": {"propertyName": "power_stable", "dataType": "text"}},
-        "station_type must be at most 50 characters",
-    ),
-    (
-        """mutation($taskType: String!, $input: UpsertPropertyConfigInput!) {
+@pytest.mark.parametrize(
+    "query,variables,message",
+    [
+        (
+            UPSERT_STATION_PROPERTY_CONFIG,
+            {"stationType": "x" * 51, "input": {"propertyName": "power_stable", "dataType": "text"}},
+            "station_type must be at most 50 characters",
+        ),
+        (
+            """mutation($taskType: String!, $input: UpsertPropertyConfigInput!) {
             upsertTaskPropertyConfig(taskType: $taskType, input: $input) { uuid }
         }""",
-        {"taskType": "hr", "input": {"propertyName": "skill", "dataType": "text", "unit": "x" * 21}},
-        "unit must be at most 20 characters",
-    ),
-    (
-        """mutation($input: UpsertTicketPropertyConfigInput!) {
+            {"taskType": "hr", "input": {"propertyName": "skill", "dataType": "text", "unit": "x" * 21}},
+            "unit must be at most 20 characters",
+        ),
+        (
+            """mutation($input: UpsertTicketPropertyConfigInput!) {
             upsertTicketPropertyConfig(input: $input) { uuid }
         }""",
-        {"input": {"propertyName": "water_depth", "dataType": "text", "hint": "x" * 201}},
-        "hint must be at most 200 characters",
-    ),
-])
+            {"input": {"propertyName": "water_depth", "dataType": "text", "hint": "x" * 201}},
+            "hint must be at most 200 characters",
+        ),
+    ],
+)
 async def test_upsert_property_config_refuses_a_value_longer_than_its_column(
     client, coordinator_auth, query, variables, message
 ):

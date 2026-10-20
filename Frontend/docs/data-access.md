@@ -108,9 +108,9 @@ libs/data-access/
 目前 `apps/demo` 主要有兩種接法：
 
 1. 一般 GraphQL / server-side query
-   - 透過 `createUrqlClient()` 或 `getServerUrqlClient()`
+   - 透過 `createUrqlClient()`
 2. auth 與 profile 類 REST
-   - 透過 app-local wrapper 呼叫 `/api/bff/auth/*`
+   - 透過 generated OpenAPI client 呼叫共用 proxy `/api/v1/auth/*`
    - BFF 再轉呼叫 `@rescue-frontend/data-access` 的 REST client
 
 補充：

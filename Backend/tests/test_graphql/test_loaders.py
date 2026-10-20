@@ -56,10 +56,13 @@ async def test_tickets_photos_uses_single_batched_query(client, coordinator_auth
             t = Tickets(
                 geometry=from_shape(Point(121.5 + i * 0.001, 25.0), srid=4326),
                 created_by=user_uuid,
-                title=f"t{i}", description="d",
-                contact_name="x", contact_email="x@x.x",
-                status="pending", priority="medium",
-                task_type="hr", visibility="public",
+                title=f"t{i}",
+                description="d",
+                contact_name="x",
+                contact_email="x@x.x",
+                status="pending",
+                priority="medium",
+                task_type="hr",
             )
             db.add(t)
             tickets.append(t)
@@ -67,26 +70,29 @@ async def test_tickets_photos_uses_single_batched_query(client, coordinator_auth
 
         for t in tickets:
             for j in range(2):
-                db.add(Photo(
-                    ref_uuid=t.uuid, ref_type="geometry",
-                    url=f"https://example/{t.uuid}/{j}.jpg",
-                    created_by=user_uuid,
-                ))
+                db.add(
+                    Photo(
+                        ref_uuid=t.uuid,
+                        ref_type="geometry",
+                        url=f"https://example/{t.uuid}/{j}.jpg",
+                        created_by=user_uuid,
+                    )
+                )
         await db.flush()
 
     with _SelectCounter("photos") as counter:
-        resp = await client.post("/graphql", headers=auth_header(token), json={
-            "query": "query { tickets { items { uuid photos { url } } } }"
-        })
+        resp = await client.post(
+            "/graphql",
+            headers=auth_header(token),
+            json={"query": "query { tickets { items { uuid photos { url } } } }"},
+        )
 
     assert resp.status_code == 200
     body = resp.json()
     assert "errors" not in body, body
     items = body["data"]["tickets"]["items"]
     assert sum(len(it["photos"]) for it in items) >= 6
-    assert counter.count == 1, (
-        f"expected 1 SELECT against photos, got {counter.count} (N+1 regression)"
-    )
+    assert counter.count == 1, f"expected 1 SELECT against photos, got {counter.count} (N+1 regression)"
 
 
 @pytest.mark.asyncio
@@ -109,26 +115,27 @@ async def test_stations_photos_uses_single_batched_query(client, coordinator_aut
 
         for s in stations:
             for j in range(2):
-                db.add(Photo(
-                    ref_uuid=s.uuid, ref_type="geometry",
-                    url=f"https://example/{s.uuid}/{j}.jpg",
-                    created_by=user_uuid,
-                ))
+                db.add(
+                    Photo(
+                        ref_uuid=s.uuid,
+                        ref_type="geometry",
+                        url=f"https://example/{s.uuid}/{j}.jpg",
+                        created_by=user_uuid,
+                    )
+                )
         await db.flush()
 
     with _SelectCounter("photos") as counter:
-        resp = await client.post("/graphql", json={
-            "query": "query { stations { items { uuid photos { url } } } }"
-        })
+        resp = await client.post(
+            "/graphql", json={"query": "query { stations { items { uuid photos { url } } } }"}
+        )
 
     assert resp.status_code == 200
     body = resp.json()
     assert "errors" not in body, body
     items = body["data"]["stations"]["items"]
     assert sum(len(it["photos"]) for it in items) >= 6
-    assert counter.count == 1, (
-        f"expected 1 SELECT against photos, got {counter.count} (N+1 regression)"
-    )
+    assert counter.count == 1, f"expected 1 SELECT against photos, got {counter.count} (N+1 regression)"
 
 
 @pytest.mark.asyncio
@@ -144,24 +151,36 @@ async def test_pending_suggested_fields_use_single_batched_query(client, coordin
             db.add(station)
             await db.flush()
             prop = StationProperty(
-                station_uuid=station.uuid, property_type="supply", property_name="water",
-                quantity=1, created_by=user_uuid,
+                station_uuid=station.uuid,
+                property_type="supply",
+                property_name="water",
+                quantity=1,
+                created_by=user_uuid,
             )
             db.add(prop)
             await db.flush()
             targets = (("station", station.uuid, "name"), ("station_property", prop.uuid, "quantity"))
             for target_type, target, field in targets:
-                db.add(StationUpdateSuggestion(
-                    target_type=target_type, target_uuid=str(target), field_name=field,
-                    new_value="1", status="pending", created_by=user_uuid,
-                ))
+                db.add(
+                    StationUpdateSuggestion(
+                        target_type=target_type,
+                        target_uuid=str(target),
+                        field_name=field,
+                        new_value="1",
+                        status="pending",
+                        created_by=user_uuid,
+                    )
+                )
         await db.flush()
 
     with _SelectCounter("station_update_suggestions") as counter:
-        resp = await client.post("/graphql", json={
-            "query": "query { stations(hasPendingSuggestions: true, limit: 500) "
-                     "{ items { pendingSuggestedFields properties { pendingSuggestedFields } } } }"
-        })
+        resp = await client.post(
+            "/graphql",
+            json={
+                "query": "query { stations(hasPendingSuggestions: true, limit: 500) "
+                "{ items { pendingSuggestedFields properties { pendingSuggestedFields } } } }"
+            },
+        )
 
     body = resp.json()
     assert "errors" not in body, body
@@ -226,10 +245,15 @@ async def test_assigned_teams_uses_single_batched_query(client, redis):
 
         zones: list[TeamZone] = []
         for i in range(3):
-            polygon = Polygon([
-                (121.0 + i, 24.0), (121.0 + i, 25.0),
-                (122.0 + i, 25.0), (122.0 + i, 24.0), (121.0 + i, 24.0),
-            ])
+            polygon = Polygon(
+                [
+                    (121.0 + i, 24.0),
+                    (121.0 + i, 25.0),
+                    (122.0 + i, 25.0),
+                    (122.0 + i, 24.0),
+                    (121.0 + i, 24.0),
+                ]
+            )
             zone = TeamZone(name=f"zone-{uuid_mod.uuid4().hex[:8]}", geometry=from_shape(polygon, srid=4326))
             db.add(zone)
             zones.append(zone)

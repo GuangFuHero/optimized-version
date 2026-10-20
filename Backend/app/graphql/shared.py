@@ -12,6 +12,10 @@ from uuid import UUID
 
 import strawberry
 
+from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope
+from app.core.security import resolve_scope
+
 
 @strawberry.enum
 class Visibility(enum.Enum):
@@ -64,15 +68,15 @@ class TriState(enum.Enum):
 class PageInfo:
     """Pagination metadata for list responses."""
 
-    total_count: int = strawberry.field(
-        description="Total number of matching records across all pages"
-    )
+    total_count: int = strawberry.field(description="Total number of matching records across all pages")
     has_next_page: bool = strawberry.field(
         description="True if there are more records after the current page"
     )
     has_previous_page: bool = strawberry.field(
         description="True if there are records before the current page"
     )
+
+
 @strawberry.enum
 class AccessStatus(enum.Enum):
     """Whether a space can be entered right now.
@@ -95,9 +99,7 @@ class SecondaryLocationType:
     geometry_uuid: str = strawberry.field(
         description="UUID of the parent station or ticket this location belongs to"
     )
-    location_type: str = strawberry.field(
-        description="Type of secondary location: 'address' or 'pole'"
-    )
+    location_type: str = strawberry.field(description="Type of secondary location: 'address' or 'pole'")
     county: str | None = None
     city: str | None = None
     lane: str | None = None
@@ -109,15 +111,9 @@ class SecondaryLocationType:
     floor: str | None = strawberry.field(
         default=None, description="Floor label as spoken: 'B1', '1F', 'RF' — never coerced to a number"
     )
-    room: str | None = strawberry.field(
-        default=None, description="房號／空間, e.g. '302', '樓梯間'"
-    )
-    space_description: str | None = strawberry.field(
-        default=None, description="空間描述, e.g. '三房兩廳'"
-    )
-    victim_space: str | None = strawberry.field(
-        default=None, description="求救者所在空間, e.g. '主臥衣櫃'"
-    )
+    room: str | None = strawberry.field(default=None, description="房號／空間, e.g. '302', '樓梯間'")
+    space_description: str | None = strawberry.field(default=None, description="空間描述, e.g. '三房兩廳'")
+    victim_space: str | None = strawberry.field(default=None, description="求救者所在空間, e.g. '主臥衣櫃'")
     access_status: str | None = strawberry.field(
         default=None,
         description=(
@@ -145,13 +141,24 @@ class SecondaryLocationType:
     def from_model(cls, m) -> "SecondaryLocationType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, geometry_uuid=m.geometry_uuid,
+            uuid=m.uuid,
+            geometry_uuid=m.geometry_uuid,
             location_type=m.location_type,
-            county=m.county, city=m.city, lane=m.lane, alley=m.alley,
-            no=m.no, building_section=m.building_section, floor=m.floor, room=m.room,
-            space_description=m.space_description, victim_space=m.victim_space,
-            access_status=m.access_status, landmark_note=m.landmark_note,
-            pole_id=m.pole_id, pole_type=m.pole_type, pole_note=m.pole_note,
+            county=m.county,
+            city=m.city,
+            lane=m.lane,
+            alley=m.alley,
+            no=m.no,
+            building_section=m.building_section,
+            floor=m.floor,
+            room=m.room,
+            space_description=m.space_description,
+            victim_space=m.victim_space,
+            access_status=m.access_status,
+            landmark_note=m.landmark_note,
+            pole_id=m.pole_id,
+            pole_type=m.pole_type,
+            pole_note=m.pole_note,
         )
 
 
@@ -175,12 +182,8 @@ class SecondaryLocationInput:
         default=None, description="Floor label: 'B1', '1F', 'RF'. Free text on purpose"
     )
     room: str | None = strawberry.field(default=None, description="房號／空間, e.g. '302', '樓梯間'")
-    space_description: str | None = strawberry.field(
-        default=None, description="空間描述, e.g. '三房兩廳'"
-    )
-    victim_space: str | None = strawberry.field(
-        default=None, description="求救者所在空間, e.g. '主臥衣櫃'"
-    )
+    space_description: str | None = strawberry.field(default=None, description="空間描述, e.g. '三房兩廳'")
+    victim_space: str | None = strawberry.field(default=None, description="求救者所在空間, e.g. '主臥衣櫃'")
     access_status: AccessStatus | None = strawberry.field(
         default=None, description="Whether the space can be entered right now"
     )
@@ -190,6 +193,7 @@ class SecondaryLocationInput:
     pole_id: str | None = None
     pole_type: str | None = None
     pole_note: str | None = None
+
 
 def secondary_location_to_dict(sl: SecondaryLocationInput) -> dict:
     """Flatten a SecondaryLocationInput into the kwargs the repository stores.
@@ -202,11 +206,79 @@ def secondary_location_to_dict(sl: SecondaryLocationInput) -> dict:
     """
     return {
         "location_type": sl.location_type,
-        "county": sl.county, "city": sl.city, "lane": sl.lane, "alley": sl.alley,
-        "no": sl.no, "building_section": sl.building_section,
-        "floor": sl.floor, "room": sl.room,
-        "space_description": sl.space_description, "victim_space": sl.victim_space,
+        "county": sl.county,
+        "city": sl.city,
+        "lane": sl.lane,
+        "alley": sl.alley,
+        "no": sl.no,
+        "building_section": sl.building_section,
+        "floor": sl.floor,
+        "room": sl.room,
+        "space_description": sl.space_description,
+        "victim_space": sl.victim_space,
         "access_status": sl.access_status.value if sl.access_status else None,
         "landmark_note": sl.landmark_note,
-        "pole_id": sl.pole_id, "pole_type": sl.pole_type, "pole_note": sl.pole_note,
+        "pole_id": sl.pole_id,
+        "pole_type": sl.pole_type,
+        "pole_note": sl.pole_note,
     }
+
+
+@strawberry.type
+class DuplicateSuspect:
+    """One part of a submission that looks like something already there."""
+
+    draft_ref: str = strawberry.field(
+        description='Which part of what was sent: "task:0", "task:1"…, or "station"'
+    )
+    related_kind: str = strawberry.field(description='What it looks like: "ticket_task" or "station"')
+    related_uuid: str = strawberry.field(description="The existing entity it looks like")
+    related_ticket_uuid: str | None = strawberry.field(
+        default=None, description="When it looks like a task, that task's ticket"
+    )
+
+
+@strawberry.type
+class DuplicatesSuspected:
+    """Nothing was created: these parts look like existing ones.
+
+    Show them to the submitter. To create anyway, send the same input again with
+    `acknowledgedDuplicateOf` set on each part the submitter confirmed is not a duplicate.
+    """
+
+    suspects: list[DuplicateSuspect]
+
+    @classmethod
+    def of(cls, suspects) -> "DuplicatesSuspected":
+        """Build from the service's suspects."""
+        return cls(
+            suspects=[
+                DuplicateSuspect(
+                    draft_ref=s.draft_ref,
+                    related_kind=s.related_kind,
+                    related_uuid=s.related_uuid,
+                    related_ticket_uuid=s.related_ticket_uuid,
+                )
+                for s in suspects
+            ]
+        )
+
+
+@strawberry.type
+class UserRefType:
+    """A user shown beside content they wrote: their nickname, never their contacts."""
+
+    uuid: str
+    name: str | None = None
+
+
+async def staff_user_ref(info: strawberry.types.Info, user_uuid, perm: Perm) -> UserRefType | None:
+    """The user behind `user_uuid`, or None unless the caller holds `perm`; never raises."""
+    viewer = info.context["user"]
+    if user_uuid is None or viewer is None:
+        return None
+    scope = await resolve_scope(viewer, perm, info.context["db"], cache=info.context["_rbac_cache"])
+    if scope == Scope.NONE:
+        return None
+    name = await info.context["loaders"]["user_name_by_uuid"].load(str(user_uuid))
+    return UserRefType(uuid=str(user_uuid), name=name)

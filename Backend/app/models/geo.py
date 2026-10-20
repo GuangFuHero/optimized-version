@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, String, false, func, text
+from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, Index, String, false, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,6 +15,22 @@ class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
     """Base polymorphic ORM model for geospatial geometry entities."""
 
     __tablename__ = "base_geometries"
+    # Serve the dedup engine's `ST_DWithin(...::geography, ...)` candidate lookups:
+    # tickets by their point, stations by their centroid. The GIST index geoalchemy2 builds on
+    # `geometry` cannot serve a geography operand. Also created by migration d4c8b1e07a92;
+    # declared here so `create_all` schemas match.
+    __table_args__ = (
+        Index(
+            "ix_base_geometries_geography",
+            text("(geometry::geography)"),
+            postgresql_using="gist",
+        ),
+        Index(
+            "ix_base_geometries_centroid_geography",
+            text("(ST_Centroid(geometry)::geography)"),
+            postgresql_using="gist",
+        ),
+    )
     property_name: Mapped[str] = mapped_column(String(50))
     geometry = mapped_column(Geometry("GEOMETRY", srid=4326))
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"))
@@ -114,6 +130,9 @@ class Station(BaseGeometry):
     contact_phone: Mapped[str | None] = mapped_column(String(50))
     operational_status: Mapped[str] = mapped_column(String(20), server_default="active")
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # What the station is short of, in free text, and when that last changed (Spec/024 ADR-333).
+    supply_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    supply_status_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Keyword-search column, maintained by PostgreSQL (ADR-079/081). The field list here
     # IS the positive list — see app/models/search.py before changing it.

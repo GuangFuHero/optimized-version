@@ -8,12 +8,13 @@ import uuid
 
 import pytest
 
-from tests.test_graphql.conftest import auth_header
+from app.core.permissions import Perm
+from tests.test_graphql.conftest import _create_user_with_grants, _create_user_with_role, auth_header
 
 CREATE_TEMPLATE = """
 mutation($content: String!, $tags: [String!]!, $state: BriefingState!) {
   createBriefingTemplate(input: {content: $content, tags: $tags, state: $state}) {
-    uuid content tags state createdBy
+    uuid content tags state creator { uuid }
   }
 }
 """
@@ -29,7 +30,35 @@ DELETE_TEMPLATE = "mutation($uuid: UUID!) { deleteBriefingTemplate(uuid: $uuid) 
 GENERATE = """
 mutation($templateUuid: UUID) {
   generateBriefing(input: {templateUuid: $templateUuid}) {
-    uuid templateUuid content tags state
+    uuid templateUuid content tags state status
+  }
+}
+"""
+
+GENERATE_CONTENT = """
+mutation($content: String!) {
+  generateBriefing(input: {content: $content}) { uuid status }
+}
+"""
+
+UPDATE_CONTENT = """
+mutation($uuid: UUID!, $content: String!) {
+  updateBriefing(uuid: $uuid, input: {content: $content}) { uuid content }
+}
+"""
+
+PUBLISH = """
+mutation($uuid: UUID!) {
+  publishBriefing(uuid: $uuid) { uuid status publishedAt }
+}
+"""
+
+GET_BRIEFING = "query($uuid: UUID!) { briefing(uuid: $uuid) { uuid } }"
+
+LIST_BY_STATUS = """
+query($status: BriefingStatusFilter!) {
+  briefings(status: $status) {
+    uuid status creator { uuid name } updater { uuid name } publisher { uuid name }
   }
 }
 """
@@ -57,16 +86,12 @@ query($state: BriefingState, $tag: String) {
 
 async def _post(client, query, variables, token=None):
     headers = auth_header(token) if token else {}
-    resp = await client.post(
-        "/graphql", json={"query": query, "variables": variables}, headers=headers
-    )
+    resp = await client.post("/graphql", json={"query": query, "variables": variables}, headers=headers)
     return resp.json()
 
 
 async def _create_template(client, token, content, tags, state):
-    body = await _post(
-        client, CREATE_TEMPLATE, {"content": content, "tags": tags, "state": state}, token
-    )
+    body = await _post(client, CREATE_TEMPLATE, {"content": content, "tags": tags, "state": state}, token)
     assert "errors" not in body, body
     return body["data"]["createBriefingTemplate"]
 
@@ -79,12 +104,13 @@ async def test_template_and_briefing_lifecycle(client, briefing_admin_auth):
     t = await _create_template(client, token, "supply list", ["supply"], "IN_FIELD")
     assert t["tags"] == ["supply"]
     assert t["state"] == "in_field"
-    assert t["createdBy"] == user_uuid
+    assert t["creator"]["uuid"] == user_uuid
 
     # Generate a briefing seeded from the template
     gen = await _post(client, GENERATE, {"templateUuid": t["uuid"]}, token)
     assert "errors" not in gen, gen
     b = gen["data"]["generateBriefing"]
+    assert b["status"] == "DRAFT"
     assert b["templateUuid"] == t["uuid"]
     assert b["content"] == "supply list"
     assert b["tags"] == ["supply"]
@@ -140,9 +166,7 @@ async def test_list_filters_by_state_and_tag(client, briefing_admin_auth):
 
 
 @pytest.mark.asyncio
-async def test_generate_rejects_a_template_that_is_missing_or_deleted(
-    client, briefing_admin_auth
-):
+async def test_generate_rejects_a_template_that_is_missing_or_deleted(client, briefing_admin_auth):
     """Both cases raise rather than silently producing an empty briefing / an FK violation."""
     _, token = briefing_admin_auth
 
@@ -182,3 +206,77 @@ async def test_briefings_are_public_but_templates_are_not(client, login_user_aut
 
         templates = await _post(client, LIST_TEMPLATES, {}, caller)
         assert templates.get("errors"), templates
+
+
+def _row(body, uuid):
+    assert "errors" not in body, body
+    return next((x for x in body["data"]["briefings"] if x["uuid"] == uuid), None)
+
+
+@pytest.mark.asyncio
+async def test_draft_stays_private_until_published_then_freezes(client, redis, briefing_admin_auth):
+    """A draft is editable and editor-only; publishing makes it public and read-only."""
+    author_uuid, author_token = briefing_admin_auth
+    editor_uuid, editor_token = await _create_user_with_role(redis, "Briefing Admin")
+    gen = await _post(client, GENERATE_CONTENT, {"content": "v1"}, author_token)
+    assert "errors" not in gen, gen
+    uuid = gen["data"]["generateBriefing"]["uuid"]
+
+    assert _row(await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"}), uuid) is None
+    assert (await _post(client, GET_BRIEFING, {"uuid": uuid})).get("errors")
+    edited = await _post(client, UPDATE_CONTENT, {"uuid": uuid, "content": "v1 edited"}, editor_token)
+    assert "errors" not in edited, edited
+
+    draft = _row(await _post(client, LIST_BY_STATUS, {"status": "DRAFT"}, author_token), uuid)
+    assert draft["status"] == "DRAFT" and draft["publisher"] is None
+    assert draft["creator"]["uuid"] == author_uuid and draft["updater"]["uuid"] == editor_uuid
+
+    pub = await _post(client, PUBLISH, {"uuid": uuid}, editor_token)
+    assert "errors" not in pub, pub
+    assert pub["data"]["publishBriefing"]["status"] == "PUBLISHED"
+    assert pub["data"]["publishBriefing"]["publishedAt"]
+
+    again = await _post(client, PUBLISH, {"uuid": uuid}, editor_token)
+    assert "Briefing is already published" in str(again.get("errors"))
+    frozen = await _post(client, UPDATE_CONTENT, {"uuid": uuid, "content": "v2"}, author_token)
+    assert "Published briefings are read-only" in str(frozen.get("errors"))
+
+    admin_row = _row(await _post(client, LIST_BY_STATUS, {"status": "ALL"}, author_token), uuid)
+    assert admin_row["publisher"]["uuid"] == editor_uuid and admin_row["publisher"]["name"]
+    public_row = _row(await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"}), uuid)
+    assert public_row["status"] == "PUBLISHED"
+    assert public_row["creator"] is None and public_row["publisher"] is None
+    assert (await _post(client, GET_BRIEFING, {"uuid": uuid}))["data"]["briefing"]["uuid"] == uuid
+
+
+@pytest.mark.asyncio
+async def test_draft_lists_and_publishing_need_editor_permissions(
+    client, briefing_admin_auth, login_user_auth
+):
+    """Guests and plain accounts can list only published briefings and cannot publish."""
+    _, admin_token = briefing_admin_auth
+    _, user_token = login_user_auth
+    gen = await _post(client, GENERATE_CONTENT, {"content": "draft"}, admin_token)
+    uuid = gen["data"]["generateBriefing"]["uuid"]
+    for caller in (None, user_token):
+        for status in ("DRAFT", "ALL"):
+            assert (await _post(client, LIST_BY_STATUS, {"status": status}, caller)).get("errors")
+        assert (await _post(client, PUBLISH, {"uuid": uuid}, caller)).get("errors")
+
+
+@pytest.mark.asyncio
+async def test_edit_alone_drafts_but_cannot_publish_or_read_templates(client, redis, briefing_admin_auth):
+    """Without .publish an editor can draft ad hoc, but can't publish, copy or edit a template."""
+    _, admin_token = briefing_admin_auth
+    _, editor = await _create_user_with_grants(redis, ((Perm.PREDEP_EDIT, "all"),))
+    t = await _create_template(client, admin_token, "template body", [], "BRIEFING")
+
+    seeded = await _post(client, GENERATE, {"templateUuid": t["uuid"]}, editor)
+    assert seeded.get("errors") and "template body" not in str(seeded)
+    touched = await _post(client, UPDATE_TEMPLATE, {"uuid": t["uuid"], "content": None}, editor)
+    assert touched.get("errors") and "template body" not in str(touched)
+
+    gen = await _post(client, GENERATE_CONTENT, {"content": "ad hoc"}, editor)
+    assert "errors" not in gen, gen
+    uuid = gen["data"]["generateBriefing"]["uuid"]
+    assert (await _post(client, PUBLISH, {"uuid": uuid}, editor)).get("errors")

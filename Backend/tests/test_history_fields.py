@@ -62,8 +62,7 @@ def test_classification_never_names_a_column_that_does_not_exist(entity, table):
     columns = {c.name for c in HISTORY_MODELS[table].__table__.columns}
     key = (entity, table)
     named = set(FIELD_TIERS.get(key, {})) | set(EXCLUDED.get(key, {}))
-    assert named - columns == set(), (
-        f"{entity}/{table} 分類到不存在的欄位: {sorted(named - columns)}")
+    assert named - columns == set(), f"{entity}/{table} 分類到不存在的欄位: {sorted(named - columns)}"
 
 
 @pytest.mark.parametrize("key", sorted(EXCLUDED))
@@ -117,11 +116,19 @@ def test_the_shared_tables_really_are_classified_differently():
     assert differing, "shared tables are identical — the (entity, table) key buys nothing"
 
 
-def test_review_columns_are_audit_tier():
-    """ADR-130: internal review notes need audit.view, not merely *.view_history."""
-    assert FIELD_TIERS[("ticket", "tickets")]["review_note"].tier is Tier.AUDIT
-    assert FIELD_TIERS[("ticket", "ticket_tasks")]["review_note"].tier is Tier.AUDIT
-    assert FIELD_TIERS[("ticket", "ticket_tasks")]["moderation_status"].tier is Tier.AUDIT
+def test_a_stations_internal_comment_is_pii_without_a_masker():
+    """ADR-332: the timeline gates `comment` with the key StationType.comment uses (ADR-197).
+
+    Withheld, not masked: free text has no shape to redact.
+    """
+    spec = FIELD_TIERS[("station", "stations")]["comment"]
+    assert spec.tier is Tier.PII and spec.mask is None
+
+
+def test_the_audit_note_is_audit_tier_and_the_status_public():
+    """The note says what an auditor found; the status is public on the ticket itself."""
+    assert FIELD_TIERS[("ticket", "tickets")]["audit_note"].tier is Tier.AUDIT
+    assert FIELD_TIERS[("ticket", "tickets")]["audit_status"].tier is Tier.PUBLIC
 
 
 def test_dedup_and_scoring_columns_are_excluded_everywhere():

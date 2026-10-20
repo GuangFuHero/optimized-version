@@ -1,22 +1,26 @@
 'use client';
 
 import type { ReactElement } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import AlternateEmailRoundedIcon from '@mui/icons-material/AlternateEmailRounded';
 import ChatRoundedIcon from '@mui/icons-material/ChatRounded';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import FacebookRoundedIcon from '@mui/icons-material/FacebookRounded';
 import FileDownloadRoundedIcon from '@mui/icons-material/FileDownloadRounded';
+import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded';
+import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
+import XIcon from '@mui/icons-material/X';
 import {
   Box,
   Button,
+  ButtonBase,
   Drawer,
   IconButton,
-  Stack,
-  TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 
 import { createQrDataUrl, downloadQrSvg } from './qr-code';
@@ -29,7 +33,7 @@ import type { PointShareChannel, PointShareTarget } from './types';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
-const { color } = designTokens;
+const { color, radius } = designTokens;
 
 interface PointShareDrawerProps {
   open: boolean;
@@ -41,14 +45,48 @@ const channelIcons: Record<PointShareChannel, ReactElement> = {
   line: <ChatRoundedIcon />,
   facebook: <FacebookRoundedIcon />,
   threads: <AlternateEmailRoundedIcon />,
+  x: <XIcon />,
 };
 
+// A tile a finger can hit (prototype site-actions.jsx:1318). Five of them fit one row at 390px, each
+// ~64px wide inside; at the 10 step 「Facebook」, the widest label, still fits one line on a phone.
+const tileSx = {
+  minHeight: 76,
+  px: 0,
+  py: 1.5,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 0.75,
+  borderRadius: `${radius.md}px`,
+  border: `1px solid ${color.border.default}`,
+  bgcolor: color.bg.neutral.default,
+  color: color.fg.neutral.default,
+  // A <button> takes the browser's font, not the page's.
+  fontFamily: 'inherit',
+  fontSize: displayTextSize[10],
+  fontWeight: 500,
+  whiteSpace: 'nowrap',
+  '& .MuiSvgIcon-root': { fontSize: 20, color: color.fg.neutral.subtle },
+} as const;
+
+/**
+ * Sharing a point, laid out as the prototype's (site-actions.jsx:1255-1395, Sucre 2026-09-11): one
+ * screen with no scrolling, the QR code as large as it fits — it is printed and posted on site —
+ * the phone's own share sheet where there is one, then the channels. A bottom sheet on a phone.
+ */
 export function PointShareDrawer({
   open,
   target,
   onClose,
 }: PointShareDrawerProps) {
+  const theme = useTheme();
+  const isPhone = useMediaQuery(theme.breakpoints.down('tablet'));
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+  // After mount: the server has no `navigator`, and most desktop browsers have no share sheet —
+  // a button that does nothing is left out rather than shown.
+  const [canShareNatively, setCanShareNatively] = useState(false);
   const links = useMemo(
     () => (target ? createPointShareLinks(target) : []),
     [target],
@@ -57,6 +95,10 @@ export function PointShareDrawer({
     () => (target ? createQrDataUrl(target.url) : ''),
     [target],
   );
+
+  useEffect(() => {
+    setCanShareNatively(typeof navigator.share === 'function');
+  }, []);
 
   const handleCopy = async () => {
     if (!target) {
@@ -68,149 +110,192 @@ export function PointShareDrawer({
     window.setTimeout(() => setCopyState('idle'), 1400);
   };
 
+  const handleNativeShare = () => {
+    if (!target) {
+      return;
+    }
+
+    // A dismissed sheet rejects; there is nothing to tell the person who dismissed it.
+    navigator
+      .share({ title: target.title, text: target.description, url: target.url })
+      .catch(() => undefined);
+  };
+
   return (
     <Drawer
-      anchor="right"
+      anchor={isPhone ? 'bottom' : 'right'}
       open={open}
       onClose={onClose}
       sx={{
-        '& .MuiDrawer-paper': {
-          width: { mobile: '100vw', tablet: 400 },
-          maxWidth: '100vw',
-          bgcolor: color.bg.neutral.subtle,
-        },
+        '& .MuiDrawer-paper': isPhone
+          ? {
+              height: '92dvh',
+              borderRadius: `${radius.lg}px ${radius.lg}px 0 0`,
+              bgcolor: color.bg.neutral.default,
+            }
+          : {
+              width: 440,
+              maxWidth: '100vw',
+              bgcolor: color.bg.neutral.default,
+            },
       }}
     >
       <Box
         sx={{
           height: '100%',
-          display: 'grid',
-          gridTemplateRows: 'auto minmax(0, 1fr)',
+          display: 'flex',
+          flexDirection: 'column',
+          pb: 'env(safe-area-inset-bottom)',
         }}
       >
+        {isPhone ? (
+          // Says it is a sheet that goes back down; dragging it is not wired up.
+          <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
+            <Box
+              sx={{
+                width: 36,
+                height: 4,
+                borderRadius: '999px',
+                bgcolor: color.border.default,
+              }}
+            />
+          </Box>
+        ) : null}
+
         <Box
           sx={{
-            px: 3,
-            py: 2.5,
+            px: { mobile: 2, tablet: 3 },
+            py: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
             borderBottom: `1px solid ${color.border.default}`,
-            bgcolor: color.bg.neutral.default,
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography
-                sx={{ color: color.fg.neutral.default, fontSize: displayTextSize[14], fontWeight: 800 }}
-              >
-                {target?.title ?? '分享資訊'}
-              </Typography>
-            </Box>
-            <IconButton aria-label="關閉分享" onClick={onClose} size="small">
-              <CloseRoundedIcon />
-            </IconButton>
-          </Box>
+          <Typography
+            sx={{
+              minWidth: 0,
+              flex: 1,
+              color: color.fg.neutral.default,
+              fontSize: displayTextSize[16],
+              fontWeight: 700,
+            }}
+          >
+            {target?.title ?? '分享'}
+          </Typography>
+          <IconButton aria-label="關閉分享" onClick={onClose} size="small">
+            <CloseRoundedIcon />
+          </IconButton>
         </Box>
 
         {target ? (
-          <Stack spacing={2.5} sx={{ minHeight: 0, overflowY: 'auto', p: 3 }}>
-            <Stack spacing={1}>
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              p: { mobile: 2, tablet: 3 },
+            }}
+          >
+            {/* The largest part, as the prototype has it: too small to scan, it is no use at all. */}
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                p: 2,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 1,
+                borderRadius: `${radius.lg}px`,
+                border: `1px solid ${color.border.default}`,
+                bgcolor: color.bg.neutral.subtle,
+              }}
+            >
+              <Box
+                component="img"
+                alt={`${target.title} QR Code`}
+                src={qrDataUrl}
+                sx={{
+                  flex: '1 1 0',
+                  minHeight: 0,
+                  maxWidth: '100%',
+                  aspectRatio: '1 / 1',
+                  objectFit: 'contain',
+                }}
+              />
               <Typography
-                sx={{ color: color.fg.neutral.default, fontSize: displayTextSize[14], fontWeight: 800 }}
+                sx={{
+                  color: color.fg.neutral.muted,
+                  fontSize: displayTextSize[12],
+                  lineHeight: 1.5,
+                  textAlign: 'center',
+                }}
               >
-                分享方式
+                給現場的人掃，或長按另存後列印張貼。
+              </Typography>
+              <Button
+                size="small"
+                startIcon={<FileDownloadRoundedIcon />}
+                onClick={() => downloadQrSvg(target.url, `${target.title}.svg`)}
+                sx={{ textTransform: 'none' }}
+              >
+                下載 QR Code
+              </Button>
+            </Box>
+
+            {canShareNatively ? (
+              <Button
+                variant="contained"
+                startIcon={<IosShareRoundedIcon />}
+                onClick={handleNativeShare}
+                sx={{ textTransform: 'none', fontWeight: 700 }}
+              >
+                分享到⋯
+              </Button>
+            ) : null}
+
+            <Box>
+              <Typography
+                sx={{
+                  mb: 1,
+                  color: color.fg.neutral.default,
+                  fontSize: displayTextSize[13],
+                  fontWeight: 700,
+                }}
+              >
+                傳給別人
               </Typography>
               <Box
                 sx={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 1fr 1fr',
-                  gap: 1,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(64px, 1fr))',
+                  gap: 0.75,
                 }}
               >
                 {links.map((link) => (
-                  <Button
+                  <ButtonBase
                     key={link.channel}
-                    variant="outlined"
-                    startIcon={channelIcons[link.channel]}
                     onClick={() => openPointShareLink(link.href)}
-                    sx={{
-                      minWidth: 0,
-                      px: 1,
-                      color: color.brand.secondary.subtle,
-                      borderColor: color.border.default,
-                      bgcolor: color.bg.neutral.default,
-                      textTransform: 'none',
-                      fontWeight: 800,
-                    }}
+                    sx={tileSx}
                   >
+                    {channelIcons[link.channel]}
                     {link.label}
-                  </Button>
+                  </ButtonBase>
                 ))}
+                <ButtonBase onClick={handleCopy} sx={tileSx}>
+                  {copyState === 'copied' ? (
+                    <CheckRoundedIcon />
+                  ) : (
+                    <LinkRoundedIcon />
+                  )}
+                  {copyState === 'copied' ? '已複製' : '複製連結'}
+                </ButtonBase>
               </Box>
-            </Stack>
-
-            <Stack spacing={1}>
-              <Typography
-                sx={{ color: color.fg.neutral.default, fontSize: displayTextSize[14], fontWeight: 800 }}
-              >
-                連結
-              </Typography>
-              <TextField
-                value={target.url}
-                size="small"
-                fullWidth
-                slotProps={{ input: { readOnly: true } }}
-              />
-              <Button
-                variant="contained"
-                startIcon={<ContentCopyRoundedIcon />}
-                onClick={handleCopy}
-                sx={{
-                  alignSelf: 'flex-start',
-                  textTransform: 'none',
-                  fontWeight: 800,
-                }}
-              >
-                {copyState === 'copied' ? '已複製' : '複製連結'}
-              </Button>
-            </Stack>
-
-            <Stack spacing={1.5}>
-              <Typography
-                sx={{ color: color.fg.neutral.default, fontSize: displayTextSize[14], fontWeight: 800 }}
-              >
-                QR Code
-              </Typography>
-              <Box
-                sx={{
-                  width: '100%',
-                  aspectRatio: '1 / 1',
-                  maxWidth: 260,
-                  alignSelf: 'center',
-                  bgcolor: color.bg.neutral.default,
-                  border: `1px solid ${color.border.default}`,
-                  p: 2,
-                }}
-              >
-                <Box
-                  component="img"
-                  alt={`${target.title} QR Code`}
-                  src={qrDataUrl}
-                  sx={{ display: 'block', width: '100%', height: '100%' }}
-                />
-              </Box>
-              <Button
-                variant="outlined"
-                startIcon={<FileDownloadRoundedIcon />}
-                onClick={() => downloadQrSvg(target.url, `${target.title}.svg`)}
-                sx={{
-                  alignSelf: 'center',
-                  textTransform: 'none',
-                  fontWeight: 800,
-                }}
-              >
-                下載 QR Code
-              </Button>
-            </Stack>
-          </Stack>
+            </Box>
+          </Box>
         ) : null}
       </Box>
     </Drawer>

@@ -18,7 +18,7 @@ export interface RoleRequestError {
 const REFUSALS: Record<string, string> = {
   'You already have a pending request': '你已經有一筆申請在審核中。',
   'Only an account without a back-office identity can apply':
-    '你已經有後台身分，不需要申請。',
+    '你已經有管理平台身分，不需要申請。',
   'Reason is required': '請填寫申請理由。',
   'Reason must be at most 500 characters': '申請理由最多 500 字。',
   'Contact must be at most 100 characters': '聯絡方式最多 100 字。',

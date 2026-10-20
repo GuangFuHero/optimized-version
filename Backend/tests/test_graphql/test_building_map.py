@@ -38,7 +38,9 @@ query ($bounds: BoundsInput) { buildingMaps(bounds: $bounds) { items { uuid } pa
 """
 CREATE_TICKET = """
 mutation ($input: CreateTicketInput!) {
-  createTicket(input: $input) { uuid geometry secondaryLocation { county city lane no floor room } }
+  createTicket(input: $input) {
+    ... on TicketCreated { ticket { uuid geometry secondaryLocation { county city lane no floor room } } }
+  }
 }
 """
 BUILDING_TICKETS = "query ($uuid: UUID!) { buildingMapTickets(buildingMapUuid: $uuid) { uuid } }"
@@ -156,7 +158,7 @@ async def test_ticket_in_building_copies_its_point_and_address(
         building["uuid"], floor="2F", room="咖啡廳", county="台北市", lane="假路",
     )}, token)
     assert "errors" not in body, body
-    ticket = body["data"]["createTicket"]
+    ticket = body["data"]["createTicket"]["ticket"]
     assert ticket["geometry"]["coordinates"] == POINT["coordinates"]
     assert ticket["secondaryLocation"] == {
         "county": "花蓮縣", "city": "光復鄉", "lane": "中正路", "no": "10號",
@@ -240,7 +242,7 @@ async def test_building_map_tickets_are_hidden_from_anonymous_callers(
     _, token = login_user_auth
     building = await _create_building(client, admin_token)
     body = await _gql(client, CREATE_TICKET, {"input": _ticket_input(building["uuid"], floor="3F")}, token)
-    ticket_uuid = body["data"]["createTicket"]["uuid"]
+    ticket_uuid = body["data"]["createTicket"]["ticket"]["uuid"]
 
     body = await _gql(client, BUILDING_TICKETS, {"uuid": building["uuid"]}, token)
     assert body["data"]["buildingMapTickets"] == [{"uuid": ticket_uuid}]

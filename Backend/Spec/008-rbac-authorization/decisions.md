@@ -1449,6 +1449,76 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 ---
 
+#### ADR-332 站點的內部備註 `comment` 由 `station.view_pii` 把關，範圍外讀到 `null`
+> **狀態：ACCEPTED（2026-10-17）。** 使用者 2026-10-17 拍板用 `station.view_pii`。
+
+**白話**：站點的內部備註只給看得到這個站點聯絡方式的人；訪客和其他民眾拿到空值。
+
+**Context**：`StationType.comment` 的欄位說明寫著「Internal admin comment, not shown to the public」，但
+`from_model` 直接回傳 `m.comment`，沒有任何權限檢查。2026-10-17 在 staging 用訪客身分查 `stations`，25 個站點
+裡有 8 個拿到內部備註，例如「水退後已撤站，記錄未更新 (stale)」「與 b…07 疑似重複」。前台的站點詳情在沒有描述
+時，還會拿 `comment` 當描述顯示。操作紀錄（016）也把站點的 `comment` 分在公開層。
+
+**Decision**：
+
+1. **`StationType.comment` 改成 resolver**，跟三個 `contact_*` 共用 `_pii_visible`（`station.view_pii`＋
+   checkpoint 2）：scope 內回原文，scope 外回 `null`。
+2. **不遮罩**：備註是自由文字，沒有可以留一部分的格式。做法同 018 的兩個檢傷欄位（ADR-254）。
+3. **用 `station.view_pii`，不用 `station.edit` 或 `station.review`**。照 seed，持有它的剛好是該讀的人：`user`
+   `own`（建站的人讀得到自己寫的，建站抽屜也會讀回 `createStation` 的結果）、`data_auditor` `all`、團隊
+   `admin`／`member` `team`、`super_admin` `all`。另外兩個都有缺口：
+   - `station.edit`：`data_auditor` 沒有，可是「疑似重複」這類備註正是寫給它看的。
+   - `station.review`：`member` 沒有，能改備註卻讀不回來；`user` 也讀不到自己剛寫的。
+4. **操作紀錄跟著改**：站點的 `comment` 從公開層改成 PII 層，不帶 mask（`services/history_fields.py`）。依
+   ADR-197，同一個欄位的單筆讀取與時間軸用同一把鑰匙。照 seed，`station.view_history` 的 scope 沒有一個比
+   `station.view_pii` 寬，但 scope 可以在執行期調整，seed 不是保證（ADR-197 的理由）。
+5. **站點的 `comment` 不再能提修改建議**：從 `graphql/suggestions/fields.py` 的 `SUGGESTABLE_FIELDS["station"]`
+   拿掉。提建議只要 `station.contribute`（一般帳號 `all`），也就是讀不到備註的人能建議備註該寫什麼，通過後還會蓋
+   掉後台寫的內部備註。前台的建議表單本來就沒有這一欄。`station_property` 的 `comment` 留著：它存的是屬性的值。
+6. **另外兩條讀得到備註的路用同一把鑰匙**（#81 review，2026-10-19 補）：
+   - **站點匯出**（`GET /stations/export`）：`services/bulk_export.py` 每一列用 `station.view_pii` 判斷，做法同
+     單匯出的聯絡欄位；範圍外的列 `comment` 欄留空。匯出檔也是匯入範本（ADR-119），匯入時空白代表不動
+     （ADR-121），拿回去匯入不會清掉備註。
+   - **建議合併紀錄**：第 5 條之前通過的合併，`changes` 存著備註的前後原文，而 `suggestionMerges` 和撤銷合併的
+     回傳只查 `station.review`／`station.revoke`。`StationSuggestionMergeType.changes` 在呼叫者沒有這個站點的
+     `station.view_pii` 時，拿掉站點 `comment` 那幾筆，兩條路一起生效。照 seed，持有這兩個能力的人都有範圍一樣
+     大的 `station.view_pii`，理由同第 4 條。
+
+**後果**：
+
+- ➕ 訪客與一般帳號讀不到別人站點的內部備註。`station`、`stations`、`createStation`、`updateStation` 都經過
+  `from_model`，一起生效。
+- ◾ 站點搜尋原本就只比對名稱與描述（`models/geo.py` 的 `search_text`），不能用 `q` 猜備註。
+- ◾ `StationPropertyType.comment` 不受影響：它存的是 Boolean／Enum 屬性的值（`services/station.py` 的
+  comment-backed 屬性，例如供水充足程度），本來就是公開資料。
+- ➖ 團隊 `admin`／`member` 讀別的團隊的站點時拿到 `null`（之前讀得到）。後台目前沒有畫面讀 `comment`。
+- ➖ 前台站點詳情「沒有描述就顯示 `comment`」的退回要拿掉，fragment 也不再選它（前端另一支 PR）。
+- ➖ 拿掉之前就送出、還在待審的站點 `comment` 建議只能「不採用」：通過時 `coerce_and_validate` 會說這一欄不能
+  建議。之前已經通過的合併照樣能撤銷（撤銷不查欄位清單）。mock seed 沒有建議修改的資料。
+
+---
+
+#### ADR-334 `/users/me` lists checkpoint 1 capabilities for the active identity
+
+**Status: ACCEPTED (2026-10-18).** PR #79.
+
+**Context**: The frontend needs to decide which controls and pages to show. Role names cannot answer this because role grants and direct grants can change at runtime. Repeating the seed's role-to-capability mapping in the frontend would let it drift from backend authorization.
+
+**Decision**:
+
+1. Both `GET` and `PATCH /api/v1/users/me` return `capabilities: list[Perm]` for the request's active identity. A request with `X-WG-Realm: site` uses its `user` identity under ADR-289. Grants from other identities are excluded.
+2. `authz.capabilities` includes every `PUBLIC_PERMS` entry, even without a grant or with a `none` grant. Other entries require `resolve_scope(...) != Scope.NONE`, which includes role grants, direct grants, and government-team scope widening. For a team identity, `GOV_TEAM_ONLY_PERMS` also requires a non-deleted, active government team, as in `require_gov_team`. Platform identities are exempt from that fence.
+3. The response is a list of capability keys, not a capability-to-scope map. `openapi-typescript` 7 ignores JSON Schema `propertyNames`, so a map would generate plain string keys. A list preserves the `Perm` union in the generated client contract.
+4. This list answers checkpoint 1 only. The frontend uses it to decide what to show. Each backend request still checks authorization, including checkpoint 2 against the resource and any service-specific eligibility or state rules. Unlike `require_scope`, `has_permission` / `PermissionChecker` requires grants even for `PUBLIC_PERMS`, so `/analytics/tickets/*` and `/analytics/stations/*` can return 403 for custom roles without `ticket.view` or `station.view` even though those capabilities are listed. Seeded roles already hold both grants. For example, `role_request.add` can be listed for a site `user` identity whose account also holds a back-office identity, while the role-request service rejects that account as ineligible under ADR-287.
+
+**Consequences**:
+
+- The frontend can use capability keys without maintaining its own role mapping. It must fetch the profile again after an identity switch or a grant change to see the new list.
+- A listed capability does not promise access to every resource or guarantee that an operation will succeed.
+- Grant queries share one cache per listing. `tests/test_me_capabilities.py` checks seed roles, government-team fencing, public capabilities, direct grants, fixed query counts, and the GET/PATCH response under back-office and site identities.
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|

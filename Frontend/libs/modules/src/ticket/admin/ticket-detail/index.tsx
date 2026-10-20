@@ -274,12 +274,21 @@ export function TicketDetailHeader({
           gap: 2,
         }}
       >
+        {/* At most two lines, then 「…」(WG-031): a longer title ran out of the fixed-height header
+            and over the tabs. Hovering shows the whole of it. */}
         <Typography
+          title={title}
           sx={{
+            minWidth: 0,
             color: ticketDetailPalette.heading,
             fontSize: displayTextSize[18],
             lineHeight: '24px',
             fontWeight: 600,
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: 2,
+            overflow: 'hidden',
+            overflowWrap: 'anywhere',
           }}
         >
           {title}

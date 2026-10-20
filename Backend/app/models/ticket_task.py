@@ -39,9 +39,6 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     progress_note: Mapped[str | None] = mapped_column(String)
     is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False)
     dedup_group_id: Mapped[str | None] = mapped_column(String)
-    moderation_status: Mapped[str] = mapped_column(String(50), default="pending_review")
-    visibility: Mapped[str] = mapped_column(String(50), default="public")
-    review_note: Mapped[str | None] = mapped_column(String)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
     # Set when `status` becomes 'fulfilled'/'canceled', cleared if it leaves again — by the
     # actions that move it (services/ticket.py: the claim that fills the task, the release that
@@ -54,8 +51,8 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     # decides what giving a place back does to it (ADR-291, ADR-292).
     recruiting_stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Keyword-search column (ADR-079/081). progress_note and review_note are excluded:
-    # operational notes accumulate contact details and ad-hoc coordination text.
+    # Keyword-search column (ADR-079/081). progress_note is excluded: operational notes
+    # accumulate contact details and ad-hoc coordination text.
     search_text: Mapped[str] = mapped_column(
         String,
         Computed(

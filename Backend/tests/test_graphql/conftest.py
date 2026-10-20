@@ -3,6 +3,7 @@
 import uuid as uuid_mod
 from contextlib import asynccontextmanager
 
+import pytest
 import pytest_asyncio
 from geoalchemy2.shape import from_shape
 from httpx import ASGITransport, AsyncClient
@@ -15,6 +16,7 @@ from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.db.session import Base
+from app.dedup_engine import registry as dedup_registry
 from app.main import app
 from app.models.auth import User
 from app.models.geo import HazardousZone, Station
@@ -111,7 +113,7 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_DELETE, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ASSIGN, "all")
-        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_REVIEW, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_AUDIT, "all")
 
         # Content Admin: announcement management. ADR-026 dropped the Group/Policy tables in
         # favour of capability grants, so this role is the capability-era equivalent of the old
@@ -138,17 +140,49 @@ async def _ensure_db():
         await _grant(db, briefing_role, perm_cache, Perm.PREDEP_EDIT, "all")
         await _grant(db, briefing_role, perm_cache, Perm.PREDEP_DELETE, "all")
 
-        # Data Auditor: reviews and revokes station suggestions everywhere, as the seeded
-        # `data_auditor` role does, but edits nothing directly.
+        # Data Auditor: reviews and revokes station suggestions and audits tickets everywhere, as
+        # the seeded `data_auditor` role does, but edits nothing directly.
         auditor_role = Role(name="Data Auditor", kind="platform")
         db.add(auditor_role)
         await db.flush()
         await _grant(db, auditor_role, perm_cache, Perm.STATION_VIEW, "all")
         await _grant(db, auditor_role, perm_cache, Perm.STATION_REVIEW, "all")
         await _grant(db, auditor_role, perm_cache, Perm.STATION_REVOKE, "all")
+        await _grant(db, auditor_role, perm_cache, Perm.TICKET_AUDIT, "all")
 
         await db.commit()
     await eng.dispose()
+
+
+class _NeverSuspects:
+    """A dedup engine that never suspects a duplicate.
+
+    GraphQL tests create many similar tickets, tasks and stations at the same spot; with the real
+    engine the create mutations would answer DuplicatesSuspected instead of creating. Tests that
+    are about deduplication opt in to the real engine with `@pytest.mark.real_dedup`.
+    """
+
+    version = "stub-v2"
+
+    async def check(self, db, submission, now):
+        """Never a suspect."""
+        return []
+
+    async def score(self, db, submission, draft_ref, related_kind, related_uuid, now):
+        """Only reached through an acknowledged create, which these tests do not send."""
+        raise AssertionError("the stub dedup engine does not score")
+
+
+def pytest_configure(config):
+    """Register the marker that opts a test into the real dedup engine."""
+    config.addinivalue_line("markers", "real_dedup: run create mutations with the real dedup engine")
+
+
+@pytest.fixture(autouse=True)
+def _no_dedup_hints(request, monkeypatch):
+    """Every GraphQL test runs with the never-suspecting engine unless marked `real_dedup`."""
+    if request.node.get_closest_marker("real_dedup") is None:
+        monkeypatch.setattr(dedup_registry, "_ENGINE", _NeverSuspects())
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -158,6 +192,7 @@ async def setup_db():
     # Dispose the app-level engine pool so each test gets fresh connections
     # on the current event loop (avoids "Future attached to a different loop").
     from app.db.session import engine as app_engine
+
     await app_engine.dispose()
 
 
@@ -203,23 +238,13 @@ async def _create_user_with_role(redis, role_name: str) -> tuple[str, str]:
         return str(user.uuid), token
 
 
-async def _citizen_since_adr_286(redis) -> str:
-    """A signed-in citizen granted as the seed grants one since ADR-286; returns their token.
-
-    view_pii `all` (whom to call once they claim, ADR-286), view_history `own`, assign `own`
-    (claiming a need). Login User keeps view_pii at `own`, which the masking tests rely on.
-    """
+async def _create_user_with_grants(redis, grants) -> tuple[str, str]:
+    """Create a one-off platform role holding `grants` ((Perm, scope) pairs) and a user acting as it."""
     async with test_db() as db:
-        role = Role(name=f"citizen-{uuid_mod.uuid4().hex[:8]}", kind="platform")
+        role = Role(name=f"adhoc-{uuid_mod.uuid4().hex[:8]}", kind="platform")
         db.add(role)
         await db.flush()
-        for perm, scope in (
-            (Perm.TICKET_VIEW, "all"),
-            (Perm.TICKET_VIEW_DETAIL, "all"),
-            (Perm.TICKET_VIEW_PII, "all"),
-            (Perm.TICKET_VIEW_HISTORY, "own"),
-            (Perm.TICKET_ASSIGN, "own"),
-        ):
+        for perm, scope in grants:
             permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
             if permission is None:
                 permission = Permission(key=perm.value)
@@ -227,7 +252,25 @@ async def _citizen_since_adr_286(redis) -> str:
                 await db.flush()
             db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
         role_name = role.name
-    _, token = await _create_user_with_role(redis, role_name)
+    return await _create_user_with_role(redis, role_name)
+
+
+async def _citizen_since_adr_286(redis) -> str:
+    """A signed-in citizen granted as the seed grants one since ADR-286; returns their token.
+
+    view_pii `all` (whom to call once they claim, ADR-286), view_history `own`, assign `own`
+    (claiming a need). Login User keeps view_pii at `own`, which the masking tests rely on.
+    """
+    _, token = await _create_user_with_grants(
+        redis,
+        (
+            (Perm.TICKET_VIEW, "all"),
+            (Perm.TICKET_VIEW_DETAIL, "all"),
+            (Perm.TICKET_VIEW_PII, "all"),
+            (Perm.TICKET_VIEW_HISTORY, "own"),
+            (Perm.TICKET_ASSIGN, "own"),
+        ),
+    )
     return token
 
 
@@ -275,8 +318,11 @@ async def sample_station(coordinator_auth):
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
             created_by=user_uuid,
             type="shelter",
-            op_hour="08:00-18:00", level=3, comment="Test station",
-            source="user", visibility="public",
+            op_hour="08:00-18:00",
+            level=3,
+            comment="Test station",
+            source="user",
+            visibility="public",
         )
         db.add(station)
         await db.flush()
@@ -289,12 +335,22 @@ async def sample_hazardous_zone(coordinator_auth):
     user_uuid, _ = coordinator_auth
     async with test_db() as db:
         area = HazardousZone(
-            geometry=from_shape(Polygon([
-                (121.49, 24.99), (121.51, 24.99), (121.51, 25.01),
-                (121.49, 25.01), (121.49, 24.99),
-            ]), srid=4326),
+            geometry=from_shape(
+                Polygon(
+                    [
+                        (121.49, 24.99),
+                        (121.51, 24.99),
+                        (121.51, 25.01),
+                        (121.49, 25.01),
+                        (121.49, 24.99),
+                    ]
+                ),
+                srid=4326,
+            ),
             created_by=user_uuid,
-            status="blocked", information_source="test", is_public=True,
+            status="blocked",
+            information_source="test",
+            is_public=True,
             note="Test hazardous zone",
         )
         db.add(area)
@@ -310,10 +366,13 @@ async def sample_ticket(coordinator_auth):
         ticket = Tickets(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
             created_by=user_uuid,
-            title="Need volunteers", description="Cleanup needed",
-            contact_name="Test", contact_email="test@test.com",
-            status="pending", priority="high",
-            task_type="hr", visibility="public",
+            title="Need volunteers",
+            description="Cleanup needed",
+            contact_name="Test",
+            contact_email="test@test.com",
+            status="pending",
+            priority="high",
+            task_type="hr",
         )
         db.add(ticket)
         await db.flush()
@@ -327,8 +386,10 @@ async def sample_ticket_task(coordinator_auth, sample_ticket):
     async with test_db() as db:
         task = TicketTask(
             ticket_uuid=sample_ticket,
-            task_type="hr", task_name="Need medics",
-            quantity=3, source="user", visibility="public",
+            task_type="hr",
+            task_name="Need medics",
+            quantity=3,
+            source="user",
             created_by=user_uuid,
         )
         db.add(task)
@@ -345,7 +406,9 @@ async def sample_station_property(coordinator_auth, sample_station):
             station_uuid=sample_station,
             property_type="facility",
             property_name="restroom",
-            quantity=2, status="pending", weightings=1.0,
+            quantity=2,
+            status="pending",
+            weightings=1.0,
             created_by=user_uuid,
         )
         db.add(prop)

@@ -24,23 +24,48 @@ export interface TicketAddressParts {
   landmarkNote?: string | null;
 }
 
-/**
- * Null when there is nothing to show: `secondaryLocation` is null for a ticket filed without an
- * address, and for a caller without ticket.view_detail on it.
- */
-export function formatTicketAddress(location: TicketAddressParts | null | undefined): string | null {
+const part = (value?: string | null) => value?.trim() ?? '';
+
+/** The street address alone, or null when there is none. */
+export function formatTicketStreet(
+  location: TicketAddressParts | null | undefined,
+): string | null {
   if (!location) {
     return null;
   }
 
-  const part = (value?: string | null) => value?.trim() ?? '';
   // A Chinese street address is one continuous string (backend ADR-155) — no separators. With no
   // part of it split out, the address is the one the site's 請求協助 took as typed.
   const street =
     [location.county, location.city, location.lane, location.alley, location.no]
       .map(part)
       .join('') || part(location.landmarkNote);
-  const line = [street, part(location.buildingSection), part(location.floor), part(location.room)]
+
+  return street || null;
+}
+
+/** The building, floor and room, spaced, or null when none was given. */
+export function formatTicketUnit(
+  location: TicketAddressParts | null | undefined,
+): string | null {
+  if (!location) {
+    return null;
+  }
+
+  const unit = [location.buildingSection, location.floor, location.room]
+    .map(part)
+    .filter(Boolean)
+    .join(' ');
+
+  return unit || null;
+}
+
+/**
+ * Null when there is nothing to show: `secondaryLocation` is null for a ticket filed without an
+ * address, and for a caller without ticket.view_detail on it.
+ */
+export function formatTicketAddress(location: TicketAddressParts | null | undefined): string | null {
+  const line = [formatTicketStreet(location), formatTicketUnit(location)]
     .filter(Boolean)
     .join(' ');
 

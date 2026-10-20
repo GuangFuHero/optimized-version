@@ -6,11 +6,14 @@ marked as coming from the site therefore acts as the `user` grant the caller hol
 request only: never an identity they do not hold, and nothing stored changes.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import delete, select, text
 
 from app.core.permissions import Perm
 from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
+from app.models.announcement import Announcement
 from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
@@ -141,3 +144,41 @@ async def test_any_other_realm_is_ignored(client, db_session, redis, realm):
     _, _, headers = await _auditor(db_session, redis)
 
     assert await _active_role(client, {**headers, "X-WG-Realm": realm}) == "data_auditor"
+
+
+async def test_author_names_stay_hidden_on_the_site(client, db_session, redis, fresh_app_engine):
+    """An editor sees an announcement's author in the back office, not on the site (acting as `user`)."""
+    user_role = (await db_session.execute(select(Role).where(Role.name == "user"))).scalar_one()
+    permission = Permission(key=Perm.ANN_EDIT.value)
+    editor_role = Role(name="announcement_editor", kind="platform")
+    account = User(name="公告編輯")
+    db_session.add_all([permission, editor_role, account])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            RolePermissionAssign(role_uuid=editor_role.uuid, permission_uuid=permission.uuid, scope="all"),
+            UserRoleAssign(user_uuid=account.uuid, role_uuid=user_role.uuid),
+            UserRoleAssign(user_uuid=account.uuid, role_uuid=editor_role.uuid),
+            Announcement(
+                content="停水",
+                active=True,
+                display_order=1,
+                placement="public_page",
+                created_by=account.uuid,
+                updated_by=account.uuid,
+                published_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    account_uuid, editor_uuid = str(account.uuid), str(editor_role.uuid)
+    await db_session.commit()
+    headers = await auth_headers_for(redis, account_uuid, editor_uuid)
+    body = {"query": "{ announcements { creator { name } updater { name } } }"}
+
+    back_office = (await client.post("/graphql", json=body, headers=headers)).json()
+    site = (await client.post("/graphql", json=body, headers={**headers, **SITE})).json()
+
+    assert back_office["data"]["announcements"] == [
+        {"creator": {"name": "公告編輯"}, "updater": {"name": "公告編輯"}}
+    ]
+    assert site["data"]["announcements"] == [{"creator": None, "updater": None}]

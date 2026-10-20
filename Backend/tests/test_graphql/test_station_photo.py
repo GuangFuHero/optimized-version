@@ -36,7 +36,9 @@ from app.repositories.session_repository import SessionRepository
 from tests.test_graphql.conftest import auth_header, test_db
 
 CREATE_STATION = """
-mutation($input: CreateStationInput!) { createStation(input: $input) { uuid } }
+mutation($input: CreateStationInput!) {
+    createStation(input: $input) { ... on StationCreated { station { uuid } } }
+}
 """
 
 ATTACH_STATION_PHOTO = """
@@ -54,7 +56,9 @@ query($uuid: UUID!) { station(uuid: $uuid) { photos { uuid url } } }
 """
 
 CREATE_TICKET = """
-mutation($input: CreateTicketInput!) { createTicket(input: $input) { uuid } }
+mutation($input: CreateTicketInput!) {
+    createTicket(input: $input) { ... on TicketCreated { ticket { uuid } } }
+}
 """
 
 
@@ -69,7 +73,7 @@ async def _create_station(client, token: str, lonlat=(121.5, 24.5)) -> str:
     )
     body = resp.json()
     assert "errors" not in body, body
-    return body["data"]["createStation"]["uuid"]
+    return body["data"]["createStation"]["station"]["uuid"]
 
 
 async def _attach(client, token: str, station_uuid: str, url: str):
@@ -375,7 +379,7 @@ async def test_detach_station_photo_rejects_a_ticket_photo(client, coordinator_a
     )
     body = resp.json()
     assert "errors" not in body, body
-    ticket_uuid = body["data"]["createTicket"]["uuid"]
+    ticket_uuid = body["data"]["createTicket"]["ticket"]["uuid"]
 
     # No ticket-photo mutation exists yet, so insert the row the way a future one would.
     async with test_db() as db:

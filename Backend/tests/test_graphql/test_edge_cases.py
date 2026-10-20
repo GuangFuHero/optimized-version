@@ -11,13 +11,13 @@ async def test_geojson_point_roundtrip(client, coordinator_auth):
     _, token = coordinator_auth
     res = await client.post("/graphql", json={
         "query": """mutation($input: CreateStationInput!) {
-            createStation(input: $input) { uuid geometry }
+            createStation(input: $input) { ... on StationCreated { station { uuid geometry } } }
         }""",
         "variables": {"input": {
             "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
         }},
     }, headers=auth_header(token))
-    data = res.json()["data"]["createStation"]
+    data = res.json()["data"]["createStation"]["station"]
     created_uuid = data["uuid"]
 
     res = await client.post("/graphql", json={
@@ -67,7 +67,7 @@ async def test_invalid_geojson(client, coordinator_auth):
     _, token = coordinator_auth
     res = await client.post("/graphql", json={
         "query": """mutation($input: CreateStationInput!) {
-            createStation(input: $input) { uuid }
+            createStation(input: $input) { ... on StationCreated { station { uuid } } }
         }""",
         "variables": {"input": {
             "geometry": {"type": "Invalid", "coordinates": []},
@@ -98,20 +98,21 @@ async def test_unicode_in_fields(client, coordinator_auth):
     _, token = coordinator_auth
     res = await client.post("/graphql", json={
         "query": """mutation($input: CreateStationInput!) {
-            createStation(input: $input) { uuid comment }
+            createStation(input: $input) { ... on StationCreated { station { uuid comment } } }
         }""",
         "variables": {"input": {
             "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
             "comment": "\u6e2c\u8a66\u7ad9\u9ede",
         }},
     }, headers=auth_header(token))
-    data = res.json()["data"]["createStation"]
+    data = res.json()["data"]["createStation"]["station"]
     created_uuid = data["uuid"]
     assert data["comment"] == "\u6e2c\u8a66\u7ad9\u9ede"
 
+    # comment is behind station.view_pii (ADR-332), so the read-back is signed in too.
     res = await client.post("/graphql", json={
         "query": f'{{ station(uuid: "{created_uuid}") {{ comment }} }}',
-    })
+    }, headers=auth_header(token))
     station = res.json()["data"]["station"]
     assert station["comment"] == "\u6e2c\u8a66\u7ad9\u9ede"
 

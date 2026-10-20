@@ -2,14 +2,12 @@
 
 import { useState, type ReactNode } from 'react';
 
-import { Box, Drawer, Stack, Typography } from '@mui/material';
+import { Box, Drawer } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { usePathname } from 'next/navigation';
 
-import { displayTextSize, getRescueColorScheme } from '@rescue-frontend/ui';
+import { getRescueColorScheme, layoutSizes } from '@rescue-frontend/ui';
 
-import { LAYOUT_DIMENSIONS } from '../layout';
-import { GuangFuBrandIcon } from '../../brand';
 import { SiteMapRouteProvider } from '../../map/site/use-site-map-route-state';
 import {
   RoleRequestDrawer,
@@ -33,8 +31,6 @@ interface SiteShellProps {
   onSignOut?: () => void;
 }
 
-const SITE_EXPANDED_SIDEBAR_WIDTH = 240;
-
 /**
  * 前台外殼：使用單一 responsive layout，避免在 JS 依 breakpoint 切換整份 UI，
  * 減少 SSR 與 hydration 期間先渲染預設版面再跳版的情況。
@@ -51,7 +47,7 @@ export function SiteShell({
   const rescue = getRescueColorScheme(useTheme());
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  // 前往後台 / 申請成為後台人員: asked once here, shown in the top bar or the phone's menu, and
+  // 前往管理平台 / 申請管理權限: asked once here, shown in the top bar or the phone's menu, and
   // the application drawer the latter opens.
   const { myRoleRequests, refetch: refetchRoleRequests } =
     useMyRoleRequests(isAuthenticated);
@@ -65,37 +61,9 @@ export function SiteShell({
   // 這一頁怎麼用 on a phone, from the menu's row: the desktop's ？ holds its own.
   const pageHelp = usePageHelp();
   const [pageHelpOpen, setPageHelpOpen] = useState(false);
-  const bodyMinHeight = `calc(100dvh - ${LAYOUT_DIMENSIONS.desktopTopNavBarHeight}px)`;
   const desktopSidebarWidth = desktopSidebarOpen
-    ? SITE_EXPANDED_SIDEBAR_WIDTH
-    : LAYOUT_DIMENSIONS.collapsedSidebarWidth;
-
-  const mobileSidebarBrand = (
-    <Stack
-      sx={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 1.25,
-        minWidth: 0,
-      }}
-    >
-      <GuangFuBrandIcon width={38} height={26} />
-      <Typography
-        sx={{
-          minWidth: 0,
-          color: rescue.adminShell.sidebar.heading,
-          fontSize: displayTextSize[20],
-          lineHeight: '28px',
-          fontWeight: 700,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        島嶼守望
-      </Typography>
-    </Stack>
-  );
+    ? layoutSizes.site.expandedSidebarWidth
+    : layoutSizes.site.collapsedSidebarWidth;
 
   const content = (
     <Box
@@ -108,8 +76,8 @@ export function SiteShell({
           tablet: `${desktopSidebarWidth}px minmax(0, 1fr)`,
         },
         gridTemplateRows: {
-          mobile: `${LAYOUT_DIMENSIONS.mobileTopNavBarHeight}px minmax(0, 1fr)`,
-          tablet: `${LAYOUT_DIMENSIONS.desktopTopNavBarHeight}px minmax(0, 1fr)`,
+          mobile: `${layoutSizes.site.mobileTopNavBarHeight}px minmax(0, 1fr)`,
+          tablet: `${layoutSizes.site.desktopTopNavBarHeight}px minmax(0, 1fr)`,
         },
         height: '100dvh',
         bgcolor: rescue.adminShell.topNavBar.frame,
@@ -185,13 +153,9 @@ export function SiteShell({
         }}
       >
         <SiteSidebar
+          collapsed={!desktopSidebarOpen}
           isAuthenticated={isAuthenticated}
           onSignIn={onSignIn}
-          open={desktopSidebarOpen}
-          width={SITE_EXPANDED_SIDEBAR_WIDTH}
-          collapsedWidth={LAYOUT_DIMENSIONS.collapsedSidebarWidth}
-          minHeight={bodyMinHeight}
-          onSignOut={onSignOut}
         />
       </Box>
 
@@ -228,11 +192,6 @@ export function SiteShell({
         <SiteSidebar
           isAuthenticated={isAuthenticated}
           onSignIn={onSignIn}
-          open
-          width="100%"
-          minHeight="100dvh"
-          headerContent={mobileSidebarBrand}
-          showCloseButton
           onClose={() => setMobileDrawerOpen(false)}
           onSignOut={onSignOut}
           portalEntry={portalEntry}

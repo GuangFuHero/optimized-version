@@ -72,9 +72,7 @@ async def _known_types(db: AsyncSession, *, data_column, config_column) -> set[s
     """The type vocabulary: every value in use, plus every value the field config names."""
     values = set()
     for column in (data_column, config_column):
-        values.update(
-            value for (value,) in (await db.execute(select(column).distinct())).all() if value
-        )
+        values.update(value for (value,) in (await db.execute(select(column).distinct())).all() if value)
     return values - {_CONFIG_WILDCARD}
 
 
@@ -184,17 +182,36 @@ async def _station_rows(db: AsyncSession, stations: list[Station]) -> dict:
 _ADDRESS_FIELDS = ("county", "city", "lane", "alley", "no", "floor", "room")
 
 
-def _station_row(station: Station, address, properties: dict, columns) -> dict[str, str]:
+def _station_row(
+    station: Station, address, properties: dict, columns, *, comment_visible: bool
+) -> dict[str, str]:
     latitude, longitude = _coordinates(station.geometry)
     row = {
         "uuid": _text(station.uuid),
         "latitude": latitude,
         "longitude": longitude,
     }
-    for field in ("name", "type", "description", "op_hour", "level", "comment", "source",
-                  "visibility", "verification_status", "is_official", "confidence_score",
-                  "created_at", "updated_at"):
+    for field in (
+        "name",
+        "type",
+        "description",
+        "op_hour",
+        "level",
+        "comment",
+        "source",
+        "visibility",
+        "verification_status",
+        "is_official",
+        "confidence_score",
+        "created_at",
+        "updated_at",
+    ):
         row[field] = _text(getattr(station, field, None))
+    # The internal note follows station.view_pii here as in the API (ADR-332). Blank rather than
+    # a placeholder: the importer reads a blank cell as "leave it alone" (ADR-121), so the row
+    # round-trips without erasing the note.
+    if not comment_visible:
+        row["comment"] = ""
     for field in _ADDRESS_FIELDS:
         row[field] = _text(getattr(address, field, None)) if address else ""
     for column in columns:
@@ -216,10 +233,13 @@ async def export_stations(
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.STATION_EXPORT, db)
         await _require_known_type(
-            db, station_type,
-            data_column=Station.type, config_column=StationPropertyConfig.station_type,
+            db,
+            station_type,
+            data_column=Station.type,
+            config_column=StationPropertyConfig.station_type,
         )
         columns = await station_columns(db, station_type)
+        may_see_comment = await _row_decider(db, actor, Perm.STATION_VIEW_PII)
 
         stations = list(
             (
@@ -243,6 +263,7 @@ async def export_stations(
                 related["addresses"].get(str(station.uuid)),
                 related["properties"].get(str(station.uuid), {}),
                 columns,
+                comment_visible=await may_see_comment(station),
             )
             for station in stations
         ]
@@ -253,10 +274,11 @@ async def export_stations(
 
 
 async def _row_decider(db: AsyncSession, actor: User, perm: Perm):
-    """Return an `async (ticket) -> bool` answering "does `perm` reach this row for this caller".
+    """Return an `async (resource) -> bool` answering "does `perm` reach this row for this caller".
 
     Used for ticket.view_pii (the contact columns) and ticket.view_detail (the point and the
-    free text, ADR-281) — the same two decisions the API makes per field. The API also asks the
+    free text, ADR-281) — the same two decisions the API makes per field — and for
+    station.view_pii (a station's internal comment, ADR-332). The API also asks the
     contact for ticket.view_history or a claim (ADR-286 point 1); every seeded holder of
     ticket.export holds ticket.view_history over the rows it may export, so it is not asked
     again here. Resolves the capability once and only falls back to a per-row geometry check
@@ -265,12 +287,12 @@ async def _row_decider(db: AsyncSession, actor: User, perm: Perm):
     """
     scope = await resolve_scope(actor, perm, db)
     if scope == Scope.ALL:
-        return lambda ticket: _always(True)
+        return lambda resource: _always(True)
     if scope == Scope.NONE:
-        return lambda ticket: _always(False)
+        return lambda resource: _always(False)
 
-    def decide(ticket):
-        return in_scope(scope, actor=actor, resource=ticket, db=db)
+    def decide(resource):
+        return in_scope(scope, actor=actor, resource=resource, db=db)
 
     return decide
 
@@ -302,8 +324,10 @@ async def export_tickets(
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
         await _require_known_type(
-            db, task_type,
-            data_column=TicketTask.task_type, config_column=TaskPropertyConfig.task_type,
+            db,
+            task_type,
+            data_column=TicketTask.task_type,
+            config_column=TaskPropertyConfig.task_type,
         )
         columns = await ticket_columns(db, task_type)
         may_see_pii = await _row_decider(db, actor, Perm.TICKET_VIEW_PII)
@@ -340,6 +364,12 @@ async def export_tickets(
             ).scalars():
                 properties.setdefault(str(row.task_uuid), {})[row.property_name] = row
 
+        auditor_uuids = {str(ticket.audited_by) for _, ticket in pairs if ticket.audited_by}
+        auditors = {}
+        if auditor_uuids:
+            found = await db.execute(select(User.uuid, User.name).where(User.uuid.in_(auditor_uuids)))
+            auditors = {str(uuid): name for uuid, name in found.all()}
+
         rows = []
         for task, ticket in pairs:
             # AC-04: the export is one more path to the same fields, so the same boundary
@@ -358,11 +388,21 @@ async def export_tickets(
                 "task_quantity": _text(task.quantity),
                 **_contact_fields(ticket, visible=await may_see_pii(ticket)),
             }
-            for field in ("title", "description", "status", "priority",
-                          "visibility", "verification_status", "review_note", "created_at"):
+            for field in (
+                "title",
+                "description",
+                "status",
+                "priority",
+                "audit_status",
+                "audit_note",
+                "audited_at",
+                "created_at",
+            ):
                 row[field] = _text(getattr(ticket, field, None))
+            # The verdict goes out whole to every exporter, whatever detail the row withholds.
+            row["audited_by"] = _text(auditors.get(str(ticket.audited_by))) if ticket.audited_by else ""
             if not detail:
-                row["description"] = row["review_note"] = ""
+                row["description"] = ""
             # One cell, comma-separated, matching what the importer splits back apart.
             row["disaster_types"] = ",".join(ticket.disaster_types or [])
             for column in columns:

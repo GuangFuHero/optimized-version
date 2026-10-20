@@ -104,13 +104,13 @@
 | ticket.edit | — | own | — | all | zone | zone |
 | ticket.delete | — | own | — | all | zone | own |
 | ticket.assign | — | own | — | all | zone | own |
-| **ticket.review** | — | — | all | all | zone | zone |
+| **ticket.audit** | — | — | all | all | zone | zone |
 | ticket.export | — | — | all | all | zone | — |
 | ticket.import | — | — | — | all | all | — |
 
 > **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，除了審核之外全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
 
-> **審核（ADR-312）**：`ticket.review` 管「後台對單與需求的判斷」——單的 `verificationStatus`（`reviewTicket`）、單與需求的 `reviewNote`、需求的 `moderationStatus`。`updateTicket`／`updateTicketTask` 帶到這些欄位就要 `ticket.review`，其他欄位照舊要 `ticket.edit`；只改審核欄位時只要 `ticket.review`，所以沒有 `ticket.edit` 的 `data_auditor` 也能審核。一般使用者沒有 `ticket.review`，改不了自己單的審核結果。
+> **檢核**：`ticket.audit` 管「單的資料檢核」——`auditTicket` 給出結論（`audited` 已檢核、`audit_issue` 有疑慮，後者必填 `note`），並解鎖 `auditNote`、`auditedAt`、`auditedBy`、`auditHistory`、`changesSinceAudit`。`auditStatus` 本身公開，前台可據此排除有疑慮的單；前台一律以 `user` 身分運作，沒有 `ticket.audit`，所以其餘欄位只在後台看得到。檢核只在單的層級，需求沒有各自的檢核。結論只對當時的內容成立：之後內容一變（文字、地址、災害欄位、需求內容、新增需求）就回到 `no_audit`；承接、人數、刪除需求、優先度、進度備註不算。`need_audit` 只由掃描系統設定，內容變動時維持不變。`audit_issue` 會通知建單者與已承接的志工（不含說明）。
 
 ### 使用者 User
 
@@ -185,6 +185,8 @@
 | announcement.edit | — | — | — | all | — | — |
 | announcement.delete | — | — | — | all | — | — |
 
+> 新公告是草稿：建立要 `announcement.edit`，上線（`setAnnouncementActive(true)`）或修改已上線的公告要 `announcement.publish`。
+
 ### 行前通知 Pre-Departure（功能 007）
 
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
@@ -194,7 +196,7 @@
 | pre_departure.edit | — | — | — | all | — | — |
 | pre_departure.delete | — | — | — | all | — | — |
 
-> 公開的是**生成後的 briefing**；template 是編輯者的作業面，讀取要 `pre_departure.publish`。
+> 公開的是**已發布的 briefing**；草稿的讀寫要 `pre_departure.edit`，發布或從 template 產生草稿要 `pre_departure.publish`。template 是編輯者的作業面，讀取要 `pre_departure.publish`，修改要 `pre_departure.edit` 加 `pre_departure.publish`。
 
 ### 稽核 / RBAC 自管
 
@@ -230,7 +232,7 @@
 `ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩；登入者（user、team admin/member、data_auditor、super_admin）一律 all（ADR-286，原本 user→own、team→zone）。
 聯絡人姓名、電話、Email 在 `view_pii` 之外還要**二擇一**：這張單的 `ticket.view_history`（建單者、責任區的 team、稽核與超管），或在這張單的某筆需求上有承接；其他登入者看到遮罩，單張（`ticket`）和列表（`tickets`）都一樣（ADR-286 第 1 點，2026-10-11 收緊）。兩個檢傷欄位不受這條影響：點進單登入就看得到，列表另要 `ticket.view_history`；列表一頁最多 200 筆（ADR-286 第 6 點）。
 
-任務的承接名單（`assignments`，誰承接了哪筆需求）**不**跟著 `view_pii`，改看 `ticket.view_history`（user→own、team→zone、data_auditor/super_admin→all）：建單者與協調者看得到，其他登入者看不到（ADR-286）。需求的審核狀態（`moderationStatus`）同樣看 `ticket.view_history`，沒有的人拿 null（ADR-286 第 5 點）。
+任務的承接名單（`assignments`，誰承接了哪筆需求）**不**跟著 `view_pii`，改看 `ticket.view_history`（user→own、team→zone、data_auditor/super_admin→all）：建單者與協調者看得到，其他登入者看不到（ADR-286）。
 
 ### 異動時間軸的四層可見度（ADR-127~130，功能 016）
 `*.view_history` 是**進入時間軸的門票**，它決定看得到「哪些資源」的歷史；`audit.view` 決定看得到「多深」。同一個時間軸依 caller 權限分四層揭露：
@@ -239,7 +241,7 @@
 |---|---|---|
 | 一般 | 業務欄位（狀態、優先度、名稱、營業時間…） | `*.view_history` |
 | PII | `contact_*`、詳細地址、精確座標 | `ticket.view_pii` 且 in scope，否則遮罩／不給值 |
-| 稽核 | `review_note`、`moderation_status` | `audit.view` |
+| 稽核 | `audit_note` | `audit.view` |
 | RAW | 整列原始 audit 負載 | `audit.view` |
 
 `data_auditor` 與 `super_admin` 同時持有 `audit.view=all` 與 `ticket.view_pii=all`，因此自動看得到四層全部，**沒有任何特例程式**。

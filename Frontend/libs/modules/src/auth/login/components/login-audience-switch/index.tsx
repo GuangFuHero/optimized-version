@@ -16,7 +16,7 @@ const DEFAULT_LOGIN_AUDIENCE: LoginAudience = 'site';
 
 const loginAudienceOptions = [
   { value: 'site', label: '前台' },
-  { value: 'admin', label: '後台' },
+  { value: 'admin', label: '管理平台' },
 ] as const satisfies readonly {
   value: LoginAudience;
   label: string;

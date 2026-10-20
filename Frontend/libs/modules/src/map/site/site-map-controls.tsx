@@ -1,15 +1,20 @@
 'use client';
 
-import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import { Layers } from 'lucide-react';
+
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
+import { z } from 'zod';
 
 import type { RescueMapControllerValue } from '../types';
 import {
   SITE_FALLBACK_DATA_TYPE,
   SITE_SUB_DATA_TYPE_OPTIONS,
 } from '../../route/constants';
-import type { RescueMapDataType, SiteSubDataTypeOption } from '../../route/types';
+import type {
+  RescueMapDataType,
+  SiteSubDataTypeOption,
+} from '../../route/types';
 import { SiteControlSurface } from '../../route/controls/control-surface';
 import { SiteDataTypeToggle } from '../../route/controls/data-type-toggle';
 import { SiteSubTypeFilter } from '../../route/controls/sub-type-filter';
@@ -32,30 +37,21 @@ function createEmptyPinnedSubDataTypes(): Record<RescueMapDataType, string[]> {
   };
 }
 
+const pinnedSubDataTypes = z.object({
+  station: z.array(z.string()).catch([]),
+  ticket: z.array(z.string()).catch([]),
+});
+
 function normalizePinnedSubDataTypes(
-  value: unknown,
-): Record<RescueMapDataType, string[]> {
-  if (!value || typeof value !== 'object') {
-    return createEmptyPinnedSubDataTypes();
-  }
-
-  const candidate = value as Partial<Record<RescueMapDataType, unknown>>;
-
+  candidate: z.infer<typeof pinnedSubDataTypes>,
+) {
   return {
     station: SITE_SUB_DATA_TYPE_OPTIONS.station
       .map((option) => option.value)
-      .filter(
-        (optionValue) =>
-          Array.isArray(candidate.station) &&
-          candidate.station.includes(optionValue),
-      ),
+      .filter((optionValue) => candidate.station.includes(optionValue)),
     ticket: SITE_SUB_DATA_TYPE_OPTIONS.ticket
       .map((option) => option.value)
-      .filter(
-        (optionValue) =>
-          Array.isArray(candidate.ticket) &&
-          candidate.ticket.includes(optionValue),
-      ),
+      .filter((optionValue) => candidate.ticket.includes(optionValue)),
   };
 }
 
@@ -73,7 +69,9 @@ function readPinnedSubDataTypes(): Record<RescueMapDataType, string[]> {
   }
 
   try {
-    return normalizePinnedSubDataTypes(JSON.parse(storedValue));
+    return normalizePinnedSubDataTypes(
+      pinnedSubDataTypes.parse(JSON.parse(storedValue)),
+    );
   } catch {
     return createEmptyPinnedSubDataTypes();
   }
@@ -110,7 +108,7 @@ function SiteLayerButton({ controller }: SiteMapControlsProps) {
             : color.fg.neutral.subtle,
         }}
       >
-        <LayersOutlinedIcon sx={{ fontSize: 18 }} />
+        <Box component={Layers} sx={{ width: 18, height: 18 }} />
       </ButtonBase>
     </SiteControlSurface>
   );

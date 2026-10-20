@@ -57,17 +57,19 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, *, team
         await db.refresh(team)
     kind = "team" if team is not None else "platform"
     identity_role = f"bulk-tests-{user.name}"
-    role = (
-        await db.execute(select(Role).where(Role.name == identity_role))
-    ).scalar_one_or_none()
+    role = (await db.execute(select(Role).where(Role.name == identity_role))).scalar_one_or_none()
     if role is None:
         role = Role(name=identity_role, kind=kind)
         db.add(role)
         await db.flush()
-        db.add(UserRoleAssign(
-            user_uuid=user.uuid, role_uuid=role.uuid,
-            team_uuid=team.uuid if team is not None else None, role_kind=kind,
-        ))
+        db.add(
+            UserRoleAssign(
+                user_uuid=user.uuid,
+                role_uuid=role.uuid,
+                team_uuid=team.uuid if team is not None else None,
+                role_kind=kind,
+            )
+        )
         acting_as(user, role, team)
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     await db.flush()
@@ -88,7 +90,8 @@ async def _zoned_team(db) -> Team:
 
 
 async def _station(
-    db, *, name: str, point: Point, creator: User, quantity: int | None = None, team: Team | None = None
+    db, *, name: str, point: Point, creator: User, quantity: int | None = None, team: Team | None = None,
+    comment: str | None = None,
 ) -> Station:
     station = Station(
         geometry=from_shape(point, srid=4326),
@@ -98,6 +101,7 @@ async def _station(
         name=name,
         level=0,
         visibility="public",
+        comment=comment,
     )
     db.add(station)
     await db.flush()
@@ -132,7 +136,6 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
         status="pending",
         priority="high",
         task_type="rescue",
-        visibility="public",
     )
     db.add(ticket)
     await db.flush()
@@ -142,7 +145,6 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
         task_name=f"{title} 任務",
         quantity=3,
         source="user",
-        visibility="public",
         created_by=str(creator.uuid),
     )
     db.add(task)
@@ -153,15 +155,21 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
 
 
 async def _configs(db) -> None:
-    db.add(StationPropertyConfig(
-        station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
-    ))
-    db.add(StationPropertyConfig(
-        station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
-    ))
-    db.add(TaskPropertyConfig(
-        task_type="rescue", property_name="people_count", data_type="number", enum_options=None
-    ))
+    db.add(
+        StationPropertyConfig(
+            station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
+        )
+    )
+    db.add(
+        StationPropertyConfig(
+            station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
+        )
+    )
+    db.add(
+        TaskPropertyConfig(
+            task_type="rescue", property_name="people_count", data_type="number", enum_options=None
+        )
+    )
     await db.flush()
 
 
@@ -257,6 +265,42 @@ async def test_team_scoped_export_follows_station_assignment(db, exporter_type, 
 
 
 @pytest.mark.asyncio
+async def test_station_comment_follows_view_pii_row_by_row(db):
+    """The internal note is station.view_pii's in the file as in the API (ADR-332)."""
+    await _configs(db)
+    mine = Team(name="Mine", type="ngo")
+    other = Team(name="Other", type="ngo")
+    actor = User(name="TeamAdmin")
+    author = User(name="Someone")
+    db.add_all([mine, other, actor, author])
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter", team=mine)
+    await _grant(db, actor, Perm.STATION_VIEW_PII, "team", "team-pii", team=mine)
+    await _station(db, name="本隊站", point=IN_ZONE, creator=author, team=mine, comment="與 b…07 疑似重複")
+    await _station(db, name="他隊站", point=IN_ZONE, creator=author, team=other, comment="水退後已撤站")
+
+    rows = {r["name"]: r for r in _parse(await export_stations(db, actor=actor, station_type="shelter")).rows}
+
+    assert rows["本隊站"]["comment"] == "與 b…07 疑似重複"
+    assert rows["他隊站"]["comment"] == ""
+
+
+@pytest.mark.asyncio
+async def test_holding_station_export_does_not_imply_reading_the_comment(db):
+    """Export and view_pii are separate grants, as on tickets."""
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter")
+    await _station(db, name="光復國小", point=IN_ZONE, creator=actor, comment="水退後已撤站")
+
+    row = _parse(await export_stations(db, actor=actor, station_type="shelter")).rows[0]
+
+    assert row["comment"] == ""
+
+
+@pytest.mark.asyncio
 async def test_export_without_the_capability_is_denied(db):
     """A field worker holds no bulk capability at all (ADR-111)."""
     actor = User(name="Member")
@@ -346,8 +390,11 @@ async def test_ticket_export_writes_one_row_per_task(db):
     ticket, _ = await _ticket_with_task(db, title="求救", point=IN_ZONE, creator=actor)
     db.add(
         TicketTask(
-            ticket_uuid=ticket.uuid, task_type="rescue", task_name="第二個任務",
-            source="user", visibility="public", created_by=str(actor.uuid),
+            ticket_uuid=ticket.uuid,
+            task_type="rescue",
+            task_name="第二個任務",
+            source="user",
+            created_by=str(actor.uuid),
         )
     )
     await db.flush()
@@ -413,7 +460,8 @@ async def test_a_caller_without_view_pii_gets_every_contact_masked(db):
 
 
 async def _with_free_text(db, ticket, task) -> None:
-    ticket.description, ticket.review_note = "中正路十二號", "已電話確認"
+    ticket.description = "中正路十二號"
+    ticket.audit_status, ticket.audit_note = "audit_issue", "電話打不通"
     task.task_description = "從後門進去"
     await db.flush()
 
@@ -437,11 +485,13 @@ async def test_detail_follows_view_detail_row_by_row(db):
     inside, outside = rows["區內"], rows["區外"]
     assert (inside["latitude"], inside["longitude"]) == ("25", "121.5")
     assert inside["description"] == "中正路十二號"
-    assert inside["review_note"] == "已電話確認"
     assert inside["task_description"] == "從後門進去"
     assert (outside["latitude"], outside["longitude"]) == ("", "")
-    assert outside["description"] == outside["review_note"] == outside["task_description"] == ""
+    assert outside["description"] == outside["task_description"] == ""
     assert outside["task_name"] == "區外 任務"  # structured fields are never withheld
+    # The verdict goes out whole to every exporter, inside the zone or not.
+    assert (inside["audit_status"], inside["audit_note"]) == ("audit_issue", "電話打不通")
+    assert (outside["audit_status"], outside["audit_note"]) == ("audit_issue", "電話打不通")
 
 
 @pytest.mark.asyncio

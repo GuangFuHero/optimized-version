@@ -157,7 +157,6 @@ TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
     # `UpdateTicketInput` has no geometry, so a ticket's location is fixed once created.
     _create_only(_c("latitude", FLOAT, required_on_create=True)),
     _create_only(_c("longitude", FLOAT, required_on_create=True)),
-    _create_only(_c("visibility", ENUM, enum_options=_VISIBILITY_OPTIONS, max_length=50)),
     # One row is one ticket plus one task (ADR-120). task_type + task_name are the task's
     # match key; task_description and task_quantity are absent from UpdateTicketTaskInput.
     _create_only(_c("task_type", max_length=50)),
@@ -165,8 +164,11 @@ TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
     _create_only(_c("task_description", TEXT)),
     # At least 1, as for any need (`_validate_need_size`): with 0 every claim reads as full.
     _create_only(_c("task_quantity", INTEGER, min_value=1)),
-    _readonly(_c("verification_status")),
-    _readonly(_c("review_note", TEXT)),
+    # The latest verdict, for every exporter. Only `auditTicket` gives one, so a file never sets it.
+    _readonly(_c("audit_status")),
+    _readonly(_c("audit_note", TEXT)),
+    _readonly(_c("audited_at", TIMESTAMP)),
+    _readonly(_c("audited_by")),
     _readonly(_c("created_at", TIMESTAMP)),
 )
 
@@ -205,9 +207,7 @@ async def station_columns(db: AsyncSession, station_type: str) -> tuple[ColumnSp
     to tell the user what was left out and why.
     """
     configs = await _station_configs(db, station_type)
-    dynamic = tuple(
-        _dynamic_column(c) for c in configs if c.data_type in STORABLE_STATION_DATA_TYPES
-    )
+    dynamic = tuple(_dynamic_column(c) for c in configs if c.data_type in STORABLE_STATION_DATA_TYPES)
     return STATION_COLUMNS + dynamic
 
 
@@ -238,7 +238,5 @@ async def ticket_columns(db: AsyncSession, task_type: str) -> tuple[ColumnSpec, 
     the station side nothing has to be dropped.
     """
     disaster_types = await project_settings_repository.get_current_disaster_types(db)
-    configs = await task_property_config_repository.list_by_type(
-        db, task_type, disaster_types=disaster_types
-    )
+    configs = await task_property_config_repository.list_by_type(db, task_type, disaster_types=disaster_types)
     return TICKET_COLUMNS + tuple(_dynamic_column(c) for c in configs)

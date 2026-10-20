@@ -6,10 +6,9 @@ import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
 import { Box, ButtonBase } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
-import { getRescueColorScheme } from '@rescue-frontend/ui';
+import { getRescueColorScheme, layoutSizes } from '@rescue-frontend/ui';
 
-import { LAYOUT_DIMENSIONS } from '../layout';
-import { MenuGlyph } from '../menu-glyph';
+import { MenuGlyph } from './menu-glyph';
 import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
@@ -43,7 +42,7 @@ export function SiteMobileTopNavBar({
       component="header"
       sx={{
         width: '100%',
-        height: LAYOUT_DIMENSIONS.mobileTopNavBarHeight,
+        height: layoutSizes.site.mobileTopNavBarHeight,
         display: 'grid',
         gridTemplateColumns: '40px minmax(0, 1fr) 40px',
         alignItems: 'center',

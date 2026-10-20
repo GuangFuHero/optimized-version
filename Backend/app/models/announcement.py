@@ -1,6 +1,8 @@
 """SQLAlchemy model for site-wide announcements."""
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Text, text
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -17,6 +19,9 @@ class Announcement(Base, UUIDPKMixin, TimestampMixin):
 
     ``display_order`` is named that way (not ``order``) because ``order`` is a SQL reserved
     word; it is exposed as the ``order`` field in GraphQL.
+
+    A new announcement is an inactive draft until first activated. ``published_at`` and
+    ``published_by`` (when it last went live, and who did it) tell a draft apart from a deactivated one.
     """
 
     __tablename__ = "announcements"
@@ -26,3 +31,6 @@ class Announcement(Base, UUIDPKMixin, TimestampMixin):
     # Which page shows it: "admin_page", "public_page" or "all" (both).
     placement: Mapped[str] = mapped_column(Text, server_default=text("'all'"), default="all")
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
+    updated_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)

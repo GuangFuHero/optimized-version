@@ -32,6 +32,8 @@ export type Scalars = {
   DateTime: { input: any; output: any };
   /** GeoJSON geometry object (RFC 7946) */
   GeoJSON: { input: Geometry; output: Geometry };
+  /** The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf). */
+  JSON: { input: any; output: any };
   UUID: { input: string; output: string };
 };
 
@@ -57,6 +59,14 @@ export const AnnouncementMoveDirection = {
 
 export type AnnouncementMoveDirection =
   (typeof AnnouncementMoveDirection)[keyof typeof AnnouncementMoveDirection];
+export const AnnouncementPlacement = {
+  AdminPage: 'admin_page',
+  All: 'all',
+  PublicPage: 'public_page',
+} as const;
+
+export type AnnouncementPlacement =
+  (typeof AnnouncementPlacement)[keyof typeof AnnouncementPlacement];
 export type AnnouncementType = {
   __typename?: 'AnnouncementType';
   active: Scalars['Boolean']['output'];
@@ -66,6 +76,8 @@ export type AnnouncementType = {
   createdBy?: Maybe<Scalars['String']['output']>;
   /** Display position (1 = top) among active announcements; null when inactive */
   order?: Maybe<Scalars['Int']['output']>;
+  /** admin_page, public_page, or all (both pages) */
+  placement: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };
@@ -107,6 +119,20 @@ export type AssignedTeamType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export const AuditStatus = {
+  AuditIssue: 'audit_issue',
+  Audited: 'audited',
+  NeedAudit: 'need_audit',
+  NoAudit: 'no_audit',
+} as const;
+
+export type AuditStatus = (typeof AuditStatus)[keyof typeof AuditStatus];
+export const AuditVerdict = {
+  AuditIssue: 'audit_issue',
+  Audited: 'audited',
+} as const;
+
+export type AuditVerdict = (typeof AuditVerdict)[keyof typeof AuditVerdict];
 export type BoundsInput = {
   /** North boundary latitude */
   maxLat: Scalars['Float']['input'];
@@ -155,9 +181,50 @@ export type BriefingType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type BuildingFloorAreasInput = {
+  /** Area names, 1-20 characters each */
+  areas: Array<Scalars['String']['input']>;
+  /** Floor label: '3F', '1F', 'B1' */
+  floor: Scalars['String']['input'];
+};
+
+export type BuildingFloorType = {
+  __typename?: 'BuildingFloorType';
+  /** Areas a ticket on this floor must pick from, ending with '其他' for an unlisted space. Empty when the floor takes a free-text room number instead */
+  areas: Array<Scalars['String']['output']>;
+  /** Floor label: '3F', '1F', 'B1' */
+  label: Scalars['String']['output'];
+};
+
+export type BuildingMapConnection = {
+  __typename?: 'BuildingMapConnection';
+  items: Array<BuildingMapType>;
+  pageInfo: PageInfo;
+};
+
+export type BuildingMapType = {
+  __typename?: 'BuildingMapType';
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** The building's floors, roof (RF) first */
+  floors: Array<BuildingFloorType>;
+  floorsAboveGround: Scalars['Int']['output'];
+  floorsBelowGround: Scalars['Int']['output'];
+  /** GeoJSON Point of the building — [longitude, latitude] */
+  geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  /** Building name shown on the map and in the sidebar */
+  name: Scalars['String']['output'];
+  /** The building's street address. Public, like a station's */
+  secondaryLocation?: Maybe<SecondaryLocationType>;
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
 export type CreateAnnouncementInput = {
   /** The announcement body text */
   content: Scalars['String']['input'];
+  /** Which page shows it; defaults to both */
+  placement?: AnnouncementPlacement;
 };
 
 export type CreateAreaInput = {
@@ -185,6 +252,21 @@ export type CreateBriefingTemplateInput = {
   tags?: Array<Scalars['String']['input']>;
 };
 
+export type CreateBuildingMapInput = {
+  /** Areas per floor. A floor left out takes a free-text room number */
+  floorAreas?: Array<BuildingFloorAreasInput>;
+  /** Floors from 1F up, 1-200 */
+  floorsAboveGround: Scalars['Int']['input'];
+  /** Basement floors, 0-20 */
+  floorsBelowGround?: Scalars['Int']['input'];
+  /** GeoJSON Point — [longitude, latitude] */
+  geometry: Scalars['GeoJSON']['input'];
+  /** Building name, e.g. '光復國小圖書館' */
+  name: Scalars['String']['input'];
+  /** Street address. Leave buildingSection, floor and room empty */
+  secondaryLocation: SecondaryLocationInput;
+};
+
 export type CreateCrowdSourcingInput = {
   /** Distance in meters from the user to the station at time of submission */
   distanceFromGeometry?: InputMaybe<Scalars['Float']['input']>;
@@ -197,6 +279,8 @@ export type CreateCrowdSourcingInput = {
 };
 
 export type CreateHelpRequestInput = {
+  /** Optional; the account's own email is never filled in for it */
+  contactEmail?: InputMaybe<Scalars['String']['input']>;
   /** Who to ask for at the place */
   contactName: Scalars['String']['input'];
   /** Phone number or LINE ID, as the person typed it */
@@ -254,6 +338,8 @@ export type CreateStationPropertyInput = {
   weightings?: Scalars['Float']['input'];
 };
 
+export type CreateStationResult = DuplicatesSuspected | StationCreated;
+
 export type CreateStationSuggestionInput = {
   /** Why the change is suggested */
   comment?: InputMaybe<Scalars['String']['input']>;
@@ -280,6 +366,8 @@ export type CreateTaskPropertyInput = {
 };
 
 export type CreateTicketInput = {
+  /** File the ticket inside this building map. Its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it */
+  buildingMapUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Optional email for follow-up */
   contactEmail?: InputMaybe<Scalars['String']['input']>;
   /** Full name of the requester */
@@ -289,8 +377,8 @@ export type CreateTicketInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   /** Disaster type keys, e.g. ['flood', 'landslide']. Each must be an active key from `disasterTypes`; an unknown one is rejected rather than stored, because a ticket filed under a disaster that does not exist would show the reporter an empty form */
   disasterTypes?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
-  geometry: Scalars['GeoJSON']['input'];
+  /** GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted */
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
   /** 立即生命危險. Omit when nobody was asked */
   immediateDangerReported?: InputMaybe<TriState>;
   /** 災民受困／無法自行離開. Omit when nobody was asked */
@@ -301,8 +389,25 @@ export type CreateTicketInput = {
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Type of help: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: InputMaybe<Scalars['String']['input']>;
+  /** The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates */
+  tasks?: Array<CreateTicketTaskDraft>;
   title: Scalars['String']['input'];
-  /** Visibility: 'public' (default), 'restricted', or 'internal' */
+};
+
+export type CreateTicketResult = DuplicatesSuspected | TicketCreated;
+
+export type CreateTicketTaskDraft = {
+  /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
+  /** Number of people or units needed */
+  quantity?: InputMaybe<Scalars['Int']['input']>;
+  routeUuid?: InputMaybe<Scalars['UUID']['input']>;
+  /** Origin: 'user' (default) or 'official' */
+  source?: Scalars['String']['input'];
+  taskDescription?: InputMaybe<Scalars['String']['input']>;
+  taskName: Scalars['String']['input'];
+  /** Category: 'rescue', 'supply', 'medical', or 'hr' */
+  taskType: Scalars['String']['input'];
   visibility?: Visibility;
 };
 
@@ -319,9 +424,9 @@ export type CreateTicketTaskInput = {
   taskType: Scalars['String']['input'];
   /** UUID of the ticket this task belongs to */
   ticketUuid: Scalars['UUID']['input'];
-  /** Visibility: 'public' (default), 'restricted', or 'internal' */
-  visibility?: Visibility;
 };
+
+export type CreateTicketTaskResult = DuplicatesSuspected | TicketTaskCreated;
 
 export type CrowdSourcingType = {
   __typename?: 'CrowdSourcingType';
@@ -350,6 +455,23 @@ export type DisasterTypeType = {
   /** Display name, e.g. '水災' */
   label: Scalars['String']['output'];
   uuid: Scalars['UUID']['output'];
+};
+
+export type DuplicateSuspect = {
+  __typename?: 'DuplicateSuspect';
+  /** Which part of what was sent: "task:0", "task:1"…, or "station" */
+  draftRef: Scalars['String']['output'];
+  /** What it looks like: "ticket_task" or "station" */
+  relatedKind: Scalars['String']['output'];
+  /** When it looks like a task, that task's ticket */
+  relatedTicketUuid?: Maybe<Scalars['String']['output']>;
+  /** The existing entity it looks like */
+  relatedUuid: Scalars['String']['output'];
+};
+
+export type DuplicatesSuspected = {
+  __typename?: 'DuplicatesSuspected';
+  suspects: Array<DuplicateSuspect>;
 };
 
 export const FieldDataType = {
@@ -415,21 +537,24 @@ export type Mutation = {
   assignTaskActor: TaskAssignmentType;
   assignZoneToTeam: ZoneAssignmentType;
   attachStationPhoto: PhotoType;
+  auditTicket: TicketType;
   createAnnouncement: AnnouncementType;
   createArea: AreaType;
   createBriefingTemplate: BriefingTemplateType;
+  createBuildingMap: BuildingMapType;
   createCrowdSourcing: CrowdSourcingType;
   createHelpRequest: TicketType;
-  createStation: StationType;
+  createStation: CreateStationResult;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;
   createTaskProperty: TaskPropertyType;
-  createTicket: TicketType;
-  createTicketTask: TicketTaskType;
+  createTicket: CreateTicketResult;
+  createTicketTask: CreateTicketTaskResult;
   deleteAnnouncement: Scalars['Boolean']['output'];
   deleteArea: Scalars['Boolean']['output'];
   deleteBriefing: Scalars['Boolean']['output'];
   deleteBriefingTemplate: Scalars['Boolean']['output'];
+  deleteBuildingMap: Scalars['Boolean']['output'];
   deleteStation: Scalars['Boolean']['output'];
   deleteTicket: Scalars['Boolean']['output'];
   deleteTicketTask: Scalars['Boolean']['output'];
@@ -439,7 +564,6 @@ export type Mutation = {
   moveAnnouncement: AnnouncementType;
   promoteMarkZone: HazardousZoneType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
-  reviewTicket: TicketType;
   revokeStationSuggestionMerge: StationSuggestionMergeType;
   setAnnouncementActive: AnnouncementType;
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
@@ -451,6 +575,7 @@ export type Mutation = {
   updateArea: AreaType;
   updateBriefing: BriefingType;
   updateBriefingTemplate: BriefingTemplateType;
+  updateBuildingMap: BuildingMapType;
   updateStation: StationType;
   updateStationProperty: StationPropertyType;
   updateTaskAssignment: TaskAssignmentType;
@@ -484,6 +609,13 @@ export type MutationAttachStationPhotoArgs = {
   url: Scalars['String']['input'];
 };
 
+export type MutationAuditTicketArgs = {
+  contentHash: Scalars['String']['input'];
+  note?: InputMaybe<Scalars['String']['input']>;
+  status: AuditVerdict;
+  uuid: Scalars['UUID']['input'];
+};
+
 export type MutationCreateAnnouncementArgs = {
   input: CreateAnnouncementInput;
 };
@@ -496,6 +628,10 @@ export type MutationCreateBriefingTemplateArgs = {
   input: CreateBriefingTemplateInput;
 };
 
+export type MutationCreateBuildingMapArgs = {
+  input: CreateBuildingMapInput;
+};
+
 export type MutationCreateCrowdSourcingArgs = {
   input: CreateCrowdSourcingInput;
 };
@@ -505,6 +641,7 @@ export type MutationCreateHelpRequestArgs = {
 };
 
 export type MutationCreateStationArgs = {
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   input: CreateStationInput;
 };
 
@@ -525,6 +662,7 @@ export type MutationCreateTicketArgs = {
 };
 
 export type MutationCreateTicketTaskArgs = {
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   input: CreateTicketTaskInput;
 };
 
@@ -541,6 +679,10 @@ export type MutationDeleteBriefingArgs = {
 };
 
 export type MutationDeleteBriefingTemplateArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MutationDeleteBuildingMapArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
@@ -582,12 +724,6 @@ export type MutationPromoteMarkZoneArgs = {
 
 export type MutationRemoveZoneFromTeamArgs = {
   input: ZoneTeamAssignmentInput;
-};
-
-export type MutationReviewTicketArgs = {
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
-  uuid: Scalars['UUID']['input'];
-  verificationStatus: Scalars['String']['input'];
 };
 
 export type MutationRevokeStationSuggestionMergeArgs = {
@@ -637,6 +773,11 @@ export type MutationUpdateBriefingArgs = {
 
 export type MutationUpdateBriefingTemplateArgs = {
   input: UpdateBriefingTemplateInput;
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MutationUpdateBuildingMapArgs = {
+  input: UpdateBuildingMapInput;
   uuid: Scalars['UUID']['input'];
 };
 
@@ -756,6 +897,9 @@ export type Query = {
   briefingTemplate?: Maybe<BriefingTemplateType>;
   briefingTemplates: Array<BriefingTemplateType>;
   briefings: Array<BriefingType>;
+  buildingMap?: Maybe<BuildingMapType>;
+  buildingMapTickets: Array<TicketType>;
+  buildingMaps: BuildingMapConnection;
   disasterTypes: Array<DisasterTypeType>;
   hazardousZone?: Maybe<HazardousZoneType>;
   hazardousZones: HazardousZoneConnection;
@@ -783,6 +927,7 @@ export type QueryAnnouncementArgs = {
 
 export type QueryAnnouncementsArgs = {
   filter?: AnnouncementFilter;
+  placement?: AnnouncementPlacement;
 };
 
 export type QueryAreasArgs = {
@@ -808,6 +953,22 @@ export type QueryBriefingTemplatesArgs = {
 export type QueryBriefingsArgs = {
   state?: InputMaybe<BriefingState>;
   tag?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type QueryBuildingMapArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type QueryBuildingMapTicketsArgs = {
+  buildingMapUuid: Scalars['UUID']['input'];
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+};
+
+export type QueryBuildingMapsArgs = {
+  bounds?: InputMaybe<BoundsInput>;
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
 };
 
 export type QueryDisasterTypesArgs = {
@@ -887,8 +1048,11 @@ export type QueryTicketTasksArgs = {
 };
 
 export type QueryTicketsArgs = {
+  auditStatus?: InputMaybe<AuditStatus>;
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
+  needType?: InputMaybe<Scalars['String']['input']>;
+  openNeedsOnly?: Scalars['Boolean']['input'];
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
@@ -998,6 +1162,11 @@ export type StationConnection = {
   __typename?: 'StationConnection';
   items: Array<StationType>;
   pageInfo: PageInfo;
+};
+
+export type StationCreated = {
+  __typename?: 'StationCreated';
+  station: StationType;
 };
 
 export const StationOperationalStatus = {
@@ -1206,6 +1375,8 @@ export type TaskAssignmentStatus =
   (typeof TaskAssignmentStatus)[keyof typeof TaskAssignmentStatus];
 export type TaskAssignmentType = {
   __typename?: 'TaskAssignmentType';
+  /** Display name of the assigned person. Null to a caller without ticket.view_history on the parent ticket, unless the assignment is their own */
+  actorName?: Maybe<Scalars['String']['output']>;
   /** UUID of the assigned user or group */
   actorUuid: Scalars['String']['output'];
   /** Timestamp when the assignment was created */
@@ -1294,10 +1465,45 @@ export type TeamZoneType = {
   uuid: Scalars['UUID']['output'];
 };
 
+/** One field that differs from the content the last verdict was given on */
+export type TicketAuditChangeType = {
+  __typename?: 'TicketAuditChangeType';
+  /** Its value when audited; null if it is new */
+  auditedValue?: Maybe<Scalars['JSON']['output']>;
+  currentValue?: Maybe<Scalars['JSON']['output']>;
+  /** 'ticket', 'secondary_location', 'disaster_detail', 'task' or 'task_property' */
+  entity: Scalars['String']['output'];
+  /** The row it is on; the ticket's own uuid for its address and disaster answers */
+  entityUuid: Scalars['String']['output'];
+  /** Column name, or the disaster field's property name */
+  field: Scalars['String']['output'];
+};
+
+/** One move of a ticket's audit status */
+export type TicketAuditEntryType = {
+  __typename?: 'TicketAuditEntryType';
+  actorName?: Maybe<Scalars['String']['output']>;
+  /** Who moved it; null for the scan */
+  actorUuid?: Maybe<Scalars['String']['output']>;
+  at: Scalars['DateTime']['output'];
+  /** What moved it: 'verdict' (an auditor's), 'scan' (picked out for checking) or 'content_change' (a change that voided the verdict) */
+  kind: Scalars['String']['output'];
+  /** The auditor's note; set on a verdict only */
+  note?: Maybe<Scalars['String']['output']>;
+  /** The audit status it moved to */
+  status: Scalars['String']['output'];
+};
+
 export type TicketConnection = {
   __typename?: 'TicketConnection';
   items: Array<TicketType>;
   pageInfo: PageInfo;
+};
+
+export type TicketCreated = {
+  __typename?: 'TicketCreated';
+  tasks: Array<TicketTaskType>;
+  ticket: TicketType;
 };
 
 export type TicketDisasterDetailInput = {
@@ -1339,6 +1545,11 @@ export type TicketPropertyConfigType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type TicketTaskCreated = {
+  __typename?: 'TicketTaskCreated';
+  task: TicketTaskType;
+};
+
 export type TicketTaskType = {
   __typename?: 'TicketTaskType';
   assignedCount: Scalars['Int']['output'];
@@ -1348,8 +1559,6 @@ export type TicketTaskType = {
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket */
   createdBy?: Maybe<Scalars['String']['output']>;
-  /** Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without ticket.view_history on the parent ticket */
-  moderationStatus?: Maybe<Scalars['String']['output']>;
   /** The caller's own claim on this task. Null to a guest or a non-claimant */
   myAssignment?: Maybe<TaskAssignmentType>;
   progress?: Maybe<Scalars['Float']['output']>;
@@ -1360,8 +1569,6 @@ export type TicketTaskType = {
   quantity?: Maybe<Scalars['Int']['output']>;
   /** When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back */
   recruitingStoppedAt?: Maybe<Scalars['DateTime']['output']>;
-  /** Moderator's notes explaining the review decision. Null to a caller without ticket.view_detail on the parent ticket */
-  reviewNote?: Maybe<Scalars['String']['output']>;
   /** Origin of this task: 'user' or 'official' */
   source: Scalars['String']['output'];
   /** Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or its requester stopped recruiting — the people on it still go), or 'canceled'. Moves only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion */
@@ -1376,12 +1583,24 @@ export type TicketTaskType = {
   ticketUuid: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
-  /** Who can see this task: 'public', 'restricted', or 'internal' */
-  visibility: Scalars['String']['output'];
 };
 
 export type TicketType = {
   __typename?: 'TicketType';
+  /** A fingerprint of the ticket's content as it now stands, to pass back to auditTicket so the verdict is refused if the ticket changes in between. Null to a caller without ticket.audit here. Read it on one ticket at a time */
+  auditContentHash?: Maybe<Scalars['String']['output']>;
+  /** Every move of the audit status, newest first: verdicts, the scan's flags, and changes that voided a verdict. Null to a caller without ticket.audit here. Read it on one ticket at a time: it queries the change log per ticket */
+  auditHistory?: Maybe<Array<TicketAuditEntryType>>;
+  /** The note given with the last verdict, kept after a change voids it, so the next auditor sees what was found; always set while 'audit_issue'. Null to a caller without ticket.audit here */
+  auditNote?: Maybe<Scalars['String']['output']>;
+  /** The data check: 'no_audit' (not checked as it now stands), 'need_audit' (picked out for checking), 'audited' (found right) or 'audit_issue' (found wrong). Public, so a list can leave out tickets with issues */
+  auditStatus: Scalars['String']['output'];
+  /** When the last verdict was given, kept after a change voids it. Null if never audited, or to a caller without ticket.audit here */
+  auditedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of who gave the last verdict. Null if never audited, or without ticket.audit here */
+  auditedBy?: Maybe<Scalars['String']['output']>;
+  /** What differs from the content the last verdict was given on, field by field. Null if never audited, or to a caller without ticket.audit here. A need taken off since does not appear: it does not void a verdict. A value the caller could not read on the ticket itself (address, free text, triage answers) comes back null, the change still listed. Read it on one ticket at a time */
+  changesSinceAudit?: Maybe<Array<TicketAuditChangeType>>;
   /** Follow-up email — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
   contactEmail?: Maybe<Scalars['String']['output']>;
   /** Requester full name — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
@@ -1410,8 +1629,6 @@ export type TicketType = {
   priority: Scalars['String']['output'];
   /** Internal polymorphic discriminator — always 'request' */
   propertyName: Scalars['String']['output'];
-  /** Moderator's notes about the verification decision. Null to a caller without ticket.view_detail here */
-  reviewNote?: Maybe<Scalars['String']['output']>;
   /** Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address */
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
@@ -1423,10 +1640,6 @@ export type TicketType = {
   title: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
-  /** Review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed' */
-  verificationStatus?: Maybe<Scalars['String']['output']>;
-  /** Who can see this ticket: 'public', 'restricted', or 'internal' */
-  visibility?: Maybe<Scalars['String']['output']>;
 };
 
 export const TriState = {
@@ -1439,6 +1652,8 @@ export type TriState = (typeof TriState)[keyof typeof TriState];
 export type UpdateAnnouncementInput = {
   /** The new announcement body text */
   content: Scalars['String']['input'];
+  /** Which page shows it; omit to keep the current placement */
+  placement?: InputMaybe<AnnouncementPlacement>;
 };
 
 export type UpdateAreaInput = {
@@ -1466,6 +1681,15 @@ export type UpdateBriefingTemplateInput = {
   state?: InputMaybe<BriefingState>;
   /** Replacement tag list */
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+export type UpdateBuildingMapInput = {
+  /** Replaces every floor's areas when sent; [] clears them */
+  floorAreas?: InputMaybe<Array<BuildingFloorAreasInput>>;
+  floorsAboveGround?: InputMaybe<Scalars['Int']['input']>;
+  floorsBelowGround?: InputMaybe<Scalars['Int']['input']>;
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateStationInput = {
@@ -1523,24 +1747,14 @@ export type UpdateTicketInput = {
   personTrappedReported?: InputMaybe<TriState>;
   /** Updated urgency: 'low', 'medium', 'high', or 'critical' */
   priority?: InputMaybe<Scalars['String']['input']>;
-  /** Moderator's review notes — pass null to clear */
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
   /** Replace the ticket's street address and space detail, creating it if the ticket was filed without one. A whole-input replacement, not a patch — omitted members are written as null */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   title?: InputMaybe<Scalars['String']['input']>;
-  /** Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed' */
-  verificationStatus?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateTicketTaskInput = {
-  /** New review state: 'pending_review', 'approved', or 'rejected' */
-  moderationStatus?: InputMaybe<Scalars['String']['input']>;
   /** Updated progress description — pass null to clear */
   progressNote?: InputMaybe<Scalars['String']['input']>;
-  /** Moderator's review notes — pass null to clear */
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
-  /** Updated visibility: 'public', 'restricted', or 'internal' */
-  visibility?: InputMaybe<Visibility>;
 };
 
 export type UpsertDisasterTypeInput = {
@@ -1627,13 +1841,13 @@ export type StationFieldsFragment = {
   description?: string | null;
   opHour?: string | null;
   level: number;
-  comment?: string | null;
   source?: string | null;
   visibility?: string | null;
   verificationStatus?: string | null;
   isDuplicate: boolean;
   isTemporary: boolean;
   isOfficial: boolean;
+  operationalStatus: string;
   createdBy?: string | null;
   createdAt?: any | null;
   updatedAt?: any | null;
@@ -1756,17 +1970,6 @@ export type GetClosureAreaQuery = {
     | null;
 };
 
-export type CreateStationMutationVariables = Exact<{
-  input: CreateStationInput;
-}>;
-
-export type CreateStationMutation = {
-  __typename?: 'Mutation';
-  createStation: { __typename?: 'StationType' } & {
-    ' $fragmentRefs'?: { StationFieldsFragment: StationFieldsFragment };
-  };
-};
-
 export type UpdateStationMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateStationInput;
@@ -1877,9 +2080,7 @@ export type TicketFieldsFragment = {
   status: string;
   priority: string;
   taskType?: string | null;
-  visibility?: string | null;
-  verificationStatus?: string | null;
-  reviewNote?: string | null;
+  auditStatus: string;
   createdBy?: string | null;
   createdAt?: any | null;
   updatedAt?: any | null;
@@ -1896,9 +2097,6 @@ export type TicketTaskFieldsFragment = {
   status: string;
   source: string;
   progressNote?: string | null;
-  visibility: string;
-  moderationStatus?: string | null;
-  reviewNote?: string | null;
   createdAt?: any | null;
   updatedAt?: any | null;
 } & { ' $fragmentName'?: 'TicketTaskFieldsFragment' };
@@ -2043,17 +2241,6 @@ export type GetTicketTasksQuery = {
   >;
 };
 
-export type CreateTicketMutationVariables = Exact<{
-  input: CreateTicketInput;
-}>;
-
-export type CreateTicketMutation = {
-  __typename?: 'Mutation';
-  createTicket: { __typename?: 'TicketType' } & {
-    ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
-  };
-};
-
 export type CreateHelpRequestMutationVariables = Exact<{
   input: CreateHelpRequestInput;
 }>;
@@ -2086,13 +2273,28 @@ export type UpdateTicketMutation = {
 
 export type CreateTicketTaskMutationVariables = Exact<{
   input: CreateTicketTaskInput;
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 export type CreateTicketTaskMutation = {
   __typename?: 'Mutation';
-  createTicketTask: { __typename?: 'TicketTaskType' } & {
-    ' $fragmentRefs'?: { TicketTaskFieldsFragment: TicketTaskFieldsFragment };
-  };
+  createTicketTask:
+    | {
+        __typename: 'DuplicatesSuspected';
+        suspects: Array<{
+          __typename?: 'DuplicateSuspect';
+          relatedUuid: string;
+          relatedTicketUuid?: string | null;
+        }>;
+      }
+    | {
+        __typename: 'TicketTaskCreated';
+        task: { __typename?: 'TicketTaskType' } & {
+          ' $fragmentRefs'?: {
+            TicketTaskFieldsFragment: TicketTaskFieldsFragment;
+          };
+        };
+      };
 };
 
 export type UpdateTicketTaskMutationVariables = Exact<{
@@ -2274,7 +2476,6 @@ export const StationFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
           { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
           {
@@ -2284,6 +2485,7 @@ export const StationFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -2345,12 +2547,7 @@ export const TicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -2381,9 +2578,6 @@ export const TicketTaskFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
         ],
@@ -2577,7 +2771,6 @@ export const GetStationsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
           { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
           {
@@ -2587,6 +2780,7 @@ export const GetStationsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -2741,7 +2935,6 @@ export const GetStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
           { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
           {
@@ -2751,6 +2944,7 @@ export const GetStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -2976,97 +3170,6 @@ export const GetClosureAreaDocument = {
     },
   ],
 } as unknown as DocumentNode<GetClosureAreaQuery, GetClosureAreaQueryVariables>;
-export const CreateStationDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'CreateStation' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateStationInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createStation' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'StationFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'StationFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'StationType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  CreateStationMutation,
-  CreateStationMutationVariables
->;
 export const UpdateStationDocument = {
   kind: 'Document',
   definitions: [
@@ -3153,7 +3256,6 @@ export const UpdateStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
           { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
           {
@@ -3163,6 +3265,7 @@ export const UpdateStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3684,12 +3787,7 @@ export const GetTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3888,12 +3986,7 @@ export const GetTicketsWithNeedsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -4061,12 +4154,7 @@ export const GetTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -4092,9 +4180,6 @@ export const GetTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
         ],
@@ -4287,9 +4372,6 @@ export const GetTicketTasksDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
         ],
@@ -4297,97 +4379,6 @@ export const GetTicketTasksDocument = {
     },
   ],
 } as unknown as DocumentNode<GetTicketTasksQuery, GetTicketTasksQueryVariables>;
-export const CreateTicketDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'CreateTicket' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateTicketInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createTicket' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'TicketFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'TicketFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  CreateTicketMutation,
-  CreateTicketMutationVariables
->;
 export const CreateHelpRequestDocument = {
   kind: 'Document',
   definitions: [
@@ -4475,12 +4466,7 @@ export const CreateHelpRequestDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -4611,12 +4597,7 @@ export const UpdateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -4650,6 +4631,14 @@ export const CreateTicketTaskDocument = {
             },
           },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -4666,13 +4655,75 @@ export const CreateTicketTaskDocument = {
                   name: { kind: 'Name', value: 'input' },
                 },
               },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+                },
+              },
             ],
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
                 {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'TicketTaskFields' },
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'TicketTaskCreated' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'task' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'FragmentSpread',
+                              name: { kind: 'Name', value: 'TicketTaskFields' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'DuplicatesSuspected' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspects' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedUuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: {
+                                kind: 'Name',
+                                value: 'relatedTicketUuid',
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
                 },
               ],
             },
@@ -4699,9 +4750,6 @@ export const CreateTicketTaskDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
         ],
@@ -4799,9 +4847,6 @@ export const UpdateTicketTaskDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
         ],

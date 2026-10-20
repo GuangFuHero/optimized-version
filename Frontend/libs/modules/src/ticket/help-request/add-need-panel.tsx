@@ -11,7 +11,13 @@ import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 import { addNeedErrorMessage } from '../needs/claim-error';
 import { useNeedClaim } from '../needs/need-claim-provider';
 import { announceTicketChanged } from '../ticket-changes';
-import { canAddNeed, toCreateTicketTaskInput } from './add-need';
+import {
+  canAddNeed,
+  readAddNeedOutcome,
+  toCreateTicketTaskInput,
+  type SuspectTicket,
+} from './add-need';
+import { AddNeedDuplicateDialog } from './add-need-duplicate-dialog';
 import {
   emptyNeed,
   isQuantityMissing,
@@ -37,10 +43,17 @@ interface AddNeedPanelProps {
   needCount: number;
 }
 
+/** What the backend held the need back for, with the suspect to name when adding it anyway. */
+interface HeldNeed {
+  tickets: SuspectTicket[];
+  acknowledge: string;
+}
+
 /**
  * 「再加一件需要的幫忙」 at the foot of a ticket's needs, for its requester: one need at a
  * time, in the same row the drawer files them with. Added, it shows up in the list above — the
- * word that it went through — as every view of the ticket reloads it.
+ * word that it went through — as every view of the ticket reloads it. One that looks like an open
+ * need of another ticket is held, and the requester is asked, not stopped.
  */
 export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
   const [open, setOpen] = useState(false);
@@ -48,6 +61,10 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
   const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Open is kept apart from what is shown, so the dialog keeps its content while it fades out.
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [held, setHeld] = useState<HeldNeed | null>(null);
+  const [heldError, setHeldError] = useState<string | null>(null);
   const [, createTicketTask] = useMutation(CreateTicketTaskDocument);
 
   const close = () => {
@@ -55,30 +72,11 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
     setDraft(emptyNeed());
     setTouched(false);
     setError(null);
+    setHeldOpen(false);
   };
 
-  if (!open) {
-    return (
-      <ButtonBase
-        onClick={() => setOpen(true)}
-        sx={{
-          gap: 0.75,
-          width: '100%',
-          height: 42,
-          borderRadius: `${radius.md}px`,
-          border: `1px dashed ${color.border.default}`,
-          color: color.brand.secondary.subtle,
-          fontSize: displayTextSize[14],
-          fontWeight: 500,
-        }}
-      >
-        <AddRoundedIcon sx={{ fontSize: 16 }} />
-        再加一件需要的幫忙
-      </ButtonBase>
-    );
-  }
-
-  const submit = async () => {
+  /** Sent as typed, or again with a suspect named once the requester said it is not the same. */
+  const submit = async (acknowledgedDuplicateOf?: string) => {
     setTouched(true);
 
     const input = toCreateTicketTaskInput(ticketUuid, draft);
@@ -89,9 +87,19 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
 
     setSubmitting(true);
     setError(null);
+    setHeldError(null);
 
     try {
-      const result = await createTicketTask({ input });
+      const result = await createTicketTask({ input, acknowledgedDuplicateOf });
+      const answer = result.data?.createTicketTask;
+      const outcome = answer ? readAddNeedOutcome(answer) : null;
+
+      // Held: nothing was added, so nothing on the ticket changed.
+      if (outcome?.kind === 'held') {
+        setHeld(outcome);
+        setHeldOpen(true);
+        return;
+      }
 
       // Answered either way: added, or the ticket changed under them — deleted, say — which every
       // view of it should now show.
@@ -100,7 +108,14 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
       }
 
       if (result.error) {
-        setError(addNeedErrorMessage(result.error));
+        const message = addNeedErrorMessage(result.error);
+
+        if (acknowledgedDuplicateOf) {
+          setHeldError(message);
+        } else {
+          setError(message);
+        }
+
         return;
       }
 
@@ -109,6 +124,42 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
       setSubmitting(false);
     }
   };
+
+  const dialog = (
+    <AddNeedDuplicateDialog
+      open={heldOpen}
+      tickets={held?.tickets ?? []}
+      error={heldError}
+      submitting={submitting}
+      onBack={() => setHeldOpen(false)}
+      onAddAnyway={() => void submit(held?.acknowledge)}
+      onLeave={close}
+    />
+  );
+
+  if (!open) {
+    return (
+      <>
+        <ButtonBase
+          onClick={() => setOpen(true)}
+          sx={{
+            gap: 0.75,
+            width: '100%',
+            height: 42,
+            borderRadius: `${radius.md}px`,
+            border: `1px dashed ${color.border.default}`,
+            color: color.brand.secondary.subtle,
+            fontSize: displayTextSize[14],
+            fontWeight: 500,
+          }}
+        >
+          <AddRoundedIcon sx={{ fontSize: 16 }} />
+          再加一件需要的幫忙
+        </ButtonBase>
+        {dialog}
+      </>
+    );
+  }
 
   const unchosen = touched && !draft.need;
 
@@ -165,6 +216,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
           {submitting ? '加入中…' : '加上這一件'}
         </Button>
       </Stack>
+      {dialog}
     </Stack>
   );
 }
