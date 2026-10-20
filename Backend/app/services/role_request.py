@@ -1,26 +1,29 @@
-"""Role requests: a citizen applies to become back-office staff (Spec/019, AC-FEAT-002)."""
+"""Role requests: applying to become back-office staff (Spec/019, AC-FEAT-002; Spec/026)."""
 
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.normalize import normalize_email
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
 from app.core.security import resolve_scope
-from app.models.auth import User
+from app.models.auth import User, UserContact
 from app.models.rbac import UserRoleAssign
 from app.models.role_request import (
-    CONTACT_MAX_LENGTH,
+    APPLICANT_NAME_MAX_LENGTH,
     REASON_MAX_LENGTH,
     REQUESTED_ROLES,
     REVIEW_NOTE_MAX_LENGTH,
+    TEAM_NAME_MAX_LENGTH,
     RoleRequest,
 )
+from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import role_repository
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
@@ -41,6 +44,9 @@ _APPROVED_DATA_AUDITOR = "右上角會出現「前往管理平台」，不需要
 # The one application that can be approved yet (ADR-288). The requested role and the platform role
 # it grants share the name, unlike `government` / `ngo`, which name a type of team.
 _DATA_AUDITOR = "data_auditor"
+
+# The team type each team identity picks from and founds (ADR-352 point 1).
+TEAM_TYPE_FOR_ROLE = {"government": "gov", "ngo": "ngo"}
 
 
 class RoleRequestNotFoundError(ValueError):
@@ -74,23 +80,113 @@ class RoleRequestState:
     requests: list[RoleRequest]
 
 
-def _checked_application(requested_role: str, reason: str, contact: str | None) -> tuple[str, str | None]:
+@dataclass
+class Target:
+    """What a request asks to join (ADR-350 point 2): an existing team, a new one, or neither."""
+
+    team: Team | None = None
+    new_team_name: str | None = None
+
+
+def _checked_text(reason: str, name: str) -> tuple[str, str]:
     """Refuse what the table's CHECKs would, with messages a caller can act on; return trimmed text.
 
     The CHECKs stay as the backstop, but a violation reaching them surfaces as a driver error
     that GraphQL masks to "Unexpected error." — so every one of them is checked here first.
     """
-    if requested_role not in REQUESTED_ROLES:
-        raise ValueError(f"Cannot apply for {requested_role}")
     reason = reason.strip()
     if not reason:
         raise ValueError("Reason is required")
     if len(reason) > REASON_MAX_LENGTH:
         raise ValueError(f"Reason must be at most {REASON_MAX_LENGTH} characters")
-    contact = (contact or "").strip() or None
-    if contact is not None and len(contact) > CONTACT_MAX_LENGTH:
-        raise ValueError(f"Contact must be at most {CONTACT_MAX_LENGTH} characters")
-    return reason, contact
+    name = name.strip()
+    if not name:
+        raise ValueError("Name is required")
+    if len(name) > APPLICANT_NAME_MAX_LENGTH:
+        raise ValueError(f"Name must be at most {APPLICANT_NAME_MAX_LENGTH} characters")
+    return reason, name
+
+
+async def team_name_taken(db: AsyncSession, name: str) -> bool:
+    """Whether a team not deleted already has `name`, trimmed and ignoring case (ADR-352 point 3)."""
+    found = await db.scalar(
+        select(Team.uuid).where(
+            Team.delete_at.is_(None), func.lower(func.btrim(Team.name)) == name.strip().lower()
+        )
+    )
+    return found is not None
+
+
+async def _checked_target(
+    db: AsyncSession, requested_role: str, team_uuid, new_team_name: str | None
+) -> Target:
+    """The team a request names, checked against its identity (ADR-350 point 2, ADR-352)."""
+    if requested_role not in REQUESTED_ROLES:
+        raise ValueError(f"Cannot apply for {requested_role}")
+    new_team_name = (new_team_name or "").strip() or None
+    if requested_role == _DATA_AUDITOR:
+        if team_uuid is not None or new_team_name is not None:
+            raise ValueError("A data auditor application names no team")
+        return Target()
+    if team_uuid is None and new_team_name is None:
+        raise ValueError("Pick a team or name a new one")
+    if team_uuid is not None and new_team_name is not None:
+        raise ValueError("Pick a team or a new name, not both")
+    if new_team_name is not None:
+        if len(new_team_name) > TEAM_NAME_MAX_LENGTH:
+            raise ValueError(f"Team name must be at most {TEAM_NAME_MAX_LENGTH} characters")
+        if await team_name_taken(db, new_team_name):
+            raise ValueError("A team with this name already exists")
+        return Target(new_team_name=new_team_name)
+    team = await db.scalar(
+        select(Team).where(
+            Team.uuid == team_uuid,
+            Team.delete_at.is_(None),
+            Team.status == "active",
+            Team.type == TEAM_TYPE_FOR_ROLE[requested_role],
+        )
+    )
+    # Unknown, not active and the wrong type read the same: none of them can be joined.
+    if team is None:
+        raise ValueError("Team not found")
+    return Target(team=team)
+
+
+async def _verified_contact(db: AsyncSession, user_uuid, type_: str) -> str | None:
+    """The account's verified contact of `type_`, normalized as stored, or None."""
+    return await db.scalar(
+        select(UserContact.value).where(
+            UserContact.user_uuid == user_uuid, UserContact.type == type_, UserContact.verified.is_(True)
+        )
+    )
+
+
+async def _applicant_contacts(db: AsyncSession, user_uuid, typed_email: str | None) -> tuple[str, str | None]:
+    """Phone and email the request keeps (ADR-355 points 1–2).
+
+    The phone must be a verified contact of the account; the site adds one through the contact
+    flow first. The account's verified email wins over a typed one, which is optional.
+    """
+    phone = await _verified_contact(db, user_uuid, "phone")
+    if phone is None:
+        raise ValueError("A verified phone number is required")
+    email = await _verified_contact(db, user_uuid, "email")
+    if email is None and (typed_email or "").strip():
+        try:
+            email = normalize_email(typed_email)
+        except ValueError as err:
+            raise ValueError("Email is not valid") from err
+    return phone, email
+
+
+async def _is_member(db: AsyncSession, user_uuid, team_uuid) -> bool:
+    """Whether the account holds any grant in the team — that is membership (ADR-072)."""
+    found = await db.scalar(
+        select(UserRoleAssign.uuid).where(
+            UserRoleAssign.user_uuid == user_uuid, UserRoleAssign.team_uuid == team_uuid
+        )
+    )
+    return found is not None
 
 
 async def _has_backoffice_identity(db: AsyncSession, user_uuid, *, besides: str | None = None) -> bool:
@@ -106,13 +202,34 @@ async def _has_backoffice_identity(db: AsyncSession, user_uuid, *, besides: str 
 
 
 async def submit(
-    db: AsyncSession, *, actor: User, requested_role: str, reason: str, contact: str | None
+    db: AsyncSession,
+    *,
+    actor: User,
+    requested_role: str,
+    reason: str,
+    name: str,
+    email: str | None = None,
+    team_uuid=None,
+    new_team_name: str | None = None,
+    invite_uuid=None,
 ) -> RoleRequest:
-    """File an application for review. It stays `pending` until decided or withdrawn."""
+    """File an application for review. It stays `pending` until decided or withdrawn.
+
+    `government` / `ngo` name an existing team or a new one; `data_auditor` names neither
+    (ADR-350). `invite_uuid` is set only by the invite path (ADR-353), which has already checked
+    the invite and passes its team.
+    """
     await require_scope(actor, Perm.ROLE_REQUEST_ADD, db)
-    reason, contact = _checked_application(requested_role, reason, contact)
-    if await _has_backoffice_identity(db, actor.uuid):
-        raise ValueError("Only an account without a back-office identity can apply")
+    reason, name = _checked_text(reason, name)
+    target = await _checked_target(db, requested_role, team_uuid, new_team_name)
+    # ADR-351: a platform role still asks for no back-office identity at all (AC-RE-101); a team
+    # request only asks that the applicant is not in that team already.
+    if requested_role == _DATA_AUDITOR:
+        if await _has_backoffice_identity(db, actor.uuid):
+            raise ValueError("Only an account without a back-office identity can apply")
+    elif target.team is not None and await _is_member(db, actor.uuid, target.team.uuid):
+        raise ValueError("You are already a member of this team")
+    phone, email = await _applicant_contacts(db, actor.uuid, email)
     # Read before committing: the session expires `actor` on commit, and async SQLAlchemy cannot
     # lazily reload it afterwards.
     applicant_uuid, applicant_name = actor.uuid, actor.name
@@ -121,7 +238,12 @@ async def submit(
         uuid=request_uuid,
         requested_role=requested_role,
         reason=reason,
-        contact=contact,
+        team_uuid=target.team.uuid if target.team is not None else None,
+        new_team_name=target.new_team_name,
+        invite_uuid=invite_uuid,
+        applicant_name=name,
+        applicant_phone=phone,
+        applicant_email=email,
         created_by=applicant_uuid,
     )
     db.add(request)
@@ -318,8 +440,10 @@ async def my_role_requests(db: AsyncSession, *, actor: User) -> RoleRequestState
     # A super admin pauses applications by revoking role_request.add at runtime; the entry
     # should say so up front rather than let the form fail on submit.
     switched_on = await resolve_scope(actor, Perm.ROLE_REQUEST_ADD, db) != Scope.NONE
+    # A back-office identity no longer rules applying out: a member of one team may ask to join
+    # another (ADR-351). Only the data auditor choice still needs none, and submit says so.
     return RoleRequestState(
         has_backoffice_identity=has_backoffice_identity,
-        can_apply=switched_on and not has_backoffice_identity and not pending,
+        can_apply=switched_on and not pending,
         requests=requests,
     )

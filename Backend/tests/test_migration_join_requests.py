@@ -136,14 +136,20 @@ async def test_other_requests_are_left_as_they_were(migrated):
 async def _insert_request(conn, **columns) -> None:
     user_uuid = (
         await conn.execute(
-            text("INSERT INTO users (uuid, name, credibility_score) VALUES (gen_random_uuid(), 'x', 50) RETURNING uuid")
+            text(
+                "INSERT INTO users (uuid, name, credibility_score)"
+                " VALUES (gen_random_uuid(), 'x', 50) RETURNING uuid"
+            )
         )
     ).scalar_one()
     values = {"requested_role": "government", "reason": "理由", "status": "rejected", **columns}
     names = ", ".join(values)
     params = ", ".join(f":{name}" for name in values)
     await conn.execute(
-        text(f"INSERT INTO role_requests (uuid, created_by, {names}) VALUES (gen_random_uuid(), :user_uuid, {params})"),
+        text(
+            f"INSERT INTO role_requests (uuid, created_by, {names})"
+            f" VALUES (gen_random_uuid(), :user_uuid, {params})"
+        ),
         {"user_uuid": user_uuid, **values},
     )
 
@@ -151,7 +157,10 @@ async def _insert_request(conn, **columns) -> None:
 async def _team(conn) -> str:
     return (
         await conn.execute(
-            text("INSERT INTO teams (uuid, name, type, status) VALUES (gen_random_uuid(), 't', 'gov', 'active') RETURNING uuid")
+            text(
+                "INSERT INTO teams (uuid, name, type, status)"
+                " VALUES (gen_random_uuid(), 't', 'gov', 'active') RETURNING uuid"
+            )
         )
     ).scalar_one()
 
@@ -176,7 +185,10 @@ async def test_checks_refuse_a_request_with_the_wrong_target(migrated, columns):
         if columns.pop("invite", False):
             creator = (
                 await conn.execute(
-                    text("INSERT INTO users (uuid, name, credibility_score) VALUES (gen_random_uuid(), 'c', 50) RETURNING uuid")
+                    text(
+                        "INSERT INTO users (uuid, name, credibility_score)"
+                    " VALUES (gen_random_uuid(), 'c', 50) RETURNING uuid"
+                    )
                 )
             ).scalar_one()
             columns["invite_uuid"] = (
@@ -198,7 +210,9 @@ async def test_checks_accept_the_three_kinds(migrated):
     async with migrated.connect() as conn:
         team_uuid = await _team(conn)
         await _insert_request(conn, team_uuid=team_uuid, applicant_phone="+886912345678")
-        await _insert_request(conn, requested_role="ngo", new_team_name="新隊", applicant_phone="+886912345678")
+        await _insert_request(
+            conn, requested_role="ngo", new_team_name="新隊", applicant_phone="+886912345678"
+        )
         await _insert_request(conn, requested_role="data_auditor", applicant_phone="+886912345678")
 
 
@@ -209,7 +223,10 @@ async def test_an_invite_expires_24_hours_after_the_database_created_it(migrated
         team_uuid = await _team(conn)
         creator = (
             await conn.execute(
-                text("INSERT INTO users (uuid, name, credibility_score) VALUES (gen_random_uuid(), 'c', 50) RETURNING uuid")
+                text(
+                    "INSERT INTO users (uuid, name, credibility_score)"
+                    " VALUES (gen_random_uuid(), 'c', 50) RETURNING uuid"
+                )
             )
         ).scalar_one()
         lifetime = (
@@ -231,7 +248,10 @@ async def test_team_status_is_one_of_three(migrated):
     async with migrated.connect() as conn:
         with pytest.raises(IntegrityError):
             await conn.execute(
-                text("INSERT INTO teams (uuid, name, type, status) VALUES (gen_random_uuid(), 'x', 'gov', 'paused')")
+                text(
+                    "INSERT INTO teams (uuid, name, type, status)"
+                    " VALUES (gen_random_uuid(), 'x', 'gov', 'paused')"
+                )
             )
 
 

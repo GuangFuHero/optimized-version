@@ -7,6 +7,8 @@
 - Task 2 完成：全套件 2184 passed、5 failed。當時誤判為「套件跑到一半改了程式」；實際原因是 Task 2 的測試建了一個
   沒有權限的共用 `user` 角色，同一個 worker 上之後的申請測試就拿不到 `role_request.add`（順序相關，單獨跑會過）。
   已在後續 commit 修正：該測試改用自己命名的角色。
+- Task 3 完成：全套件 2226 passed、0 failed。019 的既有測試改成帶姓名、帳號帶已驗證手機；團隊成員的 `canApply`
+  改為 true（ADR-351）。
 
 **Goal:** 在 Spec 019 的 `role_requests` 上加入「申請加入既有團隊／成立新團隊」與團隊邀請連結，讓 team admin 與
 super admin 從各自的審核佇列決定；加上團隊雜項（最後 admin 防呆、聯絡欄位、編輯／停用、稽核紀錄讀取）。
@@ -15,7 +17,7 @@ super admin 從各自的審核佇列決定；加上團隊雜項（最後 admin �
 `app/services/team_invite.py`；審核權限判斷集中在 `role_request.py` 的 `_require_reviewer`；加成員的寫入抽成不 commit
 的 helper 給核准共用；團隊狀態對權限的影響放在身分解析（`active_identity_repository`）一處。
 
-**Tech Stack:** FastAPI, strawberry, SQLAlchemy async, PostgreSQL, Redis, pytest（`uv run pytest -n 4`）, ruff。無新依賴。
+**Tech Stack:** FastAPI, strawberry, SQLAlchemy async, PostgreSQL, Redis, pytest（`uv run pytest -n 8`）, ruff。無新依賴。
 
 **Source spec:** `Spec/026-join-requests/spec.md`（ADR-350~358）
 
@@ -36,8 +38,13 @@ super admin 從各自的審核佇列決定；加上團隊雜項（最後 admin �
 
 1. **有測試。** 每個動到程式碼的 Task 都有自己的新測試，先寫、先看它紅（RED），再實作到綠（GREEN）。
    純重構（Task 6a）也要有測試釘住「行為沒變」。
-2. **本 Task 的測試綠＋全套件不比基準差。** 基準在 Task 1 開頭記一次，之後每個 Task 結束跑
-   `uv run pytest tests -q -n 4` 對照，只能多、不能少。
+2. **本 Task 的測試綠＋相關測試綠。** 每個 Task 結束跑本 Task 新增／改到的測試檔，加上同一區的既有測試
+   （例如動到申請就跑 `tests/test_role_request*.py tests/test_graphql/test_role_request*.py`）。
+   **全套件**（`uv run pytest tests -q -n 8`，約 4～5 分鐘）只在這些時點跑，對照基準只能多、不能少：
+   Task 6b 完成（Part A 收尾）、Task 9 完成（權限解析改動）、Task 13 Docker 驗證前；動到共用元件
+   （`security.py`、`conftest`、seed）時另外加跑。（Popo 2026-10-20 決定，原本是每個 Task 都跑）
+   - **單獨跑測試檔要用新的 DB 名**（例如 `TEST_DB_URL=.../t_<亂數>`）：GraphQL 測試的資料會留在 DB 裡跨次保留，
+     髒 DB 會遮住順序相關的錯（Task 2 的教訓）。
 3. **一個 Task 一個 commit**，conventional commits，測試與實作同一個 commit。
 4. **新決策**：實作中冒出的決策照樣寫成 ADR（從 ADR-359 起，commit 前再掃一次遠端），同時更新 spec、decisions、plan。
 5. **整張票完成後做 Task 13 的 Docker 完整驗證**；沒通過不算完成、不回報完成、不開 PR。
@@ -56,7 +63,7 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5439/
 export TEST_REDIS_URL="redis://localhost:6394/15"
 ```
 
-- worktree 裡先 `uv sync`（`.venv` 的 strawberry 太舊會誤報失敗），再 `uv run pytest -n 4`。
+- worktree 裡先 `uv sync`（`.venv` 的 strawberry 太舊會誤報失敗），再 `uv run pytest -n 8`。
 
 ### 已知陷阱
 
@@ -291,7 +298,7 @@ export TEST_REDIS_URL="redis://localhost:6394/15"
 不動使用者現有的 `backend-db-1`／`backend-redis-1`；compose 檔、腳本都放 scratchpad。
 
 ### 13.1 本機收尾
-- [ ] `uv run pytest tests -q -n 4`：比基準只多不少
+- [ ] `uv run pytest tests -q -n 8`：比基準只多不少
 - [ ] `COVERAGE_CORE=sysmon uv run pytest --cov=app/services/role_request --cov=app/services/team_invite --cov=app/services/audit_log tests -q`：≥ 80%
 - [ ] `uv run alembic heads` 單一 head
 
