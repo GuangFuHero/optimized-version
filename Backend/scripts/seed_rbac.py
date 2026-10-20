@@ -155,6 +155,7 @@ ROLES_DATA = [
                 Perm.RBAC_ASSIGN,
                 Perm.RBAC_EDIT,
                 Perm.AUDIT_VIEW,
+                Perm.TEAM_AUDIT_VIEW,
                 Perm.ROLE_REQUEST_REVIEW,
                 Perm.TEAM_VIEW,
                 Perm.TEAM_EDIT,
@@ -219,6 +220,7 @@ ROLES_DATA = [
             # Spec/026 ADR-357: edit their own team's details. Creating a team needs `all`.
             Perm.TEAM_EDIT: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
+            Perm.TEAM_AUDIT_VIEW: "team",  # Spec/026 ADR-358: changes to their own team
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324: every back-office page's shell shows the disaster
             Perm.ZONE_VIEW: "all",

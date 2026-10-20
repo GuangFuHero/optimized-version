@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     admin,
     analytics,
+    audit_logs,
     auth,
     bulk,
     duplicate_pairs,
@@ -41,6 +42,9 @@ api_router.include_router(role_requests.router, prefix="/admin", tags=["後台�
 
 # 註冊 AI 重複審核 API（列表 / 單張配對卡，Spec 025）
 api_router.include_router(duplicate_pairs.router, prefix="/admin", tags=["AI 重複審核"])
+
+# 註冊稽核紀錄讀取 API（全平台 / 自己團隊，Spec/026 ADR-358）
+api_router.include_router(audit_logs.router, prefix="/admin", tags=["稽核紀錄"])
 
 # 註冊團隊邀請連結 API（team admin 建立／列出；登入者打開／申請，Spec/026）
 api_router.include_router(team_invites.admin_router, prefix="/admin", tags=["團隊邀請連結"])

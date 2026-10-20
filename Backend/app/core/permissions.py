@@ -143,6 +143,10 @@ class Perm(StrEnum):
 
     # Audit Log
     AUDIT_VIEW = "audit.view"
+    # Spec/026 ADR-358: a team admin reads the changes made to their own team. Its own key rather
+    # than `audit.view` at `team`: every audit.view holder already reads all data and all PII,
+    # which ADR-130's RAW tier rests on, and a team admin does not.
+    TEAM_AUDIT_VIEW = "team.audit.view"
 
     # RBAC self-management (Super Admin only)
     RBAC_VIEW = "rbac.view"
