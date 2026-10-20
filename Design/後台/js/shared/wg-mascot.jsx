@@ -1,0 +1,141 @@
+/* 光復寶寶（會動的版本，2026-10-20）—— 404／403 頁用。
+ *
+ * 圖形來自 assets/mascot/guangfu-baby(-404/-403).svg，路徑原封不動，只是拆成幾組好分開動：
+ *   身體＋臉（眼睛會眨、會左右看）、牌子＋兩隻手、三滴汗、地上的影子。
+ * 牌子上的字用 props.code 傳進來（"404"／"403"），直接畫在網頁裡，所以吃得到網頁字型。
+ *
+ *   mood="lost"  404：左右張望找路、汗滴飛出、問號往上飄
+ *   mood="stop"  403：彈出來、每隔幾秒搖頭說不、把牌子往前推、旁邊一個鎖頭在跳
+ *
+ * 🔒 系統設定「減少動態效果」→ 全部靜止（@media prefers-reduced-motion）。
+ * 🔒 點牠會跳一下（彩蛋，不是功能）。是 <button>，鍵盤也按得到；aria-label 寫 404／403。
+ * 🔒 只有裝飾性的動態，不要拿它傳遞資訊。文字區照樣把話說完整。
+ * 🔒 不要用物件 rest 解構（Babel standalone _excluded 撞名白畫面）。
+ */
+(function () {
+  const P = ["M180.4,99c-4.4-19.6-2.5-33.6-10.2-52.5-10.7-26.4-36.8-39.7-67.1-38.1-33.3,1.8-53.1,21.8-60.1,50.6-3,12.2-3.1,18-5.5,30.2-3.3,16.7-15.4,35.6-9.6,51.3,6.8,18.3,36.3,22.5,54.3,24.1,22.1,2,45,2.1,67-.8,16.1-2.1,35.4-8.2,38.6-24.8,2.9-15.5-3.9-24.5-7.3-39.9Z", "M118.4,38.5c-.6-.4-1.4-.6-2.2-.5-.2,0-.4,0-.6.2-.3.2-.3.5-.3.8,0,2.1,1.1,5.7,2.3,6,1.2.4,2.1,0,2.6-.5,1-1,.6-3-.4-4.7-.3-.5-.7-1-1.3-1.4Z", "M131.8,38c-.6-.4-1.4-.6-2.2-.5-.2,0-.4,0-.6.2-.3.2-.3.5-.3.8,0,2.1,1.1,5.7,2.3,6,1.2.4,2.1,0,2.6-.5,1-1,.6-3-.4-4.7-.3-.5-.7-1-1.3-1.4Z", "M137.1,34.7c-.2.5-1,.5-1.5.4-1.5-.3-3-1.5-3.9-2.9-.5-.6-1-2.5.3-2.3.9.2,1.7,1.1,2.4,1.8.7.8,2.8,2,2.6,3h0Z", "M112.4,31.6c.8.6.9,1.9.7,2.8,0,.1,0,.3,0,.4-.2,1-.6,2-1.5,2.7-.4.3-.9.7-1.4.9s-.9.2-1-.2,0-.8.2-1.2c.2-.4.5-.7.9-1.1.4-.5.8-1.1,1.1-1.6,0-.1,0-.2.1-.3.2-.8-.2-1.8.6-2.4,0,0,.2,0,.3,0Z", "M36.7,89.9c-.2,7.3-1.5,10.9,1.1,14.5,2.6,3.5,6.2,3.6,7.2,7.1.7,2.5-.7,4-2.5,8.5-.8,2-4.4,10.8-2.5,17.3,2.2,7.5,11.6,10.8,13.8,11.6,11.1,3.9,15.4-2.3,28.5-.8,14,1.6,13.3,9.1,25.9,10,14.3,1.1,16.2-8.5,31.2-7,8.9.9,12.7,4.8,21.7,2.9,1.9-.4,7-1.5,11.9-5.6,9.4-8,13-23.3,7.9-29.1-2.3-2.6-5.8-3.6-9.7-8.8-.6-.8-1.1-1.7-1.4-2.9-2-6.4,1-13.9,2.7-18.3,2.2-5.6,3.4-5.6,3.9-9,1-7-3.4-13-5.8-16.3-1.9-2.6-6.7-9-15.6-12-13.6-4.6-25.6,2.7-27.4,3.9-.6.4-1.9,1.8-4,3.2,0,0-4.1,2.7-9,4.1-6.9,2-16.2-1.6-22.7-3.5-18.7-5.4-33.9-2.4-42.1-.8-11.8,2.3-13.9,5.3-14.6,6.3-3.4,5.4,1.8,9.4,1.3,24.5Z", "M110.5,158.7c-.7,0-1.5,0-2.2,0-6.3-.5-9.4-2.6-12.6-4.8-3.2-2.2-6.4-4.5-13.4-5.3-5.9-.7-10.1.2-13.8,1-4.7,1-8.7,1.9-14.9-.3-9.7-3.4-13-8.4-14-11.9-1.3-4.3-.5-10.2,2.4-17.4v-.2c.6-1.3,1-2.3,1.4-3.2,1-2.3,1.5-3.4,1.1-5-.5-1.8-1.8-2.6-3.3-3.6-1.3-.8-2.7-1.7-3.9-3.4-2-2.8-1.8-5.6-1.5-9.8.1-1.5.2-3.1.3-5,.2-7.2-.9-11.9-1.7-15.3-.9-3.9-1.5-6.4.4-9.4,1.7-2.7,6.7-4.9,14.8-6.5,8.2-1.6,23.5-4.6,42.3.8,1,.3,2,.6,3.1.9,6.1,1.9,13.7,4.2,19.4,2.5,4.7-1.3,8.8-4,8.8-4.1,1.3-.9,2.3-1.8,3-2.4.4-.4.8-.7,1-.8,3.2-2,14.7-8.3,27.7-3.9,9.2,3.1,14.1,9.9,15.8,12.1,2.4,3.3,6.9,9.4,5.9,16.6-.3,2-.8,2.9-1.6,4.2-.6,1.1-1.4,2.4-2.4,4.9-1.7,4.4-4.6,11.8-2.7,18,.3,1.1.8,2,1.4,2.8,2.3,3.2,4.5,4.8,6.4,6.2,1.2.8,2.3,1.6,3.2,2.7,1.8,2.1,2.7,5.4,2.4,9.4-.5,7.5-4.6,15.4-10.3,20.3-3.3,2.8-7.4,4.7-12.1,5.7-5.6,1.2-9.2.1-13.4-1.1-2.5-.7-5.1-1.5-8.4-1.8-7.5-.8-11.6,1.3-15.9,3.4-3.6,1.8-7.3,3.6-13,3.6ZM78.3,147.4c1.3,0,2.7,0,4.2.2,7.2.8,10.5,3.2,13.8,5.4,3.1,2.1,6,4.2,12.1,4.6,6.9.5,10.7-1.4,14.8-3.5,4.2-2.1,8.6-4.3,16.4-3.5,3.4.4,6.1,1.1,8.6,1.9,4,1.2,7.5,2.2,12.9,1.1,1.7-.3,6.8-1.4,11.7-5.5,5.5-4.6,9.5-12.6,10-19.7.3-3.8-.5-6.9-2.2-8.8-.8-1-1.9-1.7-3-2.5-1.9-1.4-4.2-3-6.6-6.3-.6-.9-1.1-1.9-1.5-3.1-2-6.5.9-14.1,2.7-18.6,1-2.6,1.8-3.9,2.4-5,.7-1.3,1.2-2.1,1.4-3.9.9-6.8-3.4-12.8-5.7-16-1.6-2.2-6.4-8.8-15.3-11.8-12.7-4.3-23.9,1.8-27,3.8-.2.1-.5.4-.9.7-.7.6-1.7,1.5-3.1,2.5-.2.1-4.2,2.8-9.1,4.2-6,1.7-13.7-.7-19.8-2.5-1.1-.3-2.1-.6-3.1-.9-18.6-5.3-33.8-2.4-41.9-.8-7.9,1.5-12.7,3.6-14.3,6.1-1.7,2.7-1.1,5-.3,8.8.8,3.5,1.9,8.3,1.7,15.5h0c0,1.9-.2,3.6-.3,5-.3,4.1-.5,6.6,1.3,9.2,1.1,1.5,2.4,2.3,3.6,3.2,1.6,1,3.1,2,3.6,4.1.5,1.9,0,3.3-1.1,5.6-.4.9-.9,1.9-1.4,3.1v.2c-2.9,7.1-3.7,12.8-2.5,16.9,1,3.3,4.1,8,13.5,11.3,5.9,2.1,9.9,1.2,14.4.3,2.8-.6,5.9-1.3,9.9-1.3Z", "M38.4,88.5c2.3-.4,2.8,3.3,7.8,5.6,4.1,1.9,5.6.4,10.5,2.7,1.9.9,5.6,2.6,5.7,5.2,0,.8-.3,2.2-3.3,4.3-4,2.8-14.9,8.5-21.2,2.9-3.6-3.2-3.7-8.3-3.7-10.1,0-4.2,1.4-10.1,4.2-10.6Z", "M181.6,115.3c-2.2.8-3.4-3.7-8.9-6-4.4-1.9-5.7.2-11-2.1-2-.9-6.1-2.6-6.7-5.7-.2-.9-.1-2.7,2.5-5.7,3.5-3.9,13.3-12.2,20.7-6,4.2,3.5,5.2,9.7,5.6,12,.9,5.1.5,12.6-2.2,13.5Z", "M193.6,38.2c1.7,2.2,4.1,5.2,2.9,7.9-1.1,2.6-5.1,3.9-7.9,2.9-1.5-.5-3-3.1-5.9-8.3-2.7-4.8-3.5-6.8-2.9-7.4,0,0,.1,0,.2-.1,3-1,5.9-.3,5.9-.3,4.4,1.1,7.1,4.5,7.7,5.2Z", "M32.9,43.1c-2.7,2.3-7.7,4.3-11.1,2.2-3.2-2.1-3.5-7.5-2.2-11.1,3.5-9.6,20.8-11.2,22.5-8.2.4.8-.4,1.4-3.4,6.9-3.9,7.1-3.6,8.4-5.8,10.2Z", "M23.7,75.4c-1.7,2.2-4.1,5.2-7,4.7-2.8-.5-4.9-4.1-4.7-7,.1-1.6,2.3-3.6,6.7-7.7,4.1-3.8,5.9-4.9,6.5-4.5,0,0,.1.1.1.2,1.7,2.7,1.6,5.7,1.6,5.7,0,4.5-2.7,8-3.3,8.7Z"];
+  const C = { body: '#e4781e', ink: '#15191b', sign: '#2193ba', white: '#fff', drop: '#65bddb' };
+
+  const CSS = `
+.wgm{display:block;width:100%;height:auto;overflow:visible}
+.wgm *{transform-box:fill-box}
+.wgm-btn{display:block;margin:0 auto;padding:0;border:0;background:none;cursor:pointer;border-radius:24px;-webkit-tap-highlight-color:transparent}
+.wgm-btn:focus-visible{outline:3px solid var(--color-bg-primary);outline-offset:6px}
+.wgm-in{transform-origin:50% 100%}
+.wgm-all{transform-origin:50% 100%}
+.wgm-head{transform-origin:50% 90%}
+.wgm-eyes{transform-origin:50% 50%}
+.wgm-sign{transform-origin:50% 50%}
+.wgm-shadow{transform-origin:50% 50%}
+.wgm-drop{opacity:0}
+.wgm-q{opacity:0;transform-origin:50% 50%}
+.wgm-lock{transform-origin:50% 100%}
+
+/* —— 404 lost —— */
+.wgm--lost .wgm-in{animation:wgm-drop-in .7s cubic-bezier(.3,1.6,.5,1) both}
+.wgm--lost .wgm-all{animation:wgm-look 3.6s ease-in-out .7s infinite}
+.wgm--lost .wgm-shadow{animation:wgm-shadow-look 3.6s ease-in-out .7s infinite}
+.wgm--lost .wgm-eyes{animation:wgm-eyes-look 3.6s ease-in-out .7s infinite}
+.wgm--lost .wgm-lids{animation:wgm-blink 3.6s linear .7s infinite}
+.wgm--lost .wgm-drop{animation:wgm-fly 2.4s ease-out infinite}
+.wgm--lost .wgm-q1{animation:wgm-q 3.6s ease-out 1.2s infinite}
+.wgm--lost .wgm-q2{animation:wgm-q 3.6s ease-out 3s infinite}
+@keyframes wgm-drop-in{0%{transform:translateY(-40px) scale(.8);opacity:0}60%{opacity:1}100%{transform:none;opacity:1}}
+@keyframes wgm-look{0%,100%{transform:rotate(0) translateY(0)}20%{transform:rotate(-5deg) translateY(-6px)}40%{transform:rotate(-5deg) translateY(0)}60%{transform:rotate(5deg) translateY(-6px)}80%{transform:rotate(5deg) translateY(0)}}
+@keyframes wgm-shadow-look{0%,100%,40%,80%{transform:scaleX(1);opacity:1}20%,60%{transform:scaleX(.85);opacity:.7}}
+@keyframes wgm-eyes-look{0%,100%{transform:translateX(0)}15%,40%{transform:translateX(-4px)}55%,80%{transform:translateX(4px)}}
+@keyframes wgm-blink{0%,46%,52%,100%{transform:scaleY(1)}49%{transform:scaleY(.1)}}
+@keyframes wgm-fly{0%{opacity:0;transform:translate(0,0) scale(.6)}15%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1)}}
+@keyframes wgm-q{0%{opacity:0;transform:translateY(8px) scale(.6) rotate(-10deg)}20%{opacity:1;transform:translateY(0) scale(1) rotate(0)}60%{opacity:1}100%{opacity:0;transform:translateY(-22px) scale(1) rotate(8deg)}}
+
+/* —— 403 stop —— */
+.wgm--stop .wgm-in{animation:wgm-pop .6s cubic-bezier(.3,1.7,.5,1) both}
+.wgm--stop .wgm-all{animation:wgm-breathe 3.6s ease-in-out .6s infinite}
+.wgm--stop .wgm-head{animation:wgm-no 3.6s ease-in-out .6s infinite}
+.wgm--stop .wgm-sign{animation:wgm-push 3.6s ease-in-out .6s infinite}
+.wgm--stop .wgm-lids{animation:wgm-blink 3.6s linear .6s infinite}
+.wgm--stop .wgm-lock{animation:wgm-lock 3.6s ease-in-out .6s infinite}
+.wgm--stop .wgm-drop{animation:wgm-fly 3.6s ease-out infinite}
+@keyframes wgm-pop{0%{transform:scale(.4);opacity:0}100%{transform:none;opacity:1}}
+@keyframes wgm-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.02,.98)}}
+@keyframes wgm-no{0%,30%,100%{transform:rotate(0)}5%{transform:rotate(-7deg)}10%{transform:rotate(7deg)}15%{transform:rotate(-6deg)}20%{transform:rotate(5deg)}25%{transform:rotate(-2deg)}}
+@keyframes wgm-push{0%,26%,48%,100%{transform:none}32%{transform:translateY(-3px) scale(1.08)}40%{transform:scale(1.04)}}
+@keyframes wgm-lock{0%,26%,60%,100%{transform:translateY(0) rotate(0)}32%{transform:translateY(-10px) rotate(-12deg)}38%{transform:translateY(0) rotate(8deg)}44%{transform:translateY(-4px) rotate(-4deg)}50%{transform:rotate(0)}}
+
+/* —— 點一下跳 —— */
+.wgm-hop .wgm-in{animation:wgm-hop .55s cubic-bezier(.3,.7,.4,1)!important}
+@keyframes wgm-hop{0%{transform:none}25%{transform:translateY(0) scale(1.08,.9)}55%{transform:translateY(-26px) scale(.95,1.06)}80%{transform:translateY(0) scale(1.06,.94)}100%{transform:none}}
+
+@media (prefers-reduced-motion: reduce){.wgm *,.wgm-hop .wgm-in{animation:none!important}.wgm-drop,.wgm-q{opacity:0}}
+`;
+  function ensureCSS() {
+    if (document.getElementById('wgm-css')) return;
+    const el = document.createElement('style'); el.id = 'wgm-css'; el.textContent = CSS;
+    document.head.appendChild(el);
+  }
+
+  // 汗滴：往外飛的方向（px，在 SVG 座標裡）
+  const DROPS = [
+    { d: P[9],  dx: '14px',  dy: '-12px', delay: '0s' },
+    { d: P[10], dx: '-14px', dy: '-10px', delay: '.8s' },
+    { d: P[11], dx: '-16px', dy: '6px',   delay: '1.6s' },
+  ];
+
+  function WGMascot(props) {
+    React.useEffect(ensureCSS, []);
+    const mood = props.mood === 'stop' ? 'stop' : 'lost';
+    const code = props.code || (mood === 'stop' ? '403' : '404');
+    const [hop, setHop] = React.useState(false);
+    const font = "var(--font-display), 'Arial Rounded MT Bold', 'Nunito', 'Arial Black', Arial, sans-serif";
+    return (
+      <button type="button" className={'wgm-btn' + (hop ? ' wgm-hop' : '')} aria-label={code}
+        onClick={() => setHop(true)} onAnimationEnd={(e) => { if (e.animationName === 'wgm-hop') setHop(false); }}
+        style={{ width: props.width || 'clamp(200px, 52vw, 260px)' }}>
+        <svg className={'wgm wgm--' + mood} viewBox="0 -14 210.4 196" aria-hidden="true" focusable="false">
+          <ellipse className="wgm-shadow" cx="109" cy="176" rx="62" ry="6" fill={C.ink} fillOpacity=".12" />
+          <g className="wgm-in">
+            <g className="wgm-all">
+              <g className="wgm-head">
+                <path fill={C.body} d={P[0]} />
+                <g className="wgm-eyes">
+                  <g className="wgm-lids">
+                    <path fill={C.ink} d={P[1]} />
+                    <path fill={C.ink} d={P[2]} />
+                  </g>
+                  <path fill={C.ink} d={P[3]} />
+                  <path fill={C.ink} d={P[4]} />
+                </g>
+              </g>
+              <g className="wgm-sign">
+                <path fill={C.sign} d={P[5]} />
+                <path fill={C.white} d={P[6]} />
+                <text x="110" y="126" textAnchor="middle" fill={C.white} fontFamily={font} fontWeight="800" fontSize="38" letterSpacing="1">{code}</text>
+                <path fill={C.body} d={P[7]} />
+                <path fill={C.body} d={P[8]} />
+              </g>
+            </g>
+          </g>
+          {DROPS.map((x, i) => (
+            <path key={i} className="wgm-drop" fill={C.drop} d={x.d}
+              style={{ '--dx': x.dx, '--dy': x.dy, animationDelay: x.delay }} />
+          ))}
+          {mood === 'lost' ? (
+            <g fill={C.sign} fontFamily={font} fontWeight="800">
+              <text className="wgm-q wgm-q1" x="176" y="22" fontSize="26">?</text>
+              <text className="wgm-q wgm-q2" x="34" y="18" fontSize="20">?</text>
+            </g>
+          ) : (
+            <g transform="translate(170 6)"><g className="wgm-lock">
+              <path d="M6 14 V9 a8 8 0 0 1 16 0 V14" fill="none" stroke={C.ink} strokeWidth="3.4" strokeLinecap="round" />
+              <rect x="1" y="13" width="26" height="21" rx="5" fill={C.sign} stroke={C.ink} strokeWidth="2.4" />
+              <circle cx="14" cy="22" r="3" fill={C.white} />
+              <rect x="12.6" y="23" width="2.8" height="6" rx="1.4" fill={C.white} />
+            </g></g>
+          )}
+        </svg>
+      </button>
+    );
+  }
+
+  Object.assign(window, { WGMascot });
+})();

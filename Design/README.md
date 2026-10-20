@@ -29,7 +29,8 @@
 | | `資源站點管理 Resource Station v2.html` | 站點列表／地圖視圖、審查、匯入匯出 |
 | | `緊急公告 Emergency Announcements.html` | 發布前台／後台公告橫幅 |
 | | `志工行前資訊 Volunteer Briefing.html` | 編輯並發布前台的行前資訊 |
-| | `後台找不到頁面 Not Found.html` | 走到不存在的網址時顯示的畫面（2026-10-18 加入） |
+| | `後台找不到頁面 Not Found.html` | 走到不存在的網址時顯示的畫面（2026-10-18 加入；10-20 光復寶寶改成會動） |
+| | `後台沒有權限 Forbidden.html` | 頁面存在、但目前身份沒權限時的畫面（2026-10-20 加入，文件見 `後台/docs/沒有權限此頁.md`） |
 | | `成員管理 Member Management.html` | 側欄的「團隊」與「成員與權限」**是這一頁的兩個分頁**（`#view=teams`／`#view=members`）。邀請 QR 見 `後台/docs/成員邀請QR.md`（2026-10-20） |
 
 每一頁標題旁的 **？** 是該頁的功能說明。

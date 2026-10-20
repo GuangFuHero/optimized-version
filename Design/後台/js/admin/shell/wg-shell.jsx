@@ -232,7 +232,7 @@
     const act = activation || window.TK_ACTIVATION || {};
     const types = disasterTypes || (window.wgActiveDisasters ? window.wgActiveDisasters() : []);
     // 2026-10-05：「設定」不在 NAV 裡（它在側邊欄底部），查不到時標題會退回第一項「總覽儀表板」。
-    const current = NAV.find((n) => n[0] === activeNav) || (activeNav === "settings" ? ["settings", "設定"] : activeNav === "notfound" ? ["notfound", "找不到這一頁"] : NAV[0]);
+    const current = NAV.find((n) => n[0] === activeNav) || (activeNav === "settings" ? ["settings", "設定"] : activeNav === "notfound" ? ["notfound", "找不到這一頁"] : activeNav === "forbidden" ? ["forbidden", "沒有權限訪問此頁"] : NAV[0]);
     const canRemove = typeof onRemoveDisaster === "function" && types.length > 1;
 
     // 事件卡：三種關閉方式 —— 點卡片外面、Esc、收合側邊欄。

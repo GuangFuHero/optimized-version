@@ -13,7 +13,12 @@
  *
  * props
  *   realm  'site' | 'admin'
+ *   title  標題，預設「找不到這一頁」（2026-10-20：沒有權限的頁面共用這支，傳「沒有權限訪問此頁」）
+ *   mood   'lost'（404，預設）| 'stop'（403）—— 光復寶寶的動畫，見 js/shared/wg-mascot.jsx
+ *   code   牌子上的字，預設依 mood（404／403）
+ *   （img／alt 是沒載入 wg-mascot.jsx 時的靜態退回圖）
  *   lead   一句說明
+ *   note   （選填）說明下方的補充區塊，例如 403 頁的「目前身份」
  *   links  [{ key, label, sub, icon, href? , onClick? }]
  */
 (function () {
@@ -47,13 +52,21 @@
     return (
       <div data-wg-notfound={props.realm} style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--color-bg-neutral-subtle)' }}>
         <style>{'.wg-nf-card{transition:border-color .15s}.wg-nf-card:hover,.wg-nf-card:focus-visible{border-color:var(--color-bg-primary)!important;outline:none}'}</style>
-        <div style={{ maxWidth: 560, margin: '0 auto', padding: 'clamp(32px, 8vh, 80px) 16px 48px' }}>
+        <div style={{ maxWidth: 560, margin: '0 auto', padding: 'clamp(24px, 6vh, 64px) 16px 48px' }}>
           {/* 光復寶寶舉著寫「404」的牌子（2026-10-18 Sucre 提供；牌子上的字是另存的 -404 版本）。
               原檔疊的陰影 PNG 不在資料夾，已拿掉那一層。alt 寫 404：牌子上的字是這張圖唯一的資訊。 */}
-          <img src="assets/mascot/guangfu-baby-404.svg" alt="404" width="180"
-            style={{ display: 'block', width: 'clamp(140px, 36vw, 180px)', height: 'auto', margin: '0 0 16px' }} />
-          <h2 style={{ font: '700 26px/1.3 var(--font-display)', margin: '0 0 12px', color: 'var(--color-fg-neutral-default)' }}>找不到這一頁</h2>
-          <p style={{ font: '400 16px/1.7 var(--font-body)', margin: '0 0 28px', color: 'var(--color-fg-neutral-default)' }}>{props.lead}</p>
+          {/* 2026-10-20：以圖為主 —— 光復寶寶放大、置中、會動（wg-mascot.jsx）。沒載入時退回靜態圖。 */}
+          <div style={{ margin: '0 0 20px' }}>
+            {window.WGMascot
+              ? <window.WGMascot mood={props.mood} code={props.code} />
+              : <img src={props.img || "assets/mascot/guangfu-baby-404.svg"} alt={props.alt || "404"} width="220"
+                  style={{ display: 'block', width: 'clamp(180px, 48vw, 220px)', height: 'auto', margin: '0 auto' }} />}
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ font: '700 28px/1.3 var(--font-display)', margin: '0 0 12px', color: 'var(--color-fg-neutral-default)' }}>{props.title || '找不到這一頁'}</h2>
+            <p style={{ font: '400 16px/1.7 var(--font-body)', margin: props.note ? '0 auto 14px' : '0 auto 28px', maxWidth: 460, color: 'var(--color-fg-neutral-subtle)' }}>{props.lead}</p>
+            {props.note ? <div style={{ margin: '0 0 28px' }}>{props.note}</div> : null}
+          </div>
           {links.length ? (
             <div style={{ display: 'grid', gap: 8 }}>
               {links.map((l) => <NotFoundCard key={l.key} link={l} />)}
