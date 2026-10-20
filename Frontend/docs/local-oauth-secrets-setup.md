@@ -3,7 +3,7 @@
 只有要在本機測試 **Google / LINE 登入**時才需要。
 一般 email + 密碼登入不需要這些值，可以跳過整份文件。
 
-> LINE 登入在本機直接用 `http://localhost:3000` 就可以，不需要 https 或 ngrok。`http://localhost:3000/api/auth/callback/line` 已經登記在 LINE channel 上，channel 也已經 publish，不用另外申請成 tester。
+> LINE 登入在本機直接用 `http://localhost:3000` 就可以，不需要 https。`http://localhost:3000/api/auth/callback/line` 已經登記在 LINE channel 上，channel 也已經 publish，不用另外申請成 tester。
 
 ## 1. 安裝 gcloud CLI
 
