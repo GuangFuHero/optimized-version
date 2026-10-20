@@ -24,6 +24,18 @@ class TeamRepository(GenericRepository[Team]):
         )
         return (await db.execute(query)).scalars().all()
 
+    async def name_taken(self, db: AsyncSession, name: str, *, excluding=None) -> bool:
+        """Whether a team not deleted has `name`, trimmed and ignoring case (Spec/026, ADR-352).
+
+        `excluding` leaves one team out, for renaming it.
+        """
+        query = select(Team.uuid).where(
+            Team.delete_at.is_(None), func.lower(func.btrim(Team.name)) == name.strip().lower()
+        )
+        if excluding is not None:
+            query = query.where(Team.uuid != excluding)
+        return (await db.scalar(query)) is not None
+
     async def list_joinable(self, db: AsyncSession, *, type_: str | None = None) -> list[Team]:
         """Teams someone can ask to join: active and not deleted, by name (Spec/026, ADR-352).
 

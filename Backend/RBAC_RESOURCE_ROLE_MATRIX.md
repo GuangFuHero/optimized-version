@@ -126,10 +126,11 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | team.view | — | — | — | all | team | team |
-| team.edit | — | — | — | all | — | — |
+| team.edit | — | — | — | all | team | — |
 | team.member.manage | — | — | — | all | team | — |
 
-> `team.edit`（建立/編輯 team）只有 super_admin（ADR-054）；team admin 只管成員。
+> `team.edit`：建立 team 要 `all`，只有 super_admin（ADR-054）；team admin 以 `team` 編輯自己 team 的名稱、統編、
+> 聯絡人（026/ADR-357）。停用／恢復／解散也要 `all`。team admin 以 `team.member.manage` 審自己 team 的加入申請（026/ADR-354）。
 
 ### 責任區 Work Zone
 

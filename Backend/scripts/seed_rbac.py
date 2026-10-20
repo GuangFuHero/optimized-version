@@ -216,6 +216,8 @@ ROLES_DATA = [
             Perm.TICKET_ASSIGN: "zone",
             Perm.TICKET_AUDIT: "zone",
             Perm.TEAM_VIEW: "team",
+            # Spec/026 ADR-357: edit their own team's details. Creating a team needs `all`.
+            Perm.TEAM_EDIT: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324: every back-office page's shell shows the disaster

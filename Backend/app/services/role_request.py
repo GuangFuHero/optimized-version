@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 from fastapi import status as http_status
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +29,7 @@ from app.models.role_request import (
 from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import role_repository
+from app.repositories.team_repository import team_repository
 from app.services.admin import DEFAULT_TEAM_ROLE, grant_team_role
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
@@ -128,16 +129,6 @@ def _checked_text(reason: str, name: str) -> tuple[str, str]:
     return reason, name
 
 
-async def team_name_taken(db: AsyncSession, name: str) -> bool:
-    """Whether a team not deleted already has `name`, trimmed and ignoring case (ADR-352 point 3)."""
-    found = await db.scalar(
-        select(Team.uuid).where(
-            Team.delete_at.is_(None), func.lower(func.btrim(Team.name)) == name.strip().lower()
-        )
-    )
-    return found is not None
-
-
 async def _checked_target(
     db: AsyncSession, requested_role: str, team_uuid, new_team_name: str | None
 ) -> Target:
@@ -156,7 +147,7 @@ async def _checked_target(
     if new_team_name is not None:
         if len(new_team_name) > TEAM_NAME_MAX_LENGTH:
             raise ValueError(f"Team name must be at most {TEAM_NAME_MAX_LENGTH} characters")
-        if await team_name_taken(db, new_team_name):
+        if await team_repository.name_taken(db, new_team_name):
             raise ValueError("A team with this name already exists")
         return Target(new_team_name=new_team_name)
     team = await db.scalar(
@@ -495,7 +486,7 @@ async def _found_new_team(db: AsyncSession, request: RoleRequest) -> tuple[str, 
     """
     name = request.new_team_name
     await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(lower(btrim(:name))))"), {"name": name})
-    if await team_name_taken(db, name):
+    if await team_repository.name_taken(db, name):
         raise RoleRequestConflictError("A team with this name already exists")
     team = Team(name=name, type=TEAM_TYPE_FOR_ROLE[request.requested_role], status="active")
     db.add(team)

@@ -34,10 +34,11 @@ from app.schemas.admin import (
     TeamMemberRequest,
     TeamMemberResponse,
     TeamResponse,
+    UpdateTeamRequest,
 )
 from app.services import admin as admin_service
 from app.services import project_settings as project_settings_service
-from app.services.admin import AdminConflictError, AdminNotFoundError
+from app.services.admin import AdminConflictError, AdminNotFoundError, AdminValidationError
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.project_settings import ProjectSettingsValidationError
 
@@ -313,13 +314,41 @@ async def create_team(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Create a gov/ngo team (super_admin only, via team.edit)."""
+    """Create a gov/ngo team (super_admin only, via team.edit at `all`)."""
     team = await admin_service.create_team(
         db, actor=current_user, name=body.name, type_=body.type, tax_id=body.tax_id
     )
-    return TeamResponse(
-        uuid=team.uuid, name=team.name, type=team.type, status=team.status, tax_id=team.tax_id
-    )
+    return TeamResponse.model_validate(team)
+
+
+@router.patch(
+    "/teams/{team_uuid}",
+    response_model=TeamResponse,
+    summary="編輯 team（名稱、統編、聯絡人）",
+    responses={
+        403: {"description": "Permission Denied"},
+        404: {"description": "Team not found"},
+        409: {"description": "Name already taken"},
+    },
+)
+async def update_team(
+    team_uuid: UUID,
+    body: UpdateTeamRequest,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Edit a team: a team admin their own, a super admin any (Spec/026, ADR-357)."""
+    try:
+        team = await admin_service.update_team(
+            db, actor=current_user, team_uuid=str(team_uuid), changes=body.model_dump(exclude_unset=True)
+        )
+    except AdminNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
+    except AdminConflictError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
+    except AdminValidationError as err:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)) from err
+    return TeamResponse.model_validate(team)
 
 
 @router.get(
@@ -335,10 +364,7 @@ async def list_teams(
 ):
     """List teams filtered by the caller's team.view scope (all / own team / none)."""
     teams = await admin_service.list_teams(db, actor=current_user, scope=scope)
-    return [
-        TeamResponse(uuid=t.uuid, name=t.name, type=t.type, status=t.status, tax_id=t.tax_id)
-        for t in teams
-    ]
+    return [TeamResponse.model_validate(t) for t in teams]
 
 
 @router.post("/teams/{team_uuid}/members", response_model=TeamMemberResponse)

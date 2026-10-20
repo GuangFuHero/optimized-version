@@ -42,6 +42,10 @@ class AdminNotFoundError(ValueError):
     """A referenced user, role, or team does not exist."""
 
 
+class AdminValidationError(ValueError):
+    """A field to fix. REST answers 422."""
+
+
 class AdminConflictError(ValueError):
     """The requested change would violate a structural invariant (e.g. last super_admin)."""
 
@@ -405,11 +409,44 @@ async def revoke_user_sessions(db: AsyncSession, redis, *, actor: User, user_uui
 async def create_team(
     db: AsyncSession, *, actor: User, name: str, type_: str, tax_id: str | None = None
 ) -> Team:
-    """Create a gov/ngo team (checkpoint 1 only — team.edit, super_admin in seed, ADR-054)."""
-    await require_scope(actor, Perm.TEAM_EDIT, db)
+    """Create a gov/ngo team (team.edit at `all`, super_admin in seed, ADR-054).
+
+    Since Spec/026 team admins hold team.edit at `team` to edit their own team (ADR-357), so
+    creating one asks for `all` explicitly: checkpoint 1 alone would let any scope through.
+    """
+    if await require_scope(actor, Perm.TEAM_EDIT, db) != Scope.ALL:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
     return await team_repository.create(
         db, obj_in={"name": name, "type": type_, "tax_id": tax_id}
     )
+
+
+async def update_team(db: AsyncSession, *, actor: User, team_uuid: str, changes: dict) -> Team:
+    """Edit a team's name, tax ID or contact (Spec/026, ADR-357 point 1).
+
+    team.edit with checkpoint 2 on the team: a team admin edits their own, a super admin any;
+    another team is not found (ADR-023). A new name must not be taken (ADR-352 point 3).
+    """
+    team = await db.scalar(select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None)))
+    if team is None:
+        raise AdminNotFoundError("Team not found")
+    await require_scope(
+        actor,
+        Perm.TEAM_EDIT,
+        db,
+        resource=SimpleNamespace(created_by=None, team_uuid=team.uuid, geometry=None),
+    )
+    if "name" in changes:
+        changes = {**changes, "name": changes["name"].strip()}
+        if not changes["name"]:
+            raise AdminValidationError("Team name is required")
+        if await team_repository.name_taken(db, changes["name"], excluding=team.uuid):
+            raise AdminConflictError("A team with this name already exists")
+    for field, value in changes.items():
+        setattr(team, field, value)
+    await db.commit()
+    await db.refresh(team)
+    return team
 
 
 async def list_teams(db: AsyncSession, *, actor: User, scope: Scope) -> list[Team]:
