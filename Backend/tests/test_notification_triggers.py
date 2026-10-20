@@ -169,6 +169,9 @@ async def test_add_team_member_triggers_notification(mock_actor):
 
     with (
         patch("app.services.admin.require_scope", new_callable=AsyncMock),
+        # The last-admin guard (Spec/026, ADR-356) queries the team's admins, which a mock db
+        # cannot answer; it has its own tests in tests/test_team_last_admin.py.
+        patch("app.services.admin._refuse_last_team_admin", new_callable=AsyncMock),
         patch(
             "app.services.admin.user_repository.get_by_uuid",
             new_callable=AsyncMock,
