@@ -8,9 +8,9 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 # Retry a command whose connection died underneath it (ADR-196). Without this, every Redis
-# restart costs one spurious 401 per connection still sitting in the pool: the pooled socket
+# restart costs one spurious refusal per connection still sitting in the pool: the pooled socket
 # is only discovered to be dead when a request tries to use it, and `_require_live_session`
-# fail-closes that into a 401 (ADR-100) indistinguishable from a real revocation.
+# fail-closes that into a 503 (ADR-100, ADR-328) for a request that did nothing wrong.
 #
 # `health_check_interval` does NOT solve this and is deliberately not set — measured, the
 # health-check PING is itself sent on the dead socket and raises with nothing to catch it:

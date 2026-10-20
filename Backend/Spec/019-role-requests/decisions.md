@@ -139,6 +139,9 @@ belongs to the back office.
 4. The GraphQL context passes the header to `get_current_user` itself, because it calls it directly (ADR-102).
 5. **Back-office pages must reach the backend on a path that does not add the header.** Today the whole
    frontend is the site, so the header goes on the `/api/graphql` proxy and the server-side client.
+   **Amended by ADR-329** (2026-10-17, `Spec/023-backend-session-login`): the back office sends
+   `X-WG-Realm: admin`, which acts as a back-office identity, so `admin` is no longer a value decision 2
+   ignores.
 
 **Why this is not the citizen base**: nothing is unioned. The request acts as exactly one identity — a grant
 the caller already holds, and the least one. The header is set by the client, but all it can do is pick the

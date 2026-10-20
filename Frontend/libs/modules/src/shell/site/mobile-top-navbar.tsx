@@ -19,7 +19,6 @@ interface SiteMobileTopNavBarProps {
   isAuthenticated?: boolean;
   onMenuClick: () => void;
   userName?: string;
-  userImage?: string;
   onSignIn?: () => void;
   onSignOut?: () => void;
 }
@@ -31,7 +30,6 @@ export function SiteMobileTopNavBar({
   isAuthenticated = false,
   onMenuClick,
   userName,
-  userImage,
   onSignIn,
   onSignOut,
 }: SiteMobileTopNavBarProps) {
@@ -89,11 +87,7 @@ export function SiteMobileTopNavBar({
         }}
       >
         {isAuthenticated ? (
-          <SiteUserMenu
-            userName={userName}
-            userImage={userImage}
-            onSignOut={onSignOut}
-          />
+          <SiteUserMenu userName={userName} onSignOut={onSignOut} />
         ) : (
           <ButtonBase
             disableRipple

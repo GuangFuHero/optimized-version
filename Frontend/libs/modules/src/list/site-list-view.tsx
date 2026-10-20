@@ -11,7 +11,6 @@ import {
 
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
-import { useSession } from 'next-auth/react';
 
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from '../map/constants';
@@ -32,6 +31,7 @@ import { SiteDataTypeToggle } from '../route/controls/data-type-toggle';
 import { SiteControlSurface } from '../route/controls/control-surface';
 import { SiteSubTypeFilter } from '../route/controls/sub-type-filter';
 import { SiteViewSwitch } from '../route/controls/view-switch';
+import { useAuthSession } from '../session/auth-session';
 import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { usePaginatedRescueMapMarkers } from '../map/site';
@@ -45,7 +45,7 @@ const { color } = designTokens;
  * 前台列表模組：與地圖共用路由狀態與篩選邏輯，支援維度切換、子分類篩選與詳情雙向綁定。
  */
 export function SiteListView() {
-  const { status: authStatus } = useSession();
+  const { status: authStatus } = useAuthSession();
   const { module, state, replace } = useSiteRouteState();
   const isAuthenticated = authStatus === 'authenticated';
   const loadMoreRef = useRef<HTMLDivElement | null>(null);

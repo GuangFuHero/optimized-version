@@ -19,7 +19,15 @@ import pytest
 
 from app.core.api_errors import ErrorCode
 
-_AUTH_ENDPOINTS = pathlib.Path(__file__).resolve().parents[1] / "app/api/v1/endpoints/auth"
+_APP = pathlib.Path(__file__).resolve().parents[1] / "app"
+_AUTH_ENDPOINTS = _APP / "api/v1/endpoints/auth"
+# The auth endpoints' own logic that moved into a service when the browser's endpoints came to share it
+# (ADR-325). Its raise sites answer for those endpoints, so they are held to the same contract.
+_AUTH_SERVICES = [_APP / "services/auth_session.py"]
+
+
+def _auth_sources() -> list[pathlib.Path]:
+    return [*sorted(_AUTH_ENDPOINTS.glob("*.py")), *_AUTH_SERVICES]
 
 
 @pytest.mark.asyncio
@@ -87,7 +95,7 @@ def test_no_auth_endpoint_constructs_a_bare_http_exception():
     """
     offenders = []
 
-    for path in sorted(_AUTH_ENDPOINTS.glob("*.py")):
+    for path in _auth_sources():
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.ImportFrom):
                 offenders += [
@@ -119,7 +127,7 @@ def test_every_api_error_call_passes_an_error_code_member():
     offenders = []
     calls_checked = 0
 
-    for path in sorted(_AUTH_ENDPOINTS.glob("*.py")):
+    for path in _auth_sources():
         tree = ast.parse(path.read_text())
         call_names = {"ApiError"} | {
             alias.asname

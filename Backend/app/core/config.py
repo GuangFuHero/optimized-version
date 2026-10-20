@@ -5,6 +5,15 @@ import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def normalise_origin(origin: str) -> str:
+    """An origin as it is compared (ADR-327): trimmed, lower-case, without a trailing slash.
+
+    Both the allowlist and the `Origin` a request carries go through this, so the two can only match
+    or differ on what actually matters.
+    """
+    return origin.strip().lower().rstrip("/")
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and the .env file."""
 
@@ -23,6 +32,26 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15            # short-lived access token
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14              # refresh token lifetime (Redis TTL)
+    # How long a rotated refresh token still yields the token it was rotated into (ADR-330); 0 turns it off.
+    REFRESH_REUSE_GRACE_SECONDS: int = 30
+
+    # The browser's sign-in cookies (ADR-326). Every name starts with the prefix — `wg` in production,
+    # `wgstg` on staging, `wgdev` on a developer's machine — so no environment reads or clears another's.
+    # The default is the developer's, never production's: an environment that forgets to set it cannot end
+    # up answering to production's cookies.
+    AUTH_COOKIE_PREFIX: str = os.getenv("AUTH_COOKIE_PREFIX", "wgdev")
+    # The parent domain of the site and the back office, so one sign-in reaches both (`.wan-guard.com`,
+    # on staging too). Empty sends no Domain: the cookie stays on the one host, as on localhost.
+    AUTH_COOKIE_DOMAIN: str = os.getenv("AUTH_COOKIE_DOMAIN", "")
+    # Deliberately not derived from ENV, which counts as production when unset; a developer serving over
+    # plain http sets it to false.
+    AUTH_COOKIE_SECURE: bool = True
+    # The pages allowed to send a cookie-authenticated write (ADR-327): comma-separated origins. The default
+    # names only the two local apps, so an environment that forgets it refuses every such write instead
+    # of accepting some it should not.
+    AUTH_ALLOWED_ORIGINS: str = os.getenv(
+        "AUTH_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"
+    )
 
     # Redis 連線字串
     # Docker 內部連線預設: redis://redis:6379
@@ -43,8 +72,32 @@ class Settings(BaseSettings):
     KOTSMS_PASSWORD: str = os.getenv("KOTSMS_PASSWORD", "")
 
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    # The backend runs the Google and LINE sign-in itself (ADR-331), so the client secrets live here and
+    # nowhere else. Left empty, that provider's sign-in is refused at its start.
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
     LINE_CHANNEL_ID: str = os.getenv("LINE_CHANNEL_ID", "")
+    LINE_CHANNEL_SECRET: str = os.getenv("LINE_CHANNEL_SECRET", "")
+
+    # Where a Google or LINE sign-in sends the browser back to: the site's or the back office's own URL,
+    # by the `app` it was started for (ADR-331). Local values by default, like APP_BASE_URL.
+    SITE_APP_URL: str = os.getenv("SITE_APP_URL", "http://localhost:3000")
+    ADMIN_APP_URL: str = os.getenv("ADMIN_APP_URL", "http://localhost:3001")
+    # The host each provider is registered to call back, the site's: one redirect URI per provider, for
+    # both apps (ADR-331).
+    OAUTH_REDIRECT_BASE_URL: str = os.getenv("OAUTH_REDIRECT_BASE_URL", "http://localhost:3000")
+
+    @property
+    def allowed_origins(self) -> frozenset[str]:
+        """`AUTH_ALLOWED_ORIGINS` as a set, written the way a browser sends `Origin`.
+
+        Kept as a plain string field and split here because pydantic-settings reads a list field from
+        the environment as JSON, which would reject a comma-separated value. Entries are filtered after
+        `normalise_origin`, so a stray `/` cannot leave an empty origin in the set for a request without
+        one to match.
+        """
+        normalised = (normalise_origin(origin) for origin in self.AUTH_ALLOWED_ORIGINS.split(","))
+        return frozenset(origin for origin in normalised if origin)
 
     @property
     def JWT_SIGNING_KEY(self) -> str:

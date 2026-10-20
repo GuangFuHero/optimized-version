@@ -120,12 +120,14 @@ async def test_h1_the_session_survives_a_transient_db_outage(client, db_session,
     """The killer consequence: rotate() burns the old token BEFORE the activity write runs.
 
     If that write escapes, the client never receives the new token, retries with the old one,
-    and rotate() reads the retry as a replay and revokes the whole session — a transient DB
-    outage signs the device out for good. The fix is that the refresh still completes, so the
-    client holds a usable token and the token chain is never broken.
+    and — once the grace period is over (ADR-330) — rotate() reads the retry as a replay and
+    revokes the whole session: a transient DB outage signs the device out for good. The fix is
+    that the refresh still completes, so the client holds a usable token and the token chain is
+    never broken.
 
-    Note what is NOT asserted: replaying the *old* token afterwards must still 401 and revoke.
-    That is the reuse-detection contract (session_repository.py:80) and it stays intact.
+    Note what is NOT asserted: replaying the *old* token once its grace period is over must
+    still 401 and revoke. That is the reuse-detection contract (`SessionRepository.rotate`,
+    ADR-330) and it stays intact.
     """
     await _make_login_user(db_session)
     tokens = await _login(client)

@@ -3,17 +3,21 @@
 tests/test_audit.py exercises the trigger/contextvar mechanism by setting the contextvars
 directly; that leaves the one link it deliberately bypasses untested — whether a real HTTP
 request's JWT actually reaches those contextvars via app.core.context.AuditContextMiddleware.
-This test goes through the full ASGI stack (real Bearer token, real middleware) instead.
+This test goes through the full ASGI stack (a real token, as a Bearer header or as the browser's
+access cookie, and the real middleware) instead.
 """
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import select, text
 
+from app.core import auth_cookies
+from app.core.config import settings
 from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.audit import AuditLog
 from app.models.auth import User
-from tests.conftest import auth_headers_for
+from tests.conftest import token_for
+from tests.cookies import cookie_header
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -29,9 +33,25 @@ async def _install_audit_trigger_on_users(db_session):
     await db_session.commit()
 
 
+SITE = "https://site.test"
+
+
+def _bearer(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _cookie(token: str) -> dict:
+    # A browser sends no Authorization header, just the access cookie — from one of our own pages.
+    return {**cookie_header(**{auth_cookies.access_cookie_name(): token}), "Origin": SITE}
+
+
 @pytest.mark.asyncio
-async def test_authenticated_request_attributes_audit_log_to_the_real_caller(client, db_session, redis):
-    """A PATCH /users/me under a real Bearer token attributes the resulting audit row to it."""
+@pytest.mark.parametrize("carry", [_bearer, _cookie], ids=["bearer", "cookie"])
+async def test_authenticated_request_attributes_audit_log_to_the_real_caller(
+    client, db_session, redis, monkeypatch, carry
+):
+    """A PATCH /users/me under a real token — Bearer or cookie — attributes the audit row to it."""
+    monkeypatch.setattr(settings, "AUTH_ALLOWED_ORIGINS", SITE)
     actor = User(name="Audit Actor")
     db_session.add(actor)
     await db_session.flush()
@@ -47,7 +67,7 @@ async def test_authenticated_request_attributes_audit_log_to_the_real_caller(cli
     resp = await client.patch(
         "/api/v1/users/me",
         json={"name": "Renamed By Self"},
-        headers=await auth_headers_for(redis, actor_uuid),
+        headers=carry(await token_for(redis, actor_uuid)),
     )
     assert resp.status_code == 200, resp.json()
 

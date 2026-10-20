@@ -28,6 +28,34 @@ export function verifyAsync(payload: components['schemas']['VerifyRequest']) {
     .then(responseData);
 }
 
+/** Signs this browser in: the backend sets the `{p}_at` and `{p}_rt` cookies on its answer. */
+export function signInAsync(
+  payload: components['schemas']['SessionSignInRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/session', { body: payload })
+    .then(responseData);
+}
+
+/** Finishes a registration with its code and signs the new account in, as `signInAsync` does. */
+export function verifyAndSignInAsync(
+  payload: components['schemas']['VerifyRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/session/verify', { body: payload })
+    .then(responseData);
+}
+
+/** The signed-in account, through the proxy, which refreshes a spent access token on the way. */
+export function getCurrentUserAsync() {
+  return authApiClient.GET('/api/v1/users/me').then(responseData);
+}
+
+/** Signs this browser out: the backend ends its session and clears both cookies. */
+export function signOutAsync() {
+  return authApiClient.DELETE('/api/v1/auth/session').then(() => undefined);
+}
+
 export function resendVerificationAsync(
   payload: components['schemas']['ResendVerificationRequest'],
 ) {
@@ -50,10 +78,6 @@ export function resetPasswordAsync(
   return authApiClient
     .POST('/api/v1/auth/reset-password', { body: payload })
     .then(() => undefined);
-}
-
-export function logoutAsync() {
-  return authApiClient.POST('/api/v1/auth/logout').then(() => undefined);
 }
 
 export function logoutAllAsync() {
@@ -98,18 +122,4 @@ export function resendContactAsync(
   return authApiClient
     .POST('/api/v1/auth/contacts/resend', { body: payload })
     .then(() => undefined);
-}
-
-export function googleSsoAsync(
-  payload: components['schemas']['IdTokenRequest'],
-) {
-  return authApiClient
-    .POST('/api/v1/auth/sso/google', { body: payload })
-    .then(responseData);
-}
-
-export function lineSsoAsync(payload: components['schemas']['IdTokenRequest']) {
-  return authApiClient
-    .POST('/api/v1/auth/sso/line', { body: payload })
-    .then(responseData);
 }

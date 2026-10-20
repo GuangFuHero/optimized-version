@@ -110,8 +110,9 @@ libs/data-access/
 1. 一般 GraphQL / server-side query
    - 透過 `createUrqlClient()`
 2. auth 與 profile 類 REST
-   - 透過 generated OpenAPI client 呼叫共用 proxy `/api/v1/auth/*`
-   - BFF 再轉呼叫 `@rescue-frontend/data-access` 的 REST client
+   - 透過 generated OpenAPI client（`createRestClient`）呼叫前端自己的 `/api/v1/*`
+   - proxy（`libs/modules/src/server/backend-proxy.ts`）用 `fetch` 原樣轉給後端，並帶上瀏覽器的登入 cookie；
+     細節見 [`authentication.md`](authentication.md)
 
 補充：
 
@@ -136,4 +137,6 @@ pnpm codegen
 
 - 不要在 `libs/ui` 寫資料存取邏輯。
 - `libs/modules` 若需要 reusable data hook，可以依賴 `@rescue-frontend/data-access`。
-- app-local route handler（例如 BFF / GraphQL proxy）負責框架邊界、cookie 與 request/response 轉換，不要把這些 Next.js 邊界邏輯塞回 library。
+- 前後台共用的 Next.js 邊界邏輯（REST／GraphQL proxy、cookie 轉送、render 前的 refresh）放在
+  `libs/modules/src/server/`；app 的 route file（`apps/*/src/app/api/**/route.ts`）和 `apps/demo/src/proxy.ts`
+  只負責掛上去，並指定是前台（`site`）還是後台（`admin`）。

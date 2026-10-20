@@ -22,3 +22,9 @@ export {
   createBackendGraphqlHandler,
   createBackendRestHandler,
 } from './server/backend-proxy';
+export { refreshBeforeRenderAsync } from './server/refresh-before-render';
+export {
+  currentUserFromBackendAsync,
+  READ_IN_BROWSER,
+  type CurrentUser,
+} from './server/current-user';

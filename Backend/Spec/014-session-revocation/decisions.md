@@ -36,6 +36,9 @@
 
 ### ADR-100 Redis 不可用時回 401；不降級為只驗 JWT
 
+> **回應的狀態碼被 023/ADR-328 修改**：照樣拒絕、不放行，但改回 503 `session_store_unavailable`，不再刻意跟無效的 token
+> 一樣。瀏覽器的 cookie 因此不會被清，Redis 恢復後同一組 cookie 照常能用，不必所有人重新登入。
+
 **白話**：Redis 掛掉的時候，寧可讓所有人都登不進去，也不放行。
 
 **Context**：ADR-099 讓認證路徑依賴 Redis。連不上時無法判斷 session 是否已被撤銷。
@@ -486,6 +489,11 @@ if session.get("act") != payload.get("act"):
 ➖ `_claim` 在重放路徑上多一次 GET。只發生在真的重放或重試，正常換發不受影響。
 
 **與 ADR-100 的關係**：ADR-100 說「分不出 session 死了還是 Redis 掛了就一律 401」，這條完全不變。本 ADR 改的是**在什麼情況下才算「Redis 掛了」**——一條死掉的池化連線不算，它只是需要重連。
+
+> **2026-10-17 由 ADR-330 修改**（`Spec/023-backend-session-login`）：決策 2 的 NX value 從單純的 nonce 改成一筆 JSON
+> 紀錄（這次嘗試的 nonce、claim 的時間、加密過的新 refresh token），讓寬限期內（`REFRESH_REUSE_GRACE_SECONDS`）重送的
+> 舊 token 拿到同一支新 token。
+> nonce 還在紀錄裡，每次嘗試的值仍然唯一，所以本 ADR 的重試語意不變。
 
 
 ---

@@ -182,9 +182,9 @@ class _DeadRedis:
 async def test_a_redis_outage_refuses_the_request(client, db_session, redis, caplog):
     """Fail closed (ADR-100): an outage must not quietly disable revocation.
 
-    Also asserts the log, because the response is deliberately indistinguishable from an
-    invalid token — without the log, a Redis outage looks like "everyone's credentials
-    stopped working" with nothing to point at.
+    Refused with a 503 rather than a 401, so nobody is treated as signed out (ADR-328). Also
+    asserts the log: the response says only that the session store is unavailable, and the log is
+    what says why.
     """
     user_uuid = await _user(db_session)
     headers = await auth_headers_for(redis, user_uuid)
@@ -195,7 +195,8 @@ async def test_a_redis_outage_refuses_the_request(client, db_session, redis, cap
     finally:
         app.dependency_overrides[get_redis] = lambda: redis
 
-    assert res.status_code == 401
+    assert res.status_code == 503, res.text
+    assert res.json()["code"] == "session_store_unavailable"
     assert any("Redis" in r.message or "redis" in r.message for r in caplog.records), caplog.text
 
 

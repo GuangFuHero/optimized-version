@@ -1,4 +1,5 @@
 """LINE id_token verification: protocol + real (verify-endpoint) adapter and dependency."""
+import hmac
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -23,8 +24,8 @@ class LineTokenVerificationError(Exception):
 class LineTokenVerifier(Protocol):
     """Verifies a LINE id_token and returns the identity claims."""
 
-    async def verify(self, id_token: str) -> LineIdentity:
-        """Verify the token; raise LineTokenVerificationError on failure."""
+    async def verify(self, id_token: str, nonce: str | None = None) -> LineIdentity:
+        """Verify the token, and its nonce if one is given; raise LineTokenVerificationError on failure."""
         ...
 
 
@@ -37,14 +38,20 @@ class LineVerifyApiVerifier:
         """Store the channel id used as the expected audience (client_id)."""
         self._channel_id = channel_id
 
-    async def verify(self, id_token: str) -> LineIdentity:
-        """POST the token to LINE's verify endpoint; LINE checks signature/aud/exp."""
+    async def verify(self, id_token: str, nonce: str | None = None) -> LineIdentity:
+        """POST the token to LINE's verify endpoint; LINE checks signature/aud/exp.
+
+        With `nonce`, LINE also checks the token carries it, and so do we once LINE has answered: LINE
+        documents what it does with a nonce that differs, not with a token that has none. The backend's own
+        sign-in passes the one it sent (ADR-331). A token the frontend obtained, for linking or step-up, is
+        verified without one.
+        """
+        data = {"id_token": id_token, "client_id": self._channel_id}
+        if nonce is not None:
+            data["nonce"] = nonce
         try:
             async with httpx.AsyncClient(timeout=8) as client:
-                resp = await client.post(
-                    self.VERIFY_URL,
-                    data={"id_token": id_token, "client_id": self._channel_id},
-                )
+                resp = await client.post(self.VERIFY_URL, data=data)
         except httpx.HTTPError as err:
             raise LineTokenVerificationError(f"LINE verify request failed: {err}") from err
         if resp.status_code != 200:
@@ -58,6 +65,11 @@ class LineVerifyApiVerifier:
         sub = claims.get("sub")
         if not sub:
             raise LineTokenVerificationError("LINE verify response missing sub")
+        token_nonce = claims.get("nonce")
+        if nonce is not None and not (
+            isinstance(token_nonce, str) and hmac.compare_digest(token_nonce.encode(), nonce.encode())
+        ):
+            raise LineTokenVerificationError("LINE token carries another nonce, or none")
         return LineIdentity(sub=str(sub), name=claims.get("name"), email=claims.get("email"))
 
 

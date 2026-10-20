@@ -7,17 +7,25 @@ import {
   isUnauthorizedError,
   markSessionExpired,
   reloginHref,
-  shouldReloadForSignOut,
+  shouldReloadForSessionChange,
   takeSessionExpired,
   type FlagStorage,
+  type SessionSeen,
 } from './expiry';
 
-describe('shouldReloadForSignOut', () => {
+describe('shouldReloadForSessionChange', () => {
+  const signedInAs = (uuid: string): SessionSeen => ({
+    status: 'authenticated',
+    user: { uuid },
+  });
+  const guest: SessionSeen = { status: 'unauthenticated', user: null };
+  const loading: SessionSeen = { status: 'loading', user: null };
+
   it('reloads a tab whose session another tab signed out', () => {
     expect(
-      shouldReloadForSignOut({
-        previous: 'authenticated',
-        current: 'unauthenticated',
+      shouldReloadForSessionChange({
+        previous: signedInAs('u-a'),
+        current: guest,
         signingOutHere: false,
       }),
     ).toBe(true);
@@ -25,9 +33,9 @@ describe('shouldReloadForSignOut', () => {
 
   it('leaves the signing-out tab to its own reload', () => {
     expect(
-      shouldReloadForSignOut({
-        previous: 'authenticated',
-        current: 'unauthenticated',
+      shouldReloadForSessionChange({
+        previous: signedInAs('u-a'),
+        current: guest,
         signingOutHere: true,
       }),
     ).toBe(false);
@@ -35,9 +43,9 @@ describe('shouldReloadForSignOut', () => {
 
   it('leaves a guest arriving alone: loading is not a sign-out', () => {
     expect(
-      shouldReloadForSignOut({
-        previous: 'loading',
-        current: 'unauthenticated',
+      shouldReloadForSessionChange({
+        previous: loading,
+        current: guest,
         signingOutHere: false,
       }),
     ).toBe(false);
@@ -45,22 +53,45 @@ describe('shouldReloadForSignOut', () => {
 
   it('waits out a session being read again', () => {
     expect(
-      shouldReloadForSignOut({
-        previous: 'authenticated',
-        current: 'loading',
+      shouldReloadForSessionChange({
+        previous: signedInAs('u-a'),
+        current: loading,
         signingOutHere: false,
       }),
     ).toBe(false);
   });
 
-  it('leaves a guest tab alone when another tab signs in: it holds nothing private', () => {
+  it('reloads a guest tab when another tab signs in: its cache holds what the guest was shown', () => {
+    // A need the person already took would still offer 接這筆.
     expect(
-      shouldReloadForSignOut({
-        previous: 'unauthenticated',
-        current: 'authenticated',
+      shouldReloadForSessionChange({
+        previous: guest,
+        current: signedInAs('u-a'),
+        signingOutHere: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('leaves a guest tab that reads its session again and is still a guest', () => {
+    expect(
+      shouldReloadForSessionChange({
+        previous: guest,
+        current: guest,
         signingOutHere: false,
       }),
     ).toBe(false);
+  });
+
+  it('reloads a tab that next finds someone else signed in', () => {
+    // A tab left in the background checks only when it comes back (focus), and may never see the
+    // guest in between: what it shows is still the first person's.
+    expect(
+      shouldReloadForSessionChange({
+        previous: signedInAs('u-a'),
+        current: signedInAs('u-b'),
+        signingOutHere: false,
+      }),
+    ).toBe(true);
   });
 });
 

@@ -192,6 +192,8 @@ does not change when one does.
   grant. A revoked identity still answers 401; an account without `user` keeps the token's identity; any
   other value is ignored. The token and the session do not change, and the audit trail records `user`. The
   GraphQL context passes the header through itself, because it calls `get_current_user` directly.
+  **Amended by ADR-329** (2026-10-17, `Spec/023-backend-session-login`): the value `admin` is no longer
+  ignored; it acts as a back-office identity.
 - **Every account holds `user`; logins start on it (ADR-290).** Registration grants `user`.
   `scripts/bootstrap_admin.py` keeps it when granting `super_admin`. Migration `15370be54155` backfilled it.
   `default_for_user` puts `user` first, so a fresh login — password, SSO, registration, or a refresh that
@@ -206,7 +208,8 @@ Built in `Frontend/libs/modules/src/role-request/` (2026-10-01).
   (`Frontend/apps/demo/src/app/api/graphql/route.ts`) and the server-side client that calls the backend
   directly (`Frontend/apps/demo/src/lib/urql-rsc.ts`). The whole app is the site today (`/admin` is a placeholder).
   **Back-office pages must reach the backend on a path that does not add the header**, or every back-office
-  request would act as `user`.
+  request would act as `user`. **Amended by ADR-329** (2026-10-17): the back office sends
+  `X-WG-Realm: admin` instead.
 - Entry button: signed out, neither is shown; `hasBackofficeIdentity` → 前往後台 (to a "back office in
   preparation" page at `/admin`); otherwise 申請成為後台人員, which opens the application drawer.
 - Drawer: the form when nothing is pending; the pending card (with 撤回申請) when one is; the last rejected
