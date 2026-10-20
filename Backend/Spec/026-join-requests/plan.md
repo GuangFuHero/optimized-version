@@ -1,6 +1,9 @@
 # 026 加入團隊申請（BE-038）— Implementation Plan
 
-**進度（2026-10-20）**：spec 與 ADR-350~358 已 commit（`74e5dbb9e`），尚未開始實作。
+**進度（2026-10-20）**：spec 與 ADR-350~358 已 commit（`74e5dbb9e`）。
+- 基準（`e29650bfd`，main + 文件）：2170 passed、0 failed。
+- Task 1 完成：全套件 2180 passed、0 failed。`teams.status` 的 CHECK 讓 4 個拿 `'inactive'` 當「非啟用」範例的既有測試
+  失敗；程式從未寫入 `'inactive'`，改用 `'suspended'`（Popo 2026-10-20 選定）。
 
 **Goal:** 在 Spec 019 的 `role_requests` 上加入「申請加入既有團隊／成立新團隊」與團隊邀請連結，讓 team admin 與
 super admin 從各自的審核佇列決定；加上團隊雜項（最後 admin 防呆、聯絡欄位、編輯／停用、稽核紀錄讀取）。
@@ -38,13 +41,16 @@ super admin 從各自的審核佇列決定；加上團隊雜項（最後 admin �
 
 ### 測試環境
 
-- DB：h3 容器（`localhost:5435`），**DB 名用 `disaster_rescue_test_026`**，不跟 025 共用。
-- Redis：專屬 redis `localhost:6390`，**db 8**（025 用 db 1 起；`localhost:6379` 是 enerlyzer 的，絕對不要用）。
+- 本票自己的容器（不共用 025 的 `dedup025-testdb`／`dedup025-testredis`）：
+  `join026-testdb`（`disaster-postgres-h3:16-3.4`，`127.0.0.1:5439`）、`join026-testredis`（`127.0.0.1:6394`）。
+  `localhost:6379` 是 enerlyzer 的 redis，絕對不要用。
 
 ```
-export TEST_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/disaster_rescue_test_026"
-export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/postgres"
-export TEST_REDIS_URL="redis://localhost:6390/8"
+docker run -d --name join026-testdb -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5439:5432 disaster-postgres-h3:16-3.4
+docker run -d --name join026-testredis -p 127.0.0.1:6394:6379 redis:7-alpine
+export TEST_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5439/disaster_rescue_test"
+export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5439/postgres"
+export TEST_REDIS_URL="redis://localhost:6394/15"
 ```
 
 - worktree 裡先 `uv sync`（`.venv` 的 strawberry 太舊會誤報失敗），再 `uv run pytest -n 4`。

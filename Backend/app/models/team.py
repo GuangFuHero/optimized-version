@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -17,6 +17,9 @@ class Team(Base, UUIDPKMixin, TimestampMixin):
     """
 
     __tablename__ = "teams"
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'suspended', 'disbanded')", name="ck_teams_status"),
+    )
     # ADR-053: team-scope resources filter on this column; Team's boundary is its own uuid.
     __team_scope_attr__ = "uuid"
     name: Mapped[str] = mapped_column(String(100))
@@ -26,6 +29,9 @@ class Team(Base, UUIDPKMixin, TimestampMixin):
     type: Mapped[str] = mapped_column(String(10))
     tax_id: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 統一編號 (UBN), 8 碼
     status: Mapped[str] = mapped_column(String(20), default="active")
+    # Shown where the team already is: its own members and super admins (ADR-357 point 5).
+    contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
 
 class TeamZone(AreaPolygon):
