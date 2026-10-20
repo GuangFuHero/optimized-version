@@ -14,6 +14,7 @@
 | 6 | [`admin-features.md`](admin-features.md) | 了解目前 repo 內 admin 頁面與 modules 的實作狀態，以及哪些部分仍未接通 |
 | 7 | [`database-schema.md`](database-schema.md) | 快速查看前端目前依賴的後端資料契約摘要 |
 | 8 | [`known-issues.md`](known-issues.md) | 先掃一遍目前已知的死碼、未串接功能與技術債 |
+| 9 | [`local-oauth-secrets-setup.md`](local-oauth-secrets-setup.md) | 要在本機測試 Google / LINE 登入時，照這份取得 client ID 與 secret |
 
 ## 維護原則
 
