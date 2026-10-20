@@ -243,13 +243,16 @@
    *
    * 🔴 Sucre：「後台人員有名字跟電話，前台人員沒有 —— 申請時就該填，進後台就不用再填一次。」
    *    前台註冊只收「手機或 Email → 驗證碼 → 密碼」，沒有名字。用 Email 註冊的人名字電話都沒有。
-   * 🔒 裁示：名字＋手機必填、Email 選填；**手機申請時就驗證**；
-   *    帳號裡已有的手機／Email **帶入唯讀**（那是登入帳號，不在這裡改）；名字可以改。
+   * 🔒 裁示：名字＋手機必填；**手機申請時就驗證**；
+   *    帳號裡已有的手機**帶入唯讀**（那是登入帳號，不在這裡改）；名字可以改。
+   *    （原本 Email 選填／唯讀帶入，2026-10-20 拿掉，見下。）
    * 取代 09-11 的「可聯絡到你的方式（選填）」自由文字欄 —— 那是一份沒驗證、和帳號脫鉤的副本。
    * ⚠️ 前台目前**沒有個人設定頁**，所以唯讀欄位不寫「請到個人設定修改」。
+   * 🔒 2026-10-20 Sucre：「Email 要拿掉，流程上他需要去登入系統驗證 Email。」
+   *    申請表不再收／顯示 Email —— Email 由登入系統驗證，不在申請時填。
+   *    帳號裡已有的 Email 仍隨申請帶出（profile.email），但畫面上不出現欄位。
    */
   const SITE_PHONE_RE = /^09\d{8}$/;
-  const SITE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const DEMO_OTP = '123456';   // 與登入頁 site-auth.jsx 同一組示範驗證碼
 
   function ReadonlyContact({ label, value, note }) {
@@ -273,7 +276,6 @@
   function ApplicantSection({ profile, viewerId, form, setForm, touched, errors }) {
     const set = (patch) => setForm(Object.assign({}, form, patch));
     const hasPhone = Boolean(profile.phone && profile.phoneVerified);
-    const hasEmail = Boolean(profile.email);
 
     const sendCode = () => {
       const p = Bridge.normalizePhone(form.phone);
@@ -337,15 +339,6 @@
             ) : null}
           </div>
         )}
-
-        {hasEmail ? (
-          <ReadonlyContact label="Email" value={profile.email} note="這是你登入用的 Email，不在這裡改。" />
-        ) : (
-          <Field label="Email（選填）" error={errors.email || undefined}>
-            <Input value={form.email} type="email" placeholder="name@example.tw"
-              onChange={(e) => set({ email: e.target.value })} />
-          </Field>
-        )}
       </div>
     );
   }
@@ -362,7 +355,7 @@
     const [confirmWithdraw, setConfirmWithdraw] = useState(false);
     const profile = useMemo(() => Bridge.readSiteProfile(viewerId) || {}, [viewerId, version]);
     const blankApplicant = () => ({ name: profile.name || '', phone: '', codeSent: false, code: '',
-      phoneVerified: false, phoneError: null, codeError: null, email: '' });
+      phoneVerified: false, phoneError: null, codeError: null });
     const [applicant, setApplicant] = useState(blankApplicant);
     const [teamId, setTeamId] = useState(null);       // 2026-10-05：既有團隊 id，或 NEW_TEAM
     const [newTeamName, setNewTeamName] = useState('');
@@ -396,14 +389,11 @@
       if (!applicant.phone.trim()) applicantErrors.phone = '必填';
       else if (!applicant.phoneVerified) applicantErrors.phone = '請先完成手機驗證';
     }
-    if (!profile.email && applicant.email.trim() && !SITE_EMAIL_RE.test(applicant.email.trim()))
-      applicantErrors.email = 'Email 格式不正確';
 
     const missing = [];
     if (!opt) missing.push('要申請的身分');
     if (applicantErrors.name) missing.push('你的名字');
     if (applicantErrors.phone) missing.push(applicantErrors.phone === '必填' ? '手機號碼' : '手機驗證');
-    if (applicantErrors.email) missing.push('Email 格式');
     if (teamError) missing.push('所屬' + teamNoun);
     if (!reason.trim()) missing.push('申請理由');
 
@@ -413,10 +403,10 @@
       const app = {
         name: applicant.name.trim(),
         phone: hasPhone ? profile.phone : Bridge.normalizePhone(applicant.phone),
-        email: profile.email || applicant.email.trim(),
+        email: profile.email || '',   // 只帶帳號既有的 Email；申請表不收 Email（2026-10-20）
       };
       /* 先寫回帳號：驗證過的手機與名字是帳號本身的資料，進後台直接沿用。 */
-      Bridge.writeSiteProfile(viewerId, { name: app.name, phone: app.phone, phoneVerified: true, email: app.email });
+      Bridge.writeSiteProfile(viewerId, { name: app.name, phone: app.phone, phoneVerified: true });
       Bridge.submitRoleRequest({ by: viewerId, role: opt.value, roleLabel: opt.label,
         reason: reason.trim(), applicant: app,
         teamId: pickedTeam ? pickedTeam.id : null,
