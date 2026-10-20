@@ -314,12 +314,17 @@ def _checked_note(note: str | None) -> str | None:
     return note
 
 
-async def notify_new_cards(db: AsyncSession, *, count: int, actor_uuid: str) -> None:
+async def notify_new_cards(db: AsyncSession, *, count: int, actor: User, actor_uuid: str) -> None:
     """Tell everyone holding ai_duplicate.review that `count` new cards wait (ADR-345).
 
     One notice per submission, however many cards it left, pointing at the queue rather than a
     card. Called after the submission committed: a failure here is logged and swallowed, so the
     work the submitter just created is never undone by a notice.
+
+    The rollback that clears a failed notice expires every instance in the session, whatever
+    `expire_on_commit` says. The caller refreshes what it created; this refreshes `actor`, which
+    the request goes on reading after the mutation (the contact masks check its grants).
+    `actor_uuid` is passed separately because the caller reads it before its commit.
     """
     if count <= 0:
         return
@@ -339,3 +344,4 @@ async def notify_new_cards(db: AsyncSession, *, count: int, actor_uuid: str) -> 
     except Exception:
         logger.exception("Sending the dedup review notice failed (%d new cards)", count)
         await db.rollback()
+        await db.refresh(actor)

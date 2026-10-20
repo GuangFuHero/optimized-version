@@ -101,7 +101,7 @@ async def submit_new_ticket(
     created = {task_ref(i): str(t.uuid) for i, t in enumerate(created_tasks)}
     carded = await _record_acknowledged(db, pairs, created, actor_uuid)
     await db.commit()
-    await dedup_review.notify_new_cards(db, count=carded, actor_uuid=actor_uuid)
+    await dedup_review.notify_new_cards(db, count=carded, actor=actor, actor_uuid=actor_uuid)
     await db.refresh(ticket)
     for task in created_tasks:
         await db.refresh(task)
@@ -137,7 +137,7 @@ async def submit_new_task(
     )
     carded = await _record_acknowledged(db, pairs, {task_ref(0): str(created_task.uuid)}, actor_uuid)
     await db.commit()
-    await dedup_review.notify_new_cards(db, count=carded, actor_uuid=actor_uuid)
+    await dedup_review.notify_new_cards(db, count=carded, actor=actor, actor_uuid=actor_uuid)
     await db.refresh(created_task)
     return SubmissionCreated(entity=created_task)
 
@@ -162,7 +162,7 @@ async def submit_new_station(
     station = await station_service.insert_station(db, actor=actor, fields=fields)
     carded = await _record_acknowledged(db, pairs, {"station": str(station.uuid)}, actor_uuid)
     await db.commit()
-    await dedup_review.notify_new_cards(db, count=carded, actor_uuid=actor_uuid)
+    await dedup_review.notify_new_cards(db, count=carded, actor=actor, actor_uuid=actor_uuid)
     await db.refresh(station)
     await station_service.announce_station_created(db, station=station, actor_uuid=actor_uuid)
     return SubmissionCreated(entity=station)

@@ -152,3 +152,9 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
   `Spec/Docs/er-diagram.md` 的類型清單已同步。
 - `ref_type = "dedup_review"`、`ref_uuid = None`：一次送出可能有好幾張卡，所以指向審核頁本身，不指向單張卡。
 - 實作在 `app/services/dedup_review.py::notify_new_cards`，由 `dedup_submission` 三個 submit 在 commit 後呼叫。
+
+**Task 7 review 補充（2026-10-20）**：通知失敗時的 `db.rollback()` 會讓 session 裡**所有**物件過期（不受
+`expire_on_commit=False` 影響），包括目前登入的使用者。GraphQL 在 mutation 之後解析 `contactName`／`contactPhone`
+時要用它判斷權限，讀到過期的物件就丟 MissingGreenlet：工單已經建好，回應卻帶著 `Unexpected error.`。
+修法：`notify_new_cards` 多收 `actor`，rollback 之後 `refresh(actor)`；建立的 entity 本來就由呼叫端在通知後 refresh。
+回歸測試：`tests/test_graphql/test_dedup_review_notify_graphql.py`。

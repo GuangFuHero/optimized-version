@@ -73,6 +73,7 @@ commit 前看 `git diff --cached --stat`）。
 ## Task 7：待審提醒（ADR-345）
 
 - ✅ 2026-10-20：`dedup_review.notify_new_cards`（類型 `dedup_review_pending`）；移除 `ticket.py`／`station.py` 的死分支（−48 行）；`test_dedup_submission` 的站點通知預期跟著改。全套件 **2274 passed**；真實流程中只有 data_auditor 和 super admin 收到通知。
+- 🔧 2026-10-20 Task 7 review：通知失敗時的 rollback 讓目前使用者過期，GraphQL 回傳的聯絡欄位變成 `Unexpected error.`；改成 rollback 後 refresh actor（見 ADR-345 補充）。回歸測試 `tests/test_graphql/test_dedup_review_notify_graphql.py`；全套件 **2276 passed**。
 
 - `dedup_submission` 三個 submit 函式：commit 後若寫了 `dup_ignored` 卡，發一則通知（N 筆）；失敗只記 log。
 - 移除 `ticket.py`、`station.py` 的 `dedup_flag_*` 舊分支與其測試。
