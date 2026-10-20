@@ -81,12 +81,21 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 - 卡本身：`uuid`、`entity_kind`、`status`、`similarity`、`evidence`（原樣，結構由 engine 決定）、
   `engine_version`、`method`、`source_layer`、`duplicate_group_uuid`、`hint_outcome`、
   `created_at`、`reviewed_by`、`reviewed_at`。
-- `low`、`high` 兩邊的摘要（ADR-340）：`uuid`、`deleted`，以及
-  - task：`ticket_uuid`、`type`、`status`、`ticket` 的標題／地址／座標、`created_by`、`created_at`
-  - station：`name`、`type`、地址、座標、`operational_status`、`created_by`、`created_at`
-  - 依 `entity_kind` 分組、每種一條 query 批次載入。
+- `low`、`high` 兩邊的摘要（ADR-340），三種實體共用一個形狀（`app/services/dedup_review.py::EntitySummary`）：
 
-（摘要的確切欄位在 Task 3 對照模型定案，寫進 plan 的交接段。）
+  | 欄位 | ticket_task | station | ticket |
+  |---|---|---|---|
+  | `uuid`、`deleted` | ✓ | ✓ | ✓ |
+  | `title` | `task_name` | `name` | `title` |
+  | `type` | `task_type` | `type` | `task_type` |
+  | `status` | `status` | `operational_status` | `status` |
+  | `ticket_uuid`、`ticket_title` | 所屬工單 | — | — |
+  | `longitude`、`latitude` | 所屬工單的點 | 中心點 | 點 |
+  | `created_by`、`created_at` | ✓ | ✓ | ✓ |
+
+  - 模型沒有地址欄位，比對位置用座標（取 geometry 的中心點，多邊形站點也只給一個點）。
+  - 實體或（task 的）所屬工單已軟刪除 → `deleted: true`，其他欄位為 null。
+  - 依 `entity_kind` 分組、每種一條 query 批次載入（`DuplicatePairRepository.entity_summaries`）。
 
 ### 2.2 `GET /admin/duplicate-pairs/{uuid}` — `ai_duplicate.view`
 

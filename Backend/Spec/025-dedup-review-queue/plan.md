@@ -37,6 +37,8 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 3：讀取 — repository、摘要載入、service（ADR-339、340）
 
+- ✅ 2026-10-20：`app/services/dedup_review.py`（`list_pairs`、`get_pair`）＋ repository；摘要欄位回填 spec §2.1。全套件 **2206 passed**。
+
 - `dedup_repository`：`list_pairs(filters, sort, skip, limit)` 回 `(rows, total)`；`get_pair`；`events_for_pair`。
 - 摘要載入：依 `entity_kind` 分組，每種一條 query；對照模型定下摘要欄位，回填 spec §2.1。
 - service：`list_duplicate_pairs`、`get_duplicate_pair`，檢查 `ai_duplicate.view`。
