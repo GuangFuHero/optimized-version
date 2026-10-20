@@ -47,6 +47,8 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 4：讀取 — REST 端點（ADR-338）
 
+- ✅ 2026-10-20：`app/api/v1/endpoints/duplicate_pairs.py`、`app/schemas/duplicate_pair.py`；API 測試 14 個（seed 的 super_admin／data_auditor 200，user／team admin／member 403）。
+
 - `app/api/v1/endpoints/duplicate_pairs.py`＋`app/schemas/duplicate_pair.py`，掛到 admin router。
 - 測試（API 層）：super_admin／data_auditor 200；user、team 身分 403；404；`limit` 超過上限 422；`evidence` 原樣回傳。
 

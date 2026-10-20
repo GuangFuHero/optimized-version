@@ -7,6 +7,7 @@ from app.api.v1.endpoints import (
     analytics,
     auth,
     bulk,
+    duplicate_pairs,
     history,
     map,
     notifications,
@@ -36,6 +37,9 @@ api_router.include_router(rbac_admin.router, prefix="/admin", tags=["RBAC 管理
 
 # 註冊後台人員申請審核 API（列表 / 通過 / 不通過，Spec/019）
 api_router.include_router(role_requests.router, prefix="/admin", tags=["後台人員申請審核"])
+
+# 註冊 AI 重複審核 API（列表 / 單張配對卡，Spec 025）
+api_router.include_router(duplicate_pairs.router, prefix="/admin", tags=["AI 重複審核"])
 
 
 def rbac_test_enabled(env: str) -> bool:
