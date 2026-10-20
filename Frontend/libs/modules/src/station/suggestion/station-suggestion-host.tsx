@@ -1,12 +1,12 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from 'urql';
 
 import { CreateStationSuggestionDocument } from '@rescue-frontend/data-access';
 
+import { useAuthSession } from '../../session/auth-session';
 import { SiteToast } from '../../shell/site/site-toast';
 import { stationSuggestionErrorMessage } from './error';
 import {
@@ -42,7 +42,7 @@ function StationSuggestionReturn({
   onReturn: (stationUuid: string) => void;
 }) {
   const searchParams = useSearchParams();
-  const { status } = useSession();
+  const { status } = useAuthSession();
   const [stationUuid] = useState(() => readSuggestionReturn(searchParams));
   const handled = useRef(false);
 
