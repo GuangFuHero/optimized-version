@@ -67,6 +67,14 @@ export const AnnouncementPlacement = {
 
 export type AnnouncementPlacement =
   (typeof AnnouncementPlacement)[keyof typeof AnnouncementPlacement];
+export const AnnouncementStatus = {
+  Active: 'ACTIVE',
+  Draft: 'DRAFT',
+  Inactive: 'INACTIVE',
+} as const;
+
+export type AnnouncementStatus =
+  (typeof AnnouncementStatus)[keyof typeof AnnouncementStatus];
 export type AnnouncementType = {
   __typename?: 'AnnouncementType';
   active: Scalars['Boolean']['output'];
@@ -80,8 +88,9 @@ export type AnnouncementType = {
   placement: Scalars['String']['output'];
   /** When it last went live; null while a draft */
   publishedAt?: Maybe<Scalars['DateTime']['output']>;
-  /** 'draft', 'active' or 'inactive' */
-  status: Scalars['String']['output'];
+  /** Who last activated it; null while a draft or unless the caller holds announcement.edit */
+  publisher?: Maybe<UserRefType>;
+  status: AnnouncementStatus;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Who last changed it. Null unless the caller holds announcement.edit */
   updater?: Maybe<UserRefType>;
@@ -157,6 +166,13 @@ export const BriefingState = {
 } as const;
 
 export type BriefingState = (typeof BriefingState)[keyof typeof BriefingState];
+export const BriefingStatus = {
+  Draft: 'DRAFT',
+  Published: 'PUBLISHED',
+} as const;
+
+export type BriefingStatus =
+  (typeof BriefingStatus)[keyof typeof BriefingStatus];
 export const BriefingStatusFilter = {
   All: 'ALL',
   Draft: 'DRAFT',
@@ -191,8 +207,7 @@ export type BriefingType = {
   publisher?: Maybe<UserRefType>;
   /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
   state: Scalars['String']['output'];
-  /** 'draft' or 'published' */
-  status: Scalars['String']['output'];
+  status: BriefingStatus;
   /** Free-form categorization tags */
   tags: Array<Scalars['String']['output']>;
   /** UUID of the source template, or null for ad-hoc briefings */

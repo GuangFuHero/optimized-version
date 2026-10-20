@@ -22,6 +22,12 @@ enum AnnouncementPlacement {
   all
 }
 
+enum AnnouncementStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
 type AnnouncementType {
   uuid: UUID!
   content: String!
@@ -34,9 +40,7 @@ type AnnouncementType {
   Display position (1 = top) among active announcements; null when inactive
   """
   order: Int
-
-  """'draft', 'active' or 'inactive'"""
-  status: String!
+  status: AnnouncementStatus!
 
   """When it last went live; null while a draft"""
   publishedAt: DateTime
@@ -48,6 +52,11 @@ type AnnouncementType {
 
   """Who last changed it. Null unless the caller holds announcement.edit"""
   updater: UserRefType
+
+  """
+  Who last activated it; null while a draft or unless the caller holds announcement.edit
+  """
+  publisher: UserRefType
 }
 
 type AreaConnection {
@@ -119,6 +128,11 @@ enum BriefingState {
   DEBRIEF
 }
 
+enum BriefingStatus {
+  DRAFT
+  PUBLISHED
+}
+
 enum BriefingStatusFilter {
   PUBLISHED
   DRAFT
@@ -153,9 +167,7 @@ type BriefingType {
 
   """Lifecycle phase: 'briefing', 'in_field', or 'debrief'"""
   state: String!
-
-  """'draft' or 'published'"""
-  status: String!
+  status: BriefingStatus!
 
   """When it was published; null while a draft"""
   publishedAt: DateTime
