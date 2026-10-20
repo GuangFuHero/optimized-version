@@ -10,6 +10,7 @@ import type { components, paths } from '../rest/openapi';
 import { adminRestClient } from './client';
 import { responseData } from '../rest/openapi-client';
 import type { AdminQueryOptions } from './graphql-fetchers';
+import { SILENT_ERROR_META } from './query-client';
 
 export const currentUserQuery = () =>
   queryOptions({
@@ -74,8 +75,14 @@ export const projectSettingsQuery = () =>
         .then(responseData),
   });
 
-export function useProjectSettings(options: AdminQueryOptions = {}) {
-  return useQuery({ ...projectSettingsQuery(), enabled: options.enabled });
+export function useProjectSettings(
+  options: AdminQueryOptions & { silentError?: boolean } = {},
+) {
+  return useQuery({
+    ...projectSettingsQuery(),
+    enabled: options.enabled,
+    meta: { [SILENT_ERROR_META]: options.silentError === true },
+  });
 }
 
 export const capabilitiesQuery = () =>
@@ -309,6 +316,47 @@ export function useStationAnalyticsValue(
     enabled: options.enabled,
   });
 }
+
+/**
+ * The chart endpoints return the Plotly figure itself (`data`/`layout`/`config`), which the browser
+ * draws with `Plotly.react`. The backend's `html` form is unusable here: its inline `<script>` never
+ * runs once React has inserted the markup.
+ */
+export type AnalyticsChartFigure = components['schemas']['ChartResponse'];
+
+export type TicketAnalyticsChartQuery = NonNullable<
+  paths['/api/v1/analytics/tickets/chart']['get']['parameters']['query']
+>;
+export interface TicketAnalyticsChartParams {
+  query: TicketAnalyticsChartQuery;
+}
+
+export const ticketAnalyticsChartQuery = (params: TicketAnalyticsChartParams) =>
+  queryOptions({
+    queryKey: ['admin', 'analytics', 'TicketAnalyticsChart', params],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/analytics/tickets/chart', { params, signal })
+        .then(responseData),
+  });
+
+export type StationAnalyticsChartQuery = NonNullable<
+  paths['/api/v1/analytics/stations/chart']['get']['parameters']['query']
+>;
+export interface StationAnalyticsChartParams {
+  query: StationAnalyticsChartQuery;
+}
+
+export const stationAnalyticsChartQuery = (
+  params: StationAnalyticsChartParams,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'analytics', 'StationAnalyticsChart', params],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/analytics/stations/chart', { params, signal })
+        .then(responseData),
+  });
 
 export interface UpdateCurrentUserInput {
   body: paths['/api/v1/users/me']['patch']['requestBody']['content']['application/json'];

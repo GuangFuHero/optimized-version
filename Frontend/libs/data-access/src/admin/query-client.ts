@@ -3,6 +3,13 @@ import { CombinedError } from 'urql';
 
 import ApiError from '../rest/api-error';
 
+/**
+ * Set `meta: { [SILENT_ERROR_META]: true }` on a query that shows its own error state, so a failure
+ * is not also raised through `onError` (the admin app toasts it). A 401 is still raised: the
+ * app's sign-out on an expired session hangs off `onError`.
+ */
+export const SILENT_ERROR_META = 'silentError';
+
 export function createAdminQueryClient(onError: (error: Error) => void) {
   const reportError = (error: Error) => {
     if (error instanceof ApiError && error.code === 'step_up_required') return;
@@ -19,7 +26,15 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
   };
 
   return new QueryClient({
-    queryCache: new QueryCache({ onError: reportError }),
+    queryCache: new QueryCache({
+      onError: (error, query) => {
+        const silent = query.meta?.[SILENT_ERROR_META] === true;
+        if (silent && !(error instanceof ApiError && error.status === 401)) {
+          return;
+        }
+        reportError(error);
+      },
+    }),
     mutationCache: new MutationCache({ onError: reportError }),
     defaultOptions: {
       queries: {

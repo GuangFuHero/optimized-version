@@ -95,6 +95,7 @@ export type {
   PointShareTarget,
 } from './point-share';
 
+export { DashboardPage } from './admin/dashboard';
 export { BackOfficePlaceholder } from './role-request';
 export { AdminPlaceholderPage, AdminShell } from './shell';
 export type { AdminShellProps } from './shell';
