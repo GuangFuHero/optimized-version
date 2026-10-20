@@ -201,6 +201,7 @@ browser 裡，`router.refresh()` 只會重畫 server 那部分，訪客會繼續
 - 後台的 proxy 用 NextAuth session 裡的 backend token 帶 `Authorization: Bearer`，不轉送瀏覽器的 cookie，也不替前台
   的 session refresh。
 - 在那之前，後台要自己登入，前台的登入帶不過去。
+- 在那之前，後台的 Google、LINE 登入不能用：NextAuth 還在呼叫後端已經拿掉的 `/auth/sso/*`，會拿到 404。請用密碼登入。
 
 後台搬過去時要做的：登入、註冊頁改傳 `signInWith="backend"`（登入頁加 `app="admin"`），照 `apps/demo/src/proxy.ts`
 加上 render 前的 refresh，proxy 改成跟前台一樣轉送 cookie，然後拿掉 NextAuth。

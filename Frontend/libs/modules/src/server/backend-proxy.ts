@@ -65,11 +65,10 @@ function forwardHeaders(
 }
 
 /**
- * The back office still signs in with next-auth until its own move to the backend login, which
- * ships in the same release: its requests keep the bearer token from
- * next-auth's session. The
- * site never reads it, so a next-auth session left in a browser from before the move is ignored
- * rather than sent ahead of the new cookies (the backend prefers a bearer token, ADR-327).
+ * The back office still signs in with next-auth until its own move to the backend login: its
+ * requests keep the bearer token from next-auth's session. The site never reads it, so a next-auth
+ * session left in a browser from before the move is ignored rather than sent ahead of the new
+ * cookies (the backend prefers a bearer token, ADR-327).
  */
 function resolveNextAuthForAdminAsync(request: NextRequest) {
   return resolveBackendAuthTokenAsync(request);
