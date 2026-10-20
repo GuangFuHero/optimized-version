@@ -339,3 +339,44 @@ hold no `audit.view`.
 their queue (ADR-354 point 3).
 ➖ One more capability in the matrix (`RBAC_RESOURCE_ROLE_MATRIX.md`, `/admin/rbac/matrix`); re-run
 `scripts/seed_rbac.py` on deploy.
+
+---
+
+### ADR-359 Details settled while implementing: the REST shape, teamless legacy requests, suspended identities
+
+> **Status: PROPOSED (2026-10-20).** Backend choices made in code during Tasks 5–9; for review in the PR.
+
+**Decision**:
+
+1. **The REST review item keeps `applicant_name` as the account's nickname** (Spec 019's contract) and
+   carries what the applicant sent under `applicant_details: {name, phone, email}`, null on rows from before
+   this spec. GraphQL, which had no such field, uses `applicantName` / `applicantPhone` / `applicantEmail`.
+2. **Approving a `government` / `ngo` request that names no team answers 409**
+   `This application names no team; the applicant should apply again`. The migration rejects the pending
+   ones (ADR-350 point 9); this covers any written another way.
+3. **A team that is not active yields no identities**, in `active_identity_repository` — the one query every
+   request, login, refresh and switch resolves identities through. Its grants are untouched, so restoring
+   needs nothing re-granted. The identity list (`/users/me`, the RBAC admin's effective permissions) leaves
+   it out while suspended.
+4. **A data auditor application ignores identities in a suspended team** when checking AC-RE-101, since
+   they are not identities while suspended. Restoring the team afterwards leaves the account with both.
+
+**Consequences**:
+➖ Point 4 can leave an account holding `data_auditor` and a team identity, which AC-RE-101 otherwise
+prevents. Rare, and visible in the user list.
+
+---
+
+### ADR-360 Disbanding a team does not reassign its stations
+
+> **Status: PROPOSED (2026-10-20).** Left open for a follow-up ticket.
+
+**Context**: ADR-285 point 8 says a deleted team's stations become unassigned. Disbanding keeps the team row
+(ADR-357), so `stations.team_uuid` still points at it. Gov widening already requires an active team
+(`_acts_for_gov_team`), and a disbanded team has no members, so no one acts for it.
+
+**Decision**: this spec does not change `stations.team_uuid` on disband. The stations stay assigned to the
+disbanded team until a super admin or a gov team reassigns them.
+
+**Consequences**:
+➖ A station of a disbanded team shows that team's name until it is reassigned.

@@ -4,11 +4,11 @@
 **Feature**: 026-join-requests
 **Ticket**: BE-038 (Notion, backend). Frontend: ADMIN-027 成員管理, "Oct 20 Updates" (review rules, system map,
 Stories 1–5)
-**Status**: Draft — design only, nothing implemented
+**Status**: Implemented on `feat/join-requests` (Tasks 1–11, 2026-10-20)
 **Branch**: `feat/join-requests`
 **Depends on**: `Spec/019-role-requests` (the application this extends), `Spec/010-multi-team-membership`
 (team identities, `act` claim), `Spec/012-account-profile` (verified contacts)
-**Decisions**: `decisions.md` in this folder (ADR-350 to ADR-358)
+**Decisions**: `decisions.md` in this folder (ADR-350 to ADR-360)
 
 ## Overview
 
@@ -180,10 +180,14 @@ REST so that "returns 404" is a real HTTP status (ADR-353).
 
 | Method and path | Change |
 |---|---|
-| `GET /api/v1/admin/role-requests` | Gated as in [Permissions](#permissions) instead of `role_request.review` alone. New filters: `team_uuid`, `kind` (`member` / `new_team` / `data_auditor`). Items gain the new columns and `team_name`. Still oldest first |
-| `POST …/{uuid}/approve` | Works for every kind (below). A team admin outside the request's team, or on a new-team / data auditor request, gets 404, so the request's existence is not given away |
+| `GET /api/v1/admin/role-requests` | Gated as in [Permissions](#permissions) instead of `role_request.review` alone. New filters: `team_uuid`, `kind` (`member` / `new_team` / `data_auditor`). Items gain `team_uuid`, `team_name`, `new_team_name`, `via_invite` and `applicant_details` (ADR-359 point 1). Still oldest first |
+| `POST …/{uuid}/approve` | Works for every kind (below). A team admin outside the request's team, or on a new-team / data auditor request, gets 404, so the request's existence is not given away. A request naming no team (Spec 019) gets 409 (ADR-359 point 2) |
 | `POST …/{uuid}/reject` | `note` becomes required: `A reason is required` (422) |
 | `GET /api/v1/admin/users` | Items gain `real_name`, filled only for `role_request.review` holders (data auditors also hold `user.view`, ADR-355 point 5) |
+| `PATCH /api/v1/admin/teams/{uuid}` *(new)* | Name, tax ID, `contact_name`, `contact_phone`. Team admin: own team; super admin: any (ADR-357) |
+| `POST /api/v1/admin/teams/{uuid}/status` *(new)* | `{"status": "active" \| "suspended" \| "disbanded"}`, super admin only |
+| `GET /api/v1/admin/teams` | Items gain `contact_name`, `contact_phone` |
+| `GET /api/v1/admin/audit-logs` *(new)* | `table`, `row_id`, `actor_uuid`, `from`, `to`, `limit` (≤ 100), `offset`; newest first (ADR-358) |
 
 ## Approval
 
@@ -220,6 +224,60 @@ Approval does not also send `team_member_added`; the approval notice says it.
 | Team edit | `PATCH /api/v1/admin/teams/{uuid}`: name, tax ID, contact fields. Super admin any team, team admin own team, via `team.edit` (seed adds `admin` at `team`) (ADR-357) | Designed |
 | Suspend / restore / disband | `POST /api/v1/admin/teams/{uuid}/status`, super admin only. Suspended: grants kept but give no permission, identity cannot be used; disbanded: grants removed, row kept (ADR-357) | Designed |
 | Audit-log read API | `GET /api/v1/admin/audit-logs`. `audit.view` at `all`: every row. Team admins (new capability `team.audit.view` at `team`): rows about their active team only — the team row, its grants, requests, invites, zone assignments (ADR-358) | Designed |
+
+## API handover for the frontend
+
+Everything the site and the back office change, in one place. Error messages are the contract: map them to
+Chinese as Spec 019 does.
+
+### User site — 申請成為後台人員
+
+1. **Team list**: `roleRequestTeams(type: GOV | NGO)` → `[{ uuid, name, type }]`. 政府單位人員 asks for `GOV`,
+   社福團體人員 for `NGO`. The form's last option, 「＋ 清單裡沒有，建立新的單位／團隊」, sends `newTeamName` instead.
+2. **Phone first**: if `/users/me` has no verified phone, add one with the contact flow before submitting:
+   `POST /api/v1/auth/contacts` then `POST /api/v1/auth/contacts/verify`. **An account that already has a
+   password or an email must prove itself first** (ADR-220): the add call asks for a step-up — a code sent to
+   the existing email, or the password — before the SMS code is sent. That is two codes; the prototype draws
+   one, so this step is new on the page.
+3. **Submit**: `submitRoleRequest(input: { requestedRole, reason, name, email, teamUuid | newTeamName })`.
+   `contact` is gone. `name` is prefilled from the nickname but is kept on the request only; the nickname never
+   changes. A verified account email is used instead of the typed one, so show it read-only.
+4. **The card**: `myRoleRequests.requests[]` gains `team { uuid name type }`, `newTeamName`, `viaInvite`,
+   `applicantName`, `applicantPhone` (masked), `applicantEmail`. `canApply` now means "none pending and not
+   paused"; a team member can apply to another team (`hasBackofficeIdentity` no longer hides the entry), but
+   only a plain user may choose 資料檢核員 — submitting that answers
+   `Only an account without a back-office identity can apply`.
+5. **One pending request per account**, invite scans included: `You already have a pending request`. To ask a
+   second team, withdraw the first.
+
+### User site — invite link page
+
+- `GET /api/v1/invites/{token}` (signed in, `X-WG-Realm: site`) → `{ team: { uuid, name, type }, expires_at,
+  my_request }`. **404** `Invite not found` for unknown, expired, or a team that is not active.
+- `POST /api/v1/invites/{token}/requests` with `{ name, reason, email? }` → 201 the request. 404 as above;
+  409 `You are already a member of this team` / `You already have a pending request`; 422 for fields.
+- Show `expires_at` as "有效至"; nothing on the client decides expiry.
+
+### Back office — 團隊 → 我的團隊
+
+- **Invite**: `POST /api/v1/admin/teams/{uuid}/invites` → `{ token, team_uuid, created_at, expires_at }`.
+  Draw the QR from a URL built on `token` (qrcode-generator 2.0.4). `GET` the same path lists the links still
+  valid, newest first.
+- **審核佇列**: `GET /api/v1/admin/role-requests?status=pending` as the team identity returns that team's
+  member requests only. Approve: `POST …/{uuid}/approve`. Reject: `POST …/{uuid}/reject` with a required
+  `note` (`A reason is required`). A request already decided elsewhere answers 409.
+- **Members**: removing or demoting the team's only admin answers 409 `Cannot remove the team's only admin`.
+- **Edit team**: `PATCH /api/v1/admin/teams/{uuid}`.
+- **稽核紀錄**: `GET /api/v1/admin/audit-logs` as the team admin identity.
+
+### Back office — 成員與權限 (super admin)
+
+- **審核佇列**: the same list returns every request; filter with `kind=member|new_team|data_auditor` and
+  `team_uuid`. Approving a new-team application creates the team; the response's `team_uuid` names it.
+- **Teams**: `POST /api/v1/admin/teams/{uuid}/status`. Suspending signs the team's identities out at their
+  next request (401) and removes the team from the switcher; restoring brings them back; disbanding removes
+  every member and cannot be undone.
+- **Users**: `real_name` appears in `GET /api/v1/admin/users`.
 
 ## Tests
 

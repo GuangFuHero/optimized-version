@@ -11,6 +11,9 @@
   改為 true（ADR-351）。
 - Task 4、5、6a 完成（相關測試綠）。Task 6b 完成：Part A 收尾全套件（`-n 8`）2281 passed、0 failed，3 分 49 秒。
   019 舊的「政府／NGO 不能核准」測試移除；沒有團隊的舊申請核准時回 409（ADR-350 point 9 的延伸）。
+- Task 7、8 完成。Task 9 完成：全套件 2308 passed、1 failed（Task 7 的防呆讓一個用 mock db 的通知測試壞掉，
+  另一個 commit 修好）。Task 10、11 完成。Task 12：spec 加前端交接段、ADR-359～360（PROPOSED，PR 審）。
+- 2026-10-20 使用者指示：Task 一口氣做完 → code review 修 → Docker 驗證 → push 並開 PR。
 
 **Goal:** 在 Spec 019 的 `role_requests` 上加入「申請加入既有團隊／成立新團隊」與團隊邀請連結，讓 team admin 與
 super admin 從各自的審核佇列決定；加上團隊雜項（最後 admin 防呆、聯絡欄位、編輯／停用、稽核紀錄讀取）。
