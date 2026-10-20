@@ -81,6 +81,8 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 8：文件
 
+- ✅ 2026-10-20：spec 狀態更新；022 的「不做 admin 審核」加上指向 025 的註記（021 是 Chi 的快層 spec，不動）；`seed_rbac.py` 檔頭已在 Task 1 改好；`er-diagram.md` 的通知類型已在 Task 7 改好。重掃所有遠端分支：ADR 336～345 只在 025、沒有撞號，全域最大號 345；Spec 資料夾 025 沒有被其他分支使用。
+
 - spec 狀態更新；`seed_rbac.py` 檔頭；`Spec/022` 中提到「admin 審核不在範圍」的地方加指向 025 的註記。
 - 再掃一次全域 ADR 號，確認 336～345 沒撞號。
 
@@ -93,8 +95,20 @@ commit 前看 `git diff --cached --stat`）。
 
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
-- 新端點：`/api/v1/admin/duplicate-pairs`（見 spec §2），需重新產生 `Frontend/libs/data-access` 的 OpenAPI 型別。
-- `/me/capabilities` 會多出 `ai_duplicate.view`／`review`（super_admin、data_auditor）與 `ai_duplicate.revoke`（super_admin）；
-  導覽列入口依 `ai_duplicate.view` 顯示（ADMIN-019）。
-- 撤銷按鈕：本人的判定有 review 就顯示；別人的判定需要 `ai_duplicate.revoke`。
+需要重新產生 `Frontend/libs/data-access` 的 OpenAPI 型別（後端不改前端，ADR 範圍見 spec 非目標）。
+
+| 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |
+|---|---|---|---|---|
+| GET | `/duplicate-pairs?status=&entity_kind=&source_layer=&sort=&skip=&limit=` | `ai_duplicate.view` | `{items, total}` | 403、422 |
+| GET | `/duplicate-pairs/{uuid}` | `ai_duplicate.view` | 卡＋`events` | 403、404 |
+| POST | `/duplicate-pairs/{uuid}/confirm`（body 可省略，`{"note": "..."}` 最多 1000 字） | `ai_duplicate.review` | 更新後的卡 | 403、404、409（不是待審）、422（備註太長） |
+| POST | `/duplicate-pairs/{uuid}/reject`（同上） | `ai_duplicate.review` | 更新後的卡 | 同上 |
+| POST | `/duplicate-pairs/{uuid}/revoke`（無 body） | `ai_duplicate.review`；撤別人的另需 `ai_duplicate.revoke` | 回到待審的卡 | 403、404、409（沒有判定可撤） |
+
+- `status`、`entity_kind`、`source_layer` 可重複帶（`?status=confirmed&status=rejected`）；不帶 `status` 時只回待審（`dup_ignored`＋`suggested`）。
+- 每張卡的 `low`／`high` 是兩邊的摘要，欄位見 spec §2.1；`deleted: true` 表示那一邊已被刪除。
+- `GET /api/v1/users/me` 的 `capabilities` 會多出 `ai_duplicate.view`／`ai_duplicate.review`（super_admin、data_auditor）與
+  `ai_duplicate.revoke`（只有 super_admin）。導覽列入口依 `ai_duplicate.view` 顯示（ADMIN-019）。
+- 撤銷按鈕：卡的 `reviewed_by` 是自己 → 有 review 就顯示；是別人 → 需要 `ai_duplicate.revoke`。
+- 通知：新類型 `dedup_review_pending`，`ref_type = "dedup_review"`、`ref_uuid = null`，點了應該開審核頁。舊的 `dedup_flag_ticket`／`dedup_flag_station` 已移除（從來沒發出過）。
 - 合併、取代、逐欄位選值本次不提供（ADR-336）。

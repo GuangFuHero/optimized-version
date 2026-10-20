@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-20
 **Feature**: 025-dedup-review-queue
-**Status**：設計定案（ADR-336～345），待實作。
+**Status**：Task 1～8 已實作（2026-10-20，全套件 2274 passed、覆蓋率 96%），待 Task 9 Docker 從零驗證。
 **Base**: `main` @ `108734cda`，分支 `feat/dedup-review-queue`
 **Notion**: DEDUP-007（審核動作與後端）、DEDUP-008（AI 重複審核頁，前端 Ethan）、DEDUP-009（通知）、
 ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」（Carol 指派給 Popo）
@@ -36,7 +36,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 ## 目標
 
 - super_admin 與 data_auditor 打開 AI 重複審核頁，看到所有待審配對卡與兩邊摘要，並能判定、撤銷。
-- 其他身分在 API 層被擋下；`/me/capabilities` 不回這些權限，前端據此隱藏入口（ADMIN-019）。
+- 其他身分在 API 層被擋下；`GET /api/v1/users/me` 的 `capabilities` 不列這些權限，前端據此隱藏入口（ADMIN-019）。
 - 每個判定與撤銷都留下事件。
 - 使用者照樣建立後，審核員收到一則提醒。
 
