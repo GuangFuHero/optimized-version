@@ -29,6 +29,8 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 2：撤銷事件類型（ADR-344）
 
+- ✅ 2026-10-20：migration `a5e641c99923`（接 `1649d30b0122`）；降級在有 `verdict_revoked` 時失敗、不刪紀錄。全套件 **2183 passed**，覆蓋率 96%。
+
 - `app/models/dedup.py`：`AUDIT_EVENT_TYPES` 加 `verdict_revoked`。
 - migration：重建 `ck_dedup_audit_events_type`。
 - 測試：可寫入 `verdict_revoked`；未知類型仍被 CHECK 擋下；downgrade 可回。
