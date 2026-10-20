@@ -147,7 +147,7 @@ access token TTL 為 15 分鐘（`ACCESS_TOKEN_EXPIRE_MINUTES`），活躍使用
 | `app/repositories/project_settings_repository.py` | **新檔**：讀取／更新單列設定 |
 | `app/repositories/session_repository.py` | `rotate()` 回傳資訊供上層寫 `last_activity_at`（或直接注入 db session，落地時決定） |
 | `app/services/config.py` | `upsert_*_property_config` 加 `disaster_types` 參數 |
-| `app/services/project_settings.py` | **新檔**：讀取／更新專案設定（`super_admin` only） |
+| `app/services/project_settings.py` | **新檔**：讀取／更新專案設定（更新僅 `super_admin`；讀取從 ADR-324 起開放給所有後台身分） |
 | `app/graphql/config/{queries,types,mutations}.py` | 曝露 `disaster_types` |
 | `app/api/v1/endpoints/admin.py` | 新增 `GET`/`PATCH /admin/project-settings`；`list_users` 補三個欄位 |
 | `app/schemas/admin.py` | `AdminUserListItem` 加三欄；新增 `ProjectSettingsResponse` / `ProjectSettingsUpdate` |

@@ -170,8 +170,10 @@
 
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
-| project.view | — | — | — | all | — | — |
+| project.view | — | — | all | all | all | all |
 | project.edit | — | — | — | all | — | — |
+
+> 後台每一頁的外殼都讀專案設定（側欄顯示目前的災害），所以每個後台身分都有 `project.view`；改設定仍只有超管（ADR-324）。
 
 ### 緊急公告 Announcement
 

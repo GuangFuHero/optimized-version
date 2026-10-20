@@ -86,6 +86,8 @@ ROLES_DATA = [
             Perm.AUDIT_VIEW: "all",
             # Every staff role reads admin-page announcements; the self-registered `user` doesn't.
             Perm.ANN_VIEW_ADMIN: "all",
+            # ADR-324: every back-office page's shell shows the disaster it is responding to.
+            Perm.PROJECT_VIEW: "all",
             # ADR-130: audit.view is no longer the ticket into the timeline (that is
             # *.view_history), but it still unlocks its top two tiers — the review columns
             # and the raw audit payload.
@@ -211,6 +213,7 @@ ROLES_DATA = [
             Perm.TEAM_VIEW: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
+            Perm.PROJECT_VIEW: "all",  # ADR-324: every back-office page's shell shows the disaster
             Perm.ZONE_VIEW: "all",
             Perm.ZONE_ADD: "all",
             Perm.ZONE_EDIT: "all",
@@ -260,6 +263,7 @@ ROLES_DATA = [
             Perm.TICKET_AUDIT: "zone",
             Perm.TEAM_VIEW: "team",
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
+            Perm.PROJECT_VIEW: "all",  # ADR-324, see the admin role above
         },
     },
 ]

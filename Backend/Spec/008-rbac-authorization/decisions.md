@@ -1419,6 +1419,36 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 ---
 
+#### ADR-324 每個後台身分都讀得到專案設定（`project.view`）；改設定仍只有超管
+> **狀態：ACCEPTED（2026-10-17）。** 2026-10-14 定案（方案 A）：資料檢核員、團隊 admin、團隊 member 都給。
+
+**白話**：後台每一頁的側欄都顯示目前的災害，所以每個後台身分都要讀得到專案設定；改設定仍然只有超管。
+
+**Context**：功能 013（ADR-090）加 `project.view` 時只給了超管，那時還沒有後台外殼。新後台（#66）的側欄每一頁都讀
+`GET /api/v1/admin/project-settings`，顯示災害名稱與第幾天；這支要 `project.view`，所以資料檢核員、團隊 admin、
+團隊 member 用後台時，每一頁的側欄都是 403。
+
+**Decision**：
+
+1. **seed 補授**：`data_auditor`、團隊 `admin`、團隊 `member` 各給 `project.view` `all`。專案設定整個部署只有一筆，
+   `services/project_settings.py` 只做 checkpoint 1：任何不是 `none` 的 scope 都會放行（`services/authz.py`
+   的 `require_scope`），寫 `all` 才跟實際行為一致。
+2. **`user` 不授**：前台不讀專案設定；通報表單要的災害類型清單，從 ADR-263 起由公開的 `ticket.view` 把關。
+3. **`project.edit` 不動**，仍只有超管：改災害類型會連動整批動態欄位的可見性（ADR-090）。
+4. seed 是 additive bootstrap（ADR-055、ADR-064），`deploy.sh` 每次部署都重跑 seed，既有資料庫就會補上，不需要資料
+   migration。
+
+**後果**：
+
+- ➕ 後台外殼對每個後台身分都能用。
+- ◾ 多讀得到的只有專案設定本身（名稱、災害類型、開始時間）。`project.view` 目前只把關這一支 endpoint：
+  `services/project_settings.py` 的 `list_disaster_types` 也檢查它，但沒有呼叫者；GraphQL 的 `disasterTypes` 走
+  公開的 `ticket.view`（ADR-263）。
+- ➖ 要等後台的請求改用後台身分（登入 PR 的 `X-WG-Realm: admin`）上線，才不必另外切換。在那之前登入一律落在
+  `user`（ADR-290），後台沒先切換身分（`POST /api/v1/auth/switch-identity`）的話，側欄照樣 403。
+
+---
+
 #### ADR-332 站點的內部備註 `comment` 由 `station.view_pii` 把關，範圍外讀到 `null`
 > **狀態：ACCEPTED（2026-10-17）。** 使用者 2026-10-17 拍板用 `station.view_pii`。
 
