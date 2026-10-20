@@ -143,6 +143,12 @@ class UpdateTeamRequest(BaseModel):
         return v
 
 
+class TeamStatusRequest(BaseModel):
+    """Body for suspending, restoring or disbanding a team (Spec/026, ADR-357)."""
+
+    status: Literal["active", "suspended", "disbanded"]
+
+
 class TeamResponse(BaseModel):
     """A team's identity, status and contact (contact since Spec/026)."""
 

@@ -6,7 +6,7 @@ words mean different things in this codebase: one is how you prove who you are, 
 is which role you are currently exercising.
 """
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identity import ActiveIdentity, decode_act
@@ -27,9 +27,17 @@ def _select_identities():
         )
         .join(Role, Role.uuid == UserRoleAssign.role_uuid)
         .outerjoin(Team, Team.uuid == UserRoleAssign.team_uuid)
-        # A soft-deleted team takes its identity with it; the platform identity has no team
-        # to check, hence the OR rather than a plain filter.
-        .where(or_(UserRoleAssign.team_uuid.is_(None), Team.delete_at.is_(None)))
+        # A soft-deleted team takes its identity with it, and so does one that is not active
+        # (Spec/026, ADR-357 point 4): a suspended team's members keep their grants but can
+        # neither switch to it nor keep acting as it — a token naming it no longer resolves,
+        # which ADR-096 answers with 401. The platform identity has no team to check, hence
+        # the OR rather than a plain filter.
+        .where(
+            or_(
+                UserRoleAssign.team_uuid.is_(None),
+                and_(Team.delete_at.is_(None), Team.status == "active"),
+            )
+        )
     )
 
 

@@ -7,6 +7,7 @@ instead of a blanket 400 (ADR-032).
 
 import json
 import logging
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from fastapi import HTTPException, status
@@ -20,6 +21,7 @@ from app.core.rbac_scopes import Scope, scope_filter
 from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.rbac import Role, UserPermissionAssign, UserRoleAssign
+from app.models.role_request import RoleRequest
 from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
 from app.repositories.session_repository import SessionRepository
@@ -447,6 +449,72 @@ async def update_team(db: AsyncSession, *, actor: User, team_uuid: str, changes:
     await db.commit()
     await db.refresh(team)
     return team
+
+
+TEAM_STATUSES = ("active", "suspended", "disbanded")
+# What a pending request for a team that leaves `active` is closed with (ADR-357 point 4).
+_CLOSED_BY_STATUS = {"suspended": "團隊已停用", "disbanded": "團隊已解散"}
+
+
+async def set_team_status(db: AsyncSession, *, actor: User, team_uuid: str, new_status: str) -> Team:
+    """Suspend, restore or disband a team (Spec/026, ADR-357 points 3–4). Super admin only.
+
+    Suspended: members keep their grants, but the identities resolve to nothing until it is
+    restored (active_identity_repository). Disbanded: every grant in the team is removed, as
+    removing each member would (ADR-072, ADR-187); the row stays as history and cannot change
+    again. Either way the team's pending join requests are rejected and their applicants told.
+    """
+    if await require_scope(actor, Perm.TEAM_EDIT, db) != Scope.ALL:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
+    if new_status not in TEAM_STATUSES:
+        raise AdminValidationError(f"Unknown team status: {new_status}")
+    team = await db.scalar(
+        select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None)).with_for_update()
+    )
+    if team is None:
+        raise AdminNotFoundError("Team not found")
+    if team.status == "disbanded":
+        raise AdminConflictError("A disbanded team cannot be changed")
+    if team.status == new_status:
+        return team
+    team.status = new_status
+    team_id, actor_uuid = team.uuid, actor.uuid  # read before the commit expires them
+    if new_status == "disbanded":
+        await db.execute(delete(UserRoleAssign).where(UserRoleAssign.team_uuid == team_id))
+        await db.execute(delete(UserPermissionAssign).where(UserPermissionAssign.team_uuid == team_id))
+    closed = []
+    if new_status in _CLOSED_BY_STATUS:
+        closed = await _close_pending_requests(db, team_id, actor_uuid, _CLOSED_BY_STATUS[new_status])
+    await db.commit()
+    for request_uuid, applicant_uuid in closed:
+        await NotificationService.dispatch(
+            db,
+            event_type="role_request_rejected",
+            title="你的加入團隊申請沒有通過",
+            body=_CLOSED_BY_STATUS[new_status],
+            actor_uuid=actor_uuid,
+            ref_type="role_request",
+            ref_uuid=request_uuid,
+            explicit_recipients=[applicant_uuid],
+        )
+    await db.refresh(team)
+    return team
+
+
+async def _close_pending_requests(db: AsyncSession, team_uuid, reviewer_uuid, note: str) -> list[tuple]:
+    """Reject the team's pending member requests; return (request uuid, applicant uuid) pairs."""
+    pending = (
+        await db.execute(
+            select(RoleRequest)
+            .where(RoleRequest.team_uuid == team_uuid, RoleRequest.status == "pending")
+            .with_for_update()
+        )
+    ).scalars().all()
+    now = datetime.now(UTC)
+    for request in pending:
+        request.status, request.review_note = "rejected", note
+        request.reviewed_by, request.closed_at = reviewer_uuid, now
+    return [(request.uuid, request.created_by) for request in pending]
 
 
 async def list_teams(db: AsyncSession, *, actor: User, scope: Scope) -> list[Team]:
