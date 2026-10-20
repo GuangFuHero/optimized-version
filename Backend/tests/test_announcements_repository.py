@@ -14,9 +14,11 @@ import asyncio
 import uuid as uuid_mod
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
+from app.models.notification import Notification
 from app.repositories.announcements_repository import announcement_repository as repo
 
 
@@ -57,7 +59,7 @@ async def test_publish_appends_contiguous_and_active(db):
 
 @pytest.mark.asyncio
 async def test_draft_is_unlisted_until_published(db):
-    """A draft has no order and lists only as a draft; publishing stamps who and when."""
+    """A draft lists only as a draft; publishing stamps who and when, and taking it down keeps both."""
     uid = await _user(db)
     publisher = await _user(db)
     ua = await _draft(db, uid, "a")
@@ -68,8 +70,27 @@ async def test_draft_is_unlisted_until_published(db):
 
     await repo.set_active(db, uuid=ua, active=True, actor_uuid=publisher)
     live = await repo.get_by_uuid_active(db, ua)
-    assert live.published_at is not None and str(live.updated_by) == publisher
+    assert live.published_at is not None and str(live.published_by) == str(live.updated_by) == publisher
     assert await repo.list_announcements(db, status="draft") == []
+
+    await repo.set_active(db, uuid=ua, active=False, actor_uuid=uid)
+    down = await repo.get_by_uuid_active(db, ua)
+    assert str(down.updated_by) == uid and str(down.published_by) == publisher
+
+
+@pytest.mark.asyncio
+async def test_publish_notification_leaves_out_the_publisher(db):
+    """Everyone else is notified, and no notification records who published."""
+    uid = await _user(db)
+    reader = await _user(db)
+    ua = await _draft(db, uid, "a")
+    await repo.set_active(db, uuid=ua, active=True, actor_uuid=uid)
+    rows = await db.execute(
+        select(Notification.recipient_uuid, Notification.actor_uuid).where(
+            Notification.ref_uuid == uuid_mod.UUID(ua)
+        )
+    )
+    assert [(str(r), a) for r, a in rows] == [(reader, None)]
 
 
 @pytest.mark.asyncio

@@ -89,16 +89,16 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         else:
             title, body = "📢 管理平台公告", "管理平台有一則新公告。"
             recipients = await NotificationRecipientResolver.resolve_permission(db, Perm.ANN_VIEW_ADMIN.value)
+        # Every recipient can read a notification's actor, so the publisher is left off it and skipped here.
         await NotificationService.dispatch(
             db,
             event_type="announcement_published",
             title=title,
             body=body,
             priority="medium",
-            actor_uuid=actor_uuid,
             ref_type="announcement",
             ref_uuid=ann.uuid,
-            explicit_recipients=recipients,
+            explicit_recipients=[r for r in recipients if str(r) != str(actor_uuid)],
         )
 
     async def move(self, db: AsyncSession, *, uuid: Any, up: bool) -> Announcement | None:
@@ -145,7 +145,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             target.display_order = (live[-1].display_order + 1) if live else 1
             target.active = True
             target.published_at = datetime.now(UTC)
-            target.updated_by = actor_uuid
+            target.published_by = target.updated_by = actor_uuid
             await db.commit()
             await db.refresh(target)
 

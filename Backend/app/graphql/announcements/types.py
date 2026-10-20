@@ -20,6 +20,15 @@ class AnnouncementFilter(Enum):
 
 
 @strawberry.enum
+class AnnouncementStatus(Enum):
+    """Where an announcement is in its lifecycle."""
+
+    DRAFT = "draft"  # never activated
+    ACTIVE = "active"
+    INACTIVE = "inactive"  # taken down after going live
+
+
+@strawberry.enum
 class AnnouncementMoveDirection(Enum):
     """Direction to move an announcement within the ordered list."""
 
@@ -48,7 +57,7 @@ class AnnouncementType:
         default=None,
         description="Display position (1 = top) among active announcements; null when inactive",
     )
-    status: str = strawberry.field(default="active", description="'draft', 'active' or 'inactive'")
+    status: AnnouncementStatus = AnnouncementStatus.ACTIVE
     published_at: datetime | None = strawberry.field(
         default=None, description="When it last went live; null while a draft"
     )
@@ -56,6 +65,7 @@ class AnnouncementType:
     updated_at: datetime | None = None
     _created_by: strawberry.Private[str | None] = None
     _updated_by: strawberry.Private[str | None] = None
+    _published_by: strawberry.Private[str | None] = None
 
     @strawberry.field(description="Who created it. Null unless the caller holds announcement.edit")
     async def creator(self, info: strawberry.types.Info) -> UserRefType | None:
@@ -67,10 +77,23 @@ class AnnouncementType:
         """The last editor, to editors only."""
         return await staff_user_ref(info, self._updated_by, Perm.ANN_EDIT)
 
+    @strawberry.field(
+        description="Who last activated it; null while a draft or unless the caller holds announcement.edit"
+    )
+    async def publisher(self, info: strawberry.types.Info) -> UserRefType | None:
+        """The last publisher, to editors only."""
+        return await staff_user_ref(info, self._published_by, Perm.ANN_EDIT)
+
     @classmethod
     def from_model(cls, m) -> "AnnouncementType":
         """Build from a SQLAlchemy model instance (maps display_order → order)."""
-        status = "draft" if m.published_at is None else "active" if m.active else "inactive"
+        status = (
+            AnnouncementStatus.DRAFT
+            if m.published_at is None
+            else AnnouncementStatus.ACTIVE
+            if m.active
+            else AnnouncementStatus.INACTIVE
+        )
         return cls(
             uuid=m.uuid,
             content=m.content,
@@ -83,6 +106,7 @@ class AnnouncementType:
             created_at=m.created_at,
             updated_at=m.updated_at,
             _updated_by=m.updated_by,
+            _published_by=m.published_by,
         )
 
 

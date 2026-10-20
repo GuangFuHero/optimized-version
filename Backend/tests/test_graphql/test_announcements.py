@@ -42,7 +42,9 @@ mutation($uuid: UUID!, $active: Boolean!) {
 
 WHO = """
 query($filter: AnnouncementFilter!) {
-  announcements(filter: $filter) { uuid creator { uuid name } updater { uuid name } }
+  announcements(filter: $filter) {
+    uuid creator { uuid name } updater { uuid name } publisher { uuid name }
+  }
 }
 """
 
@@ -98,7 +100,7 @@ async def test_published_announcements_list_publicly_in_order(client, content_ad
     _, token = content_admin_auth
     a = await _create(client, token, "first")
     b = await _create(client, token, "second")
-    assert a["active"] is True and isinstance(a["order"], int) and a["status"] == "active"
+    assert a["active"] is True and isinstance(a["order"], int) and a["status"] == "ACTIVE"
 
     body = await _post(client, LIST, {"filter": "ACTIVE"})  # no auth → public
     assert "errors" not in body, body
@@ -114,7 +116,7 @@ async def test_create_makes_a_draft_that_only_editors_see(client, content_admin_
     body = await _post(client, CREATE, {"content": "draft"}, token)
     assert "errors" not in body, body
     d = body["data"]["createAnnouncement"]
-    assert (d["status"], d["active"], d["order"], d["publishedAt"]) == ("draft", False, None, None)
+    assert (d["status"], d["active"], d["order"], d["publishedAt"]) == ("DRAFT", False, None, None)
 
     assert await _listed(client, {d["uuid"]}, LIST, {"filter": "ACTIVE"}) == set()
     assert await _listed(client, {d["uuid"]}, LIST, {"filter": "DRAFT"}, token) == {d["uuid"]}
@@ -122,7 +124,7 @@ async def test_create_makes_a_draft_that_only_editors_see(client, content_admin_
     assert (await _post(client, GET_ONE, {"uuid": d["uuid"]})).get("errors")
 
     published = await _publish(client, token, d["uuid"])
-    assert published["status"] == "active"
+    assert published["status"] == "ACTIVE"
     assert await _listed(client, {d["uuid"]}, LIST, {"filter": "ACTIVE"}) == {d["uuid"]}
     assert await _listed(client, {d["uuid"]}, LIST, {"filter": "DRAFT"}, token) == set()
 
@@ -140,8 +142,8 @@ async def test_create_and_publish_require_content_permission(client, content_adm
 
 
 @pytest.mark.asyncio
-async def test_creator_and_updater_are_shown_to_editors_only(client, redis, content_admin_auth):
-    """Editors see who wrote and who last changed an announcement; guests get null for both."""
+async def test_authors_are_shown_to_editors_only(client, redis, content_admin_auth):
+    """Editors see who wrote, last changed and published an announcement; guests get null for all three."""
     author_uuid, author_token = content_admin_auth
     editor_uuid, editor_token = await _create_user_with_role(redis, "Content Admin")
     a = await _create(client, author_token, "who")
@@ -152,10 +154,11 @@ async def test_creator_and_updater_are_shown_to_editors_only(client, redis, cont
     row = next(x for x in body["data"]["announcements"] if x["uuid"] == a["uuid"])
     assert row["creator"]["uuid"] == author_uuid and row["creator"]["name"]
     assert row["updater"]["uuid"] == editor_uuid and row["updater"]["name"]
+    assert row["publisher"]["uuid"] == author_uuid and row["publisher"]["name"]
 
     public = await _post(client, WHO, {"filter": "ACTIVE"})
     row = next(x for x in public["data"]["announcements"] if x["uuid"] == a["uuid"])
-    assert row["creator"] is None and row["updater"] is None
+    assert row["creator"] is None and row["updater"] is None and row["publisher"] is None
 
 
 @pytest.mark.asyncio

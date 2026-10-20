@@ -273,14 +273,15 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
                      └ publishBriefing                                 （第一次 true 就是發布）
 ```
 
-- 草稿用 `published_at IS NULL` 表示，不另開 status 欄位；GraphQL 的 `status` 由它推出來，兩者不會不一致。
-  briefing 另有 `published_by`（誰按了發布），兩張表都有 `updated_by`（最後一個改動的人，NOT NULL）。
+- 草稿用 `published_at IS NULL` 表示，不另開 status 欄位；GraphQL 的 `status` 由它推出來，兩者不會不一致，
+  而且是 enum（`BriefingStatus`、`AnnouncementStatus`），前端拼錯值會在型別檢查時被抓到。
+  兩張表都有 `published_by`（誰按了發布；公告是最近一次上線的人，下線不清掉）和 `updated_by`（最後一個改動的人，NOT NULL）。
 - **行前通知**：`generateBriefing` 一律產生草稿，同一個 `state` 可以同時有多份草稿。`updateBriefing` 只改得動
   草稿；已發布的列是唯讀，要改就開新草稿。`publishBriefing` 把草稿變成該 `state` 的最新版本。
   `briefings(status:)` 預設 `PUBLISHED`（公開），`DRAFT`／`ALL` 要 `pre_departure.edit`；清單先列草稿（最近改的在前），
   再列已發布（`published_at` 新的在前），所以每個 `state` 的第一筆已發布就是目前版本。舊版仍然公開。
 - **公告**：`createAnnouncement` 產生不在排序裡、也不發通知的草稿。`setAnnouncementActive(true)` 照舊排到最後、
-  發通知，並寫入 `published_at`（最近一次上線的時間）。`announcements(filter:)` 多一個 `DRAFT`，與 `ALL` 一樣要
+  發通知，並寫入 `published_at`／`published_by`（最近一次上線的時間與人）。`announcements(filter:)` 多一個 `DRAFT`，與 `ALL` 一樣要
   `announcement.edit`。已上線的公告仍是原地編輯、立即生效。
 - **權限**：兩個模組都改成「寫草稿要 `.edit`、上線要 `.publish`」：`generateBriefing`、`createAnnouncement` 從
   `.publish` 改為 `.edit`；`setAnnouncementActive(true)` 從 `.edit` 改為 `.publish`，`false` 維持 `.edit`。
@@ -290,7 +291,9 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 - **作者資訊**：`creator`／`updater`／`publisher` 回傳 `{ uuid, name }`，只有暱稱、沒有聯絡方式，名字用既有的
   `user_name_by_uuid` DataLoader 一次批次查完。呼叫端沒有該模組的 `.edit` 就回 `null`，不報錯。
   原本公開的 `createdBy` 拿掉：它讓訪客看得出哪幾則出自同一人，編輯者要 UUID 就讀 `creator { uuid }`。
+  同理，公告上線的通知不記 `actor_uuid`（收件人讀得到它），發布者本人改由手動排除在收件人之外。
 - migration 把既有的列都當成已發布：`published_at = created_at`，`published_by`／`updated_by = created_by`。
+  downgrade 會先軟刪除行前通知的草稿，因為舊 schema 把每一列未刪除的 briefing 都公開列出。
 
 **為什麼不開 `/admin/users/{uuid}`**：它要 `user.view`，只有平台管理員有；前端還得一則一則去查。
 

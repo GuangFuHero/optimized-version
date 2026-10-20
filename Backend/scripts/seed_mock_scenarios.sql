@@ -116,7 +116,9 @@ DELETE FROM briefings
                           WHERE created_by IN (SELECT uuid FROM mock_users));
 DELETE FROM briefing_templates WHERE created_by IN (SELECT uuid FROM mock_users);
 DELETE FROM announcements
- WHERE created_by IN (SELECT uuid FROM mock_users) OR updated_by IN (SELECT uuid FROM mock_users);
+ WHERE created_by IN (SELECT uuid FROM mock_users)
+    OR updated_by IN (SELECT uuid FROM mock_users)
+    OR published_by IN (SELECT uuid FROM mock_users);
 DELETE FROM user_permission_assign
  WHERE user_uuid IN (SELECT uuid FROM mock_users) OR team_uuid::text LIKE '10000000-%';
 DELETE FROM user_role_assign

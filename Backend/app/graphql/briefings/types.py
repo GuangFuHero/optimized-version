@@ -20,6 +20,14 @@ class BriefingState(Enum):
 
 
 @strawberry.enum
+class BriefingStatus(Enum):
+    """Whether a briefing is still a draft."""
+
+    DRAFT = "draft"
+    PUBLISHED = "published"  # read-only
+
+
+@strawberry.enum
 class BriefingStatusFilter(Enum):
     """Which briefings to list by publication status."""
 
@@ -74,7 +82,7 @@ class BriefingType:
     state: str = strawberry.field(
         default="briefing", description="Lifecycle phase: 'briefing', 'in_field', or 'debrief'"
     )
-    status: str = strawberry.field(default="published", description="'draft' or 'published'")
+    status: BriefingStatus = BriefingStatus.PUBLISHED
     published_at: datetime | None = strawberry.field(
         default=None, description="When it was published; null while a draft"
     )
@@ -111,7 +119,7 @@ class BriefingType:
             tags=list(m.tags or []),
             state=m.state,
             _created_by=m.created_by,
-            status="draft" if m.published_at is None else "published",
+            status=BriefingStatus.DRAFT if m.published_at is None else BriefingStatus.PUBLISHED,
             published_at=m.published_at,
             created_at=m.created_at,
             updated_at=m.updated_at,

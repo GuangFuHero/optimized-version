@@ -110,7 +110,7 @@ async def test_template_and_briefing_lifecycle(client, briefing_admin_auth):
     gen = await _post(client, GENERATE, {"templateUuid": t["uuid"]}, token)
     assert "errors" not in gen, gen
     b = gen["data"]["generateBriefing"]
-    assert b["status"] == "draft"
+    assert b["status"] == "DRAFT"
     assert b["templateUuid"] == t["uuid"]
     assert b["content"] == "supply list"
     assert b["tags"] == ["supply"]
@@ -228,12 +228,12 @@ async def test_draft_stays_private_until_published_then_freezes(client, redis, b
     assert "errors" not in edited, edited
 
     draft = _row(await _post(client, LIST_BY_STATUS, {"status": "DRAFT"}, author_token), uuid)
-    assert draft["status"] == "draft" and draft["publisher"] is None
+    assert draft["status"] == "DRAFT" and draft["publisher"] is None
     assert draft["creator"]["uuid"] == author_uuid and draft["updater"]["uuid"] == editor_uuid
 
     pub = await _post(client, PUBLISH, {"uuid": uuid}, editor_token)
     assert "errors" not in pub, pub
-    assert pub["data"]["publishBriefing"]["status"] == "published"
+    assert pub["data"]["publishBriefing"]["status"] == "PUBLISHED"
     assert pub["data"]["publishBriefing"]["publishedAt"]
 
     again = await _post(client, PUBLISH, {"uuid": uuid}, editor_token)
@@ -244,7 +244,7 @@ async def test_draft_stays_private_until_published_then_freezes(client, redis, b
     admin_row = _row(await _post(client, LIST_BY_STATUS, {"status": "ALL"}, author_token), uuid)
     assert admin_row["publisher"]["uuid"] == editor_uuid and admin_row["publisher"]["name"]
     public_row = _row(await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"}), uuid)
-    assert public_row["status"] == "published"
+    assert public_row["status"] == "PUBLISHED"
     assert public_row["creator"] is None and public_row["publisher"] is None
     assert (await _post(client, GET_BRIEFING, {"uuid": uuid}))["data"]["briefing"]["uuid"] == uuid
 
