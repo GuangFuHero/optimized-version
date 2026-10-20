@@ -23,12 +23,13 @@ from app.services.auth_contact import (
     ContactConflict,
     ContactNotFound,
     LastLoginChannel,
+    ReauthRequired,
     StepUpFailed,
     StepUpRequired,
 )
 from app.sso import get_sso_verifiers
 
-from .deps import _normalize_identifier, get_rate_limiter
+from .deps import _normalize_identifier, get_rate_limiter, reauth_required
 
 router = APIRouter()
 
@@ -59,6 +60,8 @@ _ERROR_MAP = {
 
 def _as_http(err: Exception) -> ApiError:
     """Translate a contact use-case error into its HTTP equivalent, carrying its code."""
+    if isinstance(err, ReauthRequired):
+        return reauth_required(err)
     return _ERROR_MAP[type(err)](str(err))
 
 
@@ -78,6 +81,7 @@ def _normalized_or_422(type_: str, value: str) -> str:
 async def add_contact(
         body: AddContactRequest,
         current_user: User = Depends(security.get_current_user),
+        session: tuple[str, str | None] = Depends(security.get_current_session),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         email_sender=Depends(get_email_sender),
@@ -88,14 +92,16 @@ async def add_contact(
 
     Replacing an existing contact of the same type additionally requires step-up (ADR-085).
     For an SSO-only account, the first call without `step_up` is what delivers the code to
-    the OLD channel, and answers 422 asking for it back.
+    the OLD channel, and answers 422 asking for it back. An account with no password and no
+    contact answers 422 `step_up_reauth_required` until this session has signed in at its
+    provider again (ADR-361).
     """
     ident = _normalized_or_422(body.type, body.value)
     try:
         await contact_service.start_contact_change(
             db, redis, actor=current_user, type_=body.type, value=ident,
             step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
-            verifiers=verifiers,
+            verifiers=verifiers, sid=session[1],
         )
     except (ContactConflict, StepUpRequired, StepUpFailed) as err:
         raise _as_http(err) from err

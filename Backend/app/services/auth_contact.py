@@ -36,6 +36,7 @@ from app.messaging.sms import (
 )
 from app.models.auth import User, UserContact
 from app.repositories.auth_repository import contact_repository, identity_repository
+from app.repositories.step_up_proof_repository import StepUpProofRepository
 from app.repositories.verification_repository import VerificationRepository
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,19 @@ class StepUpRequired(ContactError):
     Raised for replacing and removing a contact and for minting a first password; the
     message names which of them, since the caller sees only this string (ADR-230).
     """
+
+
+class ReauthRequired(StepUpRequired):
+    """The only proof left is the account's provider, which the person proves by signing in there again.
+
+    A browser holds no `id_token` (ADR-331), so it is sent to one of `providers` and repeats the call once
+    the callback has recorded a proof (ADR-361). A Bearer client may still present the token instead.
+    """
+
+    def __init__(self, message: str, providers: list[str]):
+        """Carry the providers the account can be re-checked with, for the answer to name."""
+        super().__init__(message)
+        self.providers = providers
 
 
 class StepUpFailed(ContactError):
@@ -243,6 +257,9 @@ ACTION_REMOVE = "remove"
 ACTION_SET_PASSWORD = "set_password"
 ACTION_LINK = "link_identity"
 ACTION_UNLINK = "unlink_identity"
+# The actions `require_channel_proof` gates, so the only ones whose proof can be the account's provider: a
+# step-up at the provider is recorded for one of these (ADR-361).
+REAUTH_ACTIONS = (ACTION_ADD, ACTION_SET_PASSWORD, ACTION_LINK, ACTION_UNLINK)
 
 _ACTION_ZH = {
     ACTION_ADD: "新增聯絡方式",
@@ -271,6 +288,9 @@ PROOF_COOLDOWN = timedelta(days=7)
 # Defined here rather than in `auth_identity`, which already imports from this module — the
 # proof needs to know which identities are providers, and the reverse import would be a cycle.
 SSO_PROVIDERS = ("google", "line")
+# The providers a signed-in browser can be sent to, to prove the person afresh (ADR-361). Google is not one
+# yet: a Google-only account always holds the email Google verified, so it never needs this proof.
+REAUTH_PROVIDERS = ("line",)
 
 
 async def require_channel_proof(
@@ -284,6 +304,7 @@ async def require_channel_proof(
     email_sender,
     sms_sender,
     verifiers=None,
+    sid: str | None = None,
 ) -> None:
     """Prove the caller holds the account, before it gains a new way in (ADR-215/217/234).
 
@@ -296,7 +317,7 @@ async def require_channel_proof(
     2. **a settled contact** — a code to a channel the account held before this caller showed
        up. `_proof_contact` returns None when nothing has passed the ADR-219 cooldown.
     3. **the account's own provider** — a fresh id_token whose subject is already an identity
-       here (ADR-234).
+       here (ADR-234), or the proof session `sid` left by signing in there again (ADR-361).
 
     Falling from 2 to 3 rather than reusing an unsettled contact is what closes the chain in
     PR #45's review: the contact that would have been reused is the one the caller just
@@ -311,7 +332,9 @@ async def require_channel_proof(
             target=target, email_sender=email_sender, sms_sender=sms_sender,
         )
         return
-    if await _sso_proof(db, actor=actor, step_up=step_up, action=action, verifiers=verifiers):
+    if await _sso_proof(
+        db, redis, actor=actor, step_up=step_up, action=action, verifiers=verifiers, sid=sid
+    ):
         return
     raise ContactNotFound("此帳號沒有可驗證的聯絡方式，請先新增聯絡方式")
 
@@ -325,6 +348,7 @@ async def require_step_up_for_first_password(
     email_sender,
     sms_sender,
     verifiers=None,
+    sid: str | None = None,
 ) -> None:
     """Prove the caller holds one of the account's contacts before a first password is minted.
 
@@ -341,7 +365,7 @@ async def require_step_up_for_first_password(
     """
     await require_channel_proof(
         db, redis, actor=actor, step_up=step_up, action=ACTION_SET_PASSWORD,
-        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
+        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, sid=sid,
     )
 
 
@@ -403,7 +427,9 @@ async def _proof_contact(db: AsyncSession, user_uuid: str) -> UserContact | None
     return pool[0]
 
 
-async def _sso_proof(db: AsyncSession, *, actor: User, step_up, action: str, verifiers) -> bool:
+async def _sso_proof(
+    db: AsyncSession, redis, *, actor: User, step_up, action: str, verifiers, sid: str | None = None
+) -> bool:
     """Prove the account by a fresh token for a provider it ALREADY holds, or raise (ADR-234).
 
     The third proof, for the shape the other two cannot serve: no password to check, and no
@@ -415,6 +441,9 @@ async def _sso_proof(db: AsyncSession, *, actor: User, step_up, action: str, ver
     the attacker's own provider account verifies fine and proves nothing about this account,
     which is the same mistake ADR-217 fixed on the link path.
 
+    A browser holds no token (ADR-331). It signs in at the provider again instead, and the callback
+    leaves session `sid` a proof for this action, which is spent here first (ADR-361).
+
     Returns False when the account holds no SSO identity at all, so the caller can fall
     through to its own answer for that case.
     """
@@ -424,12 +453,16 @@ async def _sso_proof(db: AsyncSession, *, actor: User, step_up, action: str, ver
     ]
     if not identities:
         return False
+    if sid and await StepUpProofRepository(redis).spend(sid, action, str(actor.uuid)):
+        return True
 
     what = _ACTION_ZH.get(action, "這項操作")
     if not (step_up and step_up.id_token):
-        raise StepUpRequired(
-            f"{what}需要以此帳號既有的第三方登入方式重新驗證，請填入 step_up.id_token"
-        )
+        message = f"{what}需要以此帳號既有的第三方登入方式重新驗證，請填入 step_up.id_token"
+        providers = sorted({i.provider for i in identities if i.provider in REAUTH_PROVIDERS})
+        if providers:
+            raise ReauthRequired(message, providers)
+        raise StepUpRequired(message)
 
     for identity in identities:
         verifier = (verifiers or {}).get(identity.provider)
@@ -471,6 +504,7 @@ async def start_contact_change(
     email_sender,
     sms_sender,
     verifiers=None,
+    sid: str | None = None,
 ) -> None:
     """Begin adding — or replacing — a contact: send a code to the NEW value.
 
@@ -501,7 +535,7 @@ async def start_contact_change(
     elif await _has_something_to_prove_with(db, str(actor.uuid)):
         await require_channel_proof(
             db, redis, actor=actor, step_up=step_up, action=ACTION_ADD, target=value,
-            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
+            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, sid=sid,
         )
 
     code = await VerificationRepository(redis).issue_contact_verification(

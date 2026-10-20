@@ -307,6 +307,10 @@ verifier 用一個 `get_sso_verifiers` 依賴帶進四個端點（contacts / set
 ➖ `StepUp` 多一個欄位，前端四條路徑之一（`contacts`）之後可能要處理第三種證明。目前 `set-password` 表單只給驗證碼欄位（ADR-233），因為那個帳號依定義沒有 provider 以外的東西——**這點在本 ADR 之後不再成立**，`set-password` 的表單需要能填 id_token，記在下面的待辦。
 ➖ 「什麼都沒有」的 `ContactNotFound` 分支變成幾乎到不了的 backstop。它用 service 層的測試釘住，不透過 HTTP——`create_account` 會寫一列 hash 為 NULL 的 `provider="password"`，所以 `/set-password` 會先回 409，用那條路由斷言會變成「測試因為它名字沒提到的理由而通過」，也就是 ADR-231 講的那個陷阱。
 
+**2026-10-21 修訂（ADR-361，`Spec/023`）**：ADR-331 之後瀏覽器拿不到 id_token，所以第三種證明多一個來源：已登入的
+session 到 provider 重新登入一次，後端記下一份只給這個 session、這個動作用的證明（`step_up_proof:{sid}:{action}`，5 分鐘，
+用一次）。沒有證明時回 422 `step_up_reauth_required`。Bearer client 照舊可以出示 id_token。
+
 **推翻的既有測試**：`test_an_account_with_nothing_to_prove_with_can_add_its_first_contact` 斷言 202，**把這條接管路徑釘成了預期行為**——與 ADR-231 同一種毛病。改寫成四支：閘門擋下、owner 自己的 token 通過、攻擊者自己的合法 token 被 401、`set-password` 那一步也擋。
 
 ---

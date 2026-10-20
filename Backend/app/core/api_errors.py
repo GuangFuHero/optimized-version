@@ -106,6 +106,9 @@ class ErrorCode(StrEnum):
     # carrying it. A client that cannot tell it from a generic 422 shows the user an error where
     # it should show them a field.
     STEP_UP_REQUIRED = "step_up_required"
+    # The proof can only come from the account's provider, which a browser proves by signing in there again
+    # (ADR-361). The answer names the providers; the client sends the person to one and repeats the call.
+    STEP_UP_REAUTH_REQUIRED = "step_up_reauth_required"
     STEP_UP_INVALID = "step_up_invalid"
     STEP_UP_THROTTLED = "step_up_throttled"
     # No channel and no provider to prove against — the remedy is to add a contact, not to retry.
@@ -124,7 +127,19 @@ class ErrorCode(StrEnum):
 class ApiError(HTTPException):
     """An HTTPException that also carries a stable `code` for clients to branch on."""
 
-    def __init__(self, status_code: int, code: ErrorCode, detail: str, headers: dict | None = None):
-        """Build the error; `code` is what clients match on, `detail` is prose for humans."""
+    def __init__(
+        self,
+        status_code: int,
+        code: ErrorCode,
+        detail: str,
+        headers: dict | None = None,
+        extra: dict | None = None,
+    ):
+        """Build the error; `code` is what clients match on, `detail` is prose for humans.
+
+        `extra` holds further fields for the body, beside `code` and `detail`, for an answer the client acts
+        on rather than only shows (`providers` on `step_up_reauth_required`).
+        """
         super().__init__(status_code, detail=detail, headers=headers)
         self.code = code
+        self.extra = extra or {}

@@ -78,6 +78,7 @@ async def link_identity(
     sms_sender,
     dispatch=None,
     verifiers=None,
+    sid: str | None = None,
 ) -> None:
     """Attach a verified SSO identity to the current account, proof first (ADR-217).
 
@@ -101,7 +102,7 @@ async def link_identity(
 
     await require_channel_proof(
         db, redis, actor=actor, step_up=step_up, action=ACTION_LINK, target=provider,
-        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
+        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, sid=sid,
     )
 
     try:
@@ -129,6 +130,7 @@ async def unlink_identity(
     sms_sender,
     dispatch=None,
     verifiers=None,
+    sid: str | None = None,
 ) -> None:
     """Remove one SSO login method, refusing to strand the account (ADR-218).
 
@@ -165,7 +167,7 @@ async def unlink_identity(
 
     await require_channel_proof(
         db, redis, actor=actor, step_up=step_up, action=ACTION_UNLINK, target=provider,
-        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
+        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, sid=sid,
     )
 
     # The `users` row, not the identity rows: the invariant is about the *set* of login

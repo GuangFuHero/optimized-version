@@ -22,7 +22,13 @@ from app.schemas.auth import (
     UnlinkIdentityRequest,
 )
 from app.services import auth_identity
-from app.services.auth_contact import SSO_PROVIDERS, ContactNotFound, StepUpFailed, StepUpRequired
+from app.services.auth_contact import (
+    SSO_PROVIDERS,
+    ContactNotFound,
+    ReauthRequired,
+    StepUpFailed,
+    StepUpRequired,
+)
 from app.sso import get_sso_verifiers
 from app.sso.google import (
     GoogleTokenVerificationError,
@@ -35,7 +41,7 @@ from app.sso.line import (
     get_line_verifier,
 )
 
-from .deps import clear_cookies_if_cookie_authenticated, get_rate_limiter
+from .deps import clear_cookies_if_cookie_authenticated, get_rate_limiter, reauth_required
 
 router = APIRouter()
 
@@ -62,6 +68,8 @@ _ERROR_MAP = {
 
 def _as_http(err: Exception) -> ApiError:
     """Translate a link/unlink use-case error into its HTTP equivalent, carrying its code."""
+    if isinstance(err, ReauthRequired):
+        return reauth_required(err)
     return _ERROR_MAP[type(err)](str(err))
 
 
@@ -71,6 +79,7 @@ async def link_google(
         body: LinkGoogleRequest,
         background_tasks: BackgroundTasks,
         current_user: User = Depends(security.get_current_user),
+        session: tuple[str, str | None] = Depends(security.get_current_session),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         verifier: GoogleTokenVerifier = Depends(get_google_verifier),
@@ -94,7 +103,7 @@ async def link_google(
         await auth_identity.link_identity(
             db, redis, actor=current_user, provider="google", subject=gid.sub,
             step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
-            dispatch=background_tasks.add_task, verifiers=verifiers,
+            dispatch=background_tasks.add_task, verifiers=verifiers, sid=session[1],
         )
     except tuple(_ERROR_MAP) as err:
         raise _as_http(err) from err
@@ -107,6 +116,7 @@ async def link_line(
         body: IdTokenRequest,
         background_tasks: BackgroundTasks,
         current_user: User = Depends(security.get_current_user),
+        session: tuple[str, str | None] = Depends(security.get_current_session),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         verifier: LineTokenVerifier = Depends(get_line_verifier),
@@ -124,7 +134,7 @@ async def link_line(
         await auth_identity.link_identity(
             db, redis, actor=current_user, provider="line", subject=lid.sub,
             step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
-            dispatch=background_tasks.add_task, verifiers=verifiers,
+            dispatch=background_tasks.add_task, verifiers=verifiers, sid=session[1],
         )
     except tuple(_ERROR_MAP) as err:
         raise _as_http(err) from err
@@ -139,6 +149,7 @@ async def unlink_identity(
         request: Request,
         body: UnlinkIdentityRequest | None = None,
         current_user: User = Depends(security.get_current_user),
+        session: tuple[str, str | None] = Depends(security.get_current_session),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         email_sender=Depends(get_email_sender),
@@ -158,7 +169,7 @@ async def unlink_identity(
             db, redis, actor=current_user, provider=provider,
             step_up=body.step_up if body else None,
             email_sender=email_sender, sms_sender=sms_sender,
-            dispatch=background_tasks.add_task, verifiers=verifiers,
+            dispatch=background_tasks.add_task, verifiers=verifiers, sid=session[1],
         )
     except tuple(_ERROR_MAP) as err:
         raise _as_http(err) from err

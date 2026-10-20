@@ -23,6 +23,19 @@ return hits
 """
 
 
+def reauth_required(err) -> ApiError:
+    """The 422 that sends the person to their provider to prove the account (ADR-361), naming which ones.
+
+    One builder for every endpoint behind `require_channel_proof`, so the answer cannot differ between them.
+    """
+    return ApiError(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        ErrorCode.STEP_UP_REAUTH_REQUIRED,
+        detail=str(err),
+        extra={"providers": err.providers},
+    )
+
+
 def _normalize_identifier(type_: str, value: str) -> str:
     """Normalize an email or phone identifier; raise ValueError if invalid for the type."""
     return normalize_email(value) if type_ == "email" else normalize_phone(value)

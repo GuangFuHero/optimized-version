@@ -511,6 +511,101 @@ a provider it holds) and linking a provider (`/auth/link/*`). Only a Bearer clie
 LINE-only account is that shape, since LINE gives us no email (point 7), so from the site it cannot add a
 first contact, set a first password, or link or unlink a provider: each answers 422 `step_up_required`. The
 frontend never sent such a token before this change either (ADR-234 left it for its own ticket), so nothing
-that worked stops working. To be closed in a follow-up with a re-authentication through this flow, a
-`start` for a signed-in session whose callback records a short-lived proof for one action instead of signing
-in.
+that worked stops working. Closed by ADR-361: a signed-in browser re-checks the person through this flow,
+and the callback records a short-lived proof for one action instead of signing in.
+
+---
+
+### ADR-361 A signed-in browser proves the person at their provider when nothing else can
+
+> **Status: ACCEPTED (2026-10-21).** Re-checking a LINE-only account at LINE, rather than letting an account
+> with no contact add its first one unchecked, was chosen by the product owner on 2026-10-20; the details
+> below on 2026-10-21. Amends ADR-234 (`Spec/017`) and closes the gap ADR-331's consequences record.
+
+**In plain words**: Someone who has only ever signed in with LINE has no password, and no email or phone on
+the account. When they add one, we still have to check it is really them (ADR-234), and the one thing they
+hold is their LINE account. So the site sends them to LINE to sign in again, there and then. LINE sends them
+back, and the backend remembers for five minutes that this session has just proved itself, for that one
+thing. The request they were making then goes through.
+
+**Context**: Before an account gains a new way in (a first contact of a type, a first password, linking or
+unlinking a provider), `require_channel_proof` asks for one of three proofs, in order (ADR-234): the
+password; a code sent to a contact the account already has; or a fresh `id_token` from a provider the
+account already holds. An account with no password and no contact has only the third. A LINE-only account is
+that shape: LINE gives us no email (ADR-331 point 7), so its first sign-in adds no contact. Since ADR-331 the
+browser never holds an `id_token`, so the third proof is out of its reach, and every such request answers
+422 `step_up_required` with no way through. The site's role request form makes a verified phone required
+(#93, `Spec/026`, ADR-355), which puts every LINE-only applicant in front of this.
+
+**Decision**:
+
+1. **A distinct answer for "prove it at your provider".** When the third proof is the one required and none
+   is presented, the answer is 422 `step_up_reauth_required`, with `providers`: the providers the account
+   holds that the backend can re-check it with (`["line"]` for now). `step_up_required` keeps its meaning
+   (a password, or the code just sent to the account's contact). A Bearer client may still send
+   `step_up.id_token`, as before.
+2. **`GET /auth/oauth/{provider}/start?purpose=step_up&action=…&app=…&return_to=…`.** `purpose` is `sign_in`
+   (the default, which behaves as ADR-331 says) or `step_up`. With `purpose=step_up`:
+   - The request must carry a signed-in cookie session. An access token that is expired or stale answers
+     the usual 401 (ADR-328), so the site's proxy refreshes and sends the request again. Anything a refresh
+     cannot fix (no token, a session that has ended, a revoked identity) is sent to
+     `{app}/login?error=session_expired` instead of answering JSON, because this is a page navigation.
+   - `action` is one of `add_contact`, `set_password`, `link_identity` and `unlink_identity`, the actions
+     whose proof can be the third one. `provider` must be one the account holds.
+   - `app`, `return_to` and the `Referer` follow ADR-331 points 4 and 6.
+   - The state also records the purpose, the action, the session (`sid`) and the account.
+   - The provider is asked to check the person afresh: for LINE, `prompt=login` (the sign-in screen even
+     when already signed in, with auto login off) and `max_age=300`.
+3. **The callback for a step-up** checks the state against `{p}_oauth` and spends it, as for a sign-in. Then:
+   - It must be the same session: the `sid` of the browser's access cookie, read even when expired (its
+     signature still checked), must be the one recorded, and that session must still be live and belong to
+     the same account. Otherwise the browser goes to `{app}/login?error=session_expired`. The callback never
+     answers 401: the proxy would refresh and replay a state already spent.
+   - It exchanges the code and verifies the `id_token` and its nonce as for a sign-in. The token must carry
+     an `auth_time` no more than 300 seconds old, and its `sub` must be an identity of this provider on this
+     account (the rule `_sso_proof` already applies).
+   - It records the proof (point 4), leaves the session cookies alone, clears `{p}_oauth`, and sends the
+     browser to `{app}{return_to}` with `step_up=ok` added to its query.
+4. **The proof**: `step_up_proof:{sid}:{action}` in Redis, holding the account, for 300 seconds. It is spent
+   with `GETDEL`, so it works once. A new step-up for the same session and action replaces it. A proof made
+   for one action cannot be spent on another (as ADR-164 binds a code to its action), nor by another
+   session.
+5. **Using it**: the third proof first spends the proof for the request's session and action. The client
+   sends nothing extra: it repeats the request it was making. Only an account with no password and no
+   contact reaches the third proof, so nothing changes for any other account.
+6. **A step-up that fails goes back to the page it came from**, not to the sign-in page, since the person is
+   still signed in: `{app}{return_to}` with `step_up_error=<code>`:
+   | Code | When |
+   |---|---|
+   | `oauth_cancelled` | the person said no at the provider |
+   | `oauth_exchange_failed` | the provider could not be asked, or gave no token |
+   | `sso_token_invalid` | the token does not verify, or carries another nonce |
+   | `step_up_invalid` | another account at the provider, or an `auth_time` missing or too old |
+   | `oauth_request_invalid` | an `action` not on the list, or a provider the account does not hold |
+
+   A state that is not this browser's, or no longer on record, goes to the site's sign-in page as for a
+   sign-in (ADR-331 point 5): there is no telling where it came from.
+7. **Scope**: LINE only. A Google-only account always has the email Google verified (ADR-331 point 7), so it
+   never needs the third proof; Google can be added when one does, after checking how Google asks for a
+   fresh sign-in. Linking a provider through this flow (`purpose=link`) is left for when the frontend links
+   providers: its callback would verify the new provider's token and run `link_identity`, whose own proof
+   follows this ADR.
+
+**Consequences**:
+➕ A LINE-only account can add a first contact and set a first password from the site. #93's phone-first
+step works for it.
+➕ An account with LINE, no password and no contact can unlink another provider the same way. Linking one
+from the site waits for `purpose=link` (point 7).
+➕ No token reaches the browser: the proof stays in Redis, tied to one session, one action and five minutes.
+➕ A stolen session gains nothing: the person must sign in again at LINE as the LINE account already on
+this account, and the callback refuses any other session.
+➖ The proof is spent before the code is sent to the new contact. If that send fails, the person checks
+themselves at LINE again.
+➖ It is a whole-page navigation, so the page is left: the site keeps what was typed (`sessionStorage`) and
+reopens it from `return_to`. A proof that has expired by the time the request is repeated answers
+`step_up_reauth_required` again; the site says so rather than going back to LINE by itself.
+➖ A failure the site's proxy makes itself (503 when it cannot reach the backend to refresh) reaches the
+browser as JSON. The site reads `/users/me` before it navigates, which refreshes or ends the session first.
+➖ `prompt=login` asks the person at LINE every time, even when they signed in a moment ago.
+➖ Linking a provider from the site still waits for `purpose=link`; a LINE-only account linking Google will
+then go to a provider twice (LINE to prove itself, Google to link).
