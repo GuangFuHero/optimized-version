@@ -222,8 +222,16 @@ def test_every_back_office_role_reads_the_project_settings():
     view = {spec["name"]: spec["permissions"].get(Perm.PROJECT_VIEW) for spec in ROLES_DATA}
     edit = {spec["name"]: spec["permissions"].get(Perm.PROJECT_EDIT) for spec in ROLES_DATA}
     assert view == {
-        "user": None, "data_auditor": "all", "super_admin": "all", "admin": "all", "member": "all",
+        "user": None,
+        "data_auditor": "all",
+        "super_admin": "all",
+        "admin": "all",
+        "member": "all",
     }
     assert edit == {
-        "user": None, "data_auditor": None, "super_admin": "all", "admin": None, "member": None,
+        "user": None,
+        "data_auditor": None,
+        "super_admin": "all",
+        "admin": None,
+        "member": None,
     }

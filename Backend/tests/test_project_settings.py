@@ -167,10 +167,14 @@ async def _make_seeded_identity(db, role_name: str) -> tuple[str, str, str | Non
     user = User(name=f"Seeded {role_name}")
     db.add(user)
     await db.flush()
-    db.add(UserRoleAssign(
-        user_uuid=user.uuid, role_uuid=role.uuid,
-        team_uuid=team.uuid if team is not None else None, role_kind=spec["kind"],
-    ))
+    db.add(
+        UserRoleAssign(
+            user_uuid=user.uuid,
+            role_uuid=role.uuid,
+            team_uuid=team.uuid if team is not None else None,
+            role_kind=spec["kind"],
+        )
+    )
     uuids = (str(user.uuid), str(role.uuid), str(team.uuid) if team is not None else None)
     await db.commit()
     return uuids
@@ -260,8 +264,9 @@ async def test_reading_the_settings_does_not_let_a_back_office_identity_change_t
     user_uuid, role_uuid, team_uuid = await _make_seeded_identity(db_session, role_name)
     headers = await _auth_header(redis, user_uuid, role_uuid, team_uuid)
 
-    resp = await client.patch(SETTINGS_URL, headers=headers,
-                              json={"name": "亂改", "disaster_types": ["fire"]})
+    resp = await client.patch(
+        SETTINGS_URL, headers=headers, json={"name": "亂改", "disaster_types": ["fire"]}
+    )
 
     assert resp.status_code == 403, resp.text
     assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 0
