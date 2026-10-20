@@ -6,13 +6,26 @@ from uuid import UUID
 
 import strawberry
 
+from app.core.permissions import Perm
+from app.graphql.shared import UserRefType, staff_user_ref
+
 
 @strawberry.enum
 class AnnouncementFilter(Enum):
     """Filter for listing announcements."""
 
     ACTIVE = "active"  # only active, non-deleted announcements (public)
-    ALL = "all"        # active + inactive non-deleted announcements (admin only)
+    DRAFT = "draft"  # never-published drafts (admin only)
+    ALL = "all"  # active + inactive + draft non-deleted announcements (admin only)
+
+
+@strawberry.enum
+class AnnouncementStatus(Enum):
+    """Where an announcement is in its lifecycle."""
+
+    DRAFT = "draft"  # never activated
+    ACTIVE = "active"
+    INACTIVE = "inactive"  # taken down after going live
 
 
 @strawberry.enum
@@ -44,25 +57,62 @@ class AnnouncementType:
         default=None,
         description="Display position (1 = top) among active announcements; null when inactive",
     )
-    created_by: str | None = strawberry.field(
-        default=None, description="UUID of the user who created this announcement"
+    status: AnnouncementStatus = AnnouncementStatus.ACTIVE
+    published_at: datetime | None = strawberry.field(
+        default=None, description="When it last went live; null while a draft"
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    _created_by: strawberry.Private[str | None] = None
+    _updated_by: strawberry.Private[str | None] = None
+    _published_by: strawberry.Private[str | None] = None
+
+    @strawberry.field(description="Who created it. Null unless the caller holds announcement.edit")
+    async def creator(self, info: strawberry.types.Info) -> UserRefType | None:
+        """The announcement's author, to editors only."""
+        return await staff_user_ref(info, self._created_by, Perm.ANN_EDIT)
+
+    @strawberry.field(description="Who last changed it. Null unless the caller holds announcement.edit")
+    async def updater(self, info: strawberry.types.Info) -> UserRefType | None:
+        """The last editor, to editors only."""
+        return await staff_user_ref(info, self._updated_by, Perm.ANN_EDIT)
+
+    @strawberry.field(
+        description="Who last activated it; null while a draft or unless the caller holds announcement.edit"
+    )
+    async def publisher(self, info: strawberry.types.Info) -> UserRefType | None:
+        """The last publisher, to editors only."""
+        return await staff_user_ref(info, self._published_by, Perm.ANN_EDIT)
 
     @classmethod
     def from_model(cls, m) -> "AnnouncementType":
         """Build from a SQLAlchemy model instance (maps display_order → order)."""
+        status = (
+            AnnouncementStatus.DRAFT
+            if m.published_at is None
+            else AnnouncementStatus.ACTIVE
+            if m.active
+            else AnnouncementStatus.INACTIVE
+        )
         return cls(
-            uuid=m.uuid, content=m.content, active=m.active, placement=m.placement,
-            order=m.display_order, created_by=m.created_by,
-            created_at=m.created_at, updated_at=m.updated_at,
+            uuid=m.uuid,
+            content=m.content,
+            active=m.active,
+            placement=m.placement,
+            order=m.display_order,
+            _created_by=m.created_by,
+            status=status,
+            published_at=m.published_at,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
+            _updated_by=m.updated_by,
+            _published_by=m.published_by,
         )
 
 
 @strawberry.input
 class CreateAnnouncementInput:
-    """Input for creating an announcement (created active, appended at the bottom)."""
+    """Input for creating a draft announcement."""
 
     content: str = strawberry.field(description="The announcement body text")
     placement: AnnouncementPlacement = strawberry.field(

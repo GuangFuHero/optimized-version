@@ -10,11 +10,15 @@ list/get immediately before asserting, mirroring how a resolver reads the freshl
 object within a single request.
 """
 
+import asyncio
 import uuid as uuid_mod
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
+from app.models.notification import Notification
 from app.repositories.announcements_repository import announcement_repository as repo
 
 
@@ -27,23 +31,76 @@ async def _user(db) -> str:
     return str(u.uuid)
 
 
-async def _create(db, uid: str, content: str) -> str:
-    """Create an announcement and return its UUID string (captured while fresh)."""
-    a = await repo.create_at_end(db, content=content, created_by=uid)
+async def _draft(db, uid: str, content: str) -> str:
+    """Create a draft announcement and return its UUID string (captured while fresh)."""
+    a = await repo.create(db, obj_in={"content": content, "created_by": uid, "updated_by": uid})
     return str(a.uuid)
 
 
+async def _create(db, uid: str, content: str) -> str:
+    """Create an announcement and publish it, returning its UUID string."""
+    ua = await _draft(db, uid, content)
+    await repo.set_active(db, uuid=ua, active=True, actor_uuid=uid)
+    return ua
+
+
 @pytest.mark.asyncio
-async def test_create_appends_contiguous_and_active(db):
-    """Each create appends at the bottom with the next order and is active."""
+async def test_publish_appends_contiguous_and_active(db):
+    """Each publish appends at the bottom with the next order and is active."""
     uid = await _user(db)
     await _create(db, uid, "a")
     await _create(db, uid, "b")
     await _create(db, uid, "c")
-    items = await repo.list_announcements(db, only_active=True)
+    items = await repo.list_announcements(db, status="active")
     assert [i.content for i in items] == ["a", "b", "c"]
     assert [i.display_order for i in items] == [1, 2, 3]
     assert all(i.active for i in items)
+
+
+@pytest.mark.asyncio
+async def test_draft_is_unlisted_until_published(db):
+    """A draft lists only as a draft; publishing stamps who and when, and taking it down keeps both."""
+    uid = await _user(db)
+    publisher = await _user(db)
+    ua = await _draft(db, uid, "a")
+    draft = await repo.get_by_uuid_active(db, ua)
+    assert draft.active is False and draft.display_order is None and draft.published_at is None
+    assert await repo.list_announcements(db, status="active") == []
+    assert [str(i.uuid) for i in await repo.list_announcements(db, status="draft")] == [ua]
+
+    await repo.set_active(db, uuid=ua, active=True, actor_uuid=publisher)
+    live = await repo.get_by_uuid_active(db, ua)
+    assert live.published_at is not None and str(live.published_by) == str(live.updated_by) == publisher
+    assert await repo.list_announcements(db, status="draft") == []
+
+    await repo.set_active(db, uuid=ua, active=False, actor_uuid=uid)
+    down = await repo.get_by_uuid_active(db, ua)
+    assert str(down.updated_by) == uid and str(down.published_by) == publisher
+
+
+@pytest.mark.asyncio
+async def test_publish_notification_leaves_out_the_publisher(db):
+    """Everyone else is notified, and no notification records who published."""
+    uid = await _user(db)
+    reader = await _user(db)
+    ua = await _draft(db, uid, "a")
+    await repo.set_active(db, uuid=ua, active=True, actor_uuid=uid)
+    rows = await db.execute(
+        select(Notification.recipient_uuid, Notification.actor_uuid).where(
+            Notification.ref_uuid == uuid_mod.UUID(ua)
+        )
+    )
+    assert [(str(r), a) for r, a in rows] == [(reader, None)]
+
+
+@pytest.mark.asyncio
+async def test_deactivated_is_not_a_draft(db):
+    """Taking an announcement down keeps it out of the draft list."""
+    uid = await _user(db)
+    ua = await _create(db, uid, "a")
+    await repo.set_active(db, uuid=ua, active=False, actor_uuid=uid)
+    assert await repo.list_announcements(db, status="draft") == []
+    assert [str(i.uuid) for i in await repo.list_announcements(db, status="all")] == [ua]
 
 
 @pytest.mark.asyncio
@@ -54,7 +111,7 @@ async def test_move_up_swaps_with_neighbor(db):
     ub = await _create(db, uid, "b")
     moved = await repo.move(db, uuid=ub, up=True)
     assert moved.display_order == 1
-    items = await repo.list_announcements(db, only_active=True)
+    items = await repo.list_announcements(db, status="active")
     assert [i.content for i in items] == ["b", "a"]
     assert [i.display_order for i in items] == [1, 2]
 
@@ -67,7 +124,7 @@ async def test_move_at_top_edge_is_noop(db):
     await _create(db, uid, "b")
     moved = await repo.move(db, uuid=ua, up=True)
     assert moved.display_order == 1
-    items = await repo.list_announcements(db, only_active=True)
+    items = await repo.list_announcements(db, status="active")
     assert [i.content for i in items] == ["a", "b"]
 
 
@@ -76,7 +133,7 @@ async def test_move_inactive_returns_none(db):
     """Moving a non-live announcement returns None."""
     uid = await _user(db)
     ua = await _create(db, uid, "a")
-    await repo.set_active(db, uuid=ua, active=False)
+    await repo.set_active(db, uuid=ua, active=False, actor_uuid=uid)
     assert await repo.move(db, uuid=ua, up=True) is None
 
 
@@ -87,10 +144,10 @@ async def test_deactivate_nulls_order_and_closes_gap(db):
     await _create(db, uid, "a")
     ub = await _create(db, uid, "b")
     await _create(db, uid, "c")
-    res = await repo.set_active(db, uuid=ub, active=False)
+    res = await repo.set_active(db, uuid=ub, active=False, actor_uuid=uid)
     assert res.active is False
     assert res.display_order is None
-    items = await repo.list_announcements(db, only_active=True)
+    items = await repo.list_announcements(db, status="active")
     assert [i.content for i in items] == ["a", "c"]
     assert [i.display_order for i in items] == [1, 2]
 
@@ -101,10 +158,10 @@ async def test_reactivate_appends_at_end(db):
     uid = await _user(db)
     ua = await _create(db, uid, "a")
     await _create(db, uid, "b")
-    await repo.set_active(db, uuid=ua, active=False)  # a out; b becomes order 1
-    res = await repo.set_active(db, uuid=ua, active=True)  # a back at the end
+    await repo.set_active(db, uuid=ua, active=False, actor_uuid=uid)  # a out; b becomes order 1
+    res = await repo.set_active(db, uuid=ua, active=True, actor_uuid=uid)  # a back at the end
     assert res.display_order == 2
-    items = await repo.list_announcements(db, only_active=True)
+    items = await repo.list_announcements(db, status="active")
     assert [i.content for i in items] == ["b", "a"]
     assert [i.display_order for i in items] == [1, 2]
 
@@ -117,10 +174,10 @@ async def test_delete_closes_gap_and_hides_row(db):
     await _create(db, uid, "b")
     await _create(db, uid, "c")
     assert await repo.soft_delete_announcement(db, uuid=ua) is True
-    active = await repo.list_announcements(db, only_active=True)
+    active = await repo.list_announcements(db, status="active")
     assert [i.content for i in active] == ["b", "c"]
     assert [i.display_order for i in active] == [1, 2]
-    all_rows = await repo.list_announcements(db, only_active=False)
+    all_rows = await repo.list_announcements(db, status="all")
     assert all(str(r.uuid) != ua for r in all_rows)  # soft-deleted excluded
 
 
@@ -137,6 +194,42 @@ async def test_invariant_order_iff_active_and_not_deleted(db):
     ua = await _create(db, uid, "a")
     got = await repo.get_by_uuid_active(db, ua)
     assert got.active is True and got.display_order is not None
-    await repo.set_active(db, uuid=ua, active=False)
+    await repo.set_active(db, uuid=ua, active=False, actor_uuid=uid)
     fetched = await repo.get_by_uuid_active(db, ua)
     assert fetched.active is False and fetched.display_order is None
+
+
+@pytest.mark.asyncio
+async def test_set_active_decides_on_a_fresh_read(db):
+    """An activation that lost a race to another sees the row already live and changes nothing."""
+    uid = await _user(db)
+    await _create(db, uid, "live")
+    ua = await _draft(db, uid, "draft")
+    stale = await repo.get_by_uuid_active(db, ua)
+    assert stale.active is False
+    async with AsyncSession(db.bind) as other:
+        await repo.set_active(other, uuid=ua, active=True, actor_uuid=uid)
+
+    await repo.set_active(db, uuid=ua, active=True, actor_uuid=uid)
+    items = await repo.list_announcements(db, status="active")
+    assert [(i.content, i.display_order) for i in items] == [("live", 1), ("draft", 2)]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_activations_take_distinct_orders(db):
+    """An activation waiting on another's lock still sees the row it appended, so it goes after it."""
+    uid = await _user(db)
+    await _create(db, uid, "live")
+    first = await _draft(db, uid, "first")
+    second = await _draft(db, uid, "second")
+    async with AsyncSession(db.bind) as holder, AsyncSession(db.bind) as waiter:
+        await repo._live_for_update(holder)
+        waiting = asyncio.create_task(repo.set_active(waiter, uuid=second, active=True, actor_uuid=uid))
+        await asyncio.sleep(0.3)
+        row = await repo.get_by_uuid_active(holder, first, for_update=True)
+        row.active, row.display_order = True, 2
+        await holder.commit()
+        await waiting
+
+    items = await repo.list_announcements(db, status="active")
+    assert [(i.content, i.display_order) for i in items] == [("live", 1), ("first", 2), ("second", 3)]

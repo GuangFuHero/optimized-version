@@ -48,6 +48,8 @@
 > Dedup fast layer (migration `d4c8b1e07a92`, Spec 022, 2026-10-16): `duplicate_pairs` and
 > `dedup_audit_events` in their own diagram (§4), plus two geography GIST indexes on
 > `base_geometries` for candidate lookup.
+> Drafts (migration `209c4375c3e1`, Spec 007, 2026-10-18): `published_at`, `published_by` and
+> `updated_by` on `announcements` and `briefings`.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -283,6 +285,9 @@ users ||..o{ audit_logs : "acted (logical)"
 announcements {
     uuid uuid PK
     uuid created_by FK "FK to users"
+    uuid updated_by FK "FK to users; last to create, edit, activate or deactivate it"
+    timestamp published_at "nullable; NULL = draft (never activated), else when it last went live"
+    uuid published_by FK "nullable, FK to users; who last activated it"
     boolean active
     int display_order "nullable; non-null iff active and not deleted; unique among live (app-enforced)"
     text placement "admin_page / public_page / all (both); default all; enum enforced in GraphQL, not DB"
@@ -292,6 +297,8 @@ announcements {
     timestamp delete_at
 }
 users ||--o{ announcements : "authors"
+users ||--o{ announcements : "last updated"
+users ||--o{ announcements : "last published"
 
 %% In-app notification feed — one row per (recipient, event), not one per event.
 %% NotificationService.dispatch() fans an event out over a resolved recipient list and
@@ -352,10 +359,15 @@ briefings {
     jsonb tags "string array, server_default '[]'"
     string state "briefing/in_field/debrief, String(50), default briefing"
     uuid created_by FK "FK to users, indexed"
+    uuid updated_by FK "FK to users; last to edit or publish it"
+    timestamp published_at "nullable; NULL = draft, read-only once set"
+    uuid published_by FK "nullable, FK to users"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
 }
+%% Each row is one version: the newest published row per state is the current one, and a
+%% state may hold several drafts at once.
 %% template_uuid is nullable because a briefing may be ad-hoc, and content/tags/state are
 %% COPIED at generation time rather than joined — so deleting or editing a template never
 %% rewrites briefings already sent out.
@@ -363,6 +375,9 @@ briefings {
 %% vocabulary grows without a migration.
 briefing_templates ||--o{ briefings : "generated from"
 users ||--o{ briefings : "authors"
+users ||--o{ briefings : "last updated"
+users ||--o{ briefings : "published"
+users |o--o{ briefings : "published"
 %% ==========================
 %% 4. Project Settings (the deployment's single global settings row, ADR-090)
 %% ==========================

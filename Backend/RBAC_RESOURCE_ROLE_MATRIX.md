@@ -183,6 +183,8 @@
 | announcement.edit | — | — | — | all | — | — |
 | announcement.delete | — | — | — | all | — | — |
 
+> 新公告是草稿：建立要 `announcement.edit`，上線（`setAnnouncementActive(true)`）或修改已上線的公告要 `announcement.publish`。
+
 ### 行前通知 Pre-Departure（功能 007）
 
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
@@ -192,7 +194,7 @@
 | pre_departure.edit | — | — | — | all | — | — |
 | pre_departure.delete | — | — | — | all | — | — |
 
-> 公開的是**生成後的 briefing**；template 是編輯者的作業面，讀取要 `pre_departure.publish`。
+> 公開的是**已發布的 briefing**；草稿的讀寫要 `pre_departure.edit`，發布或從 template 產生草稿要 `pre_departure.publish`。template 是編輯者的作業面，讀取要 `pre_departure.publish`，修改要 `pre_departure.edit` 加 `pre_departure.publish`。
 
 ### 稽核 / RBAC 自管
 

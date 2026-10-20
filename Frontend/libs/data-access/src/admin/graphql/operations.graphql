@@ -213,7 +213,6 @@ query AdminAnnouncements($filter: AnnouncementFilter = ALL) {
     content
     active
     order
-    createdBy
     createdAt
     updatedAt
   }
@@ -225,7 +224,6 @@ query AdminBriefings($state: BriefingState, $tag: String) {
     content
     tags
     state
-    createdBy
     createdAt
     updatedAt
   }
@@ -236,7 +234,6 @@ query AdminBriefingTemplates($state: BriefingState, $tag: String) {
     content
     tags
     state
-    createdBy
     createdAt
     updatedAt
   }

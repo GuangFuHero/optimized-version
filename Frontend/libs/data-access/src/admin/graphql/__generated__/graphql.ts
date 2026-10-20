@@ -47,6 +47,7 @@ export type AccessStatus = (typeof AccessStatus)[keyof typeof AccessStatus];
 export const AnnouncementFilter = {
   Active: 'ACTIVE',
   All: 'ALL',
+  Draft: 'DRAFT',
 } as const;
 
 export type AnnouncementFilter =
@@ -66,18 +67,33 @@ export const AnnouncementPlacement = {
 
 export type AnnouncementPlacement =
   (typeof AnnouncementPlacement)[keyof typeof AnnouncementPlacement];
+export const AnnouncementStatus = {
+  Active: 'ACTIVE',
+  Draft: 'DRAFT',
+  Inactive: 'INACTIVE',
+} as const;
+
+export type AnnouncementStatus =
+  (typeof AnnouncementStatus)[keyof typeof AnnouncementStatus];
 export type AnnouncementType = {
   __typename?: 'AnnouncementType';
   active: Scalars['Boolean']['output'];
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this announcement */
-  createdBy?: Maybe<Scalars['String']['output']>;
+  /** Who created it. Null unless the caller holds announcement.edit */
+  creator?: Maybe<UserRefType>;
   /** Display position (1 = top) among active announcements; null when inactive */
   order?: Maybe<Scalars['Int']['output']>;
   /** admin_page, public_page, or all (both pages) */
   placement: Scalars['String']['output'];
+  /** When it last went live; null while a draft */
+  publishedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who last activated it; null while a draft or unless the caller holds announcement.edit */
+  publisher?: Maybe<UserRefType>;
+  status: AnnouncementStatus;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who last changed it. Null unless the caller holds announcement.edit */
+  updater?: Maybe<UserRefType>;
   uuid: Scalars['UUID']['output'];
 };
 
@@ -150,12 +166,27 @@ export const BriefingState = {
 } as const;
 
 export type BriefingState = (typeof BriefingState)[keyof typeof BriefingState];
+export const BriefingStatus = {
+  Draft: 'DRAFT',
+  Published: 'PUBLISHED',
+} as const;
+
+export type BriefingStatus =
+  (typeof BriefingStatus)[keyof typeof BriefingStatus];
+export const BriefingStatusFilter = {
+  All: 'ALL',
+  Draft: 'DRAFT',
+  Published: 'PUBLISHED',
+} as const;
+
+export type BriefingStatusFilter =
+  (typeof BriefingStatusFilter)[keyof typeof BriefingStatusFilter];
 export type BriefingTemplateType = {
   __typename?: 'BriefingTemplateType';
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this template */
-  createdBy?: Maybe<Scalars['String']['output']>;
+  /** Who created it. Null unless the caller holds pre_departure.edit */
+  creator?: Maybe<UserRefType>;
   /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
   state: Scalars['String']['output'];
   /** Free-form categorization tags */
@@ -168,15 +199,22 @@ export type BriefingType = {
   __typename?: 'BriefingType';
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this briefing */
-  createdBy?: Maybe<Scalars['String']['output']>;
+  /** Who created it. Null unless the caller holds pre_departure.edit */
+  creator?: Maybe<UserRefType>;
+  /** When it was published; null while a draft */
+  publishedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who published it; null while a draft or unless the caller holds pre_departure.edit */
+  publisher?: Maybe<UserRefType>;
   /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
   state: Scalars['String']['output'];
+  status: BriefingStatus;
   /** Free-form categorization tags */
   tags: Array<Scalars['String']['output']>;
   /** UUID of the source template, or null for ad-hoc briefings */
   templateUuid?: Maybe<Scalars['UUID']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who last changed it. Null unless the caller holds pre_departure.edit */
+  updater?: Maybe<UserRefType>;
   uuid: Scalars['UUID']['output'];
 };
 
@@ -563,6 +601,7 @@ export type Mutation = {
   mergeStationSuggestions: StationSuggestionMergeType;
   moveAnnouncement: AnnouncementType;
   promoteMarkZone: HazardousZoneType;
+  publishBriefing: BriefingType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
   revokeStationSuggestionMerge: StationSuggestionMergeType;
   setAnnouncementActive: AnnouncementType;
@@ -719,6 +758,10 @@ export type MutationMoveAnnouncementArgs = {
 
 export type MutationPromoteMarkZoneArgs = {
   input: PromoteMarkZoneInput;
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MutationPublishBriefingArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
@@ -952,6 +995,7 @@ export type QueryBriefingTemplatesArgs = {
 
 export type QueryBriefingsArgs = {
   state?: InputMaybe<BriefingState>;
+  status?: BriefingStatusFilter;
   tag?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -1810,6 +1854,12 @@ export type UpsertTicketPropertyConfigInput = {
   unit?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type UserRefType = {
+  __typename?: 'UserRefType';
+  name?: Maybe<Scalars['String']['output']>;
+  uuid: Scalars['String']['output'];
+};
+
 export const Visibility = {
   Internal: 'internal',
   Public: 'public',
@@ -2214,7 +2264,6 @@ export type AdminAnnouncementsQuery = {
     content: string;
     active: boolean;
     order?: number | null;
-    createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;
@@ -2234,7 +2283,6 @@ export type AdminBriefingsQuery = {
     content: string;
     tags: Array<string>;
     state: string;
-    createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;
@@ -2253,7 +2301,6 @@ export type AdminBriefingTemplatesQuery = {
     content: string;
     tags: Array<string>;
     state: string;
-    createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;
@@ -4276,7 +4323,6 @@ export const AdminAnnouncementsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'order' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
               ],
@@ -4350,7 +4396,6 @@ export const AdminBriefingsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
               ],
@@ -4417,7 +4462,6 @@ export const AdminBriefingTemplatesDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
               ],
