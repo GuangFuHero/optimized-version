@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-20
 **Feature**: 025-dedup-review-queue
-**Status**：已實作並完成 Docker 從零驗證（2026-10-20，全套件 2274 passed、覆蓋率 96%，見 `verification.md`）。PR 尚未開。
+**Status**：已實作並完成 Docker 從零驗證（2026-10-20，`d6e39d567`，全套件 2276 passed、覆蓋率 96%，見 `verification.md`）。PR 尚未開。
 **Base**: `main` @ `108734cda`，分支 `feat/dedup-review-queue`
 **Notion**: DEDUP-007（審核動作與後端）、DEDUP-008（AI 重複審核頁，前端 Ethan）、DEDUP-009（通知）、
 ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」（Carol 指派給 Popo）

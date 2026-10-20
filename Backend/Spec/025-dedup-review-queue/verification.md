@@ -1,8 +1,12 @@
 # Verification: 025-dedup-review-queue（Task 9 Docker 從零驗證）
 
 **日期**：2026-10-20
-**驗證的程式**：`feat/dedup-review-queue` @ `0f7b8b1ad`（用 `git archive` 匯出這個 commit 再 build，未追蹤的檔案不會進 image）
+**驗證的程式**：`feat/dedup-review-queue` @ `d6e39d567`（用 `git archive` 匯出這個 commit 再 build，未追蹤的檔案不會進 image）
 **結論**：全部通過。
+
+> 第一次驗證跑在 `0f7b8b1ad`，結果相同（容器內 2274 passed）。之後 Task 7 的 code review 找到通知失敗時
+> 回傳欄位出錯的問題（ADR-345 補充），修在 `d6e39d567`，所以用修正後的 commit 從零重做一次；以下都是重做的結果。
+> 重做用的腳本：scratchpad `t9/docker_verify.sh <commit>`，完整輸出在 `t9/docker_verify_d6e39d567.log`。
 
 ## 1. 環境
 
@@ -48,14 +52,13 @@ a5e641c99923 (head)
 $ docker exec -e TEST_DB_URL=...@db:5432/disaster_rescue_test -e TEST_REDIS_URL=redis://redis:6379/15 \
     dedup025v-backend python -m pytest -n 4 -q -p no:randomly --cov=app
 app/api/v1/endpoints/duplicate_pairs.py              53      1    98%
-app/repositories/dedup_repository.py                 56      1    98%
-app/services/dedup_review.py                        160      0   100%
+app/services/dedup_review.py                        161      0   100%
 app/services/dedup_submission.py                    109      0   100%
-TOTAL                                             11157    433    96%
-2274 passed, 97 warnings in 349.47s (0:05:49)
+TOTAL                                             11158    438    96%
+2276 passed, 97 warnings in 426.23s (0:07:06)
 ```
 
-和本機（2274 passed、96%）一致。
+和本機（2276 passed、96%）一致。
 
 ## 4. 實際打 API 走完整流程
 
@@ -75,9 +78,9 @@ STEP createTicket #1 -> 200 {"__typename":"TicketCreated", ...}
 STEP createTicket #2 (same) -> 200 {"__typename":"DuplicatesSuspected","suspects":[{"draftRef":"task:0","relatedKind":"ticket_task",...}]}
 STEP createTicket #2 create anyway -> 200 {"__typename":"TicketCreated", ...}
 STEP GET queue as citizen -> 403
-STEP GET queue as data_auditor -> 200 {"items":[{"uuid":"4247e83c-...","entity_kind":"ticket_task","status":"dup_ignored","similarity":1.0,...
+STEP GET queue as data_auditor -> 200 {"items":[{"uuid":"12359cf0-...","entity_kind":"ticket_task","status":"dup_ignored","similarity":1.0,...
 STEP GET queue as super_admin -> 200
-STEP card sides -> {"low": {"uuid": "ce012fbe-...", "deleted": false, "title": "一樓淹水需要抽水機", "type": "rescue", "status": "pending", ...
+STEP card sides -> {"low": {"uuid": "24996385-...", "deleted": false, "title": "一樓淹水需要抽水機", "type": "rescue", "status": "pending", ...
 STEP confirm as citizen -> 403
 STEP confirm as data_auditor -> 200 {"status":"confirmed",...}
 STEP confirm again -> 409 {"detail":"Duplicate pair is already confirmed"}
@@ -88,18 +91,18 @@ STEP revoke as super_admin -> 200 {"status":"dup_ignored",...}
 STEP reject as data_auditor -> 200 {"status":"rejected",...}
 ```
 
-uvicorn 的 access log 和上面的結果逐筆對得上：
+uvicorn 的 access log 和上面的結果逐筆對得上（uuid 換成 `{uuid}`）：
 
 ```
-   3 /api/v1/admin/duplicate-pairs HTTP/1.1 200 OK
-   1 /api/v1/admin/duplicate-pairs HTTP/1.1 403 Forbidden
-   1 /api/v1/admin/duplicate-pairs/4247e83c-.../ HTTP/1.1 200 OK
-   2 .../confirm HTTP/1.1 200 OK
-   1 .../confirm HTTP/1.1 403 Forbidden
-   1 .../confirm HTTP/1.1 409 Conflict
-   1 .../reject HTTP/1.1 200 OK
-   2 .../revoke HTTP/1.1 200 OK
-   1 .../revoke HTTP/1.1 403 Forbidden
+   3 /api/v1/admin/duplicate-pairs 200 OK
+   1 /api/v1/admin/duplicate-pairs 403 Forbidden
+   1 /api/v1/admin/duplicate-pairs/{uuid} 200 OK
+   2 /api/v1/admin/duplicate-pairs/{uuid}/confirm 200 OK
+   1 /api/v1/admin/duplicate-pairs/{uuid}/confirm 403 Forbidden
+   1 /api/v1/admin/duplicate-pairs/{uuid}/confirm 409 Conflict
+   1 /api/v1/admin/duplicate-pairs/{uuid}/reject 200 OK
+   2 /api/v1/admin/duplicate-pairs/{uuid}/revoke 200 OK
+   1 /api/v1/admin/duplicate-pairs/{uuid}/revoke 403 Forbidden
 ```
 
 ## 5. 資料庫裡的結果
@@ -137,9 +140,8 @@ uvicorn 的 access log 和上面的結果逐筆對得上：
 ```
 $ docker exec dedup025v-backend alembic downgrade 1649d30b0122
 downgrade exit 1
-asyncpg.exceptions.CheckViolationError: check constraint "ck_dedup_audit_events_type" of relation "dedup_audit_events" is violated by some row
-$ alembic current
-a5e641c99923 (head)
+check constraint "ck_dedup_audit_events_type" of relation "dedup_audit_events" is violated by some row
+current: a5e641c99923 (head)
 verdict_revoked rows: 2
 ```
 
@@ -147,3 +149,4 @@ verdict_revoked rows: 2
 
 - 前端畫面：DEDUP-008 屬前端，OpenAPI 型別還沒重新產生（交接表在 plan 最後一段）。
 - 正式環境的寄信：這裡用 `ENV=development` 的 console sender，從 log 讀驗證碼。
+- 通知失敗時的回應：容器裡沒有辦法讓通知故意失敗，這條路改用正式的 app 和 `SessionLocal` 在本機重現（修正前出錯、修正後正常），證據在 `Backend/SPEC025_CODE_REVIEW.md` 第六節。

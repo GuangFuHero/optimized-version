@@ -90,6 +90,7 @@ commit 前看 `git diff --cached --stat`）。
 ## Task 9：Docker 從零完整驗證
 
 - ✅ 2026-10-20：image 從 `0f7b8b1ad` 的 `git archive` 以 `--no-cache` build；容器內全套件 **2274 passed**、覆蓋率 96%；真 HTTP 完整流程、通知、降級防護都通過。報告見 `verification.md`。
+- 🔁 2026-10-20：Task 7 review 修正後，用 `d6e39d567` 從零重做：容器內 **2276 passed**，流程、通知、降級防護都通過。
 
 - 照 [docker-verify-isolated-stack] 的作法：從零 build image、全新 DB、跑 migration 與 seed、容器內跑全套件。
 - 實際打 API 走一遍：使用者照樣建立 → 審核員收到通知 → 清單出現該卡（含兩邊摘要）→ confirm → 離開清單 →
