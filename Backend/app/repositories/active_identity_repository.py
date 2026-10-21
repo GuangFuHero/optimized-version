@@ -6,7 +6,7 @@ words mean different things in this codebase: one is how you prove who you are, 
 is which role you are currently exercising.
 """
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identity import ActiveIdentity, decode_act
@@ -15,8 +15,19 @@ from app.models.team import Team
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 
 
-def _select_identities():
-    """Base query joining a grant row to its role and (optional) team names."""
+def _select_identities(*, usable_only: bool = True):
+    """Base query joining a grant row to its role and (optional) team names.
+
+    A soft-deleted team takes its identity with it. With `usable_only` (the default) so does a
+    team that is not active (Spec/026, ADR-357 point 4): a suspended team's members keep their
+    grants but can neither switch to it nor keep acting as it — a token naming it no longer
+    resolves, which ADR-096 answers with 401. Callers asking what an account *holds* rather than
+    what it may act as pass `usable_only=False` (ADR-359 point 3). The platform identity has no
+    team to check, hence the OR rather than a plain filter.
+    """
+    team_alive = Team.delete_at.is_(None)
+    if usable_only:
+        team_alive = and_(team_alive, Team.status == "active")
     return (
         select(
             UserRoleAssign.role_uuid,
@@ -27,9 +38,7 @@ def _select_identities():
         )
         .join(Role, Role.uuid == UserRoleAssign.role_uuid)
         .outerjoin(Team, Team.uuid == UserRoleAssign.team_uuid)
-        # A soft-deleted team takes its identity with it; the platform identity has no team
-        # to check, hence the OR rather than a plain filter.
-        .where(or_(UserRoleAssign.team_uuid.is_(None), Team.delete_at.is_(None)))
+        .where(or_(UserRoleAssign.team_uuid.is_(None), team_alive))
     )
 
 
@@ -46,11 +55,17 @@ def _to_identity(row) -> ActiveIdentity:
 class ActiveIdentityRepository:
     """Reads the identities a user may act as."""
 
-    async def list_for_user(self, db: AsyncSession, user_uuid: str) -> list[ActiveIdentity]:
-        """Every identity the user can switch to, platform first."""
+    async def list_for_user(
+        self, db: AsyncSession, user_uuid: str, *, include_inactive_teams: bool = False
+    ) -> list[ActiveIdentity]:
+        """Every identity the user can switch to, platform first.
+
+        `include_inactive_teams` also lists those in a suspended team: what the
+        account holds, for eligibility checks and the RBAC admin's view (ADR-359 point 3).
+        """
         rows = (
             await db.execute(
-                _select_identities()
+                _select_identities(usable_only=not include_inactive_teams)
                 .where(UserRoleAssign.user_uuid == user_uuid)
                 .order_by(UserRoleAssign.team_uuid.is_not(None), Role.name)
             )

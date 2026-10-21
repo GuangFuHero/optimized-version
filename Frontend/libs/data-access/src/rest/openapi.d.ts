@@ -743,11 +743,40 @@ export interface paths {
      *
      *     Feature 010 replaced the single platform/team role pair with the full identity list
      *     (ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).
-     *     Both land in the same row.
+     *     Both land in the same row. Built by PlatformUserDirectory (Spec/026).
      */
     get: operations['list_users_api_v1_admin_users_get'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/teams/{team_uuid}/members': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 列出 team 成員
+     * @description One team's members and their role in it (Spec/026). team.member.view covering the team.
+     *
+     *     Another team answers 404, so its existence is not given away (ADR-023).
+     */
+    get: operations['list_team_members_api_v1_admin_teams__team_uuid__members_get'];
+    put?: never;
+    /**
+     * Add Team Member
+     * @description Add a user to a team by granting them a role in it (defaults to `member`).
+     *
+     *     A user may belong to several teams at once; this replaces only the role they held in
+     *     THIS team (ADR-072/073).
+     */
+    post: operations['add_team_member_api_v1_admin_teams__team_uuid__members_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -848,7 +877,7 @@ export interface paths {
     put?: never;
     /**
      * 建立 team
-     * @description Create a gov/ngo team (super_admin only, via team.edit).
+     * @description Create a gov/ngo team (super_admin only, via team.edit at `all`). Names are unique (ADR-352).
      */
     post: operations['create_team_api_v1_admin_teams_post'];
     delete?: never;
@@ -857,7 +886,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/admin/teams/{team_uuid}/members': {
+  '/api/v1/admin/teams/{team_uuid}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * 編輯 team（名稱、統編、聯絡人）
+     * @description Edit a team: a team admin their own, a super admin any (Spec/026, ADR-357).
+     */
+    patch: operations['update_team_api_v1_admin_teams__team_uuid__patch'];
+    trace?: never;
+  };
+  '/api/v1/admin/teams/{team_uuid}/status': {
     parameters: {
       query?: never;
       header?: never;
@@ -867,13 +916,10 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Add Team Member
-     * @description Add a user to a team by granting them a role in it (defaults to `member`).
-     *
-     *     A user may belong to several teams at once; this replaces only the role they held in
-     *     THIS team (ADR-072/073).
+     * 停用／恢復 team
+     * @description Super admin only. Suspending switches the team's identities off; restoring brings them back.
      */
-    post: operations['add_team_member_api_v1_admin_teams__team_uuid__members_post'];
+    post: operations['set_team_status_api_v1_admin_teams__team_uuid__status_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1092,6 +1138,8 @@ export interface paths {
     /**
      * List Role Requests
      * @description Applications oldest first, so whoever applied first is reviewed first.
+     *
+     *     A super admin sees every one; a team admin the member requests for their team.
      */
     get: operations['list_role_requests_api_v1_admin_role_requests_get'];
     put?: never;
@@ -1113,7 +1161,7 @@ export interface paths {
     put?: never;
     /**
      * Approve Role Request
-     * @description Grant a pending data auditor application; government and NGO ones are refused for now.
+     * @description Grant a pending application: a team membership, a new team, or the data auditor role.
      */
     post: operations['approve_role_request_api_v1_admin_role_requests__request_uuid__approve_post'];
     delete?: never;
@@ -1133,7 +1181,7 @@ export interface paths {
     put?: never;
     /**
      * Reject Role Request
-     * @description Turn a pending application down. The applicant is told, with the note if there is one.
+     * @description Turn a pending application down. The note is required: it is the reason the applicant reads.
      */
     post: operations['reject_role_request_api_v1_admin_role_requests__request_uuid__reject_post'];
     delete?: never;
@@ -1236,6 +1284,90 @@ export interface paths {
      * @description Undo a card's verdict, back to the queue; someone else's needs ai_duplicate.revoke (ADR-342).
      */
     post: operations['revoke_duplicate_pair_verdict_api_v1_admin_duplicate_pairs__pair_uuid__revoke_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/audit-logs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 讀取稽核紀錄
+     * @description Newest first. A super admin or data auditor reads every change; a team admin their team's.
+     */
+    get: operations['list_audit_logs_api_v1_admin_audit_logs_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/teams/{team_uuid}/invites': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 列出團隊仍有效的邀請連結
+     * @description Links not yet expired, newest first.
+     */
+    get: operations['list_invites_api_v1_admin_teams__team_uuid__invites_get'];
+    put?: never;
+    /**
+     * 建立團隊邀請連結（24 小時）
+     * @description Issue a link anyone signed in can use, any number of times, for 24 hours.
+     */
+    post: operations['create_invite_api_v1_admin_teams__team_uuid__invites_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/invites/{token}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 打開邀請連結
+     * @description The team behind the link, and the caller's pending request: for it, or for something else.
+     */
+    get: operations['open_invite_api_v1_invites__token__get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/invites/{token}/requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * 透過邀請連結申請加入團隊
+     * @description File a member request for the link's team; it waits in that team's and super admins' queues.
+     */
+    post: operations['request_to_join_api_v1_invites__token__requests_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1871,6 +2003,8 @@ export interface components {
       uuid: string;
       /** Name */
       name: string;
+      /** Real Name */
+      real_name?: string | null;
       /** Platform Role */
       platform_role: string | null;
       /** Identities */
@@ -1881,6 +2015,20 @@ export interface components {
       last_activity_at?: string | null;
       /** Active Session Count */
       active_session_count?: number | null;
+    };
+    /**
+     * ApplicantDetails
+     * @description What the applicant sent (Spec 026, ADR-355), for the reviewer to call and confirm.
+     *
+     *     Separate from `applicant_name`, which is the account's nickname.
+     */
+    ApplicantDetails: {
+      /** Name */
+      name: string;
+      /** Phone */
+      phone: string | null;
+      /** Email */
+      email: string | null;
     };
     /**
      * AssignRoleRequest
@@ -1933,6 +2081,47 @@ export interface components {
       logo_url?: string | null;
       /** Notes */
       notes?: string | null;
+    };
+    /**
+     * AuditLogItem
+     * @description One recorded change. `client_ip` is filled for the platform view only.
+     */
+    AuditLogItem: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Table Name */
+      table_name: string;
+      /** Action */
+      action: string;
+      /**
+       * Row Id
+       * Format: uuid
+       */
+      row_id: string;
+      /** Old Values */
+      old_values: {
+        [key: string]: unknown;
+      } | null;
+      /** New Values */
+      new_values: {
+        [key: string]: unknown;
+      } | null;
+      /** User Uuid */
+      user_uuid: string | null;
+      /** Context */
+      context: {
+        [key: string]: unknown;
+      } | null;
+      /** Client Ip */
+      client_ip?: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
     };
     /** Body_commit_station_import_api_v1_bulk_stations_import_commit_post */
     Body_commit_station_import_api_v1_bulk_stations_import_commit_post: {
@@ -2811,6 +3000,106 @@ export interface components {
       team?: string | null;
     };
     /**
+     * InviteJoinRequest
+     * @description The visitor's details. The phone is the account's verified one (ADR-355).
+     */
+    InviteJoinRequest: {
+      /** Name */
+      name: string;
+      /** Reason */
+      reason: string;
+      /** Email */
+      email?: string | null;
+    };
+    /**
+     * InviteJoinResponse
+     * @description The member request just filed.
+     */
+    InviteJoinResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Requested Role
+       * @enum {string}
+       */
+      requested_role: 'government' | 'ngo';
+      /**
+       * Team Uuid
+       * Format: uuid
+       */
+      team_uuid: string;
+      /**
+       * Status
+       * @constant
+       */
+      status: 'pending';
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /**
+     * InviteRequestRef
+     * @description The visitor's pending request for the team, if they already sent one.
+     */
+    InviteRequestRef: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /**
+     * InviteResponse
+     * @description An issued link. The token is what the link and the QR code carry.
+     */
+    InviteResponse: {
+      /** Token */
+      token: string;
+      /**
+       * Team Uuid
+       * Format: uuid
+       */
+      team_uuid: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+    };
+    /**
+     * InviteTeam
+     * @description The team a link joins, as the invite page names it.
+     */
+    InviteTeam: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Name */
+      name: string;
+      /**
+       * Type
+       * @enum {string}
+       */
+      type: 'gov' | 'ngo';
+    };
+    /**
      * LinkGoogleRequest
      * @description Body carrying a Google id_token to link to the current account, plus its proof.
      *
@@ -2946,6 +3235,45 @@ export interface components {
       has_more: boolean;
     };
     /**
+     * OpenedInviteResponse
+     * @description What the invite page shows before the visitor asks to join.
+     */
+    OpenedInviteResponse: {
+      team: components['schemas']['InviteTeam'];
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      my_request: components['schemas']['InviteRequestRef'] | null;
+      pending_elsewhere?: components['schemas']['PendingElsewhere'] | null;
+    };
+    /**
+     * PendingElsewhere
+     * @description The visitor's pending request for something else, to withdraw before asking here.
+     */
+    PendingElsewhere: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Requested Role
+       * @enum {string}
+       */
+      requested_role: 'government' | 'ngo' | 'data_auditor';
+      /** Team Name */
+      team_name: string | null;
+      /** New Team Name */
+      new_team_name: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /**
      * Perm
      * @description A capability key. Every RBAC check (checkpoint 1) is keyed on one of these.
      * @enum {string}
@@ -2987,6 +3315,7 @@ export interface components {
       | 'team.view'
       | 'team.edit'
       | 'team.member.manage'
+      | 'team.member.view'
       | 'work_zone.view'
       | 'work_zone.add'
       | 'work_zone.edit'
@@ -3008,6 +3337,7 @@ export interface components {
       | 'pre_departure.edit'
       | 'pre_departure.delete'
       | 'audit.view'
+      | 'team.audit.view'
       | 'rbac.view'
       | 'rbac.assign'
       | 'rbac.edit';
@@ -3143,6 +3473,8 @@ export interface components {
     /**
      * RoleRequestDecision
      * @description A reviewer's decision. The note is checked by the service (at most 500 characters).
+     *
+     *     Rejecting requires one (Spec 026): it is the reason the applicant reads.
      */
     RoleRequestDecision: {
       /** Note */
@@ -3183,6 +3515,16 @@ export interface components {
       created_at: string;
       /** Closed At */
       closed_at: string | null;
+      /** Team Uuid */
+      team_uuid?: string | null;
+      /** New Team Name */
+      new_team_name?: string | null;
+      /**
+       * Via Invite
+       * @default false
+       */
+      via_invite: boolean;
+      applicant_details?: components['schemas']['ApplicantDetails'] | null;
     };
     /**
      * RoleRequestReviewItem
@@ -3219,6 +3561,16 @@ export interface components {
       created_at: string;
       /** Closed At */
       closed_at: string | null;
+      /** Team Uuid */
+      team_uuid?: string | null;
+      /** New Team Name */
+      new_team_name?: string | null;
+      /**
+       * Via Invite
+       * @default false
+       */
+      via_invite: boolean;
+      applicant_details?: components['schemas']['ApplicantDetails'] | null;
       /**
        * Applicant Uuid
        * Format: uuid
@@ -3226,6 +3578,8 @@ export interface components {
       applicant_uuid: string;
       /** Applicant Name */
       applicant_name: string;
+      /** Team Name */
+      team_name?: string | null;
     };
     /**
      * RowErrorResponse
@@ -3366,6 +3720,30 @@ export interface components {
       team_uuid?: string | null;
     };
     /**
+     * TeamMemberItem
+     * @description One row of a team's member list (Spec/026): their role in this team, nothing else.
+     *
+     *     `real_name` is filled for whoever manages the team's members and for reviewers (ADR-355).
+     */
+    TeamMemberItem: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Name */
+      name: string;
+      /** Real Name */
+      real_name?: string | null;
+      /**
+       * Role Uuid
+       * Format: uuid
+       */
+      role_uuid: string;
+      /** Role */
+      role: string;
+    };
+    /**
      * TeamMemberRequest
      * @description Body naming the user to add to a team, with an optional team-kind role.
      */
@@ -3393,7 +3771,7 @@ export interface components {
     };
     /**
      * TeamResponse
-     * @description A team's identity and status.
+     * @description A team's identity, status and contact (contact since Spec/026).
      */
     TeamResponse: {
       /**
@@ -3409,6 +3787,21 @@ export interface components {
       status: string;
       /** Tax Id */
       tax_id?: string | null;
+      /** Contact Name */
+      contact_name?: string | null;
+      /** Contact Phone */
+      contact_phone?: string | null;
+    };
+    /**
+     * TeamStatusRequest
+     * @description Body for suspending or restoring a team (Spec/026, ADR-357).
+     */
+    TeamStatusRequest: {
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'active' | 'suspended';
     };
     /**
      * TicketYMetric
@@ -3477,6 +3870,22 @@ export interface components {
        * @description Whether any unread notification has urgent priority
        */
       has_urgent: boolean;
+    };
+    /**
+     * UpdateTeamRequest
+     * @description Body for editing a team (Spec/026, ADR-357). Fields left out are not changed.
+     *
+     *     The type is not editable: applications and gov-only capabilities rely on it.
+     */
+    UpdateTeamRequest: {
+      /** Name */
+      name?: string | null;
+      /** Tax Id */
+      tax_id?: string | null;
+      /** Contact Name */
+      contact_name?: string | null;
+      /** Contact Phone */
+      contact_phone?: string | null;
     };
     /**
      * UserPermissionsResponse
@@ -4748,6 +5157,93 @@ export interface operations {
       };
     };
   };
+  list_team_members_api_v1_admin_teams__team_uuid__members_get: {
+    parameters: {
+      query?: {
+        skip?: number;
+        limit?: number;
+      };
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        team_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TeamMemberItem'][];
+        };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  add_team_member_api_v1_admin_teams__team_uuid__members_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        team_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TeamMemberRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TeamMemberResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   get_project_settings_api_v1_admin_project_settings_get: {
     parameters: {
       query?: never;
@@ -4993,6 +5489,13 @@ export interface operations {
         };
         content?: never;
       };
+      /** @description Name already taken */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -5004,7 +5507,7 @@ export interface operations {
       };
     };
   };
-  add_team_member_api_v1_admin_teams__team_uuid__members_post: {
+  update_team_api_v1_admin_teams__team_uuid__patch: {
     parameters: {
       query?: never;
       header?: {
@@ -5017,7 +5520,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TeamMemberRequest'];
+        'application/json': components['schemas']['UpdateTeamRequest'];
       };
     };
     responses: {
@@ -5027,8 +5530,80 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['TeamMemberResponse'];
+          'application/json': components['schemas']['TeamResponse'];
         };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Name already taken */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  set_team_status_api_v1_admin_teams__team_uuid__status_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        team_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TeamStatusRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TeamResponse'];
+        };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -5488,6 +6063,8 @@ export interface operations {
     parameters: {
       query?: {
         status?: ('pending' | 'approved' | 'rejected' | 'withdrawn') | null;
+        kind?: ('member' | 'new_team' | 'data_auditor') | null;
+        team_uuid?: string | null;
         skip?: number;
         limit?: number;
       };
@@ -5774,6 +6351,235 @@ export interface operations {
         content: {
           'application/json': components['schemas']['HTTPValidationError'];
         };
+      };
+    };
+  };
+  list_audit_logs_api_v1_admin_audit_logs_get: {
+    parameters: {
+      query?: {
+        table?: string | null;
+        row_id?: string | null;
+        actor_uuid?: string | null;
+        from?: string | null;
+        to?: string | null;
+        limit?: number;
+        offset?: number;
+      };
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuditLogItem'][];
+        };
+      };
+      /** @description Neither audit.view at all nor team.audit.view */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  list_invites_api_v1_admin_teams__team_uuid__invites_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        team_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InviteResponse'][];
+        };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  create_invite_api_v1_admin_teams__team_uuid__invites_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        team_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InviteResponse'];
+        };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  open_invite_api_v1_invites__token__get: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        token: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OpenedInviteResponse'];
+        };
+      };
+      /** @description Unknown, expired, or the team cannot be joined */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  request_to_join_api_v1_invites__token__requests_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        token: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InviteJoinRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InviteJoinResponse'];
+        };
+      };
+      /** @description Unknown, expired, or the team cannot be joined */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Already a member, or a request is pending */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description A field to fix */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

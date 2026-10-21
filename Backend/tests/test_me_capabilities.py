@@ -107,8 +107,8 @@ async def test_no_other_seeded_role_touches_the_duplicate_queue(role_name):
 @pytest.mark.parametrize("role_name", ["admin", "member"])
 @pytest.mark.parametrize(
     ("team_type", "team_status", "fenced"),
-    [("gov", "active", False), ("ngo", "active", True), ("gov", "inactive", True)],
-    ids=["active-gov", "ngo", "inactive-gov"],
+    [("gov", "active", False), ("ngo", "active", True), ("gov", "suspended", True)],
+    ids=["active-gov", "ngo", "suspended-gov"],
 )
 async def test_gov_only_capabilities_answer_as_require_gov_team_does(
     db, role_name, team_type, team_status, fenced

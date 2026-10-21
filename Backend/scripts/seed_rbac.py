@@ -155,10 +155,12 @@ ROLES_DATA = [
                 Perm.RBAC_ASSIGN,
                 Perm.RBAC_EDIT,
                 Perm.AUDIT_VIEW,
+                Perm.TEAM_AUDIT_VIEW,
                 Perm.ROLE_REQUEST_REVIEW,
                 Perm.TEAM_VIEW,
                 Perm.TEAM_EDIT,
                 Perm.TEAM_MEMBER_MANAGE,
+                Perm.TEAM_MEMBER_VIEW,
                 Perm.ZONE_VIEW,
                 Perm.ZONE_ADD,
                 Perm.ZONE_EDIT,
@@ -216,7 +218,11 @@ ROLES_DATA = [
             Perm.TICKET_ASSIGN: "zone",
             Perm.TICKET_AUDIT: "zone",
             Perm.TEAM_VIEW: "team",
+            # Spec/026 ADR-357: edit their own team's details. Creating a team needs `all`.
+            Perm.TEAM_EDIT: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
+            Perm.TEAM_MEMBER_VIEW: "team",  # Spec/026: their own team's member list
+            Perm.TEAM_AUDIT_VIEW: "team",  # Spec/026 ADR-358: changes to their own team
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324: every back-office page's shell shows the disaster
             Perm.ZONE_VIEW: "all",
@@ -267,6 +273,7 @@ ROLES_DATA = [
             # Field workers audit the tickets in their zone, as admins do.
             Perm.TICKET_AUDIT: "zone",
             Perm.TEAM_VIEW: "team",
+            Perm.TEAM_MEMBER_VIEW: "team",  # Spec/026: their own team's member list
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324, see the admin role above
         },
