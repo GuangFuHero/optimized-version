@@ -237,7 +237,7 @@ async def test_opening_a_valid_invite_names_the_team(client, db_session, redis):
     body = response.json()
     assert body["team"] == {"uuid": team_uuid, "name": "光復在地互助協會", "type": "ngo"}
     assert body["expires_at"] == invite["expires_at"]
-    assert body["my_request"] is None
+    assert (body["my_request"], body["pending_elsewhere"]) == (None, None)
 
 
 @pytest.mark.asyncio
@@ -391,3 +391,25 @@ async def test_requesting_through_an_invite_needs_a_signed_in_caller(client, db_
     response = await client.post(f"/api/v1/invites/{invite['token']}/requests", json=DETAILS)
 
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_opening_tells_of_a_pending_request_elsewhere(client, db_session, redis):
+    """One pending per account: the page can ask to withdraw it before submitting (PR #93 review)."""
+    team, other = await _team(db_session, "B 隊"), await _team(db_session, "A 隊")
+    other_uuid = other.uuid
+    invite = await _invite_for(client, db_session, redis, team)
+    visitor = await _person(db_session, "志工")
+    db_session.add(
+        RoleRequest(requested_role="ngo", reason=REASON, team_uuid=other_uuid, created_by=visitor.uuid)
+    )
+    await db_session.flush()
+    headers = await _site_headers(db_session, redis, visitor)
+
+    body = (await client.get(f"/api/v1/invites/{invite['token']}", headers=headers)).json()
+
+    assert body["my_request"] is None
+    assert (body["pending_elsewhere"]["team_name"], body["pending_elsewhere"]["requested_role"]) == (
+        "A 隊",
+        "ngo",
+    )

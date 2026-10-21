@@ -31,12 +31,23 @@ class InviteRequestRef(BaseModel):
     created_at: datetime
 
 
+class PendingElsewhere(BaseModel):
+    """The visitor's pending request for something else, to withdraw before asking here."""
+
+    uuid: UUID
+    requested_role: Literal["government", "ngo", "data_auditor"]
+    team_name: str | None
+    new_team_name: str | None
+    created_at: datetime
+
+
 class OpenedInviteResponse(BaseModel):
     """What the invite page shows before the visitor asks to join."""
 
     team: InviteTeam
     expires_at: datetime
     my_request: InviteRequestRef | None
+    pending_elsewhere: PendingElsewhere | None = None
 
 
 class InviteJoinRequest(BaseModel):

@@ -20,6 +20,7 @@ from app.schemas.team_invite import (
     InviteResponse,
     InviteTeam,
     OpenedInviteResponse,
+    PendingElsewhere,
 )
 from app.services import team_invite as team_invite_service
 from app.services.role_request import RoleRequestConflictError, RoleRequestNotFoundError
@@ -80,16 +81,25 @@ async def open_invite(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """The team behind the link, and the caller's pending request for it if they sent one."""
+    """The team behind the link, and the caller's pending request: for it, or for something else."""
     try:
         opened = await team_invite_service.open_invite(db, actor=current_user, token=token)
     except InviteNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
-    mine = opened.my_request
+    mine, other = opened.my_request, opened.pending_elsewhere
     return OpenedInviteResponse(
         team=InviteTeam(uuid=opened.team.uuid, name=opened.team.name, type=opened.team.type),
         expires_at=opened.expires_at,
         my_request=None if mine is None else InviteRequestRef(uuid=mine.uuid, created_at=mine.created_at),
+        pending_elsewhere=None
+        if other is None
+        else PendingElsewhere(
+            uuid=other.uuid,
+            requested_role=other.requested_role,
+            team_name=opened.pending_elsewhere_team_name,
+            new_team_name=other.new_team_name,
+            created_at=other.created_at,
+        ),
     )
 
 

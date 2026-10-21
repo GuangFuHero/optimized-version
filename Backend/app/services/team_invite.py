@@ -54,6 +54,10 @@ class OpenedInvite:
     team: Team
     expires_at: datetime
     my_request: RoleRequest | None
+    # A pending request for anything else: one per account (ADR-351), so the page can say to
+    # withdraw it first instead of the submit answering 409 (PR #93 review).
+    pending_elsewhere: RoleRequest | None = None
+    pending_elsewhere_team_name: str | None = None
 
 
 def _issued(invite: TeamInvite) -> IssuedInvite:
@@ -110,16 +114,25 @@ async def _valid(db: AsyncSession, token: str) -> tuple[TeamInvite, Team]:
 
 
 async def open_invite(db: AsyncSession, *, actor: User, token: str) -> OpenedInvite:
-    """The team behind a working link, and the visitor's pending request for it if any."""
+    """The team behind a working link, and the visitor's pending request: for it, or elsewhere."""
     invite, team = await _valid(db, token)
-    mine = await db.scalar(
-        select(RoleRequest).where(
-            RoleRequest.created_by == actor.uuid,
-            RoleRequest.team_uuid == team.uuid,
-            RoleRequest.status == "pending",
+    row = (
+        await db.execute(
+            select(RoleRequest, Team.name)
+            .outerjoin(Team, Team.uuid == RoleRequest.team_uuid)
+            .where(RoleRequest.created_by == actor.uuid, RoleRequest.status == "pending")
         )
+    ).first()
+    pending, pending_team_name = (row[0], row[1]) if row is not None else (None, None)
+    if pending is not None and pending.team_uuid == team.uuid:
+        return OpenedInvite(team=team, expires_at=invite.expires_at, my_request=pending)
+    return OpenedInvite(
+        team=team,
+        expires_at=invite.expires_at,
+        my_request=None,
+        pending_elsewhere=pending,
+        pending_elsewhere_team_name=pending_team_name,
     )
-    return OpenedInvite(team=team, expires_at=invite.expires_at, my_request=mine)
 
 
 async def request_to_join(
