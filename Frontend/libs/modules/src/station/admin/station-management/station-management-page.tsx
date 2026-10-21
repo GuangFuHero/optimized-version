@@ -1,9 +1,11 @@
 'use client';
 
 import { Box } from '@mui/material';
-import { designTokens } from '@rescue-frontend/ui';
+import { useDeleteStation } from '@rescue-frontend/data-access/admin';
+import { designTokens, Dialog } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 import { useAllStations } from './hooks/use-all-stations';
 import { useStationCapabilities } from './hooks/use-station-capabilities';
@@ -17,7 +19,9 @@ import {
 } from './model/station-filters';
 import { StationDrawer, type StationDrawerState } from './station-drawer';
 import { StationFilterPanel } from './station-filter-panel';
+import { StationFormPanel } from './station-form-panel';
 import { StationMapView } from './station-map-view';
+import { QuickStatusCell, TeamAssignCell } from './station-row-controls';
 import { StationStatsStrip } from './station-stats-strip';
 import { StationTable } from './station-table';
 import { StationToolbar, type StationView } from './station-toolbar';
@@ -84,6 +88,10 @@ export function StationManagementPage() {
   // View mode lives in the URL (?station=<uuid>) so notifications can link to it; edit and new
   // are local and fall back to view, or close, when finished.
   const urlStation = params.get('station');
+  const deleteStation = useDeleteStation();
+  const [pendingDelete, setPendingDelete] = useState<{ uuid: string; name: string } | null>(
+    null,
+  );
   const [localDrawer, setLocalDrawer] = useState<StationDrawerState | null>(null);
   const drawerState: StationDrawerState | null =
     localDrawer ?? (urlStation ? { mode: 'view', uuid: urlStation } : null);
@@ -160,6 +168,14 @@ export function StationManagementPage() {
           now={now}
           canAdd={caps.canAdd}
           onOpenStation={openStation}
+          renderStatus={
+            caps.canEdit ? (row) => <QuickStatusCell row={row} /> : undefined
+          }
+          renderTeam={
+            caps.canAssign && caps.canViewTeams
+              ? (row) => <TeamAssignCell row={row} />
+              : undefined
+          }
         />
       )}
       <StationDrawer
@@ -168,7 +184,43 @@ export function StationManagementPage() {
         now={now}
         onClose={closeDrawer}
         onEdit={(uuid) => setLocalDrawer({ mode: 'edit', uuid })}
+        onDelete={(uuid, name) => setPendingDelete({ uuid, name })}
+        renderForm={(state) => (
+          <StationFormPanel
+            key={state.mode === 'new' ? 'new' : state.uuid}
+            mode={state.mode === 'new' ? 'new' : 'edit'}
+            uuid={state.mode === 'new' ? undefined : state.uuid}
+            position={state.mode === 'new' ? state.position : undefined}
+            canViewPii={caps.canViewPii}
+            onSaved={openStation}
+            onCancel={closeDrawer}
+          />
+        )}
       />
+      <Dialog
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          deleteStation.mutate(
+            { uuid: pendingDelete.uuid },
+            {
+              onSuccess: () => {
+                toast('已刪除站點');
+                setPendingDelete(null);
+                setLocalDrawer(null);
+                setParam('station', null);
+              },
+            },
+          );
+        }}
+        title="刪除站點？"
+        confirmLabel="刪除"
+        confirmTone="danger"
+        submitting={deleteStation.isPending}
+      >
+        「{pendingDelete?.name || '這個站點'}」會從列表與前台地圖移除。目前系統沒有還原功能。
+      </Dialog>
     </Box>
   );
 }
