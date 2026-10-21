@@ -62,7 +62,7 @@ type AddressLookupType {
   pinMismatch: Boolean!
 
   """
-  Send back with fullAddress on save, so the address is stored as verified
+  Send back with fullAddress on save, within a day, so the address is stored as verified
   """
   addressToken: String
 }

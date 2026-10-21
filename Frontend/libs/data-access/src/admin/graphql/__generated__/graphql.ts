@@ -46,7 +46,7 @@ export const AccessStatus = {
 export type AccessStatus = (typeof AccessStatus)[keyof typeof AccessStatus];
 export type AddressLookupType = {
   __typename?: 'AddressLookupType';
-  /** Send back with fullAddress on save, so the address is stored as verified */
+  /** Send back with fullAddress on save, within a day, so the address is stored as verified */
   addressToken?: Maybe<Scalars['String']['output']>;
   /** 弄, e.g. '1弄' */
   alley?: Maybe<Scalars['String']['output']>;
