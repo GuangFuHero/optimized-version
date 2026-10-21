@@ -1,1 +1,1 @@
-"""GraphQL announcements domain — site-wide announcements with admin-managed ordering."""
+"""GraphQL announcements domain — site-wide announcements, at most one live on each page."""

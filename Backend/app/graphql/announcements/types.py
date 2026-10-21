@@ -29,14 +29,6 @@ class AnnouncementStatus(Enum):
 
 
 @strawberry.enum
-class AnnouncementMoveDirection(Enum):
-    """Direction to move an announcement within the ordered list."""
-
-    UP = "up"
-    DOWN = "down"
-
-
-@strawberry.enum
 class AnnouncementPlacement(Enum):
     """Which page shows an announcement: the admin site, the public site, or both."""
 
@@ -53,10 +45,6 @@ class AnnouncementType:
     content: str
     active: bool
     placement: str = strawberry.field(description="admin_page, public_page, or all (both pages)")
-    order: int | None = strawberry.field(
-        default=None,
-        description="Display position (1 = top) among active announcements; null when inactive",
-    )
     status: AnnouncementStatus = AnnouncementStatus.ACTIVE
     published_at: datetime | None = strawberry.field(
         default=None, description="When it last went live; null while a draft"
@@ -86,7 +74,7 @@ class AnnouncementType:
 
     @classmethod
     def from_model(cls, m) -> "AnnouncementType":
-        """Build from a SQLAlchemy model instance (maps display_order → order)."""
+        """Build from a SQLAlchemy model instance."""
         status = (
             AnnouncementStatus.DRAFT
             if m.published_at is None
@@ -99,7 +87,6 @@ class AnnouncementType:
             content=m.content,
             active=m.active,
             placement=m.placement,
-            order=m.display_order,
             _created_by=m.created_by,
             status=status,
             published_at=m.published_at,
