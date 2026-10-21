@@ -18,6 +18,7 @@ export interface StationRow {
   teamName: string | null;
   /** Created from the admin portal (`source === 'official'`); `isOfficial` is never set. */
   isOfficial: boolean;
+  createdAt: string | null;
   updatedAt: string | null;
   /** [lat, lng] for Leaflet, or null when the station has no point. */
   position: [number, number] | null;
@@ -40,6 +41,7 @@ export function toStationRow(station: AdminStationFieldsFragment): StationRow {
     teamUuid: station.assignedTeam?.uuid ?? null,
     teamName: station.assignedTeam?.name ?? null,
     isOfficial: station.source === 'official',
+    createdAt: station.createdAt ?? null,
     updatedAt: station.updatedAt ?? null,
     position: pointPosition(station.geometry),
     pendingFieldCount: station.pendingSuggestedFields.length,

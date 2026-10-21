@@ -14,6 +14,7 @@ import { EyeOff } from 'lucide-react';
 
 import { OPERATIONAL_STATUS_OPTIONS } from '../../operational-status';
 import { STATION_TYPE_OPTIONS } from '../../type-options';
+import { AdminStationFormFields } from './admin-station-form-fields';
 import type {
   StationFormErrors,
   StationFormState,
@@ -22,7 +23,7 @@ import type {
 
 const { color, typography } = designTokens;
 
-type TextKey = {
+export type TextKey = {
   [K in keyof StationFormState]: StationFormState[K] extends string ? K : never;
 }[keyof StationFormState];
 
@@ -39,9 +40,19 @@ export interface StationFormFieldsProps {
   isResolvingAddress?: boolean;
   /** Without `station.view_pii` the contact values are masked, so they can't be edited. */
   contactLocked?: boolean;
+  /** `admin` is `/stations`' prototype layout; the maps keep `default`. */
+  appearance?: 'default' | 'admin';
 }
 
 export function StationFormFields({
+  appearance = 'default',
+  ...props
+}: StationFormFieldsProps) {
+  if (appearance === 'admin') return <AdminStationFormFields {...props} />;
+  return <DefaultStationFormFields {...props} />;
+}
+
+function DefaultStationFormFields({
   mode,
   form,
   errors,

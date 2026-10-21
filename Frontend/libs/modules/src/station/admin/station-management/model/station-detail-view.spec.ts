@@ -5,6 +5,10 @@ import { toStationDetailView, type DetailStation } from './station-detail-view';
 const station = {
   uuid: 's-1',
   name: '光復加水站',
+  type: 'water',
+  geometry: { type: 'Point', coordinates: [121.42, 23.67] },
+  verificationStatus: 'human_verified',
+  createdAt: '2024-09-25T17:30:00Z',
   operationalStatus: 'temporarily_closed',
   source: 'official',
   pendingSuggestedFields: ['name', 'opHour'],
@@ -30,7 +34,10 @@ describe('toStationDetailView', () => {
   it('summarises the station for the shared detail drawer', () => {
     expect(toStationDetailView(station, { canViewPii: true })).toMatchObject({
       title: '光復加水站',
+      typeLabel: '加水',
+      district: '花蓮縣光復鄉',
       address: '花蓮縣光復鄉中正路12號',
+      coordinates: '23.670, 121.420',
       status: { label: '暫時關閉', tone: 'warning' },
       isOfficial: true,
       pendingFieldCount: 2,
@@ -43,7 +50,36 @@ describe('toStationDetailView', () => {
       { canViewPii: true },
     );
     expect(view.title).toBe('（未命名站點）');
+    expect(view.district).toBe('—');
     expect(view.address).toBe('未提供地址');
+  });
+
+  it('has no coordinates without a point', () => {
+    expect(
+      toStationDetailView({ ...station, geometry: null }, { canViewPii: true })
+        .coordinates,
+    ).toBeNull();
+  });
+
+  it('reads the verification state', () => {
+    const verification = (verificationStatus: string | null) =>
+      toStationDetailView(
+        { ...station, verificationStatus },
+        { canViewPii: true },
+      ).verification;
+    expect(verification('human_verified')).toEqual({
+      verified: true,
+      label: '人工驗證',
+    });
+    expect(verification('ai_verified')).toEqual({
+      verified: true,
+      label: 'AI 驗證',
+    });
+    expect(verification('unverified')).toEqual({
+      verified: false,
+      label: '未驗證',
+    });
+    expect(verification(null)).toEqual({ verified: false, label: '未驗證' });
   });
 
   it('maps every operational status onto a drawer tone', () => {
@@ -57,18 +93,39 @@ describe('toStationDetailView', () => {
     expect(tone('permanently_closed')).toBe('inactive');
   });
 
-  it('lists only the contact methods the station has', () => {
-    expect(toStationDetailView(station, { canViewPii: true }).contact).toEqual({
-      name: '王小明',
-      note: '聯絡資訊僅後台可見',
-      methods: [{ id: 'phone', value: '0912345678' }],
+  it('joins whichever of the contact name and phone the station has', () => {
+    const contact = (patch: Partial<DetailStation>) =>
+      toStationDetailView({ ...station, ...patch }, { canViewPii: true })
+        .contact;
+    expect(contact({})).toEqual({
+      line: '王小明 ・ 0912345678',
+      email: null,
+      maskedNote: null,
     });
+    expect(contact({ contactName: null }).line).toBe('0912345678');
+    expect(contact({ contactPhone: null }).line).toBe('王小明');
+    expect(contact({ contactName: null, contactPhone: null }).line).toBeNull();
+    expect(contact({ contactEmail: 'a@b.tw' }).email).toBe('a@b.tw');
   });
 
   it('says the contact values are masked without view_pii', () => {
     expect(
-      toStationDetailView(station, { canViewPii: false }).contact.note,
+      toStationDetailView(station, { canViewPii: false }).contact.maskedNote,
     ).toBe('無個資權限，顯示遮罩值');
+  });
+
+  it('dates the station in Taipei time', () => {
+    expect(toStationDetailView(station, { canViewPii: true }).createdDate).toBe(
+      '2024-09-26',
+    );
+    expect(
+      toStationDetailView(
+        { ...station, createdAt: null } as unknown as DetailStation,
+        {
+          canViewPii: true,
+        },
+      ).createdDate,
+    ).toBe('—');
   });
 
   it('turns each resource into a tile, with its comment beside the quantity', () => {

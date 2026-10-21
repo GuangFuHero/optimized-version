@@ -92,4 +92,61 @@ export const rescueMapMarkerStyles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
+  // ── Opt-in teardrop pin (`RescueMapMarkerItem.pin`) — admin station map only. ──
+  '.map-pin-wrapper': {
+    background: 'none',
+    border: 0,
+  },
+  '.map-pin': {
+    width: 42,
+    height: 42,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 0,
+    cursor: 'pointer',
+    transition: `transform ${motion.transition.spring}`,
+  },
+  '.map-pin__drop': {
+    display: 'block',
+    width: 22,
+    height: 22,
+    borderRadius: '50% 50% 50% 0',
+    transform: 'rotate(-45deg)',
+    boxShadow: '0 3px 8px rgba(15, 23, 42, 0.24)',
+  },
+  '.map-pin--dimmed .map-pin__drop': {
+    opacity: 0.45,
+  },
+  '.map-pin--selected': {
+    transform: 'scale(1.18)',
+  },
+  '.map-pin--selected .map-pin__drop': {
+    outline: `3px solid ${color.bg.neutral.default}`,
+    outlineOffset: 2,
+    border: `2px solid ${color.fg.neutral.default}`,
+    boxShadow: '0 10px 24px rgba(15, 23, 42, 0.34)',
+  },
+  '.map-pin-wrapper:hover .map-pin:not(.map-pin--selected)': {
+    transform: 'translateY(-2px) scale(1.06)',
+  },
+  '.leaflet-tooltip.map-marker-tooltip': {
+    minWidth: 170,
+    padding: '8px 10px',
+    borderRadius: `${radius.md}px`,
+    border: `1px solid ${color.border.default}`,
+    boxShadow: shadow.md,
+    whiteSpace: 'normal',
+  },
+  '.map-marker-tooltip__title': {
+    display: 'block',
+    ...typography.label[400],
+    color: color.fg.neutral.default,
+  },
+  '.map-marker-tooltip__subtitle': {
+    display: 'block',
+    marginTop: 2,
+    ...typography.body[300],
+    color: color.fg.neutral.subtle,
+  },
 } as const;

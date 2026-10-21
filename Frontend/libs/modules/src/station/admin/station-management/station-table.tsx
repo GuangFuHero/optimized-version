@@ -3,20 +3,56 @@
 import { Box, Typography } from '@mui/material';
 import {
   Badge,
+  Button,
   Callout,
   DataTable,
   designTokens,
-  EmptyState,
+  type BadgeTone,
   type DataTableProps,
 } from '@rescue-frontend/ui';
-import { MapPinned, SearchX, ShieldCheck } from 'lucide-react';
+import {
+  ChevronRight,
+  MapPin,
+  MapPinPlus,
+  Plus,
+  SearchX,
+  ShieldCheck,
+  Upload,
+  type LucideIcon,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { getStationTypeIcon } from '../../type-options';
+import { getStationTypeIcon, type StationTypeValue } from '../../type-options';
 import { FreshnessCell, StatusBadge } from './station-cells';
 import type { StationRow } from './model/station-row';
 
 const { color, radius, typography } = designTokens;
+
+/**
+ * Tints the name cell's type tile. The prototype gives each of its six types a tone
+ * (station-data.jsx TYPE); our eleven map onto the same tones by kinship — water-like types take
+ * info, energy types warning, the rest neutral.
+ */
+const TYPE_TONE: Record<StationTypeValue, BadgeTone> = {
+  water: 'info',
+  shower: 'info',
+  shelter: 'secondary',
+  supply: 'primary',
+  medical: 'danger',
+  gas_station: 'warning',
+  charge: 'warning',
+  power: 'warning',
+  toilet: 'neutral',
+  transport: 'neutral',
+  cellular: 'neutral',
+};
+
+function typeTileColors(type: string): { bg: string; fg: string } {
+  const tone = TYPE_TONE[type as StationTypeValue] ?? 'neutral';
+  return tone === 'neutral'
+    ? { bg: color.bg.neutral.sunken, fg: color.bg.info.default }
+    : { bg: color.bg[tone].subtle, fg: color.bg[tone].default };
+}
 
 interface StationTableProps {
   rows: StationRow[];
@@ -25,7 +61,10 @@ interface StationTableProps {
   loading: boolean;
   truncated: boolean;
   now: Date;
-  canAdd: boolean;
+  /** Set when the viewer may create stations: the no-stations state offers it. */
+  onNew?: () => void;
+  /** Set when the viewer may import: the no-stations state offers it. */
+  onImport?: () => void;
   onOpenStation: (uuid: string) => void;
   renderStatus?: (row: StationRow) => ReactNode;
   renderTeam?: (row: StationRow) => ReactNode;
@@ -37,7 +76,8 @@ export function StationTable({
   loading,
   truncated,
   now,
-  canAdd,
+  onNew,
+  onImport,
   onOpenStation,
   renderStatus,
   renderTeam,
@@ -52,14 +92,14 @@ export function StationTable({
     {
       id: 'type',
       header: '類型',
-      meta: { width: '96px' },
-      cell: ({ row }) => <Muted>{row.original.typeLabel}</Muted>,
+      meta: { width: '120px' },
+      cell: ({ row }) => <TypeCell row={row.original} />,
     },
     {
       id: 'area',
       header: '行政區',
-      meta: { width: '130px' },
-      cell: ({ row }) => <Muted>{row.original.area || '—'}</Muted>,
+      meta: { width: '110px' },
+      cell: ({ row }) => <AreaCell area={row.original.area} />,
     },
     {
       id: 'status',
@@ -75,7 +115,7 @@ export function StationTable({
     {
       id: 'team',
       header: '指派 Team',
-      meta: { width: '150px' },
+      meta: { width: '138px' },
       cell: ({ row }) =>
         renderTeam ? (
           renderTeam(row.original)
@@ -86,9 +126,21 @@ export function StationTable({
     {
       id: 'updated',
       header: '最後更新',
-      meta: { width: '120px' },
+      meta: { width: '130px' },
       cell: ({ row }) => (
         <FreshnessCell updatedAt={row.original.updatedAt} now={now} />
+      ),
+    },
+    {
+      id: 'open',
+      header: '',
+      meta: { width: '28px' },
+      cell: () => (
+        <ChevronRight
+          size={18}
+          color={color.fg.neutral.muted}
+          style={{ display: 'block' }}
+        />
       ),
     },
   ];
@@ -100,73 +152,140 @@ export function StationTable({
           只載入前 5,000 個站點，請用篩選縮小範圍。
         </Callout>
       ) : null}
-      <Box
-        sx={{
-          border: `1px solid ${color.border.default}`,
-          borderRadius: `${radius.lg}px`,
-          overflow: 'auto',
-          bgcolor: color.bg.neutral.default,
-        }}
-      >
-        <DataTable
-          columns={columns}
-          data={rows}
-          getRowId={(row) => row.uuid}
-          onRowClick={(row) => onOpenStation(row.uuid)}
-          density="compact"
-          minWidth={1000}
-          empty={
-            loading ? (
-              <Box sx={{ p: 4, textAlign: 'center' }}>
-                <Muted>載入中…</Muted>
-              </Box>
-            ) : (
-              <StationEmptyState
-                hasAnyStation={hasAnyStation}
-                canAdd={canAdd}
-              />
-            )
-          }
-        />
-      </Box>
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.uuid}
+        onRowClick={(row) => onOpenStation(row.uuid)}
+        density="compact"
+        minWidth={1000}
+        empty={
+          loading ? (
+            <Box sx={{ p: 4, textAlign: 'center' }}>
+              <Muted>載入中…</Muted>
+            </Box>
+          ) : (
+            <StationEmptyState
+              hasAnyStation={hasAnyStation}
+              onNew={onNew}
+              onImport={onImport}
+            />
+          )
+        }
+      />
     </Box>
   );
 }
 
+/**
+ * "No stations yet" offers whichever of import and create the viewer may do; "nothing matches"
+ * only asks them to loosen the filters.
+ */
 export function StationEmptyState({
   hasAnyStation,
-  canAdd,
+  onNew,
+  onImport,
 }: {
   hasAnyStation: boolean;
-  canAdd: boolean;
+  onNew?: () => void;
+  onImport?: () => void;
 }) {
   if (hasAnyStation) {
     return (
-      <EmptyState
-        icon={<SearchX size={28} />}
-        title="此條件下沒有站點"
-        description="調整篩選或搜尋再試。"
+      <StationEmptyLook
+        icon={SearchX}
+        title="沒有符合條件的站點"
+        caption="調整篩選或搜尋關鍵字再試。"
       />
     );
   }
   return (
-    <EmptyState
-      icon={<MapPinned size={28} />}
-      title="還沒有資源站點"
-      description={
-        canAdd
-          ? '資源站點是可以去取得幫助的地方：加水站、物資站、避難收容所、醫療站、流動廁所等。在這裡用「新增站點」一筆筆建立，或從 CSV 匯入。建立後民眾在前台地圖看得到；現場的人可以回報修改建議，在「審查」處理。'
-          : '資源站點是可以去取得幫助的地方：加水站、物資站、避難收容所、醫療站、流動廁所等。目前你的權限範圍內還沒有站點。'
+    <StationEmptyLook
+      icon={MapPinPlus}
+      title="還沒有任何資源站點"
+      caption="新增站點或從 CSV 匯入後，會出現在這裡。"
+      actions={
+        onNew || onImport ? (
+          <>
+            {onImport ? (
+              <Button
+                size="sm"
+                variant="outline"
+                startIcon={<Upload size={15} />}
+                onClick={onImport}
+              >
+                匯入 CSV
+              </Button>
+            ) : null}
+            {onNew ? (
+              <Button size="sm" startIcon={<Plus size={15} />} onClick={onNew}>
+                新增站點
+              </Button>
+            ) : null}
+          </>
+        ) : undefined
       }
     />
   );
 }
 
-function StationNameCell({ row }: { row: StationRow }) {
-  const TypeIcon = getStationTypeIcon(row.type);
+/** The prototype's list empty state: a bare icon, not the shared EmptyState's circle. */
+function StationEmptyLook({
+  icon: Icon,
+  title,
+  caption,
+  actions,
+}: {
+  icon: LucideIcon;
+  title: string;
+  caption: string;
+  actions?: ReactNode;
+}) {
   return (
     <Box
-      sx={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}
+      sx={{
+        p: '64px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+        color: color.fg.neutral.muted,
+      }}
+    >
+      <Icon size={38} color={color.fg.neutral.muted} />
+      <Typography
+        sx={{
+          ...typography.heading[600],
+          mt: '12px',
+          color: color.fg.neutral.subtle,
+        }}
+      >
+        {title}
+      </Typography>
+      <Typography
+        sx={{
+          ...typography.body[300],
+          mt: '4px',
+          maxWidth: 420,
+          lineHeight: 1.7,
+          color: color.fg.neutral.muted,
+        }}
+      >
+        {caption}
+      </Typography>
+      {actions ? (
+        <Box sx={{ display: 'flex', gap: '8px', mt: '16px' }}>{actions}</Box>
+      ) : null}
+    </Box>
+  );
+}
+
+function StationNameCell({ row }: { row: StationRow }) {
+  const TypeIcon = getStationTypeIcon(row.type);
+  const tile = typeTileColors(row.type);
+  return (
+    <Box
+      sx={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}
     >
       <Box
         sx={{
@@ -177,35 +296,52 @@ function StationNameCell({ row }: { row: StationRow }) {
           alignItems: 'center',
           justifyContent: 'center',
           borderRadius: `${radius.md}px`,
-          bgcolor: color.bg.primary.subtle,
-          color: color.brand.primary.subtle,
+          bgcolor: tile.bg,
+          color: tile.fg,
         }}
       >
-        <TypeIcon fontSize="small" />
+        <TypeIcon sx={{ fontSize: 18 }} />
       </Box>
       <Box sx={{ minWidth: 0 }}>
-        <Typography noWrap title={row.name} sx={typography.label[400]}>
+        <Typography
+          noWrap
+          title={row.name}
+          sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+        >
           {row.name}
         </Typography>
-        <Box
-          sx={{ display: 'flex', alignItems: 'center', gap: '6px', mt: '2px' }}
-        >
-          <Typography
-            sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+        {/* No display id to show yet, so the second line only carries the tags, when there are any. */}
+        {row.isOfficial || row.pendingFieldCount > 0 ? (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
+              mt: '3px',
+            }}
           >
-            {row.uuid.slice(0, 8)}
-          </Typography>
-          {row.isOfficial ? (
-            <Badge tone="info" size="sm" icon={<ShieldCheck size={12} />}>
-              官方
-            </Badge>
-          ) : null}
-          {row.pendingFieldCount > 0 ? (
-            <Badge tone="warning" size="sm">
-              {row.pendingFieldCount} 欄待審
-            </Badge>
-          ) : null}
-        </Box>
+            {row.isOfficial ? (
+              <Badge
+                tone="info"
+                icon={<ShieldCheck size={13} />}
+                sx={{
+                  height: 'auto',
+                  p: '2px 9px',
+                  fontWeight: typography.label[300].fontWeight,
+                  letterSpacing: 0,
+                }}
+              >
+                官方
+              </Badge>
+            ) : null}
+            {row.pendingFieldCount > 0 ? (
+              <Badge tone="warning" size="sm">
+                {row.pendingFieldCount} 欄待審
+              </Badge>
+            ) : null}
+          </Box>
+        ) : null}
       </Box>
     </Box>
   );
@@ -217,11 +353,58 @@ export function TeamText({ name }: { name: string | null }) {
       noWrap
       sx={{
         ...typography.body[300],
-        color: name ? color.fg.neutral.subtle : color.fg.neutral.muted,
+        color: name ? color.fg.neutral.default : color.fg.neutral.muted,
       }}
     >
       {name ?? '未指派'}
     </Typography>
+  );
+}
+
+function TypeCell({ row }: { row: StationRow }) {
+  const TypeIcon = getStationTypeIcon(row.type);
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        minWidth: 0,
+      }}
+    >
+      <TypeIcon sx={{ fontSize: 16, color: color.fg.neutral.subtle }} />
+      <Typography
+        noWrap
+        sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+      >
+        {row.typeLabel}
+      </Typography>
+    </Box>
+  );
+}
+
+function AreaCell({ area }: { area: string }) {
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        minWidth: 0,
+      }}
+    >
+      <MapPin
+        size={14}
+        color={color.fg.neutral.muted}
+        style={{ flexShrink: 0 }}
+      />
+      <Typography
+        noWrap
+        sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+      >
+        {area || '—'}
+      </Typography>
+    </Box>
   );
 }
 

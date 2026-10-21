@@ -105,10 +105,54 @@ function createMapMarkerIconHtml(item: RescueMapMarkerItem): string {
   ].join('');
 }
 
+/**
+ * The opt-in teardrop pin (`item.pin`), from the admin station map prototype
+ * (`Design/後台/js/admin/station-v2/station-map.jsx` pinHtml). The look lives in `styles.ts`;
+ * only the caller's colour is inline.
+ */
+function createPinIcon(
+  pin: NonNullable<RescueMapMarkerItem['pin']>,
+  leaflet: typeof import('leaflet'),
+): import('leaflet').DivIcon {
+  const modifiers = [
+    pin.selected ? ' map-pin--selected' : '',
+    pin.dimmed ? ' map-pin--dimmed' : '',
+  ].join('');
+
+  return leaflet.divIcon({
+    className: 'map-pin-wrapper',
+    html: `<span class="map-pin${modifiers}"><span class="map-pin__drop" style="background:${escapeHtml(pin.color)}"></span></span>`,
+    iconSize: [42, 42],
+    iconAnchor: [21, 36],
+  });
+}
+
+/** Tooltip content for `item.tooltip`; null when the marker has none. */
+export function createMapMarkerTooltipHtml(
+  item: RescueMapMarkerItem,
+): string | null {
+  if (!item.tooltip) {
+    return null;
+  }
+
+  const { title, subtitle } = item.tooltip;
+
+  return [
+    `<span class="map-marker-tooltip__title">${escapeHtml(title)}</span>`,
+    subtitle
+      ? `<span class="map-marker-tooltip__subtitle">${escapeHtml(subtitle)}</span>`
+      : '',
+  ].join('');
+}
+
 export function createMapMarkerIcon(
   item: RescueMapMarkerItem,
   leaflet: typeof import('leaflet'),
 ): import('leaflet').DivIcon {
+  if (item.pin) {
+    return createPinIcon(item.pin, leaflet);
+  }
+
   const { iconSize, iconAnchor } = getMapMarkerDimensions(item.variant);
 
   return leaflet.divIcon({
