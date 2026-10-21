@@ -21,14 +21,25 @@ const history = [
 
 describe('hasChangedSince', () => {
   it('flags a station field changed after the first suggestion', () => {
-    expect(hasChangedSince(history, 'station', 'op_hour', '2026-10-19T00:00:00Z')).toBe(true);
-    expect(hasChangedSince(history, 'station', 'op_hour', '2026-10-21T00:00:00Z')).toBe(false);
-    expect(hasChangedSince(history, 'station', 'name', '2026-10-01T00:00:00Z')).toBe(false);
+    expect(
+      hasChangedSince(history, 'station', 'op_hour', '2026-10-19T00:00:00Z'),
+    ).toBe(true);
+    expect(
+      hasChangedSince(history, 'station', 'op_hour', '2026-10-21T00:00:00Z'),
+    ).toBe(false);
+    expect(
+      hasChangedSince(history, 'station', 'name', '2026-10-01T00:00:00Z'),
+    ).toBe(false);
   });
 
   it('flags property fields conservatively (history has no property uuid)', () => {
     expect(
-      hasChangedSince(history, 'station_property', 'quantity', '2026-10-17T00:00:00Z'),
+      hasChangedSince(
+        history,
+        'station_property',
+        'quantity',
+        '2026-10-17T00:00:00Z',
+      ),
     ).toBe(true);
   });
 
@@ -43,7 +54,9 @@ describe('buildReviewFields', () => {
       uuid: 's1',
       opHour: '24h',
       name: '加水站',
-      properties: [{ uuid: 'p1', propertyName: '飲用水', quantity: 3, comment: null }],
+      properties: [
+        { uuid: 'p1', propertyName: '飲用水', quantity: 3, comment: null },
+      ],
       suggestedFields: [
         {
           targetType: 'station',
@@ -99,11 +112,14 @@ describe('buildDecisions', () => {
 
   it('sends only decided fields and drops approvals without a value', () => {
     expect(
-      buildDecisions([field('s1:name'), field('s1:op_hour'), field('p1:quantity')], {
-        's1:name': { approve: true, value: '新站名' },
-        's1:op_hour': { approve: false, value: '' },
-        'p1:quantity': { approve: true, value: '  ' },
-      }),
+      buildDecisions(
+        [field('s1:name'), field('s1:op_hour'), field('p1:quantity')],
+        {
+          's1:name': { approve: true, value: '新站名' },
+          's1:op_hour': { approve: false, value: '' },
+          'p1:quantity': { approve: true, value: '  ' },
+        },
+      ),
     ).toEqual([
       { targetUuid: 's1', fieldName: 'name', approve: true, value: '新站名' },
       { targetUuid: 's1', fieldName: 'op_hour', approve: false },

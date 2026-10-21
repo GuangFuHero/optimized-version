@@ -84,7 +84,9 @@ export function buildReviewFields(
     const property = station.properties.find((p) => p.uuid === s.targetUuid);
     const source =
       targetType === 'station'
-        ? (station as Record<string, unknown>)[STATION_KEYS[s.fieldName] ?? s.fieldName]
+        ? (station as Record<string, unknown>)[
+            STATION_KEYS[s.fieldName] ?? s.fieldName
+          ]
         : (property as Record<string, unknown> | undefined)?.[
             PROPERTY_KEYS[s.fieldName] ?? s.fieldName
           ];
@@ -104,7 +106,12 @@ export function buildReviewFields(
       suggestionCount: s.suggestionCount,
       comments: s.comments,
       firstSuggestedAt,
-      conflict: hasChangedSince(history, targetType, s.fieldName, firstSuggestedAt),
+      conflict: hasChangedSince(
+        history,
+        targetType,
+        s.fieldName,
+        firstSuggestedAt,
+      ),
     };
   });
 }
@@ -120,11 +127,24 @@ export function buildDecisions(
     const decision = decisions[field.key];
     if (!decision) return [];
     if (!decision.approve) {
-      return [{ targetUuid: field.targetUuid, fieldName: field.fieldName, approve: false }];
+      return [
+        {
+          targetUuid: field.targetUuid,
+          fieldName: field.fieldName,
+          approve: false,
+        },
+      ];
     }
     const value = decision.value.trim();
     return value
-      ? [{ targetUuid: field.targetUuid, fieldName: field.fieldName, approve: true, value }]
+      ? [
+          {
+            targetUuid: field.targetUuid,
+            fieldName: field.fieldName,
+            approve: true,
+            value,
+          },
+        ]
       : [];
   });
 }

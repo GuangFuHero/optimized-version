@@ -34,7 +34,6 @@ import {
 import { reverseGeocodeResponse } from '../../../map/reverse-geocode';
 import type { RescueMapMarkerItem } from '../../../map/types';
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
-import type { StationListRow } from '../station-list/types';
 
 import { designTokens } from '@rescue-frontend/ui';
 
@@ -65,7 +64,6 @@ interface StationCreateFormState {
 interface StationCreateDrawerProps {
   open: boolean;
   onClose: () => void;
-  onCreated?: (row: StationListRow) => void;
   onCreatedMarker?: (marker: RescueMapMarkerItem) => void;
   initialPosition?: [number, number] | null;
   onLocationChange?: (position: [number, number]) => void;
@@ -95,16 +93,6 @@ function createInitialState(): StationCreateFormState {
   };
 }
 
-function formatNow() {
-  return new Intl.DateTimeFormat('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date());
-}
-
 const stationCreatePalette = {
   surface: color.bg.neutral.default,
   sectionSurface: color.bg.neutral.subtle,
@@ -127,40 +115,6 @@ function isValidHttpUrl(value: string) {
   } catch {
     return false;
   }
-}
-
-function createStationRow(
-  input: AdminStationFieldsFragment,
-  address: string,
-): StationListRow {
-  return {
-    id: input.uuid,
-    code: input.uuid.slice(0, 8).toUpperCase(),
-    name:
-      input.name?.trim() ||
-      input.description?.slice(0, 18) ||
-      getStationTypeLabel(input.type),
-    type: getStationTypeLabel(input.type),
-    address: address || '未提供地址',
-    status:
-      input.operationalStatus === 'active'
-        ? 'active'
-        : input.operationalStatus === 'temporarily_closed'
-          ? 'limited'
-          : 'offline',
-    currentOccupancy: 0,
-    capacity: 0,
-    suppliesLabel: '未提供',
-    commander: '未提供',
-    updatedAt: input.updatedAt
-      ? new Intl.DateTimeFormat('zh-TW', {
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-        }).format(new Date(input.updatedAt))
-      : formatNow(),
-  };
 }
 
 function buildStationMarker(
@@ -227,7 +181,6 @@ function Section({
 export function StationCreateDrawer({
   open,
   onClose,
-  onCreated,
   onCreatedMarker,
   initialPosition,
   onLocationChange,
@@ -454,8 +407,6 @@ export function StationCreateDrawer({
       }
 
       const createdStation = stationResult.createStation.station;
-
-      onCreated?.(createStationRow(createdStation, form.address.trim()));
 
       onCreatedMarker?.(
         buildStationMarker(createdStation, [latitude, longitude]),

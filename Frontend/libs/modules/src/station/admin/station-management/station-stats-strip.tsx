@@ -4,7 +4,10 @@ import { Box, ButtonBase, Typography } from '@mui/material';
 import { designTokens } from '@rescue-frontend/ui';
 
 import { useStationStatusCounts } from './hooks/use-station-status-counts';
-import { OPERATIONAL_STATUS_OPTIONS, type OperationalStatus } from './model/status';
+import {
+  OPERATIONAL_STATUS_OPTIONS,
+  type OperationalStatus,
+} from './model/status';
 
 const { color, radius, typography } = designTokens;
 
@@ -55,14 +58,23 @@ export function StationStatsStrip({
               p: '12px 16px',
               borderRadius: `${radius.md}px`,
               border: `1px solid ${active ? color.bg.primary.default : color.border.default}`,
-              bgcolor: active ? color.bg.primary.subtle : color.bg.neutral.default,
+              bgcolor: active
+                ? color.bg.primary.subtle
+                : color.bg.neutral.default,
               textAlign: 'left',
             }}
           >
-            <Typography sx={{ ...typography.body[300], color: color.fg.neutral.muted }}>
+            <Typography
+              sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+            >
               {card.label}
             </Typography>
-            <Typography sx={{ ...typography.heading[600], color: color.fg.neutral.default }}>
+            <Typography
+              sx={{
+                ...typography.heading[600],
+                color: color.fg.neutral.default,
+              }}
+            >
               {card.count ?? '—'}
             </Typography>
           </ButtonBase>

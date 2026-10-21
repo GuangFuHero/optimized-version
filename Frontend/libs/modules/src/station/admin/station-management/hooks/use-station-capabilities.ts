@@ -5,7 +5,8 @@ import { useCurrentUser } from '@rescue-frontend/data-access/admin';
 /** What the signed-in identity may do on this page, from the backend's capability list. */
 export function useStationCapabilities() {
   const { data } = useCurrentUser();
-  const has = (perm: string) => data?.capabilities.includes(perm as never) ?? false;
+  const has = (perm: string) =>
+    data?.capabilities.includes(perm as never) ?? false;
   return {
     canAdd: has('station.add'),
     canEdit: has('station.edit'),

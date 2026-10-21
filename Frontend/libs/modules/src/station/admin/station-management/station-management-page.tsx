@@ -59,7 +59,9 @@ export function StationManagementPage() {
   const replaceParams = useCallback(
     (next: URLSearchParams) => {
       const query = next.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+      router.replace(query ? `${pathname}?${query}` : pathname, {
+        scroll: false,
+      });
     },
     [pathname, router],
   );
@@ -94,10 +96,13 @@ export function StationManagementPage() {
   // are local and fall back to view, or close, when finished.
   const urlStation = params.get('station');
   const deleteStation = useDeleteStation();
-  const [pendingDelete, setPendingDelete] = useState<{ uuid: string; name: string } | null>(
+  const [pendingDelete, setPendingDelete] = useState<{
+    uuid: string;
+    name: string;
+  } | null>(null);
+  const [localDrawer, setLocalDrawer] = useState<StationDrawerState | null>(
     null,
   );
-  const [localDrawer, setLocalDrawer] = useState<StationDrawerState | null>(null);
   const drawerState: StationDrawerState | null =
     localDrawer ?? (urlStation ? { mode: 'view', uuid: urlStation } : null);
   const openStation = (uuid: string) => {
@@ -239,7 +244,8 @@ export function StationManagementPage() {
         confirmTone="danger"
         submitting={deleteStation.isPending}
       >
-        「{pendingDelete?.name || '這個站點'}」會從列表與前台地圖移除。目前系統沒有還原功能。
+        「{pendingDelete?.name || '這個站點'}
+        」會從列表與前台地圖移除。目前系統沒有還原功能。
       </Dialog>
     </Box>
   );

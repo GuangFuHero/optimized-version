@@ -45,7 +45,9 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   const commitImport = useCommitStationImport();
   const busy = previewImport.isPending || commitImport.isPending;
 
-  const mapping = preview ? mergeMapping(preview.suggested_mapping, overrides) : undefined;
+  const mapping = preview
+    ? mergeMapping(preview.suggested_mapping, overrides)
+    : undefined;
 
   const runPreview = (nextFile: File, type: string, nextMapping?: string) =>
     previewImport.mutate(
@@ -69,7 +71,11 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
     if (!file || !stationType || !preview) return;
     const next = { ...overrides, [header]: field === SKIP ? null : field };
     setOverrides(next);
-    runPreview(file, stationType, mergeMapping(preview.suggested_mapping, next));
+    runPreview(
+      file,
+      stationType,
+      mergeMapping(preview.suggested_mapping, next),
+    );
   };
 
   const commit = () => {
@@ -89,7 +95,12 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   };
 
   const summary = preview ? importSummary(preview) : null;
-  const mapped = preview ? (JSON.parse(mergeMapping(preview.suggested_mapping, overrides)) as Record<string, string>) : {};
+  const mapped = preview
+    ? (JSON.parse(mergeMapping(preview.suggested_mapping, overrides)) as Record<
+        string,
+        string
+      >)
+    : {};
 
   return (
     <MuiDialog open onClose={onClose} maxWidth="md" fullWidth>
@@ -115,8 +126,19 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
         <ImportResult result={result} onClose={onClose} />
       ) : (
         <>
-          <Box sx={{ p: '20px 22px', display: 'flex', flexDirection: 'column', gap: '18px', overflow: 'auto' }}>
-            <Step title="1 · 這份檔案是哪一種站點" caption="一個檔案只放一種站點；一列是一個站點。">
+          <Box
+            sx={{
+              p: '20px 22px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px',
+              overflow: 'auto',
+            }}
+          >
+            <Step
+              title="1 · 這份檔案是哪一種站點"
+              caption="一個檔案只放一種站點；一列是一個站點。"
+            >
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {STATION_TYPE_OPTIONS.map((option) => (
                   <Chip
@@ -124,7 +146,9 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                     label={option.label}
                     clickable
                     color={stationType === option.value ? 'primary' : 'default'}
-                    variant={stationType === option.value ? 'filled' : 'outlined'}
+                    variant={
+                      stationType === option.value ? 'filled' : 'outlined'
+                    }
                     onClick={() => {
                       setStationType(option.value);
                       setFile(null);
@@ -148,7 +172,9 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                     e.target.value = '';
                   }}
                 />
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Box
+                  sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}
+                >
                   <Button
                     variant="outline"
                     size="sm"
@@ -161,14 +187,21 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                   {file ? <Muted>已讀取：{file.name}</Muted> : null}
                 </Box>
                 <Muted>
-                  從「匯出」下載的檔案就是範本。新的站點必填：站點名稱、緯度、經度。檔案裡沒有聯絡人、電話、營運狀態，建立後再補。匯入的站點來源依檔案的 source 欄；要標示官方，請在檔案填 official。
+                  從「匯出」下載的檔案就是範本。新的站點必填：站點名稱、緯度、經度。檔案裡沒有聯絡人、電話、營運狀態，建立後再補。匯入的站點來源依檔案的
+                  source 欄；要標示官方，請在檔案填 official。
                 </Muted>
               </Step>
             ) : null}
 
             {preview ? (
               <Step title="3 · 欄位對應" caption="檔案的每一欄要寫進哪個欄位">
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '8px 16px',
+                  }}
+                >
                   {preview.detected_headers.map((header) => {
                     const unmapped = !mapped[header];
                     return (
@@ -177,7 +210,9 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                           sx={{
                             ...typography.body[300],
                             alignSelf: 'center',
-                            color: unmapped ? color.fg.warning : color.fg.neutral.default,
+                            color: unmapped
+                              ? color.fg.warning
+                              : color.fg.neutral.default,
                           }}
                         >
                           {header}
@@ -186,7 +221,9 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                           select
                           size="small"
                           value={mapped[header] ?? SKIP}
-                          onChange={(e) => changeMapping(header, e.target.value)}
+                          onChange={(e) =>
+                            changeMapping(header, e.target.value)
+                          }
                           disabled={busy}
                         >
                           <MenuItem value={SKIP}>（不匯入）</MenuItem>
@@ -205,18 +242,29 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
 
             {preview && summary ? (
               <Step title="4 · 試算結果">
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '6px',
+                    alignItems: 'center',
+                  }}
+                >
                   <Badge tone="neutral">還沒寫入</Badge>
                   <Badge tone="success">新增 {summary.create}</Badge>
                   <Badge tone="info">更新 {summary.update}</Badge>
-                  <Badge tone={summary.failedLines ? 'danger' : 'neutral'}>失敗 {summary.failedLines}</Badge>
+                  <Badge tone={summary.failedLines ? 'danger' : 'neutral'}>
+                    失敗 {summary.failedLines}
+                  </Badge>
                 </Box>
                 {summary.update > 0 ? (
                   <Muted>
                     「更新」是站名＋縣市＋鄉鎮對到既有的站點；只會改說明、開放時間、level、comment、公開範圍和位置（經緯度），空白的格子不動。站名與地址建立後不能用匯入改。
                   </Muted>
                 ) : null}
-                {preview.errors.length > 0 ? <ErrorList errors={preview.errors} /> : null}
+                {preview.errors.length > 0 ? (
+                  <ErrorList errors={preview.errors} />
+                ) : null}
               </Step>
             ) : null}
           </Box>
@@ -240,7 +288,11 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
             <Button variant="ghost" size="sm" onClick={onClose}>
               取消
             </Button>
-            <Button size="sm" onClick={commit} disabled={!summary?.canCommit || busy}>
+            <Button
+              size="sm"
+              onClick={commit}
+              disabled={!summary?.canCommit || busy}
+            >
               {summary?.canCommit
                 ? `確認匯入 ${summary.create + summary.update} 列`
                 : '確認匯入'}
@@ -252,14 +304,29 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ImportResult({ result, onClose }: { result: Result; onClose: () => void }) {
+function ImportResult({
+  result,
+  onClose,
+}: {
+  result: Result;
+  onClose: () => void;
+}) {
   return (
     <>
-      <Box sx={{ p: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <Box
+        sx={{
+          p: '20px 22px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+        }}
+      >
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
           <Badge tone="success">新增 {result.created} 列</Badge>
           <Badge tone="info">更新 {result.updated} 列</Badge>
-          <Badge tone={result.failed ? 'danger' : 'neutral'}>失敗 {result.failed} 列</Badge>
+          <Badge tone={result.failed ? 'danger' : 'neutral'}>
+            失敗 {result.failed} 列
+          </Badge>
           <Badge tone="neutral">批次 {result.batch_id}</Badge>
         </Box>
         {result.created > 0 ? (
@@ -285,7 +352,9 @@ function ImportResult({ result, onClose }: { result: Result; onClose: () => void
           <Button
             variant="outline"
             size="sm"
-            onClick={() => result.error_report && downloadBase64(result.error_report)}
+            onClick={() =>
+              result.error_report && downloadBase64(result.error_report)
+            }
           >
             下載失敗的列
           </Button>
@@ -298,7 +367,11 @@ function ImportResult({ result, onClose }: { result: Result; onClose: () => void
   );
 }
 
-function ErrorList({ errors }: { errors: readonly components['schemas']['RowErrorResponse'][] }) {
+function ErrorList({
+  errors,
+}: {
+  errors: readonly components['schemas']['RowErrorResponse'][];
+}) {
   return (
     <Box
       sx={{
@@ -331,7 +404,15 @@ function ErrorList({ errors }: { errors: readonly components['schemas']['RowErro
   );
 }
 
-function Step({ title, caption, children }: { title: string; caption?: string; children: ReactNode }) {
+function Step({
+  title,
+  caption,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  children: ReactNode;
+}) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <Typography sx={typography.label[500]}>{title}</Typography>
@@ -343,7 +424,9 @@ function Step({ title, caption, children }: { title: string; caption?: string; c
 
 function Muted({ children, sx }: { children: ReactNode; sx?: object }) {
   return (
-    <Typography sx={{ ...typography.body[300], color: color.fg.neutral.muted, ...sx }}>
+    <Typography
+      sx={{ ...typography.body[300], color: color.fg.neutral.muted, ...sx }}
+    >
       {children}
     </Typography>
   );

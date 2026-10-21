@@ -16,7 +16,13 @@ import {
   useStationHistory,
   useStationReview,
 } from '@rescue-frontend/data-access/admin';
-import { Badge, Button, Callout, designTokens, TextInput } from '@rescue-frontend/ui';
+import {
+  Badge,
+  Button,
+  Callout,
+  designTokens,
+  TextInput,
+} from '@rescue-frontend/ui';
 import { CheckCheck, GitPullRequestArrow, X, Zap } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -51,7 +57,8 @@ export function ReviewQueueDialog({
   const queue = useAllStations(PENDING_FILTERS);
   const stations = queue.data?.rows ?? [];
   const [selected, setSelected] = useState<string | null>(null);
-  const current = stations.find((s) => s.uuid === selected) ?? stations[0] ?? null;
+  const current =
+    stations.find((s) => s.uuid === selected) ?? stations[0] ?? null;
 
   return (
     <MuiDialog
@@ -73,7 +80,9 @@ export function ReviewQueueDialog({
         <GitPullRequestArrow size={20} />
         <Box sx={{ flex: 1 }}>
           <Typography sx={typography.heading[600]}>前台修改建議審查</Typography>
-          <Typography sx={{ ...typography.body[300], color: color.fg.neutral.muted }}>
+          <Typography
+            sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+          >
             {stations.length} 個站點有待審建議 · 核准前原資料不變動
           </Typography>
         </Box>
@@ -98,13 +107,17 @@ export function ReviewQueueDialog({
           }}
         >
           {stations.length === 0 ? (
-            <Box sx={{ p: 4, textAlign: 'center', color: color.fg.neutral.muted }}>
+            <Box
+              sx={{ p: 4, textAlign: 'center', color: color.fg.neutral.muted }}
+            >
               <CheckCheck size={32} />
               <Typography sx={{ ...typography.label[400], mt: '10px' }}>
                 {queue.isPending ? '載入中…' : '佇列已清空'}
               </Typography>
               {queue.isPending ? null : (
-                <Typography sx={typography.body[300]}>目前沒有待審的修改建議。</Typography>
+                <Typography sx={typography.body[300]}>
+                  目前沒有待審的修改建議。
+                </Typography>
               )}
             </Box>
           ) : (
@@ -170,7 +183,9 @@ function StationReview({
 
   const fields = useMemo(
     () =>
-      review.data ? buildReviewFields(review.data, history.data?.data ?? []) : [],
+      review.data
+        ? buildReviewFields(review.data, history.data?.data ?? [])
+        : [],
     [review.data, history.data],
   );
   const enumOptions = useMemo(
@@ -189,10 +204,16 @@ function StationReview({
 
   const submit = () =>
     merge.mutate(
-      { stationUuid: uuid, decisions: payload, reviewNote: note.trim() || undefined },
+      {
+        stationUuid: uuid,
+        decisions: payload,
+        reviewNote: note.trim() || undefined,
+      },
       {
         onSuccess: () => {
-          toast.success(`已送出審核：採用 ${approved} 欄、不採用 ${rejected} 欄`);
+          toast.success(
+            `已送出審核：採用 ${approved} 欄、不採用 ${rejected} 欄`,
+          );
           setDecisions({});
           setNote('');
         },
@@ -209,7 +230,13 @@ function StationReview({
         <Typography sx={{ ...typography.heading[600], mb: '4px' }}>
           {review.data?.station?.name ?? '站點'}
         </Typography>
-        <Typography sx={{ ...typography.body[300], color: color.fg.neutral.muted, mb: '16px' }}>
+        <Typography
+          sx={{
+            ...typography.body[300],
+            color: color.fg.neutral.muted,
+            mb: '16px',
+          }}
+        >
           欄位級對比：目前值 → 建議值。不決定的欄位會繼續留在佇列。
         </Typography>
         {fields.length === 0 ? (
@@ -250,7 +277,11 @@ function StationReview({
           />
         </Box>
         {canEdit ? (
-          <Button variant="outline" size="sm" onClick={() => onEditStation(uuid)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onEditStation(uuid)}
+          >
             直接編輯站點
           </Button>
         ) : null}
@@ -282,7 +313,9 @@ function ReviewFieldCard({
 
   const setChoice = (next: 'approve' | 'reject' | 'later', nextValue = value) =>
     onChange(
-      next === 'later' ? undefined : { approve: next === 'approve', value: nextValue },
+      next === 'later'
+        ? undefined
+        : { approve: next === 'approve', value: nextValue },
     );
   const setFinal = (next: string) => {
     setValue(next);
@@ -303,23 +336,45 @@ function ReviewFieldCard({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <Typography sx={typography.label[400]}>{field.label}</Typography>
         {field.conflict ? (
-          <Badge tone="danger" variant="solid" size="sm" icon={<Zap size={11} />}>
+          <Badge
+            tone="danger"
+            variant="solid"
+            size="sm"
+            icon={<Zap size={11} />}
+          >
             衝突
           </Badge>
         ) : null}
-        <Typography sx={{ ...typography.data[300], color: color.fg.neutral.muted, ml: 'auto' }}>
-          {field.suggestionCount} 人建議 · 最早 {formatAbsoluteTime(field.firstSuggestedAt)}
+        <Typography
+          sx={{
+            ...typography.data[300],
+            color: color.fg.neutral.muted,
+            ml: 'auto',
+          }}
+        >
+          {field.suggestionCount} 人建議 · 最早{' '}
+          {formatAbsoluteTime(field.firstSuggestedAt)}
         </Typography>
       </Box>
 
       {field.conflict ? (
-        <Callout tone="danger">這個欄位在建議提出後已被更新，請確認目前值後再決定。</Callout>
+        <Callout tone="danger">
+          這個欄位在建議提出後已被更新，請確認目前值後再決定。
+        </Callout>
       ) : null}
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+      <Box
+        sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}
+      >
         <ValueBox label="目前值" value={field.currentValue} />
         <Box>
-          <Typography sx={{ ...typography.data[300], color: color.fg.neutral.muted, mb: '4px' }}>
+          <Typography
+            sx={{
+              ...typography.data[300],
+              color: color.fg.neutral.muted,
+              mb: '4px',
+            }}
+          >
             採用的值
           </Typography>
           {options && options.length > 0 ? (
@@ -337,14 +392,26 @@ function ReviewFieldCard({
               ))}
             </TextField>
           ) : (
-            <TextInput value={value} onChange={(e) => setFinal(e.target.value)} />
+            <TextInput
+              value={value}
+              onChange={(e) => setFinal(e.target.value)}
+            />
           )}
         </Box>
       </Box>
 
       {field.proposedValues.length > 1 ? (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-          <Typography sx={{ ...typography.body[300], color: color.fg.neutral.muted }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '6px',
+            alignItems: 'center',
+          }}
+        >
+          <Typography
+            sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+          >
             其他建議：
           </Typography>
           {field.proposedValues.map((proposed) => (
@@ -366,7 +433,10 @@ function ReviewFieldCard({
       ) : null}
 
       {field.comments.length > 0 ? (
-        <Box component="ul" sx={{ m: 0, pl: '18px', color: color.fg.neutral.subtle }}>
+        <Box
+          component="ul"
+          sx={{ m: 0, pl: '18px', color: color.fg.neutral.subtle }}
+        >
           {field.comments.map((comment, i) => (
             <Box component="li" key={i} sx={typography.body[300]}>
               {comment}
@@ -393,7 +463,13 @@ function ReviewFieldCard({
 function ValueBox({ label, value }: { label: string; value: string }) {
   return (
     <Box>
-      <Typography sx={{ ...typography.data[300], color: color.fg.neutral.muted, mb: '4px' }}>
+      <Typography
+        sx={{
+          ...typography.data[300],
+          color: color.fg.neutral.muted,
+          mb: '4px',
+        }}
+      >
         {label}
       </Typography>
       <Box

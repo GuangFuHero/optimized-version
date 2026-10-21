@@ -59,7 +59,9 @@ export function downloadBlob(blob: Blob, filename: string) {
 }
 
 export function downloadBase64(report: ErrorReport) {
-  const bytes = Uint8Array.from(atob(report.content_base64), (c) => c.charCodeAt(0));
+  const bytes = Uint8Array.from(atob(report.content_base64), (c) =>
+    c.charCodeAt(0),
+  );
   downloadBlob(new Blob([bytes], { type: report.media_type }), report.filename);
 }
 

@@ -64,7 +64,9 @@ export function FreshnessCell({
           alignItems: 'center',
           gap: '4px',
           color:
-            level === 'fresh' ? color.fg.neutral.subtle : color.fg.neutral.muted,
+            level === 'fresh'
+              ? color.fg.neutral.subtle
+              : color.fg.neutral.muted,
         }}
       >
         {level === 'stale' ? <Clock size={12} /> : null}
