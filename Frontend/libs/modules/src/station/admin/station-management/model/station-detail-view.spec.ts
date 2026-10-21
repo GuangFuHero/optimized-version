@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { toStationDetailView, type DetailStation } from './station-detail-view';
+import {
+  countRatings,
+  toStationDetailView,
+  type DetailStation,
+} from './station-detail-view';
 
 const station = {
   uuid: 's-1',
@@ -25,20 +29,31 @@ const station = {
     room: null,
   },
   properties: [
-    { uuid: 'p-1', propertyName: '飲用水', quantity: 40, comment: null },
-    { uuid: 'p-2', propertyName: '尿布', quantity: null, comment: '尚有存量' },
+    {
+      uuid: 'p-1',
+      propertyName: '飲用水',
+      quantity: 40,
+      comment: null,
+      crowdSourcings: [{ rating: 'up' }, { rating: 'up' }, { rating: 'down' }],
+    },
+    {
+      uuid: 'p-2',
+      propertyName: '尿布',
+      quantity: null,
+      comment: '尚有存量',
+      crowdSourcings: [],
+    },
   ],
 } as unknown as DetailStation;
 
 describe('toStationDetailView', () => {
-  it('summarises the station for the shared detail drawer', () => {
+  it('summarises the station for the detail sheet', () => {
     expect(toStationDetailView(station, { canViewPii: true })).toMatchObject({
       title: '光復加水站',
       typeLabel: '加水',
       district: '花蓮縣光復鄉',
       address: '花蓮縣光復鄉中正路12號',
       coordinates: '23.670, 121.420',
-      status: { label: '暫時關閉', tone: 'warning' },
       isOfficial: true,
       pendingFieldCount: 2,
     });
@@ -80,17 +95,6 @@ describe('toStationDetailView', () => {
       label: '未驗證',
     });
     expect(verification(null)).toEqual({ verified: false, label: '未驗證' });
-  });
-
-  it('maps every operational status onto a drawer tone', () => {
-    const tone = (operationalStatus: string) =>
-      toStationDetailView(
-        { ...station, operationalStatus },
-        { canViewPii: true },
-      ).status.tone;
-    expect(tone('active')).toBe('active');
-    expect(tone('temporarily_closed')).toBe('warning');
-    expect(tone('permanently_closed')).toBe('inactive');
   });
 
   it('joins whichever of the contact name and phone the station has', () => {
@@ -135,5 +139,23 @@ describe('toStationDetailView', () => {
       { id: 'p-1', label: '飲用水', value: '40' },
       { id: 'p-2', label: '尿布', value: '—（尚有存量）' },
     ]);
+  });
+
+  it('totals the crowd ratings of each rated resource', () => {
+    expect(toStationDetailView(station, { canViewPii: true }).ratings).toEqual([
+      { id: 'p-1', label: '飲用水', counts: { up: 2, neutral: 0, down: 1 } },
+    ]);
+  });
+});
+
+describe('countRatings', () => {
+  it('counts up, neutral and down, and skips any other value', () => {
+    expect(
+      countRatings([
+        { rating: 'neutral' },
+        { rating: 'up' },
+        { rating: 'sideways' },
+      ]),
+    ).toEqual({ up: 1, neutral: 1, down: 0 });
   });
 });

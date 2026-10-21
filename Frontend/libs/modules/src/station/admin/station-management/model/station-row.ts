@@ -1,5 +1,7 @@
 import type { AdminStationFieldsFragment } from '@rescue-frontend/data-access/admin';
 
+import type { OperationalStatus } from '../../../operational-status';
+import { stationPoint } from '../../../station-point';
 import { getStationTypeLabel } from '../../../type-options';
 
 /** Shown wherever a station has no name. */
@@ -10,7 +12,7 @@ export interface StationRow {
   name: string;
   type: string;
   typeLabel: string;
-  operationalStatus: string;
+  operationalStatus: OperationalStatus;
   county: string;
   city: string;
   area: string;
@@ -34,7 +36,8 @@ export function toStationRow(station: AdminStationFieldsFragment): StationRow {
     name: station.name?.trim() || UNNAMED_STATION,
     type: station.type ?? '',
     typeLabel: getStationTypeLabel(station.type),
-    operationalStatus: station.operationalStatus,
+    // The schema types it as a plain string; the backend only stores these three values.
+    operationalStatus: station.operationalStatus as OperationalStatus,
     county,
     city,
     area: `${county}${city}`,
@@ -43,19 +46,8 @@ export function toStationRow(station: AdminStationFieldsFragment): StationRow {
     isOfficial: station.source === 'official',
     createdAt: station.createdAt ?? null,
     updatedAt: station.updatedAt ?? null,
-    position: pointPosition(station.geometry),
+    position: stationPoint(station.geometry),
     pendingFieldCount: station.pendingSuggestedFields.length,
     raw: station,
   };
-}
-
-function pointPosition(geometry: unknown): [number, number] | null {
-  if (!geometry || typeof geometry !== 'object') return null;
-  const { type, coordinates } = geometry as {
-    type?: string;
-    coordinates?: unknown;
-  };
-  if (type !== 'Point' || !Array.isArray(coordinates)) return null;
-  const [lng, lat] = coordinates as number[];
-  return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
 }

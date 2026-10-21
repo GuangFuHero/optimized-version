@@ -3,6 +3,7 @@
 import type { AdminStationFieldsFragment } from '@rescue-frontend/data-access/admin';
 
 import type { RescueMapMarkerItem } from '../../../map/types';
+import { stationPoint } from '../../station-point';
 import { getStationTypeLabel } from '../../type-options';
 import { StationFormDrawer } from '../station-form';
 
@@ -39,9 +40,8 @@ export function StationCreateDrawer({
 function toCreatedStationMarker(
   station: AdminStationFieldsFragment,
 ): RescueMapMarkerItem | null {
-  const point = station.geometry as { coordinates?: number[] } | null;
-  const [lng, lat] = point?.coordinates ?? [];
-  if (lat == null || lng == null) return null;
+  const position = stationPoint(station.geometry);
+  if (!position) return null;
 
   const type = station.type?.trim().toLowerCase();
   const typeLabel = getStationTypeLabel(type);
@@ -52,7 +52,7 @@ function toCreatedStationMarker(
     title: name || station.description?.trim() || typeLabel,
     subtitle:
       station.description?.trim() || station.opHour?.trim() || typeLabel,
-    position: [lat, lng],
+    position,
     label: typeLabel,
     variant:
       station.isTemporary || type === 'shelter'

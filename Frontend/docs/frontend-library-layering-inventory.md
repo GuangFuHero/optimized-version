@@ -79,11 +79,12 @@
 ### `station/`
 
 - `admin/station-create/*`
-- `admin/station-detail/*`：站點詳情抽屜，地圖與 `/stations` 共用
+- `admin/station-detail/*`：地圖的站點詳情抽屜（`/stations` 用自己的 `station-management/station-detail-sheet.tsx`）
 - `admin/station-form/*`：新增／編輯站點表單，`/map`、前台地圖與 `/stations` 共用
 - `admin/station-management/*`：admin `/stations` 頁（列表／地圖、審查、匯入匯出）
 - `report/*`
 - `operational-status.ts`
+- `station-point.ts`：站點 GeoJSON 點轉 Leaflet `[lat, lng]`
 - `type-options.ts`
 
 ### `ticket/`

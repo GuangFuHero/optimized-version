@@ -26,31 +26,51 @@ const history = [
 ] as unknown as TimelineItem[];
 
 describe('hasChangedSince', () => {
+  const station = { type: 'station', uuid: 's1' };
+  const property = { type: 'station_property', uuid: 'p1' };
+
   it('flags a station field changed after the first suggestion', () => {
     expect(
-      hasChangedSince(history, 'station', 'op_hour', '2026-10-19T00:00:00Z'),
+      hasChangedSince(history, station, 'op_hour', '2026-10-19T00:00:00Z'),
     ).toBe(true);
     expect(
-      hasChangedSince(history, 'station', 'op_hour', '2026-10-21T00:00:00Z'),
+      hasChangedSince(history, station, 'op_hour', '2026-10-21T00:00:00Z'),
     ).toBe(false);
     expect(
-      hasChangedSince(history, 'station', 'name', '2026-10-01T00:00:00Z'),
+      hasChangedSince(history, station, 'name', '2026-10-01T00:00:00Z'),
     ).toBe(false);
   });
 
-  it('flags property fields conservatively (history has no property uuid)', () => {
+  it('flags property fields conservatively when the event has no raw rows', () => {
     expect(
-      hasChangedSince(
-        history,
-        'station_property',
-        'quantity',
-        '2026-10-17T00:00:00Z',
-      ),
+      hasChangedSince(history, property, 'quantity', '2026-10-17T00:00:00Z'),
     ).toBe(true);
+  });
+
+  it('matches the raw rows to the suggested resource when they are there', () => {
+    const withRaw = (uuid: string) =>
+      [
+        {
+          ...history[1],
+          raw: [
+            {
+              old_values: { uuid, quantity: 1 },
+              new_values: { uuid, quantity: 2 },
+            },
+          ],
+        },
+      ] as unknown as TimelineItem[];
+    const since = '2026-10-17T00:00:00Z';
+    expect(hasChangedSince(withRaw('p1'), property, 'quantity', since)).toBe(
+      true,
+    );
+    expect(hasChangedSince(withRaw('p2'), property, 'quantity', since)).toBe(
+      false,
+    );
   });
 
   it('treats a missing timestamp as no conflict', () => {
-    expect(hasChangedSince(history, 'station', 'op_hour', null)).toBe(false);
+    expect(hasChangedSince(history, station, 'op_hour', null)).toBe(false);
   });
 });
 

@@ -2,6 +2,7 @@ import { designTokens } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../../../map/types';
 import {
+  normalizeStationType,
   STATION_TYPE_OPTIONS,
   type StationTypeValue,
 } from '../../../type-options';
@@ -36,7 +37,7 @@ export const OTHER_STATION_PIN_COLOR = c.neutral[500];
 export function getStationTypePinColor(
   type: string | null | undefined,
 ): string {
-  const key = type?.trim().toLowerCase() as StationTypeValue | undefined;
+  const key = normalizeStationType(type);
   return (key && STATION_TYPE_PIN_COLORS[key]) || OTHER_STATION_PIN_COLOR;
 }
 

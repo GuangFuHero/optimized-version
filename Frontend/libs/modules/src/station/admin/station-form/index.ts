@@ -9,5 +9,5 @@ export {
   StationFormDrawer,
   type StationFormDrawerProps,
   type StationFormTarget,
-  type StationFormVariant,
+  type StationFormDrawerFrame,
 } from './station-form-drawer';

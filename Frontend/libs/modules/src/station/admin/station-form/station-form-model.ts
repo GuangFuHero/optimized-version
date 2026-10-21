@@ -6,6 +6,7 @@ import type {
 } from '@rescue-frontend/data-access/admin';
 
 import type { OperationalStatus } from '../../operational-status';
+import { stationPoint } from '../../station-point';
 import type { reverseGeocodeResponse } from '../../../map/reverse-geocode';
 
 export type StationLocationType = 'address' | 'pole';
@@ -93,8 +94,7 @@ export function emptyStationForm(
 }
 
 export function stationToForm(station: Station): StationFormState {
-  const point = station.geometry as { coordinates?: number[] } | null;
-  const [lng, lat] = point?.coordinates ?? [];
+  const [lat, lng] = stationPoint(station.geometry) ?? [];
   const location = station.secondaryLocation;
   const read = (value: string | null | undefined) => value ?? '';
 

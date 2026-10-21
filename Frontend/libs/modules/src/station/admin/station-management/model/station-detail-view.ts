@@ -1,13 +1,12 @@
 import type { AdminStationQuery } from '@rescue-frontend/data-access/admin';
 
-import { getOperationalStatusMeta } from '../../../operational-status';
+import { stationPoint } from '../../../station-point';
 import { getStationTypeLabel } from '../../../type-options';
-import type { StationStatusTone } from '../../station-detail';
 import { UNNAMED_STATION } from './station-row';
 
 export type DetailStation = NonNullable<AdminStationQuery['station']>;
 
-/** What the shared `StationDetailDrawer` shows for an admin station, before icons are added. */
+/** What `StationDetailSheet` shows for a station, ready to render. */
 export interface StationDetailView {
   title: string;
   typeLabel: string;
@@ -16,7 +15,6 @@ export interface StationDetailView {
   address: string;
   /** `lat, lng`, or null without a point. */
   coordinates: string | null;
-  status: { label: string; tone: StationStatusTone };
   isOfficial: boolean;
   verification: { verified: boolean; label: string };
   pendingFieldCount: number;
@@ -30,13 +28,28 @@ export interface StationDetailView {
   /** 成立時間 as YYYY-MM-DD (Taipei), or '—'. */
   createdDate: string;
   resources: { id: string; label: string; value: string }[];
+  /** 群眾評分 per resource, only the resources someone has rated. */
+  ratings: { id: string; label: string; counts: RatingCounts }[];
 }
 
-const STATUS_TONES = {
-  success: 'active',
-  warning: 'warning',
-  neutral: 'inactive',
-} as const satisfies Record<string, StationStatusTone>;
+export interface RatingCounts {
+  up: number;
+  neutral: number;
+  down: number;
+}
+
+/** Totals of the crowd's 'up' / 'neutral' / 'down' ratings; any other value is not counted. */
+export function countRatings(
+  ratings: readonly { rating: string }[],
+): RatingCounts {
+  const counts: RatingCounts = { up: 0, neutral: 0, down: 0 };
+  for (const { rating } of ratings) {
+    if (rating === 'up' || rating === 'neutral' || rating === 'down') {
+      counts[rating] += 1;
+    }
+  }
+  return counts;
+}
 
 export function formatStationAddress(station: DetailStation): string {
   const location = station.secondaryLocation;
@@ -64,11 +77,8 @@ function formatDistrict(station: DetailStation): string {
 }
 
 function formatCoordinates(station: DetailStation): string | null {
-  const point = station.geometry as { coordinates?: number[] } | null;
-  const [lng, lat] = point?.coordinates ?? [];
-  return lat == null || lng == null
-    ? null
-    : `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+  const point = stationPoint(station.geometry);
+  return point ? `${point[0].toFixed(3)}, ${point[1].toFixed(3)}` : null;
 }
 
 const VERIFICATION_LABELS: Record<string, string> = {
@@ -109,17 +119,12 @@ export function toStationDetailView(
   station: DetailStation,
   { canViewPii }: { canViewPii: boolean },
 ): StationDetailView {
-  const status = getOperationalStatusMeta(station.operationalStatus);
-  const tone =
-    STATUS_TONES[status.tone as keyof typeof STATUS_TONES] ?? 'inactive';
-
   return {
     title: station.name?.trim() || UNNAMED_STATION,
     typeLabel: getStationTypeLabel(station.type),
     district: formatDistrict(station) || '—',
     address: formatStationAddress(station) || '未提供地址',
     coordinates: formatCoordinates(station),
-    status: { label: status.label, tone },
     isOfficial: station.source === 'official',
     verification: verification(station),
     pendingFieldCount: station.pendingSuggestedFields.length,
@@ -140,5 +145,12 @@ export function toStationDetailView(
           : quantity,
       };
     }),
+    ratings: station.properties
+      .filter((property) => property.crowdSourcings.length > 0)
+      .map((property) => ({
+        id: property.uuid,
+        label: property.propertyName,
+        counts: countRatings(property.crowdSourcings),
+      })),
   };
 }

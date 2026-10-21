@@ -1,12 +1,13 @@
 'use client';
 
 import { useCurrentUser } from '@rescue-frontend/data-access/admin';
+import type { components } from '@rescue-frontend/data-access/openapi';
 
 /** What the signed-in identity may do on this page, from the backend's capability list. */
 export function useStationCapabilities() {
   const { data } = useCurrentUser();
-  const has = (perm: string) =>
-    data?.capabilities.includes(perm as never) ?? false;
+  const has = (perm: components['schemas']['Perm']) =>
+    data?.capabilities.includes(perm) ?? false;
   return {
     canAdd: has('station.add'),
     canEdit: has('station.edit'),
