@@ -8,7 +8,8 @@ Stores an address as its official parts (縣市 鄉鎮市區 村里 鄰 路 段 
 whether TGOS confirmed it. Plain DDL with no data moved, since local data is mock: `city` and `lane`
 are renamed to `town` and `road` and keep their values, and `alley` (巷 and 弄 together) is replaced.
 
-Downgrade restores the old columns; the parts they cannot hold are lost.
+Downgrade restores the old columns; the parts they cannot hold are lost, and a road longer than
+20 characters is cut to fit `lane`.
 """
 
 from collections.abc import Sequence

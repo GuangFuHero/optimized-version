@@ -38,7 +38,8 @@ _COUNTY_SPELLINGS = {spelling: c for c in COUNTIES for spelling in (c, c.replace
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _POSTCODE_RE = re.compile(r"^\d{3}(?:\d{2,3})?(?=\D)")
-_TOWN_RE = re.compile(r"^(.{1,4}?[鄉鎮市區])")
+# 鄉/鎮/市 ends the name only when no 區 follows it, so 前鎮區 and 新市區 stay whole.
+_TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區)))")
 _VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])")
 _NEIGHBORHOOD_RE = re.compile(r"^(\d+鄰)")
 
@@ -50,8 +51,8 @@ _TAIL_RE = re.compile(
     r"(?P<alley>\d+弄)?"
     r"(?:\d+衖)?(?:\d+衕)?"
     r"(?P<no>\d+(?:[-之]\d+)?號(?:之\d+)?)?"
-    r"(?P<floor>(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|[Ff])(?:[-之]\d+)?|[Bb]\d+)?"
-    r"(?:(?P<room>[0-9A-Za-z]{1,8})室)?"
+    r"(?P<floor>(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|[Ff])(?:[-之]\d+)?|[Bb]\d+)?"
+    r"(?:[-之]?(?P<room>[0-9A-Za-z]{1,8})室)?"
     r"$"
 )
 

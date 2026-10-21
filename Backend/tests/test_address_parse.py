@@ -66,6 +66,22 @@ def test_an_official_line_splits_into_tgos_components(line, components):
     assert _set(parse_tw_address(line)) == {"full_address": line, **components}
 
 
+@pytest.mark.parametrize(
+    ("line", "town", "road"),
+    [
+        ("高雄市前鎮區中山二路1號", "前鎮區", "中山二路"),
+        ("桃園市平鎮區中豐路1號", "平鎮區", "中豐路"),
+        ("臺南市新市區中興街1號", "新市區", "中興街"),
+        ("新竹縣竹北市光明六路1號", "竹北市", "光明六路"),
+        ("花蓮縣鳳林鎮中正路1號", "鳳林鎮", "中正路"),
+    ],
+)
+def test_a_district_named_with_town_or_city_stays_whole(line, town, road):
+    """前鎮區 and 新市區 hold a 鎮 or 市 inside the name; only the final 區 ends it."""
+    parts = parse_tw_address(line)
+    assert (parts.town, parts.road) == (town, road)
+
+
 def test_a_section_keeps_its_numeral_as_written():
     """段 keeps the numeral TGOS writes, so the part matches the line."""
     parts = parse_tw_address("臺北市中正區黎明里3鄰忠孝西路一段49號")
@@ -86,9 +102,26 @@ def test_a_floor_and_room_are_cut_from_the_line():
 
 
 def test_a_basement_and_a_sub_floor_are_floors():
-    """B1 and 3樓之1 are both read as the floor."""
+    """B1, 地下1樓 and 3樓之1 are all read as the floor, and none is left in the line."""
     assert parse_tw_address("花蓮縣光復鄉中山路三段100號B1").floor == "B1"
     assert parse_tw_address("花蓮縣光復鄉糖廠街19號3樓之1").floor == "3樓之1"
+    basement = parse_tw_address("臺北市信義區松壽路12號地下1樓")
+    assert (basement.full_address, basement.road, basement.floor) == (
+        "臺北市信義區松壽路12號",
+        "松壽路",
+        "地下1樓",
+    )
+
+
+def test_a_room_written_after_zhi_is_the_room():
+    """10樓之3室 reads as floor 10樓 and room 3, with nothing left dangling in the line."""
+    parts = parse_tw_address("臺中市西區五權西路一段10號10樓之3室")
+    assert (parts.full_address, parts.road, parts.floor, parts.room) == (
+        "臺中市西區五權西路一段10號",
+        "五權西路",
+        "10樓",
+        "3",
+    )
 
 
 def test_a_hyphenated_number_reads_as_zhi():
