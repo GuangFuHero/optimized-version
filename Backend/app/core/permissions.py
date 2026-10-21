@@ -102,6 +102,9 @@ class Perm(StrEnum):
     TEAM_VIEW = "team.view"
     TEAM_EDIT = "team.edit"
     TEAM_MEMBER_MANAGE = "team.member.manage"
+    # Spec/026: read a team's member list. Its own key, apart from team.view (the team itself)
+    # and user.view (every account), so the member list can be granted on its own.
+    TEAM_MEMBER_VIEW = "team.member.view"
 
     # Work Zone (gov-drawn disaster response boundaries — ADR-021, Phase 4/T119)
     ZONE_VIEW = "work_zone.view"

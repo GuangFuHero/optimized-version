@@ -147,6 +147,19 @@ class UpdateTeamRequest(BaseModel):
         return v
 
 
+class TeamMemberItem(BaseModel):
+    """One row of a team's member list (Spec/026): their role in this team, nothing else.
+
+    `real_name` is filled for whoever manages the team's members and for reviewers (ADR-355).
+    """
+
+    uuid: UUID
+    name: str
+    real_name: str | None = None
+    role_uuid: UUID
+    role: str
+
+
 class TeamStatusRequest(BaseModel):
     """Body for suspending, restoring or disbanding a team (Spec/026, ADR-357)."""
 

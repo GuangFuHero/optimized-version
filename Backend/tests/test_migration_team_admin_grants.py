@@ -44,7 +44,7 @@ async def _grants(conn) -> set[tuple[str, str, str]]:
         text(
             "SELECT r.name, p.key, a.scope FROM role_permission_assign a"
             " JOIN roles r ON r.uuid = a.role_uuid JOIN permissions p ON p.uuid = a.permission_uuid"
-            " WHERE p.key IN ('team.edit', 'team.audit.view')"
+            " WHERE p.key IN ('team.edit', 'team.audit.view', 'team.member.view')"
         )
     )
     return set(rows.all())
@@ -102,6 +102,9 @@ async def test_existing_databases_gain_the_grants(grants):
         ("admin", "team.edit", "team"),
         ("admin", "team.audit.view", "team"),
         ("super_admin", "team.audit.view", "all"),
+        ("admin", "team.member.view", "team"),
+        ("member", "team.member.view", "team"),
+        ("super_admin", "team.member.view", "all"),
     }
 
 

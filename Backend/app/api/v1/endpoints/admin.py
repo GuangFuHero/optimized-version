@@ -10,8 +10,7 @@ GraphQL mutations call the service layer, just over REST instead.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
@@ -19,18 +18,14 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
 from app.core.redis import get_redis
 from app.models.auth import User
-from app.models.rbac import Role, UserRoleAssign
-from app.models.team import Team
-from app.repositories.auth_repository import user_repository
-from app.repositories.session_repository import SessionRepository
 from app.schemas.admin import (
     AdminUserListItem,
     AssignRoleRequest,
     AssignRoleResponse,
     CreateTeamRequest,
-    IdentitySummary,
     ProjectSettingsResponse,
     ProjectSettingsUpdate,
+    TeamMemberItem,
     TeamMemberRequest,
     TeamMemberResponse,
     TeamResponse,
@@ -40,107 +35,15 @@ from app.schemas.admin import (
 from app.services import admin as admin_service
 from app.services import project_settings as project_settings_service
 from app.services.admin import AdminConflictError, AdminNotFoundError, AdminValidationError
-from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.project_settings import ProjectSettingsValidationError
+from app.services.user_directory import PlatformUserDirectory, TeamMemberDirectory
+from app.services.user_directory import TeamNotFoundError as UserDirectoryTeamNotFoundError
 
 logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-async def _identities_by_user(
-    db: AsyncSession, user_uuids: list[str]
-) -> dict[str, list[IdentitySummary]]:
-    """Map each user_uuid to every identity they hold (ADR-073)."""
-    if not user_uuids:
-        return {}
-    rows = (
-        await db.execute(
-            select(
-                UserRoleAssign.user_uuid, UserRoleAssign.role_uuid, Role.name,
-                UserRoleAssign.team_uuid, Team.name,
-            )
-            .join(Role, Role.uuid == UserRoleAssign.role_uuid)
-            .outerjoin(Team, Team.uuid == UserRoleAssign.team_uuid)
-            .where(UserRoleAssign.user_uuid.in_(user_uuids))
-            .order_by(UserRoleAssign.team_uuid.is_not(None), Role.name)
-        )
-    ).all()
-    result: dict[str, list[IdentitySummary]] = {}
-    for user_uuid, role_uuid, role_name, team_uuid, team_name in rows:
-        result.setdefault(str(user_uuid), []).append(
-            IdentitySummary(
-                role_uuid=role_uuid, role=role_name, team_uuid=team_uuid, team=team_name
-            )
-        )
-    return result
-
-
-def _decode(value) -> str:
-    """Redis runs in bytes mode (decode_responses=False); normalize a member to str."""
-    return value.decode() if isinstance(value, bytes) else value
-
-
-async def _session_counts(redis, user_uuids: list[str]) -> dict[str, int | None]:
-    """Map each user_uuid to their live Redis session count (ADR-094).
-
-    Two pipelined round trips for the whole page, not one per user — the default page is 100.
-
-    The `user_sessions:<uuid>` set is NOT self-cleaning: members are only removed by an
-    explicit logout (`session_repository.py:110`), while a session that simply reached its
-    TTL leaves its sid behind — and every login/rotation pushes the *set's* TTL forward, so
-    the stale sid never ages out either. Counting set members alone would report phantom
-    devices, and ADR-094 reads a high count as a credential-leak signal, so that would be a
-    false alarm. Hence the second pass: only sids whose `session:<sid>` key still exists
-    count.
-
-    Redis being down must not take the user list down with it, so every count degrades to
-    `None` (distinct from 0, which would read as "signed out everywhere").
-    """
-    if not user_uuids:
-        return {}
-    try:
-        pipe = redis.pipeline()
-        for user_uuid in user_uuids:
-            pipe.smembers(SessionRepository.USER_SESSIONS + user_uuid)
-        member_sets = await pipe.execute()
-
-        owners = [
-            (index, _decode(sid))
-            for index, members in enumerate(member_sets)
-            for sid in members
-        ]
-        pipe = redis.pipeline()
-        for _index, sid in owners:
-            pipe.exists(SessionRepository.SESSION + sid)
-        alive_flags = await pipe.execute()
-    except Exception:  # noqa: BLE001 — any Redis failure degrades, never fails the listing
-        logger.warning("Redis unavailable; omitting active_session_count", exc_info=True)
-        return dict.fromkeys(user_uuids, None)
-
-    # Deliberately outside the `except` above: the `strict=True` zips below raise ValueError
-    # on a length mismatch, which is a bug in this function, not an outage. Swallowed here it
-    # would degrade every user's count to `null` and file the bug under "Redis unavailable",
-    # pointing whoever investigates at a subsystem that is working fine.
-    counts = [0] * len(user_uuids)
-    for (index, _sid), alive in zip(owners, alive_flags, strict=True):
-        if alive:
-            counts[index] += 1
-    return dict(zip(user_uuids, counts, strict=True))
-
-
-def _platform_role(identities: list[IdentitySummary]) -> str | None:
-    """The platform role a user list shows: the one besides `user` if there is one, else `user`.
-
-    An account holds `user` plus at most one other platform role (019/ADR-294), and the other
-    one is what sets back-office staff apart. Taking the first by name only worked while every
-    other platform role happened to sort before `user`.
-    """
-    platform = [i.role for i in identities if i.team_uuid is None]
-    others = [role for role in platform if role != DEFAULT_PLATFORM_ROLE]
-    return (others or platform or [None])[0]
 
 
 @router.get(
@@ -159,26 +62,32 @@ async def list_users(
 
     Feature 010 replaced the single platform/team role pair with the full identity list
     (ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).
-    Both land in the same row.
+    Both land in the same row. Built by PlatformUserDirectory (Spec/026).
     """
-    users = await user_repository.get_multi(db, skip=skip, limit=limit)
-    user_uuids = [str(u.uuid) for u in users]
-    identities = await _identities_by_user(db, user_uuids)
-    sessions_by_user = await _session_counts(redis, user_uuids)
-    shows_real_name = await security.resolve_scope(current_user, Perm.ROLE_REQUEST_REVIEW, db) != Scope.NONE
-    return [
-        AdminUserListItem(
-            uuid=u.uuid,
-            name=u.name,
-            real_name=u.real_name if shows_real_name else None,
-            platform_role=_platform_role(identities.get(str(u.uuid), [])),
-            identities=identities.get(str(u.uuid), []),
-            last_login_at=u.last_login_at,
-            last_activity_at=u.last_activity_at,
-            active_session_count=sessions_by_user.get(str(u.uuid)),
-        )
-        for u in users
-    ]
+    return await PlatformUserDirectory(db, current_user, redis).list(skip=skip, limit=limit)
+
+
+@router.get(
+    "/teams/{team_uuid}/members",
+    response_model=list[TeamMemberItem],
+    summary="列出 team 成員",
+    responses={403: {"description": "Permission Denied"}, 404: {"description": "Team not found"}},
+)
+async def list_team_members(
+    team_uuid: UUID,
+    skip: int = 0,
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """One team's members and their role in it (Spec/026). team.member.view covering the team.
+
+    Another team answers 404, so its existence is not given away (ADR-023).
+    """
+    try:
+        return await TeamMemberDirectory(db, current_user, team_uuid).list(skip=skip, limit=limit)
+    except UserDirectoryTeamNotFoundError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
 
 
 def _project_settings_response(
