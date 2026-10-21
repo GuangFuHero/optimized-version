@@ -120,6 +120,30 @@ export function useStation(
   });
 }
 
+export const stationReviewQuery = (
+  variables: documents.AdminStationReviewQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'stations', 'review', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminStationReviewDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useStationReview(
+  variables: documents.AdminStationReviewQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...stationReviewQuery(variables),
+    enabled: Boolean(variables.uuid) && options.enabled !== false,
+  });
+}
+
 export const announcementsQuery = (
   variables: documents.AdminAnnouncementsQueryVariables = {},
 ) =>
@@ -474,6 +498,21 @@ export function useDeleteStation() {
     mutationFn: (variables: documents.AdminDeleteStationMutationVariables) =>
       adminGraphqlClient
         .mutation(documents.AdminDeleteStationDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
+  });
+}
+
+export function useMergeStationSuggestions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminMergeStationSuggestionsMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminMergeStationSuggestionsDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
     onSuccess: () =>

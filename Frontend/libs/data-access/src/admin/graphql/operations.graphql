@@ -53,12 +53,19 @@ fragment AdminStationFields on StationType {
   visibility
   verificationStatus
   operationalStatus
+  statusChangedAt
+  supplyStatus
+  pendingSuggestedFields
   isDuplicate
   isTemporary
   isOfficial
   createdBy
   createdAt
   updatedAt
+  secondaryLocation {
+    county
+    town
+  }
   assignedTeam {
     uuid
     name
@@ -158,6 +165,7 @@ query AdminStations(
   $q: String
   $assignedTeamUuid: UUID
   $unassignedOnly: Boolean = false
+  $hasPendingSuggestions: Boolean = false
   $skip: Int = 0
   $limit: Int = 50
 ) {
@@ -168,6 +176,7 @@ query AdminStations(
     q: $q
     assignedTeamUuid: $assignedTeamUuid
     unassignedOnly: $unassignedOnly
+    hasPendingSuggestions: $hasPendingSuggestions
     skip: $skip
     limit: $limit
   ) {
@@ -184,6 +193,7 @@ query AdminStation($uuid: UUID!) {
     ...AdminStationFields
     contactName
     contactPhone
+    contactEmail
     secondaryLocation {
       fullAddress
       county
@@ -217,6 +227,32 @@ query AdminStation($uuid: UUID!) {
       weightings
       createdAt
     }
+  }
+}
+query AdminStationReview($uuid: UUID!) {
+  station(uuid: $uuid) {
+    ...AdminStationFields
+    properties {
+      uuid
+      propertyName
+      quantity
+      comment
+      pendingSuggestedFields
+    }
+    suggestedFields {
+      targetType
+      targetUuid
+      fieldName
+      proposedValues
+      suggestionCount
+      comments
+      firstSuggestedAt
+    }
+  }
+  suggestableFields(targetType: "station") {
+    fieldName
+    dataType
+    enumOptions
   }
 }
 query AdminAnnouncements(
@@ -439,12 +475,24 @@ mutation AdminUpdateTaskAssignment(
 mutation AdminUnassignTaskActor($uuid: UUID!) {
   unassignTaskActor(uuid: $uuid)
 }
-mutation AdminCreateStation($input: CreateStationInput!) {
-  createStation(input: $input) {
+mutation AdminCreateStation(
+  $input: CreateStationInput!
+  $acknowledgedDuplicateOf: String
+) {
+  createStation(
+    input: $input
+    acknowledgedDuplicateOf: $acknowledgedDuplicateOf
+  ) {
     __typename
     ... on StationCreated {
       station {
         ...AdminStationFields
+      }
+    }
+    ... on DuplicatesSuspected {
+      suspects {
+        relatedKind
+        relatedUuid
       }
     }
   }
@@ -456,6 +504,27 @@ mutation AdminUpdateStation($uuid: UUID!, $input: UpdateStationInput!) {
 }
 mutation AdminDeleteStation($uuid: UUID!) {
   deleteStation(uuid: $uuid)
+}
+mutation AdminMergeStationSuggestions(
+  $stationUuid: UUID!
+  $decisions: [SuggestionDecisionInput!]!
+  $reviewNote: String
+) {
+  mergeStationSuggestions(
+    stationUuid: $stationUuid
+    decisions: $decisions
+    reviewNote: $reviewNote
+  ) {
+    uuid
+    status
+    changes {
+      targetType
+      targetUuid
+      fieldName
+      before
+      after
+    }
+  }
 }
 mutation AdminAssignStation($stationUuid: UUID!, $teamUuid: UUID!) {
   assignStationToTeam(stationUuid: $stationUuid, teamUuid: $teamUuid) {
