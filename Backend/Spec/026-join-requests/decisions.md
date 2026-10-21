@@ -222,8 +222,8 @@ Adding a phone is gated by ADR-220 whenever the account has something to prove i
    `applicant_name` into it, in the same commit, replacing an earlier value. Rejection and withdrawal leave it
    alone.
 5. **Who reads `real_name`**: the same people who read applicant details (ADR-287 point 7, ADR-354 point 3) —
-   `role_request.review` holders anywhere, and a team admin for members of their own team where the back
-   office lists them. `GET /api/v1/admin/users` returns it only to `role_request.review` holders: `user.view`
+   `role_request.review` holders anywhere, and whoever manages a team's members (its admins) in that team's
+   member list (`GET /admin/teams/{uuid}/members`, ADR-361). `GET /api/v1/admin/users` returns it only to `role_request.review` holders: `user.view`
    at `all` is also seeded to `data_auditor`, which ADR-287 keeps away from these details. It is never in site
    responses, `UserRefType`, history actor names or notifications, which keep `users.name`.
 6. **`contact`** is no longer written or accepted; old rows keep theirs.
@@ -256,14 +256,16 @@ Team edit, status and the audit-log read API are open questions in the spec.
 
 ### ADR-357 Team edit by super admin and the team's own admin; suspending a team switches its grants off
 
-> **Status: ACCEPTED (2026-10-20).** Popo, 2026-10-20: team details are edited by the super admin and the team
-> admin; a suspended team's members hold no team permissions; contact fields are not shown to other teams.
-> Status changes being super admin only follows ADMIN-027 Story 4 step 4 (a team admin who wants the team
-> gone removes its members). Disbanding removing the grants is a backend choice (point 4).
+> **Status: ACCEPTED (2026-10-20), amended 2026-10-21.** Popo, 2026-10-20: team details are edited by the
+> super admin and the team admin; a suspended team's members hold no team permissions; contact fields are not
+> shown to other teams. **2026-10-21, Popo: there is no disbanding.** ADMIN-027 Story 4 (step 3: the only admin
+> cannot be removed or demoted; step 4: an admin who wants the team gone removes the other members and stops
+> signing in, and the team stays) has no such feature, and disbanding removed every grant, the last admin's
+> included, which went round ADR-356. The `disbanded` status, its grant removal and its checks are gone.
 
 **In plain words**: a team admin can edit their own team's name, tax ID and contact; a super admin can edit
-any team. Only a super admin suspends, restores or disbands a team. While a team is suspended its members are
-still listed but can do nothing as that team. A disbanded team stays on record, with nobody in it.
+any team. Only a super admin suspends or restores a team. While a team is suspended its members are still
+listed but can do nothing as that team. A team is never disbanded: it stays, with at least one admin.
 
 **Decision**:
 
@@ -272,17 +274,16 @@ still listed but can do nothing as that team. A disbanded team stays on record, 
 2. **Gate: `team.edit` with checkpoint 2 on the team.** The seed grants `team.edit` to the team role `admin` at
    `team`; `super_admin` keeps `all`. Creating a team (`POST /admin/teams`) now requires `team.edit` at `all`,
    so the new grant does not let team admins create teams.
-3. **`POST /api/v1/admin/teams/{uuid}/status`** with `active` / `suspended` / `disbanded`, gated on
-   `team.edit` at `all` (super admin only). `teams.status` gets a CHECK on the three values.
+3. **`POST /api/v1/admin/teams/{uuid}/status`** with `active` / `suspended`, gated on `team.edit` at `all`
+   (super admin only). `teams.status` gets a CHECK on the two values; anything else is a 422.
 4. **What each status does**:
 
    | Status | Team grants | Identity switch to it | New requests, invites | Reversible |
    |---|---|---|---|---|
    | `active` | Work | Yes | Yes | — |
    | `suspended` | Kept, but resolve to no permission | Refused; a token acting as it answers 401, as a revoked identity does (ADR-096) | Refused (invite 404, team not in the form's list) | Restore to `active` |
-   | `disbanded` | Removed, as removing every member (ADR-072, ADR-187) | Refused | Refused | No |
 
-   Pending requests for a team that leaves `active` are rejected with the note `團隊已停用` / `團隊已解散`.
+   Pending requests for a team that is suspended are rejected with the note `團隊已停用`, and the applicants told.
 5. **Contact fields are visible where the team already is** (`team.view` scope, unchanged): its own members and
    super admins. They are not shown to other teams; `team.view` is not widened.
 
@@ -360,23 +361,24 @@ their queue (ADR-354 point 3).
    eligibility check and the RBAC admin's permissions view — still see it (`include_inactive_teams=True`), so
    a suspended team's member cannot become a data auditor in the meantime.
 4. **Every path that names a team checks the same rules**, after code review: creating, renaming and founding
-   a team take the same advisory lock on the name before checking it is unused; a disbanded team refuses new
-   members, edits and invites (409), and a suspended one refuses invites; the last-admin guard also covers
-   the RBAC admin's role revoke; approving a member request locks the team before the request, the order
-   disbanding takes them in, so the two cannot interleave.
+   a team take the same advisory lock on the name before checking it is unused; a suspended team refuses
+   invites (409); the last-admin guard also covers the RBAC admin's role revoke; approving a member request
+   locks the team before the request, the order suspending takes them in, so the two cannot interleave.
 5. **The platform audit view masks applicant details** (`reason`, `contact`, `applicant_*` on
    `role_requests`; `real_name` on `users`) for callers without `role_request.review` — in practice data
    auditors, who ADR-287 point 7 keeps from them. Team admins read their own team's, as in their queue.
 
 **Consequences**:
-➕ One rule for team names and for disbanded teams, whichever endpoint is used.
+➕ One rule for team names, whichever endpoint is used.
 ➖ Masked audit values read `[redacted]`, so a data auditor sees that a field changed, not to what.
 
 ---
 
 ### ADR-360 Disbanding a team does not reassign its stations
 
-> **Status: PROPOSED (2026-10-20).** Left open for a follow-up ticket.
+> **Status: SUPERSEDED (2026-10-21).** There is no disbanding (ADR-357 as amended 2026-10-21), so a team's
+> stations and zones never need reassigning on that account. The follow-up ticket is cancelled. ADR-285 point 8
+> (a deleted team's stations read as unassigned) is unchanged. Kept below as it was decided.
 
 **Context**: ADR-285 point 8 says a deleted team's stations become unassigned. Disbanding keeps the team row
 (ADR-357), so `stations.team_uuid` still points at it. Gov widening already requires an active team
@@ -387,3 +389,35 @@ disbanded team until a super admin or a gov team reassigns them.
 
 **Consequences**:
 ➖ A station of a disbanded team shows that team's name until it is reassigned.
+
+---
+
+### ADR-361 Account lists share one base; a team's member list has its own capability
+
+> **Status: ACCEPTED (2026-10-21).** Popo, 2026-10-21, after PR #93 review asked where team admins read their
+> members: one base, one subclass for every account and one for a team's members, each with its own
+> permission; `team.member.view` seeded to `admin` and `member` at `team`, `super_admin` at `all`.
+
+**In plain words**: a team's people can open their team's member list. A super admin can open any team's.
+The list says each person's role in that team and nothing about their other teams. Team admins and super
+admins also see the real name each one confirmed.
+
+**Decision**:
+
+1. **`app/services/user_directory.py`**: `UserDirectory` holds what account lists share — which accounts,
+   oldest first so paging is stable, and who reads `real_name`. A subclass says who may read it and which
+   accounts it covers:
+   - `PlatformUserDirectory` — every account, `user.view` (`GET /admin/users`, unchanged rows).
+   - `TeamMemberDirectory` — one team's members, `team.member.view` with checkpoint 2 on the team
+     (`GET /admin/teams/{uuid}/members`); another team is not found (ADR-023).
+2. **`team.member.view` is its own capability**, apart from `team.view` (the team) and `user.view` (every
+   account), so the list can be granted or revoked on its own at `/admin/rbac`.
+3. **A team row is `uuid`, `name`, `real_name`, `role_uuid`, `role`**: the role in this team only. No other
+   teams' identities, sessions or logins.
+4. **`real_name` in the team list** goes to `role_request.review` holders and to whoever's
+   `team.member.manage` covers the team — its admins (ADR-355 point 5). Members read nicknames.
+5. **Existing databases** get the grants from migration `79a19cabc98a`, missing rows only (ADR-055).
+
+**Consequences**:
+➕ A new audience (a work zone's people, say) is one more subclass.
+➖ `/admin/users` now pages oldest first; before, the order was whatever the database returned.

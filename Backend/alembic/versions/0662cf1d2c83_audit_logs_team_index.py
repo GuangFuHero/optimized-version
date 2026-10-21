@@ -23,7 +23,8 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Create the expression index (mirrors app/models/audit.py)."""
     op.execute(
-        "CREATE INDEX ix_audit_logs_team_uuid ON audit_logs ((COALESCE(new_values, old_values) ->> 'team_uuid'))"
+        "CREATE INDEX ix_audit_logs_team_uuid ON audit_logs"
+        " ((COALESCE(new_values, old_values) ->> 'team_uuid'))"
     )
 
 

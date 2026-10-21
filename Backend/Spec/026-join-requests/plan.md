@@ -17,6 +17,12 @@
 - Code review（high）10 項：9 項修正（`315932c5e`，記於 ADR-359），GraphQL `team` 欄位的 N+1 留著（每人申請很少）。
   另補 grant migration `79a19cabc98a`（照 Spec 025 的做法，既有 DB 不重跑 seed 也拿得到新授權）。
 - Task 13 完成：見 `verification.md`。本機全套件 2335 passed、0 failed；API 走查 41/41。
+- 2026-10-21 PR #93 review（jujuyuzu，CHANGES_REQUESTED）後：
+  - 稽核全平台視角再遮 `user_contacts.value`、`user_identities.provider_subject`。
+  - 團隊成員名單：`UserDirectory` base + `PlatformUserDirectory`／`TeamMemberDirectory`，新權限 `team.member.view`（ADR-361）。
+  - 邀請頁加 `pending_elsewhere`；交接說明補 LINE-only 帳號要等 #94；RBAC 矩陣、er-diagram、migration E501。
+  - **拿掉團隊解散**（Popo，依 ADMIN-027 Story 4）：status 只剩 active／suspended；ADR-357 修訂、ADR-360 SUPERSEDED。
+  - 前端產生的 contracts 重新產生並 commit（使用者同意）。
 
 **Goal:** 在 Spec 019 的 `role_requests` 上加入「申請加入既有團隊／成立新團隊」與團隊邀請連結，讓 team admin 與
 super admin 從各自的審核佇列決定；加上團隊雜項（最後 admin 防呆、聯絡欄位、編輯／停用、稽核紀錄讀取）。
@@ -111,7 +117,7 @@ export TEST_REDIS_URL="redis://localhost:6394/15"
 - [ ] index `ix_role_requests_team_pending`
 - [ ] 新表 `team_invites`（`token` unique、`expires_at` 的 server default `now() + interval '24 hours'`），加進 `AUDITED_TABLES`，
       trigger 在同一個 migration 建
-- [ ] `users.real_name`；`teams.contact_name`、`teams.contact_phone`；`teams.status` CHECK（`active`／`suspended`／`disbanded`）
+- [ ] `users.real_name`；`teams.contact_name`、`teams.contact_phone`；`teams.status` CHECK（`active`／`suspended`；2026-10-21 拿掉 `disbanded`）
 - [ ] 資料：pending 且無團隊的 `government`／`ngo` 申請改 `rejected`，`review_note = '申請流程已更新，請重新送出申請。'`，
       `closed_at = now()`（ADR-350 point 9）
 - [ ] downgrade：反向移除欄位與表；**不**還原被拒的舊申請（寫在 docstring）
@@ -132,7 +138,7 @@ export TEST_REDIS_URL="redis://localhost:6394/15"
 
 **Tests:** `tests/test_graphql/test_role_request_teams.py`（新）
 - 未登入 → 401；登入的一般使用者看得到全部啟用中團隊
-- 停用、解散、已刪除的團隊不出現；`type` 篩選正確
+- 停用、已刪除的團隊不出現；`type` 篩選正確
 - 回應欄位只有 `uuid`／`name`／`type`
 
 ## Task 3: 送出申請帶團隊與申請人資料
@@ -249,7 +255,7 @@ export TEST_REDIS_URL="redis://localhost:6394/15"
 - super admin 改任何隊；改成已存在的名稱 → 409
 - member 看得到自己隊的聯絡欄位、看不到別隊（列表沒有別隊）
 
-## Task 9: 團隊停用／恢復／解散（ADR-357 point 3、4）——風險最高
+## Task 9: 團隊停用／恢復（ADR-357 point 3、4）——風險最高（2026-10-21 拿掉解散）
 
 **Files:** `app/repositories/active_identity_repository.py`、`app/core/security.py`（權限解析）、`app/services/admin.py`、
 `app/api/v1/endpoints/admin.py`、`app/services/role_request.py`
@@ -257,16 +263,14 @@ export TEST_REDIS_URL="redis://localhost:6394/15"
 - [ ] `POST /admin/teams/{uuid}/status`，`team.edit` at `all`
 - [ ] 身分解析排除非 `active` 團隊的授權：`list_for_user` 不列、`resolve` 回 None（舊 token → 401，ADR-096）、
       權限解析不計
-- [ ] 解散：刪該隊所有 `user_role_assign`、`user_permission_assign`（同 `remove_team_member`）；不可恢復
-- [ ] 離開 `active` 時，該隊 pending 申請改 `rejected`（`團隊已停用`／`團隊已解散`）並通知申請人
+- [ ] 離開 `active` 時，該隊 pending 申請改 `rejected`（`團隊已停用`）並通知申請人
 - [ ] 先讀 `resolve_scope` 與 `in_scope` 的實作，確認只有一處要改；若不只一處，先寫 ADR 再動
 
 **Tests:** `tests/test_team_status.py`（新）
 - 停用：成員的團隊身分不能切換；舊 token 打 API → 401；平台身分不受影響
 - 停用：成員原本能做的團隊操作（例如改站點）→ 403／404
 - 恢復：權限原樣回來，授權列沒有被刪
-- 解散：授權全刪、團隊列保留、不能恢復（409）
-- 停用／解散後：邀請 404、名錄不列、pending 申請被拒並通知
+- 停用後：邀請 404、名錄不列、pending 申請被拒並通知；`disbanded` 回 422
 - **全套件**：這個 Task 結束一定要跑全套件並比基準
 
 ## Task 10: 稽核紀錄讀取 API（ADR-358）

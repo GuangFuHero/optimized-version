@@ -8,7 +8,7 @@ Stories 1–5)
 **Branch**: `feat/join-requests`
 **Depends on**: `Spec/019-role-requests` (the application this extends), `Spec/010-multi-team-membership`
 (team identities, `act` claim), `Spec/012-account-profile` (verified contacts)
-**Decisions**: `decisions.md` in this folder (ADR-350 to ADR-360)
+**Decisions**: `decisions.md` in this folder (ADR-350 to ADR-361)
 
 ## Overview
 
@@ -123,7 +123,8 @@ No `revoked_at`, no `max_uses`, no `uses` (BE-038 step 1). The table is in `AUDI
 | `contact_name` | varchar(100) NULL | Shown to other teams in 所有團隊 |
 | `contact_phone` | varchar(20) NULL | Same |
 
-`status` (exists, default `active`) gains the values `suspended` and `disbanded` with a CHECK. See
+`status` (exists, default `active`) gains the value `suspended` with a CHECK on the two; there is no disbanding
+(ADR-357 as amended). See
 [Part B](#part-b--team-housekeeping-should) for what they mean.
 
 ## Permissions
@@ -185,7 +186,8 @@ REST so that "returns 404" is a real HTTP status (ADR-353).
 | `POST …/{uuid}/reject` | `note` becomes required: `A reason is required` (422) |
 | `GET /api/v1/admin/users` | Items gain `real_name`, filled only for `role_request.review` holders (data auditors also hold `user.view`, ADR-355 point 5) |
 | `PATCH /api/v1/admin/teams/{uuid}` *(new)* | Name, tax ID, `contact_name`, `contact_phone`. Team admin: own team; super admin: any (ADR-357) |
-| `POST /api/v1/admin/teams/{uuid}/status` *(new)* | `{"status": "active" \| "suspended" \| "disbanded"}`, super admin only |
+| `POST /api/v1/admin/teams/{uuid}/status` *(new)* | `{"status": "active" \| "suspended"}`, super admin only |
+| `GET /api/v1/admin/teams/{uuid}/members` *(new)* | The team's members: `uuid`, `name`, `real_name` (admins and reviewers only), `role_uuid`, `role`. `team.member.view` covering the team (ADR-361) |
 | `GET /api/v1/admin/teams` | Items gain `contact_name`, `contact_phone` |
 | `GET /api/v1/admin/audit-logs` *(new)* | `table`, `row_id`, `actor_uuid`, `from`, `to`, `limit` (≤ 100), `offset`; newest first (ADR-358) |
 
@@ -222,7 +224,8 @@ Approval does not also send `team_member_added`; the approval notice says it.
 | Last-super-admin guard | Already enforced in `assign_role` and `rbac_admin` user-role revoke (ADR-032, ADR-056). Only tests are added for the paths BE-038 names | Exists |
 | Team contact fields | `contact_name`, `contact_phone` on `teams`; in `TeamResponse`, visible where the team already is — not to other teams (ADR-356, ADR-357 point 5) | Designed |
 | Team edit | `PATCH /api/v1/admin/teams/{uuid}`: name, tax ID, contact fields. Super admin any team, team admin own team, via `team.edit` (seed adds `admin` at `team`) (ADR-357) | Designed |
-| Suspend / restore / disband | `POST /api/v1/admin/teams/{uuid}/status`, super admin only. Suspended: grants kept but give no permission, identity cannot be used; disbanded: grants removed, row kept (ADR-357) | Designed |
+| Suspend / restore | `POST /api/v1/admin/teams/{uuid}/status`, super admin only. Suspended: grants kept but give no permission, identity cannot be used. No disbanding (ADMIN-027 Story 4, ADR-357) | Designed |
+| Member list | `GET /api/v1/admin/teams/{uuid}/members` on a user directory base shared with `/admin/users` (ADR-361) | Designed |
 | Audit-log read API | `GET /api/v1/admin/audit-logs`. `audit.view` at `all`: every row. Team admins (new capability `team.audit.view` at `team`): rows about their active team only — the team row, its grants, requests, invites, zone assignments (ADR-358) | Designed |
 
 ## API handover for the frontend
@@ -234,11 +237,14 @@ Chinese as Spec 019 does.
 
 1. **Team list**: `roleRequestTeams(type: GOV | NGO)` → `[{ uuid, name, type }]`. 政府單位人員 asks for `GOV`,
    社福團體人員 for `NGO`. The form's last option, 「＋ 清單裡沒有，建立新的單位／團隊」, sends `newTeamName` instead.
-2. **Phone first**: if `/users/me` has no verified phone, add one with the contact flow before submitting:
+2. **Phone first** (phone only, by the team's decision): if `/users/me` has no verified phone, add one with
+   the contact flow before submitting:
    `POST /api/v1/auth/contacts` then `POST /api/v1/auth/contacts/verify`. **An account that already has a
    password or an email must prove itself first** (ADR-220): the add call asks for a step-up — a code sent to
    the existing email, or the password — before the SMS code is sent. That is two codes; the prototype draws
-   one, so this step is new on the page.
+   one, so this step is new on the page. **A LINE-only account cannot add a phone until #94 lands**
+   (422 `step_up_required` today, `step_up_reauth_required` after), so until then it can neither apply nor use
+   an invite; show it the reason rather than a broken form.
 3. **Submit**: `submitRoleRequest(input: { requestedRole, reason, name, email, teamUuid | newTeamName })`.
    `contact` is gone. `name` is prefilled from the nickname but is kept on the request only; the nickname never
    changes. A verified account email is used instead of the typed one, so show it read-only.
@@ -253,7 +259,9 @@ Chinese as Spec 019 does.
 ### User site — invite link page
 
 - `GET /api/v1/invites/{token}` (signed in, `X-WG-Realm: site`) → `{ team: { uuid, name, type }, expires_at,
-  my_request }`. **404** `Invite not found` for unknown, expired, or a team that is not active.
+  my_request, pending_elsewhere }`. `pending_elsewhere` is the caller's pending request for something else
+  (`uuid`, `requested_role`, `team_name`, `new_team_name`): one pending per account, so ask them to withdraw it
+  first rather than let the submit answer 409. **404** `Invite not found` for unknown, expired, or a team that is not active.
 - `POST /api/v1/invites/{token}/requests` with `{ name, reason, email? }` → 201 the request. 404 as above;
   409 `You are already a member of this team` / `You already have a pending request`; 422 for fields.
 - Show `expires_at` as "有效至"; nothing on the client decides expiry.
@@ -266,6 +274,8 @@ Chinese as Spec 019 does.
 - **審核佇列**: `GET /api/v1/admin/role-requests?status=pending` as the team identity returns that team's
   member requests only. Approve: `POST …/{uuid}/approve`. Reject: `POST …/{uuid}/reject` with a required
   `note` (`A reason is required`). A request already decided elsewhere answers 409.
+- **成員名單**: `GET /api/v1/admin/teams/{uuid}/members` as the team identity (admin or member). Admins also
+  get each member's `real_name`.
 - **Members**: removing or demoting the team's only admin answers 409 `Cannot remove the team's only admin`.
 - **Edit team**: `PATCH /api/v1/admin/teams/{uuid}`.
 - **稽核紀錄**: `GET /api/v1/admin/audit-logs` as the team admin identity.
@@ -275,8 +285,8 @@ Chinese as Spec 019 does.
 - **審核佇列**: the same list returns every request; filter with `kind=member|new_team|data_auditor` and
   `team_uuid`. Approving a new-team application creates the team; the response's `team_uuid` names it.
 - **Teams**: `POST /api/v1/admin/teams/{uuid}/status`. Suspending signs the team's identities out at their
-  next request (401) and removes the team from the switcher; restoring brings them back; disbanding removes
-  every member and cannot be undone.
+  next request (401) and removes the team from the switcher; restoring brings them back. There is no
+  disbanding: to wind a team down, its admin removes the other members (ADMIN-027 Story 4).
 - **Users**: `real_name` appears in `GET /api/v1/admin/users`.
 
 ## Tests
@@ -302,7 +312,7 @@ task that adds it:
   site GraphQL and history.
 - Part B: last admin cannot be removed or demoted; with two admins one can. Team admin edits own team, gets
   404 on another, cannot create a team. Suspended team: grants give no permission, switching to it refused,
-  restore brings them back; disbanded: grants gone; pending requests rejected with the note.
+  restore brings them back; pending requests rejected with the note; `disbanded` is a 422.
 - Audit log: team admin sees team A's grant and request rows, not team B's; member gets 403; `audit.view` at
   `audit.view` still has only its two holders; super admin and data auditor see everything.
 - Migration: upgrade from main's head with a pending legacy `government` row → rejected with the note;
