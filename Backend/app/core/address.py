@@ -107,10 +107,9 @@ def _take(pattern: re.Pattern, text: str) -> tuple[str | None, str]:
 
 
 def _split_tail(rest: str) -> tuple[int, dict[str, str | None], int | None]:
-    """Split `rest` at the earliest offset where the door starts, keeping the road as short as possible.
+    """Split `rest` where the door starts, returning (offset, parts, offset of a recognized unit or None).
 
-    Returns (offset, parts, offset where a recognized 棟/樓/室 begins or None). Text after a 號 that is
-    not a recognized unit stays in the line, so it can never pull the door into the road.
+    The earliest offset wins, so the road stays short; text after a 號 that is not a unit stays in the line.
     """
     for i in range(len(rest)):
         m = _TAIL_RE.fullmatch(rest, i)

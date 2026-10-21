@@ -181,6 +181,8 @@ async def place_ticket(
         raise ValueError(f"Room on {floor} must be one of {areas} or '{OTHER_AREA}'")
     address = await secondary_location_repository.get_by_geometry(db, str(building.uuid))
     location["location_type"] = "address"
+    # The reporter's own address text never stands in for the building's, even when it has none.
+    location |= dict.fromkeys(ADDRESS_PARTS)
     if address is not None:
         location |= {k: getattr(address, k) for k in ADDRESS_PARTS}
     return geom_to_geojson(building.geometry), location

@@ -1,9 +1,10 @@
 """End-to-end tests for building maps and the tickets filed inside them."""
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.models.geo import BuildingMapTicketMap
+from app.models.secondary_location import SecondaryLocation
 from tests.test_graphql.conftest import auth_header
 from tests.test_graphql.conftest import test_db as open_db
 from tests.test_graphql.test_area import _make_team_user
@@ -155,7 +156,10 @@ async def test_ngo_team_admin_cannot_pin_a_building(client, redis):
     [
         ({"floorAreas": [{"floor": "9F", "areas": ["頂樓"]}]}, "Floor '9F' is not in this building"),
         ({"secondaryLocation": {**ADDRESS, "floor": "2F"}}, "no building section, floor or room"),
-    ({"secondaryLocation": {"fullAddress": "花蓮縣光復鄉中正路10號A棟"}}, "no building section, floor or room"),
+        (
+            {"secondaryLocation": {"fullAddress": "花蓮縣光復鄉中正路10號A棟"}},
+            "no building section, floor or room",
+        ),
         ({"floorsAboveGround": 0}, "floorsAboveGround must be"),
         ({"floorAreas": [{"floor": "1F", "areas": ["   "]}]}, "Area names must be"),
         (
@@ -255,6 +259,29 @@ async def test_ticket_in_building_copies_its_point_and_address(client, coordinat
             )
         )
     assert str(linked_to) == building["uuid"]
+
+
+async def test_a_building_without_an_address_never_takes_the_reporters_text(
+    client, coordinator_auth, login_user_auth
+):
+    """A building with no address row leaves the ticket's address empty rather than storing raw text."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    async with open_db() as db:
+        await db.execute(delete(SecondaryLocation).where(SecondaryLocation.geometry_uuid == building["uuid"]))
+
+    body = await _gql(
+        client,
+        CREATE_TICKET,
+        {"input": _ticket_input(building["uuid"], floor="2F", room="咖啡廳", fullAddress="臺北市假路1號")},
+        token,
+    )
+
+    assert "errors" not in body, body
+    stored = body["data"]["createTicket"]["ticket"]["secondaryLocation"]
+    assert (stored["county"], stored["road"], stored["no"], stored["normalizationStatus"]) == (None,) * 4
+    assert (stored["floor"], stored["room"]) == ("2F", "咖啡廳")
 
 
 @pytest.mark.parametrize(
