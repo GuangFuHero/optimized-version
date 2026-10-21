@@ -44,15 +44,15 @@ _TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區)))")
 # either, since 中里路 and 中里北路 are roads.
 _VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?![村里])(?![東西南北中]?(?:路|街|大道))")
 _NEIGHBORHOOD_RE = re.compile(r"^((?:\d+|[一二三四五六七八九十]+)鄰)")
-# A hyphen inside a door number reads as 之, the way TGOS writes it: 1-1號 → 1之1號, 2號-3 → 2號之3.
-_DOOR_HYPHEN_RE = re.compile(r"(?<=\d)-(?=\d+號)|(?<=號)-(?=\d)")
+# A hyphen inside a door number reads as 之, the way TGOS writes it: 1-1號 → 1之1號, 1-2巷 → 1之2巷.
+_DOOR_HYPHEN_RE = re.compile(r"(?<=\d)-(?=\d+[巷弄號])|(?<=號)-(?=\d)")
 
 # The door: 段 巷 弄 (衖 衕, kept only in the line) 號, each optional. 巷 and 弄 need leading digits, so a
 # road named like 松羅南巷 stays the road.
 _DOOR_RE = re.compile(
     r"(?P<section>(?:\d+|[一二三四五六七八九十]+)段)?"
-    r"(?P<lane>\d+巷)?"
-    r"(?P<alley>\d+弄)?"
+    r"(?P<lane>\d+(?:之\d+)?巷)?"
+    r"(?P<alley>\d+(?:之\d+)?弄)?"
     r"(?:\d+衖)?(?:\d+衕)?"
     r"(?P<no>\d+(?:[-之]\d+)?號(?:[-之]\d+)?)?"
 )

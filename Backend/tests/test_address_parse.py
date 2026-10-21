@@ -235,6 +235,20 @@ def test_a_hyphenated_number_reads_as_zhi():
     assert (parts.full_address, parts.no) == ("花蓮縣光復鄉糖廠街19之1號", "19之1號")
 
 
+@pytest.mark.parametrize(
+    ("line", "lane", "alley"),
+    [
+        ("臺北市中正區中山路1之2巷3號", "1之2巷", None),
+        ("臺北市中正區中山路1-2巷3號", "1之2巷", None),
+        ("臺北市中正區中山路1巷2之1弄5號", "1巷", "2之1弄"),
+    ],
+)
+def test_a_sub_numbered_lane_or_alley_stays_whole(line, lane, alley):
+    """1之2巷 and 2之1弄 are one lane and one alley, so no fragment is left in the road."""
+    parts = parse_tw_address(line)
+    assert (parts.road, parts.lane, parts.alley) == ("中山路", lane, alley)
+
+
 def test_a_neighborhood_in_chinese_numerals_is_the_neighborhood():
     """三鄰 is a 鄰 like 3鄰, not the start of the road."""
     parts = parse_tw_address("花蓮縣光復鄉大進村三鄰糖廠街19號")
