@@ -16,6 +16,7 @@ import {
   type StationFilters,
 } from './model/station-filters';
 import { StationFilterPanel } from './station-filter-panel';
+import { StationMapView } from './station-map-view';
 import { StationStatsStrip } from './station-stats-strip';
 import { StationTable } from './station-table';
 import { StationToolbar, type StationView } from './station-toolbar';
@@ -77,7 +78,10 @@ export function StationManagementPage() {
     (r) => r.pendingFieldCount > 0,
   ).length;
 
+  const hasAnyStation = (unfiltered.data?.rows.length ?? 0) > 0;
+  const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
   const openStation = (uuid: string) => setParam('station', uuid);
+  const openNew = (_position?: [number, number]) => undefined;
 
   return (
     <Box
@@ -107,7 +111,7 @@ export function StationManagementPage() {
         view={view}
         onViewChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
         onOpenReview={() => undefined}
-        onNew={() => undefined}
+        onNew={() => openNew()}
         onImport={() => undefined}
       />
       {filterOpen ? (
@@ -117,15 +121,28 @@ export function StationManagementPage() {
           canViewTeams={caps.canViewTeams}
         />
       ) : null}
-      <StationTable
-        rows={rows}
-        hasAnyStation={(unfiltered.data?.rows.length ?? 0) > 0}
-        loading={stations.isPending}
-        truncated={stations.data?.truncated ?? false}
-        now={now}
-        canAdd={caps.canAdd}
-        onOpenStation={openStation}
-      />
+      {view === 'map' ? (
+        <StationMapView
+          rows={rows}
+          hasAnyStation={hasAnyStation}
+          canAdd={caps.canAdd}
+          now={now}
+          selectedUuid={selectedUuid}
+          onSelect={setSelectedUuid}
+          onOpenStation={openStation}
+          onAddAt={caps.canAdd ? (position) => openNew(position) : undefined}
+        />
+      ) : (
+        <StationTable
+          rows={rows}
+          hasAnyStation={hasAnyStation}
+          loading={stations.isPending}
+          truncated={stations.data?.truncated ?? false}
+          now={now}
+          canAdd={caps.canAdd}
+          onOpenStation={openStation}
+        />
+      )}
     </Box>
   );
 }
