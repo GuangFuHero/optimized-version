@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { adminGraphqlClient, graphqlResponseData } from './client';
+import { collectAllPages } from './collect-pages';
 import * as documents from './graphql/__generated__/graphql';
 
 export interface AdminQueryOptions {
@@ -96,6 +97,39 @@ export function useStations(
   options: AdminQueryOptions = {},
 ) {
   return useQuery({ ...stationsQuery(variables), enabled: options.enabled });
+}
+
+export type AllStationsQueryVariables = Omit<
+  documents.AdminStationsQueryVariables,
+  'skip' | 'limit'
+>;
+
+/** Every station matching `variables`, read page by page up to the collector's cap. */
+export const allStationsQuery = (variables: AllStationsQueryVariables = {}) =>
+  queryOptions({
+    queryKey: ['admin', 'stations', 'all', variables],
+    queryFn: ({ signal }) =>
+      collectAllPages(async (skip, limit) => {
+        const data = await adminGraphqlClient
+          .query(
+            documents.AdminStationsDocument,
+            { ...variables, skip, limit },
+            { fetchOptions: { credentials: 'include', signal } },
+          )
+          .toPromise()
+          .then(graphqlResponseData);
+        return {
+          items: data.stations.items,
+          hasNextPage: data.stations.pageInfo.hasNextPage,
+        };
+      }),
+  });
+
+export function useAllStations(
+  variables: AllStationsQueryVariables = {},
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({ ...allStationsQuery(variables), enabled: options.enabled });
 }
 
 export const stationQuery = (variables: documents.AdminStationQueryVariables) =>

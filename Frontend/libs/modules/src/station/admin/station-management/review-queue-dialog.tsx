@@ -27,7 +27,7 @@ import { CheckCheck, GitPullRequestArrow, X, Zap } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { useAllStations } from './hooks/use-all-stations';
+import { useStationRows } from './hooks/use-station-rows';
 import {
   buildDecisions,
   buildReviewFields,
@@ -57,8 +57,8 @@ export function ReviewQueueDialog({
   onClose,
   onEditStation,
 }: ReviewQueueDialogProps) {
-  const queue = useAllStations(PENDING_FILTERS);
-  const stations = queue.data?.rows ?? [];
+  const queue = useStationRows(PENDING_FILTERS);
+  const stations = queue.rows;
   const [selected, setSelected] = useState<string | null>(null);
   const current =
     stations.find((s) => s.uuid === selected) ?? stations[0] ?? null;

@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
 import { StationFormDrawer, type StationFormTarget } from '../station-form';
-import { useAllStations } from './hooks/use-all-stations';
+import { useStationRows } from './hooks/use-station-rows';
 import { useStationCapabilities } from './hooks/use-station-capabilities';
 import {
   applyClientFilters,
@@ -84,23 +84,21 @@ export function StationManagementPage() {
     [params, replaceParams],
   );
 
-  const stations = useAllStations(filters);
-  const unfiltered = useAllStations(EMPTY_FILTERS);
-  const loadedRows = stations.data?.rows ?? [];
+  const stations = useStationRows(filters);
+  const unfiltered = useStationRows(EMPTY_FILTERS);
+  const loadedRows = stations.rows;
   const rows = useMemo(
     () => applyClientFilters(loadedRows, filters, now),
     [loadedRows, filters, now],
   );
   // The review queue's own query: it also counts stations whose only suggestions are on their
   // resources, which pendingSuggestedFields (station fields only) leaves out.
-  const reviewQueue = useAllStations(PENDING_FILTERS, {
+  const reviewQueue = useStationRows(PENDING_FILTERS, {
     enabled: caps.canReview,
   });
-  const pendingStationCount = caps.canReview
-    ? (reviewQueue.data?.rows.length ?? 0)
-    : 0;
+  const pendingStationCount = caps.canReview ? reviewQueue.rows.length : 0;
 
-  const hasAnyStation = (unfiltered.data?.rows.length ?? 0) > 0;
+  const hasAnyStation = unfiltered.rows.length > 0;
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
   // The station on view lives in the URL (?station=<uuid>) so notifications can link to it. The
   // form opens over it, so cancelling an edit lands back on the station being edited.
@@ -180,7 +178,7 @@ export function StationManagementPage() {
               rows={rows}
               hasAnyStation={hasAnyStation}
               loading={stations.isPending}
-              truncated={stations.data?.truncated ?? false}
+              truncated={stations.truncated}
               now={now}
               canAdd={caps.canAdd}
               onOpenStation={openStation}
