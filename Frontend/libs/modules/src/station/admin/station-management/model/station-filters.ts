@@ -1,3 +1,5 @@
+import { differenceInCalendarDays, parseISO } from 'date-fns';
+
 import { getFreshness } from './freshness';
 import type { StationRow } from './station-row';
 import {
@@ -5,15 +7,21 @@ import {
   type OperationalStatus,
 } from '../../../operational-status';
 
+export type Established = 'first_week' | 'later';
+
 /** The 指派 Team filter value for stations no team runs yet. */
 export const UNASSIGNED_TEAM = '__none__';
 
 export interface StationFilters {
   type: string | null;
   status: OperationalStatus | null;
+  /** A 行政區 as StationRow.area spells it (county + city). */
+  area: string | null;
   /** A team uuid, or UNASSIGNED_TEAM. */
   team: string | null;
   official: 'yes' | 'no' | null;
+  /** 成立: created in the disaster's first week, or after it. */
+  established: Established | null;
   freshness: 'fresh' | 'stale' | 'expired' | null;
   q: string;
   /** Only stations with pending suggestions (the review queue); never in the URL. */
@@ -23,8 +31,10 @@ export interface StationFilters {
 export const EMPTY_FILTERS: StationFilters = {
   type: null,
   status: null,
+  area: null,
   team: null,
   official: null,
+  established: null,
   freshness: null,
   q: '',
   pending: false,
@@ -33,8 +43,10 @@ export const EMPTY_FILTERS: StationFilters = {
 const KEYS = {
   type: 'type',
   status: 'status',
+  area: 'area',
   team: 'team',
   official: 'official',
+  established: 'est',
   freshness: 'fresh',
   q: 'q',
 } as const;
@@ -50,8 +62,10 @@ export function parseStationFilters(params: URLSearchParams): StationFilters {
       KEYS.status,
       OPERATIONAL_STATUS_OPTIONS.map((o) => o.value),
     ),
+    area: params.get(KEYS.area) || null,
     team: params.get(KEYS.team) || null,
     official: pick(KEYS.official, ['yes', 'no'] as const),
+    established: pick(KEYS.established, ['first_week', 'later'] as const),
     freshness: pick(KEYS.freshness, ['fresh', 'stale', 'expired'] as const),
     q: params.get(KEYS.q) ?? '',
     pending: false,
@@ -67,8 +81,10 @@ export function writeStationFilters(
     value ? next.set(key, value) : next.delete(key);
   set(KEYS.type, filters.type);
   set(KEYS.status, filters.status);
+  set(KEYS.area, filters.area);
   set(KEYS.team, filters.team);
   set(KEYS.official, filters.official);
+  set(KEYS.established, filters.established);
   set(KEYS.freshness, filters.freshness);
   set(KEYS.q, filters.q.trim() || null);
   return next;
@@ -78,8 +94,10 @@ export function countActiveFilters(filters: StationFilters): number {
   return [
     filters.type,
     filters.status,
+    filters.area,
     filters.team,
     filters.official,
+    filters.established,
     filters.freshness,
   ].filter(Boolean).length;
 }
@@ -101,18 +119,51 @@ export function toServerVariables(filters: StationFilters) {
   };
 }
 
+/** The 行政區 chips: every distinct area among the loaded stations, in Chinese collation order. */
+export function areaOptions(rows: readonly StationRow[]): string[] {
+  return [...new Set(rows.map((r) => r.area).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, 'zh-Hant'),
+  );
+}
+
 /**
- * The `stations` query has no source or freshness filter and no sort, so these run here over
- * every loaded station: open stations first, then the most recently updated.
+ * Which week a station was set up in, counted in calendar days from the disaster's start the way
+ * the sidebar's 第 N 天 counts them: days 1-7 are the first week. Null when either date is missing.
+ */
+export function establishedIn(
+  createdAt: string | null,
+  disasterStartedAt: string | null,
+): Established | null {
+  if (!createdAt || !disasterStartedAt) return null;
+  const days = differenceInCalendarDays(
+    parseISO(createdAt),
+    parseISO(disasterStartedAt),
+  );
+  if (!Number.isFinite(days)) return null;
+  return days < 7 ? 'first_week' : 'later';
+}
+
+/**
+ * The `stations` query has no area, source, established or freshness filter and no sort, so these
+ * run here over every loaded station: open stations first, then the most recently updated. The
+ * 成立 filter needs the disaster's start date and is ignored without one.
  */
 export function applyClientFilters(
   rows: readonly StationRow[],
   filters: StationFilters,
   now: Date,
+  disasterStartedAt: string | null = null,
 ): StationRow[] {
   return rows
+    .filter((r) => !filters.area || r.area === filters.area)
     .filter(
       (r) => !filters.official || r.isOfficial === (filters.official === 'yes'),
+    )
+    .filter(
+      (r) =>
+        !filters.established ||
+        !disasterStartedAt ||
+        establishedIn(r.createdAt, disasterStartedAt) === filters.established,
     )
     .filter(
       (r) =>

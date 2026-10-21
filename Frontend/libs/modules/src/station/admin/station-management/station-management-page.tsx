@@ -1,18 +1,23 @@
 'use client';
 
-import { Stack } from '@mui/material';
-import { useDeleteStation } from '@rescue-frontend/data-access/admin';
+import { Box, Stack } from '@mui/material';
+import {
+  useDeleteStation,
+  useProjectSettings,
+} from '@rescue-frontend/data-access/admin';
 import { designTokens, Dialog } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
+import { AdminHeaderSlot } from '../../../shell/admin/header';
 import { StationFormDrawer, type StationFormTarget } from '../station-form';
 import { useStationRows } from './hooks/use-station-rows';
 import { useStationCapabilities } from './hooks/use-station-capabilities';
 import {
   applyClientFilters,
+  areaOptions,
   countActiveFilters,
   EMPTY_FILTERS,
   parseStationFilters,
@@ -26,13 +31,20 @@ import { StationFilterPanel } from './station-filter-panel';
 import { StationImportDialog } from './station-import-dialog';
 import { StationMapView } from './station-map-view';
 import { QuickStatusCell, TeamAssignCell } from './station-row-controls';
-import { StationStatsStrip } from './station-stats-strip';
 import { StationTable } from './station-table';
-import { StationToolbar, type StationView } from './station-toolbar';
+import {
+  StationToolbar,
+  StationViewSwitch,
+  type StationView,
+} from './station-toolbar';
 
 const { color } = designTokens;
 
-const PAGE_GUTTER = { xs: 2, md: 3 };
+// The prototype's frame (wg-shell + station-app): 12px 28px 28px around a centred 1200px column,
+// with 12px between the toolbar, filter panel and list.
+const FRAME_GAP = '12px';
+const SECTION_SX = { px: '28px' };
+const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
 
 const PENDING_FILTERS: StationFilters = { ...EMPTY_FILTERS, pending: true };
 
@@ -87,9 +99,10 @@ export function StationManagementPage() {
   const stations = useStationRows(filters);
   const unfiltered = useStationRows(EMPTY_FILTERS);
   const loadedRows = stations.rows;
+  const disasterStartedAt = useProjectSettings().data?.started_at ?? null;
   const rows = useMemo(
-    () => applyClientFilters(loadedRows, filters, now),
-    [loadedRows, filters, now],
+    () => applyClientFilters(loadedRows, filters, now, disasterStartedAt),
+    [loadedRows, filters, now, disasterStartedAt],
   );
   // The review queue's own query: it also counts stations whose only suggestions are on their
   // resources, which pendingSuggestedFields (station fields only) leaves out.
@@ -99,9 +112,11 @@ export function StationManagementPage() {
   const pendingStationCount = caps.canReview ? reviewQueue.rows.length : 0;
 
   const hasAnyStation = unfiltered.rows.length > 0;
+  const areas = useMemo(() => areaOptions(unfiltered.rows), [unfiltered.rows]);
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
   // The station on view lives in the URL (?station=<uuid>) so notifications can link to it. The
-  // form opens over it, so cancelling an edit lands back on the station being edited.
+  // station's edit form replaces its details in the same drawer, so cancelling an edit lands back
+  // on the station being edited.
   const viewedUuid = params.get('station');
   const [formTarget, setFormTarget] = useState<StationFormTarget | null>(null);
   const deleteStation = useDeleteStation();
@@ -116,17 +131,32 @@ export function StationManagementPage() {
     openStation(uuid);
     setFormTarget({ mode: 'edit', uuid });
   };
+  const emptyStateNew = caps.canAdd ? () => openNew() : undefined;
+  const emptyStateImport = caps.canImport
+    ? () => setImportOpen(true)
+    : undefined;
 
   return (
     <>
+      <AdminHeaderSlot>
+        <StationViewSwitch
+          count={rows.length}
+          view={view}
+          onChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
+        />
+      </AdminHeaderSlot>
       <AdminListPageLayout
         canvasColor={color.bg.neutral.subtle}
         header={
-          <Stack spacing={2} sx={{ px: PAGE_GUTTER, pt: PAGE_GUTTER, pb: 2 }}>
-            <StationStatsStrip
-              activeStatus={filters.status}
-              onSelectStatus={(status) => setFilters({ ...filters, status })}
-            />
+          <Stack
+            sx={{
+              ...SECTION_SX,
+              pt: FRAME_GAP,
+              pb: FRAME_GAP,
+              gap: FRAME_GAP,
+              '& > *': COLUMN_SX,
+            }}
+          >
             <StationToolbar
               caps={caps}
               query={filters.q}
@@ -137,10 +167,6 @@ export function StationManagementPage() {
               onClear={() => setFilters(EMPTY_FILTERS)}
               count={rows.length}
               pendingStationCount={pendingStationCount}
-              view={view}
-              onViewChange={(next) =>
-                setParam('view', next === 'map' ? 'map' : null)
-              }
               onOpenReview={() => setReviewOpen(true)}
               onNew={() => openNew()}
               onImport={() => setImportOpen(true)}
@@ -150,62 +176,76 @@ export function StationManagementPage() {
         }
         filterPanel={
           filterOpen ? (
-            <StationFilterPanel
-              filters={filters}
-              onChange={setFilters}
-              canViewTeams={caps.canViewTeams}
-            />
+            <Box sx={COLUMN_SX}>
+              <StationFilterPanel
+                filters={filters}
+                onChange={setFilters}
+                canViewTeams={caps.canViewTeams}
+                areas={areas}
+                canFilterEstablished={disasterStartedAt !== null}
+              />
+            </Box>
           ) : undefined
         }
-        filterPanelSx={{ px: PAGE_GUTTER, pb: 2 }}
-        listContainerSx={{ px: PAGE_GUTTER, pb: PAGE_GUTTER }}
+        filterPanelSx={{ ...SECTION_SX, pb: FRAME_GAP }}
+        listContainerSx={{ ...SECTION_SX, pb: '28px' }}
         list={
-          view === 'map' ? (
-            <StationMapView
-              rows={rows}
-              hasAnyStation={hasAnyStation}
-              canAdd={caps.canAdd}
-              now={now}
-              selectedUuid={selectedUuid}
-              onSelect={setSelectedUuid}
-              onOpenStation={openStation}
-              onAddAt={
-                caps.canAdd ? (position) => openNew(position) : undefined
-              }
-            />
-          ) : (
-            <StationTable
-              rows={rows}
-              hasAnyStation={hasAnyStation}
-              loading={stations.isPending}
-              truncated={stations.truncated}
-              now={now}
-              canAdd={caps.canAdd}
-              onOpenStation={openStation}
-              renderStatus={
-                caps.canEdit
-                  ? (row) => <QuickStatusCell row={row} />
-                  : undefined
-              }
-              renderTeam={
-                caps.canAssign && caps.canViewTeams
-                  ? (row) => <TeamAssignCell row={row} />
-                  : undefined
-              }
-            />
-          )
+          <Box sx={COLUMN_SX}>
+            {view === 'map' ? (
+              <StationMapView
+                rows={rows}
+                hasAnyStation={hasAnyStation}
+                now={now}
+                selectedUuid={selectedUuid}
+                onSelect={setSelectedUuid}
+                onOpenStation={openStation}
+                onAddAt={
+                  caps.canAdd ? (position) => openNew(position) : undefined
+                }
+                onNew={emptyStateNew}
+                onImport={emptyStateImport}
+              />
+            ) : (
+              <StationTable
+                rows={rows}
+                hasAnyStation={hasAnyStation}
+                loading={stations.isPending}
+                truncated={stations.truncated}
+                now={now}
+                onNew={emptyStateNew}
+                onImport={emptyStateImport}
+                onOpenStation={openStation}
+                renderStatus={
+                  caps.canEdit
+                    ? (row) => <QuickStatusCell row={row} />
+                    : undefined
+                }
+                renderTeam={
+                  caps.canAssign && caps.canViewTeams
+                    ? (row) => <TeamAssignCell row={row} />
+                    : undefined
+                }
+              />
+            )}
+          </Box>
         }
       />
       <StationDetailSheet
         uuid={viewedUuid}
+        editing={formTarget?.mode === 'edit' && formTarget.uuid === viewedUuid}
         caps={caps}
         now={now}
-        onClose={() => openStation(null)}
+        onClose={() => {
+          setFormTarget(null);
+          openStation(null);
+        }}
         onEdit={editStation}
+        onEditEnd={() => setFormTarget(null)}
         onDelete={(uuid, name) => setPendingDelete({ uuid, name })}
       />
       <StationFormDrawer
-        target={formTarget}
+        target={formTarget?.mode === 'create' ? formTarget : null}
+        variant="admin"
         canViewPii={caps.canViewPii}
         onClose={() => setFormTarget(null)}
         onSaved={(station) => {

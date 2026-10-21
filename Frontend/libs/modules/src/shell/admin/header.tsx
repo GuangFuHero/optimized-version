@@ -1,6 +1,8 @@
 'use client';
 
 import { Bell } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { Box, IconButton, Stack, Typography } from '@mui/material';
 
@@ -9,6 +11,9 @@ import { designTokens, layoutSizes } from '@rescue-frontend/ui';
 import { AccountMenu } from './account-menu';
 
 const { color, typography } = designTokens;
+
+/** Where a page's title-side controls land; see AdminHeaderSlot. */
+const TITLE_SLOT_ID = 'admin-header-title-slot';
 
 interface AdminHeaderProps {
   title?: string;
@@ -40,6 +45,8 @@ export function AdminHeader({ title }: AdminHeaderProps) {
       >
         {title}
       </Typography>
+      {/* `display: contents` so the slot adds no box (and no gap) on pages that leave it empty. */}
+      <Box id={TITLE_SLOT_ID} sx={{ display: 'contents' }} />
       <Stack
         direction="row"
         sx={{ ml: 'auto', alignItems: 'center', gap: '16px' }}
@@ -51,4 +58,14 @@ export function AdminHeader({ title }: AdminHeaderProps) {
       </Stack>
     </Box>
   );
+}
+
+/**
+ * Renders a page's own controls right after the header title (e.g. the stations page's count and
+ * list/map switch). The shell owns the header, so the page portals into it rather than passing props.
+ */
+export function AdminHeaderSlot({ children }: { children: ReactNode }) {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => setTarget(document.getElementById(TITLE_SLOT_ID)), []);
+  return target ? createPortal(children, target) : null;
 }

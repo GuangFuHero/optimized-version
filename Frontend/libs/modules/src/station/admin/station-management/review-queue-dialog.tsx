@@ -5,6 +5,7 @@ import {
   ButtonBase,
   Dialog as MuiDialog,
   IconButton,
+  InputBase,
   MenuItem,
   TextField,
   ToggleButton,
@@ -12,6 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import {
+  type AdminStationReviewQuery,
   useMergeStationSuggestions,
   useStationHistory,
   useStationReview,
@@ -23,7 +25,15 @@ import {
   designTokens,
   TextInput,
 } from '@rescue-frontend/ui';
-import { CheckCheck, GitPullRequestArrow, X, Zap } from 'lucide-react';
+import {
+  ArrowRight,
+  Check,
+  CheckCheck,
+  GitPullRequestArrow,
+  PencilLine,
+  X,
+  Zap,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -32,6 +42,7 @@ import {
   buildDecisions,
   buildReviewFields,
   type FieldDecision,
+  hasConflict,
   pendingFieldsLabel,
   type ReviewField,
 } from './model/review';
@@ -41,6 +52,13 @@ import { formatAbsoluteTime } from './station-cells';
 const { color, radius, typography } = designTokens;
 
 const PENDING_FILTERS = { ...EMPTY_FILTERS, pending: true };
+
+/** The adopted value reads as the incoming change. */
+const ADOPTED = {
+  ...typography.body[400],
+  bgcolor: color.bg.success.subtle,
+  color: color.fg.success,
+};
 
 interface ReviewQueueDialogProps {
   open: boolean;
@@ -62,35 +80,73 @@ export function ReviewQueueDialog({
   const [selected, setSelected] = useState<string | null>(null);
   const current =
     stations.find((s) => s.uuid === selected) ?? stations[0] ?? null;
+  const uuid = current?.uuid ?? '';
+
+  // Loaded here, not in the detail pane, so the list can flag the selected station's conflict.
+  const review = useStationReview({ uuid });
+  // Conflicts come from the station's history; without it they are unknown, never "none".
+  const history = useStationHistory(
+    { path: { uuid }, query: { limit: 100 } },
+    { enabled: canViewHistory && Boolean(uuid) },
+  );
+  const historyEvents = history.isSuccess ? (history.data?.data ?? []) : null;
+  const fields = useMemo(
+    () => (review.data ? buildReviewFields(review.data, historyEvents) : []),
+    [review.data, historyEvents],
+  );
+  const currentConflict = hasConflict(fields);
 
   return (
     <MuiDialog
       open={open}
       onClose={onClose}
-      maxWidth="lg"
-      fullWidth
-      slotProps={{ paper: { sx: { height: 'min(82vh, 760px)' } } }}
+      maxWidth={false}
+      slotProps={{
+        paper: {
+          sx: { width: 'min(1060px, 96vw)', height: 'min(82vh, 760px)', m: 0 },
+        },
+      }}
     >
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
-          p: '16px 24px',
+          p: '18px 24px',
           borderBottom: `1px solid ${color.border.default}`,
         }}
       >
-        <GitPullRequestArrow size={20} />
+        <Box
+          sx={{
+            width: 38,
+            height: 38,
+            flexShrink: 0,
+            borderRadius: `${radius.md}px`,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: color.bg.warning.subtle,
+            color: color.bg.warning.default,
+          }}
+        >
+          <GitPullRequestArrow size={20} />
+        </Box>
         <Box sx={{ flex: 1 }}>
-          <Typography sx={typography.heading[600]}>前台修改建議審查</Typography>
+          <Typography sx={{ ...typography.heading[600], fontSize: 19 }}>
+            前台修改建議審查
+          </Typography>
           <Typography
             sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
           >
             {stations.length} 個站點有待審建議 · 核准前原資料不變動
           </Typography>
         </Box>
-        <IconButton aria-label="關閉" onClick={onClose}>
-          <X size={20} />
+        <IconButton
+          aria-label="關閉"
+          onClick={onClose}
+          sx={{ color: color.fg.neutral.muted }}
+        >
+          <X size={22} />
         </IconButton>
       </Box>
 
@@ -113,12 +169,14 @@ export function ReviewQueueDialog({
             <Box
               sx={{ p: 4, textAlign: 'center', color: color.fg.neutral.muted }}
             >
-              <CheckCheck size={32} />
+              {queue.isPending ? null : (
+                <CheckCheck size={32} color={color.bg.success.default} />
+              )}
               <Typography sx={{ ...typography.label[400], mt: '10px' }}>
                 {queue.isPending ? '載入中…' : '佇列已清空'}
               </Typography>
               {queue.isPending ? null : (
-                <Typography sx={typography.body[300]}>
+                <Typography sx={{ ...typography.body[300], mt: '4px' }}>
                   目前沒有待審的修改建議。
                 </Typography>
               )}
@@ -145,9 +203,15 @@ export function ReviewQueueDialog({
                   <Typography noWrap sx={typography.label[400]}>
                     {station.name}
                   </Typography>
-                  <Badge tone="warning" size="sm">
-                    {pendingFieldsLabel(station.pendingFieldCount)}
-                  </Badge>
+                  {active && currentConflict ? (
+                    <Badge tone="danger" variant="solid" size="sm">
+                      衝突
+                    </Badge>
+                  ) : (
+                    <Badge tone="warning" size="sm">
+                      {pendingFieldsLabel(station.pendingFieldCount)}
+                    </Badge>
+                  )}
                 </ButtonBase>
               );
             })
@@ -158,52 +222,83 @@ export function ReviewQueueDialog({
           <StationReview
             key={current.uuid}
             uuid={current.uuid}
+            name={review.data?.station?.name ?? current.name}
+            loading={review.isPending}
+            fields={fields}
+            enumFields={review.data?.suggestableFields}
+            historyLoading={canViewHistory && history.isPending}
+            historyUnavailable={!historyEvents}
             canEdit={canEdit}
-            canViewHistory={canViewHistory}
             onEditStation={onEditStation}
           />
-        ) : (
+        ) : queue.isPending ? (
           <Box />
+        ) : (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              p: 4,
+              textAlign: 'center',
+              color: color.fg.neutral.muted,
+            }}
+          >
+            <GitPullRequestArrow size={28} />
+            <Typography
+              sx={{ ...typography.label[500], color: color.fg.neutral.subtle }}
+            >
+              沒有需要審查的修改建議
+            </Typography>
+            <Typography sx={{ ...typography.body[300], maxWidth: 320 }}>
+              民眾在前台對站點按「建議修改」送出後，會排進這個佇列，由資料檢核員或超級管理員核准或退回。
+            </Typography>
+          </Box>
         )}
       </Box>
     </MuiDialog>
   );
 }
 
+type SuggestableField = NonNullable<
+  AdminStationReviewQuery['suggestableFields']
+>[number];
+
 function StationReview({
   uuid,
+  name,
+  loading,
+  fields,
+  enumFields,
+  historyLoading,
+  historyUnavailable,
   canEdit,
-  canViewHistory,
   onEditStation,
 }: {
   uuid: string;
+  name: string;
+  loading: boolean;
+  fields: ReviewField[];
+  enumFields: readonly SuggestableField[] | undefined;
+  historyLoading: boolean;
+  historyUnavailable: boolean;
   canEdit: boolean;
-  canViewHistory: boolean;
   onEditStation: (uuid: string) => void;
 }) {
-  const review = useStationReview({ uuid });
-  // Conflicts come from the station's history; without it they are unknown, never "none".
-  const history = useStationHistory(
-    { path: { uuid }, query: { limit: 100 } },
-    { enabled: canViewHistory },
-  );
-  const historyEvents = history.isSuccess ? (history.data?.data ?? []) : null;
   const merge = useMergeStationSuggestions();
   const [decisions, setDecisions] = useState<Record<string, FieldDecision>>({});
   const [note, setNote] = useState('');
 
-  const fields = useMemo(
-    () => (review.data ? buildReviewFields(review.data, historyEvents) : []),
-    [review.data, historyEvents],
-  );
   const enumOptions = useMemo(
     () =>
       Object.fromEntries(
-        (review.data?.suggestableFields ?? [])
+        (enumFields ?? [])
           .filter((f) => f.dataType === 'enum' && f.enumOptions)
           .map((f) => [f.fieldName, f.enumOptions ?? []]),
       ),
-    [review.data],
+    [enumFields],
   );
 
   const payload = buildDecisions(fields, decisions);
@@ -228,34 +323,35 @@ function StationReview({
       },
     );
 
-  if (review.isPending) {
+  if (loading) {
     return <Box sx={{ p: 3, ...typography.body[300] }}>載入中…</Box>;
   }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <Box sx={{ flex: 1, overflow: 'auto', p: '20px 24px' }}>
-        <Typography sx={{ ...typography.heading[600], mb: '4px' }}>
-          {review.data?.station?.name ?? '站點'}
+      <Box sx={{ flex: 1, overflow: 'auto', p: '24px' }}>
+        <Typography sx={{ ...typography.heading[600], mb: '16px' }}>
+          {name}
         </Typography>
-        <Typography
-          sx={{
-            ...typography.body[300],
-            color: color.fg.neutral.muted,
-            mb: '16px',
-          }}
-        >
-          欄位級對比：目前值 → 建議值。不決定的欄位會繼續留在佇列。
-        </Typography>
-        {fields.length > 0 && !historyEvents ? (
-          <Box sx={{ mb: '12px' }}>
+        {fields.length > 0 && historyUnavailable ? (
+          <Box sx={{ mb: '16px' }}>
             <Callout tone="warning">
-              {canViewHistory && history.isPending
+              {historyLoading
                 ? '正在讀取版本歷史，衝突檢查完成前請先確認目前值。'
                 : '無法讀取這個站點的版本歷史，無法檢查建議提出後欄位是否被改過。'}
             </Callout>
           </Box>
         ) : null}
+        <Typography sx={typography.label[400]}>欄位級對比</Typography>
+        <Typography
+          sx={{
+            ...typography.body[300],
+            color: color.fg.neutral.muted,
+            mb: '10px',
+          }}
+        >
+          目前值 → 採用的值。不決定的欄位會繼續留在佇列。
+        </Typography>
         {fields.length === 0 ? (
           <Callout tone="info">這個站點已沒有待審的建議。</Callout>
         ) : (
@@ -280,8 +376,8 @@ function StationReview({
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
-          gap: '10px',
-          p: '14px 24px',
+          gap: '12px',
+          p: '16px 24px',
           borderTop: `1px solid ${color.border.default}`,
         }}
       >
@@ -296,14 +392,14 @@ function StationReview({
         {canEdit ? (
           <Button
             variant="outline"
-            size="sm"
+            startIcon={<PencilLine size={16} />}
             onClick={() => onEditStation(uuid)}
           >
-            直接編輯站點
+            直接調整
           </Button>
         ) : null}
         <Button
-          size="sm"
+          startIcon={<Check size={18} />}
           disabled={payload.length === 0 || merge.isPending}
           onClick={submit}
         >
@@ -342,25 +438,31 @@ function ReviewFieldCard({
   return (
     <Box
       sx={{
-        border: `1px solid ${field.conflict ? color.bg.danger.default : color.border.default}`,
+        border: `1px solid ${color.border.default}`,
         borderRadius: `${radius.lg}px`,
         p: '14px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '10px',
+        gap: '11px',
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <Typography sx={typography.label[400]}>{field.label}</Typography>
         {field.conflict ? (
-          <Badge
-            tone="danger"
-            variant="solid"
-            size="sm"
-            icon={<Zap size={11} />}
+          <Box
+            component="span"
+            title="這個欄位在建議提出後已被更新，請確認目前值後再決定。"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              ...typography.label[300],
+              color: color.fg.danger,
+            }}
           >
-            衝突
-          </Badge>
+            <Zap size={13} />
+            同欄位衝突
+          </Box>
         ) : null}
         <Typography
           sx={{
@@ -374,26 +476,24 @@ function ReviewFieldCard({
         </Typography>
       </Box>
 
-      {field.conflict ? (
-        <Callout tone="danger">
-          這個欄位在建議提出後已被更新，請確認目前值後再決定。
-        </Callout>
-      ) : null}
-
-      <Box
-        sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}
-      >
-        <ValueBox label="目前值" value={field.currentValue} />
-        <Box>
-          <Typography
-            sx={{
-              ...typography.data[300],
-              color: color.fg.neutral.muted,
-              mb: '4px',
-            }}
-          >
-            採用的值
-          </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'stretch', gap: '10px' }}>
+        <ValueBox
+          label="目前值"
+          value={field.currentValue}
+          conflict={Boolean(field.conflict)}
+        />
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            pt: '22px',
+            color: color.fg.neutral.muted,
+          }}
+        >
+          <ArrowRight size={18} />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <ColumnLabel>採用的值</ColumnLabel>
           {options && options.length > 0 ? (
             <TextField
               select
@@ -401,6 +501,16 @@ function ReviewFieldCard({
               fullWidth
               value={value}
               onChange={(e) => setFinal(e.target.value)}
+              slotProps={{
+                htmlInput: { 'aria-label': `${field.label} 採用的值` },
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  ...ADOPTED,
+                  '& fieldset': { borderColor: color.bg.success.default },
+                },
+                '& .MuiSelect-select': { p: '10px 13px' },
+              }}
             >
               {options.map((option) => (
                 <MenuItem key={option} value={option}>
@@ -409,9 +519,17 @@ function ReviewFieldCard({
               ))}
             </TextField>
           ) : (
-            <TextInput
+            <InputBase
+              fullWidth
               value={value}
               onChange={(e) => setFinal(e.target.value)}
+              inputProps={{ 'aria-label': `${field.label} 採用的值` }}
+              sx={{
+                ...ADOPTED,
+                border: `1px solid ${color.bg.success.default}`,
+                borderRadius: `${radius.md}px`,
+                '& .MuiInputBase-input': { p: '10px 13px', height: 'auto' },
+              }}
             />
           )}
         </Box>
@@ -477,26 +595,40 @@ function ReviewFieldCard({
   );
 }
 
-function ValueBox({ label, value }: { label: string; value: string }) {
+function ColumnLabel({ children }: { children: string }) {
   return (
-    <Box>
-      <Typography
-        sx={{
-          ...typography.data[300],
-          color: color.fg.neutral.muted,
-          mb: '4px',
-        }}
-      >
-        {label}
-      </Typography>
+    <Typography
+      sx={{
+        ...typography.data[300],
+        color: color.fg.neutral.muted,
+        mb: '5px',
+      }}
+    >
+      {children}
+    </Typography>
+  );
+}
+
+function ValueBox({
+  label,
+  value,
+  conflict,
+}: {
+  label: string;
+  value: string;
+  conflict: boolean;
+}) {
+  return (
+    <Box sx={{ flex: 1, minWidth: 0 }}>
+      <ColumnLabel>{label}</ColumnLabel>
       <Box
         sx={{
-          ...typography.body[300],
-          p: '9px 12px',
+          ...typography.body[400],
+          p: '10px 13px',
           borderRadius: `${radius.md}px`,
-          bgcolor: color.bg.neutral.subtle,
+          bgcolor: conflict ? color.bg.danger.subtle : color.bg.neutral.subtle,
+          color: conflict ? color.fg.danger : color.fg.neutral.subtle,
           border: `1px solid ${color.border.default}`,
-          minHeight: 40,
           wordBreak: 'break-word',
         }}
       >

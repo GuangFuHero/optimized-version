@@ -7,7 +7,7 @@ import { Clock } from 'lucide-react';
 import { getFreshness } from './model/freshness';
 import { getOperationalStatusMeta } from '../../operational-status';
 
-const { color, typography } = designTokens;
+const { color, radius, typography } = designTokens;
 
 const absoluteTime = new Intl.DateTimeFormat('zh-TW', {
   timeZone: 'Asia/Taipei',
@@ -29,7 +29,7 @@ export function StatusBadge({ status }: { status: string | null | undefined }) {
   return <Badge tone={meta.tone}>{meta.label}</Badge>;
 }
 
-/** 最後更新: muted past 24 hours, an amber pill past 72. Staleness is never shown as danger. */
+/** 最後更新: muted past 24 hours, an orange outlined pill past 72. Staleness is never shown as danger. */
 export function FreshnessCell({
   updatedAt,
   now,
@@ -43,10 +43,26 @@ export function FreshnessCell({
   if (level === 'expired') {
     return (
       <Tooltip title={`${absolute}｜超過 72 小時未異動，前往前請先確認`}>
-        <Box component="span" sx={{ display: 'inline-flex' }}>
-          <Badge tone="warning" icon={<Clock size={12} />}>
-            {relative}
-          </Badge>
+        <Box
+          component="span"
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            height: 24,
+            px: '9px',
+            boxSizing: 'border-box',
+            borderRadius: `${radius.full}px`,
+            whiteSpace: 'nowrap',
+            bgcolor: color.bg.primary.subtle,
+            border: `1px solid ${color.brand.primary.default}`,
+            color: color.brand.primary.subtle,
+            ...typography.data[300],
+            fontWeight: 700,
+          }}
+        >
+          <Clock size={12} />
+          {relative}
         </Box>
       </Tooltip>
     );
@@ -62,7 +78,8 @@ export function FreshnessCell({
           ...typography.data[300],
           display: 'inline-flex',
           alignItems: 'center',
-          gap: '4px',
+          gap: '5px',
+          whiteSpace: 'nowrap',
           color:
             level === 'fresh'
               ? color.fg.neutral.subtle

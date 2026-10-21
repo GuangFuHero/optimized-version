@@ -2,7 +2,7 @@
 
 import {
   Box,
-  Chip,
+  ButtonBase,
   Dialog as MuiDialog,
   IconButton,
   MenuItem,
@@ -15,35 +15,76 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
-import { CircleCheck, Upload, X } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import {
+  CircleCheck,
+  CircleX,
+  Download,
+  FolderOpen,
+  Upload,
+  X,
+} from 'lucide-react';
+import {
+  type ChangeEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 
-import { STATION_TYPE_OPTIONS } from '../../type-options';
+import {
+  getStationTypeIcon,
+  getStationTypeLabel,
+  STATION_TYPE_OPTIONS,
+} from '../../type-options';
 import {
   downloadBase64,
+  downloadBlob,
+  errorsOutsideSample,
   importSummary,
   mergeMapping,
+  type PreviewRow,
+  previewRows,
   STATION_IMPORT_FIELDS,
+  stationImportTemplate,
 } from './model/import';
 
-const { color, radius, typography } = designTokens;
+const { color, focusRing, motion, radius, typography } = designTokens;
 
 type Preview = components['schemas']['BulkPreviewResponse'];
 type Result = components['schemas']['BulkImportResponse'];
 
 const SKIP = '__skip__';
 
+function downloadTemplate(stationType: string) {
+  const label =
+    STATION_TYPE_OPTIONS.find((o) => o.value === stationType)?.label ??
+    stationType;
+  // The BOM lets Excel open the CJK text as UTF-8, as the backend's own CSVs do.
+  downloadBlob(
+    new Blob(['\uFEFF', stationImportTemplate(stationType)], {
+      type: 'text/csv;charset=utf-8',
+    }),
+    `資源站點匯入範本_${label}.csv`,
+  );
+}
+
 export function StationImportDialog({ onClose }: { onClose: () => void }) {
   const [stationType, setStationType] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [pasted, setPasted] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
   const [result, setResult] = useState<Result | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const pasteTimer = useRef<number | undefined>(undefined);
   const previewImport = usePreviewStationImport();
   const commitImport = useCommitStationImport();
   const busy = previewImport.isPending || commitImport.isPending;
+
+  useEffect(() => {
+    return () => window.clearTimeout(pasteTimer.current);
+  }, []);
 
   const mapping = preview
     ? mergeMapping(preview.suggested_mapping, overrides)
@@ -59,12 +100,47 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
       { onSuccess: (data) => setPreview(data) },
     );
 
-  const chooseFile = (nextFile: File | undefined) => {
-    if (!nextFile || !stationType) return;
+  const startPreview = (nextFile: File, type: string) => {
     setFile(nextFile);
     setOverrides({});
     setPreview(null);
-    runPreview(nextFile, stationType);
+    runPreview(nextFile, type);
+  };
+
+  const chooseFile = (nextFile: File | undefined) => {
+    if (!nextFile || !stationType) return;
+    window.clearTimeout(pasteTimer.current);
+    setPasted('');
+    startPreview(nextFile, stationType);
+  };
+
+  // Pasted text goes through the same upload endpoint: the backend only accepts files.
+  const previewPasted = (text: string) => {
+    window.clearTimeout(pasteTimer.current);
+    pasteTimer.current = undefined;
+    if (!stationType || !text.trim()) return;
+    startPreview(
+      new File([text], 'pasted.csv', { type: 'text/csv' }),
+      stationType,
+    );
+  };
+
+  const changePasted = (text: string) => {
+    setPasted(text);
+    setFile(null);
+    setPreview(null);
+    setOverrides({});
+    window.clearTimeout(pasteTimer.current);
+    pasteTimer.current = window.setTimeout(() => previewPasted(text), 800);
+  };
+
+  const chooseType = (type: string) => {
+    window.clearTimeout(pasteTimer.current);
+    setStationType(type);
+    setFile(null);
+    setPasted('');
+    setPreview(null);
+    setOverrides({});
   };
 
   const changeMapping = (header: string, field: string) => {
@@ -101,9 +177,18 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
         string
       >)
     : {};
+  const rows = preview ? previewRows(preview, mapped) : [];
+  const laterErrors = preview ? errorsOutsideSample(preview) : [];
+  const importable = summary ? summary.create + summary.update : 0;
+  const typeLabel = stationType ? getStationTypeLabel(stationType) : '';
 
   return (
-    <MuiDialog open onClose={onClose} maxWidth="md" fullWidth>
+    <MuiDialog
+      open
+      onClose={onClose}
+      maxWidth={false}
+      slotProps={{ paper: { sx: { width: 'min(760px, 96vw)', m: 0 } } }}
+    >
       <Box
         sx={{
           display: 'flex',
@@ -111,10 +196,17 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
           gap: '10px',
           p: '16px 22px',
           borderBottom: `1px solid ${color.border.default}`,
+          color: color.fg.neutral.default,
         }}
       >
         {result ? <CircleCheck size={20} /> : <Upload size={20} />}
-        <Typography sx={{ ...typography.heading[600], flex: 1 }}>
+        <Typography
+          sx={{
+            ...typography.heading[600],
+            color: color.fg.neutral.default,
+            flex: 1,
+          }}
+        >
           {result ? '匯入完成' : '匯入資源站點'}
         </Typography>
         <IconButton aria-label="關閉" onClick={onClose}>
@@ -131,7 +223,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
               p: '20px 22px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '18px',
+              gap: '20px',
               overflow: 'auto',
             }}
           >
@@ -139,29 +231,48 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
               title="1 · 這份檔案是哪一種站點"
               caption="一個檔案只放一種站點；一列是一個站點。"
             >
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              <Box
+                role="radiogroup"
+                aria-label="站點類型"
+                sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
+              >
                 {STATION_TYPE_OPTIONS.map((option) => (
-                  <Chip
+                  <TypeChip
                     key={option.value}
+                    value={option.value}
                     label={option.label}
-                    clickable
-                    color={stationType === option.value ? 'primary' : 'default'}
-                    variant={
-                      stationType === option.value ? 'filled' : 'outlined'
-                    }
-                    onClick={() => {
-                      setStationType(option.value);
-                      setFile(null);
-                      setPreview(null);
-                      setOverrides({});
-                    }}
+                    active={stationType === option.value}
+                    onSelect={() => chooseType(option.value)}
                   />
                 ))}
               </Box>
             </Step>
 
             {stationType ? (
-              <Step title="2 · 上傳檔案">
+              <Step
+                title="2 · 上傳檔案"
+                trailing={
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      startIcon={<Download size={15} />}
+                      onClick={() => downloadTemplate(stationType)}
+                    >
+                      下載「{typeLabel}」範本
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      startIcon={<FolderOpen size={15} />}
+                      onClick={() => fileInput.current?.click()}
+                      disabled={busy}
+                    >
+                      選擇 CSV／Excel
+                    </Button>
+                  </>
+                }
+              >
                 <input
                   ref={fileInput}
                   type="file"
@@ -172,23 +283,40 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                     e.target.value = '';
                   }}
                 />
+                {file && !pasted ? <Muted>已選擇：{file.name}</Muted> : null}
                 <Box
-                  sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}
-                >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    startIcon={<Upload size={16} />}
-                    onClick={() => fileInput.current?.click()}
-                    disabled={busy}
-                  >
-                    選擇 CSV／Excel
-                  </Button>
-                  {file ? <Muted>已讀取：{file.name}</Muted> : null}
-                </Box>
+                  component="textarea"
+                  aria-label="貼上 CSV 內容"
+                  placeholder="也可以直接貼上 CSV 內容（第一列是欄位名稱）"
+                  value={pasted}
+                  onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                    changePasted(e.target.value)
+                  }
+                  onBlur={() => {
+                    if (pasteTimer.current !== undefined) previewPasted(pasted);
+                  }}
+                  sx={{
+                    ...typography.body[300],
+                    minHeight: 80,
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    p: '10px 12px',
+                    resize: 'vertical',
+                    color: color.fg.neutral.default,
+                    bgcolor: color.bg.neutral.subtle,
+                    border: `1px solid ${color.border.default}`,
+                    borderRadius: `${radius.md}px`,
+                    outline: 'none',
+                    '&::placeholder': { color: color.fg.neutral.muted },
+                    '&:focus-visible': {
+                      outline: `${focusRing.width}px solid ${focusRing.color}`,
+                      outlineOffset: `${focusRing.offset}px`,
+                    },
+                  }}
+                />
                 <Muted>
-                  從「匯出」下載的檔案就是範本。新的站點必填：站點名稱、緯度、經度。檔案裡沒有聯絡人、電話、營運狀態，建立後再補。匯入的站點來源依檔案的
-                  source 欄；要標示官方，請在檔案填 official。
+                  從「匯出」下載的檔案就是範本。新的站點必填：站點名稱、緯度、經度。檔案裡沒有聯絡人、電話、營運狀態，建立後再補。每一列的
+                  source 填 official，站點才會標示為官方。
                 </Muted>
               </Step>
             ) : null}
@@ -211,7 +339,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                             ...typography.body[300],
                             alignSelf: 'center',
                             color: unmapped
-                              ? color.fg.warning
+                              ? color.fg.neutral.muted
                               : color.fg.neutral.default,
                           }}
                         >
@@ -230,6 +358,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                           {STATION_IMPORT_FIELDS.map((field) => (
                             <MenuItem key={field.value} value={field.value}>
                               {field.label}
+                              {field.required ? <RequiredMark /> : null}
                             </MenuItem>
                           ))}
                         </TextField>
@@ -241,29 +370,28 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
             ) : null}
 
             {preview && summary ? (
-              <Step title="4 · 試算結果">
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '6px',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Badge tone="neutral">還沒寫入</Badge>
-                  <Badge tone="success">新增 {summary.create}</Badge>
-                  <Badge tone="info">更新 {summary.update}</Badge>
-                  <Badge tone={summary.failedLines ? 'danger' : 'neutral'}>
-                    失敗 {summary.failedLines}
-                  </Badge>
-                </Box>
+              <Step
+                title="4 · 預覽與檢查"
+                caption={`還沒寫入。可匯入 ${importable} 列${
+                  summary.failedLines > 0
+                    ? `，無法匯入 ${summary.failedLines} 列`
+                    : ''
+                }。`}
+              >
                 {summary.update > 0 ? (
                   <Muted>
-                    「更新」是站名＋縣市＋鄉鎮對到既有的站點；只會改說明、開放時間、level、comment、公開範圍和位置（經緯度），空白的格子不動。站名與地址建立後不能用匯入改。
+                    其中 {summary.update}{' '}
+                    列會更新既有站點：站名＋縣市＋鄉鎮對到既有的站點；只會改說明、開放時間、level、comment、公開範圍和位置（經緯度），空白的格子不動。站名與地址建立後不能用匯入改。
                   </Muted>
                 ) : null}
-                {preview.errors.length > 0 ? (
-                  <ErrorList errors={preview.errors} />
+                {rows.length > 0 ? <PreviewList rows={rows} /> : null}
+                {preview.row_count > rows.length ? (
+                  <Muted>
+                    只列出前 {rows.length} 列（共 {preview.row_count} 列）。
+                  </Muted>
+                ) : null}
+                {laterErrors.length > 0 ? (
+                  <ErrorList errors={laterErrors} />
                 ) : null}
               </Step>
             ) : null}
@@ -279,28 +407,167 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
             }}
           >
             <Muted sx={{ flex: 1 }}>
-              {summary
-                ? `新增 ${summary.create}・更新 ${summary.update}・失敗 ${summary.failedLines}（共 ${preview?.row_count ?? 0} 列）`
-                : busy
-                  ? '試算中…'
+              {busy
+                ? '試算中…'
+                : summary
+                  ? `可匯入 ${importable} 列・略過 ${summary.failedLines} 列`
                   : ''}
             </Muted>
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" onClick={onClose}>
               取消
             </Button>
             <Button
-              size="sm"
               onClick={commit}
+              startIcon={<Upload size={17} />}
               disabled={!summary?.canCommit || busy}
             >
-              {summary?.canCommit
-                ? `確認匯入 ${summary.create + summary.update} 列`
-                : '確認匯入'}
+              {summary?.canCommit ? `確認匯入 ${importable} 列` : '確認匯入'}
             </Button>
           </Box>
         </>
       )}
     </MuiDialog>
+  );
+}
+
+function TypeChip({
+  value,
+  label,
+  active,
+  onSelect,
+}: {
+  value: string;
+  label: string;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const Icon = getStationTypeIcon(value);
+  return (
+    <ButtonBase
+      role="radio"
+      aria-checked={active}
+      onClick={onSelect}
+      disableRipple
+      sx={{
+        ...typography.label[400],
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        height: 34,
+        px: '12px',
+        borderRadius: `${radius.full}px`,
+        border: `1px solid ${
+          active ? color.brand.primary.default : color.border.default
+        }`,
+        bgcolor: active ? color.bg.primary.subtle : color.bg.neutral.default,
+        color: color.fg.neutral.default,
+        transition: `background-color ${motion.transition.fast}`,
+        '&:hover': {
+          bgcolor: active ? color.bg.primary.subtle : color.bg.neutral.subtle,
+        },
+        '&.Mui-focusVisible': {
+          outline: `${focusRing.width}px solid ${focusRing.color}`,
+          outlineOffset: `${focusRing.offset}px`,
+        },
+      }}
+    >
+      <Icon sx={{ fontSize: 16 }} aria-hidden />
+      {label}
+    </ButtonBase>
+  );
+}
+
+function PreviewList({ rows }: { rows: readonly PreviewRow[] }) {
+  return (
+    <Box
+      sx={{
+        maxHeight: 260,
+        overflowY: 'auto',
+        border: `1px solid ${color.border.default}`,
+        borderRadius: `${radius.md}px`,
+      }}
+    >
+      {rows.map((row) => {
+        const bad = row.errors.length > 0;
+        return (
+          <Box
+            key={row.line}
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: '44px 1fr',
+              gap: '10px',
+              p: '9px 12px',
+              borderBottom: `1px solid ${color.border.subtle}`,
+              opacity: bad ? 0.75 : 1,
+            }}
+          >
+            <Typography
+              sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+            >
+              #{row.line}
+            </Typography>
+            <Box sx={{ minWidth: 0 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                {bad ? (
+                  <CircleX
+                    size={14}
+                    color={color.fg.danger}
+                    aria-label="無法匯入"
+                  />
+                ) : (
+                  <CircleCheck
+                    size={14}
+                    color={color.fg.success}
+                    aria-label="可匯入"
+                  />
+                )}
+                <Typography sx={typography.label[300]}>
+                  {row.name || '（無名稱）'}
+                </Typography>
+                {row.type ? (
+                  <Typography
+                    sx={{
+                      ...typography.data[300],
+                      color: color.fg.neutral.muted,
+                    }}
+                  >
+                    {getStationTypeLabel(row.type)}
+                  </Typography>
+                ) : null}
+              </Box>
+              <Muted>{row.address || '（無地址）'}</Muted>
+              {row.errors.map((message, i) => (
+                <Typography
+                  key={i}
+                  sx={{ ...typography.data[300], color: color.fg.danger }}
+                >
+                  · {message}
+                </Typography>
+              ))}
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function RequiredMark() {
+  return (
+    <Box
+      component="span"
+      aria-hidden
+      sx={{ color: color.fg.danger, ml: '2px' }}
+    >
+      *
+    </Box>
   );
 }
 
@@ -351,7 +618,6 @@ function ImportResult({
         {result.error_report ? (
           <Button
             variant="outline"
-            size="sm"
             onClick={() =>
               result.error_report && downloadBase64(result.error_report)
             }
@@ -359,9 +625,7 @@ function ImportResult({
             下載失敗的列
           </Button>
         ) : null}
-        <Button size="sm" onClick={onClose}>
-          關閉
-        </Button>
+        <Button onClick={onClose}>關閉</Button>
       </Box>
     </>
   );
@@ -407,15 +671,34 @@ function ErrorList({
 function Step({
   title,
   caption,
+  trailing,
   children,
 }: {
   title: string;
   caption?: string;
+  /** Actions or badges at the end of the title row. */
+  trailing?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <Typography sx={typography.label[500]}>{title}</Typography>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '8px 10px',
+        }}
+      >
+        <Typography sx={{ ...typography.label[400], flex: 1 }}>
+          {title}
+        </Typography>
+        {trailing ? (
+          <Box sx={{ display: 'inline-flex', flexWrap: 'wrap', gap: '8px' }}>
+            {trailing}
+          </Box>
+        ) : null}
+      </Box>
       {caption ? <Muted>{caption}</Muted> : null}
       {children}
     </Box>

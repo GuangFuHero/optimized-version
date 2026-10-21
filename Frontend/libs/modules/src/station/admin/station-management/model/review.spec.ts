@@ -6,6 +6,7 @@ import {
   buildDecisions,
   buildReviewFields,
   hasChangedSince,
+  hasConflict,
   pendingFieldsLabel,
 } from './review';
 
@@ -142,5 +143,13 @@ describe('pendingFieldsLabel', () => {
     expect(pendingFieldsLabel(2)).toBe('2 欄');
     // Only its resources have suggestions: pendingSuggestedFields covers station fields only.
     expect(pendingFieldsLabel(0)).toBe('資源待審');
+  });
+});
+
+describe('hasConflict', () => {
+  it('is true only when a field is known to conflict', () => {
+    expect(hasConflict([{ conflict: false }, { conflict: true }])).toBe(true);
+    expect(hasConflict([{ conflict: false }, { conflict: null }])).toBe(false);
+    expect(hasConflict([])).toBe(false);
   });
 });

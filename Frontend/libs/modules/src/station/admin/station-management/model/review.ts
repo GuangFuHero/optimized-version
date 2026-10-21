@@ -154,3 +154,10 @@ export function buildDecisions(
 export function pendingFieldsLabel(stationFieldCount: number): string {
   return stationFieldCount > 0 ? `${stationFieldCount} 欄` : '資源待審';
 }
+
+/** Whether any field is known to conflict; an unknown conflict (no history) is not one. */
+export function hasConflict(
+  fields: readonly Pick<ReviewField, 'conflict'>[],
+): boolean {
+  return fields.some((field) => field.conflict === true);
+}
