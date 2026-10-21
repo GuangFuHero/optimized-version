@@ -11,7 +11,7 @@ export interface TicketAddressParts {
   floor?: string | null;
   /** '302' or '樓梯間' alike, so no 室 is added either. */
   room?: string | null;
-  /** A hint for finding the way in; on older tickets from the site, the whole address as typed. */
+  /** A hint for finding the way in; the site's 請求協助 form still sends the whole typed address here. */
   landmarkNote?: string | null;
 }
 
@@ -25,7 +25,7 @@ export function formatTicketStreet(
     return null;
   }
 
-  // Older tickets from the site's 請求協助 carry the typed address in the landmark note instead.
+  // The site's 請求協助 form still sends the typed address as the landmark note, with no parts split out.
   const street = part(location.fullAddress) || part(location.landmarkNote);
 
   return street || null;

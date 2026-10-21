@@ -66,9 +66,8 @@ class SecondaryLocation(Base, UUIDPKMixin):
     )
     pole_note: Mapped[str | None] = mapped_column(String)
 
-    # Keyword search over the door and pole, joined with no separator because an address is typed
-    # as one string (光復鄉糖廠街). 村里 and 鄰 would sit inside that string and break it, and the
-    # free-text and space-detail fields are left out.
+    # Keyword search over the address from 縣市 to 室 plus the pole id, joined with no separator because
+    # an address is typed as one string (光復鄉糖廠街); 村里, 鄰 and the free-text fields are left out.
     search_text: Mapped[str] = mapped_column(
         String,
         Computed(
