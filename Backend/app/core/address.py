@@ -45,8 +45,8 @@ _TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區)))")
 _VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?![村里])(?![東西南北中]?(?:路|街|大道))")
 _NEIGHBORHOOD_RE = re.compile(r"^(\d+鄰)")
 
-# The tail runs 段 巷 弄 (衖 衕) 號 樓 室, each part optional; 衖 and 衕 stay only in the line. 巷 and 弄
-# need leading digits, so a road named like 松羅南巷 stays the road; `unit` is the 樓/室 with its separator.
+# The tail is 段 巷 弄 (衖 衕, kept only in the line) 號, then a `unit` of 棟 樓 室 that is cut from the line.
+# Each part is optional, and 巷 and 弄 need leading digits so a road named like 松羅南巷 stays the road.
 _TAIL_RE = re.compile(
     r"(?P<section>(?:\d+|[一二三四五六七八九十]+)段)?"
     r"(?P<lane>\d+巷)?"
@@ -54,8 +54,10 @@ _TAIL_RE = re.compile(
     r"(?:\d+衖)?(?:\d+衕)?"
     r"(?P<no>\d+(?:[-之]\d+)?號(?:[-之]\d+)?)?"
     r"(?P<unit>[-之(]?"
+    r"(?:(?P<building>[0-9A-Za-z甲乙丙丁戊]+棟)[-之]?)?"
     r"(?P<floor>地下室|(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|層|[Ff])(?:[-之][0-9A-Za-z]+)?|[Bb]\d+)?"
-    r"(?:[-之]?(?P<room>[0-9A-Za-z]{1,8})室)?\)?)"
+    r"(?:[-之]?(?P<room>[0-9A-Za-z]{1,8})室)?"
+    r"(?:\(?(?P<building_after>[0-9A-Za-z甲乙丙丁戊]+棟)\)?)?\)?)"
     r"$"
 )
 _TAIL_PARTS = ("section", "lane", "alley", "no", "floor", "room")
@@ -75,6 +77,7 @@ class AddressParts:
     lane: str | None = None
     alley: str | None = None
     no: str | None = None
+    building_section: str | None = None
     floor: str | None = None
     room: str | None = None
 
@@ -100,25 +103,28 @@ def _take(pattern: re.Pattern, text: str) -> tuple[str | None, str]:
 def _split_tail(rest: str) -> tuple[int, dict[str, str | None], int | None]:
     """Split `rest` at the earliest offset where a tail starts, keeping the road as short as possible.
 
-    Returns (offset, tail parts, offset where 樓/室 begin or None); with no tail the offset is len(rest).
+    Returns (offset, tail parts, offset where 棟/樓/室 begin or None); with no tail the offset is len(rest).
     """
     for i in range(len(rest)):
         m = _TAIL_RE.fullmatch(rest[i:])
-        if m is None or not any(m.group(k) for k in _TAIL_PARTS):
+        if m is None:
             continue
         tail = {k: m.group(k) for k in _TAIL_PARTS}
+        tail["building_section"] = m.group("building") or m.group("building_after")
+        if not any(tail.values()):
+            continue
         if tail["no"]:
             tail["no"] = tail["no"].replace("-", "之")
-        has_unit = tail["floor"] or tail["room"]
+        has_unit = tail["building_section"] or tail["floor"] or tail["room"]
         return i, tail, (i + m.start("unit")) if has_unit else None
-    return len(rest), dict.fromkeys(_TAIL_PARTS), None
+    return len(rest), dict.fromkeys((*_TAIL_PARTS, "building_section")), None
 
 
 def parse_tw_address(text: str | None) -> AddressParts:
     """Split an address line into its parts; whatever is not recognized stays in `full_address`.
 
-    A 樓/室 tail is returned as `floor`/`room` and cut from `full_address`, so the line holds the
-    door alone, as TGOS writes it.
+    A 棟/樓/室 tail comes back as `building_section`/`floor`/`room` and is cut from `full_address`, so
+    the line holds the door alone, as TGOS writes it.
     """
     line = fold(text)
     if not line:

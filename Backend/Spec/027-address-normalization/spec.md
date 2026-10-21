@@ -40,7 +40,7 @@ Frontend                  Backend (GraphQL)         TGOS QueryAddr   TGOS GeoQue
 ```
 
 - **Lookups** (`normalizeAddress`, `reverseGeocode`) are read-only queries for signed-in callers, 30 a
-  minute each. A found address comes back split by the same parser the save uses, with a signed
+  minute per user across both. A found address comes back split by the same parser the save uses, with a signed
   **address token**.
 - **Saves** never call TGOS. `fullAddress` is split into the columns; a token that matches the line
   exactly marks it confirmed.
@@ -65,7 +65,8 @@ Frontend                  Backend (GraphQL)         TGOS QueryAddr   TGOS GeoQue
   `verified`.
 - **Parts keep their units** (`3鄰`, `一段`, `469巷`, `1弄`, `19號`), so display and search need no rules.
   **臺 is stored as TGOS writes it**; a typed 台 county becomes 臺.
-- **A 樓/室 typed into the line** fills `floor`/`room` when those are empty and is cut from the line.
+- **A 棟/樓/室 typed into the line** fills `buildingSection`/`floor`/`room` when those are empty and is cut
+  from the line.
 - **Bulk import parses only**: no TGOS call, no batch service. Rows are `unverified`; nothing re-checks
   them later. The station file has one `address` column in place of the five old ones; the match key is
   name + 縣市 + 鄉鎮市區 read from it.

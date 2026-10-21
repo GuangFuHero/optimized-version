@@ -266,7 +266,8 @@ class GeoQuery:
     @strawberry.field(
         description=(
             "Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin "
-            "as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute"
+            "as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute shared "
+            "with reverseGeocode"
         )
     )
     async def normalize_address(
@@ -284,7 +285,10 @@ class GeoQuery:
         return AddressLookupType.from_lookup(await address_service.lookup_address(address, pin))
 
     @strawberry.field(
-        description="The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute"
+        description=(
+            "The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute "
+            "shared with normalizeAddress"
+        )
     )
     async def reverse_geocode(self, info: strawberry.types.Info, lat: float, lng: float) -> AddressLookupType:
         """The nearest 門牌 to a pin, within 500 m."""

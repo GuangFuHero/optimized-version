@@ -100,6 +100,9 @@ class AddressLookupType:
     lane: str | None = strawberry.field(default=None, description="巷, e.g. '469巷'")
     alley: str | None = strawberry.field(default=None, description="弄, e.g. '1弄'")
     no: str | None = strawberry.field(default=None, description="號, e.g. '19號'")
+    building_section: str | None = strawberry.field(
+        default=None, description="A 棟 typed after the 號, split off for the building-section field"
+    )
     floor: str | None = strawberry.field(
         default=None, description="A 樓 typed after the 號, split off for the floor field"
     )

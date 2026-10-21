@@ -259,6 +259,16 @@ def test_an_expired_token_is_unverified():
     assert stored["normalization_status"] == "unverified"
 
 
+def test_a_typed_building_fills_an_empty_building_section():
+    """A 棟 in the line fills an empty building section, as a typed floor fills the floor."""
+    stored = apply_address({"full_address": "花蓮縣光復鄉糖廠街19號A棟3樓"}, point=None)
+    assert (stored["full_address"], stored["building_section"], stored["floor"]) == (
+        "花蓮縣光復鄉糖廠街19號",
+        "A棟",
+        "3樓",
+    )
+
+
 def test_a_typed_floor_fills_an_empty_floor_but_never_overrides_one():
     """A 樓 in the line fills an empty floor field but never replaces one."""
     assert apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None)["floor"] == "3樓"

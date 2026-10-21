@@ -155,6 +155,7 @@ async def test_ngo_team_admin_cannot_pin_a_building(client, redis):
     [
         ({"floorAreas": [{"floor": "9F", "areas": ["頂樓"]}]}, "Floor '9F' is not in this building"),
         ({"secondaryLocation": {**ADDRESS, "floor": "2F"}}, "no building section, floor or room"),
+    ({"secondaryLocation": {"fullAddress": "花蓮縣光復鄉中正路10號A棟"}}, "no building section, floor or room"),
         ({"floorsAboveGround": 0}, "floorsAboveGround must be"),
         ({"floorAreas": [{"floor": "1F", "areas": ["   "]}]}, "Area names must be"),
         (

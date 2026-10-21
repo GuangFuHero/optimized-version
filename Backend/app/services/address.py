@@ -46,7 +46,8 @@ _STRING_RE = re.compile(r"<string[^>]*>(.*)</string>", re.S)
 
 _TOKEN_TYPE = "address"
 _TOKEN_LIFETIME = timedelta(days=1)  # long enough to finish a form
-_ADDRESS_COLUMNS = tuple(f for f in AddressParts.__dataclass_fields__ if f not in ("floor", "room"))
+_UNIT_FIELDS = ("building_section", "floor", "room")
+_ADDRESS_COLUMNS = tuple(f for f in AddressParts.__dataclass_fields__ if f not in _UNIT_FIELDS)
 
 # QueryAddr takes every parameter on every call. Exact matches only: fuzzy matching lands on the
 # nearest existing number, which can be a different house.
@@ -166,7 +167,7 @@ def _found(row: dict, pin: tuple[float, float] | None) -> AddressLookup:
 async def lookup_address(text: str, pin: tuple[float, float] | None = None) -> AddressLookup:
     """Look a typed address up in TGOS (exact match only), measured against the pin if given.
 
-    A 樓/室 typed into the line is not sent; it comes back in `parts.floor` / `parts.room`.
+    A 棟/樓/室 typed into the line is not sent; it comes back in `parts` as building_section, floor, room.
     """
     typed = parse_tw_address(text)
     query = typed.full_address or fold(text)
@@ -189,7 +190,7 @@ async def lookup_address(text: str, pin: tuple[float, float] | None = None) -> A
     if len(rows) > 1:
         return AddressLookup(AMBIGUOUS)
     found = _found(rows[0], pin)
-    return replace(found, parts=replace(found.parts, floor=typed.floor, room=typed.room))
+    return replace(found, parts=replace(found.parts, **{k: getattr(typed, k) for k in _UNIT_FIELDS}))
 
 
 async def reverse_geocode(lat: float, lng: float) -> AddressLookup:
@@ -230,8 +231,8 @@ def apply_address(sl: dict | None, *, point: tuple[float, float] | None) -> dict
     token = values.pop("address_token", None)
     parts = parse_tw_address(values.get("full_address"))
     values |= {k: getattr(parts, k) for k in _ADDRESS_COLUMNS}
-    # A 樓/室 typed into the line fills the floor and room only when those were left empty.
-    for unit in ("floor", "room"):
+    # A 棟/樓/室 typed into the line fills its field only when that was left empty.
+    for unit in _UNIT_FIELDS:
         values[unit] = values.get(unit) or getattr(parts, unit)
     values["normalization_status"] = _grade(token, parts.full_address, point) if parts.full_address else None
     check_lengths(SecondaryLocation, **values)

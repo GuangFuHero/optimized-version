@@ -96,9 +96,9 @@ async def create_building_map(
     await require_scope(actor, Perm.ZONE_ADD, db)
     await _require_gov_team(db, actor)
     validate_point(geometry, entity="Building map")
+    secondary_location = apply_address(secondary_location, point=point_of(geometry))
     if any(secondary_location.get(k) for k in ("building_section", "floor", "room")):
         raise ValueError("A building map's address has no building section, floor or room")
-    secondary_location = apply_address(secondary_location, point=point_of(geometry))
     building = await building_map_repository.add(
         db,
         obj_in={

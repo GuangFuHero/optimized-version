@@ -30,7 +30,8 @@ Frontend                  Backend (GraphQL)         TGOS QueryAddr   TGOS GeoQue
 | Finishes typing an address | `normalizeAddress(address, lat, lng)` | On blur or a 「確認地址」 button, **never on every keystroke**. Pass the pin if there is one. |
 | Saves | create / update mutation | Send `fullAddress` and `addressToken` from the last lookup. |
 
-Each signed-in user gets 30 lookups a minute, and the whole platform shares 300,000 a month. Guests
+Each signed-in user gets 30 lookups a minute across both queries, and the whole platform shares
+300,000 a month. Guests
 cannot look up (they cannot file either).
 
 ## 2. The two queries
@@ -38,7 +39,7 @@ cannot look up (they cannot file either).
 ```graphql
 fragment AddressLookupFields on AddressLookupType {
   status fullAddress county town village neighborhood road section lane alley no
-  floor room lat lng distanceM pinMismatch addressToken
+  buildingSection floor room lat lng distanceM pinMismatch addressToken
 }
 
 query NormalizeAddress($address: String!, $lat: Float, $lng: Float) {
@@ -58,14 +59,14 @@ Example: `normalizeAddress(address: "花蓮縣光復鄉糖廠街19號3樓", lat:
   "fullAddress": "花蓮縣光復鄉大進村3鄰糖廠街19號",
   "county": "花蓮縣", "town": "光復鄉", "village": "大進村", "neighborhood": "3鄰",
   "road": "糖廠街", "section": null, "lane": null, "alley": null, "no": "19號",
-  "floor": "3樓", "room": null,
+  "buildingSection": null, "floor": "3樓", "room": null,
   "lat": 23.658676, "lng": 121.420631, "distanceM": 4.1, "pinMismatch": false,
   "addressToken": "eyJhbGciOi…"
 }
 ```
 
-`floor` / `room` are what the user typed after the 號, split off for the floor and room fields. TGOS
-itself knows nothing about floors.
+`buildingSection` / `floor` / `room` are the 棟, 樓 and 室 the user typed after the 號, split off for
+their own fields. TGOS itself knows nothing about them.
 
 ## 3. What to show for each `status`
 
@@ -97,8 +98,8 @@ secondaryLocation: {
   exact line it came with, for one day; otherwise the address saves as `unverified`.
 - **No lookup, or not found?** Send the typed line as `fullAddress` without a token. It is still split
   into parts as far as it goes.
-- **Floor and room** go in their own fields. A 樓/室 left at the end of `fullAddress` is moved there
-  only if those fields are empty.
+- **Building, floor and room** go in their own fields. A 棟/樓/室 left at the end of `fullAddress` is
+  moved there only if those fields are empty.
 - The same input is used by `createTicket`, `updateTicket`, `createHelpRequest`, `createStation` and
   `createBuildingMap`. On `updateTicket` the whole address is replaced, so send every field again.
 

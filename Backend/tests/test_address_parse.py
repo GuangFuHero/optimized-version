@@ -129,6 +129,21 @@ def test_a_basement_or_a_bracketed_floor_is_the_floor(line, full_address, floor)
     assert parts.no is not None
 
 
+@pytest.mark.parametrize(
+    ("line", "full_address", "building", "floor"),
+    [
+        ("花蓮縣光復鄉大進村糖廠街19號A棟3樓", "花蓮縣光復鄉大進村糖廠街19號", "A棟", "3樓"),
+        ("臺北市中正區中正路1號3樓(B棟)", "臺北市中正區中正路1號", "B棟", "3樓"),
+        ("臺北市中正區中正路1號甲棟", "臺北市中正區中正路1號", "甲棟", None),
+    ],
+)
+def test_a_building_after_the_door_is_the_building_section(line, full_address, building, floor):
+    """A 棟 before or after the floor comes off the line as the building section, leaving the 號."""
+    parts = parse_tw_address(line)
+    assert (parts.full_address, parts.building_section, parts.floor) == (full_address, building, floor)
+    assert parts.no is not None
+
+
 def test_a_room_written_after_zhi_is_the_room():
     """10樓之3室 reads as floor 10樓 and room 3, with nothing left dangling in the line."""
     parts = parse_tw_address("臺中市西區五權西路一段10號10樓之3室")
