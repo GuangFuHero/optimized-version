@@ -23,6 +23,9 @@
   - 邀請頁加 `pending_elsewhere`；交接說明補 LINE-only 帳號要等 #94；RBAC 矩陣、er-diagram、migration E501。
   - **拿掉團隊解散**（Popo，依 ADMIN-027 Story 4）：status 只剩 active／suspended；ADR-357 修訂、ADR-360 SUPERSEDED。
   - 前端產生的 contracts 重新產生並 commit（使用者同意）。
+- 2026-10-21 合併順序：#92 先合（使用者決定）。#93 疊在 `feat/dedup-review-queue` 上，PR base 改成該分支；
+  `11f0025d521b` 改接 #92 的 head `a5e641c99923`，migration 測試 `_BEFORE` 跟著改；`api.py` 兩邊 router 都留。
+  #92 合進 main 後，把 #93 的 base 改回 main。
 
 **Goal:** 在 Spec 019 的 `role_requests` 上加入「申請加入既有團隊／成立新團隊」與團隊邀請連結，讓 team admin 與
 super admin 從各自的審核佇列決定；加上團隊雜項（最後 admin 防呆、聯絡欄位、編輯／停用、稽核紀錄讀取）。

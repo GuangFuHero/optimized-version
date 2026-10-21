@@ -320,9 +320,10 @@ task that adds it:
 
 ## Operations
 
-- Migration parent: main's head `209c4375c3e1` (2026-10-20). `Spec/025-dedup-review-queue` branches from the
-  same head; whichever merges second changes its `down_revision`, and its PR says so.
+- Migration parent: Spec 025's head `a5e641c99923` (#92). Popo, 2026-10-21: #92 merges first and this PR is
+  stacked on `feat/dedup-review-queue`, so `11f0025d521b` revises `a5e641c99923`, not main's `209c4375c3e1`.
 - New grants: `team.edit` and the new `team.audit.view` to `admin` at `team`; `team.audit.view` to
   `super_admin` at `all` (ADR-357, ADR-358). The seed writes them on a new database; migration
   `79a19cabc98a` writes the missing ones on an existing database, keeping any scope set at runtime (ADR-055).
-- Migrations: `11f0025d521b` → `0662cf1d2c83` → `79a19cabc98a`, from main's `209c4375c3e1`.
+- Migrations: `209c4375c3e1` → (#92) `1649d30b0122` → `a5e641c99923` → `11f0025d521b` → `0662cf1d2c83` →
+  `79a19cabc98a`, one head.

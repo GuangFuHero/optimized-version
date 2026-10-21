@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 
-# briefing announcement drafts: main's head when Spec 026 started.
-_BEFORE = "209c4375c3e1"
+# Spec 025's last migration (dedup verdict_revoked): #92 merges first and Spec 026 chains after it.
+_BEFORE = "a5e641c99923"
 _LEGACY_NOTE = "申請流程已更新，請重新送出申請。"
 
 _DB_NAME = f"{TEST_DB_URL.rsplit('/', 1)[-1]}_join"

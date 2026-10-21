@@ -1,7 +1,7 @@
 """join requests: applications name a team, invite links, team housekeeping (Spec 026)
 
 Revision ID: 11f0025d521b
-Revises: 209c4375c3e1
+Revises: a5e641c99923
 Create Date: 2026-10-20 12:00:00.000000
 
 `role_requests` gains the team a member request asks for, the name of a team to found, the
@@ -28,7 +28,7 @@ from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.
 revision: str = "11f0025d521b"
-down_revision: str | Sequence[str] | None = "209c4375c3e1"
+down_revision: str | Sequence[str] | None = "a5e641c99923"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
