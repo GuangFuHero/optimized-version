@@ -63,11 +63,17 @@ query GetStation($uuid: UUID!) {
     secondaryLocation {
       uuid
       locationType
+      fullAddress
       county
-      city
+      town
+      village
+      neighborhood
+      road
+      section
       lane
       alley
       no
+      normalizationStatus
       floor
       room
       poleId
