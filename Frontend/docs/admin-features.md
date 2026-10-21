@@ -29,7 +29,8 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `shell/admin/*`
 - `station/admin/station-create`
 - `station/admin/station-detail`
-- `station/admin/station-list`
+- `station/admin/station-form`
+- `station/admin/station-management`
 - `ticket/admin/ticket-create`
 - `ticket/admin/ticket-detail`
 - `ticket/admin/ticket-list`
@@ -45,7 +46,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `page.tsx` + `admin-map-page.client.tsx` 已存在
 - 使用 `@rescue-frontend/modules` 的 `Map`
 - 已有「新增站點 / 新增任務」控制 UI
-- 依賴 `StationCreateDrawer`、`TicketCreateDrawer`
+- 依賴 `StationCreateDrawer`（共用的 `StationFormDrawer` 新增模式）、`TicketCreateDrawer`
 - 只有登入狀態會顯示建立 controls
 
 ### `/stations`（資源站點管理 v2，ADMIN-026）
@@ -53,8 +54,9 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `page.tsx` 掛載 `StationManagementPage`（`libs/modules/src/station/admin/station-management/`），接真實 API
 - 狀態統計（`/analytics/stations/data` 各營運狀態數量）、篩選（類型、營運狀態、指派 Team、官方認定、更新時間、關鍵字，存在 URL）、列表／地圖切換
 - 列表會分頁讀完權限範圍內所有站點（上限 5,000），官方認定、更新時間篩選與排序（開設中優先、最近更新優先）在前端做
-- 站點抽屜：基本資料、照片、資源、聯絡資訊（無 `station.view_pii` 時顯示遮罩值且不可改）、版本歷史；`/stations?station=<uuid>` 直接開啟，給通知連結用
-- 新增／編輯／刪除站點、列表上直接改營運狀態與指派 Team；後台新增的站點一律 `source: "official"`（`/map` 的新增抽屜也是）
+- 站點抽屜沿用地圖的 `StationDetailDrawer`：基本資料、照片、資源、聯絡資訊（無 `station.view_pii` 時顯示遮罩值且不可改）、版本歷史；`/stations?station=<uuid>` 直接開啟，給通知連結用
+- 新增／編輯用 `station/admin/station-form` 的 `StationFormDrawer`，與 `/map` 的新增共用同一份表單；地址只在新增時送出（`UpdateStationInput` 不能改 `secondaryLocation`）
+- 刪除站點、列表上直接改營運狀態與指派 Team；後台新增的站點一律 `source: "official"`
 - 前台修改建議審查：依欄位決定採用／不採用（可改寫入值），一次送出附一則審核備註（`mergeStationSuggestions`）
 - 批次匯入（試算 → 欄位對應 → 確認，失敗列可下載）與匯出（單一類型，CSV／Excel）
 - 權限一律看後端回的 capabilities（`station.add/edit/delete/review/assign/import/export/view_history/view_pii`）
@@ -68,7 +70,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 匯出只能選一種類型，不套用列表篩選
 - 站點照片只能附 URL，沒有上傳端點
 - 群眾評分沒有站點層級的讀取與統計，且 `crowdSourcings` 原始資料公開回傳 `userUuid`
-- 營運狀態文字（開設中／暫時關閉／永久關閉）待產品確認是否改為兩態，只需改 `model/status.ts`
+- 營運狀態文字（開設中／暫時關閉／永久關閉）待產品確認是否改為兩態，只需改 `station/operational-status.ts`
 
 ### `/tickets`
 

@@ -2,6 +2,9 @@ import type { AdminStationFieldsFragment } from '@rescue-frontend/data-access/ad
 
 import { getStationTypeLabel } from '../../../type-options';
 
+/** Shown wherever a station has no name. */
+export const UNNAMED_STATION = '（未命名站點）';
+
 export interface StationRow {
   uuid: string;
   name: string;
@@ -27,7 +30,7 @@ export function toStationRow(station: AdminStationFieldsFragment): StationRow {
   const city = station.secondaryLocation?.city?.trim() ?? '';
   return {
     uuid: station.uuid,
-    name: station.name?.trim() || '（未命名站點）',
+    name: station.name?.trim() || UNNAMED_STATION,
     type: station.type ?? '',
     typeLabel: getStationTypeLabel(station.type),
     operationalStatus: station.operationalStatus,

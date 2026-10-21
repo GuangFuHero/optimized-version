@@ -1,6 +1,9 @@
 import { getFreshness } from './freshness';
 import type { StationRow } from './station-row';
-import { OPERATIONAL_STATUS_OPTIONS, type OperationalStatus } from './status';
+import {
+  OPERATIONAL_STATUS_OPTIONS,
+  type OperationalStatus,
+} from '../../../operational-status';
 
 /** The 指派 Team filter value for stations no team runs yet. */
 export const UNASSIGNED_TEAM = '__none__';

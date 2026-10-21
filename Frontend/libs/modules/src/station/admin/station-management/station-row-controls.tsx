@@ -16,7 +16,7 @@ import {
   getOperationalStatusMeta,
   OPERATIONAL_STATUS_OPTIONS,
   type OperationalStatus,
-} from './model/status';
+} from '../../operational-status';
 import { StatusBadge } from './station-cells';
 import { TeamText } from './station-table';
 

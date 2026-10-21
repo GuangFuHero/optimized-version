@@ -7,7 +7,7 @@ import { useStationStatusCounts } from './hooks/use-station-status-counts';
 import {
   OPERATIONAL_STATUS_OPTIONS,
   type OperationalStatus,
-} from './model/status';
+} from '../../operational-status';
 
 const { color, radius, typography } = designTokens;
 

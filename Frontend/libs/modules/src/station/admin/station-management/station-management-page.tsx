@@ -1,12 +1,14 @@
 'use client';
 
-import { Box } from '@mui/material';
+import { Stack } from '@mui/material';
 import { useDeleteStation } from '@rescue-frontend/data-access/admin';
 import { designTokens, Dialog } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
+import { StationFormDrawer, type StationFormTarget } from '../station-form';
 import { useAllStations } from './hooks/use-all-stations';
 import { useStationCapabilities } from './hooks/use-station-capabilities';
 import {
@@ -18,10 +20,9 @@ import {
   type StationFilters,
 } from './model/station-filters';
 import { ReviewQueueDialog } from './review-queue-dialog';
-import { StationDrawer, type StationDrawerState } from './station-drawer';
+import { StationDetailSheet } from './station-detail-sheet';
 import { StationExportMenu } from './station-export-menu';
 import { StationFilterPanel } from './station-filter-panel';
-import { StationFormPanel } from './station-form-panel';
 import { StationImportDialog } from './station-import-dialog';
 import { StationMapView } from './station-map-view';
 import { QuickStatusCell, TeamAssignCell } from './station-row-controls';
@@ -30,6 +31,8 @@ import { StationTable } from './station-table';
 import { StationToolbar, type StationView } from './station-toolbar';
 
 const { color } = designTokens;
+
+const PAGE_GUTTER = { xs: 2, md: 3 };
 
 const PENDING_FILTERS: StationFilters = { ...EMPTY_FILTERS, pending: true };
 
@@ -99,121 +102,118 @@ export function StationManagementPage() {
 
   const hasAnyStation = (unfiltered.data?.rows.length ?? 0) > 0;
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
-  // View mode lives in the URL (?station=<uuid>) so notifications can link to it; edit and new
-  // are local and fall back to view, or close, when finished.
-  const urlStation = params.get('station');
+  // The station on view lives in the URL (?station=<uuid>) so notifications can link to it. The
+  // form opens over it, so cancelling an edit lands back on the station being edited.
+  const viewedUuid = params.get('station');
+  const [formTarget, setFormTarget] = useState<StationFormTarget | null>(null);
   const deleteStation = useDeleteStation();
   const [pendingDelete, setPendingDelete] = useState<{
     uuid: string;
     name: string;
   } | null>(null);
-  const [localDrawer, setLocalDrawer] = useState<StationDrawerState | null>(
-    null,
-  );
-  const drawerState: StationDrawerState | null =
-    localDrawer ?? (urlStation ? { mode: 'view', uuid: urlStation } : null);
-  const openStation = (uuid: string) => {
-    setLocalDrawer(null);
-    setParam('station', uuid);
-  };
+  const openStation = (uuid: string | null) => setParam('station', uuid);
   const openNew = (position?: [number, number]) =>
-    setLocalDrawer({ mode: 'new', position });
-  const closeDrawer = () => {
-    if (localDrawer?.mode === 'edit') {
-      setLocalDrawer(null);
-      return;
-    }
-    setLocalDrawer(null);
-    setParam('station', null);
+    setFormTarget({ mode: 'create', position });
+  const editStation = (uuid: string) => {
+    openStation(uuid);
+    setFormTarget({ mode: 'edit', uuid });
   };
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        p: { xs: '16px', md: '24px' },
-        minHeight: '100%',
-        bgcolor: color.bg.neutral.subtle,
-      }}
-    >
-      <StationStatsStrip
-        activeStatus={filters.status}
-        onSelectStatus={(status) => setFilters({ ...filters, status })}
+    <>
+      <AdminListPageLayout
+        canvasColor={color.bg.neutral.subtle}
+        header={
+          <Stack spacing={2} sx={{ px: PAGE_GUTTER, pt: PAGE_GUTTER, pb: 2 }}>
+            <StationStatsStrip
+              activeStatus={filters.status}
+              onSelectStatus={(status) => setFilters({ ...filters, status })}
+            />
+            <StationToolbar
+              caps={caps}
+              query={filters.q}
+              onQueryChange={(q) => setFilters({ ...filters, q })}
+              activeFilterCount={countActiveFilters(filters)}
+              filterOpen={filterOpen}
+              onToggleFilter={() => setFilterOpen((open) => !open)}
+              onClear={() => setFilters(EMPTY_FILTERS)}
+              count={rows.length}
+              pendingStationCount={pendingStationCount}
+              view={view}
+              onViewChange={(next) =>
+                setParam('view', next === 'map' ? 'map' : null)
+              }
+              onOpenReview={() => setReviewOpen(true)}
+              onNew={() => openNew()}
+              onImport={() => setImportOpen(true)}
+              exportControl={<StationExportMenu />}
+            />
+          </Stack>
+        }
+        filterPanel={
+          filterOpen ? (
+            <StationFilterPanel
+              filters={filters}
+              onChange={setFilters}
+              canViewTeams={caps.canViewTeams}
+            />
+          ) : undefined
+        }
+        filterPanelSx={{ px: PAGE_GUTTER, pb: 2 }}
+        listContainerSx={{ px: PAGE_GUTTER, pb: PAGE_GUTTER }}
+        list={
+          view === 'map' ? (
+            <StationMapView
+              rows={rows}
+              hasAnyStation={hasAnyStation}
+              canAdd={caps.canAdd}
+              now={now}
+              selectedUuid={selectedUuid}
+              onSelect={setSelectedUuid}
+              onOpenStation={openStation}
+              onAddAt={
+                caps.canAdd ? (position) => openNew(position) : undefined
+              }
+            />
+          ) : (
+            <StationTable
+              rows={rows}
+              hasAnyStation={hasAnyStation}
+              loading={stations.isPending}
+              truncated={stations.data?.truncated ?? false}
+              now={now}
+              canAdd={caps.canAdd}
+              onOpenStation={openStation}
+              renderStatus={
+                caps.canEdit
+                  ? (row) => <QuickStatusCell row={row} />
+                  : undefined
+              }
+              renderTeam={
+                caps.canAssign && caps.canViewTeams
+                  ? (row) => <TeamAssignCell row={row} />
+                  : undefined
+              }
+            />
+          )
+        }
       />
-      <StationToolbar
-        caps={caps}
-        query={filters.q}
-        onQueryChange={(q) => setFilters({ ...filters, q })}
-        activeFilterCount={countActiveFilters(filters)}
-        filterOpen={filterOpen}
-        onToggleFilter={() => setFilterOpen((open) => !open)}
-        onClear={() => setFilters(EMPTY_FILTERS)}
-        count={rows.length}
-        pendingStationCount={pendingStationCount}
-        view={view}
-        onViewChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
-        onOpenReview={() => setReviewOpen(true)}
-        onNew={() => openNew()}
-        onImport={() => setImportOpen(true)}
-        exportControl={<StationExportMenu />}
-      />
-      {filterOpen ? (
-        <StationFilterPanel
-          filters={filters}
-          onChange={setFilters}
-          canViewTeams={caps.canViewTeams}
-        />
-      ) : null}
-      {view === 'map' ? (
-        <StationMapView
-          rows={rows}
-          hasAnyStation={hasAnyStation}
-          canAdd={caps.canAdd}
-          now={now}
-          selectedUuid={selectedUuid}
-          onSelect={setSelectedUuid}
-          onOpenStation={openStation}
-          onAddAt={caps.canAdd ? (position) => openNew(position) : undefined}
-        />
-      ) : (
-        <StationTable
-          rows={rows}
-          hasAnyStation={hasAnyStation}
-          loading={stations.isPending}
-          truncated={stations.data?.truncated ?? false}
-          now={now}
-          canAdd={caps.canAdd}
-          onOpenStation={openStation}
-          renderStatus={
-            caps.canEdit ? (row) => <QuickStatusCell row={row} /> : undefined
-          }
-          renderTeam={
-            caps.canAssign && caps.canViewTeams
-              ? (row) => <TeamAssignCell row={row} />
-              : undefined
-          }
-        />
-      )}
-      <StationDrawer
-        state={drawerState}
+      <StationDetailSheet
+        uuid={viewedUuid}
         caps={caps}
         now={now}
-        onClose={closeDrawer}
-        onEdit={(uuid) => setLocalDrawer({ mode: 'edit', uuid })}
+        onClose={() => openStation(null)}
+        onEdit={editStation}
         onDelete={(uuid, name) => setPendingDelete({ uuid, name })}
-        renderForm={(state) => (
-          <StationFormPanel
-            key={state.mode === 'new' ? 'new' : state.uuid}
-            mode={state.mode === 'new' ? 'new' : 'edit'}
-            uuid={state.mode === 'new' ? undefined : state.uuid}
-            position={state.mode === 'new' ? state.position : undefined}
-            canViewPii={caps.canViewPii}
-            onSaved={openStation}
-            onCancel={closeDrawer}
-          />
-        )}
+      />
+      <StationFormDrawer
+        target={formTarget}
+        canViewPii={caps.canViewPii}
+        onClose={() => setFormTarget(null)}
+        onSaved={(station) => {
+          setFormTarget(null);
+          openStation(station.uuid);
+        }}
       />
       {caps.canReview && reviewOpen ? (
         <ReviewQueueDialog
@@ -223,7 +223,7 @@ export function StationManagementPage() {
           onClose={() => setReviewOpen(false)}
           onEditStation={(uuid) => {
             setReviewOpen(false);
-            setLocalDrawer({ mode: 'edit', uuid });
+            editStation(uuid);
           }}
         />
       ) : null}
@@ -241,8 +241,7 @@ export function StationManagementPage() {
               onSuccess: () => {
                 toast('已刪除站點');
                 setPendingDelete(null);
-                setLocalDrawer(null);
-                setParam('station', null);
+                openStation(null);
               },
             },
           );
@@ -255,6 +254,6 @@ export function StationManagementPage() {
         「{pendingDelete?.name || '這個站點'}
         」會從列表與前台地圖移除。目前系統沒有還原功能。
       </Dialog>
-    </Box>
+    </>
   );
 }
