@@ -49,8 +49,11 @@ services:
     image: disaster-backend:latest
     restart: unless-stopped
     # No --reload, no source bind-mount: uses the Dockerfile CMD (uvicorn app.main:app :8000).
+    # .env.tgos holds the TGOS keys, written by hand on the VM because deploy.sh rewrites .env.
     env_file:
       - .env
+      - path: .env.tgos
+        required: false
     ports:
       - "8000:8000"
     depends_on:
