@@ -99,7 +99,7 @@ commit 前看 `git diff --cached --stat`）。
 
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
-需要重新產生 `Frontend/libs/data-access` 的 OpenAPI 型別（後端不改前端，ADR 範圍見 spec 非目標）。
+`Frontend/libs/data-access` 的 OpenAPI 型別已在本 PR 重新產生（`pnpm schemas:generate`，commit `695cb6676`；Frontend CI 會比對這份檔案）。畫面本身仍是前端的工作。
 
 | 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |
 |---|---|---|---|---|

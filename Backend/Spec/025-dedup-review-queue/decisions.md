@@ -33,8 +33,12 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
 **決定**：兩個角色都給，scope = `all`。
 
 - `seed_rbac.py` 加授權並改檔頭說明；`tests/test_me_capabilities.py` 的斷言改成只缺 `role_request.add`。
-- 既有資料庫：seed 只補缺的、不覆蓋（ADR-055），所以照 `65c5196498fb` 的先例另寫 data migration，
-  只 INSERT 缺的授權列，不動已經在 `/admin/rbac` 改過的。（慣例，未另外拍板）
+- 既有資料庫：`scripts/deploy.sh` 每次 `alembic upgrade head` 之後都會跑 seed，而 seed 會補上缺的授權
+  （只補缺的、不覆蓋，ADR-055），所以正常部署靠 seed 就會拿到。另外加一支 data migration `1649d30b0122`
+  當保險，給只跑 migration、沒跑 seed 的資料庫；它只 INSERT 缺的授權列，不動已經在 `/admin/rbac` 改過的。（慣例，未另外拍板）
+
+> 2026-10-21 修正（#92 review）：原文說既有資料庫只能靠 migration 補授權，理由是「seed 不覆蓋」；但 seed 會補缺的，
+> `deploy.sh:211-214` 也是 migrate 完接著跑 seed，所以 migration 不是唯一的路。
 
 **權限管的是資料，不是演算法**：view 管能不能讀配對卡與事件，review 管能不能改配對卡狀態。
 `app/dedup_engine/` 不經過這兩個權限，本 Spec 也不改它。
@@ -76,11 +80,14 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
 
 **Date**: 2026-10-20　**Status**: Accepted（使用者拍板）
 
-**決定**：每張卡帶 `low`、`high` 兩邊的摘要（比對用的幾個欄位：名稱／類型、地址、座標、狀態、
-建立者、建立時間；task 另帶所屬 ticket 的 uuid）。後端依 `entity_kind` 分組後一次查回
+**決定**：每張卡帶 `low`、`high` 兩邊的摘要（比對用的幾個欄位：名稱、類型、座標、狀態、
+建立者、建立時間；task 另帶所屬 ticket 的 uuid 與標題）。後端依 `entity_kind` 分組後一次查回
 （每種一條 query），不會一張卡查一次。完整內容由前端點進去再用既有 API 查。
 
-- 實體已被軟刪除時，摘要回 `null` 加 `deleted: true`，卡仍照常顯示，讓審核員可以判定。
+- 模型沒有地址欄位，比對位置用座標（geometry 的中心點）。欄位對照見 spec §2.1。
+- 實體（或 task 所屬的 ticket）已軟刪除時，那一邊回 `{uuid, deleted: true}`，其他欄位為 null；卡仍照常顯示，讓審核員可以判定。
+
+> 2026-10-21 修正（#92 review）：原文寫「地址」與「摘要回 `null`」，和實作不符；實作在 Task 3 定案時已改為上面的寫法，ADR 沒跟著改。
 - 審核員本來就有 `*.view_pii = all`，摘要不另外遮罩。
 
 ---

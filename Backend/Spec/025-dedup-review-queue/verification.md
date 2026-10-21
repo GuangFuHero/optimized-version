@@ -147,6 +147,6 @@ verdict_revoked rows: 2
 
 ## 7. 沒有在這裡驗的
 
-- 前端畫面：DEDUP-008 屬前端，OpenAPI 型別還沒重新產生（交接表在 plan 最後一段）。
+- 前端畫面：DEDUP-008 屬前端（交接表在 plan 最後一段）。OpenAPI 型別在 #92 review 後已重新產生（`695cb6676`），Frontend CI 的 typecheck／lint／test 都通過。
 - 正式環境的寄信：這裡用 `ENV=development` 的 console sender，從 log 讀驗證碼。
 - 通知失敗時的回應：容器裡沒有辦法讓通知故意失敗，這條路改用正式的 app 和 `SessionLocal` 在本機重現（修正前出錯、修正後正常），證據在 `Backend/SPEC025_CODE_REVIEW.md` 第六節。

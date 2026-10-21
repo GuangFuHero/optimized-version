@@ -60,7 +60,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 | `ai_duplicate.revoke`（新增） | all | — | — |
 
 - `seed_rbac.py` 加授權、改檔頭說明；`Perm` 加 `AI_DUP_REVOKE`。
-- data migration：新增 `ai_duplicate.revoke` 權限列；為兩個角色 INSERT 缺的授權列，不動 runtime 改過的（ADR-055）。
+- 既有資料庫：部署時 `deploy.sh` 在 migrate 之後會跑 seed，seed 會補上缺的授權；另有 data migration `1649d30b0122` 當保險（新增 `ai_duplicate.revoke` 權限列、為兩個角色 INSERT 缺的授權列，不動 runtime 改過的，ADR-055）。
 
 ## 2. API（ADR-338）
 
