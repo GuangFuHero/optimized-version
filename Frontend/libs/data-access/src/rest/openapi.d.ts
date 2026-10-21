@@ -114,31 +114,8 @@ export interface paths {
      * Refresh
      * @description 以 refresh token 換發新的 access token，並 rotate refresh token。
      *
-     *     The identity is validated BEFORE rotating (ADR-096). `rotate()` burns the old refresh
-     *     token the moment it runs, so refusing afterwards would leave the caller holding a dead
-     *     token with no replacement — and their retry would read as a replay and revoke the whole
-     *     session. Reading the record first is side-effect free.
-     *
-     *     **The identity comes from the session when the caller does not name one** (ADR-188).
-     *     `body.identity` still wins, so a client that tracks it keeps deciding; but a client that
-     *     does not — or forgets on one request — no longer gets silently returned to its platform
-     *     identity, which for a super_admin acting as a team member was a silent re-escalation
-     *     every time an access token expired.
-     *
-     *     Rotation is also where `users.last_activity_at` is recorded (ADR-093). Access tokens
-     *     live 15 minutes, so an active user rotates about that often — precise enough to answer
-     *     "has this account been used lately?", which is all the admin console needs. It is
-     *     deliberately NOT updated per request: `users` is in AUDITED_TABLES, so that would append
-     *     one `audit_logs` row per request and bury the audit trail under activity noise.
-     *
-     *     `SessionRepository` stays a pure Redis component — the DB write happens here, not there.
-     *
-     *     The write is deliberately best-effort. By the time `rotate()` returns it has already
-     *     burned the old refresh token (`session_repository.py:78` claims the `refresh_used:` flag),
-     *     so letting a DB error escape would 500 the request *after* the old token died: the client
-     *     never receives `new_refresh`, retries with the old one, and `rotate()` reads that as a
-     *     replay and revokes the entire session. A transient DB outage would sign the device out
-     *     permanently. `last_activity_at` is observability — it is not worth a user's session.
+     *     `body.identity`, when given, names the identity the new token acts as; otherwise the
+     *     session's own carries forward (ADR-188). See `auth_session.refresh_session` for the rest.
      */
     post: operations['refresh_api_v1_auth_refresh_post'];
     delete?: never;
@@ -160,19 +137,12 @@ export interface paths {
      * Switch Identity
      * @description Act as a different identity you already hold; returns a re-signed access token.
      *
-     *     Deliberately gated by nothing but being logged in. Requiring a capability here would let
-     *     a user downgrade into an identity that cannot switch back, locking themselves out of
-     *     their own permissions (ADR-070).
+     *     The rules are in `auth_session.switch_identity`. Rate limited because it mints credentials,
+     *     as `login` and `refresh` do (ADR-183).
      *
-     *     Only re-signs the access token — the session is untouched and the refresh token is not
-     *     rotated, because switching is not a credential event.
-     *
-     *     **The session it re-signs from has to still exist** (ADR-183). This mints a fresh
-     *     access token with a fresh expiry, so without that check the endpoint is a token
-     *     refresher gated on nothing but holding an unexpired token: after `logout` or
-     *     `logout-all`, `/auth/refresh` correctly refuses, but calling this before each expiry
-     *     would keep a revoked session alive indefinitely. Rate limited for the same reason —
-     *     it mints credentials, and `login` and `refresh` both are.
+     *     **Bearer only** (ADR-325). The answer carries the token in its body, which is exactly what
+     *     the browser's cookie keeps away from the page's scripts, so a request signed in by the
+     *     cookie is refused. A browser switches through `POST /auth/session/identity`.
      */
     post: operations['switch_identity_api_v1_auth_switch_identity_post'];
     delete?: never;
@@ -230,6 +200,8 @@ export interface paths {
      *     caller's own session has to be live for this to revoke anything; when it is not, the
      *     answer is still 204, because "every device is signed out" is what the caller asked for
      *     and this token's own device already is (ADR-190).
+     *
+     *     A browser signed in by cookie has them cleared, on both 204s: either way its session is over.
      */
     post: operations['logout_all_api_v1_auth_logout_all_post'];
     delete?: never;
@@ -238,7 +210,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/auth/sso/google': {
+  '/api/v1/auth/session': {
     parameters: {
       query?: never;
       header?: never;
@@ -248,10 +220,139 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Sso Google
-     * @description Verify a Google id_token; log in an existing google identity or create the account on first login.
+     * Sign In
+     * @description Sign the browser in with an email or phone number and a password.
+     *
+     *     A wrong password clears nothing: whoever is already signed in on this browser stays signed in.
      */
-    post: operations['sso_google_api_v1_auth_sso_google_post'];
+    post: operations['sign_in_api_v1_auth_session_post'];
+    /**
+     * Sign Out
+     * @description Sign this browser out: end its session and clear both cookies.
+     *
+     *     Always 204, like `/auth/logout` (ADR-190): a browser with no session, or one already ended, is
+     *     already where it asked to be. The one exception is a session store that cannot be reached: then
+     *     the session may still be running, so the answer is 503 and the cookies stay.
+     */
+    delete: operations['sign_out_api_v1_auth_session_delete'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/session/refresh': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Refresh Browser Session
+     * @description Exchange the refresh cookie for a new pair of cookies; the session keeps its identity (ADR-188).
+     *
+     *     A replay within the grace period gets the same new refresh token (ADR-330). Any failure is a
+     *     sign-out, so the error handler clears both cookies: the request is marked as signing in by cookie.
+     */
+    post: operations['refresh_browser_session_api_v1_auth_session_refresh_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/session/identity': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Switch Browser Identity
+     * @description Act as another identity the account holds; the new access token goes into the cookie.
+     *
+     *     The browser's `/auth/switch-identity`, under the same rules (`auth_session.switch_identity`). The
+     *     access cookie it replaces is stale from now on (ADR-195), and a refresh carries the new identity
+     *     forward (ADR-188). A cookie-authenticated write, so it needs one of our origins (ADR-327).
+     *
+     *     **Cookie only** (ADR-325). A Bearer client would get its new token in a cookie it does not read,
+     *     and be left holding one that acts as the identity it switched away from; it is refused, and switches
+     *     through `/auth/switch-identity`.
+     */
+    post: operations['switch_browser_identity_api_v1_auth_session_identity_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/session/verify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Verify And Sign In
+     * @description Finish a registration with its 6-digit code, and sign the new account in.
+     */
+    post: operations['verify_and_sign_in_api_v1_auth_session_verify_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/oauth/{provider}/start': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Start Oauth
+     * @description Send the browser to the provider's sign-in page, bound to this browser, this sign-in and this server.
+     *
+     *     `app` (`site` or `admin`) is the app to come back to, at `return_to`, a path on it. The request must
+     *     come from one of our pages (ADR-327), which for a navigation means its `Referer`. A start that is
+     *     refused leaves `{p}_oauth` alone: a link from another site must not end a sign-in in another tab.
+     */
+    get: operations['start_oauth_api_v1_auth_oauth__provider__start_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/oauth/{provider}/callback': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Oauth Callback
+     * @description Finish a sign-in: check it is this browser's, exchange the code, check the token, sign in.
+     *
+     *     The provider's redirect, so no `Origin` to check: the state does that job, and it is checked first.
+     *     It must match the browser's `{p}_oauth` cookie and still be on record, and is spent on the spot. A
+     *     state that does not match leaves the cookie alone, as a refused start does.
+     */
+    get: operations['oauth_callback_api_v1_auth_oauth__provider__callback_get'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -277,26 +378,6 @@ export interface paths {
      *     that no password change or session revocation can take back.
      */
     post: operations['link_google_api_v1_auth_link_google_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/auth/sso/line': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Sso Line
-     * @description Verify a LINE id_token; log in an existing line identity or create the account on first login.
-     */
-    post: operations['sso_line_api_v1_auth_sso_line_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2763,14 +2844,6 @@ export interface components {
       /** Value */
       value: string;
     };
-    /**
-     * GoogleSsoRequest
-     * @description Body carrying a Google id_token for SSO login / first-login create.
-     */
-    GoogleSsoRequest: {
-      /** Id Token */
-      id_token: string;
-    };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
@@ -2842,9 +2915,9 @@ export interface components {
     };
     /**
      * IdTokenRequest
-     * @description Body carrying a provider id_token (LINE SSO / link).
+     * @description Body carrying a LINE id_token to link to the current account, plus its proof.
      *
-     *     `step_up` is ignored on the SSO login path and required on the link path (ADR-217).
+     *     Same contract as `LinkGoogleRequest` (ADR-217).
      */
     IdTokenRequest: {
       /** Id Token */
@@ -3533,6 +3606,28 @@ export interface components {
      */
     Scope: 'none' | 'own' | 'team' | 'zone' | 'all';
     /**
+     * SessionIdentityResponse
+     * @description Answer to the browser's identity switch: the identity now in effect (ADR-325).
+     *
+     *     The new access token went into the cookie, so there is none here.
+     */
+    SessionIdentityResponse: {
+      identity: components['schemas']['IdentityView'];
+    };
+    /**
+     * SessionSignInRequest
+     * @description Body for `POST /auth/session`: the credentials `/auth/login` takes as a form (ADR-325).
+     *
+     *     320 is the longest email the normaliser accepts (#75), so a longer username is refused before
+     *     anything reads it.
+     */
+    SessionSignInRequest: {
+      /** Username */
+      username: string;
+      /** Password */
+      password: string;
+    };
+    /**
      * SetGrantRequest
      * @description Upsert body for a single matrix cell; `scope` is validated against the Scope enum.
      */
@@ -3557,6 +3652,29 @@ export interface components {
        */
       salt_frontend: string;
       step_up?: components['schemas']['StepUp'] | null;
+    };
+    /**
+     * SignedInResponse
+     * @description Answer to the browser's sign-in and registration: who, and as which identity (ADR-325).
+     *
+     *     No token: those went into `HttpOnly` cookies, where a script on the page cannot read them.
+     */
+    SignedInResponse: {
+      user: components['schemas']['SignedInUser'];
+      identity?: components['schemas']['IdentityView'] | null;
+    };
+    /**
+     * SignedInUser
+     * @description The account a browser just signed in as.
+     */
+    SignedInUser: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Name */
+      name: string;
     };
     /**
      * StationYMetric
@@ -3816,7 +3934,7 @@ export interface components {
       created_at: string;
       /** Identities */
       identities?: components['schemas']['IdentityOption'][];
-      /** @description 這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；沒有時為 null */
+      /** @description 這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；帶 `X-WG-Realm: admin` 的請求是後台身分，token 的身分是 `user` 時改用第一個後台身分（ADR-329）；沒有時為 null */
       active_identity?: components['schemas']['IdentityOption'] | null;
       /** Contacts */
       contacts?: components['schemas']['ContactOut'][];
@@ -4225,7 +4343,7 @@ export interface operations {
       };
     };
   };
-  sso_google_api_v1_auth_sso_google_post: {
+  sign_in_api_v1_auth_session_post: {
     parameters: {
       query?: never;
       header?: never;
@@ -4234,7 +4352,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['GoogleSsoRequest'];
+        'application/json': components['schemas']['SessionSignInRequest'];
       };
     };
     responses: {
@@ -4244,8 +4362,177 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['TokenPair'];
+          'application/json': components['schemas']['SignedInResponse'];
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  sign_out_api_v1_auth_session_delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  refresh_browser_session_api_v1_auth_session_refresh_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  switch_browser_identity_api_v1_auth_session_identity_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SwitchIdentityRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SessionIdentityResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  verify_and_sign_in_api_v1_auth_session_verify_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['VerifyRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SignedInResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  start_oauth_api_v1_auth_oauth__provider__start_get: {
+    parameters: {
+      query?: {
+        app?: string | null;
+        return_to?: string | null;
+      };
+      header?: never;
+      path: {
+        provider: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  oauth_callback_api_v1_auth_oauth__provider__callback_get: {
+    parameters: {
+      query?: {
+        code?: string | null;
+        state?: string | null;
+        error?: string | null;
+      };
+      header?: never;
+      path: {
+        provider: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -4280,39 +4567,6 @@ export interface operations {
         };
         content: {
           'application/json': unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  sso_line_api_v1_auth_sso_line_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['IdTokenRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['TokenPair'];
         };
       };
       /** @description Validation Error */
