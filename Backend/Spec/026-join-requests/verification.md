@@ -1,4 +1,21 @@
-# 026 Join Requests — Verification (2026-10-20)
+# 026 Join Requests — Verification
+
+## Round 2 (2026-10-21, after PR #93 review, on main `31e948877`)
+
+| Check | Result |
+|---|---|
+| Local full suite, `pytest tests -n 8` | 2531 passed, 0 failed |
+| Container full suite (same image) | 2531 passed, 0 failed |
+| Migrations from scratch, down to `209c4375c3e1` and up | clean, head `79a19cabc98a` |
+| API walk-through (round 1's 41 checks, minus nothing, plus 4) | 45/45 |
+| Frontend after `pnpm schemas:generate` | typecheck, lint, test pass |
+
+Added checks: a team admin lists the team's members with real names; a member lists them without; a team
+admin's list of another team → 404; the invite page names a pending request for another team
+(`pending_elsewhere`). Masking on rows the real trigger wrote: a data auditor reads `applicant_phone` and
+`user_contacts.value` as `[redacted]`; a super admin reads the values. Disbanding is gone: `disbanded` → 422.
+
+## Round 1 (2026-10-20)
 
 Isolated stack `-p join026verify`: `disaster-postgres-h3:16-3.4`, `redis:7-alpine`, and the branch's image
 built with `DOCKER_BUILDKIT=0 docker build`. No published ports; scripts ran inside the backend container
