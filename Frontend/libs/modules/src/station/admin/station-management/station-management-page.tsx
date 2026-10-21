@@ -17,6 +17,7 @@ import {
   writeStationFilters,
   type StationFilters,
 } from './model/station-filters';
+import { ReviewQueueDialog } from './review-queue-dialog';
 import { StationDrawer, type StationDrawerState } from './station-drawer';
 import { StationFilterPanel } from './station-filter-panel';
 import { StationFormPanel } from './station-form-panel';
@@ -50,6 +51,7 @@ export function StationManagementPage() {
   const caps = useStationCapabilities();
   const now = useNow();
   const [filterOpen, setFilterOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const replaceParams = useCallback(
     (next: URLSearchParams) => {
@@ -137,7 +139,7 @@ export function StationManagementPage() {
         pendingStationCount={pendingStationCount}
         view={view}
         onViewChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
-        onOpenReview={() => undefined}
+        onOpenReview={() => setReviewOpen(true)}
         onNew={() => openNew()}
         onImport={() => undefined}
       />
@@ -197,6 +199,17 @@ export function StationManagementPage() {
           />
         )}
       />
+      {caps.canReview && reviewOpen ? (
+        <ReviewQueueDialog
+          open
+          canEdit={caps.canEdit}
+          onClose={() => setReviewOpen(false)}
+          onEditStation={(uuid) => {
+            setReviewOpen(false);
+            setLocalDrawer({ mode: 'edit', uuid });
+          }}
+        />
+      ) : null}
       <Dialog
         open={Boolean(pendingDelete)}
         onClose={() => setPendingDelete(null)}
