@@ -430,7 +430,7 @@ export function StationCreateDrawer({
           opHour: form.availableTime.trim() || undefined,
           // TODO: 後端建立站點流程穩定後，再把地址/次要位置欄位一起送出。
           // comment: form.address.trim(),
-          // source: 'user',
+          source: 'official',
           // visibility: 'public',
           // secondaryLocation: {
           //   locationType: form.locationType,
