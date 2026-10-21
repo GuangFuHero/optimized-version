@@ -10,11 +10,15 @@ import {
 } from '../model/station-filters';
 import { toStationRow } from '../model/station-row';
 
-export function useAllStations(filters: StationFilters) {
+export function useAllStations(
+  filters: StationFilters,
+  options: { enabled?: boolean } = {},
+) {
   const queryClient = useQueryClient();
   const variables = toServerVariables(filters);
   return useQuery({
     queryKey: ['admin', 'stations', 'all', variables],
+    enabled: options.enabled,
     queryFn: async () => {
       const { items, truncated } = await collectAllPages(
         async (skip, limit) => {

@@ -46,7 +46,9 @@ const STATION_TYPE_LABELS = Object.fromEntries(
 ) as Record<StationTypeValue, string>;
 
 export function getStationTypeLabel(type?: string | null): string {
-  const normalizedType = type?.trim().toLowerCase() as StationTypeValue | undefined;
+  const normalizedType = type?.trim().toLowerCase() as
+    | StationTypeValue
+    | undefined;
 
   if (!normalizedType) {
     return '站點';
@@ -60,7 +62,10 @@ export function getStationTypeLabel(type?: string | null): string {
  * (`Design/前台/js/site/site-route.js:23`). The prototype names lucide icons; these are the
  * closest MUI Rounded equivalents, since MUI is what this app already ships.
  */
-export const STATION_TYPE_ICONS: Record<StationTypeValue, typeof PlaceRoundedIcon> = {
+export const STATION_TYPE_ICONS: Record<
+  StationTypeValue,
+  typeof PlaceRoundedIcon
+> = {
   water: WaterDropRoundedIcon,
   shelter: NightShelterRoundedIcon,
   shower: ShowerRoundedIcon,

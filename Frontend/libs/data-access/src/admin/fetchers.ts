@@ -319,7 +319,8 @@ export interface StationAnalyticsDataParams {
 
 export const stationAnalyticsDataQuery = (params: StationAnalyticsDataParams) =>
   queryOptions({
-    queryKey: ['admin', 'analytics', 'StationAnalyticsData', params],
+    // Under ['admin', 'stations'] so every station mutation refreshes the counts.
+    queryKey: ['admin', 'stations', 'StationAnalyticsData', params],
     queryFn: ({ signal }) =>
       adminRestClient
         .GET('/api/v1/analytics/stations/data', { params, signal })
