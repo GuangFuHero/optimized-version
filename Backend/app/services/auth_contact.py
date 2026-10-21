@@ -449,7 +449,7 @@ async def _has_something_to_prove_with(db: AsyncSession, user_uuid: str) -> bool
 
     A linked SSO provider counts (ADR-234). It was left out originally, and that exemption was
     not neutral: a LINE first login attaches no contact when the provider returns no email or
-    that email is taken (`auth/sso.py:171-179`), so the ungated shape is reachable — and the
+    that email is taken (`sso_login.sign_in_with_line`), so the ungated shape is reachable — and the
     contact it let through immediately became the proof channel for everything else.
     """
     identities = await identity_repository.list_by_user(db, user_uuid)

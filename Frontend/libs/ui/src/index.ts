@@ -1,5 +1,5 @@
 export { AnnouncementBanner } from './components/AnnouncementBanner';
-export { Avatar } from './components/Avatar';
+export { Avatar, nameInitials } from './components/Avatar';
 export type { AvatarProps, AvatarTone } from './components/Avatar';
 export { Badge } from './components/Badge';
 export type {

@@ -51,6 +51,9 @@ services:
       - SECRET_KEY=your-secret-key-for-local-dev
       - REDIS_URL=redis://redis:6379
       - ENV=development
+      # Served over plain http here, where a browser drops a Secure cookie. The other sign-in settings
+      # default to this machine's values (ADR-326).
+      - AUTH_COOKIE_SECURE=false
     depends_on:
       - db
       - redis

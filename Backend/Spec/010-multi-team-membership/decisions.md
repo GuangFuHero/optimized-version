@@ -79,6 +79,8 @@
    **已被 ADR-188 推翻**：前端沒帶 identity 時，伺服器會退回 platform 預設——失效方向是往上而不是往下，切換的降權效果每 15 分鐘被靜默還原一次。session 現在也記錄 `act`，未指定時沿用。
 4. **預設身分 = 該使用者的 platform 身分**。每人恰有一個（同 kind 取代保證），所以這個預設永遠存在、唯一、無歧義，且與現行「platform 角色恆生效」的行為最接近。
 5. **「記住上次的身分」由前端保存**，存在 NextAuth 的 session cookie 裡。
+   **登入改由後端處理後（ADR-325）不再有這個 cookie**：同一次登入期間的身分由 session 紀錄保存（ADR-188）；重新登入一律
+   從 `user` 開始（ADR-290），後台則從排序第一個後台身分開始（ADR-329），不記上次用哪個。
 
 **為何記憶放前端**：後端的 `device` 欄位只是 User-Agent 字串（`app/api/v1/endpoints/auth/deps.py:23`）——瀏覽器更新就變、同型號手機完全一樣，**不能當 per-device 的 key**。伺服器端只能做 per-user 記憶，而那會讓「筆電當管理員、手機當志工」的人兩邊預設值互相覆蓋。前端 NextAuth 已有一個 http-only 的 session cookie，**後端的 access/refresh token 本來就存在裡面**（`Frontend/apps/demo/src/lib/server-backend-auth.ts:113-114`），多存一個 `activeIdentity` 是零額外基礎設施、零額外風險，且 cookie 天然一瀏覽器一份。
 

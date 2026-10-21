@@ -11,11 +11,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.api import api_router
-from app.core import security
-from app.core.api_errors import ApiError
+from app.core import auth_cookies, security
+from app.core.access_log import OAuthQueryRedactor
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.context import AuditContextMiddleware
 from app.core.redis import create_redis_client, get_redis
+from app.core.request_auth import authenticated_by_cookie
 from app.graphql.router import graphql_router
 
 # Route the app's loggers (e.g. the app.email / app.sms console senders) to stdout at INFO so dev
@@ -29,6 +31,11 @@ if not _app_logger.handlers:
     _app_logger.setLevel(logging.INFO)
     # Keep propagate=True so pytest's caplog (root-level capture) still sees app.* records;
     # uvicorn adds no root handler, so this does not double-log in production.
+
+# uvicorn prints every request line, query included, and an OAuth callback's query carries the provider's
+# code and the state (ADR-331). uvicorn configures its loggers before it imports the app, so the filter
+# added here stays on.
+logging.getLogger("uvicorn.access").addFilter(OAuthQueryRedactor())
 
 
 @asynccontextmanager
@@ -71,8 +78,12 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-# Added last so it is outermost and answers preflights before any other middleware runs. Browsers
-# call this API with bearer tokens, never cookies, so any origin may call it without credentials.
+# Added last so it is outermost and answers preflights before any other middleware runs. Browsers never
+# call this API across origins: they reach it through the frontend's own server on the same origin,
+# carrying the sign-in cookies, and the backend itself is not exposed. So any origin may call it without
+# credentials, and what stops another site's page from making a browser send the cookies is the Origin
+# check on cookie-authenticated writes (ADR-327), not CORS — which decides who may read a response, not
+# whether a request is sent.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -82,14 +93,32 @@ app.add_middleware(
 )
 
 
+# The 401 codes that mean the user is signed out, as opposed to needing a refresh (ADR-328).
+# `refresh_token_invalid` only comes from a refresh that failed, which leaves nothing to try next (ADR-325).
+_SIGNED_OUT = frozenset({
+    ErrorCode.SESSION_EXPIRED, ErrorCode.CREDENTIALS_INVALID,
+    ErrorCode.REFRESH_TOKEN_INVALID, ErrorCode.IDENTITY_REVOKED,
+})
+
+
 @app.exception_handler(ApiError)
-async def api_error_handler(_request: Request, exc: ApiError) -> JSONResponse:
-    """Emit `code` alongside `detail` so clients branch on the code instead of the English text."""
-    return JSONResponse(
+async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
+    """Emit `code` alongside `detail` so clients branch on the code instead of the English text.
+
+    A cookie-authenticated request whose session is gone also gets its sign-in cookies cleared, or
+    the browser would keep sending a token that can never work again (ADR-328). Done here rather
+    than at each raise site, because REST endpoints and the GraphQL context both end up here, and
+    rather than in a middleware, which would have to parse the body to find the code. A token that
+    only needs refreshing keeps its cookies: the refresh needs them.
+    """
+    response = JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail, "code": exc.code},
         headers=exc.headers,
     )
+    if exc.code in _SIGNED_OUT and authenticated_by_cookie(request):
+        auth_cookies.clear_session_cookies(response)
+    return response
 
 
 app.include_router(api_router, prefix="/api/v1")

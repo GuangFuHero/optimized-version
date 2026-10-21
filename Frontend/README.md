@@ -30,13 +30,14 @@ pnpm install
 cp .env.example .env.local
 ```
 
-依需求填入：
+本機照預設值就能接 `localhost:8000` 的後端：
 
-- `NEXT_PUBLIC_API_BASE_URL`：後端 REST API base URL
-- `NEXTAUTH_URL` / `NEXTAUTH_SECRET` / `AUTH_SECRET`：NextAuth 設定
-- `GOOGLE_MAPS_API_KEY`：地圖圖層 / 地理編碼用
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`：Google SSO（見 [`docs/authentication.md`](docs/authentication.md)）
-- `LINE_CLIENT_ID` / `LINE_CLIENT_SECRET`：LINE SSO（見 [`docs/authentication.md`](docs/authentication.md)）
+- `NEXT_PUBLIC_API_BASE_URL` / `API_BASE_URL` / `GRAPHQL_URL`：後端 REST、GraphQL 的 URL
+- `AUTH_COOKIE_PREFIX`：登入 cookie 名稱的前綴，要跟後端的 `AUTH_COOKIE_PREFIX` 一樣（本機 `wgdev`）
+- `GOOGLE_MAPS_API_KEY`：選填，只用來在地圖上建立站點時預填地址
+
+前台的登入（密碼、Google、LINE）都由後端處理，前台沒有自己的登入 secret；Google、LINE 只在後端設定（見
+[`docs/authentication.md`](docs/authentication.md)）。後台還在用 NextAuth，設定見 [admin README](apps/admin/README.md)。
 
 ### 3. 啟動開發環境
 

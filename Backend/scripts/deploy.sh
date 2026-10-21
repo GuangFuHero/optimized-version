@@ -76,13 +76,17 @@ on_failure() {
 
 gen_env() {     # .env is a deploy-time artifact: compose interpolation + container env share it (S7)
     log "generating .env from Secret Manager"
-    local secret_key pg_pw smtp_key kotsms_user kotsms_pw
+    local secret_key pg_pw smtp_key kotsms_user kotsms_pw oauth_google_secret oauth_line_secret
     local nextauth_secret google_secret line_secret tunnel_token
     secret_key=$(gcloud secrets versions access latest --secret=staging-backend-jwt-signing-key)
     pg_pw=$(gcloud secrets versions access latest --secret=staging-backend-postgres-password)
     smtp_key=$(gcloud secrets versions access latest --secret=staging-backend-smtp2go-api-key)
     kotsms_user=$(gcloud secrets versions access latest --secret=staging-backend-kotsms-username)
     kotsms_pw=$(gcloud secrets versions access latest --secret=staging-backend-kotsms-password)
+    # The backend runs the Google and LINE sign-in (ADR-331). Same values as the staging-frontend-* pair
+    # below, which NextAuth reads until the frontend drops it.
+    oauth_google_secret=$(gcloud secrets versions access latest --secret=staging-backend-google-client-secret)
+    oauth_line_secret=$(gcloud secrets versions access latest --secret=staging-backend-line-channel-secret)
     # Frontend (Next.js) + Cloudflare Tunnel secrets — shared with the frontend/cloudflared containers.
     nextauth_secret=$(gcloud secrets versions access latest --secret=staging-frontend-nextauth-secret)
     google_secret=$(gcloud secrets versions access latest --secret=staging-frontend-google-client-secret)
@@ -99,8 +103,12 @@ gen_env() {     # .env is a deploy-time artifact: compose interpolation + contai
         || { printf 'ERROR: smtp2go key has .env-unsafe characters\n' >&2; false; }
     [[ "$kotsms_user" =~ ^[A-Za-z0-9_-]+$ && "$kotsms_pw" =~ ^[A-Za-z0-9_-]+$ ]] \
         || { printf 'ERROR: a kotsms credential has .env-unsafe characters\n' >&2; false; }
-    # Frontend secrets/token go into plain KEY=value (not a URL), so only newlines would corrupt the
-    # dotenv file — OAuth secrets / tunnel tokens may legitimately contain + / = and are fine unquoted.
+    # The OAuth secrets and the frontend secrets/token go into plain KEY=value (not a URL), so only
+    # newlines would corrupt the dotenv file — they may legitimately contain + / = and are fine unquoted.
+    for v in "$oauth_google_secret" "$oauth_line_secret"; do
+        [[ -n "$v" && "$v" != *$'\n'* ]] \
+            || { printf 'ERROR: a backend OAuth secret is empty or multi-line\n' >&2; false; }
+    done
     for v in "$nextauth_secret" "$google_secret" "$line_secret" "$tunnel_token"; do
         [[ -n "$v" && "$v" != *$'\n'* ]] \
             || { printf 'ERROR: a frontend secret is empty or multi-line\n' >&2; false; }
@@ -124,6 +132,8 @@ gen_env() {     # .env is a deploy-time artifact: compose interpolation + contai
         printf 'SMS_PROVIDER=kotsms\n'
         printf 'KOTSMS_USERNAME=%s\n' "$kotsms_user"
         printf 'KOTSMS_PASSWORD=%s\n' "$kotsms_pw"
+        printf 'GOOGLE_CLIENT_SECRET=%s\n' "$oauth_google_secret"
+        printf 'LINE_CHANNEL_SECRET=%s\n' "$oauth_line_secret"
         cat scripts/deploy-config.staging.env
     } > .env
     {
@@ -217,10 +227,10 @@ main() {
 
     trap - ERR
     # Frontend + tunnel are NOT part of the rollback gate (backend-only). Warn-only smoke check.
-    if curl -fsS --max-time 10 https://demo.wan-guard.com >/dev/null 2>&1; then
-        log "frontend reachable via tunnel: https://demo.wan-guard.com"
+    if curl -fsS --max-time 10 https://staging.wan-guard.com >/dev/null 2>&1; then
+        log "frontend reachable via tunnel: https://staging.wan-guard.com"
     else
-        log "WARN: https://demo.wan-guard.com not reachable yet (frontend/tunnel may still be starting)"
+        log "WARN: https://staging.wan-guard.com not reachable yet (frontend/tunnel may still be starting)"
     fi
     docker image prune -f >/dev/null || true    # dangling only; :latest/:prev survive; never fail a good deploy
     log "DEPLOY OK — $(git rev-parse --short HEAD) in $(( $(date +%s) - start_ts ))s"

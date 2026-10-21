@@ -1,7 +1,6 @@
 """Registration endpoints: salt retrieval, verify-then-create register, and resend."""
 
 from fastapi import APIRouter, Depends, Request, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
@@ -23,7 +22,7 @@ from app.schemas.auth import (
     UserSaltResponse,
     VerifyRequest,
 )
-from app.services.auth_account import create_account
+from app.services import auth_session
 
 from .deps import _normalize_identifier, get_rate_limiter, issue_token_pair
 
@@ -100,37 +99,7 @@ async def verify(
         redis=Depends(get_redis),
 ):
     """Consume a 6-digit code, create the account, and issue a session (verify == login)."""
-    try:
-        ident = _normalize_identifier(body.type, body.value)
-    except ValueError as err:
-        raise ApiError(
-            status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID, detail="Invalid or expired code",
-        ) from err
-    payload = await VerificationRepository(redis).consume_registration(
-        type_=body.type, value=ident, code=body.code
-    )
-    if payload is None:
-        raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID, detail="Invalid or expired code")
-    # guard a stale pending (pre-required-name deploy) that has no usable name: the pending is already
-    # consumed (burned) above, so the user simply re-registers instead of hitting a 500 on the NOT NULL
-    name = payload.get("name")
-    if not name or not str(name).strip():
-        raise ApiError(
-            status.HTTP_400_BAD_REQUEST,
-            ErrorCode.REGISTRATION_EXPIRED,
-            detail="Registration expired, please register again"
-        )
-    # re-check the race: someone may have verified the same identifier between register and now
-    if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
-        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail="Already in use")
-    try:
-        user = await create_account(
-            db, contact_type=body.type, value=ident, password_hash=payload["password_hash"],
-            name=name,
-        )
-    except IntegrityError as err:  # concurrent verify race for the same identifier
-        await db.rollback()
-        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail="Already in use") from err
+    user = await auth_session.verify_registration(db, redis, body)
     return await issue_token_pair(redis, request, str(user.uuid))
 
 

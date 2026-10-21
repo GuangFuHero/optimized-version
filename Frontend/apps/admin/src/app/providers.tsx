@@ -2,8 +2,8 @@
 
 import { createAdminQueryClient } from '@rescue-frontend/data-access/admin';
 import { ApiError } from '@rescue-frontend/data-access';
-import { ApplicationProviders } from '@rescue-frontend/modules';
-import { signOut, useSession } from 'next-auth/react';
+import { ApplicationProviders, useAuthSession } from '@rescue-frontend/modules';
+import { signOut } from 'next-auth/react';
 import { useState, type ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -23,11 +23,9 @@ function BackendProvider({ children }: { children: ReactNode }) {
 }
 
 function SessionQueries({ children }: { children: ReactNode }) {
-  const { data: session, status } = useSession();
+  const { user, status } = useAuthSession();
   return (
-    <BackendProvider key={session?.user?.id ?? status}>
-      {children}
-    </BackendProvider>
+    <BackendProvider key={user?.uuid ?? status}>{children}</BackendProvider>
   );
 }
 

@@ -1,15 +1,16 @@
-"""Shared auth-endpoint helpers: identifier normalization, token issuance, rate limiting."""
+"""Shared auth-endpoint helpers: identifier normalization, token issuance, sign-in cookies, rate limiting."""
 
 import os
 
-from fastapi import Request, status
+from fastapi import Request, Response, status
 
-from app.core import security
+from app.core import auth_cookies
 from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.normalize import normalize_email, normalize_phone
-from app.repositories.session_repository import SessionRepository
+from app.core.request_auth import authenticated_by_cookie
 from app.schemas.auth import TokenPair
+from app.services import auth_session
 
 # Fixed-window counter. INCR and the first-hit EXPIRE run in one script so a crash between them can
 # never leave a key without a TTL (which would ban the caller forever).
@@ -27,6 +28,11 @@ def _normalize_identifier(type_: str, value: str) -> str:
     return normalize_email(value) if type_ == "email" else normalize_phone(value)
 
 
+def device_of(request: Request) -> str:
+    """What a new session records as its device: the browser's or the client's user agent."""
+    return request.headers.get("user-agent", "unknown")
+
+
 async def issue_token_pair(
     redis, request: Request, user_uuid: str, *, identity=None
 ) -> TokenPair:
@@ -37,17 +43,24 @@ async def issue_token_pair(
     response can report which identity the token carries (ADR-205) without the caller
     resolving it a second time.
     """
-    device = request.headers.get("user-agent", "unknown")
-    act = identity.to_claim() if identity else None
-    # The session records the identity too (ADR-188), so a later refresh that does not name
-    # one can carry it forward rather than resetting to the platform default.
-    sid, refresh_token = await SessionRepository(redis).create_session(user_uuid, device, act=act)
-    access_token = security.create_access_token(data={"sub": user_uuid}, sid=sid, act=act)
+    access_token, refresh_token = await auth_session.open_session(
+        redis, user_uuid, identity, device_of(request)
+    )
     return TokenPair(
         access_token=access_token, refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         identity=identity.to_view() if identity else None,
     )
+
+
+def clear_cookies_if_cookie_authenticated(request: Request, response: Response) -> None:
+    """Clear the sign-in cookies if this request signed in with them (ADR-325).
+
+    For the endpoints that end the caller's own session. A Bearer client never had its tokens in
+    our cookies, so it gets no `Set-Cookie` at all.
+    """
+    if authenticated_by_cookie(request):
+        auth_cookies.clear_session_cookies(response)
 
 
 # An IP is well under this; the cap only stops a hostile header from becoming a huge Redis key.
@@ -95,12 +108,17 @@ def _resolve_route_path(request: Request) -> str:
     return getattr(route, "path", None) or request.scope["path"]
 
 
+# `/auth/login` and `POST /auth/session` check the same password, so they count against one allowance:
+# two doors must not double the guesses a caller gets (ADR-325).
+PASSWORD_SIGN_IN_BUCKET = "password-sign-in"
+
+
 # 頻率限制包裝器：支援測試環境繞過
-def get_rate_limiter(times: int, seconds: int):
+def get_rate_limiter(times: int, seconds: int, bucket: str | None = None):
     """Build a per-caller rate-limit dependency backed by Redis (bypassed in testing).
 
     Keyed by caller IP + route, so callers do not consume each other's allowance and the count is
-    shared across workers and replicas.
+    shared across workers and replicas. Routes given the same `bucket` share one allowance instead.
     """
 
     async def dynamic_rate_limiter(request: Request):
@@ -108,7 +126,7 @@ def get_rate_limiter(times: int, seconds: int):
         if os.getenv("ENV") == "testing":
             return None
         key = build_rate_limit_key(
-            times, seconds, resolve_client_ip(request), _resolve_route_path(request),
+            times, seconds, resolve_client_ip(request), bucket or _resolve_route_path(request),
         )
         if not await consume_rate_limit(request.app.state.redis, key, times, seconds):
             raise ApiError(

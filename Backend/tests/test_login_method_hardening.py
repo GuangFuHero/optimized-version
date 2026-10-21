@@ -14,7 +14,9 @@ from sqlalchemy import select
 
 from app.core.security import generate_salt, get_password_hash
 from app.models.auth import UserContact
+from app.services import sso_login
 from app.services.auth_account import create_account
+from app.sso.line import LineIdentity
 from tests.conftest import auth_headers_for
 
 pytestmark = pytest.mark.asyncio
@@ -72,14 +74,11 @@ async def test_a_stolen_session_cannot_link_the_attackers_provider(
     # the proof went to the victim's own contact, which the session holder need not control
     assert capture_email.messages[-1][0] == "victim@x.com"
 
-    # and the provider token alone still does not sign the attacker in as the victim
-    signed_in = await client.post("/api/v1/auth/sso/line",
-                                  json={"id_token": _token("attacker-line-sub")})
-    assert signed_in.status_code == 200  # it made a NEW account, not the victim's
-    assert signed_in.json()["access_token"]
-    me = await client.get("/api/v1/users/me",
-                          headers={"Authorization": f"Bearer {signed_in.json()['access_token']}"})
-    assert me.json()["uuid"] != user_uuid
+    # and signing in with that LINE account alone still does not land on the victim's: the OAuth
+    # callback signs in whoever `sign_in_with_line` finds, here a NEW account
+    signed_in = await sso_login.sign_in_with_line(
+        db_session, LineIdentity(sub="attacker-line-sub", name=None, email=None))
+    assert str(signed_in.uuid) != user_uuid
 
 
 async def test_linking_succeeds_with_the_code_and_notifies(client, db_session, redis, capture_email):
@@ -357,7 +356,7 @@ async def test_a_provider_only_account_cannot_have_a_contact_attached_by_a_sessi
     asserted 202 here — it pinned this takeover path as intended behaviour. ADR-220 exempted
     accounts with "nothing to prove with", but `_has_something_to_prove_with` did not count
     SSO identities, and a LINE first login attaches no contact when the provider returns no
-    email or that email is taken (`auth/sso.py:171-179`), so the shape is reachable.
+    email or that email is taken (`sso_login.sign_in_with_line`), so the shape is reachable.
 
     Verified before the fix, in full: attach the attacker's email (202, ungated, and
     `_notify_contact_added` had nobody to tell), `set-password` delivered its step-up code to
