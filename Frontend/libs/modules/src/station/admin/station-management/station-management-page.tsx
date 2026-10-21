@@ -19,8 +19,10 @@ import {
 } from './model/station-filters';
 import { ReviewQueueDialog } from './review-queue-dialog';
 import { StationDrawer, type StationDrawerState } from './station-drawer';
+import { StationExportMenu } from './station-export-menu';
 import { StationFilterPanel } from './station-filter-panel';
 import { StationFormPanel } from './station-form-panel';
+import { StationImportDialog } from './station-import-dialog';
 import { StationMapView } from './station-map-view';
 import { QuickStatusCell, TeamAssignCell } from './station-row-controls';
 import { StationStatsStrip } from './station-stats-strip';
@@ -52,6 +54,7 @@ export function StationManagementPage() {
   const now = useNow();
   const [filterOpen, setFilterOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const replaceParams = useCallback(
     (next: URLSearchParams) => {
@@ -141,7 +144,8 @@ export function StationManagementPage() {
         onViewChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
         onOpenReview={() => setReviewOpen(true)}
         onNew={() => openNew()}
-        onImport={() => undefined}
+        onImport={() => setImportOpen(true)}
+        exportControl={<StationExportMenu />}
       />
       {filterOpen ? (
         <StationFilterPanel
@@ -209,6 +213,9 @@ export function StationManagementPage() {
             setLocalDrawer({ mode: 'edit', uuid });
           }}
         />
+      ) : null}
+      {caps.canImport && importOpen ? (
+        <StationImportDialog onClose={() => setImportOpen(false)} />
       ) : null}
       <Dialog
         open={Boolean(pendingDelete)}
