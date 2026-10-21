@@ -310,6 +310,32 @@ export function useStationAnalyticsValue(
   });
 }
 
+export type StationAnalyticsDataQuery = NonNullable<
+  paths['/api/v1/analytics/stations/data']['get']['parameters']['query']
+>;
+export interface StationAnalyticsDataParams {
+  query: StationAnalyticsDataQuery;
+}
+
+export const stationAnalyticsDataQuery = (params: StationAnalyticsDataParams) =>
+  queryOptions({
+    queryKey: ['admin', 'analytics', 'StationAnalyticsData', params],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/analytics/stations/data', { params, signal })
+        .then(responseData),
+  });
+
+export function useStationAnalyticsData(
+  params: StationAnalyticsDataParams,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...stationAnalyticsDataQuery(params),
+    enabled: options.enabled,
+  });
+}
+
 export interface UpdateCurrentUserInput {
   body: paths['/api/v1/users/me']['patch']['requestBody']['content']['application/json'];
 }
@@ -664,6 +690,7 @@ export function usePreviewStationImport() {
           bodySerializer: (body) => {
             const form = new FormData();
             form.append('file', body.file);
+            if (body.mapping) form.append('mapping', body.mapping);
             return form;
           },
         })
@@ -709,6 +736,7 @@ export function useCommitStationImport() {
           bodySerializer: (body) => {
             const form = new FormData();
             form.append('file', body.file);
+            if (body.mapping) form.append('mapping', body.mapping);
             return form;
           },
         })

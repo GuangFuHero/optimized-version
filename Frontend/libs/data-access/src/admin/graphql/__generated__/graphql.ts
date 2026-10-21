@@ -1,80 +1,64 @@
+ 
 import type { Geometry } from 'geojson';
 import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
 export type Maybe<T> = T | null;
 export type InputMaybe<T> = T | null | undefined;
-export type Exact<T extends { [key: string]: unknown }> = {
-  [K in keyof T]: T[K];
-};
-export type MakeOptional<T, K extends keyof T> = Omit<T, K> & {
-  [SubKey in K]?: Maybe<T[SubKey]>;
-};
-export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & {
-  [SubKey in K]: Maybe<T[SubKey]>;
-};
-export type MakeEmpty<
-  T extends { [key: string]: unknown },
-  K extends keyof T,
-> = { [_ in K]?: never };
-export type Incremental<T> =
-  | T
-  | {
-      [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never;
-    };
+export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
+export type MakeOptional<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]?: Maybe<T[SubKey]> };
+export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]: Maybe<T[SubKey]> };
+export type MakeEmpty<T extends { [key: string]: unknown }, K extends keyof T> = { [_ in K]?: never };
+export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 /** All built-in and custom scalars, mapped to their actual values */
 export type Scalars = {
-  ID: { input: string; output: string };
-  String: { input: string; output: string };
-  Boolean: { input: boolean; output: boolean };
-  Int: { input: number; output: number };
-  Float: { input: number; output: number };
+  ID: { input: string; output: string; }
+  String: { input: string; output: string; }
+  Boolean: { input: boolean; output: boolean; }
+  Int: { input: number; output: number; }
+  Float: { input: number; output: number; }
   /** Date with time (isoformat) */
-  DateTime: { input: string; output: string };
+  DateTime: { input: string; output: string; }
   /** GeoJSON geometry object (RFC 7946) */
-  GeoJSON: { input: Geometry; output: Geometry };
+  GeoJSON: { input: Geometry; output: Geometry; }
   /** The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf). */
-  JSON: { input: unknown; output: unknown };
-  UUID: { input: string; output: string };
+  JSON: { input: unknown; output: unknown; }
+  UUID: { input: string; output: string; }
 };
 
 export const AccessStatus = {
   Accessible: 'accessible',
   Inaccessible: 'inaccessible',
   Restricted: 'restricted',
-  Unknown: 'unknown',
+  Unknown: 'unknown'
 } as const;
 
-export type AccessStatus = (typeof AccessStatus)[keyof typeof AccessStatus];
+export type AccessStatus = typeof AccessStatus[keyof typeof AccessStatus];
 export const AnnouncementFilter = {
   Active: 'ACTIVE',
   All: 'ALL',
-  Draft: 'DRAFT',
+  Draft: 'DRAFT'
 } as const;
 
-export type AnnouncementFilter =
-  (typeof AnnouncementFilter)[keyof typeof AnnouncementFilter];
+export type AnnouncementFilter = typeof AnnouncementFilter[keyof typeof AnnouncementFilter];
 export const AnnouncementMoveDirection = {
   Down: 'DOWN',
-  Up: 'UP',
+  Up: 'UP'
 } as const;
 
-export type AnnouncementMoveDirection =
-  (typeof AnnouncementMoveDirection)[keyof typeof AnnouncementMoveDirection];
+export type AnnouncementMoveDirection = typeof AnnouncementMoveDirection[keyof typeof AnnouncementMoveDirection];
 export const AnnouncementPlacement = {
   AdminPage: 'admin_page',
   All: 'all',
-  PublicPage: 'public_page',
+  PublicPage: 'public_page'
 } as const;
 
-export type AnnouncementPlacement =
-  (typeof AnnouncementPlacement)[keyof typeof AnnouncementPlacement];
+export type AnnouncementPlacement = typeof AnnouncementPlacement[keyof typeof AnnouncementPlacement];
 export const AnnouncementStatus = {
   Active: 'ACTIVE',
   Draft: 'DRAFT',
-  Inactive: 'INACTIVE',
+  Inactive: 'INACTIVE'
 } as const;
 
-export type AnnouncementStatus =
-  (typeof AnnouncementStatus)[keyof typeof AnnouncementStatus];
+export type AnnouncementStatus = typeof AnnouncementStatus[keyof typeof AnnouncementStatus];
 export type AnnouncementType = {
   __typename?: 'AnnouncementType';
   active: Scalars['Boolean']['output'];
@@ -106,10 +90,10 @@ export type AreaConnection = {
 export const AreaKind = {
   HazardousZone: 'hazardous_zone',
   MarkZone: 'mark_zone',
-  TeamZone: 'team_zone',
+  TeamZone: 'team_zone'
 } as const;
 
-export type AreaKind = (typeof AreaKind)[keyof typeof AreaKind];
+export type AreaKind = typeof AreaKind[keyof typeof AreaKind];
 export type AreaType = {
   __typename?: 'AreaType';
   /** Teams a team zone is assigned to; empty for the other kinds */
@@ -138,16 +122,16 @@ export const AuditStatus = {
   AuditIssue: 'audit_issue',
   Audited: 'audited',
   NeedAudit: 'need_audit',
-  NoAudit: 'no_audit',
+  NoAudit: 'no_audit'
 } as const;
 
-export type AuditStatus = (typeof AuditStatus)[keyof typeof AuditStatus];
+export type AuditStatus = typeof AuditStatus[keyof typeof AuditStatus];
 export const AuditVerdict = {
   AuditIssue: 'audit_issue',
-  Audited: 'audited',
+  Audited: 'audited'
 } as const;
 
-export type AuditVerdict = (typeof AuditVerdict)[keyof typeof AuditVerdict];
+export type AuditVerdict = typeof AuditVerdict[keyof typeof AuditVerdict];
 export type BoundsInput = {
   /** North boundary latitude */
   maxLat: Scalars['Float']['input'];
@@ -162,25 +146,23 @@ export type BoundsInput = {
 export const BriefingState = {
   Briefing: 'BRIEFING',
   Debrief: 'DEBRIEF',
-  InField: 'IN_FIELD',
+  InField: 'IN_FIELD'
 } as const;
 
-export type BriefingState = (typeof BriefingState)[keyof typeof BriefingState];
+export type BriefingState = typeof BriefingState[keyof typeof BriefingState];
 export const BriefingStatus = {
   Draft: 'DRAFT',
-  Published: 'PUBLISHED',
+  Published: 'PUBLISHED'
 } as const;
 
-export type BriefingStatus =
-  (typeof BriefingStatus)[keyof typeof BriefingStatus];
+export type BriefingStatus = typeof BriefingStatus[keyof typeof BriefingStatus];
 export const BriefingStatusFilter = {
   All: 'ALL',
   Draft: 'DRAFT',
-  Published: 'PUBLISHED',
+  Published: 'PUBLISHED'
 } as const;
 
-export type BriefingStatusFilter =
-  (typeof BriefingStatusFilter)[keyof typeof BriefingStatusFilter];
+export type BriefingStatusFilter = typeof BriefingStatusFilter[keyof typeof BriefingStatusFilter];
 export type BriefingTemplateType = {
   __typename?: 'BriefingTemplateType';
   content: Scalars['String']['output'];
@@ -518,10 +500,10 @@ export const FieldDataType = {
   MultiSelect: 'multi_select',
   Number: 'number',
   SingleSelect: 'single_select',
-  Text: 'text',
+  Text: 'text'
 } as const;
 
-export type FieldDataType = (typeof FieldDataType)[keyof typeof FieldDataType];
+export type FieldDataType = typeof FieldDataType[keyof typeof FieldDataType];
 export type GenerateBriefingInput = {
   /** Override content; defaults to the template's content */
   content?: InputMaybe<Scalars['String']['input']>;
@@ -628,10 +610,12 @@ export type Mutation = {
   withdrawRoleRequest: RoleRequestType;
 };
 
+
 export type MutationAssignStationToTeamArgs = {
   stationUuid: Scalars['UUID']['input'];
   teamUuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationAssignTaskActorArgs = {
   actorUuid?: InputMaybe<Scalars['UUID']['input']>;
@@ -639,14 +623,17 @@ export type MutationAssignTaskActorArgs = {
   taskUuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationAssignZoneToTeamArgs = {
   input: ZoneTeamAssignmentInput;
 };
+
 
 export type MutationAttachStationPhotoArgs = {
   stationUuid: Scalars['UUID']['input'];
   url: Scalars['String']['input'];
 };
+
 
 export type MutationAuditTicketArgs = {
   contentHash: Scalars['String']['input'];
@@ -655,95 +642,118 @@ export type MutationAuditTicketArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationCreateAnnouncementArgs = {
   input: CreateAnnouncementInput;
 };
+
 
 export type MutationCreateAreaArgs = {
   input: CreateAreaInput;
 };
 
+
 export type MutationCreateBriefingTemplateArgs = {
   input: CreateBriefingTemplateInput;
 };
+
 
 export type MutationCreateBuildingMapArgs = {
   input: CreateBuildingMapInput;
 };
 
+
 export type MutationCreateCrowdSourcingArgs = {
   input: CreateCrowdSourcingInput;
 };
 
+
 export type MutationCreateHelpRequestArgs = {
   input: CreateHelpRequestInput;
 };
+
 
 export type MutationCreateStationArgs = {
   acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   input: CreateStationInput;
 };
 
+
 export type MutationCreateStationPropertyArgs = {
   input: CreateStationPropertyInput;
 };
+
 
 export type MutationCreateStationSuggestionArgs = {
   input: CreateStationSuggestionInput;
 };
 
+
 export type MutationCreateTaskPropertyArgs = {
   input: CreateTaskPropertyInput;
 };
 
+
 export type MutationCreateTicketArgs = {
   input: CreateTicketInput;
 };
+
 
 export type MutationCreateTicketTaskArgs = {
   acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   input: CreateTicketTaskInput;
 };
 
+
 export type MutationDeleteAnnouncementArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationDeleteAreaArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationDeleteBriefingArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationDeleteBriefingTemplateArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationDeleteBuildingMapArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationDeleteStationArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationDeleteTicketArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationDeleteTicketTaskArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationDetachStationPhotoArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationGenerateBriefingArgs = {
   input: GenerateBriefingInput;
 };
+
 
 export type MutationMergeStationSuggestionsArgs = {
   decisions: Array<SuggestionDecisionInput>;
@@ -751,126 +761,153 @@ export type MutationMergeStationSuggestionsArgs = {
   stationUuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationMoveAnnouncementArgs = {
   direction: AnnouncementMoveDirection;
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationPromoteMarkZoneArgs = {
   input: PromoteMarkZoneInput;
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationPublishBriefingArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationRemoveZoneFromTeamArgs = {
   input: ZoneTeamAssignmentInput;
 };
 
+
 export type MutationRevokeStationSuggestionMergeArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationSetAnnouncementActiveArgs = {
   active: Scalars['Boolean']['input'];
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationSetTicketDisasterDetailsArgs = {
   details: Array<TicketDisasterDetailInput>;
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationStopRecruitingArgs = {
   taskUuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationSubmitRoleRequestArgs = {
   input: SubmitRoleRequestInput;
 };
 
+
 export type MutationUnassignStationArgs = {
   stationUuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationUnassignTaskActorArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationUpdateAnnouncementArgs = {
   input: UpdateAnnouncementInput;
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationUpdateAreaArgs = {
   input: UpdateAreaInput;
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationUpdateBriefingArgs = {
   input: UpdateBriefingInput;
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationUpdateBriefingTemplateArgs = {
   input: UpdateBriefingTemplateInput;
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationUpdateBuildingMapArgs = {
   input: UpdateBuildingMapInput;
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationUpdateStationArgs = {
   input: UpdateStationInput;
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationUpdateStationPropertyArgs = {
   input: UpdateStationPropertyInput;
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationUpdateTaskAssignmentArgs = {
   input: UpdateTaskAssignmentInput;
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationUpdateTaskPropertyArgs = {
   input: UpdateTaskPropertyInput;
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationUpdateTicketArgs = {
   input: UpdateTicketInput;
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type MutationUpdateTicketTaskArgs = {
   input: UpdateTicketTaskInput;
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type MutationUpsertDisasterTypeArgs = {
   input: UpsertDisasterTypeInput;
 };
+
 
 export type MutationUpsertStationPropertyConfigArgs = {
   input: UpsertPropertyConfigInput;
   stationType: Scalars['String']['input'];
 };
 
+
 export type MutationUpsertTaskPropertyConfigArgs = {
   input: UpsertPropertyConfigInput;
   taskType: Scalars['String']['input'];
 };
 
+
 export type MutationUpsertTicketPropertyConfigArgs = {
   input: UpsertTicketPropertyConfigInput;
 };
+
 
 export type MutationWithdrawRoleRequestArgs = {
   uuid: Scalars['UUID']['input'];
@@ -898,10 +935,10 @@ export const NeedKind = {
   Hr: 'hr',
   Medical: 'medical',
   Rescue: 'rescue',
-  Supply: 'supply',
+  Supply: 'supply'
 } as const;
 
-export type NeedKind = (typeof NeedKind)[keyof typeof NeedKind];
+export type NeedKind = typeof NeedKind[keyof typeof NeedKind];
 export type PageInfo = {
   __typename?: 'PageInfo';
   /** True if there are more records after the current page */
@@ -964,14 +1001,17 @@ export type Query = {
   zonesByTeam: TeamZoneConnection;
 };
 
+
 export type QueryAnnouncementArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type QueryAnnouncementsArgs = {
   filter?: AnnouncementFilter;
   placement?: AnnouncementPlacement;
 };
+
 
 export type QueryAreasArgs = {
   bounds?: InputMaybe<BoundsInput>;
@@ -980,18 +1020,22 @@ export type QueryAreasArgs = {
   skip?: Scalars['Int']['input'];
 };
 
+
 export type QueryBriefingArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type QueryBriefingTemplateArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+
 export type QueryBriefingTemplatesArgs = {
   state?: InputMaybe<BriefingState>;
   tag?: InputMaybe<Scalars['String']['input']>;
 };
+
 
 export type QueryBriefingsArgs = {
   state?: InputMaybe<BriefingState>;
@@ -999,9 +1043,11 @@ export type QueryBriefingsArgs = {
   tag?: InputMaybe<Scalars['String']['input']>;
 };
 
+
 export type QueryBuildingMapArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type QueryBuildingMapTicketsArgs = {
   buildingMapUuid: Scalars['UUID']['input'];
@@ -1009,19 +1055,23 @@ export type QueryBuildingMapTicketsArgs = {
   skip?: Scalars['Int']['input'];
 };
 
+
 export type QueryBuildingMapsArgs = {
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
 };
 
+
 export type QueryDisasterTypesArgs = {
   includeInactive?: Scalars['Boolean']['input'];
 };
 
+
 export type QueryHazardousZoneArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type QueryHazardousZonesArgs = {
   bounds?: InputMaybe<BoundsInput>;
@@ -1029,14 +1079,17 @@ export type QueryHazardousZonesArgs = {
   skip?: Scalars['Int']['input'];
 };
 
+
 export type QueryStationArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type QueryStationPropertyConfigsArgs = {
   includeInactive?: Scalars['Boolean']['input'];
   stationType: Scalars['String']['input'];
 };
+
 
 export type QueryStationsArgs = {
   assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
@@ -1050,22 +1103,27 @@ export type QueryStationsArgs = {
   unassignedOnly?: Scalars['Boolean']['input'];
 };
 
+
 export type QuerySuggestableFieldsArgs = {
   targetType: Scalars['String']['input'];
 };
 
+
 export type QueryTaskPropertiesArgs = {
   taskUuid: Scalars['String']['input'];
 };
+
 
 export type QueryTaskPropertyConfigsArgs = {
   includeInactive?: Scalars['Boolean']['input'];
   taskType: Scalars['String']['input'];
 };
 
+
 export type QueryTeamZoneArgs = {
   uuid: Scalars['UUID']['input'];
 };
+
 
 export type QueryTeamZonesArgs = {
   bounds?: InputMaybe<BoundsInput>;
@@ -1073,15 +1131,18 @@ export type QueryTeamZonesArgs = {
   skip?: Scalars['Int']['input'];
 };
 
+
 export type QueryTicketArgs = {
   uuid: Scalars['UUID']['input'];
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
+
 export type QueryTicketPropertyConfigsArgs = {
   disasterTypes: Array<Scalars['String']['input']>;
   includeInactive?: Scalars['Boolean']['input'];
 };
+
 
 export type QueryTicketTasksArgs = {
   limit?: Scalars['Int']['input'];
@@ -1090,6 +1151,7 @@ export type QueryTicketTasksArgs = {
   status?: InputMaybe<Scalars['String']['input']>;
   ticketUuid: Scalars['String']['input'];
 };
+
 
 export type QueryTicketsArgs = {
   auditStatus?: InputMaybe<AuditStatus>;
@@ -1104,6 +1166,7 @@ export type QueryTicketsArgs = {
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
+
 export type QueryZonesByTeamArgs = {
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
@@ -1113,20 +1176,18 @@ export type QueryZonesByTeamArgs = {
 export const RoleRequestRole = {
   DataAuditor: 'data_auditor',
   Government: 'government',
-  Ngo: 'ngo',
+  Ngo: 'ngo'
 } as const;
 
-export type RoleRequestRole =
-  (typeof RoleRequestRole)[keyof typeof RoleRequestRole];
+export type RoleRequestRole = typeof RoleRequestRole[keyof typeof RoleRequestRole];
 export const RoleRequestStatus = {
   Approved: 'approved',
   Pending: 'pending',
   Rejected: 'rejected',
-  Withdrawn: 'withdrawn',
+  Withdrawn: 'withdrawn'
 } as const;
 
-export type RoleRequestStatus =
-  (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
+export type RoleRequestStatus = typeof RoleRequestStatus[keyof typeof RoleRequestStatus];
 export type RoleRequestType = {
   __typename?: 'RoleRequestType';
   /** When it was approved, rejected or withdrawn */
@@ -1216,11 +1277,10 @@ export type StationCreated = {
 export const StationOperationalStatus = {
   Active: 'active',
   PermanentlyClosed: 'permanently_closed',
-  TemporarilyClosed: 'temporarily_closed',
+  TemporarilyClosed: 'temporarily_closed'
 } as const;
 
-export type StationOperationalStatus =
-  (typeof StationOperationalStatus)[keyof typeof StationOperationalStatus];
+export type StationOperationalStatus = typeof StationOperationalStatus[keyof typeof StationOperationalStatus];
 export type StationPropertyConfigType = {
   __typename?: 'StationPropertyConfigType';
   /** Which control the form renders for this field */
@@ -1417,11 +1477,10 @@ export type SuggestionDecisionInput = {
 export const TaskAssignmentStatus = {
   Accepted: 'accepted',
   Completed: 'completed',
-  EnRoute: 'en_route',
+  EnRoute: 'en_route'
 } as const;
 
-export type TaskAssignmentStatus =
-  (typeof TaskAssignmentStatus)[keyof typeof TaskAssignmentStatus];
+export type TaskAssignmentStatus = typeof TaskAssignmentStatus[keyof typeof TaskAssignmentStatus];
 export type TaskAssignmentType = {
   __typename?: 'TaskAssignmentType';
   /** Display name of the assigned person. Null to a caller without ticket.view_history on the parent ticket, unless the assignment is their own */
@@ -1468,11 +1527,10 @@ export type TaskPropertyConfigType = {
 
 export const TaskPropertyStatus = {
   Fulfilled: 'fulfilled',
-  Pending: 'pending',
+  Pending: 'pending'
 } as const;
 
-export type TaskPropertyStatus =
-  (typeof TaskPropertyStatus)[keyof typeof TaskPropertyStatus];
+export type TaskPropertyStatus = typeof TaskPropertyStatus[keyof typeof TaskPropertyStatus];
 export type TaskPropertyType = {
   __typename?: 'TaskPropertyType';
   /** Optional notes about this property. Null to a caller without ticket.view_detail on the parent ticket */
@@ -1694,10 +1752,10 @@ export type TicketType = {
 export const TriState = {
   No: 'no',
   Unknown: 'unknown',
-  Yes: 'yes',
+  Yes: 'yes'
 } as const;
 
-export type TriState = (typeof TriState)[keyof typeof TriState];
+export type TriState = typeof TriState[keyof typeof TriState];
 export type UpdateAnnouncementInput = {
   /** The new announcement body text */
   content: Scalars['String']['input'];
@@ -1863,10 +1921,10 @@ export type UserRefType = {
 export const Visibility = {
   Internal: 'internal',
   Public: 'public',
-  Restricted: 'restricted',
+  Restricted: 'restricted'
 } as const;
 
-export type Visibility = (typeof Visibility)[keyof typeof Visibility];
+export type Visibility = typeof Visibility[keyof typeof Visibility];
 export type ZoneAssignmentType = {
   __typename?: 'ZoneAssignmentType';
   assignedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1880,82 +1938,13 @@ export type ZoneTeamAssignmentInput = {
   zoneUuid: Scalars['UUID']['input'];
 };
 
-export type AdminPageInfoFragment = {
-  __typename?: 'PageInfo';
-  totalCount: number;
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
-};
+export type AdminPageInfoFragment = { __typename?: 'PageInfo', totalCount: number, hasNextPage: boolean, hasPreviousPage: boolean };
 
-export type AdminTicketFieldsFragment = {
-  __typename?: 'TicketType';
-  uuid: string;
-  title: string;
-  description?: string | null;
-  geometry?: Geometry | null;
-  status: string;
-  priority: string;
-  taskType?: string | null;
-  auditStatus: string;
-  contactName?: string | null;
-  contactEmail?: string | null;
-  contactPhone?: string | null;
-  createdBy?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-};
+export type AdminTicketFieldsFragment = { __typename?: 'TicketType', uuid: string, title: string, description?: string | null, geometry?: Geometry | null, status: string, priority: string, taskType?: string | null, auditStatus: string, contactName?: string | null, contactEmail?: string | null, contactPhone?: string | null, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null };
 
-export type AdminTaskFieldsFragment = {
-  __typename?: 'TicketTaskType';
-  uuid: string;
-  ticketUuid: string;
-  taskType: string;
-  taskName: string;
-  taskDescription?: string | null;
-  quantity?: number | null;
-  status: string;
-  progressNote?: string | null;
-  source: string;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  assignments: Array<{
-    __typename?: 'TaskAssignmentType';
-    uuid: string;
-    actorUuid: string;
-    role?: string | null;
-    status: string;
-    assignedAt?: string | null;
-    updatedAt?: string | null;
-  }>;
-};
+export type AdminTaskFieldsFragment = { __typename?: 'TicketTaskType', uuid: string, ticketUuid: string, taskType: string, taskName: string, taskDescription?: string | null, quantity?: number | null, status: string, progressNote?: string | null, source: string, createdAt?: string | null, updatedAt?: string | null, assignments: Array<{ __typename?: 'TaskAssignmentType', uuid: string, actorUuid: string, role?: string | null, status: string, assignedAt?: string | null, updatedAt?: string | null }> };
 
-export type AdminStationFieldsFragment = {
-  __typename?: 'StationType';
-  uuid: string;
-  type?: string | null;
-  name?: string | null;
-  description?: string | null;
-  geometry?: Geometry | null;
-  opHour?: string | null;
-  level: number;
-  comment?: string | null;
-  source?: string | null;
-  visibility?: string | null;
-  verificationStatus?: string | null;
-  operationalStatus: string;
-  isDuplicate: boolean;
-  isTemporary: boolean;
-  isOfficial: boolean;
-  createdBy?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  assignedTeam?: {
-    __typename?: 'AssignedTeamType';
-    uuid: string;
-    name: string;
-    type: string;
-  } | null;
-};
+export type AdminStationFieldsFragment = { __typename?: 'StationType', uuid: string, type?: string | null, name?: string | null, description?: string | null, geometry?: Geometry | null, opHour?: string | null, level: number, comment?: string | null, source?: string | null, visibility?: string | null, verificationStatus?: string | null, operationalStatus: string, statusChangedAt?: string | null, supplyStatus?: string | null, pendingSuggestedFields: Array<string>, isDuplicate: boolean, isTemporary: boolean, isOfficial: boolean, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, secondaryLocation?: { __typename?: 'SecondaryLocationType', county?: string | null, city?: string | null } | null, assignedTeam?: { __typename?: 'AssignedTeamType', uuid: string, name: string, type: string } | null };
 
 export type AdminTicketsQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
@@ -1966,138 +1955,15 @@ export type AdminTicketsQueryVariables = Exact<{
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
-export type AdminTicketsQuery = {
-  __typename?: 'Query';
-  tickets: {
-    __typename?: 'TicketConnection';
-    items: Array<{
-      __typename?: 'TicketType';
-      uuid: string;
-      title: string;
-      description?: string | null;
-      geometry?: Geometry | null;
-      status: string;
-      priority: string;
-      taskType?: string | null;
-      auditStatus: string;
-      contactName?: string | null;
-      contactEmail?: string | null;
-      contactPhone?: string | null;
-      createdBy?: string | null;
-      createdAt?: string | null;
-      updatedAt?: string | null;
-      tasks: Array<{
-        __typename?: 'TicketTaskType';
-        uuid: string;
-        ticketUuid: string;
-        taskType: string;
-        taskName: string;
-        taskDescription?: string | null;
-        quantity?: number | null;
-        status: string;
-        progressNote?: string | null;
-        source: string;
-        createdAt?: string | null;
-        updatedAt?: string | null;
-        assignments: Array<{
-          __typename?: 'TaskAssignmentType';
-          uuid: string;
-          actorUuid: string;
-          role?: string | null;
-          status: string;
-          assignedAt?: string | null;
-          updatedAt?: string | null;
-        }>;
-      }>;
-    }>;
-    pageInfo: {
-      __typename?: 'PageInfo';
-      totalCount: number;
-      hasNextPage: boolean;
-      hasPreviousPage: boolean;
-    };
-  };
-};
+
+export type AdminTicketsQuery = { __typename?: 'Query', tickets: { __typename?: 'TicketConnection', items: Array<{ __typename?: 'TicketType', uuid: string, title: string, description?: string | null, geometry?: Geometry | null, status: string, priority: string, taskType?: string | null, auditStatus: string, contactName?: string | null, contactEmail?: string | null, contactPhone?: string | null, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, tasks: Array<{ __typename?: 'TicketTaskType', uuid: string, ticketUuid: string, taskType: string, taskName: string, taskDescription?: string | null, quantity?: number | null, status: string, progressNote?: string | null, source: string, createdAt?: string | null, updatedAt?: string | null, assignments: Array<{ __typename?: 'TaskAssignmentType', uuid: string, actorUuid: string, role?: string | null, status: string, assignedAt?: string | null, updatedAt?: string | null }> }> }>, pageInfo: { __typename?: 'PageInfo', totalCount: number, hasNextPage: boolean, hasPreviousPage: boolean } } };
 
 export type AdminTicketQueryVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminTicketQuery = {
-  __typename?: 'Query';
-  ticket?: {
-    __typename?: 'TicketType';
-    uuid: string;
-    title: string;
-    description?: string | null;
-    geometry?: Geometry | null;
-    status: string;
-    priority: string;
-    taskType?: string | null;
-    auditStatus: string;
-    contactName?: string | null;
-    contactEmail?: string | null;
-    contactPhone?: string | null;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    secondaryLocation?: {
-      __typename?: 'SecondaryLocationType';
-      county?: string | null;
-      city?: string | null;
-      lane?: string | null;
-      alley?: string | null;
-      no?: string | null;
-      floor?: string | null;
-      room?: string | null;
-      landmarkNote?: string | null;
-    } | null;
-    photos: Array<{
-      __typename?: 'PhotoType';
-      uuid: string;
-      url: string;
-      createdAt?: string | null;
-    }>;
-    tasks: Array<{
-      __typename?: 'TicketTaskType';
-      uuid: string;
-      ticketUuid: string;
-      taskType: string;
-      taskName: string;
-      taskDescription?: string | null;
-      quantity?: number | null;
-      status: string;
-      progressNote?: string | null;
-      source: string;
-      createdAt?: string | null;
-      updatedAt?: string | null;
-      properties: Array<{
-        __typename?: 'TaskPropertyType';
-        uuid: string;
-        propertyName: string;
-        propertyValue: string;
-        quantity?: number | null;
-        status?: string | null;
-        comment?: string | null;
-      }>;
-      assignments: Array<{
-        __typename?: 'TaskAssignmentType';
-        uuid: string;
-        actorUuid: string;
-        role?: string | null;
-        status: string;
-        assignedAt?: string | null;
-        updatedAt?: string | null;
-      }>;
-    }>;
-    disasterDetails: Array<{
-      __typename?: 'TicketDisasterDetailType';
-      uuid: string;
-      propertyName: string;
-      value: string;
-    }>;
-  } | null;
-};
+
+export type AdminTicketQuery = { __typename?: 'Query', ticket?: { __typename?: 'TicketType', uuid: string, title: string, description?: string | null, geometry?: Geometry | null, status: string, priority: string, taskType?: string | null, auditStatus: string, contactName?: string | null, contactEmail?: string | null, contactPhone?: string | null, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, secondaryLocation?: { __typename?: 'SecondaryLocationType', county?: string | null, city?: string | null, lane?: string | null, alley?: string | null, no?: string | null, floor?: string | null, room?: string | null, landmarkNote?: string | null } | null, photos: Array<{ __typename?: 'PhotoType', uuid: string, url: string, createdAt?: string | null }>, tasks: Array<{ __typename?: 'TicketTaskType', uuid: string, ticketUuid: string, taskType: string, taskName: string, taskDescription?: string | null, quantity?: number | null, status: string, progressNote?: string | null, source: string, createdAt?: string | null, updatedAt?: string | null, properties: Array<{ __typename?: 'TaskPropertyType', uuid: string, propertyName: string, propertyValue: string, quantity?: number | null, status?: string | null, comment?: string | null }>, assignments: Array<{ __typename?: 'TaskAssignmentType', uuid: string, actorUuid: string, role?: string | null, status: string, assignedAt?: string | null, updatedAt?: string | null }> }>, disasterDetails: Array<{ __typename?: 'TicketDisasterDetailType', uuid: string, propertyName: string, value: string }> } | null };
 
 export type AdminTicketTasksQueryVariables = Exact<{
   ticketUuid: Scalars['String']['input'];
@@ -2107,32 +1973,8 @@ export type AdminTicketTasksQueryVariables = Exact<{
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
-export type AdminTicketTasksQuery = {
-  __typename?: 'Query';
-  ticketTasks: Array<{
-    __typename?: 'TicketTaskType';
-    uuid: string;
-    ticketUuid: string;
-    taskType: string;
-    taskName: string;
-    taskDescription?: string | null;
-    quantity?: number | null;
-    status: string;
-    progressNote?: string | null;
-    source: string;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    assignments: Array<{
-      __typename?: 'TaskAssignmentType';
-      uuid: string;
-      actorUuid: string;
-      role?: string | null;
-      status: string;
-      assignedAt?: string | null;
-      updatedAt?: string | null;
-    }>;
-  }>;
-};
+
+export type AdminTicketTasksQuery = { __typename?: 'Query', ticketTasks: Array<{ __typename?: 'TicketTaskType', uuid: string, ticketUuid: string, taskType: string, taskName: string, taskDescription?: string | null, quantity?: number | null, status: string, progressNote?: string | null, source: string, createdAt?: string | null, updatedAt?: string | null, assignments: Array<{ __typename?: 'TaskAssignmentType', uuid: string, actorUuid: string, role?: string | null, status: string, assignedAt?: string | null, updatedAt?: string | null }> }> };
 
 export type AdminStationsQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
@@ -2141,317 +1983,106 @@ export type AdminStationsQueryVariables = Exact<{
   q?: InputMaybe<Scalars['String']['input']>;
   assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   unassignedOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  hasPendingSuggestions?: InputMaybe<Scalars['Boolean']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
-export type AdminStationsQuery = {
-  __typename?: 'Query';
-  stations: {
-    __typename?: 'StationConnection';
-    items: Array<{
-      __typename?: 'StationType';
-      uuid: string;
-      type?: string | null;
-      name?: string | null;
-      description?: string | null;
-      geometry?: Geometry | null;
-      opHour?: string | null;
-      level: number;
-      comment?: string | null;
-      source?: string | null;
-      visibility?: string | null;
-      verificationStatus?: string | null;
-      operationalStatus: string;
-      isDuplicate: boolean;
-      isTemporary: boolean;
-      isOfficial: boolean;
-      createdBy?: string | null;
-      createdAt?: string | null;
-      updatedAt?: string | null;
-      assignedTeam?: {
-        __typename?: 'AssignedTeamType';
-        uuid: string;
-        name: string;
-        type: string;
-      } | null;
-    }>;
-    pageInfo: {
-      __typename?: 'PageInfo';
-      totalCount: number;
-      hasNextPage: boolean;
-      hasPreviousPage: boolean;
-    };
-  };
-};
+
+export type AdminStationsQuery = { __typename?: 'Query', stations: { __typename?: 'StationConnection', items: Array<{ __typename?: 'StationType', uuid: string, type?: string | null, name?: string | null, description?: string | null, geometry?: Geometry | null, opHour?: string | null, level: number, comment?: string | null, source?: string | null, visibility?: string | null, verificationStatus?: string | null, operationalStatus: string, statusChangedAt?: string | null, supplyStatus?: string | null, pendingSuggestedFields: Array<string>, isDuplicate: boolean, isTemporary: boolean, isOfficial: boolean, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, secondaryLocation?: { __typename?: 'SecondaryLocationType', county?: string | null, city?: string | null } | null, assignedTeam?: { __typename?: 'AssignedTeamType', uuid: string, name: string, type: string } | null }>, pageInfo: { __typename?: 'PageInfo', totalCount: number, hasNextPage: boolean, hasPreviousPage: boolean } } };
 
 export type AdminStationQueryVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminStationQuery = {
-  __typename?: 'Query';
-  station?: {
-    __typename?: 'StationType';
-    contactName?: string | null;
-    contactPhone?: string | null;
-    uuid: string;
-    type?: string | null;
-    name?: string | null;
-    description?: string | null;
-    geometry?: Geometry | null;
-    opHour?: string | null;
-    level: number;
-    comment?: string | null;
-    source?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
-    operationalStatus: string;
-    isDuplicate: boolean;
-    isTemporary: boolean;
-    isOfficial: boolean;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    secondaryLocation?: {
-      __typename?: 'SecondaryLocationType';
-      county?: string | null;
-      city?: string | null;
-      lane?: string | null;
-      alley?: string | null;
-      no?: string | null;
-      floor?: string | null;
-      room?: string | null;
-      poleId?: string | null;
-      poleType?: string | null;
-      poleNote?: string | null;
-    } | null;
-    photos: Array<{
-      __typename?: 'PhotoType';
-      uuid: string;
-      url: string;
-      createdAt?: string | null;
-    }>;
-    properties: Array<{
-      __typename?: 'StationPropertyType';
-      uuid: string;
-      propertyType: string;
-      propertyName: string;
-      quantity?: number | null;
-      comment?: string | null;
-      status: string;
-      weightings: number;
-      createdAt?: string | null;
-    }>;
-    assignedTeam?: {
-      __typename?: 'AssignedTeamType';
-      uuid: string;
-      name: string;
-      type: string;
-    } | null;
-  } | null;
-};
+
+export type AdminStationQuery = { __typename?: 'Query', station?: { __typename?: 'StationType', contactName?: string | null, contactPhone?: string | null, contactEmail?: string | null, uuid: string, type?: string | null, name?: string | null, description?: string | null, geometry?: Geometry | null, opHour?: string | null, level: number, comment?: string | null, source?: string | null, visibility?: string | null, verificationStatus?: string | null, operationalStatus: string, statusChangedAt?: string | null, supplyStatus?: string | null, pendingSuggestedFields: Array<string>, isDuplicate: boolean, isTemporary: boolean, isOfficial: boolean, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, secondaryLocation?: { __typename?: 'SecondaryLocationType', county?: string | null, city?: string | null, lane?: string | null, alley?: string | null, no?: string | null, floor?: string | null, room?: string | null, poleId?: string | null, poleType?: string | null, poleNote?: string | null } | null, photos: Array<{ __typename?: 'PhotoType', uuid: string, url: string, createdAt?: string | null }>, properties: Array<{ __typename?: 'StationPropertyType', uuid: string, propertyType: string, propertyName: string, quantity?: number | null, comment?: string | null, status: string, weightings: number, createdAt?: string | null }>, assignedTeam?: { __typename?: 'AssignedTeamType', uuid: string, name: string, type: string } | null } | null };
+
+export type AdminStationReviewQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+
+export type AdminStationReviewQuery = { __typename?: 'Query', station?: { __typename?: 'StationType', uuid: string, type?: string | null, name?: string | null, description?: string | null, geometry?: Geometry | null, opHour?: string | null, level: number, comment?: string | null, source?: string | null, visibility?: string | null, verificationStatus?: string | null, operationalStatus: string, statusChangedAt?: string | null, supplyStatus?: string | null, pendingSuggestedFields: Array<string>, isDuplicate: boolean, isTemporary: boolean, isOfficial: boolean, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, properties: Array<{ __typename?: 'StationPropertyType', uuid: string, propertyName: string, quantity?: number | null, comment?: string | null, pendingSuggestedFields: Array<string> }>, suggestedFields: Array<{ __typename?: 'SuggestedFieldType', targetType: string, targetUuid: string, fieldName: string, proposedValues: Array<string>, suggestionCount: number, comments: Array<string>, firstSuggestedAt?: string | null }>, secondaryLocation?: { __typename?: 'SecondaryLocationType', county?: string | null, city?: string | null } | null, assignedTeam?: { __typename?: 'AssignedTeamType', uuid: string, name: string, type: string } | null } | null, suggestableFields: Array<{ __typename?: 'SuggestableFieldType', fieldName: string, dataType: string, enumOptions?: Array<string> | null }> };
 
 export type AdminAnnouncementsQueryVariables = Exact<{
   filter?: InputMaybe<AnnouncementFilter>;
 }>;
 
-export type AdminAnnouncementsQuery = {
-  __typename?: 'Query';
-  announcements: Array<{
-    __typename?: 'AnnouncementType';
-    uuid: string;
-    content: string;
-    active: boolean;
-    order?: number | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  }>;
-};
+
+export type AdminAnnouncementsQuery = { __typename?: 'Query', announcements: Array<{ __typename?: 'AnnouncementType', uuid: string, content: string, active: boolean, order?: number | null, createdAt?: string | null, updatedAt?: string | null }> };
 
 export type AdminBriefingsQueryVariables = Exact<{
   state?: InputMaybe<BriefingState>;
   tag?: InputMaybe<Scalars['String']['input']>;
 }>;
 
-export type AdminBriefingsQuery = {
-  __typename?: 'Query';
-  briefings: Array<{
-    __typename?: 'BriefingType';
-    uuid: string;
-    templateUuid?: string | null;
-    content: string;
-    tags: Array<string>;
-    state: string;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  }>;
-};
+
+export type AdminBriefingsQuery = { __typename?: 'Query', briefings: Array<{ __typename?: 'BriefingType', uuid: string, templateUuid?: string | null, content: string, tags: Array<string>, state: string, createdAt?: string | null, updatedAt?: string | null }> };
 
 export type AdminBriefingTemplatesQueryVariables = Exact<{
   state?: InputMaybe<BriefingState>;
   tag?: InputMaybe<Scalars['String']['input']>;
 }>;
 
-export type AdminBriefingTemplatesQuery = {
-  __typename?: 'Query';
-  briefingTemplates: Array<{
-    __typename?: 'BriefingTemplateType';
-    uuid: string;
-    content: string;
-    tags: Array<string>;
-    state: string;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  }>;
-};
+
+export type AdminBriefingTemplatesQuery = { __typename?: 'Query', briefingTemplates: Array<{ __typename?: 'BriefingTemplateType', uuid: string, content: string, tags: Array<string>, state: string, createdAt?: string | null, updatedAt?: string | null }> };
 
 export type AdminStationPropertyConfigsQueryVariables = Exact<{
   stationType: Scalars['String']['input'];
   includeInactive?: InputMaybe<Scalars['Boolean']['input']>;
 }>;
 
-export type AdminStationPropertyConfigsQuery = {
-  __typename?: 'Query';
-  stationPropertyConfigs: Array<{
-    __typename?: 'StationPropertyConfigType';
-    uuid: string;
-    stationType: string;
-    propertyName: string;
-    dataType: FieldDataType;
-    enumOptions?: Array<string> | null;
-    unit?: string | null;
-    label?: string | null;
-    displayLabel: string;
-    sortOrder: number;
-    isActive: boolean;
-  }>;
-};
+
+export type AdminStationPropertyConfigsQuery = { __typename?: 'Query', stationPropertyConfigs: Array<{ __typename?: 'StationPropertyConfigType', uuid: string, stationType: string, propertyName: string, dataType: FieldDataType, enumOptions?: Array<string> | null, unit?: string | null, label?: string | null, displayLabel: string, sortOrder: number, isActive: boolean }> };
 
 export type AdminTaskPropertyConfigsQueryVariables = Exact<{
   taskType: Scalars['String']['input'];
   includeInactive?: InputMaybe<Scalars['Boolean']['input']>;
 }>;
 
-export type AdminTaskPropertyConfigsQuery = {
-  __typename?: 'Query';
-  taskPropertyConfigs: Array<{
-    __typename?: 'TaskPropertyConfigType';
-    uuid: string;
-    taskType: string;
-    propertyName: string;
-    dataType: FieldDataType;
-    enumOptions?: Array<string> | null;
-    unit?: string | null;
-    disasterTypes: Array<string>;
-    label?: string | null;
-    displayLabel: string;
-    sortOrder: number;
-    isActive: boolean;
-  }>;
-};
+
+export type AdminTaskPropertyConfigsQuery = { __typename?: 'Query', taskPropertyConfigs: Array<{ __typename?: 'TaskPropertyConfigType', uuid: string, taskType: string, propertyName: string, dataType: FieldDataType, enumOptions?: Array<string> | null, unit?: string | null, disasterTypes: Array<string>, label?: string | null, displayLabel: string, sortOrder: number, isActive: boolean }> };
 
 export type AdminTicketPropertyConfigsQueryVariables = Exact<{
   disasterTypes: Array<Scalars['String']['input']> | Scalars['String']['input'];
   includeInactive?: InputMaybe<Scalars['Boolean']['input']>;
 }>;
 
-export type AdminTicketPropertyConfigsQuery = {
-  __typename?: 'Query';
-  ticketPropertyConfigs: Array<{
-    __typename?: 'TicketPropertyConfigType';
-    uuid: string;
-    propertyName: string;
-    dataType: FieldDataType;
-    enumOptions?: Array<string> | null;
-    unit?: string | null;
-    disasterTypes: Array<string>;
-    label?: string | null;
-    displayLabel: string;
-    hint?: string | null;
-    isActive: boolean;
-  }>;
-};
+
+export type AdminTicketPropertyConfigsQuery = { __typename?: 'Query', ticketPropertyConfigs: Array<{ __typename?: 'TicketPropertyConfigType', uuid: string, propertyName: string, dataType: FieldDataType, enumOptions?: Array<string> | null, unit?: string | null, disasterTypes: Array<string>, label?: string | null, displayLabel: string, hint?: string | null, isActive: boolean }> };
 
 export type AdminDisasterTypesQueryVariables = Exact<{
   includeInactive?: InputMaybe<Scalars['Boolean']['input']>;
 }>;
 
-export type AdminDisasterTypesQuery = {
-  __typename?: 'Query';
-  disasterTypes: Array<{
-    __typename?: 'DisasterTypeType';
-    uuid: string;
-    key: string;
-    label: string;
-    isActive: boolean;
-  }>;
-};
+
+export type AdminDisasterTypesQuery = { __typename?: 'Query', disasterTypes: Array<{ __typename?: 'DisasterTypeType', uuid: string, key: string, label: string, isActive: boolean }> };
 
 export type AdminCreateTicketMutationVariables = Exact<{
   input: CreateTicketInput;
 }>;
 
-export type AdminCreateTicketMutation = {
-  __typename?: 'Mutation';
-  createTicket:
+
+export type AdminCreateTicketMutation = { __typename?: 'Mutation', createTicket:
     | { __typename: 'DuplicatesSuspected' }
-    | {
-        __typename: 'TicketCreated';
-        ticket: {
-          __typename?: 'TicketType';
-          uuid: string;
-          title: string;
-          description?: string | null;
-          geometry?: Geometry | null;
-          status: string;
-          priority: string;
-          taskType?: string | null;
-          auditStatus: string;
-          contactName?: string | null;
-          contactEmail?: string | null;
-          contactPhone?: string | null;
-          createdBy?: string | null;
-          createdAt?: string | null;
-          updatedAt?: string | null;
-        };
-      };
-};
+    | { __typename: 'TicketCreated', ticket: { __typename?: 'TicketType', uuid: string, title: string, description?: string | null, geometry?: Geometry | null, status: string, priority: string, taskType?: string | null, auditStatus: string, contactName?: string | null, contactEmail?: string | null, contactPhone?: string | null, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null } }
+   };
 
 export type AdminUpdateTicketMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateTicketInput;
 }>;
 
-export type AdminUpdateTicketMutation = {
-  __typename?: 'Mutation';
-  updateTicket: {
-    __typename?: 'TicketType';
-    uuid: string;
-    title: string;
-    description?: string | null;
-    geometry?: Geometry | null;
-    status: string;
-    priority: string;
-    taskType?: string | null;
-    auditStatus: string;
-    contactName?: string | null;
-    contactEmail?: string | null;
-    contactPhone?: string | null;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  };
-};
+
+export type AdminUpdateTicketMutation = { __typename?: 'Mutation', updateTicket: { __typename?: 'TicketType', uuid: string, title: string, description?: string | null, geometry?: Geometry | null, status: string, priority: string, taskType?: string | null, auditStatus: string, contactName?: string | null, contactEmail?: string | null, contactPhone?: string | null, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null } };
 
 export type AdminDeleteTicketMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminDeleteTicketMutation = {
-  __typename?: 'Mutation';
-  deleteTicket: boolean;
-};
+
+export type AdminDeleteTicketMutation = { __typename?: 'Mutation', deleteTicket: boolean };
 
 export type AdminAuditTicketMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
@@ -2460,109 +2091,34 @@ export type AdminAuditTicketMutationVariables = Exact<{
   note?: InputMaybe<Scalars['String']['input']>;
 }>;
 
-export type AdminAuditTicketMutation = {
-  __typename?: 'Mutation';
-  auditTicket: {
-    __typename?: 'TicketType';
-    uuid: string;
-    title: string;
-    description?: string | null;
-    geometry?: Geometry | null;
-    status: string;
-    priority: string;
-    taskType?: string | null;
-    auditStatus: string;
-    contactName?: string | null;
-    contactEmail?: string | null;
-    contactPhone?: string | null;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  };
-};
+
+export type AdminAuditTicketMutation = { __typename?: 'Mutation', auditTicket: { __typename?: 'TicketType', uuid: string, title: string, description?: string | null, geometry?: Geometry | null, status: string, priority: string, taskType?: string | null, auditStatus: string, contactName?: string | null, contactEmail?: string | null, contactPhone?: string | null, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null } };
 
 export type AdminSetTicketDisasterDetailsMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   details: Array<TicketDisasterDetailInput> | TicketDisasterDetailInput;
 }>;
 
-export type AdminSetTicketDisasterDetailsMutation = {
-  __typename?: 'Mutation';
-  setTicketDisasterDetails: Array<{
-    __typename?: 'TicketDisasterDetailType';
-    uuid: string;
-    propertyName: string;
-    value: string;
-  }>;
-};
+
+export type AdminSetTicketDisasterDetailsMutation = { __typename?: 'Mutation', setTicketDisasterDetails: Array<{ __typename?: 'TicketDisasterDetailType', uuid: string, propertyName: string, value: string }> };
 
 export type AdminCreateTicketTaskMutationVariables = Exact<{
   input: CreateTicketTaskInput;
 }>;
 
-export type AdminCreateTicketTaskMutation = {
-  __typename?: 'Mutation';
-  createTicketTask:
+
+export type AdminCreateTicketTaskMutation = { __typename?: 'Mutation', createTicketTask:
     | { __typename: 'DuplicatesSuspected' }
-    | {
-        __typename: 'TicketTaskCreated';
-        task: {
-          __typename?: 'TicketTaskType';
-          uuid: string;
-          ticketUuid: string;
-          taskType: string;
-          taskName: string;
-          taskDescription?: string | null;
-          quantity?: number | null;
-          status: string;
-          progressNote?: string | null;
-          source: string;
-          createdAt?: string | null;
-          updatedAt?: string | null;
-          assignments: Array<{
-            __typename?: 'TaskAssignmentType';
-            uuid: string;
-            actorUuid: string;
-            role?: string | null;
-            status: string;
-            assignedAt?: string | null;
-            updatedAt?: string | null;
-          }>;
-        };
-      };
-};
+    | { __typename: 'TicketTaskCreated', task: { __typename?: 'TicketTaskType', uuid: string, ticketUuid: string, taskType: string, taskName: string, taskDescription?: string | null, quantity?: number | null, status: string, progressNote?: string | null, source: string, createdAt?: string | null, updatedAt?: string | null, assignments: Array<{ __typename?: 'TaskAssignmentType', uuid: string, actorUuid: string, role?: string | null, status: string, assignedAt?: string | null, updatedAt?: string | null }> } }
+   };
 
 export type AdminUpdateTicketTaskMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateTicketTaskInput;
 }>;
 
-export type AdminUpdateTicketTaskMutation = {
-  __typename?: 'Mutation';
-  updateTicketTask: {
-    __typename?: 'TicketTaskType';
-    uuid: string;
-    ticketUuid: string;
-    taskType: string;
-    taskName: string;
-    taskDescription?: string | null;
-    quantity?: number | null;
-    status: string;
-    progressNote?: string | null;
-    source: string;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    assignments: Array<{
-      __typename?: 'TaskAssignmentType';
-      uuid: string;
-      actorUuid: string;
-      role?: string | null;
-      status: string;
-      assignedAt?: string | null;
-      updatedAt?: string | null;
-    }>;
-  };
-};
+
+export type AdminUpdateTicketTaskMutation = { __typename?: 'Mutation', updateTicketTask: { __typename?: 'TicketTaskType', uuid: string, ticketUuid: string, taskType: string, taskName: string, taskDescription?: string | null, quantity?: number | null, status: string, progressNote?: string | null, source: string, createdAt?: string | null, updatedAt?: string | null, assignments: Array<{ __typename?: 'TaskAssignmentType', uuid: string, actorUuid: string, role?: string | null, status: string, assignedAt?: string | null, updatedAt?: string | null }> } };
 
 export type AdminAssignTaskActorMutationVariables = Exact<{
   taskUuid: Scalars['UUID']['input'];
@@ -2570,5089 +2126,298 @@ export type AdminAssignTaskActorMutationVariables = Exact<{
   role?: InputMaybe<Scalars['String']['input']>;
 }>;
 
-export type AdminAssignTaskActorMutation = {
-  __typename?: 'Mutation';
-  assignTaskActor: {
-    __typename?: 'TaskAssignmentType';
-    uuid: string;
-    taskUuid: string;
-    actorUuid: string;
-    role?: string | null;
-    status: string;
-    assignedAt?: string | null;
-  };
-};
+
+export type AdminAssignTaskActorMutation = { __typename?: 'Mutation', assignTaskActor: { __typename?: 'TaskAssignmentType', uuid: string, taskUuid: string, actorUuid: string, role?: string | null, status: string, assignedAt?: string | null } };
 
 export type AdminUpdateTaskAssignmentMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateTaskAssignmentInput;
 }>;
 
-export type AdminUpdateTaskAssignmentMutation = {
-  __typename?: 'Mutation';
-  updateTaskAssignment: {
-    __typename?: 'TaskAssignmentType';
-    uuid: string;
-    taskUuid: string;
-    actorUuid: string;
-    role?: string | null;
-    status: string;
-    updatedAt?: string | null;
-  };
-};
+
+export type AdminUpdateTaskAssignmentMutation = { __typename?: 'Mutation', updateTaskAssignment: { __typename?: 'TaskAssignmentType', uuid: string, taskUuid: string, actorUuid: string, role?: string | null, status: string, updatedAt?: string | null } };
 
 export type AdminUnassignTaskActorMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminUnassignTaskActorMutation = {
-  __typename?: 'Mutation';
-  unassignTaskActor: boolean;
-};
+
+export type AdminUnassignTaskActorMutation = { __typename?: 'Mutation', unassignTaskActor: boolean };
 
 export type AdminCreateStationMutationVariables = Exact<{
   input: CreateStationInput;
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
 }>;
 
-export type AdminCreateStationMutation = {
-  __typename?: 'Mutation';
-  createStation:
-    | { __typename: 'DuplicatesSuspected' }
-    | {
-        __typename: 'StationCreated';
-        station: {
-          __typename?: 'StationType';
-          uuid: string;
-          type?: string | null;
-          name?: string | null;
-          description?: string | null;
-          geometry?: Geometry | null;
-          opHour?: string | null;
-          level: number;
-          comment?: string | null;
-          source?: string | null;
-          visibility?: string | null;
-          verificationStatus?: string | null;
-          operationalStatus: string;
-          isDuplicate: boolean;
-          isTemporary: boolean;
-          isOfficial: boolean;
-          createdBy?: string | null;
-          createdAt?: string | null;
-          updatedAt?: string | null;
-          assignedTeam?: {
-            __typename?: 'AssignedTeamType';
-            uuid: string;
-            name: string;
-            type: string;
-          } | null;
-        };
-      };
-};
+
+export type AdminCreateStationMutation = { __typename?: 'Mutation', createStation:
+    | { __typename: 'DuplicatesSuspected', suspects: Array<{ __typename?: 'DuplicateSuspect', relatedKind: string, relatedUuid: string }> }
+    | { __typename: 'StationCreated', station: { __typename?: 'StationType', uuid: string, type?: string | null, name?: string | null, description?: string | null, geometry?: Geometry | null, opHour?: string | null, level: number, comment?: string | null, source?: string | null, visibility?: string | null, verificationStatus?: string | null, operationalStatus: string, statusChangedAt?: string | null, supplyStatus?: string | null, pendingSuggestedFields: Array<string>, isDuplicate: boolean, isTemporary: boolean, isOfficial: boolean, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, secondaryLocation?: { __typename?: 'SecondaryLocationType', county?: string | null, city?: string | null } | null, assignedTeam?: { __typename?: 'AssignedTeamType', uuid: string, name: string, type: string } | null } }
+   };
 
 export type AdminUpdateStationMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateStationInput;
 }>;
 
-export type AdminUpdateStationMutation = {
-  __typename?: 'Mutation';
-  updateStation: {
-    __typename?: 'StationType';
-    uuid: string;
-    type?: string | null;
-    name?: string | null;
-    description?: string | null;
-    geometry?: Geometry | null;
-    opHour?: string | null;
-    level: number;
-    comment?: string | null;
-    source?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
-    operationalStatus: string;
-    isDuplicate: boolean;
-    isTemporary: boolean;
-    isOfficial: boolean;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    assignedTeam?: {
-      __typename?: 'AssignedTeamType';
-      uuid: string;
-      name: string;
-      type: string;
-    } | null;
-  };
-};
+
+export type AdminUpdateStationMutation = { __typename?: 'Mutation', updateStation: { __typename?: 'StationType', uuid: string, type?: string | null, name?: string | null, description?: string | null, geometry?: Geometry | null, opHour?: string | null, level: number, comment?: string | null, source?: string | null, visibility?: string | null, verificationStatus?: string | null, operationalStatus: string, statusChangedAt?: string | null, supplyStatus?: string | null, pendingSuggestedFields: Array<string>, isDuplicate: boolean, isTemporary: boolean, isOfficial: boolean, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, secondaryLocation?: { __typename?: 'SecondaryLocationType', county?: string | null, city?: string | null } | null, assignedTeam?: { __typename?: 'AssignedTeamType', uuid: string, name: string, type: string } | null } };
 
 export type AdminDeleteStationMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminDeleteStationMutation = {
-  __typename?: 'Mutation';
-  deleteStation: boolean;
-};
+
+export type AdminDeleteStationMutation = { __typename?: 'Mutation', deleteStation: boolean };
+
+export type AdminMergeStationSuggestionsMutationVariables = Exact<{
+  stationUuid: Scalars['UUID']['input'];
+  decisions: Array<SuggestionDecisionInput> | SuggestionDecisionInput;
+  reviewNote?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type AdminMergeStationSuggestionsMutation = { __typename?: 'Mutation', mergeStationSuggestions: { __typename?: 'StationSuggestionMergeType', uuid: string, status: string, changes: Array<{ __typename?: 'SuggestionChangeType', targetType: string, targetUuid: string, fieldName: string, before?: string | null, after?: string | null }> } };
 
 export type AdminAssignStationMutationVariables = Exact<{
   stationUuid: Scalars['UUID']['input'];
   teamUuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminAssignStationMutation = {
-  __typename?: 'Mutation';
-  assignStationToTeam: {
-    __typename?: 'StationType';
-    uuid: string;
-    type?: string | null;
-    name?: string | null;
-    description?: string | null;
-    geometry?: Geometry | null;
-    opHour?: string | null;
-    level: number;
-    comment?: string | null;
-    source?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
-    operationalStatus: string;
-    isDuplicate: boolean;
-    isTemporary: boolean;
-    isOfficial: boolean;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    assignedTeam?: {
-      __typename?: 'AssignedTeamType';
-      uuid: string;
-      name: string;
-      type: string;
-    } | null;
-  };
-};
+
+export type AdminAssignStationMutation = { __typename?: 'Mutation', assignStationToTeam: { __typename?: 'StationType', uuid: string, type?: string | null, name?: string | null, description?: string | null, geometry?: Geometry | null, opHour?: string | null, level: number, comment?: string | null, source?: string | null, visibility?: string | null, verificationStatus?: string | null, operationalStatus: string, statusChangedAt?: string | null, supplyStatus?: string | null, pendingSuggestedFields: Array<string>, isDuplicate: boolean, isTemporary: boolean, isOfficial: boolean, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, secondaryLocation?: { __typename?: 'SecondaryLocationType', county?: string | null, city?: string | null } | null, assignedTeam?: { __typename?: 'AssignedTeamType', uuid: string, name: string, type: string } | null } };
 
 export type AdminUnassignStationMutationVariables = Exact<{
   stationUuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminUnassignStationMutation = {
-  __typename?: 'Mutation';
-  unassignStation: {
-    __typename?: 'StationType';
-    uuid: string;
-    type?: string | null;
-    name?: string | null;
-    description?: string | null;
-    geometry?: Geometry | null;
-    opHour?: string | null;
-    level: number;
-    comment?: string | null;
-    source?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
-    operationalStatus: string;
-    isDuplicate: boolean;
-    isTemporary: boolean;
-    isOfficial: boolean;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    assignedTeam?: {
-      __typename?: 'AssignedTeamType';
-      uuid: string;
-      name: string;
-      type: string;
-    } | null;
-  };
-};
+
+export type AdminUnassignStationMutation = { __typename?: 'Mutation', unassignStation: { __typename?: 'StationType', uuid: string, type?: string | null, name?: string | null, description?: string | null, geometry?: Geometry | null, opHour?: string | null, level: number, comment?: string | null, source?: string | null, visibility?: string | null, verificationStatus?: string | null, operationalStatus: string, statusChangedAt?: string | null, supplyStatus?: string | null, pendingSuggestedFields: Array<string>, isDuplicate: boolean, isTemporary: boolean, isOfficial: boolean, createdBy?: string | null, createdAt?: string | null, updatedAt?: string | null, secondaryLocation?: { __typename?: 'SecondaryLocationType', county?: string | null, city?: string | null } | null, assignedTeam?: { __typename?: 'AssignedTeamType', uuid: string, name: string, type: string } | null } };
 
 export type AdminAttachStationPhotoMutationVariables = Exact<{
   stationUuid: Scalars['UUID']['input'];
   url: Scalars['String']['input'];
 }>;
 
-export type AdminAttachStationPhotoMutation = {
-  __typename?: 'Mutation';
-  attachStationPhoto: {
-    __typename?: 'PhotoType';
-    uuid: string;
-    url: string;
-    createdAt?: string | null;
-  };
-};
+
+export type AdminAttachStationPhotoMutation = { __typename?: 'Mutation', attachStationPhoto: { __typename?: 'PhotoType', uuid: string, url: string, createdAt?: string | null } };
 
 export type AdminDetachStationPhotoMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminDetachStationPhotoMutation = {
-  __typename?: 'Mutation';
-  detachStationPhoto: boolean;
-};
+
+export type AdminDetachStationPhotoMutation = { __typename?: 'Mutation', detachStationPhoto: boolean };
 
 export type AdminCreateStationPropertyMutationVariables = Exact<{
   input: CreateStationPropertyInput;
 }>;
 
-export type AdminCreateStationPropertyMutation = {
-  __typename?: 'Mutation';
-  createStationProperty: {
-    __typename?: 'StationPropertyType';
-    uuid: string;
-    stationUuid: string;
-    propertyType: string;
-    propertyName: string;
-    quantity?: number | null;
-    status: string;
-    comment?: string | null;
-  };
-};
+
+export type AdminCreateStationPropertyMutation = { __typename?: 'Mutation', createStationProperty: { __typename?: 'StationPropertyType', uuid: string, stationUuid: string, propertyType: string, propertyName: string, quantity?: number | null, status: string, comment?: string | null } };
 
 export type AdminUpdateStationPropertyMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateStationPropertyInput;
 }>;
 
-export type AdminUpdateStationPropertyMutation = {
-  __typename?: 'Mutation';
-  updateStationProperty: {
-    __typename?: 'StationPropertyType';
-    uuid: string;
-    stationUuid: string;
-    propertyType: string;
-    propertyName: string;
-    quantity?: number | null;
-    status: string;
-    comment?: string | null;
-  };
-};
+
+export type AdminUpdateStationPropertyMutation = { __typename?: 'Mutation', updateStationProperty: { __typename?: 'StationPropertyType', uuid: string, stationUuid: string, propertyType: string, propertyName: string, quantity?: number | null, status: string, comment?: string | null } };
 
 export type AdminCreateTaskPropertyMutationVariables = Exact<{
   input: CreateTaskPropertyInput;
 }>;
 
-export type AdminCreateTaskPropertyMutation = {
-  __typename?: 'Mutation';
-  createTaskProperty: {
-    __typename?: 'TaskPropertyType';
-    uuid: string;
-    taskUuid: string;
-    propertyName: string;
-    propertyValue: string;
-    quantity?: number | null;
-    status?: string | null;
-    comment?: string | null;
-  };
-};
+
+export type AdminCreateTaskPropertyMutation = { __typename?: 'Mutation', createTaskProperty: { __typename?: 'TaskPropertyType', uuid: string, taskUuid: string, propertyName: string, propertyValue: string, quantity?: number | null, status?: string | null, comment?: string | null } };
 
 export type AdminUpdateTaskPropertyMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateTaskPropertyInput;
 }>;
 
-export type AdminUpdateTaskPropertyMutation = {
-  __typename?: 'Mutation';
-  updateTaskProperty: {
-    __typename?: 'TaskPropertyType';
-    uuid: string;
-    taskUuid: string;
-    propertyName: string;
-    propertyValue: string;
-    quantity?: number | null;
-    status?: string | null;
-    comment?: string | null;
-  };
-};
+
+export type AdminUpdateTaskPropertyMutation = { __typename?: 'Mutation', updateTaskProperty: { __typename?: 'TaskPropertyType', uuid: string, taskUuid: string, propertyName: string, propertyValue: string, quantity?: number | null, status?: string | null, comment?: string | null } };
 
 export type AdminCreateAnnouncementMutationVariables = Exact<{
   input: CreateAnnouncementInput;
 }>;
 
-export type AdminCreateAnnouncementMutation = {
-  __typename?: 'Mutation';
-  createAnnouncement: {
-    __typename?: 'AnnouncementType';
-    uuid: string;
-    content: string;
-    active: boolean;
-    order?: number | null;
-  };
-};
+
+export type AdminCreateAnnouncementMutation = { __typename?: 'Mutation', createAnnouncement: { __typename?: 'AnnouncementType', uuid: string, content: string, active: boolean, order?: number | null } };
 
 export type AdminUpdateAnnouncementMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateAnnouncementInput;
 }>;
 
-export type AdminUpdateAnnouncementMutation = {
-  __typename?: 'Mutation';
-  updateAnnouncement: {
-    __typename?: 'AnnouncementType';
-    uuid: string;
-    content: string;
-    active: boolean;
-    order?: number | null;
-  };
-};
+
+export type AdminUpdateAnnouncementMutation = { __typename?: 'Mutation', updateAnnouncement: { __typename?: 'AnnouncementType', uuid: string, content: string, active: boolean, order?: number | null } };
 
 export type AdminDeleteAnnouncementMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminDeleteAnnouncementMutation = {
-  __typename?: 'Mutation';
-  deleteAnnouncement: boolean;
-};
+
+export type AdminDeleteAnnouncementMutation = { __typename?: 'Mutation', deleteAnnouncement: boolean };
 
 export type AdminMoveAnnouncementMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   direction: AnnouncementMoveDirection;
 }>;
 
-export type AdminMoveAnnouncementMutation = {
-  __typename?: 'Mutation';
-  moveAnnouncement: {
-    __typename?: 'AnnouncementType';
-    uuid: string;
-    order?: number | null;
-  };
-};
+
+export type AdminMoveAnnouncementMutation = { __typename?: 'Mutation', moveAnnouncement: { __typename?: 'AnnouncementType', uuid: string, order?: number | null } };
 
 export type AdminSetAnnouncementActiveMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   active: Scalars['Boolean']['input'];
 }>;
 
-export type AdminSetAnnouncementActiveMutation = {
-  __typename?: 'Mutation';
-  setAnnouncementActive: {
-    __typename?: 'AnnouncementType';
-    uuid: string;
-    active: boolean;
-    order?: number | null;
-  };
-};
+
+export type AdminSetAnnouncementActiveMutation = { __typename?: 'Mutation', setAnnouncementActive: { __typename?: 'AnnouncementType', uuid: string, active: boolean, order?: number | null } };
 
 export type AdminGenerateBriefingMutationVariables = Exact<{
   input: GenerateBriefingInput;
 }>;
 
-export type AdminGenerateBriefingMutation = {
-  __typename?: 'Mutation';
-  generateBriefing: {
-    __typename?: 'BriefingType';
-    uuid: string;
-    templateUuid?: string | null;
-    content: string;
-    tags: Array<string>;
-    state: string;
-  };
-};
+
+export type AdminGenerateBriefingMutation = { __typename?: 'Mutation', generateBriefing: { __typename?: 'BriefingType', uuid: string, templateUuid?: string | null, content: string, tags: Array<string>, state: string } };
 
 export type AdminUpdateBriefingMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateBriefingInput;
 }>;
 
-export type AdminUpdateBriefingMutation = {
-  __typename?: 'Mutation';
-  updateBriefing: {
-    __typename?: 'BriefingType';
-    uuid: string;
-    content: string;
-    tags: Array<string>;
-    state: string;
-  };
-};
+
+export type AdminUpdateBriefingMutation = { __typename?: 'Mutation', updateBriefing: { __typename?: 'BriefingType', uuid: string, content: string, tags: Array<string>, state: string } };
 
 export type AdminDeleteBriefingMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminDeleteBriefingMutation = {
-  __typename?: 'Mutation';
-  deleteBriefing: boolean;
-};
+
+export type AdminDeleteBriefingMutation = { __typename?: 'Mutation', deleteBriefing: boolean };
 
 export type AdminCreateBriefingTemplateMutationVariables = Exact<{
   input: CreateBriefingTemplateInput;
 }>;
 
-export type AdminCreateBriefingTemplateMutation = {
-  __typename?: 'Mutation';
-  createBriefingTemplate: {
-    __typename?: 'BriefingTemplateType';
-    uuid: string;
-    content: string;
-    tags: Array<string>;
-    state: string;
-  };
-};
+
+export type AdminCreateBriefingTemplateMutation = { __typename?: 'Mutation', createBriefingTemplate: { __typename?: 'BriefingTemplateType', uuid: string, content: string, tags: Array<string>, state: string } };
 
 export type AdminUpdateBriefingTemplateMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateBriefingTemplateInput;
 }>;
 
-export type AdminUpdateBriefingTemplateMutation = {
-  __typename?: 'Mutation';
-  updateBriefingTemplate: {
-    __typename?: 'BriefingTemplateType';
-    uuid: string;
-    content: string;
-    tags: Array<string>;
-    state: string;
-  };
-};
+
+export type AdminUpdateBriefingTemplateMutation = { __typename?: 'Mutation', updateBriefingTemplate: { __typename?: 'BriefingTemplateType', uuid: string, content: string, tags: Array<string>, state: string } };
 
 export type AdminDeleteBriefingTemplateMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
 
-export type AdminDeleteBriefingTemplateMutation = {
-  __typename?: 'Mutation';
-  deleteBriefingTemplate: boolean;
-};
+
+export type AdminDeleteBriefingTemplateMutation = { __typename?: 'Mutation', deleteBriefingTemplate: boolean };
 
 export type AdminUpsertStationPropertyConfigMutationVariables = Exact<{
   stationType: Scalars['String']['input'];
   input: UpsertPropertyConfigInput;
 }>;
 
-export type AdminUpsertStationPropertyConfigMutation = {
-  __typename?: 'Mutation';
-  upsertStationPropertyConfig: {
-    __typename?: 'StationPropertyConfigType';
-    uuid: string;
-    propertyName: string;
-  };
-};
+
+export type AdminUpsertStationPropertyConfigMutation = { __typename?: 'Mutation', upsertStationPropertyConfig: { __typename?: 'StationPropertyConfigType', uuid: string, propertyName: string } };
 
 export type AdminUpsertTaskPropertyConfigMutationVariables = Exact<{
   taskType: Scalars['String']['input'];
   input: UpsertPropertyConfigInput;
 }>;
 
-export type AdminUpsertTaskPropertyConfigMutation = {
-  __typename?: 'Mutation';
-  upsertTaskPropertyConfig: {
-    __typename?: 'TaskPropertyConfigType';
-    uuid: string;
-    propertyName: string;
-  };
-};
+
+export type AdminUpsertTaskPropertyConfigMutation = { __typename?: 'Mutation', upsertTaskPropertyConfig: { __typename?: 'TaskPropertyConfigType', uuid: string, propertyName: string } };
 
 export type AdminUpsertTicketPropertyConfigMutationVariables = Exact<{
   input: UpsertTicketPropertyConfigInput;
 }>;
 
-export type AdminUpsertTicketPropertyConfigMutation = {
-  __typename?: 'Mutation';
-  upsertTicketPropertyConfig: {
-    __typename?: 'TicketPropertyConfigType';
-    uuid: string;
-    propertyName: string;
-  };
-};
+
+export type AdminUpsertTicketPropertyConfigMutation = { __typename?: 'Mutation', upsertTicketPropertyConfig: { __typename?: 'TicketPropertyConfigType', uuid: string, propertyName: string } };
 
 export type AdminUpsertDisasterTypeMutationVariables = Exact<{
   input: UpsertDisasterTypeInput;
 }>;
 
-export type AdminUpsertDisasterTypeMutation = {
-  __typename?: 'Mutation';
-  upsertDisasterType: {
-    __typename?: 'DisasterTypeType';
-    uuid: string;
-    key: string;
-    label: string;
-  };
-};
+
+export type AdminUpsertDisasterTypeMutation = { __typename?: 'Mutation', upsertDisasterType: { __typename?: 'DisasterTypeType', uuid: string, key: string, label: string } };
 
 export type AdminAssignZoneToTeamMutationVariables = Exact<{
   input: ZoneTeamAssignmentInput;
 }>;
 
-export type AdminAssignZoneToTeamMutation = {
-  __typename?: 'Mutation';
-  assignZoneToTeam: {
-    __typename?: 'ZoneAssignmentType';
-    zoneUuid: string;
-    teamUuid: string;
-    assignedAt?: string | null;
-  };
-};
+
+export type AdminAssignZoneToTeamMutation = { __typename?: 'Mutation', assignZoneToTeam: { __typename?: 'ZoneAssignmentType', zoneUuid: string, teamUuid: string, assignedAt?: string | null } };
 
 export type AdminRemoveZoneFromTeamMutationVariables = Exact<{
   input: ZoneTeamAssignmentInput;
 }>;
 
-export type AdminRemoveZoneFromTeamMutation = {
-  __typename?: 'Mutation';
-  removeZoneFromTeam: boolean;
-};
 
-export const AdminPageInfoFragmentDoc = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminPageInfo' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'PageInfo' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'totalCount' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasNextPage' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasPreviousPage' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminPageInfoFragment, unknown>;
-export const AdminTicketFieldsFragmentDoc = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTicketFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminTicketFieldsFragment, unknown>;
-export const AdminTaskFieldsFragmentDoc = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTaskFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketTaskType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'ticketUuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskDescription' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignments' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'role' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminTaskFieldsFragment, unknown>;
-export const AdminStationFieldsFragmentDoc = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminStationFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'StationType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignedTeam' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminStationFieldsFragment, unknown>;
-export const AdminTicketsDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminTickets' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'bounds' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'BoundsInput' },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'status' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'priority' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '0' },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'limit' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '50' },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'tickets' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'bounds' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'bounds' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'status' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'status' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'priority' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'priority' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'q' },
-                value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'skip' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'skip' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'limit' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'limit' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'items' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'AdminTicketFields' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'tasks' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'FragmentSpread',
-                              name: { kind: 'Name', value: 'AdminTaskFields' },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'pageInfo' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'AdminPageInfo' },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTicketFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTaskFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketTaskType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'ticketUuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskDescription' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignments' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'role' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminPageInfo' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'PageInfo' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'totalCount' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasNextPage' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasPreviousPage' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminTicketsQuery, AdminTicketsQueryVariables>;
-export const AdminTicketDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminTicket' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'ticket' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminTicketFields' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'secondaryLocation' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'county' },
-                      },
-                      { kind: 'Field', name: { kind: 'Name', value: 'city' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'lane' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'alley' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'no' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'room' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'landmarkNote' },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'photos' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'url' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'createdAt' },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'tasks' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'AdminTaskFields' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'properties' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'uuid' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'propertyName' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'propertyValue' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'quantity' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'status' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'comment' },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'disasterDetails' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'propertyName' },
-                      },
-                      { kind: 'Field', name: { kind: 'Name', value: 'value' } },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTicketFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTaskFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketTaskType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'ticketUuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskDescription' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignments' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'role' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminTicketQuery, AdminTicketQueryVariables>;
-export const AdminTicketTasksDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminTicketTasks' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'ticketUuid' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'status' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '0' },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'limit' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '50' },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'ticketTasks' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'ticketUuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'ticketUuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'status' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'status' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'q' },
-                value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'skip' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'skip' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'limit' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'limit' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminTaskFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTaskFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketTaskType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'ticketUuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskDescription' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignments' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'role' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminTicketTasksQuery,
-  AdminTicketTasksQueryVariables
->;
-export const AdminStationsDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminStations' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'bounds' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'BoundsInput' },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'stationType' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'operationalStatus' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'StationOperationalStatus' },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'assignedTeamUuid' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'unassignedOnly' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
-          defaultValue: { kind: 'BooleanValue', value: false },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '0' },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'limit' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '50' },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'stations' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'bounds' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'bounds' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'stationType' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'stationType' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'operationalStatus' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'operationalStatus' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'q' },
-                value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'assignedTeamUuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'assignedTeamUuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'unassignedOnly' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'unassignedOnly' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'skip' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'skip' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'limit' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'limit' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'items' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'AdminStationFields' },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'pageInfo' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'AdminPageInfo' },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminStationFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'StationType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignedTeam' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminPageInfo' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'PageInfo' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'totalCount' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasNextPage' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasPreviousPage' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminStationsQuery, AdminStationsQueryVariables>;
-export const AdminStationDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminStation' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'station' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminStationFields' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'contactPhone' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'secondaryLocation' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'county' },
-                      },
-                      { kind: 'Field', name: { kind: 'Name', value: 'city' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'lane' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'alley' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'no' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'room' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'poleId' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'poleType' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'poleNote' },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'photos' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'url' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'createdAt' },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'properties' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'propertyType' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'propertyName' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'quantity' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'comment' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'status' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'weightings' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'createdAt' },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminStationFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'StationType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignedTeam' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminStationQuery, AdminStationQueryVariables>;
-export const AdminAnnouncementsDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminAnnouncements' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'filter' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'AnnouncementFilter' },
-          },
-          defaultValue: { kind: 'EnumValue', value: 'ALL' },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'announcements' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'filter' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'filter' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'placement' },
-                value: { kind: 'EnumValue', value: 'admin_page' },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminAnnouncementsQuery,
-  AdminAnnouncementsQueryVariables
->;
-export const AdminBriefingsDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminBriefings' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'state' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'BriefingState' },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'tag' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'briefings' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'state' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'state' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'tag' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'tag' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'templateUuid' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminBriefingsQuery, AdminBriefingsQueryVariables>;
-export const AdminBriefingTemplatesDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminBriefingTemplates' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'state' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'BriefingState' },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'tag' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'briefingTemplates' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'state' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'state' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'tag' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'tag' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminBriefingTemplatesQuery,
-  AdminBriefingTemplatesQueryVariables
->;
-export const AdminStationPropertyConfigsDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminStationPropertyConfigs' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'stationType' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'includeInactive' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
-          defaultValue: { kind: 'BooleanValue', value: true },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'stationPropertyConfigs' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'stationType' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'stationType' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'includeInactive' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'includeInactive' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'stationType' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'dataType' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'enumOptions' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'unit' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'label' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'displayLabel' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'sortOrder' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'isActive' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminStationPropertyConfigsQuery,
-  AdminStationPropertyConfigsQueryVariables
->;
-export const AdminTaskPropertyConfigsDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminTaskPropertyConfigs' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'taskType' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'includeInactive' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
-          defaultValue: { kind: 'BooleanValue', value: true },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'taskPropertyConfigs' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'taskType' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'taskType' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'includeInactive' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'includeInactive' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'dataType' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'enumOptions' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'unit' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'disasterTypes' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'label' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'displayLabel' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'sortOrder' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'isActive' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminTaskPropertyConfigsQuery,
-  AdminTaskPropertyConfigsQueryVariables
->;
-export const AdminTicketPropertyConfigsDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminTicketPropertyConfigs' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'disasterTypes' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'ListType',
-              type: {
-                kind: 'NonNullType',
-                type: {
-                  kind: 'NamedType',
-                  name: { kind: 'Name', value: 'String' },
-                },
-              },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'includeInactive' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
-          defaultValue: { kind: 'BooleanValue', value: true },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'ticketPropertyConfigs' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'disasterTypes' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'disasterTypes' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'includeInactive' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'includeInactive' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'dataType' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'enumOptions' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'unit' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'disasterTypes' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'label' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'displayLabel' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'hint' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'isActive' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminTicketPropertyConfigsQuery,
-  AdminTicketPropertyConfigsQueryVariables
->;
-export const AdminDisasterTypesDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminDisasterTypes' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'includeInactive' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
-          defaultValue: { kind: 'BooleanValue', value: true },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'disasterTypes' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'includeInactive' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'includeInactive' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'key' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'label' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'isActive' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminDisasterTypesQuery,
-  AdminDisasterTypesQueryVariables
->;
-export const AdminCreateTicketDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminCreateTicket' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateTicketInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createTicket' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
-                {
-                  kind: 'InlineFragment',
-                  typeCondition: {
-                    kind: 'NamedType',
-                    name: { kind: 'Name', value: 'TicketCreated' },
-                  },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'ticket' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'FragmentSpread',
-                              name: {
-                                kind: 'Name',
-                                value: 'AdminTicketFields',
-                              },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTicketFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminCreateTicketMutation,
-  AdminCreateTicketMutationVariables
->;
-export const AdminUpdateTicketDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateTicket' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateTicketInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateTicket' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminTicketFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTicketFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateTicketMutation,
-  AdminUpdateTicketMutationVariables
->;
-export const AdminDeleteTicketDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminDeleteTicket' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'deleteTicket' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminDeleteTicketMutation,
-  AdminDeleteTicketMutationVariables
->;
-export const AdminAuditTicketDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminAuditTicket' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'status' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'AuditVerdict' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'contentHash' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'note' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'auditTicket' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'status' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'status' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'contentHash' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'contentHash' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'note' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'note' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminTicketFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTicketFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminAuditTicketMutation,
-  AdminAuditTicketMutationVariables
->;
-export const AdminSetTicketDisasterDetailsDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminSetTicketDisasterDetails' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'details' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'ListType',
-              type: {
-                kind: 'NonNullType',
-                type: {
-                  kind: 'NamedType',
-                  name: { kind: 'Name', value: 'TicketDisasterDetailInput' },
-                },
-              },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'setTicketDisasterDetails' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'details' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'details' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'value' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminSetTicketDisasterDetailsMutation,
-  AdminSetTicketDisasterDetailsMutationVariables
->;
-export const AdminCreateTicketTaskDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminCreateTicketTask' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateTicketTaskInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createTicketTask' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
-                {
-                  kind: 'InlineFragment',
-                  typeCondition: {
-                    kind: 'NamedType',
-                    name: { kind: 'Name', value: 'TicketTaskCreated' },
-                  },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'task' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'FragmentSpread',
-                              name: { kind: 'Name', value: 'AdminTaskFields' },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTaskFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketTaskType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'ticketUuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskDescription' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignments' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'role' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminCreateTicketTaskMutation,
-  AdminCreateTicketTaskMutationVariables
->;
-export const AdminUpdateTicketTaskDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateTicketTask' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateTicketTaskInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateTicketTask' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminTaskFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTaskFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketTaskType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'ticketUuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskDescription' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignments' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'role' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateTicketTaskMutation,
-  AdminUpdateTicketTaskMutationVariables
->;
-export const AdminAssignTaskActorDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminAssignTaskActor' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'taskUuid' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'actorUuid' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'role' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignTaskActor' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'taskUuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'taskUuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'actorUuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'actorUuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'role' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'role' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'taskUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'role' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminAssignTaskActorMutation,
-  AdminAssignTaskActorMutationVariables
->;
-export const AdminUpdateTaskAssignmentDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateTaskAssignment' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateTaskAssignmentInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateTaskAssignment' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'taskUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'role' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateTaskAssignmentMutation,
-  AdminUpdateTaskAssignmentMutationVariables
->;
-export const AdminUnassignTaskActorDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUnassignTaskActor' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'unassignTaskActor' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUnassignTaskActorMutation,
-  AdminUnassignTaskActorMutationVariables
->;
-export const AdminCreateStationDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminCreateStation' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateStationInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createStation' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
-                {
-                  kind: 'InlineFragment',
-                  typeCondition: {
-                    kind: 'NamedType',
-                    name: { kind: 'Name', value: 'StationCreated' },
-                  },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'station' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'FragmentSpread',
-                              name: {
-                                kind: 'Name',
-                                value: 'AdminStationFields',
-                              },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminStationFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'StationType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignedTeam' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminCreateStationMutation,
-  AdminCreateStationMutationVariables
->;
-export const AdminUpdateStationDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateStation' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateStationInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateStation' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminStationFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminStationFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'StationType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignedTeam' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateStationMutation,
-  AdminUpdateStationMutationVariables
->;
-export const AdminDeleteStationDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminDeleteStation' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'deleteStation' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminDeleteStationMutation,
-  AdminDeleteStationMutationVariables
->;
-export const AdminAssignStationDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminAssignStation' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'stationUuid' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'teamUuid' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignStationToTeam' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'stationUuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'stationUuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'teamUuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'teamUuid' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminStationFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminStationFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'StationType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignedTeam' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminAssignStationMutation,
-  AdminAssignStationMutationVariables
->;
-export const AdminUnassignStationDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUnassignStation' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'stationUuid' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'unassignStation' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'stationUuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'stationUuid' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminStationFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminStationFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'StationType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignedTeam' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUnassignStationMutation,
-  AdminUnassignStationMutationVariables
->;
-export const AdminAttachStationPhotoDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminAttachStationPhoto' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'stationUuid' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'url' } },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'attachStationPhoto' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'stationUuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'stationUuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'url' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'url' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'url' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminAttachStationPhotoMutation,
-  AdminAttachStationPhotoMutationVariables
->;
-export const AdminDetachStationPhotoDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminDetachStationPhoto' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'detachStationPhoto' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminDetachStationPhotoMutation,
-  AdminDetachStationPhotoMutationVariables
->;
-export const AdminCreateStationPropertyDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminCreateStationProperty' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateStationPropertyInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createStationProperty' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'stationUuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyType' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminCreateStationPropertyMutation,
-  AdminCreateStationPropertyMutationVariables
->;
-export const AdminUpdateStationPropertyDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateStationProperty' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateStationPropertyInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateStationProperty' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'stationUuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyType' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateStationPropertyMutation,
-  AdminUpdateStationPropertyMutationVariables
->;
-export const AdminCreateTaskPropertyDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminCreateTaskProperty' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateTaskPropertyInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createTaskProperty' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'taskUuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyValue' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminCreateTaskPropertyMutation,
-  AdminCreateTaskPropertyMutationVariables
->;
-export const AdminUpdateTaskPropertyDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateTaskProperty' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateTaskPropertyInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateTaskProperty' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'taskUuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyValue' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateTaskPropertyMutation,
-  AdminUpdateTaskPropertyMutationVariables
->;
-export const AdminCreateAnnouncementDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminCreateAnnouncement' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateAnnouncementInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createAnnouncement' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminCreateAnnouncementMutation,
-  AdminCreateAnnouncementMutationVariables
->;
-export const AdminUpdateAnnouncementDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateAnnouncement' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateAnnouncementInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateAnnouncement' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateAnnouncementMutation,
-  AdminUpdateAnnouncementMutationVariables
->;
-export const AdminDeleteAnnouncementDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminDeleteAnnouncement' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'deleteAnnouncement' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminDeleteAnnouncementMutation,
-  AdminDeleteAnnouncementMutationVariables
->;
-export const AdminMoveAnnouncementDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminMoveAnnouncement' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'direction' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'AnnouncementMoveDirection' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'moveAnnouncement' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'direction' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'direction' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminMoveAnnouncementMutation,
-  AdminMoveAnnouncementMutationVariables
->;
-export const AdminSetAnnouncementActiveDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminSetAnnouncementActive' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'active' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'Boolean' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'setAnnouncementActive' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'active' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'active' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminSetAnnouncementActiveMutation,
-  AdminSetAnnouncementActiveMutationVariables
->;
-export const AdminGenerateBriefingDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminGenerateBriefing' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'GenerateBriefingInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'generateBriefing' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'templateUuid' },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminGenerateBriefingMutation,
-  AdminGenerateBriefingMutationVariables
->;
-export const AdminUpdateBriefingDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateBriefing' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateBriefingInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateBriefing' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateBriefingMutation,
-  AdminUpdateBriefingMutationVariables
->;
-export const AdminDeleteBriefingDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminDeleteBriefing' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'deleteBriefing' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminDeleteBriefingMutation,
-  AdminDeleteBriefingMutationVariables
->;
-export const AdminCreateBriefingTemplateDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminCreateBriefingTemplate' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateBriefingTemplateInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createBriefingTemplate' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminCreateBriefingTemplateMutation,
-  AdminCreateBriefingTemplateMutationVariables
->;
-export const AdminUpdateBriefingTemplateDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateBriefingTemplate' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateBriefingTemplateInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateBriefingTemplate' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateBriefingTemplateMutation,
-  AdminUpdateBriefingTemplateMutationVariables
->;
-export const AdminDeleteBriefingTemplateDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminDeleteBriefingTemplate' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'deleteBriefingTemplate' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminDeleteBriefingTemplateMutation,
-  AdminDeleteBriefingTemplateMutationVariables
->;
-export const AdminUpsertStationPropertyConfigDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpsertStationPropertyConfig' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'stationType' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpsertPropertyConfigInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'upsertStationPropertyConfig' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'stationType' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'stationType' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpsertStationPropertyConfigMutation,
-  AdminUpsertStationPropertyConfigMutationVariables
->;
-export const AdminUpsertTaskPropertyConfigDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpsertTaskPropertyConfig' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'taskType' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpsertPropertyConfigInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'upsertTaskPropertyConfig' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'taskType' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'taskType' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpsertTaskPropertyConfigMutation,
-  AdminUpsertTaskPropertyConfigMutationVariables
->;
-export const AdminUpsertTicketPropertyConfigDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpsertTicketPropertyConfig' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpsertTicketPropertyConfigInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'upsertTicketPropertyConfig' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'propertyName' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpsertTicketPropertyConfigMutation,
-  AdminUpsertTicketPropertyConfigMutationVariables
->;
-export const AdminUpsertDisasterTypeDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpsertDisasterType' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpsertDisasterTypeInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'upsertDisasterType' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'key' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'label' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpsertDisasterTypeMutation,
-  AdminUpsertDisasterTypeMutationVariables
->;
-export const AdminAssignZoneToTeamDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminAssignZoneToTeam' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'ZoneTeamAssignmentInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'assignZoneToTeam' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'zoneUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'teamUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminAssignZoneToTeamMutation,
-  AdminAssignZoneToTeamMutationVariables
->;
-export const AdminRemoveZoneFromTeamDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminRemoveZoneFromTeam' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'ZoneTeamAssignmentInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'removeZoneFromTeam' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminRemoveZoneFromTeamMutation,
-  AdminRemoveZoneFromTeamMutationVariables
->;
+export type AdminRemoveZoneFromTeamMutation = { __typename?: 'Mutation', removeZoneFromTeam: boolean };
+
+export const AdminPageInfoFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminPageInfo"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PageInfo"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}}]}}]} as unknown as DocumentNode<AdminPageInfoFragment, unknown>;
+export const AdminTicketFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTicketFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"priority"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"auditStatus"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<AdminTicketFieldsFragment, unknown>;
+export const AdminTaskFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTaskFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"ticketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"taskName"}},{"kind":"Field","name":{"kind":"Name","value":"taskDescription"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"progressNote"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"actorUuid"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"assignedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AdminTaskFieldsFragment, unknown>;
+export const AdminStationFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminStationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"operationalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"statusChangedAt"}},{"kind":"Field","name":{"kind":"Name","value":"supplyStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pendingSuggestedFields"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignedTeam"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]} as unknown as DocumentNode<AdminStationFieldsFragment, unknown>;
+export const AdminTicketsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminTickets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"bounds"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BoundsInput"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"priority"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"q"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skip"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"0"}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"50"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tickets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"bounds"},"value":{"kind":"Variable","name":{"kind":"Name","value":"bounds"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"priority"},"value":{"kind":"Variable","name":{"kind":"Name","value":"priority"}}},{"kind":"Argument","name":{"kind":"Name","value":"q"},"value":{"kind":"Variable","name":{"kind":"Name","value":"q"}}},{"kind":"Argument","name":{"kind":"Name","value":"skip"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skip"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTicketFields"}},{"kind":"Field","name":{"kind":"Name","value":"tasks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTaskFields"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminPageInfo"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTicketFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"priority"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"auditStatus"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTaskFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"ticketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"taskName"}},{"kind":"Field","name":{"kind":"Name","value":"taskDescription"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"progressNote"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"actorUuid"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"assignedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminPageInfo"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PageInfo"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}}]}}]} as unknown as DocumentNode<AdminTicketsQuery, AdminTicketsQueryVariables>;
+export const AdminTicketDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminTicket"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ticket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTicketFields"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}},{"kind":"Field","name":{"kind":"Name","value":"lane"}},{"kind":"Field","name":{"kind":"Name","value":"alley"}},{"kind":"Field","name":{"kind":"Name","value":"no"}},{"kind":"Field","name":{"kind":"Name","value":"floor"}},{"kind":"Field","name":{"kind":"Name","value":"room"}},{"kind":"Field","name":{"kind":"Name","value":"landmarkNote"}}]}},{"kind":"Field","name":{"kind":"Name","value":"photos"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"tasks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTaskFields"}},{"kind":"Field","name":{"kind":"Name","value":"properties"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyValue"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"disasterDetails"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"value"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTicketFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"priority"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"auditStatus"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTaskFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"ticketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"taskName"}},{"kind":"Field","name":{"kind":"Name","value":"taskDescription"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"progressNote"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"actorUuid"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"assignedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AdminTicketQuery, AdminTicketQueryVariables>;
+export const AdminTicketTasksDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminTicketTasks"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ticketUuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"q"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skip"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"0"}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"50"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ticketTasks"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"ticketUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ticketUuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"q"},"value":{"kind":"Variable","name":{"kind":"Name","value":"q"}}},{"kind":"Argument","name":{"kind":"Name","value":"skip"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skip"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTaskFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTaskFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"ticketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"taskName"}},{"kind":"Field","name":{"kind":"Name","value":"taskDescription"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"progressNote"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"actorUuid"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"assignedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AdminTicketTasksQuery, AdminTicketTasksQueryVariables>;
+export const AdminStationsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminStations"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"bounds"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BoundsInput"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stationType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"operationalStatus"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"StationOperationalStatus"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"q"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assignedTeamUuid"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"unassignedOnly"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}},"defaultValue":{"kind":"BooleanValue","value":false}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"hasPendingSuggestions"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}},"defaultValue":{"kind":"BooleanValue","value":false}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skip"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"0"}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"50"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stations"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"bounds"},"value":{"kind":"Variable","name":{"kind":"Name","value":"bounds"}}},{"kind":"Argument","name":{"kind":"Name","value":"stationType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stationType"}}},{"kind":"Argument","name":{"kind":"Name","value":"operationalStatus"},"value":{"kind":"Variable","name":{"kind":"Name","value":"operationalStatus"}}},{"kind":"Argument","name":{"kind":"Name","value":"q"},"value":{"kind":"Variable","name":{"kind":"Name","value":"q"}}},{"kind":"Argument","name":{"kind":"Name","value":"assignedTeamUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assignedTeamUuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"unassignedOnly"},"value":{"kind":"Variable","name":{"kind":"Name","value":"unassignedOnly"}}},{"kind":"Argument","name":{"kind":"Name","value":"hasPendingSuggestions"},"value":{"kind":"Variable","name":{"kind":"Name","value":"hasPendingSuggestions"}}},{"kind":"Argument","name":{"kind":"Name","value":"skip"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skip"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminStationFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminPageInfo"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminStationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"operationalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"statusChangedAt"}},{"kind":"Field","name":{"kind":"Name","value":"supplyStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pendingSuggestedFields"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignedTeam"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminPageInfo"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PageInfo"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}}]}}]} as unknown as DocumentNode<AdminStationsQuery, AdminStationsQueryVariables>;
+export const AdminStationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminStation"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"station"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminStationFields"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}},{"kind":"Field","name":{"kind":"Name","value":"lane"}},{"kind":"Field","name":{"kind":"Name","value":"alley"}},{"kind":"Field","name":{"kind":"Name","value":"no"}},{"kind":"Field","name":{"kind":"Name","value":"floor"}},{"kind":"Field","name":{"kind":"Name","value":"room"}},{"kind":"Field","name":{"kind":"Name","value":"poleId"}},{"kind":"Field","name":{"kind":"Name","value":"poleType"}},{"kind":"Field","name":{"kind":"Name","value":"poleNote"}}]}},{"kind":"Field","name":{"kind":"Name","value":"photos"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"properties"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyType"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"weightings"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminStationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"operationalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"statusChangedAt"}},{"kind":"Field","name":{"kind":"Name","value":"supplyStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pendingSuggestedFields"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignedTeam"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]} as unknown as DocumentNode<AdminStationQuery, AdminStationQueryVariables>;
+export const AdminStationReviewDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminStationReview"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"station"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminStationFields"}},{"kind":"Field","name":{"kind":"Name","value":"properties"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"pendingSuggestedFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"suggestedFields"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"targetUuid"}},{"kind":"Field","name":{"kind":"Name","value":"fieldName"}},{"kind":"Field","name":{"kind":"Name","value":"proposedValues"}},{"kind":"Field","name":{"kind":"Name","value":"suggestionCount"}},{"kind":"Field","name":{"kind":"Name","value":"comments"}},{"kind":"Field","name":{"kind":"Name","value":"firstSuggestedAt"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"suggestableFields"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"targetType"},"value":{"kind":"StringValue","value":"station","block":false}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"fieldName"}},{"kind":"Field","name":{"kind":"Name","value":"dataType"}},{"kind":"Field","name":{"kind":"Name","value":"enumOptions"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminStationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"operationalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"statusChangedAt"}},{"kind":"Field","name":{"kind":"Name","value":"supplyStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pendingSuggestedFields"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignedTeam"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]} as unknown as DocumentNode<AdminStationReviewQuery, AdminStationReviewQueryVariables>;
+export const AdminAnnouncementsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminAnnouncements"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AnnouncementFilter"}},"defaultValue":{"kind":"EnumValue","value":"ALL"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"announcements"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}},{"kind":"Argument","name":{"kind":"Name","value":"placement"},"value":{"kind":"EnumValue","value":"admin_page"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"active"}},{"kind":"Field","name":{"kind":"Name","value":"order"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AdminAnnouncementsQuery, AdminAnnouncementsQueryVariables>;
+export const AdminBriefingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminBriefings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"state"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BriefingState"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tag"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"briefings"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"state"},"value":{"kind":"Variable","name":{"kind":"Name","value":"state"}}},{"kind":"Argument","name":{"kind":"Name","value":"tag"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tag"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"templateUuid"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AdminBriefingsQuery, AdminBriefingsQueryVariables>;
+export const AdminBriefingTemplatesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminBriefingTemplates"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"state"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BriefingState"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tag"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"briefingTemplates"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"state"},"value":{"kind":"Variable","name":{"kind":"Name","value":"state"}}},{"kind":"Argument","name":{"kind":"Name","value":"tag"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tag"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AdminBriefingTemplatesQuery, AdminBriefingTemplatesQueryVariables>;
+export const AdminStationPropertyConfigsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminStationPropertyConfigs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stationType"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeInactive"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}},"defaultValue":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stationPropertyConfigs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"stationType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stationType"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeInactive"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeInactive"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"stationType"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"dataType"}},{"kind":"Field","name":{"kind":"Name","value":"enumOptions"}},{"kind":"Field","name":{"kind":"Name","value":"unit"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"displayLabel"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}}]}}]}}]} as unknown as DocumentNode<AdminStationPropertyConfigsQuery, AdminStationPropertyConfigsQueryVariables>;
+export const AdminTaskPropertyConfigsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminTaskPropertyConfigs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"taskType"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeInactive"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}},"defaultValue":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"taskPropertyConfigs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"taskType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"taskType"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeInactive"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeInactive"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"dataType"}},{"kind":"Field","name":{"kind":"Name","value":"enumOptions"}},{"kind":"Field","name":{"kind":"Name","value":"unit"}},{"kind":"Field","name":{"kind":"Name","value":"disasterTypes"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"displayLabel"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}}]}}]}}]} as unknown as DocumentNode<AdminTaskPropertyConfigsQuery, AdminTaskPropertyConfigsQueryVariables>;
+export const AdminTicketPropertyConfigsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminTicketPropertyConfigs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"disasterTypes"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeInactive"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}},"defaultValue":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ticketPropertyConfigs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"disasterTypes"},"value":{"kind":"Variable","name":{"kind":"Name","value":"disasterTypes"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeInactive"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeInactive"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"dataType"}},{"kind":"Field","name":{"kind":"Name","value":"enumOptions"}},{"kind":"Field","name":{"kind":"Name","value":"unit"}},{"kind":"Field","name":{"kind":"Name","value":"disasterTypes"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"displayLabel"}},{"kind":"Field","name":{"kind":"Name","value":"hint"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}}]}}]}}]} as unknown as DocumentNode<AdminTicketPropertyConfigsQuery, AdminTicketPropertyConfigsQueryVariables>;
+export const AdminDisasterTypesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AdminDisasterTypes"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"includeInactive"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}},"defaultValue":{"kind":"BooleanValue","value":true}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"disasterTypes"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"includeInactive"},"value":{"kind":"Variable","name":{"kind":"Name","value":"includeInactive"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"isActive"}}]}}]}}]} as unknown as DocumentNode<AdminDisasterTypesQuery, AdminDisasterTypesQueryVariables>;
+export const AdminCreateTicketDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminCreateTicket"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateTicketInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createTicket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketCreated"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ticket"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTicketFields"}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTicketFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"priority"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"auditStatus"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<AdminCreateTicketMutation, AdminCreateTicketMutationVariables>;
+export const AdminUpdateTicketDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateTicket"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTicketInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTicket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTicketFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTicketFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"priority"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"auditStatus"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<AdminUpdateTicketMutation, AdminUpdateTicketMutationVariables>;
+export const AdminDeleteTicketDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminDeleteTicket"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteTicket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}]}]}}]} as unknown as DocumentNode<AdminDeleteTicketMutation, AdminDeleteTicketMutationVariables>;
+export const AdminAuditTicketDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminAuditTicket"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AuditVerdict"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"contentHash"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"note"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"auditTicket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"contentHash"},"value":{"kind":"Variable","name":{"kind":"Name","value":"contentHash"}}},{"kind":"Argument","name":{"kind":"Name","value":"note"},"value":{"kind":"Variable","name":{"kind":"Name","value":"note"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTicketFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTicketFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"priority"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"auditStatus"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<AdminAuditTicketMutation, AdminAuditTicketMutationVariables>;
+export const AdminSetTicketDisasterDetailsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminSetTicketDisasterDetails"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"details"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"TicketDisasterDetailInput"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setTicketDisasterDetails"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"details"},"value":{"kind":"Variable","name":{"kind":"Name","value":"details"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"value"}}]}}]}}]} as unknown as DocumentNode<AdminSetTicketDisasterDetailsMutation, AdminSetTicketDisasterDetailsMutationVariables>;
+export const AdminCreateTicketTaskDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminCreateTicketTask"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateTicketTaskInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createTicketTask"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskCreated"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"task"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTaskFields"}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTaskFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"ticketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"taskName"}},{"kind":"Field","name":{"kind":"Name","value":"taskDescription"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"progressNote"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"actorUuid"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"assignedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AdminCreateTicketTaskMutation, AdminCreateTicketTaskMutationVariables>;
+export const AdminUpdateTicketTaskDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateTicketTask"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTicketTaskInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTicketTask"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminTaskFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminTaskFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"ticketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"taskName"}},{"kind":"Field","name":{"kind":"Name","value":"taskDescription"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"progressNote"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"actorUuid"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"assignedAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AdminUpdateTicketTaskMutation, AdminUpdateTicketTaskMutationVariables>;
+export const AdminAssignTaskActorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminAssignTaskActor"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"taskUuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"actorUuid"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"role"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"assignTaskActor"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"taskUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"taskUuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"actorUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"actorUuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"role"},"value":{"kind":"Variable","name":{"kind":"Name","value":"role"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskUuid"}},{"kind":"Field","name":{"kind":"Name","value":"actorUuid"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"assignedAt"}}]}}]}}]} as unknown as DocumentNode<AdminAssignTaskActorMutation, AdminAssignTaskActorMutationVariables>;
+export const AdminUpdateTaskAssignmentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateTaskAssignment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTaskAssignmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTaskAssignment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskUuid"}},{"kind":"Field","name":{"kind":"Name","value":"actorUuid"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<AdminUpdateTaskAssignmentMutation, AdminUpdateTaskAssignmentMutationVariables>;
+export const AdminUnassignTaskActorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUnassignTaskActor"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"unassignTaskActor"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}]}]}}]} as unknown as DocumentNode<AdminUnassignTaskActorMutation, AdminUnassignTaskActorMutationVariables>;
+export const AdminCreateStationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminCreateStation"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateStationInput"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"acknowledgedDuplicateOf"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createStation"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}},{"kind":"Argument","name":{"kind":"Name","value":"acknowledgedDuplicateOf"},"value":{"kind":"Variable","name":{"kind":"Name","value":"acknowledgedDuplicateOf"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"__typename"}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationCreated"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"station"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminStationFields"}}]}}]}},{"kind":"InlineFragment","typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"DuplicatesSuspected"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"suspects"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"relatedKind"}},{"kind":"Field","name":{"kind":"Name","value":"relatedUuid"}}]}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminStationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"operationalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"statusChangedAt"}},{"kind":"Field","name":{"kind":"Name","value":"supplyStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pendingSuggestedFields"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignedTeam"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]} as unknown as DocumentNode<AdminCreateStationMutation, AdminCreateStationMutationVariables>;
+export const AdminUpdateStationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateStation"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateStationInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateStation"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminStationFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminStationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"operationalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"statusChangedAt"}},{"kind":"Field","name":{"kind":"Name","value":"supplyStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pendingSuggestedFields"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignedTeam"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]} as unknown as DocumentNode<AdminUpdateStationMutation, AdminUpdateStationMutationVariables>;
+export const AdminDeleteStationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminDeleteStation"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteStation"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}]}]}}]} as unknown as DocumentNode<AdminDeleteStationMutation, AdminDeleteStationMutationVariables>;
+export const AdminMergeStationSuggestionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminMergeStationSuggestions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stationUuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"decisions"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SuggestionDecisionInput"}}}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"reviewNote"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mergeStationSuggestions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"stationUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stationUuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"decisions"},"value":{"kind":"Variable","name":{"kind":"Name","value":"decisions"}}},{"kind":"Argument","name":{"kind":"Name","value":"reviewNote"},"value":{"kind":"Variable","name":{"kind":"Name","value":"reviewNote"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"changes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"targetUuid"}},{"kind":"Field","name":{"kind":"Name","value":"fieldName"}},{"kind":"Field","name":{"kind":"Name","value":"before"}},{"kind":"Field","name":{"kind":"Name","value":"after"}}]}}]}}]}}]} as unknown as DocumentNode<AdminMergeStationSuggestionsMutation, AdminMergeStationSuggestionsMutationVariables>;
+export const AdminAssignStationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminAssignStation"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stationUuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"teamUuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"assignStationToTeam"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"stationUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stationUuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"teamUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"teamUuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminStationFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminStationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"operationalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"statusChangedAt"}},{"kind":"Field","name":{"kind":"Name","value":"supplyStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pendingSuggestedFields"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignedTeam"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]} as unknown as DocumentNode<AdminAssignStationMutation, AdminAssignStationMutationVariables>;
+export const AdminUnassignStationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUnassignStation"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stationUuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"unassignStation"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"stationUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stationUuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"AdminStationFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"AdminStationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"operationalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"statusChangedAt"}},{"kind":"Field","name":{"kind":"Name","value":"supplyStatus"}},{"kind":"Field","name":{"kind":"Name","value":"pendingSuggestedFields"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"secondaryLocation"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"county"}},{"kind":"Field","name":{"kind":"Name","value":"city"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignedTeam"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]} as unknown as DocumentNode<AdminUnassignStationMutation, AdminUnassignStationMutationVariables>;
+export const AdminAttachStationPhotoDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminAttachStationPhoto"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stationUuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"url"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"attachStationPhoto"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"stationUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stationUuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"url"},"value":{"kind":"Variable","name":{"kind":"Name","value":"url"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<AdminAttachStationPhotoMutation, AdminAttachStationPhotoMutationVariables>;
+export const AdminDetachStationPhotoDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminDetachStationPhoto"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"detachStationPhoto"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}]}]}}]} as unknown as DocumentNode<AdminDetachStationPhotoMutation, AdminDetachStationPhotoMutationVariables>;
+export const AdminCreateStationPropertyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminCreateStationProperty"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateStationPropertyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createStationProperty"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"stationUuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyType"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}}]}}]}}]} as unknown as DocumentNode<AdminCreateStationPropertyMutation, AdminCreateStationPropertyMutationVariables>;
+export const AdminUpdateStationPropertyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateStationProperty"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateStationPropertyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateStationProperty"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"stationUuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyType"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}}]}}]}}]} as unknown as DocumentNode<AdminUpdateStationPropertyMutation, AdminUpdateStationPropertyMutationVariables>;
+export const AdminCreateTaskPropertyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminCreateTaskProperty"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateTaskPropertyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createTaskProperty"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskUuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyValue"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}}]}}]}}]} as unknown as DocumentNode<AdminCreateTaskPropertyMutation, AdminCreateTaskPropertyMutationVariables>;
+export const AdminUpdateTaskPropertyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateTaskProperty"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTaskPropertyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTaskProperty"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskUuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyValue"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}}]}}]}}]} as unknown as DocumentNode<AdminUpdateTaskPropertyMutation, AdminUpdateTaskPropertyMutationVariables>;
+export const AdminCreateAnnouncementDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminCreateAnnouncement"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAnnouncementInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAnnouncement"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"active"}},{"kind":"Field","name":{"kind":"Name","value":"order"}}]}}]}}]} as unknown as DocumentNode<AdminCreateAnnouncementMutation, AdminCreateAnnouncementMutationVariables>;
+export const AdminUpdateAnnouncementDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateAnnouncement"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateAnnouncementInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateAnnouncement"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"active"}},{"kind":"Field","name":{"kind":"Name","value":"order"}}]}}]}}]} as unknown as DocumentNode<AdminUpdateAnnouncementMutation, AdminUpdateAnnouncementMutationVariables>;
+export const AdminDeleteAnnouncementDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminDeleteAnnouncement"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAnnouncement"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}]}]}}]} as unknown as DocumentNode<AdminDeleteAnnouncementMutation, AdminDeleteAnnouncementMutationVariables>;
+export const AdminMoveAnnouncementDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminMoveAnnouncement"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"direction"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AnnouncementMoveDirection"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"moveAnnouncement"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"direction"},"value":{"kind":"Variable","name":{"kind":"Name","value":"direction"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"order"}}]}}]}}]} as unknown as DocumentNode<AdminMoveAnnouncementMutation, AdminMoveAnnouncementMutationVariables>;
+export const AdminSetAnnouncementActiveDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminSetAnnouncementActive"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"active"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAnnouncementActive"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"active"},"value":{"kind":"Variable","name":{"kind":"Name","value":"active"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"active"}},{"kind":"Field","name":{"kind":"Name","value":"order"}}]}}]}}]} as unknown as DocumentNode<AdminSetAnnouncementActiveMutation, AdminSetAnnouncementActiveMutationVariables>;
+export const AdminGenerateBriefingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminGenerateBriefing"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"GenerateBriefingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"generateBriefing"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"templateUuid"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}}]}}]} as unknown as DocumentNode<AdminGenerateBriefingMutation, AdminGenerateBriefingMutationVariables>;
+export const AdminUpdateBriefingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateBriefing"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateBriefingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateBriefing"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}}]}}]} as unknown as DocumentNode<AdminUpdateBriefingMutation, AdminUpdateBriefingMutationVariables>;
+export const AdminDeleteBriefingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminDeleteBriefing"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteBriefing"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}]}]}}]} as unknown as DocumentNode<AdminDeleteBriefingMutation, AdminDeleteBriefingMutationVariables>;
+export const AdminCreateBriefingTemplateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminCreateBriefingTemplate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateBriefingTemplateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createBriefingTemplate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}}]}}]} as unknown as DocumentNode<AdminCreateBriefingTemplateMutation, AdminCreateBriefingTemplateMutationVariables>;
+export const AdminUpdateBriefingTemplateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpdateBriefingTemplate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateBriefingTemplateInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateBriefingTemplate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}}]}}]} as unknown as DocumentNode<AdminUpdateBriefingTemplateMutation, AdminUpdateBriefingTemplateMutationVariables>;
+export const AdminDeleteBriefingTemplateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminDeleteBriefingTemplate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteBriefingTemplate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}]}]}}]} as unknown as DocumentNode<AdminDeleteBriefingTemplateMutation, AdminDeleteBriefingTemplateMutationVariables>;
+export const AdminUpsertStationPropertyConfigDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpsertStationPropertyConfig"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stationType"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertPropertyConfigInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"upsertStationPropertyConfig"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"stationType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stationType"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}}]}}]}}]} as unknown as DocumentNode<AdminUpsertStationPropertyConfigMutation, AdminUpsertStationPropertyConfigMutationVariables>;
+export const AdminUpsertTaskPropertyConfigDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpsertTaskPropertyConfig"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"taskType"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertPropertyConfigInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"upsertTaskPropertyConfig"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"taskType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"taskType"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}}]}}]}}]} as unknown as DocumentNode<AdminUpsertTaskPropertyConfigMutation, AdminUpsertTaskPropertyConfigMutationVariables>;
+export const AdminUpsertTicketPropertyConfigDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpsertTicketPropertyConfig"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertTicketPropertyConfigInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"upsertTicketPropertyConfig"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}}]}}]}}]} as unknown as DocumentNode<AdminUpsertTicketPropertyConfigMutation, AdminUpsertTicketPropertyConfigMutationVariables>;
+export const AdminUpsertDisasterTypeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminUpsertDisasterType"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpsertDisasterTypeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"upsertDisasterType"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"label"}}]}}]}}]} as unknown as DocumentNode<AdminUpsertDisasterTypeMutation, AdminUpsertDisasterTypeMutationVariables>;
+export const AdminAssignZoneToTeamDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminAssignZoneToTeam"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ZoneTeamAssignmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"assignZoneToTeam"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"zoneUuid"}},{"kind":"Field","name":{"kind":"Name","value":"teamUuid"}},{"kind":"Field","name":{"kind":"Name","value":"assignedAt"}}]}}]}}]} as unknown as DocumentNode<AdminAssignZoneToTeamMutation, AdminAssignZoneToTeamMutationVariables>;
+export const AdminRemoveZoneFromTeamDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AdminRemoveZoneFromTeam"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ZoneTeamAssignmentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"removeZoneFromTeam"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<AdminRemoveZoneFromTeamMutation, AdminRemoveZoneFromTeamMutationVariables>;
