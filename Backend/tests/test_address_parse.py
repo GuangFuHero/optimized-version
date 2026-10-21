@@ -82,6 +82,16 @@ def test_a_district_named_with_town_or_city_stays_whole(line, town, road):
     assert (parts.town, parts.road) == (town, road)
 
 
+@pytest.mark.parametrize(
+    ("line", "road"),
+    [("臺南市新市路1號", "新市路"), ("新北市新市路一段1號", "新市路"), ("高雄市中鎮路1號", "中鎮路")],
+)
+def test_a_road_named_like_a_town_is_not_the_town(line, road):
+    """With no 鄉鎮市區 written, 新市路 and 中鎮路 are roads, not the towns 新市 and 中鎮."""
+    parts = parse_tw_address(line)
+    assert (parts.town, parts.road) == (None, road)
+
+
 def test_a_section_keeps_its_numeral_as_written():
     """段 keeps the numeral TGOS writes, so the part matches the line."""
     parts = parse_tw_address("臺北市中正區黎明里3鄰忠孝西路一段49號")

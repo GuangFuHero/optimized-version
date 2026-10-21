@@ -1,8 +1,6 @@
 """Taiwanese address parsing: one address line split into its 縣市 … 號 parts.
 
-Pure functions with no I/O. The line is normally the official address TGOS returned, but a
-typed one has to parse too, so nothing here raises on content: whatever is not recognized stays
-in `full_address` alone.
+Pure functions that never raise on content: whatever is not recognized stays in `full_address`.
 """
 
 import re
@@ -38,8 +36,8 @@ _COUNTY_SPELLINGS = {spelling: c for c in COUNTIES for spelling in (c, c.replace
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _POSTCODE_RE = re.compile(r"^\d{3}(?:\d{2,3})?")
-# 鄉/鎮/市 ends the name only when no 區 follows it, so 前鎮區 and 新市區 stay whole.
-_TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區)))")
+# 鄉/鎮/市 ends the name only when no 區 or road suffix follows, so 前鎮區 stays whole and 新市路 is a road.
+_TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區|路|街|大道)))")
 # A 村/里 ends the village only when no other 村/里 follows (嘉里村, 大里里) and no road suffix does
 # either, since 中里路 and 中里北路 are roads.
 _VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?![村里])(?![東西南北中]?(?:路|街|大道))")
