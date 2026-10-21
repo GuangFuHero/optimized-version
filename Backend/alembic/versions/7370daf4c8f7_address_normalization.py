@@ -1,7 +1,7 @@
 """secondary_locations: split the address into its official parts
 
 Revision ID: 7370daf4c8f7
-Revises: a5e641c99923
+Revises: 79a19cabc98a
 Create Date: 2026-10-20 18:00:00.000000
 
 Stores an address as its official parts (縣市 鄉鎮市區 村里 鄰 路 段 巷 弄 號), plus the whole line and
@@ -19,7 +19,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "7370daf4c8f7"
-down_revision: str | Sequence[str] | None = "a5e641c99923"
+down_revision: str | Sequence[str] | None = "79a19cabc98a"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

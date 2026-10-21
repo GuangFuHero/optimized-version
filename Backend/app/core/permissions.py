@@ -102,6 +102,9 @@ class Perm(StrEnum):
     TEAM_VIEW = "team.view"
     TEAM_EDIT = "team.edit"
     TEAM_MEMBER_MANAGE = "team.member.manage"
+    # Spec/026: read a team's member list. Its own key, apart from team.view (the team itself)
+    # and user.view (every account), so the member list can be granted on its own.
+    TEAM_MEMBER_VIEW = "team.member.view"
 
     # Work Zone (gov-drawn disaster response boundaries — ADR-021, Phase 4/T119)
     ZONE_VIEW = "work_zone.view"
@@ -143,6 +146,10 @@ class Perm(StrEnum):
 
     # Audit Log
     AUDIT_VIEW = "audit.view"
+    # Spec/026 ADR-358: a team admin reads the changes made to their own team. Its own key rather
+    # than `audit.view` at `team`: every audit.view holder already reads all data and all PII,
+    # which ADR-130's RAW tier rests on, and a team admin does not.
+    TEAM_AUDIT_VIEW = "team.audit.view"
 
     # RBAC self-management (Super Admin only)
     RBAC_VIEW = "rbac.view"

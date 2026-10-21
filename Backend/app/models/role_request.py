@@ -1,4 +1,4 @@
-"""SQLAlchemy model for role requests: a citizen applying to become back-office staff (Spec/019)."""
+"""SQLAlchemy model for role requests: applying to become back-office staff (Spec/019, Spec/026)."""
 
 from datetime import datetime
 
@@ -16,6 +16,21 @@ STATUSES = ("pending", "approved", "rejected", "withdrawn")
 REASON_MAX_LENGTH = 500
 CONTACT_MAX_LENGTH = 100
 REVIEW_NOTE_MAX_LENGTH = 500
+# Spec 026 (ADR-350, ADR-355). A new team's name fits `teams.name`; the name an applicant gives
+# fits `users.real_name`, where approval copies it.
+TEAM_NAME_MAX_LENGTH = 100
+APPLICANT_NAME_MAX_LENGTH = 100
+PHONE_MAX_LENGTH = 20
+EMAIL_MAX_LENGTH = 320
+
+# ADR-350 point 2: a government / NGO request names one team, existing or new; a data auditor
+# names none. Rows from Spec 019 name none and carry no phone, which is how they are let through.
+_TARGET_CHECK = (
+    "NOT (team_uuid IS NOT NULL AND new_team_name IS NOT NULL)"
+    " AND (requested_role <> 'data_auditor' OR (team_uuid IS NULL AND new_team_name IS NULL))"
+    " AND (requested_role = 'data_auditor' OR applicant_phone IS NULL"
+    " OR team_uuid IS NOT NULL OR new_team_name IS NOT NULL)"
+)
 
 
 def _one_of(column: str, values: tuple[str, ...]) -> str:
@@ -48,6 +63,16 @@ class RoleRequest(Base, UUIDPKMixin, TimestampMixin):
             postgresql_where=text("status = 'pending'"),
         ),
         Index("ix_role_requests_status_created_at", "status", "created_at"),
+        CheckConstraint(_TARGET_CHECK, name="ck_role_requests_target"),
+        # An invite always belongs to the team the request is for.
+        CheckConstraint("invite_uuid IS NULL OR team_uuid IS NOT NULL", name="ck_role_requests_invite"),
+        # The team admin's queue: pending member requests for one team, oldest first.
+        Index(
+            "ix_role_requests_team_pending",
+            "team_uuid",
+            "created_at",
+            postgresql_where=text("status = 'pending'"),
+        ),
     )
 
     requested_role: Mapped[str] = mapped_column(String(20))
@@ -61,3 +86,14 @@ class RoleRequest(Base, UUIDPKMixin, TimestampMixin):
     # When it left `pending` — approved, rejected or withdrawn alike.
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"), index=True)
+
+    # Spec 026. The existing team a member request asks for, or the name of a team to found
+    # (ADR-350 point 2); the invite a member request came through (ADR-353).
+    team_uuid: Mapped[str | None] = mapped_column(ForeignKey("teams.uuid"), index=True)
+    new_team_name: Mapped[str | None] = mapped_column(String(TEAM_NAME_MAX_LENGTH))
+    invite_uuid: Mapped[str | None] = mapped_column(ForeignKey("team_invites.uuid"))
+    # Snapshots taken at submit, so the reviewer sees what was sent even if the account changes
+    # (ADR-355). NULL only on rows from before Spec 026.
+    applicant_name: Mapped[str | None] = mapped_column(String(APPLICANT_NAME_MAX_LENGTH))
+    applicant_phone: Mapped[str | None] = mapped_column(String(PHONE_MAX_LENGTH))
+    applicant_email: Mapped[str | None] = mapped_column(String(EMAIL_MAX_LENGTH))

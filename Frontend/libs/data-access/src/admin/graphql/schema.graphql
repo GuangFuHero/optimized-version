@@ -803,7 +803,7 @@ type MyRoleRequestsType {
   hasBackofficeIdentity: Boolean!
 
   """
-  May send an application now: no back-office identity, none pending, not paused
+  May send an application now: none pending and not paused. A back-office identity rules out only the data auditor choice (ADR-351)
   """
   canApply: Boolean!
 
@@ -932,6 +932,7 @@ type Query {
   teamZone(uuid: UUID!): TeamZoneType
   zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): TeamZoneConnection!
   myRoleRequests: MyRoleRequestsType!
+  roleRequestTeams(type: RoleRequestTeamType = null): [RoleRequestTeam!]!
 }
 
 enum RoleRequestRole {
@@ -947,10 +948,23 @@ enum RoleRequestStatus {
   withdrawn
 }
 
+type RoleRequestTeam {
+  uuid: UUID!
+  name: String!
+  type: RoleRequestTeamType!
+}
+
+enum RoleRequestTeamType {
+  GOV
+  NGO
+}
+
 type RoleRequestType {
   uuid: UUID!
   requestedRole: RoleRequestRole!
   reason: String!
+
+  """Spec 019 only; no longer sent (ADR-355)"""
   contact: String
   status: RoleRequestStatus!
 
@@ -960,6 +974,20 @@ type RoleRequestType {
 
   """When it was approved, rejected or withdrawn"""
   closedAt: DateTime
+
+  """The team a new-team application founds"""
+  newTeamName: String
+
+  """Sent through a team's invite link"""
+  viaInvite: Boolean!
+  applicantName: String
+
+  """Masked"""
+  applicantPhone: String
+  applicantEmail: String
+
+  """The existing team a member request asks to join"""
+  team: RoleRequestTeam
 }
 
 input SecondaryLocationInput {
@@ -1327,7 +1355,10 @@ type StationType {
 input SubmitRoleRequestInput {
   requestedRole: RoleRequestRole!
   reason: String!
-  contact: String = null
+  name: String!
+  email: String = null
+  teamUuid: UUID = null
+  newTeamName: String = null
 }
 
 type SuggestableFieldType {
