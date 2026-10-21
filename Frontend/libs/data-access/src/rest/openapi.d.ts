@@ -1142,6 +1142,106 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/duplicate-pairs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Duplicate Pairs
+     * @description Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).
+     */
+    get: operations['list_duplicate_pairs_api_v1_admin_duplicate_pairs_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/duplicate-pairs/{pair_uuid}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Duplicate Pair
+     * @description One card, its sides and its events, oldest first.
+     */
+    get: operations['get_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/duplicate-pairs/{pair_uuid}/confirm': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Confirm Duplicate Pair
+     * @description Mark a pending card a duplicate (ADR-341: only the card changes).
+     */
+    post: operations['confirm_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__confirm_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/duplicate-pairs/{pair_uuid}/reject': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reject Duplicate Pair
+     * @description Mark a pending card not a duplicate (ADR-341: only the card changes).
+     */
+    post: operations['reject_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__reject_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/duplicate-pairs/{pair_uuid}/revoke': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Revoke Duplicate Pair Verdict
+     * @description Undo a card's verdict, back to the queue; someone else's needs ai_duplicate.revoke (ADR-342).
+     */
+    post: operations['revoke_duplicate_pair_verdict_api_v1_admin_duplicate_pairs__pair_uuid__revoke_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/rbac-test/public': {
     parameters: {
       query?: never;
@@ -2312,6 +2412,43 @@ export interface components {
       series: components['schemas']['ChartSeries'][];
     };
     /**
+     * DedupEventResponse
+     * @description One event recorded on a card.
+     */
+    DedupEventResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Event Type */
+      event_type: string;
+      /** Actor Uuid */
+      actor_uuid: string | null;
+      /**
+       * Source Layer
+       * @enum {string}
+       */
+      source_layer: 'fast' | 'slow' | 'manual' | 'system';
+      /** Decision Reason */
+      decision_reason: string | null;
+      /** Engine Version */
+      engine_version: string | null;
+      /** Before State */
+      before_state: {
+        [key: string]: unknown;
+      } | null;
+      /** After State */
+      after_state: {
+        [key: string]: unknown;
+      } | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /**
      * DeleteContactRequest
      * @description Body for `DELETE /auth/contacts/{type}` — carries the step-up proof (ADR-159/161).
      *
@@ -2334,6 +2471,159 @@ export interface components {
       scope: string;
       /** Team Uuid */
       team_uuid: string | null;
+    };
+    /**
+     * DuplicatePairDecision
+     * @description A reviewer's verdict. The optional note is checked by the service (at most 1000 characters).
+     */
+    DuplicatePairDecision: {
+      /** Note */
+      note?: string | null;
+    };
+    /**
+     * DuplicatePairDetail
+     * @description One card with every event recorded on it, oldest first.
+     */
+    DuplicatePairDetail: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Entity Kind
+       * @enum {string}
+       */
+      entity_kind: 'ticket' | 'station' | 'ticket_task';
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'dup_ignored' | 'suggested' | 'confirmed' | 'rejected';
+      /** Similarity */
+      similarity: number | null;
+      /** Evidence */
+      evidence: {
+        [key: string]: unknown;
+      } | null;
+      /** Method */
+      method: string;
+      /** Engine Version */
+      engine_version: string | null;
+      /**
+       * Source Layer
+       * @enum {string}
+       */
+      source_layer: 'fast' | 'slow' | 'manual' | 'system';
+      /** Duplicate Group Uuid */
+      duplicate_group_uuid: string | null;
+      /** Hint Outcome */
+      hint_outcome: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Reviewed By */
+      reviewed_by: string | null;
+      /** Reviewed At */
+      reviewed_at: string | null;
+      low: components['schemas']['EntitySummaryResponse'];
+      high: components['schemas']['EntitySummaryResponse'];
+      /** Events */
+      events: components['schemas']['DedupEventResponse'][];
+    };
+    /**
+     * DuplicatePairPage
+     * @description One page of cards and how many match in all.
+     */
+    DuplicatePairPage: {
+      /** Items */
+      items: components['schemas']['DuplicatePairResponse'][];
+      /** Total */
+      total: number;
+    };
+    /**
+     * DuplicatePairResponse
+     * @description One card and both of its sides. `evidence` is the engine's, opaque and unchanged.
+     */
+    DuplicatePairResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Entity Kind
+       * @enum {string}
+       */
+      entity_kind: 'ticket' | 'station' | 'ticket_task';
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'dup_ignored' | 'suggested' | 'confirmed' | 'rejected';
+      /** Similarity */
+      similarity: number | null;
+      /** Evidence */
+      evidence: {
+        [key: string]: unknown;
+      } | null;
+      /** Method */
+      method: string;
+      /** Engine Version */
+      engine_version: string | null;
+      /**
+       * Source Layer
+       * @enum {string}
+       */
+      source_layer: 'fast' | 'slow' | 'manual' | 'system';
+      /** Duplicate Group Uuid */
+      duplicate_group_uuid: string | null;
+      /** Hint Outcome */
+      hint_outcome: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Reviewed By */
+      reviewed_by: string | null;
+      /** Reviewed At */
+      reviewed_at: string | null;
+      low: components['schemas']['EntitySummaryResponse'];
+      high: components['schemas']['EntitySummaryResponse'];
+    };
+    /**
+     * EntitySummaryResponse
+     * @description One side of a card: the fields a reviewer compares (ADR-340). A deleted side has only its uuid.
+     */
+    EntitySummaryResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Deleted */
+      deleted: boolean;
+      /** Title */
+      title: string | null;
+      /** Type */
+      type: string | null;
+      /** Status */
+      status: string | null;
+      /** Ticket Uuid */
+      ticket_uuid: string | null;
+      /** Ticket Title */
+      ticket_title: string | null;
+      /** Longitude */
+      longitude: number | null;
+      /** Latitude */
+      latitude: number | null;
+      /** Created By */
+      created_by: string | null;
+      /** Created At */
+      created_at: string | null;
     };
     /**
      * ErrorReportResponse
@@ -2687,6 +2977,7 @@ export interface components {
       | 'map.view'
       | 'ai_duplicate.view'
       | 'ai_duplicate.review'
+      | 'ai_duplicate.revoke'
       | 'user.view'
       | 'user.add'
       | 'user.edit'
@@ -5289,6 +5580,190 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RoleRequestResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  list_duplicate_pairs_api_v1_admin_duplicate_pairs_get: {
+    parameters: {
+      query?: {
+        status?:
+          | ('dup_ignored' | 'suggested' | 'confirmed' | 'rejected')[]
+          | null;
+        entity_kind?: ('ticket' | 'station' | 'ticket_task')[] | null;
+        source_layer?: ('fast' | 'slow' | 'manual' | 'system')[] | null;
+        sort?: 'created_at' | '-created_at' | 'similarity' | '-similarity';
+        skip?: number;
+        limit?: number;
+      };
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuplicatePairPage'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  get_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__get: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        pair_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuplicatePairDetail'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  confirm_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__confirm_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        pair_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json':
+          | components['schemas']['DuplicatePairDecision']
+          | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuplicatePairResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  reject_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__reject_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        pair_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json':
+          | components['schemas']['DuplicatePairDecision']
+          | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuplicatePairResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  revoke_duplicate_pair_verdict_api_v1_admin_duplicate_pairs__pair_uuid__revoke_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        pair_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuplicatePairResponse'];
         };
       };
       /** @description Validation Error */

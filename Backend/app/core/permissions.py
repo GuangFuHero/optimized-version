@@ -76,9 +76,12 @@ class Perm(StrEnum):
     # kind needs the work_zone.* capabilities below.
     MAP_VIEW = "map.view"
 
-    # AI Duplicate Review
+    # AI Duplicate Review (Spec 025): `view` reads the pair cards and their events, `review`
+    # confirms or rejects a card and undoes one's own verdict, `revoke` undoes anyone's (ADR-342).
+    # They govern the dedup records only; the engine in app/dedup_engine/ never checks them.
     AI_DUP_VIEW = "ai_duplicate.view"
     AI_DUP_REVIEW = "ai_duplicate.review"
+    AI_DUP_REVOKE = "ai_duplicate.revoke"
 
     # User Management
     USER_VIEW = "user.view"

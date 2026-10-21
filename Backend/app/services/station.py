@@ -265,9 +265,7 @@ async def update_station(
     if not station:
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_EDIT, db, resource=station)
-    actor_uid = actor.uuid
 
-    old_dup = station.is_duplicate
     obj_in = normalize_contact_fields(changes)
     if geometry is not None:
         validate_point(geometry)
@@ -290,28 +288,8 @@ async def update_station(
     # No operational-status branch here on purpose: the per-resource live status
     # (beds_available, water_level, is_open, ...) is not a column on `stations`, so those
     # names can never appear in `changes`. `resource_station_updated` for status changes
-    # fires from update_station_property() instead.
-    #
-    # NOTE: the dedup branch below is likewise unreachable today — UpdateStationInput
-    # exposes no is_duplicate / dedup_group_id field, so nothing can set them. It is left
-    # in place for the dedup feature that will write them (PRD Q2).
-    if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
-        "dedup_group_id" in changes and changes["dedup_group_id"]
-    ):
-        dedup_recipients = await NotificationRecipientResolver.resolve_permission(
-            db, Perm.AI_DUP_REVIEW.value
-        )
-        await NotificationService.dispatch(
-            db,
-            event_type="dedup_flag_station",
-            title=f"重複物資站待審核：{updated.name or '物資站'}",
-            body=f"物資站「{updated.name or updated.uuid}」已被系統標記為疑似重複項目，請進行審核。",
-            priority="medium",
-            actor_uuid=actor_uid,
-            ref_type="station",
-            ref_uuid=updated.uuid,
-            explicit_recipients=dedup_recipients,
-        )
+    # fires from update_station_property() instead. Reviewers hear about suspected duplicates
+    # when a pair card is written (services/dedup_review.notify_new_cards, ADR-345), not here.
 
     await db.refresh(updated)
     return updated
