@@ -47,22 +47,26 @@ _NEIGHBORHOOD_RE = re.compile(r"^((?:\d+|[一二三四五六七八九十]+)鄰)"
 # A hyphen inside a door number reads as 之, the way TGOS writes it: 1-1號 → 1之1號, 2號-3 → 2號之3.
 _DOOR_HYPHEN_RE = re.compile(r"(?<=\d)-(?=\d+號)|(?<=號)-(?=\d)")
 
-# The tail is 段 巷 弄 (衖 衕, kept only in the line) 號, then a `unit` of 棟 樓 室, each piece optionally
-# bracketed, that is cut from the line. 巷 and 弄 need leading digits so a road like 松羅南巷 stays the road.
-_TAIL_RE = re.compile(
+# The door: 段 巷 弄 (衖 衕, kept only in the line) 號, each optional. 巷 and 弄 need leading digits, so a
+# road named like 松羅南巷 stays the road.
+_DOOR_RE = re.compile(
     r"(?P<section>(?:\d+|[一二三四五六七八九十]+)段)?"
     r"(?P<lane>\d+巷)?"
     r"(?P<alley>\d+弄)?"
     r"(?:\d+衖)?(?:\d+衕)?"
     r"(?P<no>\d+(?:[-之]\d+)?號(?:[-之]\d+)?)?"
-    r"(?P<unit>[-之]?"
-    r"(?:\(?(?P<building>[0-9A-Za-z甲乙丙丁戊]+棟)\)?[-之]?)?"
-    r"(?:\(?(?P<floor>地下室|(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|層|[Ff])(?:[-之][0-9A-Za-z]+)?|[Bb]\d+)\)?)?"
-    r"(?:[-之]?\(?(?P<room>[0-9A-Za-z]{1,8})室\)?)?"
-    r"(?:\(?(?P<building_after>[0-9A-Za-z甲乙丙丁戊]+棟)\)?)?)"
-    r"$"
 )
-_TAIL_PARTS = ("section", "lane", "alley", "no", "floor", "room")
+# What may follow the door: 棟/座, 樓/層 and 室, each optional and optionally bracketed.
+_UNIT_RE = re.compile(
+    r"[-之]?"
+    r"(?:\(?(?P<building>[0-9A-Za-z甲乙丙丁戊]+[棟座])\)?[-之]?)?"
+    r"(?:\(?(?P<floor>地下室|(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|層|[Ff])(?:[-之][0-9A-Za-z]+)?|[Bb]\d+)\)?)?"
+    r"(?:[-之]?\(?(?P<room>[0-9A-Za-z]{1,8})號?室\)?)?"
+    r"(?:\(?(?P<building_after>[0-9A-Za-z甲乙丙丁戊]+[棟座])\)?)?"
+)
+_TAIL_RE = re.compile(_DOOR_RE.pattern + "(?P<unit>" + _UNIT_RE.pattern + ")")
+_DOOR_PARTS = ("section", "lane", "alley", "no")
+_UNIT_PARTS = ("building_section", "floor", "room")
 
 
 @dataclass(frozen=True)
@@ -103,21 +107,26 @@ def _take(pattern: re.Pattern, text: str) -> tuple[str | None, str]:
 
 
 def _split_tail(rest: str) -> tuple[int, dict[str, str | None], int | None]:
-    """Split `rest` at the earliest offset where a tail starts, keeping the road as short as possible.
+    """Split `rest` at the earliest offset where the door starts, keeping the road as short as possible.
 
-    Returns (offset, tail parts, offset where 棟/樓/室 begin or None); with no tail the offset is len(rest).
+    Returns (offset, parts, offset where a recognized 棟/樓/室 begins or None). Text after a 號 that is
+    not a recognized unit stays in the line, so it can never pull the door into the road.
     """
     for i in range(len(rest)):
-        m = _TAIL_RE.fullmatch(rest[i:])
-        if m is None:
-            continue
-        tail = {k: m.group(k) for k in _TAIL_PARTS}
-        tail["building_section"] = m.group("building") or m.group("building_after")
-        if not any(tail.values()):
-            continue
-        has_unit = tail["building_section"] or tail["floor"] or tail["room"]
-        return i, tail, (i + m.start("unit")) if has_unit else None
-    return len(rest), dict.fromkeys((*_TAIL_PARTS, "building_section")), None
+        m = _TAIL_RE.fullmatch(rest, i)
+        if m:
+            units = {
+                "building_section": m.group("building") or m.group("building_after"),
+                "floor": m.group("floor"),
+                "room": m.group("room"),
+            }
+            parts = {k: m.group(k) for k in _DOOR_PARTS} | units
+            if any(parts.values()):
+                return i, parts, m.start("unit") if any(units.values()) else None
+        door = _DOOR_RE.match(rest, i)
+        if door.group("no"):
+            return i, {k: door.group(k) for k in _DOOR_PARTS} | dict.fromkeys(_UNIT_PARTS), None
+    return len(rest), dict.fromkeys((*_DOOR_PARTS, *_UNIT_PARTS)), None
 
 
 def parse_tw_address(text: str | None) -> AddressParts:

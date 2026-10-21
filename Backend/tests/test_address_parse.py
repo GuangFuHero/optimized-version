@@ -144,6 +144,31 @@ def test_a_building_after_the_door_is_the_building_section(line, full_address, b
     assert parts.no is not None
 
 
+@pytest.mark.parametrize(
+    ("line", "building", "floor", "room"),
+    [
+        ("臺北市中正區忠孝東路一段100號3樓5號室", None, "3樓", "5"),
+        ("臺北市中正區中正路100號10樓B座", "B座", "10樓", None),
+        ("臺北市中正區中正路100號B座", "B座", None, None),
+    ],
+)
+def test_a_hao_shi_room_and_a_zuo_building_are_units(line, building, floor, room):
+    """5號室 is room 5 and B座 is a building like B棟; the door keeps its 號."""
+    parts = parse_tw_address(line)
+    assert parts.full_address.endswith("100號") and parts.no == "100號"
+    assert (parts.building_section, parts.floor, parts.room) == (building, floor, room)
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["臺北市中正區中正路100號3-5樓", "臺北市中正區中正路100號後面的鐵皮屋"],
+)
+def test_unrecognised_text_after_the_door_never_moves_the_door(line):
+    """Whatever follows the 號 and is not a unit stays in the line, with the road and 號 still right."""
+    parts = parse_tw_address(line)
+    assert (parts.full_address, parts.road, parts.no) == (line, "中正路", "100號")
+
+
 def test_a_room_written_after_zhi_is_the_room():
     """10樓之3室 reads as floor 10樓 and room 3, with nothing left dangling in the line."""
     parts = parse_tw_address("臺中市西區五權西路一段10號10樓之3室")
