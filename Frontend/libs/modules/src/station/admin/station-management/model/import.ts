@@ -89,6 +89,104 @@ function csvCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+/** RFC 4180 records: quoted fields may hold commas, quotes and line breaks. */
+export function parseCsv(text: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (quoted) {
+      if (char !== '"') field += char;
+      else if (text[i + 1] === '"') field += text[++i];
+      else quoted = false;
+    } else if (char === '"') {
+      quoted = true;
+    } else if (char === ',') {
+      record.push(field);
+      field = '';
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && text[i + 1] === '\n') i++;
+      record.push(field);
+      records.push(record);
+      record = [];
+      field = '';
+    } else {
+      field += char;
+    }
+  }
+  if (field || record.length) {
+    record.push(field);
+    records.push(record);
+  }
+  return records;
+}
+
+export function toCsv(records: readonly (readonly string[])[]): string {
+  return records.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+
+const OFFICIAL_SOURCE = 'official';
+
+/**
+ * The CSV with `source = official` on every row, and the mapping that reads it: every station
+ * added from the admin portal is official (decided 2026-10-15), and the backend stores "import"
+ * for a row whose source is empty. A column already mapped to source is overwritten; otherwise
+ * one is appended. Headers and rows are read the way the backend reads them (headers trimmed,
+ * trailing blank headers dropped, rows cut or padded to the headers), and blank rows stay blank
+ * so the backend still skips them.
+ */
+export function withOfficialSource(
+  text: string,
+  mapping: Readonly<Record<string, string>>,
+): { text: string; mapping: Record<string, string> } {
+  const [headerRecord = [], ...rows] = parseCsv(text.replace(/^\uFEFF/, ''));
+  const headers = headerRecord.map((h) => h.trim());
+  while (headers.length && headers[headers.length - 1] === '') headers.pop();
+
+  const nextMapping = { ...mapping };
+  let sourceColumns = headers.flatMap((h, i) =>
+    mapping[h] === 'source' ? [i] : [],
+  );
+  if (sourceColumns.length === 0) {
+    let header = 'source';
+    while (headers.includes(header)) header = `${header}_`;
+    sourceColumns = [headers.length];
+    headers.push(header);
+    nextMapping[header] = 'source';
+  }
+
+  const width = headers.length;
+  const records = rows.map((row) => {
+    if (row.slice(0, width).every((cell) => cell === '')) return [];
+    const cells = Array.from({ length: width }, (_, i) => row[i] ?? '');
+    for (const column of sourceColumns) cells[column] = OFFICIAL_SOURCE;
+    return cells;
+  });
+  return { text: toCsv([headers, ...records]), mapping: nextMapping };
+}
+
+/** Whether the backend reads this upload as CSV (it goes by the file extension). */
+export function isCsvFile(file: Pick<File, 'name'>): boolean {
+  return file.name.toLowerCase().endsWith('.csv');
+}
+
+/**
+ * An .xlsx can't be rewritten here, so it has to carry the source itself: a column mapped to
+ * source, reading official on every row the preview shows. Rows past the sample can't be checked.
+ */
+export function lacksOfficialSource(
+  preview: Pick<BulkPreview, 'sample_rows'>,
+  mapping: Readonly<Record<string, string>>,
+): boolean {
+  const columns = Object.keys(mapping).filter((h) => mapping[h] === 'source');
+  if (columns.length === 0) return true;
+  return preview.sample_rows.some((row) =>
+    columns.some((h) => (row[h] ?? '').trim() !== OFFICIAL_SOURCE),
+  );
+}
+
 export function importSummary(
   preview: Pick<BulkPreview, 'to_create' | 'to_update' | 'errors'>,
 ) {

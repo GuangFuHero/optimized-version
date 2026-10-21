@@ -45,10 +45,20 @@ const STATION_TYPE_LABELS = Object.fromEntries(
   STATION_TYPE_OPTIONS.map((option) => [option.value, option.label]),
 ) as Record<StationTypeValue, string>;
 
-export function getStationTypeLabel(type?: string | null): string {
-  const normalizedType = type?.trim().toLowerCase() as
+/**
+ * A stored type as a key of the type maps: trimmed and lower-cased. It may still be a type outside
+ * the list, so look it up with a fallback.
+ */
+export function normalizeStationType(
+  type?: string | null,
+): StationTypeValue | undefined {
+  return (type?.trim().toLowerCase() || undefined) as
     | StationTypeValue
     | undefined;
+}
+
+export function getStationTypeLabel(type?: string | null): string {
+  const normalizedType = normalizeStationType(type);
 
   if (!normalizedType) {
     return '站點';
@@ -80,7 +90,7 @@ export const STATION_TYPE_ICONS: Record<
 };
 
 export function getStationTypeIcon(type?: string | null) {
-  const key = type?.trim().toLowerCase() as StationTypeValue | undefined;
+  const key = normalizeStationType(type);
 
   return (key && STATION_TYPE_ICONS[key]) || Inventory2RoundedIcon;
 }

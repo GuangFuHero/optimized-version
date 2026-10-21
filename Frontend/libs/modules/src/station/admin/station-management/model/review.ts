@@ -20,13 +20,14 @@ export const SUGGESTION_FIELD_LABELS: Record<string, string> = {
 
 /**
  * Suggestions store no base value, so a conflict means "this field changed after the first
- * suggestion on it". History events carry no property uuid, so a property field matches a change
- * to that field on any of the station's properties — it may warn when it need not, never the
- * other way round.
+ * suggestion on it". A history event names no row, but its raw audit rows (sent only with
+ * `audit.view`) hold the whole row, uuid included, so a change is matched to the suggestion's own
+ * resource when they are there. Without them a property field matches a change to that field on
+ * any of the station's properties — it may warn when it need not, never the other way round.
  */
 export function hasChangedSince(
   history: readonly TimelineItem[],
-  targetType: string,
+  target: { type: string; uuid: string },
   fieldName: string,
   since: string | null,
 ): boolean {
@@ -35,9 +36,23 @@ export function hasChangedSince(
   if (Number.isNaN(from)) return false;
   return history.some(
     (event) =>
-      event.entity === targetType &&
+      event.entity === target.type &&
       Date.parse(event.at) > from &&
-      event.changes.some((change) => change.field === fieldName),
+      event.changes.some((change) => change.field === fieldName) &&
+      touchesRow(event, target.uuid),
+  );
+}
+
+/** Whether the event wrote this row; true when the event carries no raw rows to tell by. */
+function touchesRow(event: TimelineItem, uuid: string): boolean {
+  if (!event.raw?.length) return true;
+  return event.raw.some((row) =>
+    [row['old_values'], row['new_values']].some(
+      (values) =>
+        typeof values === 'object' &&
+        values !== null &&
+        (values as Record<string, unknown>)['uuid'] === uuid,
+    ),
   );
 }
 
@@ -108,7 +123,12 @@ export function buildReviewFields(
       comments: s.comments,
       firstSuggestedAt,
       conflict: history
-        ? hasChangedSince(history, targetType, s.fieldName, firstSuggestedAt)
+        ? hasChangedSince(
+            history,
+            { type: targetType, uuid: s.targetUuid },
+            s.fieldName,
+            firstSuggestedAt,
+          )
         : null,
     };
   });

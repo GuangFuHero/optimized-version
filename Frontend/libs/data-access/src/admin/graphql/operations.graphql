@@ -214,6 +214,10 @@ query AdminStation($uuid: UUID!) {
       status
       weightings
       createdAt
+      # Only the rating: the drawer shows totals, never who rated.
+      crowdSourcings {
+        rating
+      }
     }
   }
 }

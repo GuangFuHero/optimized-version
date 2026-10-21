@@ -299,6 +299,19 @@ function StationInfo({
           <Muted>（無盤點資料）</Muted>
         )}
       </Block>
+      <Block label="群眾評分">
+        {view.ratings.length ? (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {view.ratings.map((resource) => (
+              <Badge key={resource.id}>
+                {`${resource.label}・好 ${resource.counts.up}／普通 ${resource.counts.neutral}／差 ${resource.counts.down}`}
+              </Badge>
+            ))}
+          </Box>
+        ) : (
+          <Muted>（尚無評分）</Muted>
+        )}
+      </Block>
       <Row label="成立時間">{view.createdDate}</Row>
       {/* 建立者: the station only carries a `createdBy` uuid, no name to show. */}
       <Row label="驗證">{view.verification.label}</Row>

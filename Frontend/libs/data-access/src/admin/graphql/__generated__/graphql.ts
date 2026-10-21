@@ -2263,6 +2263,10 @@ export type AdminStationQuery = {
       status: string;
       weightings: number;
       createdAt?: string | null;
+      crowdSourcings: Array<{
+        __typename?: 'CrowdSourcingType';
+        rating: string;
+      }>;
     }>;
     assignedTeam?: {
       __typename?: 'AssignedTeamType';
@@ -4422,6 +4426,19 @@ export const AdminStationDocument = {
                       {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'createdAt' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'crowdSourcings' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'rating' },
+                            },
+                          ],
+                        },
                       },
                     ],
                   },

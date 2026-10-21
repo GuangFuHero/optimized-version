@@ -31,6 +31,7 @@ import { StationFilterPanel } from './station-filter-panel';
 import { StationImportDialog } from './station-import-dialog';
 import { StationMapView } from './station-map-view';
 import { QuickStatusCell, TeamAssignCell } from './station-row-controls';
+import { StationStatsStrip } from './station-stats-strip';
 import { StationTable } from './station-table';
 import {
   StationToolbar,
@@ -157,6 +158,10 @@ export function StationManagementPage() {
               '& > *': COLUMN_SX,
             }}
           >
+            <StationStatsStrip
+              activeStatus={filters.status}
+              onSelectStatus={(status) => setFilters({ ...filters, status })}
+            />
             <StationToolbar
               caps={caps}
               query={filters.q}
@@ -245,7 +250,7 @@ export function StationManagementPage() {
       />
       <StationFormDrawer
         target={formTarget?.mode === 'create' ? formTarget : null}
-        variant="admin"
+        frame="admin-drawer"
         canViewPii={caps.canViewPii}
         onClose={() => setFormTarget(null)}
         onSaved={(station) => {

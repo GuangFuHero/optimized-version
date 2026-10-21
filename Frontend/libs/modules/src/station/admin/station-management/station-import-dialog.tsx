@@ -42,11 +42,14 @@ import {
   downloadBlob,
   errorsOutsideSample,
   importSummary,
+  isCsvFile,
+  lacksOfficialSource,
   mergeMapping,
   type PreviewRow,
   previewRows,
   STATION_IMPORT_FIELDS,
   stationImportTemplate,
+  withOfficialSource,
 } from './model/import';
 
 const { color, focusRing, motion, radius, typography } = designTokens;
@@ -55,6 +58,32 @@ type Preview = components['schemas']['BulkPreviewResponse'];
 type Result = components['schemas']['BulkImportResponse'];
 
 const SKIP = '__skip__';
+
+/**
+ * The upload to commit: a CSV gets `source = official` on every row. A file that isn't UTF-8 goes
+ * as it is, so the backend's own encoding error reaches the user; an .xlsx goes as it is, and
+ * `lacksOfficialSource` holds the commit back unless it already carries the source.
+ */
+async function officialUpload(
+  file: File,
+  mapping: Record<string, string>,
+): Promise<{ file: File; mapping: string }> {
+  const original = { file, mapping: JSON.stringify(mapping) };
+  if (!isCsvFile(file)) return original;
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(
+      await file.arrayBuffer(),
+    );
+  } catch {
+    return original;
+  }
+  const official = withOfficialSource(text, mapping);
+  return {
+    file: new File([official.text], file.name, { type: 'text/csv' }),
+    mapping: JSON.stringify(official.mapping),
+  };
+}
 
 function downloadTemplate(stationType: string) {
   const label =
@@ -85,10 +114,6 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     return () => window.clearTimeout(pasteTimer.current);
   }, []);
-
-  const mapping = preview
-    ? mergeMapping(preview.suggested_mapping, overrides)
-    : undefined;
 
   const runPreview = (nextFile: File, type: string, nextMapping?: string) =>
     previewImport.mutate(
@@ -154,12 +179,16 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
     );
   };
 
-  const commit = () => {
+  const commit = async () => {
     if (!file || !stationType) return;
+    const upload = await officialUpload(file, mapped);
     commitImport.mutate(
       {
         params: { query: { station_type: stationType } },
-        body: { file: file as unknown as string, mapping },
+        body: {
+          file: upload.file as unknown as string,
+          mapping: upload.mapping,
+        },
       },
       {
         onSuccess: (data) => {
@@ -180,6 +209,10 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   const rows = preview ? previewRows(preview, mapped) : [];
   const laterErrors = preview ? errorsOutsideSample(preview) : [];
   const importable = summary ? summary.create + summary.update : 0;
+  const needsSourceColumn =
+    file !== null && !isCsvFile(file) && preview !== null
+      ? lacksOfficialSource(preview, mapped)
+      : false;
   const typeLabel = stationType ? getStationTypeLabel(stationType) : '';
 
   return (
@@ -315,8 +348,9 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                   }}
                 />
                 <Muted>
-                  從「匯出」下載的檔案就是範本。新的站點必填：站點名稱、緯度、經度。檔案裡沒有聯絡人、電話、營運狀態，建立後再補。每一列的
-                  source 填 official，站點才會標示為官方。
+                  從「匯出」下載的檔案就是範本。新的站點必填：站點名稱、緯度、經度。檔案裡沒有聯絡人、電話、營運狀態，建立後再補。CSV
+                  匯入的站點一律標示為官方；Excel 檔請在每一列的 source 填
+                  official。
                 </Muted>
               </Step>
             ) : null}
@@ -393,6 +427,13 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                 {laterErrors.length > 0 ? (
                   <ErrorList errors={laterErrors} />
                 ) : null}
+                {needsSourceColumn ? (
+                  <Callout tone="warning">
+                    Excel 檔要有一欄對應到「來源」，而且每一列都填
+                    official，匯入的站點才會是官方站點。也可以另存成 CSV
+                    再上傳，系統會自動補上。
+                  </Callout>
+                ) : null}
               </Step>
             ) : null}
           </Box>
@@ -419,7 +460,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
             <Button
               onClick={commit}
               startIcon={<Upload size={17} />}
-              disabled={!summary?.canCommit || busy}
+              disabled={!summary?.canCommit || busy || needsSourceColumn}
             >
               {summary?.canCommit ? `確認匯入 ${importable} 列` : '確認匯入'}
             </Button>

@@ -52,13 +52,17 @@ export interface StationFormDrawerProps {
   /** The typed coordinates changed: a map can move its pin to follow them. */
   onLocationChange?: (position: [number, number]) => void;
   /**
-   * `admin` is `/stations`' look: the prototype drawer's header, a create banner and its footer
-   * copy. The maps keep `default`, the shared `Sheet`.
+   * `admin-drawer` is `/stations`' look: the prototype drawer's header, a create banner and its
+   * footer copy. The maps keep `sheet`, the shared `Sheet`.
    */
-  variant?: StationFormVariant;
+  frame?: StationFormDrawerFrame;
 }
 
-export type StationFormVariant = 'default' | 'admin';
+/** The frames a standalone form drawer can take (`admin-embedded` lives in another drawer). */
+export type StationFormDrawerFrame = Exclude<
+  StationFormFrame,
+  'admin-embedded'
+>;
 
 const SHEET_WIDTH = 540;
 
@@ -69,7 +73,7 @@ export function StationFormDrawer({
   onClose,
   onSaved,
   onLocationChange,
-  variant = 'default',
+  frame = 'sheet',
 }: StationFormDrawerProps) {
   if (!target) return null;
 
@@ -77,7 +81,7 @@ export function StationFormDrawer({
     return (
       <StationFormSheet
         mode="create"
-        frame={variant === 'admin' ? 'admin-drawer' : 'sheet'}
+        frame={frame}
         initial={emptyStationForm(target.position)}
         position={target.position}
         onClose={onClose}
@@ -91,7 +95,7 @@ export function StationFormDrawer({
     <EditStationSheet
       key={target.uuid}
       uuid={target.uuid}
-      frame={variant === 'admin' ? 'admin-drawer' : 'sheet'}
+      frame={frame}
       canViewPii={canViewPii}
       onClose={onClose}
       onSaved={onSaved}

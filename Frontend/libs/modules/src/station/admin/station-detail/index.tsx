@@ -4,7 +4,6 @@ export { StationDetailDrawer } from './station-detail-drawer';
 export { StationDetailFooterAction } from './station-detail-footer-action';
 export { StationDetailHeader } from './station-detail-header';
 export { StationDetailInfoPanel } from './station-detail-info-panel';
-export { StationDetailSectionHeading } from './station-detail-primitives';
 export { StationDetailTabs } from './station-detail-tabs';
 export {
   StationResourceGrid,
