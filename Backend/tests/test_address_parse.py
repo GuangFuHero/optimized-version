@@ -169,6 +169,20 @@ def test_unrecognised_text_after_the_door_never_moves_the_door(line):
     assert (parts.full_address, parts.road, parts.no) == (line, "中正路", "100號")
 
 
+@pytest.mark.parametrize(
+    ("line", "floor", "room"),
+    [
+        ("臺北市信義區信義路五段7號5樓之502室", "5樓", "502"),
+        ("臺北市信義區信義路五段7號5樓-502室", "5樓", "502"),
+        ("臺北市大安區和平東路1號2樓-301室", "2樓", "301"),
+    ],
+)
+def test_a_multi_digit_room_after_a_floor_keeps_all_its_digits(line, floor, room):
+    """The floor's 之/- suffix never eats the digits of a room that follows it."""
+    parts = parse_tw_address(line)
+    assert (parts.floor, parts.room) == (floor, room)
+
+
 def test_a_room_written_after_zhi_is_the_room():
     """10樓之3室 reads as floor 10樓 and room 3, with nothing left dangling in the line."""
     parts = parse_tw_address("臺中市西區五權西路一段10號10樓之3室")

@@ -99,7 +99,8 @@ secondaryLocation: {
 - **No lookup, or not found?** Send the typed line as `fullAddress` without a token. It is still split
   into parts as far as it goes.
 - **Building, floor and room** go in their own fields. A 棟/樓/室 left at the end of `fullAddress` is
-  moved there only if those fields are empty.
+  moved there only if those fields are empty; if a field is already filled, it wins and the typed one
+  is dropped.
 - The same input is used by `createTicket`, `updateTicket`, `createHelpRequest`, `createStation` and
   `createBuildingMap`. On `updateTicket` the whole address is replaced, so send every field again.
 

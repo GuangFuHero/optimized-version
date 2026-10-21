@@ -231,7 +231,7 @@ def apply_address(sl: dict | None, *, point: tuple[float, float] | None) -> dict
     token = values.pop("address_token", None)
     parts = parse_tw_address(values.get("full_address"))
     values |= {k: getattr(parts, k) for k in _ADDRESS_COLUMNS}
-    # A 棟/樓/室 typed into the line fills its field only when that was left empty.
+    # A 棟/樓/室 typed into the line fills its field only when that was left empty; a filled field wins.
     for unit in _UNIT_FIELDS:
         values[unit] = values.get(unit) or getattr(parts, unit)
     values["normalization_status"] = _grade(token, parts.full_address, point) if parts.full_address else None
