@@ -27,7 +27,7 @@ from app.models.auth import User
 from app.repositories.auth_repository import identity_repository
 from app.repositories.oauth_state_repository import OAuthStateRepository
 from app.repositories.session_repository import SessionRepository
-from app.repositories.step_up_proof_repository import StepUpProofRepository
+from app.repositories.step_up_proof_repository import PROOF_TTL_SECONDS, StepUpProofRepository
 from app.services import auth_session, sso_login
 from app.services.auth_contact import REAUTH_ACTIONS, REAUTH_PROVIDERS
 from app.sso import get_sso_verifiers
@@ -115,11 +115,20 @@ def _to_sign_in_page(app_url: str, code: ErrorCode) -> RedirectResponse:
     return RedirectResponse(f"{app_url.rstrip('/')}/login?error={code}", status_code=status.HTTP_302_FOUND)
 
 
+# What a step-up adds to the page's query. A page back from an earlier step-up still carries it.
+_STEP_UP_OUTCOME = frozenset({"step_up", "step_up_error"})
+
+
 def _back_to_page(app_url: str, return_to: str, **query: str) -> RedirectResponse:
-    """Send a signed-in browser back to the page it came from, `query` added to the page's own (ADR-361)."""
+    """Send a signed-in browser back to the page it came from, `query` added to the page's own (ADR-361).
+
+    How an earlier step-up ended is taken off first, so the page reads only how this one did. The rest of
+    the page's query is kept as it was, encoding and all.
+    """
     path, hash_mark, fragment = return_to.partition("#")
-    joiner = "&" if "?" in path else "?"
-    location = f"{app_url.rstrip('/')}{path}{joiner}{urlencode(query)}{hash_mark}{fragment}"
+    path, _, own_query = path.partition("?")
+    kept = [pair for pair in own_query.split("&") if pair and pair.split("=", 1)[0] not in _STEP_UP_OUTCOME]
+    location = f"{app_url.rstrip('/')}{path}?{'&'.join([*kept, urlencode(query)])}{hash_mark}{fragment}"
     return RedirectResponse(location, status_code=status.HTTP_302_FOUND)
 
 
@@ -198,15 +207,28 @@ async def _id_token_from(
         return ErrorCode.OAUTH_EXCHANGE_FAILED
 
 
+# How far the provider's clock may run ahead of ours. A sign-in further ahead than this is not one the
+# provider could have seen yet.
+_CLOCK_SKEW_SECONDS = 60
+
+
+def _signed_in_lately(auth_time: int | None) -> bool:
+    """Whether the provider says the person signed in there within `FRESH_SIGN_IN_MAX_AGE`, and not later."""
+    if auth_time is None:
+        return False
+    return -_CLOCK_SKEW_SECONDS <= time.time() - auth_time <= FRESH_SIGN_IN_MAX_AGE
+
+
 async def _finish_step_up(
     db: AsyncSession, redis, verifiers: dict, id_token: str, sign_in, app_url: str
 ) -> RedirectResponse:
-    """The provider checked the person again: a proof for this session and action, and back to their page.
+    """The provider checked the person again: a proof for this session, action and browser; back to the page.
 
     The token must be for the identity already on this account, as `_sso_proof` requires: one for anyone
     else's account at the provider verifies, and proves nothing about this one. It must also say the person
     signed in there within `FRESH_SIGN_IN_MAX_AGE`, which the start asked for. The browser stays signed in
-    as it was: no session cookie is touched (ADR-361).
+    as it was: no session cookie is touched. It is handed only the secret its proof is spent with, which a
+    copy of the session's cookies does not have (ADR-361).
     """
     try:
         verified = await verifiers[sign_in.provider].verify(id_token, nonce=sign_in.nonce)
@@ -214,11 +236,12 @@ async def _finish_step_up(
         return _step_up_ended(app_url, sign_in.return_to, step_up_error=ErrorCode.SSO_TOKEN_INVALID)
     identity = await identity_repository.get_user_identity(db, sign_in.user_uuid, sign_in.provider)
     is_this_account = identity is not None and str(verified.sub) == str(identity.provider_subject)
-    fresh = verified.auth_time is not None and time.time() - verified.auth_time <= FRESH_SIGN_IN_MAX_AGE
-    if not (is_this_account and fresh):
+    if not (is_this_account and _signed_in_lately(verified.auth_time)):
         return _step_up_ended(app_url, sign_in.return_to, step_up_error=ErrorCode.STEP_UP_INVALID)
-    await StepUpProofRepository(redis).record(sign_in.sid, sign_in.action, sign_in.user_uuid)
-    return _step_up_ended(app_url, sign_in.return_to, step_up="ok")
+    secret = await StepUpProofRepository(redis).record(sign_in.sid, sign_in.action, sign_in.user_uuid)
+    response = _step_up_ended(app_url, sign_in.return_to, step_up="ok")
+    auth_cookies.set_step_up_cookie(response, secret, max_age=PROOF_TTL_SECONDS)
+    return response
 
 
 async def _can_prove(db: AsyncSession, account: User, provider: str) -> bool:

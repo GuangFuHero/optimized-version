@@ -36,7 +36,7 @@ from app.messaging.sms import (
 )
 from app.models.auth import User, UserContact
 from app.repositories.auth_repository import contact_repository, identity_repository
-from app.repositories.step_up_proof_repository import StepUpProofRepository
+from app.repositories.step_up_proof_repository import ProofHolder, StepUpProofRepository
 from app.repositories.verification_repository import VerificationRepository
 
 logger = logging.getLogger(__name__)
@@ -304,7 +304,7 @@ async def require_channel_proof(
     email_sender,
     sms_sender,
     verifiers=None,
-    sid: str | None = None,
+    proof_holder: ProofHolder | None = None,
 ) -> None:
     """Prove the caller holds the account, before it gains a new way in (ADR-215/217/234).
 
@@ -317,7 +317,7 @@ async def require_channel_proof(
     2. **a settled contact** — a code to a channel the account held before this caller showed
        up. `_proof_contact` returns None when nothing has passed the ADR-219 cooldown.
     3. **the account's own provider** — a fresh id_token whose subject is already an identity
-       here (ADR-234), or the proof session `sid` left by signing in there again (ADR-361).
+       here (ADR-234), or the proof `proof_holder` can spend, left by signing in there again (ADR-361).
 
     Falling from 2 to 3 rather than reusing an unsettled contact is what closes the chain in
     PR #45's review: the contact that would have been reused is the one the caller just
@@ -333,7 +333,7 @@ async def require_channel_proof(
         )
         return
     if await _sso_proof(
-        db, redis, actor=actor, step_up=step_up, action=action, verifiers=verifiers, sid=sid
+        db, redis, actor=actor, step_up=step_up, action=action, verifiers=verifiers, proof_holder=proof_holder
     ):
         return
     raise ContactNotFound("此帳號沒有可驗證的聯絡方式，請先新增聯絡方式")
@@ -348,7 +348,7 @@ async def require_step_up_for_first_password(
     email_sender,
     sms_sender,
     verifiers=None,
-    sid: str | None = None,
+    proof_holder: ProofHolder | None = None,
 ) -> None:
     """Prove the caller holds one of the account's contacts before a first password is minted.
 
@@ -365,7 +365,7 @@ async def require_step_up_for_first_password(
     """
     await require_channel_proof(
         db, redis, actor=actor, step_up=step_up, action=ACTION_SET_PASSWORD,
-        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, sid=sid,
+        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, proof_holder=proof_holder,
     )
 
 
@@ -428,7 +428,14 @@ async def _proof_contact(db: AsyncSession, user_uuid: str) -> UserContact | None
 
 
 async def _sso_proof(
-    db: AsyncSession, redis, *, actor: User, step_up, action: str, verifiers, sid: str | None = None
+    db: AsyncSession,
+    redis,
+    *,
+    actor: User,
+    step_up,
+    action: str,
+    verifiers,
+    proof_holder: ProofHolder | None = None,
 ) -> bool:
     """Prove the account by a fresh token for a provider it ALREADY holds, or raise (ADR-234).
 
@@ -442,7 +449,8 @@ async def _sso_proof(
     which is the same mistake ADR-217 fixed on the link path.
 
     A browser holds no token (ADR-331). It signs in at the provider again instead, and the callback
-    leaves session `sid` a proof for this action, which is spent here first (ADR-361).
+    leaves a proof for this action that only that browser, on that session, can spend: `proof_holder`.
+    It is spent here first (ADR-361).
 
     Returns False when the account holds no SSO identity at all, so the caller can fall
     through to its own answer for that case.
@@ -453,7 +461,7 @@ async def _sso_proof(
     ]
     if not identities:
         return False
-    if sid and await StepUpProofRepository(redis).spend(sid, action, str(actor.uuid)):
+    if proof_holder and await StepUpProofRepository(redis).spend(proof_holder, action, str(actor.uuid)):
         return True
 
     what = _ACTION_ZH.get(action, "這項操作")
@@ -504,7 +512,7 @@ async def start_contact_change(
     email_sender,
     sms_sender,
     verifiers=None,
-    sid: str | None = None,
+    proof_holder: ProofHolder | None = None,
 ) -> None:
     """Begin adding — or replacing — a contact: send a code to the NEW value.
 
@@ -535,7 +543,7 @@ async def start_contact_change(
     elif await _has_something_to_prove_with(db, str(actor.uuid)):
         await require_channel_proof(
             db, redis, actor=actor, step_up=step_up, action=ACTION_ADD, target=value,
-            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, sid=sid,
+            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, proof_holder=proof_holder,
         )
 
     code = await VerificationRepository(redis).issue_contact_verification(

@@ -24,6 +24,7 @@ from app.repositories.auth_repository import (
     user_repository,
 )
 from app.repositories.session_repository import SessionRepository
+from app.repositories.step_up_proof_repository import ProofHolder
 from app.repositories.verification_repository import VerificationRepository
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -39,6 +40,7 @@ from .deps import (
     _normalize_identifier,
     clear_cookies_if_cookie_authenticated,
     get_rate_limiter,
+    get_step_up_holder,
     reauth_required,
 )
 
@@ -91,7 +93,7 @@ async def set_password(
         request: Request,
         response: Response,
         current_user: User = Depends(security.get_current_user),
-        session: tuple[str, str | None] = Depends(security.get_current_session),
+        step_up_holder: ProofHolder | None = Depends(get_step_up_holder),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         verifiers=Depends(get_sso_verifiers),
@@ -119,7 +121,8 @@ async def set_password(
     try:
         await contact_service.require_step_up_for_first_password(
             db, redis, actor=current_user, step_up=body.step_up,
-            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, sid=session[1],
+            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
+            proof_holder=step_up_holder,
         )
     except StepUpFailed as err:
         raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.STEP_UP_INVALID,

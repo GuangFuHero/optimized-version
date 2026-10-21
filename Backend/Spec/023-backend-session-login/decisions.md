@@ -520,13 +520,14 @@ and the callback records a short-lived proof for one action instead of signing i
 
 > **Status: ACCEPTED (2026-10-21).** Re-checking a LINE-only account at LINE, rather than letting an account
 > with no contact add its first one unchecked, was chosen by the product owner on 2026-10-20; the details
-> below on 2026-10-21. Amends ADR-234 (`Spec/017`) and closes the gap ADR-331's consequences record.
+> below on 2026-10-21. Binding the proof to the browser (point 4) was added on 2026-10-22, after PR #94's
+> review. Amends ADR-234 (`Spec/017`) and closes the gap ADR-331's consequences record.
 
 **In plain words**: Someone who has only ever signed in with LINE has no password, and no email or phone on
 the account. When they add one, we still have to check it is really them (ADR-234), and the one thing they
 hold is their LINE account. So the site sends them to LINE to sign in again, there and then. LINE sends them
-back, and the backend remembers for five minutes that this session has just proved itself, for that one
-thing. The request they were making then goes through.
+back, and the backend remembers for five minutes that this browser, on this session, has just proved
+itself, for that one thing. The request they were making then goes through.
 
 **Context**: Before an account gains a new way in (a first contact of a type, a first password, linking or
 unlinking a provider), `require_channel_proof` asks for one of three proofs, in order (ADR-234): the
@@ -562,19 +563,27 @@ browser never holds an `id_token`, so the third proof is out of its reach, and e
      the same account. Otherwise the browser goes to `{app}/login?error=session_expired`. The callback never
      answers 401: the proxy would refresh and replay a state already spent.
    - It exchanges the code and verifies the `id_token` and its nonce as for a sign-in. The token must carry
-     an `auth_time` no more than 300 seconds old, and its `sub` must be an identity of this provider on this
-     account (the rule `_sso_proof` already applies).
-   - It records the proof (point 4), leaves the session cookies alone, clears `{p}_oauth`, and sends the
-     browser to `{app}{return_to}` with `step_up=ok` added to its query.
-4. **The proof**: `step_up_proof:{sid}:{action}` in Redis, holding the account, for 300 seconds. It is spent
-   with `GETDEL`, so it works once. A new step-up for the same session and action replaces it. A proof made
-   for one action cannot be spent on another (as ADR-164 binds a code to its action), nor by another
-   session.
-5. **Using it**: the third proof first spends the proof for the request's session and action. The client
-   sends nothing extra: it repeats the request it was making. Only an account with no password and no
-   contact reaches the third proof, so nothing changes for any other account.
+     an `auth_time` no more than 300 seconds old and no more than 60 seconds ahead of our clock, and its
+     `sub` must be an identity of this provider on this account (the rule `_sso_proof` already applies).
+   - It records the proof (point 4), hands the browser the proof's secret in `{p}_step_up`, leaves the
+     session cookies alone, clears `{p}_oauth`, and sends the browser to `{app}{return_to}` with `step_up=ok`
+     added to its query.
+4. **The proof**: `step_up_proof:{sid}:{action}:{browser}` in Redis, holding the account, for 300 seconds.
+   `browser` is a hash of a random secret that the callback hands only the browser that came back to it, in
+   the `{p}_step_up` cookie (`HttpOnly`, `Path=/api/v1/auth`, 300 seconds). It is spent with `GETDEL`, so it
+   works once. A proof made for one action cannot be spent on another (as ADR-164 binds a code to its
+   action). Nor can it be spent by another session, or by another browser holding the same session: cookies
+   copied from the session earlier carry its `sid` but not the secret, so they find no proof, and the
+   owner's is left in place. A new step-up in the same browser hands it a new secret, so only the latest of
+   that browser's proofs can be spent.
+5. **Using it**: the third proof first spends the proof for the request's session, action and secret. The
+   client sends nothing extra: it repeats the request it was making, and the browser sends the cookie with
+   it (the site's proxy passes every `{p}_*` cookie on, `forwardedCookieHeader`). Only an account with no
+   password and no contact reaches the third proof, so nothing changes for any other account.
 6. **A step-up that fails goes back to the page it came from**, not to the sign-in page, since the person is
-   still signed in: `{app}{return_to}` with `step_up_error=<code>`:
+   still signed in: `{app}{return_to}` with `step_up_error=<code>`. A `step_up` or `step_up_error` already
+   in `return_to`, from an earlier step-up, is taken off first, so the page reads only how this one ended;
+   the rest of its query is kept as it was. The codes:
    | Code | When |
    |---|---|
    | `oauth_cancelled` | the person said no at the provider |
@@ -596,9 +605,16 @@ browser never holds an `id_token`, so the third proof is out of its reach, and e
 step works for it.
 ➕ An account with LINE, no password and no contact can unlink another provider the same way. Linking one
 from the site waits for `purpose=link` (point 7).
-➕ No token reaches the browser: the proof stays in Redis, tied to one session, one action and five minutes.
-➕ A stolen session gains nothing: the person must sign in again at LINE as the LINE account already on
-this account, and the callback refuses any other session.
+➕ No token reaches the browser: the proof stays in Redis, tied to one session, one action, one browser and
+five minutes. The browser holds only a random secret, which proves nothing without the session.
+➕ A copy of the session's cookies gains nothing. The person must sign in again at LINE as the LINE account
+already on this account, the callback refuses any other session, and the proof it leaves can be spent only
+with the secret handed to the browser that came back. PR #94's review found that a proof bound to `sid`
+alone could be spent first by whoever held a copy of the refresh cookie, since a refresh keeps the `sid`,
+and that led to a takeover: a phone of theirs added, then a password set with a code sent to it.
+➖ Someone who can read this browser's cookies whenever they like (malware on the device) can read
+`{p}_step_up` too. Nothing on the server tells them apart from the owner.
+➖ Two step-ups for different actions in one browser within five minutes: only the later one can be spent.
 ➖ The proof is spent before the code is sent to the new contact. If that send fails, the person checks
 themselves at LINE again.
 ➖ It is a whole-page navigation, so the page is left: the site keeps what was typed (`sessionStorage`) and

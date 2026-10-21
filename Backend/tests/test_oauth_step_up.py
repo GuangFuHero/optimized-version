@@ -2,8 +2,8 @@
 
 An account with no password and no contact can prove itself only with the provider it holds (ADR-234), and
 since ADR-331 the browser never holds that provider's `id_token`. So the site sends the person to LINE to
-sign in again; the callback records a proof for this session and this action, and the request they were
-making then goes through.
+sign in again; the callback records a proof for this session, this action and this browser, and the request
+they were making then goes through.
 
 LINE's token endpoint and verify API are faked, as in `tests/test_oauth_line.py`.
 """
@@ -98,16 +98,34 @@ def _signed_in_browser(token: str) -> dict:
     return {**cookie_header(**{auth_cookies.access_cookie_name(): token}), **oauth_flow.FROM_OUR_PAGE}
 
 
-def _from_the_site(token: str) -> dict:
-    """What a signed-in browser sends on a request from one of our pages: its access cookie and Origin."""
-    return {**cookie_header(**{auth_cookies.access_cookie_name(): token}), "Origin": oauth_flow.SITE}
+def _from_the_site(token: str, proof: str | None = None) -> dict:
+    """What a signed-in browser sends on a request from one of our pages: its access cookie and Origin.
+
+    `proof` is the step-up cookie the callback handed this browser, when it has one.
+    """
+    cookies = {auth_cookies.access_cookie_name(): token}
+    if proof is not None:
+        cookies[auth_cookies.step_up_cookie_name()] = proof
+    return {**cookie_header(**cookies), "Origin": oauth_flow.SITE}
 
 
-async def _start_step_up(client, token: str, *, action: str = "add_contact", provider: str = "line"):
-    """Go to the provider to prove the account, from the site's page at `RETURN_TO`."""
+def _proof_handed_over(back) -> str:
+    """The step-up cookie a callback hands the browser that came back to it."""
+    return cookies_set_by(back)[auth_cookies.step_up_cookie_name()]["value"]
+
+
+def _no_proof_handed_over(back) -> None:
+    """Assert a callback handed the browser no step-up cookie."""
+    assert auth_cookies.step_up_cookie_name() not in cookies_set_by(back)
+
+
+async def _start_step_up(
+    client, token: str, *, action: str = "add_contact", provider: str = "line", return_to: str = RETURN_TO
+):
+    """Go to the provider to prove the account, from the site's page at `return_to`."""
     return await client.get(
         f"/api/v1/auth/oauth/{provider}/start",
-        params={"purpose": "step_up", "action": action, "app": "site", "return_to": RETURN_TO},
+        params={"purpose": "step_up", "action": action, "app": "site", "return_to": return_to},
         headers=_signed_in_browser(token),
     )
 
@@ -126,11 +144,11 @@ async def test_a_first_contact_asks_the_person_to_prove_it_at_line(client, db_se
     assert capture_sms.last_code is None
 
 
-async def _set_password(client, token: str):
+async def _set_password(client, token: str, proof: str | None = None):
     """Ask, as the signed-in browser, for a first password."""
     return await client.post(
         "/api/v1/auth/set-password",
-        headers=_from_the_site(token),
+        headers=_from_the_site(token, proof),
         json={"password": "a" * 64, "salt_frontend": "aa"},
     )
 
@@ -248,20 +266,27 @@ async def test_a_step_up_at_a_provider_the_account_does_not_hold_goes_back_to_th
 
 
 async def test_signing_in_again_at_line_goes_back_to_the_page(client, db_session, redis, exchanger):
-    """The person proved: back to their page, still signed in as they were, and the step-up spent."""
+    """The person proved: back to their page, still signed in as they were, the step-up spent.
+
+    The browser is handed its part of the proof, for as long as the proof lasts and only for the auth
+    endpoints, where the request it was for is repeated.
+    """
     user_uuid, _ = await _line_only(db_session, redis)
 
     back = await _step_up_at_line(client, exchanger, await token_for(redis, user_uuid))
 
     _back_on_the_page(back, step_up="ok")
-    assert set(cookies_set_by(back)) == {oauth_flow.oauth_cookie_name()}
-    assert cookies_set_by(back)[oauth_flow.oauth_cookie_name()]["max-age"] == "0"
+    cookies = cookies_set_by(back)
+    assert set(cookies) == {oauth_flow.oauth_cookie_name(), auth_cookies.step_up_cookie_name()}
+    assert cookies[oauth_flow.oauth_cookie_name()]["max-age"] == "0"
+    proof = cookies[auth_cookies.step_up_cookie_name()]
+    assert (proof["path"], proof["max-age"], proof["httponly"]) == ("/api/v1/auth", "300", True)
 
 
-async def _add_phone(client, token: str):
+async def _add_phone(client, token: str, proof: str | None = None, *, phone: str = "0912345678"):
     """Ask, as the signed-in browser, to add a phone: the request the step-up was for."""
     return await client.post(
-        "/api/v1/auth/contacts", headers=_from_the_site(token), json={"type": "phone", "value": "0912345678"}
+        "/api/v1/auth/contacts", headers=_from_the_site(token, proof), json={"type": "phone", "value": phone}
     )
 
 
@@ -271,12 +296,32 @@ async def test_once_proved_at_line_the_first_contact_goes_through(
     """The request is simply made again: the callback's proof lets it through, and the code is sent."""
     user_uuid, _ = await _line_only(db_session, redis)
     token = await token_for(redis, user_uuid)
-    _back_on_the_page(await _step_up_at_line(client, exchanger, token), step_up="ok")
+    back = await _step_up_at_line(client, exchanger, token)
+    _back_on_the_page(back, step_up="ok")
 
-    response = await _add_phone(client, token)
+    response = await _add_phone(client, token, _proof_handed_over(back))
 
     assert response.status_code == 202, response.text
     assert capture_sms.last_code
+
+
+async def test_a_copy_of_the_session_cannot_spend_the_proof(
+    client, db_session, redis, exchanger, capture_sms
+):
+    """Cookies copied before the step-up carry its `sid`, but not what the callback handed the owner.
+
+    The holder of the copy repeats the request first, with their own phone, and gets nothing: not the proof,
+    not a code, and the owner's proof is still there for the owner's own request (PR #94's review).
+    """
+    user_uuid, _ = await _line_only(db_session, redis)
+    token = await token_for(redis, user_uuid)
+    back = await _step_up_at_line(client, exchanger, token)
+
+    for copied in (None, "a-guess"):
+        refused = await _add_phone(client, token, copied, phone="0987654321")
+        assert refused.json()["code"] == "step_up_reauth_required", refused.text
+    assert capture_sms.last_code is None
+    assert (await _add_phone(client, token, _proof_handed_over(back))).status_code == 202
 
 
 async def test_another_line_account_proves_nothing(client, db_session, redis, exchanger, capture_sms):
@@ -287,22 +332,38 @@ async def test_another_line_account_proves_nothing(client, db_session, redis, ex
     back = await _step_up_at_line(client, exchanger, token, sub="U-someone-else")
 
     _back_on_the_page(back, step_up_error="step_up_invalid")
+    _no_proof_handed_over(back)
     assert (await _add_phone(client, token)).json()["code"] == "step_up_reauth_required"
     assert capture_sms.last_code is None
 
 
-@pytest.mark.parametrize("signed_in_ago", [None, 301], ids=["no auth_time", "too long ago"])
+@pytest.mark.parametrize(
+    "signed_in_ago", [None, 301, -90], ids=["no auth_time", "too long ago", "in the future"]
+)
 async def test_a_sign_in_that_is_not_fresh_proves_nothing(
     client, db_session, redis, exchanger, capture_sms, signed_in_ago
 ):
-    """Only a sign-in at LINE within the last five minutes counts, and LINE must say when it was."""
+    """Only a sign-in at LINE within the last five minutes counts, and LINE must say when it was.
+
+    A sign-in more than a minute ahead of our clock is not one LINE could have seen yet.
+    """
     user_uuid, _ = await _line_only(db_session, redis)
     token = await token_for(redis, user_uuid)
 
     back = await _step_up_at_line(client, exchanger, token, signed_in_ago=signed_in_ago)
 
     _back_on_the_page(back, step_up_error="step_up_invalid")
+    _no_proof_handed_over(back)
     assert (await _add_phone(client, token)).json()["code"] == "step_up_reauth_required"
+
+
+async def test_a_clock_a_little_ahead_at_line_still_counts(client, db_session, redis, exchanger):
+    """LINE's clock and ours can differ by a few seconds; a minute ahead is still a fresh sign-in."""
+    user_uuid, _ = await _line_only(db_session, redis)
+
+    back = await _step_up_at_line(client, exchanger, await token_for(redis, user_uuid), signed_in_ago=-45)
+
+    _back_on_the_page(back, step_up="ok")
 
 
 async def _started_at_line(client, exchanger, token: str):
@@ -345,9 +406,11 @@ async def test_an_access_token_that_ran_out_at_line_still_comes_back_proved(
     started = await _started_at_line(client, exchanger, create_access_token({"sub": user_uuid}, sid=sid))
     expired = create_access_token({"sub": user_uuid}, expires_delta=timedelta(minutes=-1), sid=sid)
 
-    _back_on_the_page(await _come_back(client, started, expired), step_up="ok")
+    back = await _come_back(client, started, expired)
+
+    _back_on_the_page(back, step_up="ok")
     fresh = create_access_token({"sub": user_uuid}, sid=sid)
-    assert (await _add_phone(client, fresh)).status_code == 202
+    assert (await _add_phone(client, fresh, _proof_handed_over(back))).status_code == 202
 
 
 @pytest.mark.parametrize(
@@ -373,54 +436,84 @@ async def test_a_step_up_that_fails_at_line_goes_back_to_the_page(
 
     _back_on_the_page(back, step_up_error=error)
     assert cookies_set_by(back)[oauth_flow.oauth_cookie_name()]["max-age"] == "0"
+    _no_proof_handed_over(back)
     assert (await _add_phone(client, token)).json()["code"] == "step_up_reauth_required"
+
+
+@pytest.mark.parametrize(
+    ("return_to", "back_to"),
+    [
+        ("/map?apply=1&step_up=ok&q=a%20b#form", "/map?apply=1&q=a%20b&step_up_error=oauth_cancelled#form"),
+        ("/map?step_up_error=step_up_invalid", "/map?step_up_error=oauth_cancelled"),
+    ],
+    ids=["after one that worked", "after one that failed"],
+)
+async def test_a_page_back_from_a_step_up_says_only_how_this_one_ended(
+    client, db_session, redis, exchanger, return_to, back_to
+):
+    """A page back from an earlier step-up still says how that one ended; this one's answer replaces it.
+
+    The page's own query is otherwise left as it was, encoding and all.
+    """
+    user_uuid, _ = await _line_only(db_session, redis)
+    token = await token_for(redis, user_uuid)
+    started = await _start_step_up(client, token, return_to=return_to)
+
+    back = await _come_back(client, started, token, code=None, error="access_denied")
+
+    assert back.status_code == 302, back.text
+    assert back.headers["location"] == f"{oauth_flow.SITE}{back_to}"
 
 
 async def test_a_proof_lets_one_request_through(client, db_session, redis, exchanger, capture_sms):
     """Spent by the request it was for: the next one asks again."""
     user_uuid, _ = await _line_only(db_session, redis)
     token = await token_for(redis, user_uuid)
-    await _step_up_at_line(client, exchanger, token)
+    proof = _proof_handed_over(await _step_up_at_line(client, exchanger, token))
 
-    assert (await _add_phone(client, token)).status_code == 202
-    assert (await _add_phone(client, token)).json()["code"] == "step_up_reauth_required"
+    assert (await _add_phone(client, token, proof)).status_code == 202
+    assert (await _add_phone(client, token, proof)).json()["code"] == "step_up_reauth_required"
 
 
 async def test_a_proof_is_for_the_action_it_was_asked_for(client, db_session, redis, exchanger):
     """Proved for a password: adding a contact still asks, as a code is bound to its action (ADR-164)."""
     user_uuid, _ = await _line_only(db_session, redis)
     token = await token_for(redis, user_uuid)
-    _back_on_the_page(await _step_up_at_line(client, exchanger, token, action="set_password"), step_up="ok")
+    back = await _step_up_at_line(client, exchanger, token, action="set_password")
+    _back_on_the_page(back, step_up="ok")
 
-    assert (await _add_phone(client, token)).json()["code"] == "step_up_reauth_required"
+    response = await _add_phone(client, token, _proof_handed_over(back))
+
+    assert response.json()["code"] == "step_up_reauth_required"
 
 
 async def test_once_proved_at_line_a_first_password_is_set(client, db_session, redis, exchanger):
     """The same proof, asked for this action, lets the first password through."""
     user_uuid, _ = await _line_only(db_session, redis)
     token = await token_for(redis, user_uuid)
-    _back_on_the_page(await _step_up_at_line(client, exchanger, token, action="set_password"), step_up="ok")
+    back = await _step_up_at_line(client, exchanger, token, action="set_password")
+    _back_on_the_page(back, step_up="ok")
 
-    response = await _set_password(client, token)
+    response = await _set_password(client, token, _proof_handed_over(back))
 
     assert response.status_code == 204, response.text
 
 
 async def test_a_proof_is_for_the_session_that_asked_for_it(client, db_session, redis, exchanger):
-    """Another session of the same account, another device say, has proved nothing."""
+    """Another session of the same account has proved nothing, even holding this browser's secret."""
     user_uuid, _ = await _line_only(db_session, redis)
-    await _step_up_at_line(client, exchanger, await token_for(redis, user_uuid))
+    proof = _proof_handed_over(await _step_up_at_line(client, exchanger, await token_for(redis, user_uuid)))
 
-    response = await _add_phone(client, await token_for(redis, user_uuid))
+    response = await _add_phone(client, await token_for(redis, user_uuid), proof)
 
     assert response.json()["code"] == "step_up_reauth_required"
 
 
-async def _link_google(client, token: str):
+async def _link_google(client, token: str, proof: str | None = None):
     """Ask, as the signed-in browser, to add a Google account as another way in."""
     return await client.post(
         "/api/v1/auth/link/google",
-        headers=_from_the_site(token),
+        headers=_from_the_site(token, proof),
         json={"id_token": json.dumps({"sub": "google-sub"})},
     )
 
@@ -429,9 +522,10 @@ async def test_once_proved_at_line_a_provider_is_linked(client, db_session, redi
     """Proved for linking, the Google account is added."""
     user_uuid, _ = await _line_only(db_session, redis)
     token = await token_for(redis, user_uuid)
-    _back_on_the_page(await _step_up_at_line(client, exchanger, token, action="link_identity"), step_up="ok")
+    back = await _step_up_at_line(client, exchanger, token, action="link_identity")
+    _back_on_the_page(back, step_up="ok")
 
-    response = await _link_google(client, token)
+    response = await _link_google(client, token, _proof_handed_over(back))
 
     assert response.status_code == 200, response.text
 
@@ -442,10 +536,11 @@ async def test_once_proved_at_line_another_provider_is_unlinked(client, db_sessi
     db_session.add(UserIdentity(user_uuid=user_uuid, provider="google", provider_subject="google-sub"))
     await db_session.commit()
     token = await token_for(redis, user_uuid)
-    _back_on_the_page(
-        await _step_up_at_line(client, exchanger, token, action="unlink_identity"), step_up="ok"
-    )
+    back = await _step_up_at_line(client, exchanger, token, action="unlink_identity")
+    _back_on_the_page(back, step_up="ok")
 
-    response = await client.delete("/api/v1/auth/link/google", headers=_from_the_site(token))
+    response = await client.delete(
+        "/api/v1/auth/link/google", headers=_from_the_site(token, _proof_handed_over(back))
+    )
 
     assert response.status_code == 204, response.text

@@ -16,6 +16,7 @@ from app.messaging.email import build_contact_verification_email, get_email_send
 from app.messaging.sms import build_verification_sms, get_sms_sender
 from app.models.auth import User
 from app.repositories.auth_repository import contact_repository
+from app.repositories.step_up_proof_repository import ProofHolder
 from app.repositories.verification_repository import VerificationRepository
 from app.schemas.auth import AddContactRequest, DeleteContactRequest, VerifyContactRequest
 from app.services import auth_contact as contact_service
@@ -29,7 +30,7 @@ from app.services.auth_contact import (
 )
 from app.sso import get_sso_verifiers
 
-from .deps import _normalize_identifier, get_rate_limiter, reauth_required
+from .deps import _normalize_identifier, get_rate_limiter, get_step_up_holder, reauth_required
 
 router = APIRouter()
 
@@ -81,7 +82,7 @@ def _normalized_or_422(type_: str, value: str) -> str:
 async def add_contact(
         body: AddContactRequest,
         current_user: User = Depends(security.get_current_user),
-        session: tuple[str, str | None] = Depends(security.get_current_session),
+        step_up_holder: ProofHolder | None = Depends(get_step_up_holder),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         email_sender=Depends(get_email_sender),
@@ -101,7 +102,7 @@ async def add_contact(
         await contact_service.start_contact_change(
             db, redis, actor=current_user, type_=body.type, value=ident,
             step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
-            verifiers=verifiers, sid=session[1],
+            verifiers=verifiers, proof_holder=step_up_holder,
         )
     except (ContactConflict, StepUpRequired, StepUpFailed) as err:
         raise _as_http(err) from err
