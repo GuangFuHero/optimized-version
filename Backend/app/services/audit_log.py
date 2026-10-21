@@ -21,13 +21,16 @@ from app.models.auth import User
 
 MAX_PAGE = 100
 
-# What an applicant sent and the name a reviewer confirmed: read only by those who may decide
-# the request (ADR-287 point 7, ADR-354 point 3, ADR-355 point 5). A data auditor holds audit.view
-# at `all` and still does not read these, so the platform view masks them for anyone without
-# role_request.review. Team admins read them for their own team's requests, as in their queue.
+# Personal data a data auditor holds audit.view at `all` for but must not read (ADR-359 point 5):
+# what an applicant sent and the name a reviewer confirmed (ADR-287 point 7, ADR-355 point 5), and
+# every account's login phone / email and SSO subject, which would otherwise undo that masking
+# (PR #93 review). The platform view masks them for anyone without role_request.review. Team
+# admins read their own team's applicants, as in their queue; the team view covers no account rows.
 _APPLICANT_KEYS = {
     "role_requests": ("reason", "contact", "applicant_name", "applicant_phone", "applicant_email"),
     "users": ("real_name",),
+    "user_contacts": ("value",),
+    "user_identities": ("provider_subject",),
 }
 REDACTED = "[redacted]"
 

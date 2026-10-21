@@ -93,7 +93,10 @@ class World:
         member = await _role(db, "member", "team", _seeded("member", Perm.TEAM_AUDIT_VIEW, Perm.AUDIT_VIEW))
         auditor = await _role(db, "data_auditor", "platform", _seeded("data_auditor", Perm.AUDIT_VIEW))
         boss = await _role(
-            db, "super_admin", "platform", _seeded("super_admin", Perm.AUDIT_VIEW, Perm.TEAM_AUDIT_VIEW)
+            db,
+            "super_admin",
+            "platform",
+            _seeded("super_admin", Perm.AUDIT_VIEW, Perm.TEAM_AUDIT_VIEW, Perm.ROLE_REQUEST_REVIEW),
         )
         identities = {}
         for who, role, team in (
@@ -218,3 +221,16 @@ async def test_the_team_view_uses_the_index(db_session):
         .all()
     )
     assert any("ix_audit_logs_team_uuid" in line for line in plan), plan
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("who", "expected"), [("auditor", "[redacted]"), ("super", "+886912345678")])
+async def test_login_contacts_are_masked_for_data_auditors(client, db_session, redis, who, expected):
+    """PR #93 review: `table=user_contacts` must not undo the applicant masking (ADR-359 point 5)."""
+    world = await World().build(db_session, redis)
+    db_session.add(_row("user_contacts", new={"type": "phone", "value": "+886912345678"}))
+    await db_session.commit()
+
+    response = await client.get(URL, headers=world.headers[who], params={"table": "user_contacts"})
+
+    assert [item["new_values"]["value"] for item in response.json()] == [expected]

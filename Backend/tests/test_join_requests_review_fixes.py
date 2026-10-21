@@ -207,3 +207,12 @@ def test_data_auditors_read_applicant_details_masked():
         "real_name": REDACTED,
     }
     assert redact_applicant_details("teams", {"name": "x"}) == {"name": "x"}
+    # PR #93 review: login contacts and SSO subjects too, or the masking above is undone.
+    assert redact_applicant_details("user_contacts", {"type": "phone", "value": "+886912345678"}) == {
+        "type": "phone",
+        "value": REDACTED,
+    }
+    assert redact_applicant_details("user_identities", {"provider": "line", "provider_subject": "U1234"}) == {
+        "provider": "line",
+        "provider_subject": REDACTED,
+    }
