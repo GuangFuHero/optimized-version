@@ -114,8 +114,31 @@ export interface paths {
      * Refresh
      * @description 以 refresh token 換發新的 access token，並 rotate refresh token。
      *
-     *     `body.identity`, when given, names the identity the new token acts as; otherwise the
-     *     session's own carries forward (ADR-188). See `auth_session.refresh_session` for the rest.
+     *     The identity is validated BEFORE rotating (ADR-096). `rotate()` burns the old refresh
+     *     token the moment it runs, so refusing afterwards would leave the caller holding a dead
+     *     token with no replacement — and their retry would read as a replay and revoke the whole
+     *     session. Reading the record first is side-effect free.
+     *
+     *     **The identity comes from the session when the caller does not name one** (ADR-188).
+     *     `body.identity` still wins, so a client that tracks it keeps deciding; but a client that
+     *     does not — or forgets on one request — no longer gets silently returned to its platform
+     *     identity, which for a super_admin acting as a team member was a silent re-escalation
+     *     every time an access token expired.
+     *
+     *     Rotation is also where `users.last_activity_at` is recorded (ADR-093). Access tokens
+     *     live 15 minutes, so an active user rotates about that often — precise enough to answer
+     *     "has this account been used lately?", which is all the admin console needs. It is
+     *     deliberately NOT updated per request: `users` is in AUDITED_TABLES, so that would append
+     *     one `audit_logs` row per request and bury the audit trail under activity noise.
+     *
+     *     `SessionRepository` stays a pure Redis component — the DB write happens here, not there.
+     *
+     *     The write is deliberately best-effort. By the time `rotate()` returns it has already
+     *     burned the old refresh token (`session_repository.py:78` claims the `refresh_used:` flag),
+     *     so letting a DB error escape would 500 the request *after* the old token died: the client
+     *     never receives `new_refresh`, retries with the old one, and `rotate()` reads that as a
+     *     replay and revokes the entire session. A transient DB outage would sign the device out
+     *     permanently. `last_activity_at` is observability — it is not worth a user's session.
      */
     post: operations['refresh_api_v1_auth_refresh_post'];
     delete?: never;
@@ -137,12 +160,19 @@ export interface paths {
      * Switch Identity
      * @description Act as a different identity you already hold; returns a re-signed access token.
      *
-     *     The rules are in `auth_session.switch_identity`. Rate limited because it mints credentials,
-     *     as `login` and `refresh` do (ADR-183).
+     *     Deliberately gated by nothing but being logged in. Requiring a capability here would let
+     *     a user downgrade into an identity that cannot switch back, locking themselves out of
+     *     their own permissions (ADR-070).
      *
-     *     **Bearer only** (ADR-325). The answer carries the token in its body, which is exactly what
-     *     the browser's cookie keeps away from the page's scripts, so a request signed in by the
-     *     cookie is refused. A browser switches through `POST /auth/session/identity`.
+     *     Only re-signs the access token — the session is untouched and the refresh token is not
+     *     rotated, because switching is not a credential event.
+     *
+     *     **The session it re-signs from has to still exist** (ADR-183). This mints a fresh
+     *     access token with a fresh expiry, so without that check the endpoint is a token
+     *     refresher gated on nothing but holding an unexpired token: after `logout` or
+     *     `logout-all`, `/auth/refresh` correctly refuses, but calling this before each expiry
+     *     would keep a revoked session alive indefinitely. Rate limited for the same reason —
+     *     it mints credentials, and `login` and `refresh` both are.
      */
     post: operations['switch_identity_api_v1_auth_switch_identity_post'];
     delete?: never;
@@ -200,8 +230,6 @@ export interface paths {
      *     caller's own session has to be live for this to revoke anything; when it is not, the
      *     answer is still 204, because "every device is signed out" is what the caller asked for
      *     and this token's own device already is (ADR-190).
-     *
-     *     A browser signed in by cookie has them cleared, on both 204s: either way its session is over.
      */
     post: operations['logout_all_api_v1_auth_logout_all_post'];
     delete?: never;
@@ -210,7 +238,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/auth/session': {
+  '/api/v1/auth/sso/google': {
     parameters: {
       query?: never;
       header?: never;
@@ -220,139 +248,10 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Sign In
-     * @description Sign the browser in with an email or phone number and a password.
-     *
-     *     A wrong password clears nothing: whoever is already signed in on this browser stays signed in.
+     * Sso Google
+     * @description Verify a Google id_token; log in an existing google identity or create the account on first login.
      */
-    post: operations['sign_in_api_v1_auth_session_post'];
-    /**
-     * Sign Out
-     * @description Sign this browser out: end its session and clear both cookies.
-     *
-     *     Always 204, like `/auth/logout` (ADR-190): a browser with no session, or one already ended, is
-     *     already where it asked to be. The one exception is a session store that cannot be reached: then
-     *     the session may still be running, so the answer is 503 and the cookies stay.
-     */
-    delete: operations['sign_out_api_v1_auth_session_delete'];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/auth/session/refresh': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Refresh Browser Session
-     * @description Exchange the refresh cookie for a new pair of cookies; the session keeps its identity (ADR-188).
-     *
-     *     A replay within the grace period gets the same new refresh token (ADR-330). Any failure is a
-     *     sign-out, so the error handler clears both cookies: the request is marked as signing in by cookie.
-     */
-    post: operations['refresh_browser_session_api_v1_auth_session_refresh_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/auth/session/identity': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Switch Browser Identity
-     * @description Act as another identity the account holds; the new access token goes into the cookie.
-     *
-     *     The browser's `/auth/switch-identity`, under the same rules (`auth_session.switch_identity`). The
-     *     access cookie it replaces is stale from now on (ADR-195), and a refresh carries the new identity
-     *     forward (ADR-188). A cookie-authenticated write, so it needs one of our origins (ADR-327).
-     *
-     *     **Cookie only** (ADR-325). A Bearer client would get its new token in a cookie it does not read,
-     *     and be left holding one that acts as the identity it switched away from; it is refused, and switches
-     *     through `/auth/switch-identity`.
-     */
-    post: operations['switch_browser_identity_api_v1_auth_session_identity_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/auth/session/verify': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Verify And Sign In
-     * @description Finish a registration with its 6-digit code, and sign the new account in.
-     */
-    post: operations['verify_and_sign_in_api_v1_auth_session_verify_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/auth/oauth/{provider}/start': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Start Oauth
-     * @description Send the browser to the provider's sign-in page, bound to this browser, this sign-in and this server.
-     *
-     *     `app` (`site` or `admin`) is the app to come back to, at `return_to`, a path on it. The request must
-     *     come from one of our pages (ADR-327), which for a navigation means its `Referer`. A start that is
-     *     refused leaves `{p}_oauth` alone: a link from another site must not end a sign-in in another tab.
-     */
-    get: operations['start_oauth_api_v1_auth_oauth__provider__start_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/auth/oauth/{provider}/callback': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Oauth Callback
-     * @description Finish a sign-in: check it is this browser's, exchange the code, check the token, sign in.
-     *
-     *     The provider's redirect, so no `Origin` to check: the state does that job, and it is checked first.
-     *     It must match the browser's `{p}_oauth` cookie and still be on record, and is spent on the spot. A
-     *     state that does not match leaves the cookie alone, as a refused start does.
-     */
-    get: operations['oauth_callback_api_v1_auth_oauth__provider__callback_get'];
-    put?: never;
-    post?: never;
+    post: operations['sso_google_api_v1_auth_sso_google_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -378,6 +277,26 @@ export interface paths {
      *     that no password change or session revocation can take back.
      */
     post: operations['link_google_api_v1_auth_link_google_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/auth/sso/line': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Sso Line
+     * @description Verify a LINE id_token; log in an existing line identity or create the account on first login.
+     */
+    post: operations['sso_line_api_v1_auth_sso_line_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -743,11 +662,40 @@ export interface paths {
      *
      *     Feature 010 replaced the single platform/team role pair with the full identity list
      *     (ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).
-     *     Both land in the same row.
+     *     Both land in the same row. Built by PlatformUserDirectory (Spec/026).
      */
     get: operations['list_users_api_v1_admin_users_get'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/teams/{team_uuid}/members': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 列出 team 成員
+     * @description One team's members and their role in it (Spec/026). team.member.view covering the team.
+     *
+     *     Another team answers 404, so its existence is not given away (ADR-023).
+     */
+    get: operations['list_team_members_api_v1_admin_teams__team_uuid__members_get'];
+    put?: never;
+    /**
+     * Add Team Member
+     * @description Add a user to a team by granting them a role in it (defaults to `member`).
+     *
+     *     A user may belong to several teams at once; this replaces only the role they held in
+     *     THIS team (ADR-072/073).
+     */
+    post: operations['add_team_member_api_v1_admin_teams__team_uuid__members_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -848,7 +796,7 @@ export interface paths {
     put?: never;
     /**
      * 建立 team
-     * @description Create a gov/ngo team (super_admin only, via team.edit).
+     * @description Create a gov/ngo team (super_admin only, via team.edit at `all`). Names are unique (ADR-352).
      */
     post: operations['create_team_api_v1_admin_teams_post'];
     delete?: never;
@@ -857,7 +805,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/admin/teams/{team_uuid}/members': {
+  '/api/v1/admin/teams/{team_uuid}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * 編輯 team（名稱、統編、聯絡人）
+     * @description Edit a team: a team admin their own, a super admin any (Spec/026, ADR-357).
+     */
+    patch: operations['update_team_api_v1_admin_teams__team_uuid__patch'];
+    trace?: never;
+  };
+  '/api/v1/admin/teams/{team_uuid}/status': {
     parameters: {
       query?: never;
       header?: never;
@@ -867,13 +835,10 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Add Team Member
-     * @description Add a user to a team by granting them a role in it (defaults to `member`).
-     *
-     *     A user may belong to several teams at once; this replaces only the role they held in
-     *     THIS team (ADR-072/073).
+     * 停用／恢復 team
+     * @description Super admin only. Suspending switches the team's identities off; restoring brings them back.
      */
-    post: operations['add_team_member_api_v1_admin_teams__team_uuid__members_post'];
+    post: operations['set_team_status_api_v1_admin_teams__team_uuid__status_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1092,6 +1057,8 @@ export interface paths {
     /**
      * List Role Requests
      * @description Applications oldest first, so whoever applied first is reviewed first.
+     *
+     *     A super admin sees every one; a team admin the member requests for their team.
      */
     get: operations['list_role_requests_api_v1_admin_role_requests_get'];
     put?: never;
@@ -1113,7 +1080,7 @@ export interface paths {
     put?: never;
     /**
      * Approve Role Request
-     * @description Grant a pending data auditor application; government and NGO ones are refused for now.
+     * @description Grant a pending application: a team membership, a new team, or the data auditor role.
      */
     post: operations['approve_role_request_api_v1_admin_role_requests__request_uuid__approve_post'];
     delete?: never;
@@ -1133,7 +1100,7 @@ export interface paths {
     put?: never;
     /**
      * Reject Role Request
-     * @description Turn a pending application down. The applicant is told, with the note if there is one.
+     * @description Turn a pending application down. The note is required: it is the reason the applicant reads.
      */
     post: operations['reject_role_request_api_v1_admin_role_requests__request_uuid__reject_post'];
     delete?: never;
@@ -1142,7 +1109,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/admin/duplicate-pairs': {
+  '/api/v1/admin/audit-logs': {
     parameters: {
       query?: never;
       header?: never;
@@ -1150,10 +1117,10 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * List Duplicate Pairs
-     * @description Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).
+     * 讀取稽核紀錄
+     * @description Newest first. A super admin or data auditor reads every change; a team admin their team's.
      */
-    get: operations['list_duplicate_pairs_api_v1_admin_duplicate_pairs_get'];
+    get: operations['list_audit_logs_api_v1_admin_audit_logs_get'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1162,7 +1129,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/admin/duplicate-pairs/{pair_uuid}': {
+  '/api/v1/admin/teams/{team_uuid}/invites': {
     parameters: {
       query?: never;
       header?: never;
@@ -1170,10 +1137,34 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Get Duplicate Pair
-     * @description One card, its sides and its events, oldest first.
+     * 列出團隊仍有效的邀請連結
+     * @description Links not yet expired, newest first.
      */
-    get: operations['get_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__get'];
+    get: operations['list_invites_api_v1_admin_teams__team_uuid__invites_get'];
+    put?: never;
+    /**
+     * 建立團隊邀請連結（24 小時）
+     * @description Issue a link anyone signed in can use, any number of times, for 24 hours.
+     */
+    post: operations['create_invite_api_v1_admin_teams__team_uuid__invites_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/invites/{token}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 打開邀請連結
+     * @description The team behind the link, and the caller's pending request: for it, or for something else.
+     */
+    get: operations['open_invite_api_v1_invites__token__get'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1182,7 +1173,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/admin/duplicate-pairs/{pair_uuid}/confirm': {
+  '/api/v1/invites/{token}/requests': {
     parameters: {
       query?: never;
       header?: never;
@@ -1192,50 +1183,10 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Confirm Duplicate Pair
-     * @description Mark a pending card a duplicate (ADR-341: only the card changes).
+     * 透過邀請連結申請加入團隊
+     * @description File a member request for the link's team; it waits in that team's and super admins' queues.
      */
-    post: operations['confirm_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__confirm_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/admin/duplicate-pairs/{pair_uuid}/reject': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Reject Duplicate Pair
-     * @description Mark a pending card not a duplicate (ADR-341: only the card changes).
-     */
-    post: operations['reject_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__reject_post'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/admin/duplicate-pairs/{pair_uuid}/revoke': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Revoke Duplicate Pair Verdict
-     * @description Undo a card's verdict, back to the queue; someone else's needs ai_duplicate.revoke (ADR-342).
-     */
-    post: operations['revoke_duplicate_pair_verdict_api_v1_admin_duplicate_pairs__pair_uuid__revoke_post'];
+    post: operations['request_to_join_api_v1_invites__token__requests_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1871,6 +1822,8 @@ export interface components {
       uuid: string;
       /** Name */
       name: string;
+      /** Real Name */
+      real_name?: string | null;
       /** Platform Role */
       platform_role: string | null;
       /** Identities */
@@ -1881,6 +1834,20 @@ export interface components {
       last_activity_at?: string | null;
       /** Active Session Count */
       active_session_count?: number | null;
+    };
+    /**
+     * ApplicantDetails
+     * @description What the applicant sent (Spec 026, ADR-355), for the reviewer to call and confirm.
+     *
+     *     Separate from `applicant_name`, which is the account's nickname.
+     */
+    ApplicantDetails: {
+      /** Name */
+      name: string;
+      /** Phone */
+      phone: string | null;
+      /** Email */
+      email: string | null;
     };
     /**
      * AssignRoleRequest
@@ -1933,6 +1900,47 @@ export interface components {
       logo_url?: string | null;
       /** Notes */
       notes?: string | null;
+    };
+    /**
+     * AuditLogItem
+     * @description One recorded change. `client_ip` is filled for the platform view only.
+     */
+    AuditLogItem: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Table Name */
+      table_name: string;
+      /** Action */
+      action: string;
+      /**
+       * Row Id
+       * Format: uuid
+       */
+      row_id: string;
+      /** Old Values */
+      old_values: {
+        [key: string]: unknown;
+      } | null;
+      /** New Values */
+      new_values: {
+        [key: string]: unknown;
+      } | null;
+      /** User Uuid */
+      user_uuid: string | null;
+      /** Context */
+      context: {
+        [key: string]: unknown;
+      } | null;
+      /** Client Ip */
+      client_ip?: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
     };
     /** Body_commit_station_import_api_v1_bulk_stations_import_commit_post */
     Body_commit_station_import_api_v1_bulk_stations_import_commit_post: {
@@ -2412,43 +2420,6 @@ export interface components {
       series: components['schemas']['ChartSeries'][];
     };
     /**
-     * DedupEventResponse
-     * @description One event recorded on a card.
-     */
-    DedupEventResponse: {
-      /**
-       * Uuid
-       * Format: uuid
-       */
-      uuid: string;
-      /** Event Type */
-      event_type: string;
-      /** Actor Uuid */
-      actor_uuid: string | null;
-      /**
-       * Source Layer
-       * @enum {string}
-       */
-      source_layer: 'fast' | 'slow' | 'manual' | 'system';
-      /** Decision Reason */
-      decision_reason: string | null;
-      /** Engine Version */
-      engine_version: string | null;
-      /** Before State */
-      before_state: {
-        [key: string]: unknown;
-      } | null;
-      /** After State */
-      after_state: {
-        [key: string]: unknown;
-      } | null;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-    };
-    /**
      * DeleteContactRequest
      * @description Body for `DELETE /auth/contacts/{type}` — carries the step-up proof (ADR-159/161).
      *
@@ -2471,159 +2442,6 @@ export interface components {
       scope: string;
       /** Team Uuid */
       team_uuid: string | null;
-    };
-    /**
-     * DuplicatePairDecision
-     * @description A reviewer's verdict. The optional note is checked by the service (at most 1000 characters).
-     */
-    DuplicatePairDecision: {
-      /** Note */
-      note?: string | null;
-    };
-    /**
-     * DuplicatePairDetail
-     * @description One card with every event recorded on it, oldest first.
-     */
-    DuplicatePairDetail: {
-      /**
-       * Uuid
-       * Format: uuid
-       */
-      uuid: string;
-      /**
-       * Entity Kind
-       * @enum {string}
-       */
-      entity_kind: 'ticket' | 'station' | 'ticket_task';
-      /**
-       * Status
-       * @enum {string}
-       */
-      status: 'dup_ignored' | 'suggested' | 'confirmed' | 'rejected';
-      /** Similarity */
-      similarity: number | null;
-      /** Evidence */
-      evidence: {
-        [key: string]: unknown;
-      } | null;
-      /** Method */
-      method: string;
-      /** Engine Version */
-      engine_version: string | null;
-      /**
-       * Source Layer
-       * @enum {string}
-       */
-      source_layer: 'fast' | 'slow' | 'manual' | 'system';
-      /** Duplicate Group Uuid */
-      duplicate_group_uuid: string | null;
-      /** Hint Outcome */
-      hint_outcome: string | null;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /** Reviewed By */
-      reviewed_by: string | null;
-      /** Reviewed At */
-      reviewed_at: string | null;
-      low: components['schemas']['EntitySummaryResponse'];
-      high: components['schemas']['EntitySummaryResponse'];
-      /** Events */
-      events: components['schemas']['DedupEventResponse'][];
-    };
-    /**
-     * DuplicatePairPage
-     * @description One page of cards and how many match in all.
-     */
-    DuplicatePairPage: {
-      /** Items */
-      items: components['schemas']['DuplicatePairResponse'][];
-      /** Total */
-      total: number;
-    };
-    /**
-     * DuplicatePairResponse
-     * @description One card and both of its sides. `evidence` is the engine's, opaque and unchanged.
-     */
-    DuplicatePairResponse: {
-      /**
-       * Uuid
-       * Format: uuid
-       */
-      uuid: string;
-      /**
-       * Entity Kind
-       * @enum {string}
-       */
-      entity_kind: 'ticket' | 'station' | 'ticket_task';
-      /**
-       * Status
-       * @enum {string}
-       */
-      status: 'dup_ignored' | 'suggested' | 'confirmed' | 'rejected';
-      /** Similarity */
-      similarity: number | null;
-      /** Evidence */
-      evidence: {
-        [key: string]: unknown;
-      } | null;
-      /** Method */
-      method: string;
-      /** Engine Version */
-      engine_version: string | null;
-      /**
-       * Source Layer
-       * @enum {string}
-       */
-      source_layer: 'fast' | 'slow' | 'manual' | 'system';
-      /** Duplicate Group Uuid */
-      duplicate_group_uuid: string | null;
-      /** Hint Outcome */
-      hint_outcome: string | null;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /** Reviewed By */
-      reviewed_by: string | null;
-      /** Reviewed At */
-      reviewed_at: string | null;
-      low: components['schemas']['EntitySummaryResponse'];
-      high: components['schemas']['EntitySummaryResponse'];
-    };
-    /**
-     * EntitySummaryResponse
-     * @description One side of a card: the fields a reviewer compares (ADR-340). A deleted side has only its uuid.
-     */
-    EntitySummaryResponse: {
-      /**
-       * Uuid
-       * Format: uuid
-       */
-      uuid: string;
-      /** Deleted */
-      deleted: boolean;
-      /** Title */
-      title: string | null;
-      /** Type */
-      type: string | null;
-      /** Status */
-      status: string | null;
-      /** Ticket Uuid */
-      ticket_uuid: string | null;
-      /** Ticket Title */
-      ticket_title: string | null;
-      /** Longitude */
-      longitude: number | null;
-      /** Latitude */
-      latitude: number | null;
-      /** Created By */
-      created_by: string | null;
-      /** Created At */
-      created_at: string | null;
     };
     /**
      * ErrorReportResponse
@@ -2654,6 +2472,14 @@ export interface components {
       type: 'email' | 'phone';
       /** Value */
       value: string;
+    };
+    /**
+     * GoogleSsoRequest
+     * @description Body carrying a Google id_token for SSO login / first-login create.
+     */
+    GoogleSsoRequest: {
+      /** Id Token */
+      id_token: string;
     };
     /** HTTPValidationError */
     HTTPValidationError: {
@@ -2726,9 +2552,9 @@ export interface components {
     };
     /**
      * IdTokenRequest
-     * @description Body carrying a LINE id_token to link to the current account, plus its proof.
+     * @description Body carrying a provider id_token (LINE SSO / link).
      *
-     *     Same contract as `LinkGoogleRequest` (ADR-217).
+     *     `step_up` is ignored on the SSO login path and required on the link path (ADR-217).
      */
     IdTokenRequest: {
       /** Id Token */
@@ -2809,6 +2635,106 @@ export interface components {
       team_uuid?: string | null;
       /** Team */
       team?: string | null;
+    };
+    /**
+     * InviteJoinRequest
+     * @description The visitor's details. The phone is the account's verified one (ADR-355).
+     */
+    InviteJoinRequest: {
+      /** Name */
+      name: string;
+      /** Reason */
+      reason: string;
+      /** Email */
+      email?: string | null;
+    };
+    /**
+     * InviteJoinResponse
+     * @description The member request just filed.
+     */
+    InviteJoinResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Requested Role
+       * @enum {string}
+       */
+      requested_role: 'government' | 'ngo';
+      /**
+       * Team Uuid
+       * Format: uuid
+       */
+      team_uuid: string;
+      /**
+       * Status
+       * @constant
+       */
+      status: 'pending';
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /**
+     * InviteRequestRef
+     * @description The visitor's pending request for the team, if they already sent one.
+     */
+    InviteRequestRef: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /**
+     * InviteResponse
+     * @description An issued link. The token is what the link and the QR code carry.
+     */
+    InviteResponse: {
+      /** Token */
+      token: string;
+      /**
+       * Team Uuid
+       * Format: uuid
+       */
+      team_uuid: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+    };
+    /**
+     * InviteTeam
+     * @description The team a link joins, as the invite page names it.
+     */
+    InviteTeam: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Name */
+      name: string;
+      /**
+       * Type
+       * @enum {string}
+       */
+      type: 'gov' | 'ngo';
     };
     /**
      * LinkGoogleRequest
@@ -2946,6 +2872,45 @@ export interface components {
       has_more: boolean;
     };
     /**
+     * OpenedInviteResponse
+     * @description What the invite page shows before the visitor asks to join.
+     */
+    OpenedInviteResponse: {
+      team: components['schemas']['InviteTeam'];
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      my_request: components['schemas']['InviteRequestRef'] | null;
+      pending_elsewhere?: components['schemas']['PendingElsewhere'] | null;
+    };
+    /**
+     * PendingElsewhere
+     * @description The visitor's pending request for something else, to withdraw before asking here.
+     */
+    PendingElsewhere: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Requested Role
+       * @enum {string}
+       */
+      requested_role: 'government' | 'ngo' | 'data_auditor';
+      /** Team Name */
+      team_name: string | null;
+      /** New Team Name */
+      new_team_name: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /**
      * Perm
      * @description A capability key. Every RBAC check (checkpoint 1) is keyed on one of these.
      * @enum {string}
@@ -2977,7 +2942,6 @@ export interface components {
       | 'map.view'
       | 'ai_duplicate.view'
       | 'ai_duplicate.review'
-      | 'ai_duplicate.revoke'
       | 'user.view'
       | 'user.add'
       | 'user.edit'
@@ -2987,6 +2951,7 @@ export interface components {
       | 'team.view'
       | 'team.edit'
       | 'team.member.manage'
+      | 'team.member.view'
       | 'work_zone.view'
       | 'work_zone.add'
       | 'work_zone.edit'
@@ -3008,6 +2973,7 @@ export interface components {
       | 'pre_departure.edit'
       | 'pre_departure.delete'
       | 'audit.view'
+      | 'team.audit.view'
       | 'rbac.view'
       | 'rbac.assign'
       | 'rbac.edit';
@@ -3143,6 +3109,8 @@ export interface components {
     /**
      * RoleRequestDecision
      * @description A reviewer's decision. The note is checked by the service (at most 500 characters).
+     *
+     *     Rejecting requires one (Spec 026): it is the reason the applicant reads.
      */
     RoleRequestDecision: {
       /** Note */
@@ -3183,6 +3151,16 @@ export interface components {
       created_at: string;
       /** Closed At */
       closed_at: string | null;
+      /** Team Uuid */
+      team_uuid?: string | null;
+      /** New Team Name */
+      new_team_name?: string | null;
+      /**
+       * Via Invite
+       * @default false
+       */
+      via_invite: boolean;
+      applicant_details?: components['schemas']['ApplicantDetails'] | null;
     };
     /**
      * RoleRequestReviewItem
@@ -3219,6 +3197,16 @@ export interface components {
       created_at: string;
       /** Closed At */
       closed_at: string | null;
+      /** Team Uuid */
+      team_uuid?: string | null;
+      /** New Team Name */
+      new_team_name?: string | null;
+      /**
+       * Via Invite
+       * @default false
+       */
+      via_invite: boolean;
+      applicant_details?: components['schemas']['ApplicantDetails'] | null;
       /**
        * Applicant Uuid
        * Format: uuid
@@ -3226,6 +3214,8 @@ export interface components {
       applicant_uuid: string;
       /** Applicant Name */
       applicant_name: string;
+      /** Team Name */
+      team_name?: string | null;
     };
     /**
      * RowErrorResponse
@@ -3252,28 +3242,6 @@ export interface components {
      */
     Scope: 'none' | 'own' | 'team' | 'zone' | 'all';
     /**
-     * SessionIdentityResponse
-     * @description Answer to the browser's identity switch: the identity now in effect (ADR-325).
-     *
-     *     The new access token went into the cookie, so there is none here.
-     */
-    SessionIdentityResponse: {
-      identity: components['schemas']['IdentityView'];
-    };
-    /**
-     * SessionSignInRequest
-     * @description Body for `POST /auth/session`: the credentials `/auth/login` takes as a form (ADR-325).
-     *
-     *     320 is the longest email the normaliser accepts (#75), so a longer username is refused before
-     *     anything reads it.
-     */
-    SessionSignInRequest: {
-      /** Username */
-      username: string;
-      /** Password */
-      password: string;
-    };
-    /**
      * SetGrantRequest
      * @description Upsert body for a single matrix cell; `scope` is validated against the Scope enum.
      */
@@ -3298,29 +3266,6 @@ export interface components {
        */
       salt_frontend: string;
       step_up?: components['schemas']['StepUp'] | null;
-    };
-    /**
-     * SignedInResponse
-     * @description Answer to the browser's sign-in and registration: who, and as which identity (ADR-325).
-     *
-     *     No token: those went into `HttpOnly` cookies, where a script on the page cannot read them.
-     */
-    SignedInResponse: {
-      user: components['schemas']['SignedInUser'];
-      identity?: components['schemas']['IdentityView'] | null;
-    };
-    /**
-     * SignedInUser
-     * @description The account a browser just signed in as.
-     */
-    SignedInUser: {
-      /**
-       * Uuid
-       * Format: uuid
-       */
-      uuid: string;
-      /** Name */
-      name: string;
     };
     /**
      * StationYMetric
@@ -3366,6 +3311,30 @@ export interface components {
       team_uuid?: string | null;
     };
     /**
+     * TeamMemberItem
+     * @description One row of a team's member list (Spec/026): their role in this team, nothing else.
+     *
+     *     `real_name` is filled for whoever manages the team's members and for reviewers (ADR-355).
+     */
+    TeamMemberItem: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Name */
+      name: string;
+      /** Real Name */
+      real_name?: string | null;
+      /**
+       * Role Uuid
+       * Format: uuid
+       */
+      role_uuid: string;
+      /** Role */
+      role: string;
+    };
+    /**
      * TeamMemberRequest
      * @description Body naming the user to add to a team, with an optional team-kind role.
      */
@@ -3393,7 +3362,7 @@ export interface components {
     };
     /**
      * TeamResponse
-     * @description A team's identity and status.
+     * @description A team's identity, status and contact (contact since Spec/026).
      */
     TeamResponse: {
       /**
@@ -3409,6 +3378,21 @@ export interface components {
       status: string;
       /** Tax Id */
       tax_id?: string | null;
+      /** Contact Name */
+      contact_name?: string | null;
+      /** Contact Phone */
+      contact_phone?: string | null;
+    };
+    /**
+     * TeamStatusRequest
+     * @description Body for suspending or restoring a team (Spec/026, ADR-357).
+     */
+    TeamStatusRequest: {
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'active' | 'suspended';
     };
     /**
      * TicketYMetric
@@ -3479,6 +3463,22 @@ export interface components {
       has_urgent: boolean;
     };
     /**
+     * UpdateTeamRequest
+     * @description Body for editing a team (Spec/026, ADR-357). Fields left out are not changed.
+     *
+     *     The type is not editable: applications and gov-only capabilities rely on it.
+     */
+    UpdateTeamRequest: {
+      /** Name */
+      name?: string | null;
+      /** Tax Id */
+      tax_id?: string | null;
+      /** Contact Name */
+      contact_name?: string | null;
+      /** Contact Phone */
+      contact_phone?: string | null;
+    };
+    /**
      * UserPermissionsResponse
      * @description A user's identities with each one's effective permissions, plus their direct grants.
      *
@@ -3525,7 +3525,7 @@ export interface components {
       created_at: string;
       /** Identities */
       identities?: components['schemas']['IdentityOption'][];
-      /** @description 這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；帶 `X-WG-Realm: admin` 的請求是後台身分，token 的身分是 `user` 時改用第一個後台身分（ADR-329）；沒有時為 null */
+      /** @description 這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；沒有時為 null */
       active_identity?: components['schemas']['IdentityOption'] | null;
       /** Contacts */
       contacts?: components['schemas']['ContactOut'][];
@@ -3934,7 +3934,7 @@ export interface operations {
       };
     };
   };
-  sign_in_api_v1_auth_session_post: {
+  sso_google_api_v1_auth_sso_google_post: {
     parameters: {
       query?: never;
       header?: never;
@@ -3943,7 +3943,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['SessionSignInRequest'];
+        'application/json': components['schemas']['GoogleSsoRequest'];
       };
     };
     responses: {
@@ -3953,177 +3953,8 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['SignedInResponse'];
+          'application/json': components['schemas']['TokenPair'];
         };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  sign_out_api_v1_auth_session_delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  refresh_browser_session_api_v1_auth_session_refresh_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  switch_browser_identity_api_v1_auth_session_identity_post: {
-    parameters: {
-      query?: never;
-      header?: {
-        'X-WG-Realm'?: string | null;
-      };
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SwitchIdentityRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['SessionIdentityResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  verify_and_sign_in_api_v1_auth_session_verify_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['VerifyRequest'];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['SignedInResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  start_oauth_api_v1_auth_oauth__provider__start_get: {
-    parameters: {
-      query?: {
-        app?: string | null;
-        return_to?: string | null;
-      };
-      header?: never;
-      path: {
-        provider: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      302: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  oauth_callback_api_v1_auth_oauth__provider__callback_get: {
-    parameters: {
-      query?: {
-        code?: string | null;
-        state?: string | null;
-        error?: string | null;
-      };
-      header?: never;
-      path: {
-        provider: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      302: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -4158,6 +3989,39 @@ export interface operations {
         };
         content: {
           'application/json': unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  sso_line_api_v1_auth_sso_line_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['IdTokenRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TokenPair'];
         };
       };
       /** @description Validation Error */
@@ -4748,6 +4612,93 @@ export interface operations {
       };
     };
   };
+  list_team_members_api_v1_admin_teams__team_uuid__members_get: {
+    parameters: {
+      query?: {
+        skip?: number;
+        limit?: number;
+      };
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        team_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TeamMemberItem'][];
+        };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  add_team_member_api_v1_admin_teams__team_uuid__members_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        team_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TeamMemberRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TeamMemberResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   get_project_settings_api_v1_admin_project_settings_get: {
     parameters: {
       query?: never;
@@ -4993,6 +4944,13 @@ export interface operations {
         };
         content?: never;
       };
+      /** @description Name already taken */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
       /** @description Validation Error */
       422: {
         headers: {
@@ -5004,7 +4962,7 @@ export interface operations {
       };
     };
   };
-  add_team_member_api_v1_admin_teams__team_uuid__members_post: {
+  update_team_api_v1_admin_teams__team_uuid__patch: {
     parameters: {
       query?: never;
       header?: {
@@ -5017,7 +4975,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['TeamMemberRequest'];
+        'application/json': components['schemas']['UpdateTeamRequest'];
       };
     };
     responses: {
@@ -5027,8 +4985,80 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['TeamMemberResponse'];
+          'application/json': components['schemas']['TeamResponse'];
         };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Name already taken */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  set_team_status_api_v1_admin_teams__team_uuid__status_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        team_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TeamStatusRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TeamResponse'];
+        };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -5488,6 +5518,8 @@ export interface operations {
     parameters: {
       query?: {
         status?: ('pending' | 'approved' | 'rejected' | 'withdrawn') | null;
+        kind?: ('member' | 'new_team' | 'data_auditor') | null;
+        team_uuid?: string | null;
         skip?: number;
         limit?: number;
       };
@@ -5593,17 +5625,16 @@ export interface operations {
       };
     };
   };
-  list_duplicate_pairs_api_v1_admin_duplicate_pairs_get: {
+  list_audit_logs_api_v1_admin_audit_logs_get: {
     parameters: {
       query?: {
-        status?:
-          | ('dup_ignored' | 'suggested' | 'confirmed' | 'rejected')[]
-          | null;
-        entity_kind?: ('ticket' | 'station' | 'ticket_task')[] | null;
-        source_layer?: ('fast' | 'slow' | 'manual' | 'system')[] | null;
-        sort?: 'created_at' | '-created_at' | 'similarity' | '-similarity';
-        skip?: number;
+        table?: string | null;
+        row_id?: string | null;
+        actor_uuid?: string | null;
+        from?: string | null;
+        to?: string | null;
         limit?: number;
+        offset?: number;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -5619,8 +5650,15 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['DuplicatePairPage'];
+          'application/json': components['schemas']['AuditLogItem'][];
         };
+      };
+      /** @description Neither audit.view at all nor team.audit.view */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -5633,14 +5671,14 @@ export interface operations {
       };
     };
   };
-  get_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__get: {
+  list_invites_api_v1_admin_teams__team_uuid__invites_get: {
     parameters: {
       query?: never;
       header?: {
         'X-WG-Realm'?: string | null;
       };
       path: {
-        pair_uuid: string;
+        team_uuid: string;
       };
       cookie?: never;
     };
@@ -5652,8 +5690,22 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['DuplicatePairDetail'];
+          'application/json': components['schemas']['InviteResponse'][];
         };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -5666,33 +5718,41 @@ export interface operations {
       };
     };
   };
-  confirm_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__confirm_post: {
+  create_invite_api_v1_admin_teams__team_uuid__invites_post: {
     parameters: {
       query?: never;
       header?: {
         'X-WG-Realm'?: string | null;
       };
       path: {
-        pair_uuid: string;
+        team_uuid: string;
       };
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json':
-          | components['schemas']['DuplicatePairDecision']
-          | null;
-      };
-    };
+    requestBody?: never;
     responses: {
       /** @description Successful Response */
-      200: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['DuplicatePairResponse'];
+          'application/json': components['schemas']['InviteResponse'];
         };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Team not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -5705,53 +5765,14 @@ export interface operations {
       };
     };
   };
-  reject_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__reject_post: {
+  open_invite_api_v1_invites__token__get: {
     parameters: {
       query?: never;
       header?: {
         'X-WG-Realm'?: string | null;
       };
       path: {
-        pair_uuid: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json':
-          | components['schemas']['DuplicatePairDecision']
-          | null;
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DuplicatePairResponse'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  revoke_duplicate_pair_verdict_api_v1_admin_duplicate_pairs__pair_uuid__revoke_post: {
-    parameters: {
-      query?: never;
-      header?: {
-        'X-WG-Realm'?: string | null;
-      };
-      path: {
-        pair_uuid: string;
+        token: string;
       };
       cookie?: never;
     };
@@ -5763,8 +5784,15 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['DuplicatePairResponse'];
+          'application/json': components['schemas']['OpenedInviteResponse'];
         };
+      };
+      /** @description Unknown, expired, or the team cannot be joined */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -5774,6 +5802,55 @@ export interface operations {
         content: {
           'application/json': components['schemas']['HTTPValidationError'];
         };
+      };
+    };
+  };
+  request_to_join_api_v1_invites__token__requests_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        token: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InviteJoinRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InviteJoinResponse'];
+        };
+      };
+      /** @description Unknown, expired, or the team cannot be joined */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Already a member, or a request is pending */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description A field to fix */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
