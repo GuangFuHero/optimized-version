@@ -40,9 +40,9 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _POSTCODE_RE = re.compile(r"^\d{3}(?:\d{2,3})?")
 # 鄉/鎮/市 ends the name only when no 區 follows it, so 前鎮區 and 新市區 stay whole.
 _TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區)))")
-# A 村/里 right before 路, 街 or 大道, or a direction word and one of them, belongs to the road name,
-# as in 中里路 and 中里北路.
-_VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?![東西南北中]?(?:路|街|大道))")
+# A 村/里 ends the village only when no other 村/里 follows (嘉里村, 大里里) and no road suffix does
+# either, since 中里路 and 中里北路 are roads.
+_VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?![村里])(?![東西南北中]?(?:路|街|大道))")
 _NEIGHBORHOOD_RE = re.compile(r"^(\d+鄰)")
 
 # The tail runs 段 巷 弄 (衖 衕) 號 樓 室, each part optional; 衖 and 衕 stay only in the line. 巷 and 弄
@@ -53,9 +53,9 @@ _TAIL_RE = re.compile(
     r"(?P<alley>\d+弄)?"
     r"(?:\d+衖)?(?:\d+衕)?"
     r"(?P<no>\d+(?:[-之]\d+)?號(?:[-之]\d+)?)?"
-    r"(?P<unit>[-之]?"
-    r"(?P<floor>(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|[Ff])(?:[-之][0-9A-Za-z]+)?|[Bb]\d+)?"
-    r"(?:[-之]?(?P<room>[0-9A-Za-z]{1,8})室)?)"
+    r"(?P<unit>[-之(]?"
+    r"(?P<floor>地下室|(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|層|[Ff])(?:[-之][0-9A-Za-z]+)?|[Bb]\d+)?"
+    r"(?:[-之]?(?P<room>[0-9A-Za-z]{1,8})室)?\)?)"
     r"$"
 )
 _TAIL_PARTS = ("section", "lane", "alley", "no", "floor", "room")

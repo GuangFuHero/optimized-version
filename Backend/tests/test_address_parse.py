@@ -113,6 +113,22 @@ def test_a_basement_and_a_sub_floor_are_floors():
     )
 
 
+@pytest.mark.parametrize(
+    ("line", "full_address", "floor"),
+    [
+        ("臺北市中正區重慶南路一段122號地下室", "臺北市中正區重慶南路一段122號", "地下室"),
+        ("新北市板橋區文化路二段1巷2弄3號地下1層", "新北市板橋區文化路二段1巷2弄3號", "地下1層"),
+        ("臺中市西屯區台灣大道三段99號(1樓)", "臺中市西屯區台灣大道三段99號", "1樓"),
+        ("臺中市西屯區台灣大道三段99號（1樓）", "臺中市西屯區台灣大道三段99號", "1樓"),
+    ],
+)
+def test_a_basement_or_a_bracketed_floor_is_the_floor(line, full_address, floor):
+    """地下室, 地下1層 and (1樓) come off the line as the floor, leaving the door in place."""
+    parts = parse_tw_address(line)
+    assert (parts.full_address, parts.floor) == (full_address, floor)
+    assert parts.no is not None
+
+
 def test_a_room_written_after_zhi_is_the_room():
     """10樓之3室 reads as floor 10樓 and room 3, with nothing left dangling in the line."""
     parts = parse_tw_address("臺中市西區五權西路一段10號10樓之3室")
@@ -145,6 +161,8 @@ def test_a_unit_letter_or_a_sub_number_after_the_hao_is_not_the_road(line, road,
         ("臺中市南屯區中村路1段10號", None, "中村路"),
         ("花蓮縣吉安鄉中里北路12號", None, "中里北路"),
         ("花蓮縣光復鄉大進村糖廠街19號", "大進村", "糖廠街"),
+        ("花蓮縣新城鄉嘉里村1鄰北埔路1號", "嘉里村", "北埔路"),
+        ("臺中市大里區大里里1鄰中興路1號", "大里里", "中興路"),
     ],
 )
 def test_a_road_named_with_village_or_li_is_not_a_village(line, village, road):
