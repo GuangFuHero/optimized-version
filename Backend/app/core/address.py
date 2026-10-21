@@ -40,8 +40,9 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _POSTCODE_RE = re.compile(r"^\d{3}(?:\d{2,3})?")
 # 鄉/鎮/市 ends the name only when no 區 follows it, so 前鎮區 and 新市區 stay whole.
 _TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區)))")
-# A 村/里 right before 路, 街 or 大道 belongs to the road name, as in 中里路.
-_VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?!路|街|大道)")
+# A 村/里 right before 路, 街 or 大道, or a direction word and one of them, belongs to the road name,
+# as in 中里路 and 中里北路.
+_VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?![東西南北中]?(?:路|街|大道))")
 _NEIGHBORHOOD_RE = re.compile(r"^(\d+鄰)")
 
 # The tail runs 段 巷 弄 (衖 衕) 號 樓 室, each part optional; 衖 and 衕 stay only in the line. 巷 and 弄

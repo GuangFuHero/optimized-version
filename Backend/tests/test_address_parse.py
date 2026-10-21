@@ -143,6 +143,7 @@ def test_a_unit_letter_or_a_sub_number_after_the_hao_is_not_the_road(line, road,
     [
         ("臺北市大安區中里路3號", None, "中里路"),
         ("臺中市南屯區中村路1段10號", None, "中村路"),
+        ("花蓮縣吉安鄉中里北路12號", None, "中里北路"),
         ("花蓮縣光復鄉大進村糖廠街19號", "大進村", "糖廠街"),
     ],
 )
