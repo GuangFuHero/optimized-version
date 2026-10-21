@@ -93,8 +93,8 @@ secondaryLocation: {
 }
 ```
 
-- **Edited after the lookup?** Look up again. A token only counts for the exact line it came with;
-  otherwise the address saves as `unverified`.
+- **Edited after the lookup, or more than a day since?** Look up again. A token only counts for the
+  exact line it came with, for one day; otherwise the address saves as `unverified`.
 - **No lookup, or not found?** Send the typed line as `fullAddress` without a token. It is still split
   into parts as far as it goes.
 - **Floor and room** go in their own fields. A 樓/室 left at the end of `fullAddress` is moved there

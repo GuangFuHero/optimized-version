@@ -1,10 +1,13 @@
 """TGOS lookups and the write-path grading, against canned TGOS replies (no network, dummy keys)."""
 
+import asyncio
 import html
 import json
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
+from jose import jwt
 
 from app.core.config import settings
 from app.core.security import _decode_access_payload
@@ -132,6 +135,29 @@ async def test_a_refusal_or_failure_is_unavailable(monkeypatch, tgos_keys, reply
 
 
 @pytest.mark.asyncio
+async def test_a_slow_tgos_is_unavailable_within_the_timeout(monkeypatch, tgos_keys):
+    """A request that outlasts the timeout, counting the wait for a slot, reads as unavailable."""
+
+    class _SlowClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+        async def post(self, url, data=None):
+            await asyncio.sleep(5)
+
+    monkeypatch.setattr("app.services.address.httpx.AsyncClient", _SlowClient)
+    monkeypatch.setattr(address, "_TIMEOUT_S", 0.05)
+
+    assert (await lookup_address("花蓮縣光復鄉糖廠街19號")).status == address.UNAVAILABLE
+
+
+@pytest.mark.asyncio
 async def test_without_keys_nothing_is_sent(monkeypatch):
     """With no keys configured, TGOS is never called."""
     sent = _tgos_replies(monkeypatch, {"AddressList": [DOOR]})
@@ -215,6 +241,22 @@ def test_a_confirmed_address_far_from_the_pin_is_a_mismatch():
 def test_an_address_without_a_matching_token_is_unverified(sent):
     """No token, an edited line or a forged token all store the address unverified."""
     assert apply_address(sent, point=NEAR_DOOR)["normalization_status"] == "unverified"
+
+
+def test_an_expired_token_is_unverified():
+    """A token past its lifetime no longer vouches for the line."""
+    claims = {
+        "type": "address",
+        "addr": DOOR["FULL_ADDR"],
+        "lat": DOOR["Y"],
+        "lng": DOOR["X"],
+        "exp": datetime.now(UTC) - timedelta(seconds=1),
+    }
+    stale = jwt.encode(claims, settings.JWT_SIGNING_KEY, algorithm=settings.ALGORITHM)
+
+    stored = apply_address({"full_address": DOOR["FULL_ADDR"], "address_token": stale}, point=NEAR_DOOR)
+
+    assert stored["normalization_status"] == "unverified"
 
 
 def test_a_typed_floor_fills_an_empty_floor_but_never_overrides_one():

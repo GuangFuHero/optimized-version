@@ -13,6 +13,7 @@ import math
 import re
 import ssl
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from jose import JWTError, jwt
@@ -33,6 +34,7 @@ PIN_TOLERANCE_M = 500.0  # well beyond GPS error, well inside a rural 村
 _SEARCH_RADIUS_M = 500
 
 _BASE_URL = "https://addr.tgos.tw/addrws/v40"
+# Covers the wait for a free slot as well as the request itself.
 _TIMEOUT_S = 3.0
 # TGOS slows sharply once more than about four requests run at once.
 _SLOTS = asyncio.Semaphore(4)
@@ -43,6 +45,7 @@ _SSL.verify_flags &= ~ssl.VERIFY_X509_STRICT
 _STRING_RE = re.compile(r"<string[^>]*>(.*)</string>", re.S)
 
 _TOKEN_TYPE = "address"
+_TOKEN_LIFETIME = timedelta(days=1)  # long enough to finish a form
 _ADDRESS_COLUMNS = tuple(f for f in AddressParts.__dataclass_fields__ if f not in ("floor", "room"))
 
 # QueryAddr takes every parameter on every call. Exact matches only: fuzzy matching lands on the
@@ -97,7 +100,8 @@ def _distance_m(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 def _sign(full_address: str, lat: float, lng: float) -> str:
     """A token saying TGOS confirmed this exact line at this point."""
-    claims = {"type": _TOKEN_TYPE, "addr": full_address, "lat": lat, "lng": lng}
+    expires = datetime.now(UTC) + _TOKEN_LIFETIME
+    claims = {"type": _TOKEN_TYPE, "addr": full_address, "lat": lat, "lng": lng, "exp": expires}
     return jwt.encode(claims, settings.JWT_SIGNING_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -130,10 +134,10 @@ async def _tgos(operation: str, app_id: str, api_key: str, **params) -> dict | N
         return None
     data = {"oAPPId": app_id, "oAPIKey": api_key, "oSRS": "EPSG:4326", "oResultDataType": "JSON", **params}
     try:
-        async with _SLOTS, httpx.AsyncClient(timeout=_TIMEOUT_S, verify=_SSL) as client:
+        async with asyncio.timeout(_TIMEOUT_S), _SLOTS, httpx.AsyncClient(verify=_SSL) as client:
             resp = await client.post(f"{_BASE_URL}/{operation}", data=data)
             resp.raise_for_status()
-    except httpx.HTTPError as err:
+    except (httpx.HTTPError, TimeoutError) as err:
         # The request carries the keys and an address, so only the kind of failure is logged.
         logger.warning("TGOS %s failed: %s", operation, type(err).__name__)
         return None
@@ -215,10 +219,10 @@ def _grade(token: str | None, full_address: str, point: tuple[float, float] | No
 
 
 def apply_address(sl: dict | None, *, point: tuple[float, float] | None) -> dict | None:
-    """The address step of every write: split `full_address` into columns and grade it.
+    """The address step of every write: split `full_address` into columns and grade it by its token.
 
-    Returns the values to store, without the token; callers store these, never their input. Only
-    a value too long for its column is refused.
+    Returns the values to store, which callers save in place of their input; only a part too long for
+    its column is refused.
     """
     if sl is None:
         return None

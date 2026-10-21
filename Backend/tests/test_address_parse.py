@@ -124,6 +124,20 @@ def test_a_room_written_after_zhi_is_the_room():
     )
 
 
+@pytest.mark.parametrize(
+    ("line", "road", "no", "floor"),
+    [
+        ("屏東縣枋寮鄉村前路5號 1F-A", "村前路", "5號", "1F-A"),
+        ("高雄市三民區建工路2號-3", "建工路", "2號之3", None),
+        ("高雄市三民區建工路2號之3", "建工路", "2號之3", None),
+    ],
+)
+def test_a_unit_letter_or_a_sub_number_after_the_hao_is_not_the_road(line, road, no, floor):
+    """1F-A and 號-3 are read as floor and number instead of falling into the road."""
+    parts = parse_tw_address(line)
+    assert (parts.road, parts.no, parts.floor) == (road, no, floor)
+
+
 def test_a_hyphenated_number_reads_as_zhi():
     """19-1號 is stored the way TGOS writes it, 19之1號."""
     assert parse_tw_address("花蓮縣光復鄉糖廠街19-1號").no == "19之1號"

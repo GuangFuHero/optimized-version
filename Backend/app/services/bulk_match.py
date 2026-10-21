@@ -114,10 +114,8 @@ def task_key(task_type: str | None, task_name: str | None) -> tuple:
 async def build_station_index(db: AsyncSession) -> MatchIndex:
     """Index every live station by (name, county, town).
 
-    The address is LEFT JOINed: a station with no `secondary_locations` row indexes with
-    blank county/town, which is exactly what a file that leaves the address empty produces.
-    Legacy rows with no address are therefore still reachable — see the known risk in the
-    spec, they are only unreachable when the file *does* carry an address.
+    The address is LEFT JOINed, so a station without one indexes with a blank county and town,
+    the same key as a file row that leaves the address empty.
     """
     rows = (
         await db.execute(

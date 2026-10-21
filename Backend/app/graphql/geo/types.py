@@ -116,7 +116,7 @@ class AddressLookupType:
     )
     address_token: str | None = strawberry.field(
         default=None,
-        description="Send back with fullAddress on save, so the address is stored as verified",
+        description="Send back with fullAddress on save, within a day, so the address is stored as verified",
     )
 
     @classmethod

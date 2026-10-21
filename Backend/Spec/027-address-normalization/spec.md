@@ -61,7 +61,8 @@ Frontend                  Backend (GraphQL)         TGOS QueryAddr   TGOS GeoQue
 - **No address is refused for its content.** Only a part too long for its column is. Unparseable text is
   stored as `fullAddress` with the parts empty and `unverified`, so no report is lost.
 - **The token is a JWT signed with the backend's key**, typed `address`, holding the line and TGOS's
-  point. It cannot pass as a login token. Without it, any caller could claim `verified`.
+  point and expiring after a day. It cannot pass as a login token. Without it, any caller could claim
+  `verified`.
 - **Parts keep their units** (`3鄰`, `一段`, `469巷`, `1弄`, `19號`), so display and search need no rules.
   **臺 is stored as TGOS writes it**; a typed 台 county becomes 臺.
 - **A 樓/室 typed into the line** fills `floor`/`room` when those are empty and is cut from the line.

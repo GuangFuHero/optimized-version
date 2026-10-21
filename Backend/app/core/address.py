@@ -50,8 +50,8 @@ _TAIL_RE = re.compile(
     r"(?P<lane>\d+巷)?"
     r"(?P<alley>\d+弄)?"
     r"(?:\d+衖)?(?:\d+衕)?"
-    r"(?P<no>\d+(?:[-之]\d+)?號(?:之\d+)?)?"
-    r"(?P<floor>(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|[Ff])(?:[-之]\d+)?|[Bb]\d+)?"
+    r"(?P<no>\d+(?:[-之]\d+)?號(?:[-之]\d+)?)?"
+    r"(?P<floor>(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|[Ff])(?:[-之][0-9A-Za-z]+)?|[Bb]\d+)?"
     r"(?:[-之]?(?P<room>[0-9A-Za-z]{1,8})室)?"
     r"$"
 )
@@ -94,10 +94,9 @@ def _take(pattern: re.Pattern, text: str) -> tuple[str | None, str]:
 
 
 def _split_tail(rest: str) -> tuple[int, dict[str, str | None], int | None]:
-    """Find the earliest offset where `rest` becomes a tail, keeping the road as short as possible.
+    """Split `rest` at the earliest offset where a tail starts, keeping the road as short as possible.
 
-    Returns (offset, tail parts, offset where 樓/室 begin or None). With no tail the offset is
-    len(rest), so a road-only address like 花蓮縣光復鄉大平 parses with just a road.
+    Returns (offset, tail parts, offset where 樓/室 begin or None); with no tail the offset is len(rest).
     """
     for i in range(len(rest)):
         m = _TAIL_RE.fullmatch(rest[i:])
