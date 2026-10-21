@@ -205,8 +205,29 @@ def test_the_separator_before_a_floor_or_room_leaves_with_it(line, full_address,
 
 
 def test_a_hyphenated_number_reads_as_zhi():
-    """19-1號 is stored the way TGOS writes it, 19之1號."""
-    assert parse_tw_address("花蓮縣光復鄉糖廠街19-1號").no == "19之1號"
+    """19-1號 is stored the way TGOS writes it, 19之1號, in the line as well as the number."""
+    parts = parse_tw_address("花蓮縣光復鄉糖廠街19-1號")
+    assert (parts.full_address, parts.no) == ("花蓮縣光復鄉糖廠街19之1號", "19之1號")
+
+
+def test_a_neighborhood_in_chinese_numerals_is_the_neighborhood():
+    """三鄰 is a 鄰 like 3鄰, not the start of the road."""
+    parts = parse_tw_address("花蓮縣光復鄉大進村三鄰糖廠街19號")
+    assert (parts.neighborhood, parts.road) == ("三鄰", "糖廠街")
+
+
+@pytest.mark.parametrize(
+    ("line", "building", "floor", "room"),
+    [
+        ("臺北市中正區忠孝西路100號3樓(502室)", None, "3樓", "502"),
+        ("臺北市中正區忠孝西路100號(A棟)3樓", "A棟", "3樓", None),
+    ],
+)
+def test_a_bracketed_room_or_building_is_still_the_unit(line, building, floor, room):
+    """A room or 棟 in brackets comes off the line like an unbracketed one, leaving the 號."""
+    parts = parse_tw_address(line)
+    assert parts.full_address.endswith("100號")
+    assert (parts.building_section, parts.floor, parts.room) == (building, floor, room)
 
 
 def test_a_postcode_spaces_and_full_width_digits_are_folded():

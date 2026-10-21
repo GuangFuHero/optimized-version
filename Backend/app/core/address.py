@@ -43,21 +43,23 @@ _TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區)))")
 # A 村/里 ends the village only when no other 村/里 follows (嘉里村, 大里里) and no road suffix does
 # either, since 中里路 and 中里北路 are roads.
 _VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?![村里])(?![東西南北中]?(?:路|街|大道))")
-_NEIGHBORHOOD_RE = re.compile(r"^(\d+鄰)")
+_NEIGHBORHOOD_RE = re.compile(r"^((?:\d+|[一二三四五六七八九十]+)鄰)")
+# A hyphen inside a door number reads as 之, the way TGOS writes it: 1-1號 → 1之1號, 2號-3 → 2號之3.
+_DOOR_HYPHEN_RE = re.compile(r"(?<=\d)-(?=\d+號)|(?<=號)-(?=\d)")
 
-# The tail is 段 巷 弄 (衖 衕, kept only in the line) 號, then a `unit` of 棟 樓 室 that is cut from the line.
-# Each part is optional, and 巷 and 弄 need leading digits so a road named like 松羅南巷 stays the road.
+# The tail is 段 巷 弄 (衖 衕, kept only in the line) 號, then a `unit` of 棟 樓 室, each piece optionally
+# bracketed, that is cut from the line. 巷 and 弄 need leading digits so a road like 松羅南巷 stays the road.
 _TAIL_RE = re.compile(
     r"(?P<section>(?:\d+|[一二三四五六七八九十]+)段)?"
     r"(?P<lane>\d+巷)?"
     r"(?P<alley>\d+弄)?"
     r"(?:\d+衖)?(?:\d+衕)?"
     r"(?P<no>\d+(?:[-之]\d+)?號(?:[-之]\d+)?)?"
-    r"(?P<unit>[-之(]?"
-    r"(?:(?P<building>[0-9A-Za-z甲乙丙丁戊]+棟)[-之]?)?"
-    r"(?P<floor>地下室|(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|層|[Ff])(?:[-之][0-9A-Za-z]+)?|[Bb]\d+)?"
-    r"(?:[-之]?(?P<room>[0-9A-Za-z]{1,8})室)?"
-    r"(?:\(?(?P<building_after>[0-9A-Za-z甲乙丙丁戊]+棟)\)?)?\)?)"
+    r"(?P<unit>[-之]?"
+    r"(?:\(?(?P<building>[0-9A-Za-z甲乙丙丁戊]+棟)\)?[-之]?)?"
+    r"(?:\(?(?P<floor>地下室|(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|層|[Ff])(?:[-之][0-9A-Za-z]+)?|[Bb]\d+)\)?)?"
+    r"(?:[-之]?\(?(?P<room>[0-9A-Za-z]{1,8})室\)?)?"
+    r"(?:\(?(?P<building_after>[0-9A-Za-z甲乙丙丁戊]+棟)\)?)?)"
     r"$"
 )
 _TAIL_PARTS = ("section", "lane", "alley", "no", "floor", "room")
@@ -113,8 +115,6 @@ def _split_tail(rest: str) -> tuple[int, dict[str, str | None], int | None]:
         tail["building_section"] = m.group("building") or m.group("building_after")
         if not any(tail.values()):
             continue
-        if tail["no"]:
-            tail["no"] = tail["no"].replace("-", "之")
         has_unit = tail["building_section"] or tail["floor"] or tail["room"]
         return i, tail, (i + m.start("unit")) if has_unit else None
     return len(rest), dict.fromkeys((*_TAIL_PARTS, "building_section")), None
@@ -129,6 +129,7 @@ def parse_tw_address(text: str | None) -> AddressParts:
     line = fold(text)
     if not line:
         return AddressParts()
+    line = _DOOR_HYPHEN_RE.sub("之", line)
     postcode = _POSTCODE_RE.match(line)
     # Only a number in front of a county is a postcode; on its own it is the door, as in 100號.
     if postcode and line[postcode.end() :].startswith(tuple(_COUNTY_SPELLINGS)):
