@@ -51,6 +51,8 @@ export type AddressLookupType = {
   addressToken?: Maybe<Scalars['String']['output']>;
   /** 弄, e.g. '1弄' */
   alley?: Maybe<Scalars['String']['output']>;
+  /** A 棟 typed after the 號, split off for the building-section field */
+  buildingSection?: Maybe<Scalars['String']['output']>;
   /** 縣市 */
   county?: Maybe<Scalars['String']['output']>;
   /** Metres between the 門牌 and the lat/lng you passed */
@@ -946,9 +948,9 @@ export type Query = {
   myRoleRequests: MyRoleRequestsType;
   myTaskAssignments: Array<MyTaskAssignmentType>;
   myTickets: Array<TicketType>;
-  /** Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute */
+  /** Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute shared with reverseGeocode */
   normalizeAddress: AddressLookupType;
-  /** The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute */
+  /** The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute shared with normalizeAddress */
   reverseGeocode: AddressLookupType;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;

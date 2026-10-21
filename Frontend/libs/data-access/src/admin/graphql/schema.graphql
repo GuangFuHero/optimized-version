@@ -43,6 +43,9 @@ type AddressLookupType {
   """號, e.g. '19號'"""
   no: String
 
+  """A 棟 typed after the 號, split off for the building-section field"""
+  buildingSection: String
+
   """A 樓 typed after the 號, split off for the floor field"""
   floor: String
 
@@ -866,12 +869,12 @@ type Query {
   buildingMap(uuid: UUID!): BuildingMapType
 
   """
-  Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute
+  Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute shared with reverseGeocode
   """
   normalizeAddress(address: String!, lat: Float = null, lng: Float = null): AddressLookupType!
 
   """
-  The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute
+  The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute shared with normalizeAddress
   """
   reverseGeocode(lat: Float!, lng: Float!): AddressLookupType!
   tickets(
