@@ -6,7 +6,7 @@ import { designTokens } from '@rescue-frontend/ui';
 
 import { STATION_TYPE_OPTIONS } from '../../type-options';
 import { UNASSIGNED_TEAM, type StationFilters } from './model/station-filters';
-import { OPERATIONAL_STATUS_OPTIONS } from './model/status';
+import { OPERATIONAL_STATUS_OPTIONS } from '../../operational-status';
 
 const { color, typography } = designTokens;
 

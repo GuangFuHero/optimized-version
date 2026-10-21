@@ -2,7 +2,7 @@
 
 import { useStationAnalyticsData } from '@rescue-frontend/data-access/admin';
 
-import { parseStatusCounts } from '../model/status';
+import { parseStatusCounts } from '../model/status-counts';
 
 export function useStationStatusCounts() {
   const query = useStationAnalyticsData({

@@ -5,7 +5,7 @@ import { Badge, designTokens } from '@rescue-frontend/ui';
 import { Clock } from 'lucide-react';
 
 import { getFreshness } from './model/freshness';
-import { getOperationalStatusMeta } from './model/status';
+import { getOperationalStatusMeta } from '../../operational-status';
 
 const { color, typography } = designTokens;
 
