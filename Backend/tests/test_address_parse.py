@@ -138,6 +138,38 @@ def test_a_unit_letter_or_a_sub_number_after_the_hao_is_not_the_road(line, road,
     assert (parts.road, parts.no, parts.floor) == (road, no, floor)
 
 
+@pytest.mark.parametrize(
+    ("line", "village", "road"),
+    [
+        ("臺北市大安區中里路3號", None, "中里路"),
+        ("臺中市南屯區中村路1段10號", None, "中村路"),
+        ("花蓮縣光復鄉大進村糖廠街19號", "大進村", "糖廠街"),
+    ],
+)
+def test_a_road_named_with_village_or_li_is_not_a_village(line, village, road):
+    """中里路 is a road, not the village 中里 followed by 路."""
+    parts = parse_tw_address(line)
+    assert (parts.village, parts.road) == (village, road)
+
+
+def test_a_bare_door_number_is_not_a_postcode():
+    """Only digits in front of a county are a postcode; 100號 on its own is the door."""
+    assert (parse_tw_address("100號").full_address, parse_tw_address("100號").no) == ("100號", "100號")
+
+
+@pytest.mark.parametrize(
+    ("line", "full_address", "floor", "room"),
+    [
+        ("臺北市大安區和平東路100號之1-3樓", "臺北市大安區和平東路100號之1", "3樓", None),
+        ("臺北市中山南路1號-3室", "臺北市中山南路1號", None, "3"),
+    ],
+)
+def test_the_separator_before_a_floor_or_room_leaves_with_it(line, full_address, floor, room):
+    """A - or 之 before the 樓 or 室 goes with it, so the line ends at the door."""
+    parts = parse_tw_address(line)
+    assert (parts.full_address, parts.floor, parts.room) == (full_address, floor, room)
+
+
 def test_a_hyphenated_number_reads_as_zhi():
     """19-1號 is stored the way TGOS writes it, 19之1號."""
     assert parse_tw_address("花蓮縣光復鄉糖廠街19-1號").no == "19之1號"

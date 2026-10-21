@@ -37,24 +37,27 @@ COUNTIES: tuple[str, ...] = (
 _COUNTY_SPELLINGS = {spelling: c for c in COUNTIES for spelling in (c, c.replace("臺", "台"))}
 
 _WHITESPACE_RE = re.compile(r"\s+")
-_POSTCODE_RE = re.compile(r"^\d{3}(?:\d{2,3})?(?=\D)")
+_POSTCODE_RE = re.compile(r"^\d{3}(?:\d{2,3})?")
 # 鄉/鎮/市 ends the name only when no 區 follows it, so 前鎮區 and 新市區 stay whole.
 _TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區)))")
-_VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])")
+# A 村/里 right before 路, 街 or 大道 belongs to the road name, as in 中里路.
+_VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?!路|街|大道)")
 _NEIGHBORHOOD_RE = re.compile(r"^(\d+鄰)")
 
 # The tail runs 段 巷 弄 (衖 衕) 號 樓 室, each part optional; 衖 and 衕 stay only in the line. 巷 and 弄
-# need leading digits, so a road named like 松羅南巷 stays the road.
+# need leading digits, so a road named like 松羅南巷 stays the road; `unit` is the 樓/室 with its separator.
 _TAIL_RE = re.compile(
     r"(?P<section>(?:\d+|[一二三四五六七八九十]+)段)?"
     r"(?P<lane>\d+巷)?"
     r"(?P<alley>\d+弄)?"
     r"(?:\d+衖)?(?:\d+衕)?"
     r"(?P<no>\d+(?:[-之]\d+)?號(?:[-之]\d+)?)?"
+    r"(?P<unit>[-之]?"
     r"(?P<floor>(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|[Ff])(?:[-之][0-9A-Za-z]+)?|[Bb]\d+)?"
-    r"(?:[-之]?(?P<room>[0-9A-Za-z]{1,8})室)?"
+    r"(?:[-之]?(?P<room>[0-9A-Za-z]{1,8})室)?)"
     r"$"
 )
+_TAIL_PARTS = ("section", "lane", "alley", "no", "floor", "room")
 
 
 @dataclass(frozen=True)
@@ -100,14 +103,14 @@ def _split_tail(rest: str) -> tuple[int, dict[str, str | None], int | None]:
     """
     for i in range(len(rest)):
         m = _TAIL_RE.fullmatch(rest[i:])
-        if m is None or not any(m.groupdict().values()):
+        if m is None or not any(m.group(k) for k in _TAIL_PARTS):
             continue
-        tail = m.groupdict()
+        tail = {k: m.group(k) for k in _TAIL_PARTS}
         if tail["no"]:
             tail["no"] = tail["no"].replace("-", "之")
-        unit_starts = [m.start(k) for k in ("floor", "room") if tail[k]]
-        return i, tail, (i + min(unit_starts)) if unit_starts else None
-    return len(rest), dict.fromkeys(("section", "lane", "alley", "no", "floor", "room")), None
+        has_unit = tail["floor"] or tail["room"]
+        return i, tail, (i + m.start("unit")) if has_unit else None
+    return len(rest), dict.fromkeys(_TAIL_PARTS), None
 
 
 def parse_tw_address(text: str | None) -> AddressParts:
@@ -119,7 +122,10 @@ def parse_tw_address(text: str | None) -> AddressParts:
     line = fold(text)
     if not line:
         return AddressParts()
-    line = _POSTCODE_RE.sub("", line)
+    postcode = _POSTCODE_RE.match(line)
+    # Only a number in front of a county is a postcode; on its own it is the door, as in 100號.
+    if postcode and line[postcode.end() :].startswith(tuple(_COUNTY_SPELLINGS)):
+        line = line[postcode.end() :]
 
     county = next((s for s in _COUNTY_SPELLINGS if line.startswith(s)), None)
     rest = line[len(county) :] if county else line
