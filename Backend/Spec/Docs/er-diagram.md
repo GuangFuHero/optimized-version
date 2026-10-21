@@ -86,6 +86,7 @@ erDiagram
 users {
     uuid uuid PK
     string name "display nickname, not the login id, not unique"
+    string real_name "nullable, String(100) — written on approving a join request; back office only (026/ADR-355)"
     float credibility_score
     timestamp last_login_at "nullable"
     timestamp last_activity_at "nullable, written on refresh-token rotation (ADR-093)"
@@ -200,25 +201,52 @@ role_requests {
     uuid created_by FK "FK to users, indexed — the applicant"
     string requested_role "government/ngo/data_auditor, String(20), CHECK"
     string reason "text, CHECK length <= 500"
-    string contact "nullable, text, CHECK length <= 100"
+    string contact "nullable, text, CHECK length <= 100 — Spec 019 rows only; no longer written (026/ADR-355)"
     string status "pending/approved/rejected/withdrawn, String(20), CHECK, default pending"
     string review_note "nullable, text, CHECK length <= 500 — the reviewer's reply, shown to the applicant"
     uuid reviewed_by FK "nullable, FK to users; stays NULL when the applicant withdraws"
     uuid granted_role_uuid FK "nullable, FK to roles — what approval handed out"
-    uuid granted_team_uuid FK "nullable, FK to teams — reserved for government/NGO approval"
+    uuid granted_team_uuid FK "nullable, FK to teams — the team approval joined or founded"
+    uuid team_uuid FK "nullable, FK to teams, indexed — the existing team a member request asks for (026)"
+    string new_team_name "nullable, String(100) — the team a new-team application founds (026)"
+    uuid invite_uuid FK "nullable, FK to team_invites — the invite a member request came through (026)"
+    string applicant_name "nullable, String(100) — snapshot at submit (026/ADR-355)"
+    string applicant_phone "nullable, String(20) — the account's verified phone at submit"
+    string applicant_email "nullable, String(320)"
     timestamp closed_at "nullable, when it left pending — approved, rejected or withdrawn"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at "unused"
 }
 %% UNIQUE(created_by) WHERE status = 'pending' -- uq_role_requests_one_pending: one pending
-%% application per account, so two tabs submitting at once still leave one (AC-RE-106).
+%% application per account, invite scans included, so two tabs submitting at once still leave one
+%% (AC-RE-106, 026/ADR-351).
 %% INDEX: ix_role_requests_status_created_at ON (status, created_at) -- the review queue, oldest first
+%% INDEX: ix_role_requests_team_pending ON (team_uuid, created_at) WHERE status = 'pending' -- a team's queue
+%% CHECK ck_role_requests_target: government/ngo name exactly one of team_uuid / new_team_name; data_auditor
+%% neither (rows from Spec 019 name neither and carry no phone). CHECK ck_role_requests_invite: an invite
+%% only with a team (026/ADR-350).
 %% Audited (AUDITED_TABLES): submitting, withdrawing and deciding are all in audit_logs.
 users ||--o{ role_requests : "applies"
 users |o--o{ role_requests : "reviews"
 roles |o--o{ role_requests : "granted by approval"
-teams |o--o{ role_requests : "team granted (reserved)"
+teams |o--o{ role_requests : "asked for / granted"
+team_invites |o--o{ role_requests : "came through"
+
+%% Invite links (026/ADR-353): anyone signed in may use one, any number of times, for 24 hours.
+%% The link carries `token`, never `uuid`. Both times are database defaults; validity is
+%% `expires_at > now()` in the query. No revoke, extend or usage columns.
+team_invites {
+    uuid uuid PK
+    string token "String(32), UNIQUE — secrets.token_urlsafe(24)"
+    uuid team_uuid FK "FK to teams, indexed"
+    uuid created_by FK "FK to users"
+    timestamp created_at "default now()"
+    timestamp expires_at "default now() + interval '24 hours'"
+}
+%% Audited (AUDITED_TABLES).
+teams ||--o{ team_invites : "invites to"
+users ||--o{ team_invites : "issues"
 
 %% --------------------------
 %% 2a. Teams & Team Zones (ADR-021/049; ADR-019's one-team-per-user rule superseded by ADR-073)
@@ -230,8 +258,10 @@ teams {
     uuid uuid PK
     string name "String(100)"
     string type "gov/ngo, String(10)"
-    string status "String(20), default active"
+    string status "String(20), default active, CHECK active/suspended — suspended switches its identities off (026/ADR-357)"
     string tax_id "nullable, String(8), 統一編號 (UBN)"
+    string contact_name "nullable, String(100) — shown where the team is visible (026/ADR-357)"
+    string contact_phone "nullable, String(20)"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at "nullable"
@@ -277,6 +307,8 @@ audit_logs {
 %% context stores role/team NAMES, not just uuids: a role can be renamed or hard-deleted,
 %% so a uuid alone may no longer resolve when the trail is read months later. Written by
 %% the audit trigger itself, which is replaced in the same migration that adds the column.
+%% INDEX ix_audit_logs_team_uuid ON ((COALESCE(new_values, old_values) ->> 'team_uuid')) -- the team view of
+%% GET /admin/audit-logs (026/ADR-358).
 %% Dashed = non-identifying logical reference; user_uuid is a plain UUID column, not an
 %% enforced FK. table_name/row_id can point at any table in any of the domain diagrams —
 %% audit_logs is a generic mutation trail, not modeled with per-table FKs.
@@ -306,9 +338,11 @@ users ||--o{ announcements : "last published"
 %% type values: announcement_published, zone_assigned, zone_unassigned, team_member_added,
 %%   ticket_task_moderation_update, task_assignment_created, task_assignment_removed, task_claimed,
 %%   task_full, task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
-%%   station_assigned, station_unassigned, station_suggestion_created, dedup_flag_ticket,
-%%   dedup_flag_station, role_request_submitted, role_request_approved, role_request_rejected
+%%   station_assigned, station_unassigned, station_suggestion_created, dedup_review_pending,
+%%   role_request_submitted, role_request_approved, role_request_rejected
 %% (ticket_task_status_update is gone: a need's status is no longer edited by hand, ADR-293.)
+%% (dedup_flag_ticket / dedup_flag_station are gone: nothing could set is_duplicate, so they never
+%%  fired. dedup_review_pending replaces them, one per submission that leaves pair cards, ADR-345.)
 notifications {
     uuid uuid PK
     uuid recipient_uuid FK "FK to users, ON DELETE CASCADE"

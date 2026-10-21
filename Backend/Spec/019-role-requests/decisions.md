@@ -7,6 +7,8 @@ Numbering continues the repo-wide ADR sequence. ADR-286 was the last one taken w
 
 ### ADR-287 A citizen applies for a back-office role, and a super admin reviews it
 
+> **Amended by ADR-350 and ADR-351 (`Spec/026-join-requests`, 2026-10-20)**: applications name a team, team
+> admins review their own team's requests, and invite scans are applications too.
 > **Status: ACCEPTED (2026-09-30).** Product rules from the designer's site prototype (2026-09-13) and the
 > 2026-09-11 rulings recorded in it; withdrawal and the review API decided by the product owner on 2026-09-27.
 
@@ -54,6 +56,8 @@ ineligible, so granting it to them would show a capability that can never be use
 
 ### ADR-288 Approving a data auditor adds the role beside `user`; government and NGO approval is a placeholder
 
+> **Point 3 superseded by ADR-350 (`Spec/026-join-requests`, 2026-10-20)**: government and NGO
+> applications are approved into a team.
 > **Status: ACCEPTED (2026-09-30).** "Add, don't replace" follows the team decision of 2026-09-28 that
 > everyone has the same permissions on the site. The government / NGO placeholder is the same day's decision:
 > the designer and the product owner will define that flow.

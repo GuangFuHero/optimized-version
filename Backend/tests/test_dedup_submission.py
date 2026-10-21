@@ -336,7 +336,7 @@ async def test_station_held_creates_nothing_and_does_not_notify(db, engine, noti
 
 
 async def test_station_created_notifies_and_acknowledged_is_carded(db, engine, notifications):
-    """No suspects: created and notified. Acknowledged: created, carded, notified."""
+    """No suspects: created and notified. Acknowledged: also carded, and reviewers told (ADR-345)."""
     actor = await actor_with(db, Perm.STATION_ADD)
     assert isinstance(
         await submit_new_station(db, actor=actor, acknowledged_duplicate_of=None, **_station()),
@@ -347,7 +347,11 @@ async def test_station_created_notifies_and_acknowledged_is_carded(db, engine, n
         await submit_new_station(db, actor=actor, acknowledged_duplicate_of=RELATED, **_station()),
         SubmissionCreated,
     )
-    assert [n["event_type"] for n in notifications] == ["resource_station_updated"] * 2
+    assert [n["event_type"] for n in notifications] == [
+        "resource_station_updated",
+        "dedup_review_pending",
+        "resource_station_updated",
+    ]
     await db.rollback()
     pair = (await db.execute(select(DuplicatePair))).scalar_one()
     assert pair.entity_kind == "station"

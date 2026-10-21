@@ -878,7 +878,7 @@ export type MutationWithdrawRoleRequestArgs = {
 
 export type MyRoleRequestsType = {
   __typename?: 'MyRoleRequestsType';
-  /** May send an application now: no back-office identity, none pending, not paused */
+  /** May send an application now: none pending and not paused. A back-office identity rules out only the data auditor choice (ADR-351) */
   canApply: Scalars['Boolean']['output'];
   /** Holds a role beyond `user`: the entry offers 前往後台 instead of applying */
   hasBackofficeIdentity: Scalars['Boolean']['output'];
@@ -949,6 +949,7 @@ export type Query = {
   myRoleRequests: MyRoleRequestsType;
   myTaskAssignments: Array<MyTaskAssignmentType>;
   myTickets: Array<TicketType>;
+  roleRequestTeams: Array<RoleRequestTeam>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stations: StationConnection;
@@ -1027,6 +1028,10 @@ export type QueryHazardousZonesArgs = {
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
+};
+
+export type QueryRoleRequestTeamsArgs = {
+  type?: InputMaybe<RoleRequestTeamType>;
 };
 
 export type QueryStationArgs = {
@@ -1127,18 +1132,43 @@ export const RoleRequestStatus = {
 
 export type RoleRequestStatus =
   (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
+export type RoleRequestTeam = {
+  __typename?: 'RoleRequestTeam';
+  name: Scalars['String']['output'];
+  type: RoleRequestTeamType;
+  uuid: Scalars['UUID']['output'];
+};
+
+export const RoleRequestTeamType = {
+  Gov: 'GOV',
+  Ngo: 'NGO',
+} as const;
+
+export type RoleRequestTeamType =
+  (typeof RoleRequestTeamType)[keyof typeof RoleRequestTeamType];
 export type RoleRequestType = {
   __typename?: 'RoleRequestType';
+  applicantEmail?: Maybe<Scalars['String']['output']>;
+  applicantName?: Maybe<Scalars['String']['output']>;
+  /** Masked */
+  applicantPhone?: Maybe<Scalars['String']['output']>;
   /** When it was approved, rejected or withdrawn */
   closedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Spec 019 only; no longer sent (ADR-355) */
   contact?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['DateTime']['output'];
+  /** The team a new-team application founds */
+  newTeamName?: Maybe<Scalars['String']['output']>;
   reason: Scalars['String']['output'];
   requestedRole: RoleRequestRole;
   /** The reviewer's reply, if any */
   reviewNote?: Maybe<Scalars['String']['output']>;
   status: RoleRequestStatus;
+  /** The existing team a member request asks to join */
+  team?: Maybe<RoleRequestTeam>;
   uuid: Scalars['UUID']['output'];
+  /** Sent through a team's invite link */
+  viaInvite: Scalars['Boolean']['output'];
 };
 
 export type SecondaryLocationInput = {
@@ -1370,9 +1400,12 @@ export type StationType = {
 };
 
 export type SubmitRoleRequestInput = {
-  contact?: InputMaybe<Scalars['String']['input']>;
+  email?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  newTeamName?: InputMaybe<Scalars['String']['input']>;
   reason: Scalars['String']['input'];
   requestedRole: RoleRequestRole;
+  teamUuid?: InputMaybe<Scalars['UUID']['input']>;
 };
 
 export type SuggestableFieldType = {

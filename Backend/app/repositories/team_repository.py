@@ -1,11 +1,16 @@
 """Repositories for Team, TeamZone, and TeamZoneAssign (RBAC v1 §2B, Phase 4/T119)."""
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
 from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.repositories.geo_repository import AreaRepository
+
+
+def joinable():
+    """The condition for a team someone can join or be invited to: active and not deleted."""
+    return and_(Team.delete_at.is_(None), Team.status == "active")
 
 
 class TeamRepository(GenericRepository[Team]):
@@ -23,6 +28,37 @@ class TeamRepository(GenericRepository[Team]):
             .order_by(Team.created_at.desc())
         )
         return (await db.execute(query)).scalars().all()
+
+    async def lock_name(self, db: AsyncSession, name: str) -> None:
+        """Take a transaction-scoped advisory lock on a team name, trimmed and ignoring case.
+
+        Every path that creates or renames a team takes it before `name_taken`, so two of them
+        claiming the same name at once serialize instead of both passing (ADR-352 point 3).
+        """
+        await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(lower(btrim(:name))))"), {"name": name})
+
+    async def name_taken(self, db: AsyncSession, name: str, *, excluding=None) -> bool:
+        """Whether a team not deleted has `name`, trimmed and ignoring case (Spec/026, ADR-352).
+
+        `excluding` leaves one team out, for renaming it.
+        """
+        query = select(Team.uuid).where(
+            Team.delete_at.is_(None), func.lower(func.btrim(Team.name)) == name.strip().lower()
+        )
+        if excluding is not None:
+            query = query.where(Team.uuid != excluding)
+        return (await db.scalar(query)) is not None
+
+    async def list_joinable(self, db: AsyncSession, *, type_: str | None = None) -> list[Team]:
+        """Teams someone can ask to join: active and not deleted, by name (Spec/026, ADR-352).
+
+        No RBAC filter: it backs the 申請成為後台人員 picker, read by people in no team yet.
+        Callers expose only uuid, name and type.
+        """
+        query = select(Team).where(joinable())
+        if type_ is not None:
+            query = query.where(Team.type == type_)
+        return (await db.execute(query.order_by(Team.name, Team.uuid))).scalars().all()
 
 
 class TeamZoneRepository(AreaRepository):

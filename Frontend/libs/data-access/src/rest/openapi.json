@@ -1736,7 +1736,7 @@
           "管理員 API"
         ],
         "summary": "List Users",
-        "description": "List users with every identity they hold, plus last login/activity and live sessions.\n\nFeature 010 replaced the single platform/team role pair with the full identity list\n(ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).\nBoth land in the same row.",
+        "description": "List users with every identity they hold, plus last login/activity and live sessions.\n\nFeature 010 replaced the single platform/team role pair with the full identity list\n(ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).\nBoth land in the same row. Built by PlatformUserDirectory (Spec/026).",
         "operationId": "list_users_api_v1_admin_users_get",
         "security": [
           {
@@ -1792,6 +1792,176 @@
                     "$ref": "#/components/schemas/AdminUserListItem"
                   },
                   "title": "Response List Users Api V1 Admin Users Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/teams/{team_uuid}/members": {
+      "get": {
+        "tags": [
+          "管理員 API"
+        ],
+        "summary": "列出 team 成員",
+        "description": "One team's members and their role in it (Spec/026). team.member.view covering the team.\n\nAnother team answers 404, so its existence is not given away (ADR-023).",
+        "operationId": "list_team_members_api_v1_admin_teams__team_uuid__members_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "team_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Team Uuid"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TeamMemberItem"
+                  },
+                  "title": "Response List Team Members Api V1 Admin Teams  Team Uuid  Members Get"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission Denied"
+          },
+          "404": {
+            "description": "Team not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "管理員 API"
+        ],
+        "summary": "Add Team Member",
+        "description": "Add a user to a team by granting them a role in it (defaults to `member`).\n\nA user may belong to several teams at once; this replaces only the role they held in\nTHIS team (ADR-072/073).",
+        "operationId": "add_team_member_api_v1_admin_teams__team_uuid__members_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "team_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Team Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamMemberRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMemberResponse"
                 }
               }
             }
@@ -2084,7 +2254,7 @@
           "管理員 API"
         ],
         "summary": "建立 team",
-        "description": "Create a gov/ngo team (super_admin only, via team.edit).",
+        "description": "Create a gov/ngo team (super_admin only, via team.edit at `all`). Names are unique (ADR-352).",
         "operationId": "create_team_api_v1_admin_teams_post",
         "security": [
           {
@@ -2132,6 +2302,9 @@
           },
           "403": {
             "description": "Permission Denied"
+          },
+          "409": {
+            "description": "Name already taken"
           },
           "422": {
             "description": "Validation Error",
@@ -2206,14 +2379,14 @@
         }
       }
     },
-    "/api/v1/admin/teams/{team_uuid}/members": {
-      "post": {
+    "/api/v1/admin/teams/{team_uuid}": {
+      "patch": {
         "tags": [
           "管理員 API"
         ],
-        "summary": "Add Team Member",
-        "description": "Add a user to a team by granting them a role in it (defaults to `member`).\n\nA user may belong to several teams at once; this replaces only the role they held in\nTHIS team (ADR-072/073).",
-        "operationId": "add_team_member_api_v1_admin_teams__team_uuid__members_post",
+        "summary": "編輯 team（名稱、統編、聯絡人）",
+        "description": "Edit a team: a team admin their own, a super admin any (Spec/026, ADR-357).",
+        "operationId": "update_team_api_v1_admin_teams__team_uuid__patch",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -2252,7 +2425,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TeamMemberRequest"
+                "$ref": "#/components/schemas/UpdateTeamRequest"
               }
             }
           }
@@ -2263,10 +2436,100 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TeamMemberResponse"
+                  "$ref": "#/components/schemas/TeamResponse"
                 }
               }
             }
+          },
+          "403": {
+            "description": "Permission Denied"
+          },
+          "404": {
+            "description": "Team not found"
+          },
+          "409": {
+            "description": "Name already taken"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/teams/{team_uuid}/status": {
+      "post": {
+        "tags": [
+          "管理員 API"
+        ],
+        "summary": "停用／恢復 team",
+        "description": "Super admin only. Suspending switches the team's identities off; restoring brings them back.",
+        "operationId": "set_team_status_api_v1_admin_teams__team_uuid__status_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "team_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Team Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission Denied"
+          },
+          "404": {
+            "description": "Team not found"
           },
           "422": {
             "description": "Validation Error",
@@ -3209,7 +3472,7 @@
           "後台人員申請審核"
         ],
         "summary": "List Role Requests",
-        "description": "Applications oldest first, so whoever applied first is reviewed first.",
+        "description": "Applications oldest first, so whoever applied first is reviewed first.\n\nA super admin sees every one; a team admin the member requests for their team.",
         "operationId": "list_role_requests_api_v1_admin_role_requests_get",
         "security": [
           {
@@ -3237,6 +3500,44 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "member",
+                    "new_team",
+                    "data_auditor"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "team_uuid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Team Uuid"
             }
           },
           {
@@ -3310,7 +3611,7 @@
           "後台人員申請審核"
         ],
         "summary": "Approve Role Request",
-        "description": "Grant a pending data auditor application; government and NGO ones are refused for now.",
+        "description": "Grant a pending application: a team membership, a new team, or the data auditor role.",
         "operationId": "approve_role_request_api_v1_admin_role_requests__request_uuid__approve_post",
         "security": [
           {
@@ -3385,7 +3686,7 @@
           "後台人員申請審核"
         ],
         "summary": "Reject Role Request",
-        "description": "Turn a pending application down. The applicant is told, with the note if there is one.",
+        "description": "Turn a pending application down. The note is required: it is the reason the applicant reads.",
         "operationId": "reject_role_request_api_v1_admin_role_requests__request_uuid__reject_post",
         "security": [
           {
@@ -3450,6 +3751,921 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/duplicate-pairs": {
+      "get": {
+        "tags": [
+          "AI 重複審核"
+        ],
+        "summary": "List Duplicate Pairs",
+        "description": "Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).",
+        "operationId": "list_duplicate_pairs_api_v1_admin_duplicate_pairs_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "dup_ignored",
+                      "suggested",
+                      "confirmed",
+                      "rejected"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "entity_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "ticket",
+                      "station",
+                      "ticket_task"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Kind"
+            }
+          },
+          {
+            "name": "source_layer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "fast",
+                      "slow",
+                      "manual",
+                      "system"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Layer"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "created_at",
+                "-created_at",
+                "similarity",
+                "-similarity"
+              ],
+              "type": "string",
+              "default": "-created_at",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatePairPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/duplicate-pairs/{pair_uuid}": {
+      "get": {
+        "tags": [
+          "AI 重複審核"
+        ],
+        "summary": "Get Duplicate Pair",
+        "description": "One card, its sides and its events, oldest first.",
+        "operationId": "get_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pair_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Pair Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatePairDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/duplicate-pairs/{pair_uuid}/confirm": {
+      "post": {
+        "tags": [
+          "AI 重複審核"
+        ],
+        "summary": "Confirm Duplicate Pair",
+        "description": "Mark a pending card a duplicate (ADR-341: only the card changes).",
+        "operationId": "confirm_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__confirm_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pair_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Pair Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DuplicatePairDecision"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatePairResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/duplicate-pairs/{pair_uuid}/reject": {
+      "post": {
+        "tags": [
+          "AI 重複審核"
+        ],
+        "summary": "Reject Duplicate Pair",
+        "description": "Mark a pending card not a duplicate (ADR-341: only the card changes).",
+        "operationId": "reject_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__reject_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pair_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Pair Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DuplicatePairDecision"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatePairResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/duplicate-pairs/{pair_uuid}/revoke": {
+      "post": {
+        "tags": [
+          "AI 重複審核"
+        ],
+        "summary": "Revoke Duplicate Pair Verdict",
+        "description": "Undo a card's verdict, back to the queue; someone else's needs ai_duplicate.revoke (ADR-342).",
+        "operationId": "revoke_duplicate_pair_verdict_api_v1_admin_duplicate_pairs__pair_uuid__revoke_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pair_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Pair Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatePairResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit-logs": {
+      "get": {
+        "tags": [
+          "稽核紀錄"
+        ],
+        "summary": "讀取稽核紀錄",
+        "description": "Newest first. A super admin or data auditor reads every change; a team admin their team's.",
+        "operationId": "list_audit_logs_api_v1_admin_audit_logs_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "table",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Table"
+            }
+          },
+          {
+            "name": "row_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Row Id"
+            }
+          },
+          {
+            "name": "actor_uuid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor Uuid"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditLogItem"
+                  },
+                  "title": "Response List Audit Logs Api V1 Admin Audit Logs Get"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Neither audit.view at all nor team.audit.view"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/teams/{team_uuid}/invites": {
+      "post": {
+        "tags": [
+          "團隊邀請連結"
+        ],
+        "summary": "建立團隊邀請連結（24 小時）",
+        "description": "Issue a link anyone signed in can use, any number of times, for 24 hours.",
+        "operationId": "create_invite_api_v1_admin_teams__team_uuid__invites_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "team_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Team Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission Denied"
+          },
+          "404": {
+            "description": "Team not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "團隊邀請連結"
+        ],
+        "summary": "列出團隊仍有效的邀請連結",
+        "description": "Links not yet expired, newest first.",
+        "operationId": "list_invites_api_v1_admin_teams__team_uuid__invites_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "team_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Team Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InviteResponse"
+                  },
+                  "title": "Response List Invites Api V1 Admin Teams  Team Uuid  Invites Get"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission Denied"
+          },
+          "404": {
+            "description": "Team not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invites/{token}": {
+      "get": {
+        "tags": [
+          "團隊邀請連結"
+        ],
+        "summary": "打開邀請連結",
+        "description": "The team behind the link, and the caller's pending request: for it, or for something else.",
+        "operationId": "open_invite_api_v1_invites__token__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenedInviteResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown, expired, or the team cannot be joined"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/invites/{token}/requests": {
+      "post": {
+        "tags": [
+          "團隊邀請連結"
+        ],
+        "summary": "透過邀請連結申請加入團隊",
+        "description": "File a member request for the link's team; it waits in that team's and super admins' queues.",
+        "operationId": "request_to_join_api_v1_invites__token__requests_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteJoinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteJoinResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown, expired, or the team cannot be joined"
+          },
+          "409": {
+            "description": "Already a member, or a request is pending"
+          },
+          "422": {
+            "description": "A field to fix"
           }
         }
       }
@@ -5717,6 +6933,17 @@
             "type": "string",
             "title": "Name"
           },
+          "real_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Name"
+          },
           "platform_role": {
             "anyOf": [
               {
@@ -5779,6 +7006,44 @@
         ],
         "title": "AdminUserListItem",
         "description": "One row of the admin user list.\n\n`identities` replaces the old single-valued `team_uuid` / `team_role`: a user can now\nhold a role in several teams at once, so one column cannot describe them (ADR-073)."
+      },
+      "ApplicantDetails": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "phone",
+          "email"
+        ],
+        "title": "ApplicantDetails",
+        "description": "What the applicant sent (Spec 026, ADR-355), for the reviewer to call and confirm.\n\nSeparate from `applicant_name`, which is the account's nickname."
       },
       "AssignRoleRequest": {
         "properties": {
@@ -5890,6 +7155,106 @@
         ],
         "title": "AttributionResponse",
         "description": "Schema for map tile source attribution metadata."
+      },
+      "AuditLogItem": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "table_name": {
+            "type": "string",
+            "title": "Table Name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "row_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Row Id"
+          },
+          "old_values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Values"
+          },
+          "new_values": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Values"
+          },
+          "user_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Uuid"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "client_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "table_name",
+          "action",
+          "row_id",
+          "old_values",
+          "new_values",
+          "user_uuid",
+          "context",
+          "created_at"
+        ],
+        "title": "AuditLogItem",
+        "description": "One recorded change. `client_ip` is filled for the platform view only."
       },
       "Body_commit_station_import_api_v1_bulk_stations_import_commit_post": {
         "properties": {
@@ -6726,6 +8091,106 @@
         "title": "DataResponse",
         "description": "The numbers a chart of the metric plots, for a frontend that draws its own."
       },
+      "DedupEventResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "actor_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Uuid"
+          },
+          "source_layer": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "slow",
+              "manual",
+              "system"
+            ],
+            "title": "Source Layer"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "engine_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Version"
+          },
+          "before_state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before State"
+          },
+          "after_state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After State"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "event_type",
+          "actor_uuid",
+          "source_layer",
+          "decision_reason",
+          "engine_version",
+          "before_state",
+          "after_state",
+          "created_at"
+        ],
+        "title": "DedupEventResponse",
+        "description": "One event recorded on a card."
+      },
       "DeleteContactRequest": {
         "properties": {
           "step_up": {
@@ -6774,6 +8239,493 @@
         ],
         "title": "DirectGrant",
         "description": "One per-user grant and the identity it binds to (NULL team = the platform identity)."
+      },
+      "DuplicatePairDecision": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "DuplicatePairDecision",
+        "description": "A reviewer's verdict. The optional note is checked by the service (at most 1000 characters)."
+      },
+      "DuplicatePairDetail": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "entity_kind": {
+            "type": "string",
+            "enum": [
+              "ticket",
+              "station",
+              "ticket_task"
+            ],
+            "title": "Entity Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "dup_ignored",
+              "suggested",
+              "confirmed",
+              "rejected"
+            ],
+            "title": "Status"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "engine_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Version"
+          },
+          "source_layer": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "slow",
+              "manual",
+              "system"
+            ],
+            "title": "Source Layer"
+          },
+          "duplicate_group_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Group Uuid"
+          },
+          "hint_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint Outcome"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "low": {
+            "$ref": "#/components/schemas/EntitySummaryResponse"
+          },
+          "high": {
+            "$ref": "#/components/schemas/EntitySummaryResponse"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/DedupEventResponse"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "entity_kind",
+          "status",
+          "similarity",
+          "evidence",
+          "method",
+          "engine_version",
+          "source_layer",
+          "duplicate_group_uuid",
+          "hint_outcome",
+          "created_at",
+          "reviewed_by",
+          "reviewed_at",
+          "low",
+          "high",
+          "events"
+        ],
+        "title": "DuplicatePairDetail",
+        "description": "One card with every event recorded on it, oldest first."
+      },
+      "DuplicatePairPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicatePairResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "DuplicatePairPage",
+        "description": "One page of cards and how many match in all."
+      },
+      "DuplicatePairResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "entity_kind": {
+            "type": "string",
+            "enum": [
+              "ticket",
+              "station",
+              "ticket_task"
+            ],
+            "title": "Entity Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "dup_ignored",
+              "suggested",
+              "confirmed",
+              "rejected"
+            ],
+            "title": "Status"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "engine_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Version"
+          },
+          "source_layer": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "slow",
+              "manual",
+              "system"
+            ],
+            "title": "Source Layer"
+          },
+          "duplicate_group_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Group Uuid"
+          },
+          "hint_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint Outcome"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "low": {
+            "$ref": "#/components/schemas/EntitySummaryResponse"
+          },
+          "high": {
+            "$ref": "#/components/schemas/EntitySummaryResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "entity_kind",
+          "status",
+          "similarity",
+          "evidence",
+          "method",
+          "engine_version",
+          "source_layer",
+          "duplicate_group_uuid",
+          "hint_outcome",
+          "created_at",
+          "reviewed_by",
+          "reviewed_at",
+          "low",
+          "high"
+        ],
+        "title": "DuplicatePairResponse",
+        "description": "One card and both of its sides. `evidence` is the engine's, opaque and unchanged."
+      },
+      "EntitySummaryResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "ticket_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticket Uuid"
+          },
+          "ticket_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticket Title"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "deleted",
+          "title",
+          "type",
+          "status",
+          "ticket_uuid",
+          "ticket_title",
+          "longitude",
+          "latitude",
+          "created_by",
+          "created_at"
+        ],
+        "title": "EntitySummaryResponse",
+        "description": "One side of a card: the fields a reviewer compares (ADR-340). A deleted side has only its uuid."
       },
       "ErrorReportResponse": {
         "properties": {
@@ -7158,6 +9110,160 @@
         "title": "IdentityView",
         "description": "Which identity the returned token acts as (ADR-205).\n\nNames travel with the uuids for the same reason `audit_logs.context` snapshots them: a\nrole can be renamed or hard-deleted, and a client showing \"acting as 花蓮縣府 / 管理員\"\nshould not have to resolve two uuids to do it."
       },
+      "InviteJoinRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "reason"
+        ],
+        "title": "InviteJoinRequest",
+        "description": "The visitor's details. The phone is the account's verified one (ADR-355)."
+      },
+      "InviteJoinResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "requested_role": {
+            "type": "string",
+            "enum": [
+              "government",
+              "ngo"
+            ],
+            "title": "Requested Role"
+          },
+          "team_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Team Uuid"
+          },
+          "status": {
+            "type": "string",
+            "const": "pending",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "requested_role",
+          "team_uuid",
+          "status",
+          "created_at"
+        ],
+        "title": "InviteJoinResponse",
+        "description": "The member request just filed."
+      },
+      "InviteRequestRef": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "created_at"
+        ],
+        "title": "InviteRequestRef",
+        "description": "The visitor's pending request for the team, if they already sent one."
+      },
+      "InviteResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "team_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Team Uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "team_uuid",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "InviteResponse",
+        "description": "An issued link. The token is what the link and the QR code carry."
+      },
+      "InviteTeam": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "gov",
+              "ngo"
+            ],
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "name",
+          "type"
+        ],
+        "title": "InviteTeam",
+        "description": "The team a link joins, as the invite page names it."
+      },
       "LinkGoogleRequest": {
         "properties": {
           "id_token": {
@@ -7384,6 +9490,101 @@
         "title": "NotificationListResponse",
         "description": "Paginated list of notifications."
       },
+      "OpenedInviteResponse": {
+        "properties": {
+          "team": {
+            "$ref": "#/components/schemas/InviteTeam"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "my_request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InviteRequestRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending_elsewhere": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingElsewhere"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "expires_at",
+          "my_request"
+        ],
+        "title": "OpenedInviteResponse",
+        "description": "What the invite page shows before the visitor asks to join."
+      },
+      "PendingElsewhere": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "requested_role": {
+            "type": "string",
+            "enum": [
+              "government",
+              "ngo",
+              "data_auditor"
+            ],
+            "title": "Requested Role"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
+          },
+          "new_team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Team Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "requested_role",
+          "team_name",
+          "new_team_name",
+          "created_at"
+        ],
+        "title": "PendingElsewhere",
+        "description": "The visitor's pending request for something else, to withdraw before asking here."
+      },
       "Perm": {
         "type": "string",
         "enum": [
@@ -7413,6 +9614,7 @@
           "map.view",
           "ai_duplicate.view",
           "ai_duplicate.review",
+          "ai_duplicate.revoke",
           "user.view",
           "user.add",
           "user.edit",
@@ -7422,6 +9624,7 @@
           "team.view",
           "team.edit",
           "team.member.manage",
+          "team.member.view",
           "work_zone.view",
           "work_zone.add",
           "work_zone.edit",
@@ -7443,6 +9646,7 @@
           "pre_departure.edit",
           "pre_departure.delete",
           "audit.view",
+          "team.audit.view",
           "rbac.view",
           "rbac.assign",
           "rbac.edit"
@@ -7757,7 +9961,7 @@
         },
         "type": "object",
         "title": "RoleRequestDecision",
-        "description": "A reviewer's decision. The note is checked by the service (at most 500 characters)."
+        "description": "A reviewer's decision. The note is checked by the service (at most 500 characters).\n\nRejecting requires one (Spec 026): it is the reason the applicant reads."
       },
       "RoleRequestResponse": {
         "properties": {
@@ -7839,6 +10043,44 @@
               }
             ],
             "title": "Closed At"
+          },
+          "team_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Uuid"
+          },
+          "new_team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Team Name"
+          },
+          "via_invite": {
+            "type": "boolean",
+            "title": "Via Invite",
+            "default": false
+          },
+          "applicant_details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApplicantDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -7937,6 +10179,44 @@
             ],
             "title": "Closed At"
           },
+          "team_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Uuid"
+          },
+          "new_team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Team Name"
+          },
+          "via_invite": {
+            "type": "boolean",
+            "title": "Via Invite",
+            "default": false
+          },
+          "applicant_details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApplicantDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "applicant_uuid": {
             "type": "string",
             "format": "uuid",
@@ -7945,6 +10225,17 @@
           "applicant_name": {
             "type": "string",
             "title": "Applicant Name"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
           }
         },
         "type": "object",
@@ -8207,6 +10498,48 @@
         "title": "SwitchIdentityRequest",
         "description": "Body naming the identity to switch to. Must be one the caller already holds."
       },
+      "TeamMemberItem": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "real_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Name"
+          },
+          "role_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Role Uuid"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "name",
+          "role_uuid",
+          "role"
+        ],
+        "title": "TeamMemberItem",
+        "description": "One row of a team's member list (Spec/026): their role in this team, nothing else.\n\n`real_name` is filled for whoever manages the team's members and for reviewers (ADR-355)."
+      },
       "TeamMemberRequest": {
         "properties": {
           "user_uuid": {
@@ -8290,6 +10623,28 @@
               }
             ],
             "title": "Tax Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
           }
         },
         "type": "object",
@@ -8300,7 +10655,25 @@
           "status"
         ],
         "title": "TeamResponse",
-        "description": "A team's identity and status."
+        "description": "A team's identity, status and contact (contact since Spec/026)."
+      },
+      "TeamStatusRequest": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "TeamStatusRequest",
+        "description": "Body for suspending or restoring a team (Spec/026, ADR-357)."
       },
       "TicketYMetric": {
         "type": "string",
@@ -8396,6 +10769,61 @@
         ],
         "title": "UnreadCountResponse",
         "description": "Lightweight unread count response with urgent flag for UI badge and toast."
+      },
+      "UpdateTeamRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "tax_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          }
+        },
+        "type": "object",
+        "title": "UpdateTeamRequest",
+        "description": "Body for editing a team (Spec/026, ADR-357). Fields left out are not changed.\n\nThe type is not editable: applications and gov-only capabilities rely on it."
       },
       "UserPermissionsResponse": {
         "properties": {

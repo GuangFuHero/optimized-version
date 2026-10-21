@@ -8,11 +8,9 @@ Feature 010: a grant row carries its own team (`user_role_assign.team_uuid`) and
 identity is active per request, platform roles included. Every switchable, actionable role
 must therefore stand on its own — see ADR-097 and the station.contribute grants below.
 
-Only capabilities with a real enforcement point today (station/map/ticket/dynamic_field/
-user/team/work_zone/audit/rbac/announcement/pre_departure/project/role_request) are
-actually granted below; the rest of the Perm catalog (ticket.export/ai_duplicate) is
-registered as a Permission row so it exists ahead of the feature that will enforce it, but
-isn't wired into any role yet.
+Every Perm is registered as a Permission row. The AI duplicate review capabilities
+(ai_duplicate.*) go to super_admin and data_auditor only (Spec 025, ADR-337/342); an existing
+database gets them from migration 1649d30b0122, since this seed never overwrites a grant.
 """
 
 import asyncio
@@ -105,6 +103,10 @@ ROLES_DATA = [
             # A data auditor checks every ticket, giving the verdict and its note, without the
             # ticket.edit that would let them rewrite what was filed.
             Perm.TICKET_AUDIT: "all",
+            # ADR-337: the auditor works the AI 重複審核 queue. Undoing another reviewer's verdict
+            # takes ai_duplicate.revoke, which stays with super_admin (ADR-342).
+            Perm.AI_DUP_VIEW: "all",
+            Perm.AI_DUP_REVIEW: "all",
         },
     },
     {
@@ -153,10 +155,12 @@ ROLES_DATA = [
                 Perm.RBAC_ASSIGN,
                 Perm.RBAC_EDIT,
                 Perm.AUDIT_VIEW,
+                Perm.TEAM_AUDIT_VIEW,
                 Perm.ROLE_REQUEST_REVIEW,
                 Perm.TEAM_VIEW,
                 Perm.TEAM_EDIT,
                 Perm.TEAM_MEMBER_MANAGE,
+                Perm.TEAM_MEMBER_VIEW,
                 Perm.ZONE_VIEW,
                 Perm.ZONE_ADD,
                 Perm.ZONE_EDIT,
@@ -168,6 +172,9 @@ ROLES_DATA = [
                 Perm.STATION_IMPORT,
                 Perm.TICKET_EXPORT,
                 Perm.TICKET_IMPORT,
+                Perm.AI_DUP_VIEW,
+                Perm.AI_DUP_REVIEW,
+                Perm.AI_DUP_REVOKE,
             ],
             "all",
         ),
@@ -211,7 +218,11 @@ ROLES_DATA = [
             Perm.TICKET_ASSIGN: "zone",
             Perm.TICKET_AUDIT: "zone",
             Perm.TEAM_VIEW: "team",
+            # Spec/026 ADR-357: edit their own team's details. Creating a team needs `all`.
+            Perm.TEAM_EDIT: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
+            Perm.TEAM_MEMBER_VIEW: "team",  # Spec/026: their own team's member list
+            Perm.TEAM_AUDIT_VIEW: "team",  # Spec/026 ADR-358: changes to their own team
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324: every back-office page's shell shows the disaster
             Perm.ZONE_VIEW: "all",
@@ -262,6 +273,7 @@ ROLES_DATA = [
             # Field workers audit the tickets in their zone, as admins do.
             Perm.TICKET_AUDIT: "zone",
             Perm.TEAM_VIEW: "team",
+            Perm.TEAM_MEMBER_VIEW: "team",  # Spec/026: their own team's member list
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324, see the admin role above
         },

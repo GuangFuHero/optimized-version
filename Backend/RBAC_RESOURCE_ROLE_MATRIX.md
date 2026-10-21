@@ -126,10 +126,15 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | team.view | — | — | — | all | team | team |
-| team.edit | — | — | — | all | — | — |
+| team.edit | — | — | — | all | team | — |
 | team.member.manage | — | — | — | all | team | — |
+| team.member.view | — | — | — | all | team | team |
+| team.audit.view | — | — | — | all | team | — |
 
-> `team.edit`（建立/編輯 team）只有 super_admin（ADR-054）；team admin 只管成員。
+> `team.edit`：建立 team 要 `all`，只有 super_admin（ADR-054）；team admin 以 `team` 編輯自己 team 的名稱、統編、
+> 聯絡人（026/ADR-357）。停用／恢復也要 `all`；沒有解散。team admin 以 `team.member.manage` 審自己 team 的加入申請（026/ADR-354）。
+> `team.member.view`：自己 team 的成員名單（026/ADR-362），與 `user.view`（全平台人員）分開給。`team.audit.view`：自己 team 的稽核紀錄（026/ADR-358）；
+> `audit.view` 仍只有 data_auditor 與 super_admin（ADR-130）。
 
 ### 責任區 Work Zone
 
@@ -221,6 +226,19 @@
 > `/admin/rbac` 收回 `user` 的 `role_request.add` 就是暫停開放申請；已送出的申請照樣可以撤回（撤回只看是不是本人）。
 > 理由與聯絡方式只有申請人本人與持有 `role_request.review` 的人看得到（019/ADR-287）。
 
+### AI 重複審核 Duplicate Review（Spec 025）
+
+| capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
+|---|---|---|---|---|---|---|
+| ai_duplicate.view | — | — | all | all | — | — |
+| ai_duplicate.review | — | — | all | all | — | — |
+| ai_duplicate.revoke | — | — | — | all | — | — |
+
+> 管的是去重留下的**資料**（`duplicate_pairs` 配對卡與 `dedup_audit_events`），不是演算法；`app/dedup_engine/`
+> 不檢查這三個權限。`view` 讀審核清單與單張卡；`review` 判定「確認重複／不是重複」並撤銷**自己**的判定；
+> 撤銷**別人**的判定另需 `revoke`，只給 super_admin（025/ADR-337、ADR-342）。待審提醒（`dedup_review_pending`）
+> 發給持有 `review` 的人（ADR-345）。
+
 ## 補充說明
 
 ### 公開白名單（`PUBLIC_PERMS`，`app/core/permissions.py`）
@@ -249,9 +267,8 @@
 > **通報單的團隊角色是 `zone` 不是 `team`。** ADR-049 把 `team_uuid` 從 `base_geometries` 移除後，`in_scope()` 的 TEAM 分支對 ticket 永遠回 `False`——對通報單發 `team` 等於發一個不成立的授權。**站點相反，是 `team`**：ADR-285 讓 `stations` 帶上指派的 `team_uuid`，站點不再用 zone。
 
 ### 「已定義、但目前無角色授予」的 capability（ahead-of-feature，ADR-050）
-下列 key 存在於目錄、但 seed 沒發給任何角色，等對應功能實作時才會接上 enforcement：
-`ai_duplicate.view`、`ai_duplicate.review`。
-（`ticket.export` 自功能 015 起已授予；`audit.view` 自功能 016 起首次真正被 enforcement 消費；`pre_departure.*` 自功能 007 起已接上 enforcement，並補上原本沒有的 `pre_departure.delete`。）
+目前沒有：目錄裡的每個 key 都至少授予一個角色。
+（`ai_duplicate.view`／`review` 自 Spec 025 起授予 super_admin 與 data_auditor，同時新增只給 super_admin 的 `ai_duplicate.revoke`；`ticket.export` 自功能 015 起已授予；`audit.view` 自功能 016 起首次真正被 enforcement 消費；`pre_departure.*` 自功能 007 起已接上 enforcement，並補上原本沒有的 `pre_departure.delete`。）
 
 ### 相關 ADR
-ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）、ADR-285（站點改為手動指派給單一 team，不跟 zone）、019/ADR-287～290（申請成為後台人員、通過是新增身分、前台固定 `user`、登入先落在 `user`）。
+ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）、ADR-285（站點改為手動指派給單一 team，不跟 zone）、019/ADR-287～290（申請成為後台人員、通過是新增身分、前台固定 `user`、登入先落在 `user`）、025/ADR-337·342（AI 重複審核的三個權限）。

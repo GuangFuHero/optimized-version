@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class IdentitySummary(BaseModel):
@@ -25,6 +25,10 @@ class AdminUserListItem(BaseModel):
 
     uuid: UUID
     name: str
+    # The name a reviewer confirmed on approval (Spec/026, ADR-355). Filled only for holders of
+    # role_request.review: data auditors also read this list, and are kept from applicants'
+    # details (ADR-287 point 7).
+    real_name: str | None = None
     platform_role: str | None
     identities: list[IdentitySummary] = Field(default_factory=list)
     last_login_at: datetime | None = None
@@ -123,11 +127,54 @@ class CreateTeamRequest(BaseModel):
         return v
 
 
+class UpdateTeamRequest(BaseModel):
+    """Body for editing a team (Spec/026, ADR-357). Fields left out are not changed.
+
+    The type is not editable: applications and gov-only capabilities rely on it.
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    tax_id: str | None = None
+    contact_name: str | None = Field(default=None, max_length=100)
+    contact_phone: str | None = Field(default=None, max_length=20)
+
+    @field_validator("tax_id")
+    @classmethod
+    def _validate_tax_id(cls, v: str | None) -> str | None:
+        """Same rule as on creation; null clears it."""
+        if v is not None and not is_valid_ubn(v):
+            raise ValueError("統一編號須為 8 位數字且通過檢查碼（能被 5 整除）")
+        return v
+
+
+class TeamMemberItem(BaseModel):
+    """One row of a team's member list (Spec/026): their role in this team, nothing else.
+
+    `real_name` is filled for whoever manages the team's members and for reviewers (ADR-355).
+    """
+
+    uuid: UUID
+    name: str
+    real_name: str | None = None
+    role_uuid: UUID
+    role: str
+
+
+class TeamStatusRequest(BaseModel):
+    """Body for suspending or restoring a team (Spec/026, ADR-357)."""
+
+    status: Literal["active", "suspended"]
+
+
 class TeamResponse(BaseModel):
-    """A team's identity and status."""
+    """A team's identity, status and contact (contact since Spec/026)."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     uuid: UUID
     name: str
     type: str
     status: str
     tax_id: str | None = None
+    contact_name: str | None = None
+    contact_phone: str | None = None
