@@ -15,6 +15,7 @@ import {
   writeStationFilters,
   type StationFilters,
 } from './model/station-filters';
+import { StationDrawer, type StationDrawerState } from './station-drawer';
 import { StationFilterPanel } from './station-filter-panel';
 import { StationMapView } from './station-map-view';
 import { StationStatsStrip } from './station-stats-strip';
@@ -80,8 +81,26 @@ export function StationManagementPage() {
 
   const hasAnyStation = (unfiltered.data?.rows.length ?? 0) > 0;
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
-  const openStation = (uuid: string) => setParam('station', uuid);
-  const openNew = (_position?: [number, number]) => undefined;
+  // View mode lives in the URL (?station=<uuid>) so notifications can link to it; edit and new
+  // are local and fall back to view, or close, when finished.
+  const urlStation = params.get('station');
+  const [localDrawer, setLocalDrawer] = useState<StationDrawerState | null>(null);
+  const drawerState: StationDrawerState | null =
+    localDrawer ?? (urlStation ? { mode: 'view', uuid: urlStation } : null);
+  const openStation = (uuid: string) => {
+    setLocalDrawer(null);
+    setParam('station', uuid);
+  };
+  const openNew = (position?: [number, number]) =>
+    setLocalDrawer({ mode: 'new', position });
+  const closeDrawer = () => {
+    if (localDrawer?.mode === 'edit') {
+      setLocalDrawer(null);
+      return;
+    }
+    setLocalDrawer(null);
+    setParam('station', null);
+  };
 
   return (
     <Box
@@ -143,6 +162,13 @@ export function StationManagementPage() {
           onOpenStation={openStation}
         />
       )}
+      <StationDrawer
+        state={drawerState}
+        caps={caps}
+        now={now}
+        onClose={closeDrawer}
+        onEdit={(uuid) => setLocalDrawer({ mode: 'edit', uuid })}
+      />
     </Box>
   );
 }
