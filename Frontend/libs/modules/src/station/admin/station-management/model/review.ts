@@ -69,12 +69,13 @@ export interface ReviewField {
   suggestionCount: number;
   comments: string[];
   firstSuggestedAt: string | null;
-  conflict: boolean;
+  /** null when the history could not be read (no view_history, still loading, or failed). */
+  conflict: boolean | null;
 }
 
 export function buildReviewFields(
   review: AdminStationReviewQuery,
-  history: readonly TimelineItem[],
+  history: readonly TimelineItem[] | null,
 ): ReviewField[] {
   const station = review.station;
   if (!station) return [];
@@ -106,12 +107,9 @@ export function buildReviewFields(
       suggestionCount: s.suggestionCount,
       comments: s.comments,
       firstSuggestedAt,
-      conflict: hasChangedSince(
-        history,
-        targetType,
-        s.fieldName,
-        firstSuggestedAt,
-      ),
+      conflict: history
+        ? hasChangedSince(history, targetType, s.fieldName, firstSuggestedAt)
+        : null,
     };
   });
 }
@@ -147,4 +145,12 @@ export function buildDecisions(
         ]
       : [];
   });
+}
+
+/**
+ * The queue label for a station. `pendingSuggestedFields` lists only the station's own fields, so
+ * a station queued for suggestions on its resources alone has a count of zero.
+ */
+export function pendingFieldsLabel(stationFieldCount: number): string {
+  return stationFieldCount > 0 ? `${stationFieldCount} 欄` : '資源待審';
 }

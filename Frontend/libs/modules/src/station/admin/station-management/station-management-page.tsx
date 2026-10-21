@@ -31,6 +31,8 @@ import { StationToolbar, type StationView } from './station-toolbar';
 
 const { color } = designTokens;
 
+const PENDING_FILTERS: StationFilters = { ...EMPTY_FILTERS, pending: true };
+
 function useNow(intervalMs = 60_000) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -86,9 +88,14 @@ export function StationManagementPage() {
     () => applyClientFilters(loadedRows, filters, now),
     [loadedRows, filters, now],
   );
-  const pendingStationCount = (unfiltered.data?.rows ?? []).filter(
-    (r) => r.pendingFieldCount > 0,
-  ).length;
+  // The review queue's own query: it also counts stations whose only suggestions are on their
+  // resources, which pendingSuggestedFields (station fields only) leaves out.
+  const reviewQueue = useAllStations(PENDING_FILTERS, {
+    enabled: caps.canReview,
+  });
+  const pendingStationCount = caps.canReview
+    ? (reviewQueue.data?.rows.length ?? 0)
+    : 0;
 
   const hasAnyStation = (unfiltered.data?.rows.length ?? 0) > 0;
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
@@ -212,6 +219,7 @@ export function StationManagementPage() {
         <ReviewQueueDialog
           open
           canEdit={caps.canEdit}
+          canViewHistory={caps.canViewHistory}
           onClose={() => setReviewOpen(false)}
           onEditStation={(uuid) => {
             setReviewOpen(false);

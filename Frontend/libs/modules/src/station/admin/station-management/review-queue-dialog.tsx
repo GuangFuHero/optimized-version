@@ -32,6 +32,7 @@ import {
   buildDecisions,
   buildReviewFields,
   type FieldDecision,
+  pendingFieldsLabel,
   type ReviewField,
 } from './model/review';
 import { EMPTY_FILTERS } from './model/station-filters';
@@ -44,6 +45,7 @@ const PENDING_FILTERS = { ...EMPTY_FILTERS, pending: true };
 interface ReviewQueueDialogProps {
   open: boolean;
   canEdit: boolean;
+  canViewHistory: boolean;
   onClose: () => void;
   onEditStation: (uuid: string) => void;
 }
@@ -51,6 +53,7 @@ interface ReviewQueueDialogProps {
 export function ReviewQueueDialog({
   open,
   canEdit,
+  canViewHistory,
   onClose,
   onEditStation,
 }: ReviewQueueDialogProps) {
@@ -143,7 +146,7 @@ export function ReviewQueueDialog({
                     {station.name}
                   </Typography>
                   <Badge tone="warning" size="sm">
-                    {station.pendingFieldCount} 欄
+                    {pendingFieldsLabel(station.pendingFieldCount)}
                   </Badge>
                 </ButtonBase>
               );
@@ -156,6 +159,7 @@ export function ReviewQueueDialog({
             key={current.uuid}
             uuid={current.uuid}
             canEdit={canEdit}
+            canViewHistory={canViewHistory}
             onEditStation={onEditStation}
           />
         ) : (
@@ -169,24 +173,28 @@ export function ReviewQueueDialog({
 function StationReview({
   uuid,
   canEdit,
+  canViewHistory,
   onEditStation,
 }: {
   uuid: string;
   canEdit: boolean;
+  canViewHistory: boolean;
   onEditStation: (uuid: string) => void;
 }) {
   const review = useStationReview({ uuid });
-  const history = useStationHistory({ path: { uuid }, query: { limit: 100 } });
+  // Conflicts come from the station's history; without it they are unknown, never "none".
+  const history = useStationHistory(
+    { path: { uuid }, query: { limit: 100 } },
+    { enabled: canViewHistory },
+  );
+  const historyEvents = history.isSuccess ? (history.data?.data ?? []) : null;
   const merge = useMergeStationSuggestions();
   const [decisions, setDecisions] = useState<Record<string, FieldDecision>>({});
   const [note, setNote] = useState('');
 
   const fields = useMemo(
-    () =>
-      review.data
-        ? buildReviewFields(review.data, history.data?.data ?? [])
-        : [],
-    [review.data, history.data],
+    () => (review.data ? buildReviewFields(review.data, historyEvents) : []),
+    [review.data, historyEvents],
   );
   const enumOptions = useMemo(
     () =>
@@ -239,6 +247,15 @@ function StationReview({
         >
           欄位級對比：目前值 → 建議值。不決定的欄位會繼續留在佇列。
         </Typography>
+        {fields.length > 0 && !historyEvents ? (
+          <Box sx={{ mb: '12px' }}>
+            <Callout tone="warning">
+              {canViewHistory && history.isPending
+                ? '正在讀取版本歷史，衝突檢查完成前請先確認目前值。'
+                : '無法讀取這個站點的版本歷史，無法檢查建議提出後欄位是否被改過。'}
+            </Callout>
+          </Box>
+        ) : null}
         {fields.length === 0 ? (
           <Callout tone="info">這個站點已沒有待審的建議。</Callout>
         ) : (

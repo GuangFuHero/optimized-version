@@ -2,7 +2,12 @@ import type { AdminStationReviewQuery } from '@rescue-frontend/data-access/admin
 import type { TimelineItem } from '@rescue-frontend/ui';
 import { describe, expect, it } from 'vitest';
 
-import { buildDecisions, buildReviewFields, hasChangedSince } from './review';
+import {
+  buildDecisions,
+  buildReviewFields,
+  hasChangedSince,
+  pendingFieldsLabel,
+} from './review';
 
 const history = [
   {
@@ -99,6 +104,11 @@ describe('buildReviewFields', () => {
     ]);
   });
 
+  it('marks conflicts unknown when history could not be read', () => {
+    const fields = buildReviewFields(review, null);
+    expect(fields.map((f) => f.conflict)).toEqual([null, null]);
+  });
+
   it('returns nothing for a missing station', () => {
     expect(buildReviewFields({ station: null } as never, history)).toEqual([]);
   });
@@ -124,5 +134,13 @@ describe('buildDecisions', () => {
       { targetUuid: 's1', fieldName: 'name', approve: true, value: '新站名' },
       { targetUuid: 's1', fieldName: 'op_hour', approve: false },
     ]);
+  });
+});
+
+describe('pendingFieldsLabel', () => {
+  it('counts station fields, and never claims zero for a station in the queue', () => {
+    expect(pendingFieldsLabel(2)).toBe('2 欄');
+    // Only its resources have suggestions: pendingSuggestedFields covers station fields only.
+    expect(pendingFieldsLabel(0)).toBe('資源待審');
   });
 });
