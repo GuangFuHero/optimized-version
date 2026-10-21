@@ -87,6 +87,8 @@ export function buildPhoneStepUpHref(location: ApplyReturnLocation): string {
 /** The form as it was when the page left for LINE. */
 export interface ApplyDraft {
   role: RoleRequestRole | null;
+  team: string | null;
+  newTeamName: string;
   reason: string;
   name: string;
   phone: string;
@@ -121,6 +123,8 @@ function isApplyDraft(value: unknown): value is ApplyDraft {
   return (
     isRecord(value) &&
     (value.role === null || ROLES.has(value.role)) &&
+    (value.team === null || typeof value.team === 'string') &&
+    typeof value.newTeamName === 'string' &&
     typeof value.reason === 'string' &&
     typeof value.name === 'string' &&
     typeof value.phone === 'string'

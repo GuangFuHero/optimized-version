@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { roleRequestErrorMessage } from './error';
+import { isTeamListRefusal, roleRequestErrorMessage } from './error';
 
 const refusal = (message: string) => ({ graphQLErrors: [{ message }] });
 
@@ -13,18 +13,44 @@ describe('roleRequestErrorMessage', () => {
       roleRequestErrorMessage(
         refusal('Only an account without a back-office identity can apply'),
       ),
-    ).toBe('你已經有管理平台身分，不需要申請。');
+    ).toBe('你已經有管理平台身分，不能申請資料檢核員。');
     expect(roleRequestErrorMessage(refusal('Reason is required'))).toBe(
       '請填寫申請理由。',
     );
     expect(
       roleRequestErrorMessage(refusal('Reason must be at most 500 characters')),
     ).toBe('申請理由最多 500 字。');
+    expect(roleRequestErrorMessage(refusal('Name is required'))).toBe(
+      '請填寫你的名字。',
+    );
     expect(
-      roleRequestErrorMessage(
-        refusal('Contact must be at most 100 characters'),
-      ),
-    ).toBe('聯絡方式最多 100 字。');
+      roleRequestErrorMessage(refusal('A verified phone number is required')),
+    ).toBe('請先完成手機驗證。');
+  });
+
+  it("puts the team refusals in the site's words", () => {
+    expect(roleRequestErrorMessage(refusal('Team not found'))).toBe(
+      '這個單位或團隊目前不能申請加入，可能已停用，請重新選擇。',
+    );
+    expect(
+      roleRequestErrorMessage(refusal('A team with this name already exists')),
+    ).toBe('已經有同名的單位或團隊，請直接在清單裡選它，或換一個名稱。');
+    expect(
+      roleRequestErrorMessage(refusal('You are already a member of this team')),
+    ).toBe('你已經是這個團隊的成員了。');
+  });
+
+  it('has the team list read again only when the team or the new name is refused', () => {
+    expect(isTeamListRefusal(refusal('Team not found'))).toBe(true);
+    expect(
+      isTeamListRefusal(refusal('A team with this name already exists')),
+    ).toBe(true);
+    expect(
+      isTeamListRefusal(refusal('You are already a member of this team')),
+    ).toBe(false);
+    expect(isTeamListRefusal({ networkError: new Error('offline') })).toBe(
+      false,
+    );
   });
 
   it('reads 403 as applications being paused, and 401 as a sign-in that ran out', () => {

@@ -23,6 +23,8 @@ function memoryStorage(): ApplyDraftStorage & { items: Map<string, string> } {
 
 const DRAFT: ApplyDraft = {
   role: 'ngo',
+  team: 'new',
+  newTeamName: '光復青年志工隊',
   reason: '協會的物資組長',
   name: '王志豪',
   phone: '0912345678',
@@ -107,6 +109,17 @@ describe('the draft', () => {
     storage.setItem(
       'wg:role-request-draft:u-1',
       JSON.stringify({ v: 1, draft: { ...DRAFT, role: 'super_admin' } }),
+    );
+
+    expect(takeApplyDraft(storage, 'u-1')).toBeNull();
+
+    // One left before the form named a team.
+    storage.setItem(
+      'wg:role-request-draft:u-1',
+      JSON.stringify({
+        v: 1,
+        draft: { role: 'ngo', reason: '物資組長', name: '王', phone: '' },
+      }),
     );
 
     expect(takeApplyDraft(storage, 'u-1')).toBeNull();
