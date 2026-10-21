@@ -11,12 +11,26 @@ from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
 from app.models.geo import BuildingMap
 from app.repositories.geo_repository import building_map_repository, secondary_location_repository
+from app.services.address import apply_address, point_of
 from app.services.authz import require_gov_team, require_scope
-from app.services.geo_validation import check_address_lengths, validate_point
+from app.services.geo_validation import validate_point
 
 # Offered on every floor that has areas, so a reporter in an unlisted space can still file.
 OTHER_AREA = "其他"
-ADDRESS_PARTS = ("county", "city", "lane", "alley", "no")
+# Copied from a building onto every ticket filed inside it, already split and graded.
+ADDRESS_PARTS = (
+    "full_address",
+    "county",
+    "town",
+    "village",
+    "neighborhood",
+    "road",
+    "section",
+    "lane",
+    "alley",
+    "no",
+    "normalization_status",
+)
 MAX_FLOORS_ABOVE_GROUND = 200
 MAX_FLOORS_BELOW_GROUND = 20
 MAX_NAME_LENGTH = 100
@@ -84,7 +98,7 @@ async def create_building_map(
     validate_point(geometry, entity="Building map")
     if any(secondary_location.get(k) for k in ("building_section", "floor", "room")):
         raise ValueError("A building map's address has no building section, floor or room")
-    check_address_lengths(secondary_location)
+    secondary_location = apply_address(secondary_location, point=point_of(geometry))
     building = await building_map_repository.add(
         db,
         obj_in={
@@ -156,6 +170,7 @@ async def place_ticket(
     if not building:
         raise ValueError("Building map not found")
     location = dict(location or {})
+    location.pop("address_token", None)
     # A "don't know" select sends an empty string, which is stored as an unknown floor.
     floor = location["floor"] = location.get("floor") or None
     labels = floor_labels(building.floors_above_ground, building.floors_below_ground)

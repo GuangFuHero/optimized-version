@@ -173,12 +173,8 @@ async def test_deactivated_fields_never_become_columns(db):
 async def test_fields_for_another_disaster_type_never_become_columns(db):
     """The deployment runs a flood; a landslide-only field is not part of its file."""
     db.add(ProjectSettings(name="Hualien 0816", disaster_types=["flood"]))
-    await _station_configs(
-        db, [("shelter", "flood_depth", "number")], disaster_types=["flood"]
-    )
-    await _station_configs(
-        db, [("shelter", "slope_angle", "number")], disaster_types=["landslide"]
-    )
+    await _station_configs(db, [("shelter", "flood_depth", "number")], disaster_types=["flood"])
+    await _station_configs(db, [("shelter", "slope_angle", "number")], disaster_types=["landslide"])
     await _station_configs(db, [("shelter", "capacity_total", "number")])  # empty = all
 
     columns = await station_columns(db, "shelter")
@@ -207,7 +203,7 @@ async def test_station_match_key_columns_are_read_only_on_update(db):
     """Matching on a column means the file's value already equals the row's — writing is a no-op."""
     columns = await station_columns(db, "shelter")
 
-    for header in ("name", "county", "city"):
+    for header in ("name", "address"):
         assert _by_header(columns, header).writable_on_update is False, header
 
 
@@ -298,8 +294,10 @@ async def test_a_multi_select_cell_keeps_every_value_and_still_checks_the_option
     """
     db.add(
         TaskPropertyConfig(
-            task_type="rescue", property_name="utility_hazards",
-            data_type="multi_select", enum_options=["gas_odor", "power_out", "sparks"],
+            task_type="rescue",
+            property_name="utility_hazards",
+            data_type="multi_select",
+            enum_options=["gas_odor", "power_out", "sparks"],
         )
     )
     await db.flush()

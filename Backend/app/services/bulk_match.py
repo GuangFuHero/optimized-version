@@ -96,9 +96,9 @@ class MatchIndex:
         return Match(kind=MATCHED, uuid=candidates[0])
 
 
-def station_key(name: str | None, county: str | None, city: str | None) -> tuple:
-    """The station match key: name plus the county/city of its address (ADR-107)."""
-    return (normalize_text(name), normalize_text(county), normalize_text(city))
+def station_key(name: str | None, county: str | None, town: str | None) -> tuple:
+    """The station match key: name plus the 縣市 and 鄉鎮市區 of its address."""
+    return (normalize_text(name), normalize_text(county), normalize_text(town))
 
 
 def ticket_key(title: str | None, phone: str | None) -> tuple:
@@ -112,16 +112,16 @@ def task_key(task_type: str | None, task_name: str | None) -> tuple:
 
 
 async def build_station_index(db: AsyncSession) -> MatchIndex:
-    """Index every live station by (name, county, city).
+    """Index every live station by (name, county, town).
 
     The address is LEFT JOINed: a station with no `secondary_locations` row indexes with
-    blank county/city, which is exactly what a file that leaves those columns empty produces.
+    blank county/town, which is exactly what a file that leaves the address empty produces.
     Legacy rows with no address are therefore still reachable — see the known risk in the
     spec, they are only unreachable when the file *does* carry an address.
     """
     rows = (
         await db.execute(
-            select(Station.uuid, Station.name, SecondaryLocation.county, SecondaryLocation.city)
+            select(Station.uuid, Station.name, SecondaryLocation.county, SecondaryLocation.town)
             .outerjoin(
                 SecondaryLocation,
                 (SecondaryLocation.geometry_uuid == Station.uuid)
@@ -132,8 +132,8 @@ async def build_station_index(db: AsyncSession) -> MatchIndex:
     ).all()
 
     index: dict[tuple, list[str]] = {}
-    for uuid, name, county, city in rows:
-        index.setdefault(station_key(name, county, city), []).append(str(uuid))
+    for uuid, name, county, town in rows:
+        index.setdefault(station_key(name, county, town), []).append(str(uuid))
     return MatchIndex(by_key=index)
 
 
@@ -145,9 +145,7 @@ async def build_ticket_index(db: AsyncSession) -> MatchIndex:
     """
     rows = (
         await db.execute(
-            select(Tickets.uuid, Tickets.title, Tickets.contact_phone).where(
-                Tickets.delete_at.is_(None)
-            )
+            select(Tickets.uuid, Tickets.title, Tickets.contact_phone).where(Tickets.delete_at.is_(None))
         )
     ).all()
 

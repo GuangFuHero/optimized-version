@@ -179,7 +179,8 @@ async def _station_rows(db: AsyncSession, stations: list[Station]) -> dict:
     return {"addresses": addresses, "properties": properties}
 
 
-_ADDRESS_FIELDS = ("county", "city", "lane", "alley", "no", "floor", "room")
+# File column → secondary_locations column.
+_ADDRESS_FIELDS = {"address": "full_address", "floor": "floor", "room": "room"}
 
 
 def _station_row(
@@ -212,8 +213,8 @@ def _station_row(
     # round-trips without erasing the note.
     if not comment_visible:
         row["comment"] = ""
-    for field in _ADDRESS_FIELDS:
-        row[field] = _text(getattr(address, field, None)) if address else ""
+    for header, field in _ADDRESS_FIELDS.items():
+        row[header] = _text(getattr(address, field, None)) if address else ""
     for column in columns:
         if column.is_dynamic:
             prop = properties.get(column.field)

@@ -11,7 +11,7 @@ from tests.test_graphql.test_area import _make_team_user
 pytestmark = pytest.mark.asyncio
 
 POINT = {"type": "Point", "coordinates": [121.4219, 23.6696]}
-ADDRESS = {"county": "花蓮縣", "city": "光復鄉", "lane": "中正路", "no": "10號"}
+ADDRESS = {"fullAddress": "花蓮縣光復鄉中正路10號"}
 LAYOUT = {
     "floorsAboveGround": 3,
     "floorsBelowGround": 1,
@@ -21,7 +21,7 @@ LAYOUT = {
     ],
 }
 
-BUILDING_FIELDS = "uuid name geometry floors { label areas } secondaryLocation { county lane no }"
+BUILDING_FIELDS = "uuid name geometry floors { label areas } secondaryLocation { county road no }"
 
 CREATE_BUILDING = f"""
 mutation ($input: CreateBuildingMapInput!) {{ createBuildingMap(input: $input) {{ {BUILDING_FIELDS} }} }}
@@ -39,7 +39,9 @@ query ($bounds: BoundsInput) { buildingMaps(bounds: $bounds) { items { uuid } pa
 CREATE_TICKET = """
 mutation ($input: CreateTicketInput!) {
   createTicket(input: $input) {
-    ... on TicketCreated { ticket { uuid geometry secondaryLocation { county city lane no floor room } } }
+    ... on TicketCreated { ticket {
+      uuid geometry secondaryLocation { county town road no floor room normalizationStatus }
+    } }
   }
 }
 """
@@ -53,16 +55,31 @@ async def _gql(client, query, variables, token=None):
 
 
 async def _create_building(client, token, **overrides):
-    body = await _gql(client, CREATE_BUILDING, {"input": {
-        "name": "光復國小圖書館", "geometry": POINT, "secondaryLocation": ADDRESS, **LAYOUT, **overrides,
-    }}, token)
+    body = await _gql(
+        client,
+        CREATE_BUILDING,
+        {
+            "input": {
+                "name": "光復國小圖書館",
+                "geometry": POINT,
+                "secondaryLocation": ADDRESS,
+                **LAYOUT,
+                **overrides,
+            }
+        },
+        token,
+    )
     assert "errors" not in body, body
     return body["data"]["createBuildingMap"]
 
 
 def _ticket_input(building_uuid, **location):
-    return {"title": "咖啡廳天花板漏水", "contactName": "王小明",
-            "buildingMapUuid": building_uuid, "secondaryLocation": location}
+    return {
+        "title": "咖啡廳天花板漏水",
+        "contactName": "王小明",
+        "buildingMapUuid": building_uuid,
+        "secondaryLocation": location,
+    }
 
 
 async def test_building_floors_are_listed_roof_first_with_other_on_floors_with_areas(
@@ -79,7 +96,7 @@ async def test_building_floors_are_listed_roof_first_with_other_on_floors_with_a
         {"label": "1F", "areas": ["閱覽室", "健身房", "其他"]},
         {"label": "B1", "areas": []},
     ]
-    assert building["secondaryLocation"] == {"county": "花蓮縣", "lane": "中正路", "no": "10號"}
+    assert building["secondaryLocation"] == {"county": "花蓮縣", "road": "中正路", "no": "10號"}
     assert building["geometry"]["coordinates"] == POINT["coordinates"]
 
 
@@ -98,34 +115,71 @@ async def test_anonymous_caller_can_read_building_maps(client, coordinator_auth)
 async def test_create_building_map_requires_work_zone_add(client, login_user_auth):
     """A plain signed-in user cannot pin a building."""
     _, token = login_user_auth
-    body = await _gql(client, CREATE_BUILDING, {"input": {
-        "name": "x", "geometry": POINT, "secondaryLocation": ADDRESS, **LAYOUT,
-    }}, token)
+    body = await _gql(
+        client,
+        CREATE_BUILDING,
+        {
+            "input": {
+                "name": "x",
+                "geometry": POINT,
+                "secondaryLocation": ADDRESS,
+                **LAYOUT,
+            }
+        },
+        token,
+    )
     assert body["data"] is None and body["errors"]
 
 
 async def test_ngo_team_admin_cannot_pin_a_building(client, redis):
     """work_zone.add is not enough on an ngo team, as with zones."""
     token = await _make_team_user(redis, "ngo")
-    body = await _gql(client, CREATE_BUILDING, {"input": {
-        "name": "x", "geometry": POINT, "secondaryLocation": ADDRESS, **LAYOUT,
-    }}, token)
+    body = await _gql(
+        client,
+        CREATE_BUILDING,
+        {
+            "input": {
+                "name": "x",
+                "geometry": POINT,
+                "secondaryLocation": ADDRESS,
+                **LAYOUT,
+            }
+        },
+        token,
+    )
     assert "Only gov teams" in body["errors"][0]["message"]
 
 
-@pytest.mark.parametrize(("overrides", "message"), [
-    ({"floorAreas": [{"floor": "9F", "areas": ["頂樓"]}]}, "Floor '9F' is not in this building"),
-    ({"secondaryLocation": {**ADDRESS, "floor": "2F"}}, "no building section, floor or room"),
-    ({"floorsAboveGround": 0}, "floorsAboveGround must be"),
-    ({"floorAreas": [{"floor": "1F", "areas": ["   "]}]}, "Area names must be"),
-    ({"secondaryLocation": {**ADDRESS, "no": "1" * 21}}, "no must be at most 20 characters"),
-])
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"floorAreas": [{"floor": "9F", "areas": ["頂樓"]}]}, "Floor '9F' is not in this building"),
+        ({"secondaryLocation": {**ADDRESS, "floor": "2F"}}, "no building section, floor or room"),
+        ({"floorsAboveGround": 0}, "floorsAboveGround must be"),
+        ({"floorAreas": [{"floor": "1F", "areas": ["   "]}]}, "Area names must be"),
+        (
+            {"secondaryLocation": {"fullAddress": f"花蓮縣光復鄉中正路{'1' * 21}號"}},
+            "no must be at most 20 characters",
+        ),
+    ],
+)
 async def test_create_building_map_rejects_bad_layout(client, coordinator_auth, overrides, message):
     """A bad floor layout, a floor in the address, or an address part too long for its column is refused."""
     _, token = coordinator_auth
-    body = await _gql(client, CREATE_BUILDING, {"input": {
-        "name": "x", "geometry": POINT, "secondaryLocation": ADDRESS, **LAYOUT, **overrides,
-    }}, token)
+    body = await _gql(
+        client,
+        CREATE_BUILDING,
+        {
+            "input": {
+                "name": "x",
+                "geometry": POINT,
+                "secondaryLocation": ADDRESS,
+                **LAYOUT,
+                **overrides,
+            }
+        },
+        token,
+    )
     assert any(message in e["message"] for e in body["errors"]), body
 
 
@@ -134,50 +188,83 @@ async def test_update_building_map_replaces_areas_and_rechecks_floor_range(clien
     _, token = coordinator_auth
     building = await _create_building(client, token)
 
-    body = await _gql(client, UPDATE_BUILDING, {"uuid": building["uuid"], "input": {
-        "floorAreas": [{"floor": "3F", "areas": ["機房"]}],
-    }}, token)
+    body = await _gql(
+        client,
+        UPDATE_BUILDING,
+        {
+            "uuid": building["uuid"],
+            "input": {
+                "floorAreas": [{"floor": "3F", "areas": ["機房"]}],
+            },
+        },
+        token,
+    )
     floors = {f["label"]: f["areas"] for f in body["data"]["updateBuildingMap"]["floors"]}
     assert floors["3F"] == ["機房", "其他"] and floors["1F"] == []
 
-    body = await _gql(client, UPDATE_BUILDING, {"uuid": building["uuid"], "input": {
-        "floorsAboveGround": 2,
-    }}, token)
+    body = await _gql(
+        client,
+        UPDATE_BUILDING,
+        {
+            "uuid": building["uuid"],
+            "input": {
+                "floorsAboveGround": 2,
+            },
+        },
+        token,
+    )
     assert any("Floor '3F' is not in this building" in e["message"] for e in body["errors"])
 
 
-async def test_ticket_in_building_copies_its_point_and_address(
-    client, coordinator_auth, login_user_auth
-):
+async def test_ticket_in_building_copies_its_point_and_address(client, coordinator_auth, login_user_auth):
     """The ticket gets the building's point and address, the reporter's floor and room, and a link."""
     _, admin_token = coordinator_auth
     _, token = login_user_auth
     building = await _create_building(client, admin_token)
 
-    body = await _gql(client, CREATE_TICKET, {"input": _ticket_input(
-        building["uuid"], floor="2F", room="咖啡廳", county="台北市", lane="假路",
-    )}, token)
+    body = await _gql(
+        client,
+        CREATE_TICKET,
+        {
+            "input": _ticket_input(
+                building["uuid"],
+                floor="2F",
+                room="咖啡廳",
+                fullAddress="臺北市假路1號",
+            )
+        },
+        token,
+    )
     assert "errors" not in body, body
     ticket = body["data"]["createTicket"]["ticket"]
     assert ticket["geometry"]["coordinates"] == POINT["coordinates"]
     assert ticket["secondaryLocation"] == {
-        "county": "花蓮縣", "city": "光復鄉", "lane": "中正路", "no": "10號",
-        "floor": "2F", "room": "咖啡廳",
+        "county": "花蓮縣",
+        "town": "光復鄉",
+        "road": "中正路",
+        "no": "10號",
+        "floor": "2F",
+        "room": "咖啡廳",
+        "normalizationStatus": "unverified",
     }
     async with open_db() as db:
         linked_to = await db.scalar(
-            select(BuildingMapTicketMap.building_map_uuid)
-            .where(BuildingMapTicketMap.ticket_uuid == ticket["uuid"])
+            select(BuildingMapTicketMap.building_map_uuid).where(
+                BuildingMapTicketMap.ticket_uuid == ticket["uuid"]
+            )
         )
     assert str(linked_to) == building["uuid"]
 
 
-@pytest.mark.parametrize(("extra", "location", "message"), [
-    ({"geometry": POINT}, {"floor": "1F", "room": "閱覽室"}, "Omit geometry"),
-    ({}, {"floor": "9F"}, "Floor '9F' is not in this building"),
-    ({}, {"floor": "1F", "room": "咖啡廳"}, "must be one of"),
-    ({}, {"floor": "1F"}, "must be one of"),
-])
+@pytest.mark.parametrize(
+    ("extra", "location", "message"),
+    [
+        ({"geometry": POINT}, {"floor": "1F", "room": "閱覽室"}, "Omit geometry"),
+        ({}, {"floor": "9F"}, "Floor '9F' is not in this building"),
+        ({}, {"floor": "1F", "room": "咖啡廳"}, "must be one of"),
+        ({}, {"floor": "1F"}, "must be one of"),
+    ],
+)
 async def test_ticket_in_building_rejects_a_place_outside_the_layout(
     client, coordinator_auth, login_user_auth, extra, location, message
 ):
@@ -186,20 +273,28 @@ async def test_ticket_in_building_rejects_a_place_outside_the_layout(
     _, token = login_user_auth
     building = await _create_building(client, admin_token)
 
-    body = await _gql(client, CREATE_TICKET, {
-        "input": {**_ticket_input(building["uuid"], **location), **extra},
-    }, token)
+    body = await _gql(
+        client,
+        CREATE_TICKET,
+        {
+            "input": {**_ticket_input(building["uuid"], **location), **extra},
+        },
+        token,
+    )
     assert any(message in e["message"] for e in body["errors"]), body
 
 
-@pytest.mark.parametrize("location", [
-    {"floor": "1F", "room": "其他", "victimSpace": "走廊盡頭"},
-    {"floor": "3F", "room": "302"},
-    {"floor": "B1"},
-    {"floor": "RF"},
-    {},
-    {"floor": "", "room": "大廳"},
-])
+@pytest.mark.parametrize(
+    "location",
+    [
+        {"floor": "1F", "room": "其他", "victimSpace": "走廊盡頭"},
+        {"floor": "3F", "room": "302"},
+        {"floor": "B1"},
+        {"floor": "RF"},
+        {},
+        {"floor": "", "room": "大廳"},
+    ],
+)
 async def test_ticket_in_building_accepts_other_and_free_text_rooms(
     client, coordinator_auth, login_user_auth, location
 ):
@@ -212,18 +307,21 @@ async def test_ticket_in_building_accepts_other_and_free_text_rooms(
     assert "errors" not in body, body
 
 
-async def test_ticket_cannot_be_filed_under_a_deleted_building(
-    client, coordinator_auth, login_user_auth
-):
+async def test_ticket_cannot_be_filed_under_a_deleted_building(client, coordinator_auth, login_user_auth):
     """A soft-deleted building takes no new tickets."""
     _, admin_token = coordinator_auth
     _, token = login_user_auth
     building = await _create_building(client, admin_token)
     await _gql(client, DELETE_BUILDING, {"uuid": building["uuid"]}, admin_token)
 
-    body = await _gql(client, CREATE_TICKET, {
-        "input": _ticket_input(building["uuid"], floor="3F"),
-    }, token)
+    body = await _gql(
+        client,
+        CREATE_TICKET,
+        {
+            "input": _ticket_input(building["uuid"], floor="3F"),
+        },
+        token,
+    )
     assert any("Building map not found" in e["message"] for e in body["errors"]), body
 
 

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disaster_types import validate_disaster_types
 from app.core.permissions import Perm
-from app.graphql.scalars import geojson_to_geom
+from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
@@ -32,6 +32,7 @@ from app.repositories.tickets_repository import (
     ticket_repository,
     ticket_task_repository,
 )
+from app.services.address import apply_address, point_of
 from app.services.authz import require_scope
 from app.services.building_map import place_ticket
 from app.services.geo_validation import (
@@ -175,7 +176,11 @@ async def validate_ticket(
         # whitespace-only value has to be refused here rather than normalized to None.
         required=frozenset({"contact_name"}),
     )
-    check_address_lengths(secondary_location)
+    if building_map_uuid:
+        # The building's address is copied in already split and graded.
+        check_address_lengths(secondary_location)
+    else:
+        secondary_location = apply_address(secondary_location, point=point_of(geometry))
     return TicketFields(
         point=geometry,
         values={
@@ -358,7 +363,7 @@ async def create_help_request(
         {"contact_name": contact_name, "contact_email": contact_email, "contact_phone": contact_phone},
         required=frozenset({"contact_name"}),
     )
-    check_address_lengths(secondary_location)
+    secondary_location = apply_address(secondary_location, point=point_of(geometry))
     creator = str(actor.uuid)
     ticket = await ticket_repository.add(
         db,
@@ -454,7 +459,9 @@ async def update_ticket(
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
     if secondary_location is not None:
-        check_address_lengths(secondary_location)
+        secondary_location = apply_address(
+            secondary_location, point=point_of(geom_to_geojson(ticket.geometry))
+        )
         await _replace_secondary_location(db, str(ticket.uuid), secondary_location)
 
     obj_in = dict(changes)

@@ -11,11 +11,13 @@ from uuid import UUID
 import strawberry
 from sqlalchemy import String, cast, exists, or_, select
 
+from app.api.v1.endpoints.auth.deps import consume_rate_limit
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout
-from app.graphql.context import check_permission
+from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import (
+    AddressLookupType,
     BoundsInput,
     BuildingMapConnection,
     BuildingMapType,
@@ -34,6 +36,7 @@ from app.repositories.geo_repository import (
     hazardous_zone_repository,
     station_repository,
 )
+from app.services import address as address_service
 
 
 def _has_pending_suggestion():
@@ -64,7 +67,8 @@ class GeoQuery:
 
     @strawberry.field
     async def stations(
-        self, info: strawberry.types.Info,
+        self,
+        info: strawberry.types.Info,
         bounds: BoundsInput | None = None,
         station_type: str | None = None,
         operational_status: StationOperationalStatus | None = None,
@@ -72,7 +76,8 @@ class GeoQuery:
         assigned_team_uuid: UUID | None = None,
         unassigned_only: bool = False,
         has_pending_suggestions: bool = False,
-        skip: int = 0, limit: int = 50,
+        skip: int = 0,
+        limit: int = 50,
     ) -> StationConnection:
         """List stations within an optional geographic bounding box.
 
@@ -124,12 +129,21 @@ class GeoQuery:
         # own set_config/RESET, so this costs two round-trips where it used to cost six.
         async with search_timeout(db, normalize_query(q)):
             total = await station_repository.count_active(
-                db, bounds=bounds, station_type=station_type, q=q,
-                operational_status=status_value, extra_filters=extra_filters,
+                db,
+                bounds=bounds,
+                station_type=station_type,
+                q=q,
+                operational_status=status_value,
+                extra_filters=extra_filters,
             )
             items = await station_repository.list_active(
-                db, bounds=bounds, station_type=station_type, q=q,
-                operational_status=status_value, skip=skip, limit=limit,
+                db,
+                bounds=bounds,
+                station_type=station_type,
+                q=q,
+                operational_status=status_value,
+                skip=skip,
+                limit=limit,
                 extra_filters=extra_filters,
             )
         return StationConnection(
@@ -161,9 +175,11 @@ class GeoQuery:
 
     @strawberry.field
     async def hazardous_zones(
-        self, info: strawberry.types.Info,
+        self,
+        info: strawberry.types.Info,
         bounds: BoundsInput | None = None,
-        skip: int = 0, limit: int = 50,
+        skip: int = 0,
+        limit: int = 50,
     ) -> HazardousZoneConnection:
         """List hazardous zones within an optional geographic bounding box, paginated.
 
@@ -204,9 +220,11 @@ class GeoQuery:
 
     @strawberry.field
     async def building_maps(
-        self, info: strawberry.types.Info,
+        self,
+        info: strawberry.types.Info,
         bounds: BoundsInput | None = None,
-        skip: int = 0, limit: int = 50,
+        skip: int = 0,
+        limit: int = 50,
     ) -> BuildingMapConnection:
         """List building maps within an optional geographic bounding box, paginated.
 
@@ -244,3 +262,49 @@ class GeoQuery:
             if user is None or not await in_scope(scope, actor=user, resource=m, db=db):
                 return None
         return BuildingMapType.from_model(m)
+
+    @strawberry.field(
+        description=(
+            "Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin "
+            "as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute"
+        )
+    )
+    async def normalize_address(
+        self,
+        info: strawberry.types.Info,
+        address: str,
+        lat: float | None = None,
+        lng: float | None = None,
+    ) -> AddressLookupType:
+        """Look a typed address up in TGOS before saving it; pass the pin to check they agree."""
+        await _allow_lookup(info)
+        if (lat is None) != (lng is None):
+            raise ValueError("lat and lng must be provided together")
+        pin = _checked_point(lat, lng) if lat is not None else None
+        return AddressLookupType.from_lookup(await address_service.lookup_address(address, pin))
+
+    @strawberry.field(
+        description="The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute"
+    )
+    async def reverse_geocode(self, info: strawberry.types.Info, lat: float, lng: float) -> AddressLookupType:
+        """The nearest 門牌 to a pin, within 500 m."""
+        await _allow_lookup(info)
+        return AddressLookupType.from_lookup(await address_service.reverse_geocode(*_checked_point(lat, lng)))
+
+
+_LOOKUPS_PER_MINUTE = 30
+
+
+async def _allow_lookup(info: strawberry.types.Info) -> None:
+    """Signed-in callers only, each held to 30 lookups a minute so no one caller spends the quota."""
+    user = require_authenticated(info)
+    redis = info.context["request"].app.state.redis
+    if not await consume_rate_limit(redis, f"ratelimit:address_lookup:{user.uuid}", _LOOKUPS_PER_MINUTE, 60):
+        raise ValueError("Too many address lookups; try again in a minute")
+
+
+def _checked_point(lat: float, lng: float) -> tuple[float, float]:
+    """The (lat, lng) pair, or ValueError when it is off the globe."""
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        raise ValueError("Invalid coordinates")
+    return lat, lng
