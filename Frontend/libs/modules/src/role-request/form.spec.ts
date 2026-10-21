@@ -7,59 +7,65 @@ import {
 } from './form';
 
 const REASON = '我是光復鄉公所民政課，要協助檢查重複通報';
+const VERIFIED = { phoneVerified: true };
 
 describe('validateRoleRequestForm', () => {
-  it('asks for the identity and the reason, and leaves the contact optional', () => {
+  it('asks for the identity, a name, a verified phone and the reason', () => {
     expect(
-      validateRoleRequestForm({ role: null, reason: '', contact: '' }),
+      validateRoleRequestForm(
+        { role: null, reason: '', name: '' },
+        { phoneVerified: false },
+      ),
     ).toEqual({
       role: '請選擇一種身分',
+      name: '必填',
+      phone: '請先完成手機驗證',
       reason: '必填',
     });
   });
 
-  it('counts a reason of only spaces as none, as the backend does', () => {
+  it('counts a reason or a name of only spaces as none', () => {
     expect(
-      validateRoleRequestForm({ role: 'ngo', reason: '   ', contact: '' }),
+      validateRoleRequestForm(
+        { role: 'ngo', reason: '   ', name: '  ' },
+        VERIFIED,
+      ),
     ).toEqual({
+      name: '必填',
       reason: '必填',
     });
   });
 
-  it('holds the reason and the contact to the backend limits of 500 and 100 characters', () => {
+  it('holds the reason and the name to the backend limits of 500 and 100 characters', () => {
     expect(
-      validateRoleRequestForm({
-        role: 'ngo',
-        reason: '字'.repeat(500),
-        contact: '9'.repeat(100),
-      }),
+      validateRoleRequestForm(
+        { role: 'ngo', reason: '字'.repeat(500), name: '王'.repeat(100) },
+        VERIFIED,
+      ),
     ).toEqual({});
     expect(
-      validateRoleRequestForm({
-        role: 'ngo',
-        reason: '字'.repeat(501),
-        contact: '9'.repeat(101),
-      }),
+      validateRoleRequestForm(
+        { role: 'ngo', reason: '字'.repeat(501), name: '王'.repeat(101) },
+        VERIFIED,
+      ),
     ).toEqual({
+      name: '名字最多 100 字',
       reason: '申請理由最多 500 字',
-      contact: '聯絡方式最多 100 字',
     });
   });
 
   it('counts an emoji as one character, as the backend does, not as two', () => {
     expect(
-      validateRoleRequestForm({
-        role: 'ngo',
-        reason: '🙏'.repeat(500),
-        contact: '',
-      }),
+      validateRoleRequestForm(
+        { role: 'ngo', reason: '🙏'.repeat(500), name: '王志豪' },
+        VERIFIED,
+      ),
     ).toEqual({});
     expect(
-      validateRoleRequestForm({
-        role: 'ngo',
-        reason: '🙏'.repeat(501),
-        contact: '',
-      }),
+      validateRoleRequestForm(
+        { role: 'ngo', reason: '🙏'.repeat(501), name: '王志豪' },
+        VERIFIED,
+      ),
     ).toEqual({
       reason: '申請理由最多 500 字',
     });
@@ -67,11 +73,10 @@ describe('validateRoleRequestForm', () => {
 
   it('finds nothing wrong with a complete application', () => {
     expect(
-      validateRoleRequestForm({
-        role: 'data_auditor',
-        reason: REASON,
-        contact: '03-8701234',
-      }),
+      validateRoleRequestForm(
+        { role: 'data_auditor', reason: REASON, name: '王志豪' },
+        VERIFIED,
+      ),
     ).toEqual({});
   });
 });
@@ -80,26 +85,26 @@ describe('roleRequestFormProblems', () => {
   it('names what is left to fix, in the order of the form', () => {
     expect(
       roleRequestFormProblems({
-        contact: '聯絡方式最多 100 字',
-        role: '請選擇一種身分',
         reason: '必填',
+        phone: '請先完成手機驗證',
+        role: '請選擇一種身分',
+        name: '必填',
       }),
-    ).toEqual(['要申請的身分', '申請理由', '聯絡方式']);
+    ).toEqual(['要申請的身分', '你的名字', '手機驗證', '申請理由']);
   });
 });
 
 describe('toSubmitRoleRequestInput', () => {
-  it('sends the words trimmed, and no contact rather than an empty one', () => {
+  it('sends the words trimmed, and no phone: the backend reads the account', () => {
     expect(
       toSubmitRoleRequestInput({
         role: 'government',
         reason: `  ${REASON}  `,
-        contact: '   ',
+        name: '王志豪',
       }),
     ).toEqual({
       requestedRole: 'government',
       reason: REASON,
-      contact: null,
     });
   });
 });

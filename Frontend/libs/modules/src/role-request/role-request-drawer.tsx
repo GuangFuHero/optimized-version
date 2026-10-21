@@ -10,7 +10,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useMutation } from 'urql';
 
 import {
@@ -19,11 +19,20 @@ import {
 } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
+import { getCurrentUserAsync } from '../auth/api/client';
+import { useAuthSession } from '../session/auth-session';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
+import { ApplicantSection } from './applicant-section';
+import {
+  buildPhoneStepUpHref,
+  sessionApplyDraftStorage,
+  takeApplyDraft,
+  writeApplyDraft,
+  type ApplyReturn,
+} from './apply-return';
 import { roleRequestDrawerView } from './drawer-view';
 import { roleRequestErrorMessage } from './error';
 import {
-  CONTACT_MAX_LENGTH,
   REASON_MAX_LENGTH,
   ROLE_REQUEST_OPTIONS,
   roleRequestFormProblems,
@@ -32,6 +41,8 @@ import {
   type RoleRequestFormValues,
 } from './form';
 import { RoleRequestCard } from './role-request-card';
+import { useApplicantAccount } from './use-applicant-account';
+import { usePhoneVerification } from './use-phone-verification';
 import { useWithdrawRoleRequest } from './use-withdraw-role-request';
 
 const { color, radius } = designTokens;
@@ -40,7 +51,15 @@ const TITLE = '申請管理權限';
 const EMPTY_FORM: RoleRequestFormValues = {
   role: null,
   reason: '',
-  contact: '',
+  name: '',
+};
+
+// Until `/users/me` answers: nothing verified, nothing to prove with.
+const NO_ACCOUNT = {
+  nickname: '',
+  verifiedPhone: null,
+  hasPassword: false,
+  saltIdentifier: null,
 };
 
 interface RoleRequestDrawerProps {
@@ -52,6 +71,9 @@ interface RoleRequestDrawerProps {
    * or the form again.
    */
   onSubmitted: () => void;
+  /** Back from proving the person at LINE: the form comes back as it was, and carries on. */
+  applyReturn?: ApplyReturn | null;
+  onApplyReturnHandled?: () => void;
 }
 
 /**
@@ -65,8 +87,12 @@ export function RoleRequestDrawer({
   onClose,
   myRoleRequests,
   onSubmitted,
+  applyReturn = null,
+  onApplyReturnHandled,
 }: RoleRequestDrawerProps) {
   const [values, setValues] = useState<RoleRequestFormValues>(EMPTY_FORM);
+  // The name starts from the nickname until the person types one of their own.
+  const [nameEdited, setNameEdited] = useState(false);
   const [touched, setTouched] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [{ fetching: submitting }, submitRoleRequest] = useMutation(
@@ -75,16 +101,82 @@ export function RoleRequestDrawer({
   const withdraw = useWithdrawRoleRequest(onSubmitted);
   const resetWithdraw = withdraw.reset;
   const roleLabelId = useId();
+  const userId = useAuthSession().user?.uuid ?? null;
+  const applicant = useApplicantAccount(open);
+  const account = applicant.account ?? NO_ACCOUNT;
 
-  // Each opening starts from an empty form, as the prototype does.
+  /**
+   * Only LINE can prove it is them (ADR-361): the form is kept in this tab and the page goes to LINE.
+   * `/users/me` first, through the session's own fetch: a session refreshed or ended there, rather
+   * than in the navigation, which would show its error as a page of JSON.
+   */
+  const goProveAtLine = async (phone: string) => {
+    if (userId) {
+      writeApplyDraft(sessionApplyDraftStorage(), userId, { ...values, phone });
+    }
+
+    try {
+      await getCurrentUserAsync();
+    } catch {
+      // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
+    }
+
+    window.location.assign(buildPhoneStepUpHref(window.location));
+  };
+
+  const verification = usePhoneVerification({
+    account,
+    onVerified: () => void applicant.reload(),
+    onReauth: (phone) => void goProveAtLine(phone),
+  });
+  const resetVerification = verification.reset;
+  const resumeVerification = verification.resume;
+
+  // Each opening starts from an empty form, as the prototype does — unless it is the way back
+  // from LINE, which brings the form back below. Only as it opens: the way back being handled
+  // while it is open must not empty what it brought back.
+  const wasOpen = useRef(false);
+
   useEffect(() => {
-    if (open) {
+    const opening = open && !wasOpen.current;
+    wasOpen.current = open;
+
+    if (opening && !applyReturn) {
       setValues(EMPTY_FORM);
+      setNameEdited(false);
       setTouched(false);
       setSubmitError(null);
       resetWithdraw();
+      resetVerification();
     }
-  }, [open, resetWithdraw]);
+  }, [applyReturn, open, resetVerification, resetWithdraw]);
+
+  useEffect(() => {
+    if (!open || !applyReturn || !userId) {
+      return;
+    }
+
+    const draft = takeApplyDraft(sessionApplyDraftStorage(), userId);
+
+    setTouched(false);
+    setSubmitError(null);
+
+    if (draft) {
+      setValues({ role: draft.role, reason: draft.reason, name: draft.name });
+      setNameEdited(true);
+      resumeVerification(draft.phone, applyReturn.stepUp);
+    }
+
+    onApplyReturnHandled?.();
+  }, [applyReturn, onApplyReturnHandled, open, resumeVerification, userId]);
+
+  const nickname = applicant.account?.nickname;
+
+  useEffect(() => {
+    if (open && nickname && !nameEdited) {
+      setValues((current) => ({ ...current, name: nickname }));
+    }
+  }, [nameEdited, nickname, open]);
 
   if (!myRoleRequests) {
     return null;
@@ -190,7 +282,10 @@ export function RoleRequestDrawer({
     );
   }
 
-  const errors = validateRoleRequestForm(values);
+  const errors = validateRoleRequestForm(values, {
+    phoneVerified:
+      Boolean(account.verifiedPhone) || verification.stage.kind === 'verified',
+  });
   const problems = roleRequestFormProblems(errors);
   const set = (field: keyof RoleRequestFormValues) => (value: string) =>
     setValues((current) => ({ ...current, [field]: value }));
@@ -302,6 +397,22 @@ export function RoleRequestDrawer({
           </Typography>
         </Box>
 
+        {applicant.account ? (
+          <ApplicantSection
+            account={applicant.account}
+            name={values.name}
+            onNameChange={(name) => {
+              setNameEdited(true);
+              set('name')(name);
+            }}
+            nameError={touched ? (errors.name ?? null) : null}
+            phoneError={touched ? (errors.phone ?? null) : null}
+            verification={verification}
+          />
+        ) : applicant.failed ? (
+          <Alert severity="error">讀不到你的帳號資料，請關閉後再試一次。</Alert>
+        ) : null}
+
         <TextField
           label="申請理由"
           required
@@ -316,21 +427,6 @@ export function RoleRequestDrawer({
             touched && errors.reason
               ? errors.reason
               : `寫清楚你的單位、職務，以及為什麼需要管理權限（最多 ${REASON_MAX_LENGTH} 字）`
-          }
-        />
-
-        <TextField
-          label="可聯絡到你的方式（選填）"
-          fullWidth
-          size="small"
-          value={values.contact}
-          onChange={(event) => set('contact')(event.target.value)}
-          placeholder="公務電話、分機或 Email"
-          error={touched && Boolean(errors.contact)}
-          helperText={
-            touched && errors.contact
-              ? errors.contact
-              : `審核者可能需要向你確認身分（最多 ${CONTACT_MAX_LENGTH} 字）`
           }
         />
 

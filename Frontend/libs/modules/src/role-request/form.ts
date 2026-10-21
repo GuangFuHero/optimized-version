@@ -3,9 +3,10 @@ import type {
   SubmitRoleRequestInput,
 } from '@rescue-frontend/data-access';
 
-// The backend's limits (Backend `models/role_request.py`); checked here too, in the site's words.
+import { applicantNameProblem } from './applicant';
+
+// The backend's limit (Backend `models/role_request.py`); checked here too, in the site's words.
 export const REASON_MAX_LENGTH = 500;
-export const CONTACT_MAX_LENGTH = 100;
 
 /**
  * What an applicant may ask to become, as the prototype words it (`ROLE_REQUEST_OPTIONS`,
@@ -39,27 +40,42 @@ export const ROLE_REQUEST_LABELS: Record<RoleRequestRole, string> = {
   data_auditor: '資料檢核員',
 };
 
+/** The free-text 可聯絡到你的方式 is gone: a reviewer calls the verified phone instead (G-2). */
 export interface RoleRequestFormValues {
   role: RoleRequestRole | null;
   reason: string;
-  contact: string;
+  /** The name the application is made in; starts from the nickname, which it never changes. */
+  name: string;
 }
 
-type RoleRequestField = 'role' | 'reason' | 'contact';
+type RoleRequestField = 'role' | 'name' | 'phone' | 'reason';
 export type RoleRequestFormErrors = Partial<Record<RoleRequestField, string>>;
 
 // Characters as the backend counts them (Python's `len`): an emoji is one, not two UTF-16 units.
 const characters = (text: string) => [...text].length;
 
-/** The problems to show under each field; empty when the application can be sent. */
+/**
+ * The problems to show under each field; empty when the application can be sent. `phoneVerified`:
+ * the account has a verified phone, from before or from this form.
+ */
 export function validateRoleRequestForm(
   values: RoleRequestFormValues,
+  { phoneVerified }: { phoneVerified: boolean },
 ): RoleRequestFormErrors {
   const errors: RoleRequestFormErrors = {};
   const reason = values.reason.trim();
+  const nameProblem = applicantNameProblem(values.name);
 
   if (!values.role) {
     errors.role = '請選擇一種身分';
+  }
+
+  if (nameProblem) {
+    errors.name = nameProblem;
+  }
+
+  if (!phoneVerified) {
+    errors.phone = '請先完成手機驗證';
   }
 
   if (!reason) {
@@ -68,17 +84,14 @@ export function validateRoleRequestForm(
     errors.reason = `申請理由最多 ${REASON_MAX_LENGTH} 字`;
   }
 
-  if (characters(values.contact.trim()) > CONTACT_MAX_LENGTH) {
-    errors.contact = `聯絡方式最多 ${CONTACT_MAX_LENGTH} 字`;
-  }
-
   return errors;
 }
 
 const FIELD_LABELS: ReadonlyArray<[RoleRequestField, string]> = [
   ['role', '要申請的身分'],
+  ['name', '你的名字'],
+  ['phone', '手機驗證'],
   ['reason', '申請理由'],
-  ['contact', '聯絡方式'],
 ];
 
 /** The fields left to fix, in the order of the form — the summary above the submit button. */
@@ -90,13 +103,15 @@ export function roleRequestFormProblems(
   );
 }
 
-/** The application as the backend takes it: trimmed, and no contact rather than an empty one. */
+/**
+ * The application as the backend takes it, trimmed. No phone: the backend reads the account's
+ * verified one.
+ */
 export function toSubmitRoleRequestInput(
   values: RoleRequestFormValues & { role: RoleRequestRole },
 ): SubmitRoleRequestInput {
   return {
     requestedRole: values.role,
     reason: values.reason.trim(),
-    contact: values.contact.trim() || null,
   };
 }
