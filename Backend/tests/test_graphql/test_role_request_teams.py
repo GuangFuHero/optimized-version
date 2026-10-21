@@ -73,12 +73,11 @@ async def test_a_plain_user_sees_every_active_team_by_name(client, redis):
 
 
 @pytest.mark.asyncio
-async def test_suspended_disbanded_and_deleted_teams_are_left_out(client, redis):
+async def test_suspended_and_deleted_teams_are_left_out(client, redis):
     """Only a team someone can still join is offered (ADR-352 point 2, ADR-357)."""
     await _teams(
         {"name": "啟用隊", "type": "ngo"},
         {"name": "停用隊", "type": "ngo", "status": "suspended"},
-        {"name": "解散隊", "type": "ngo", "status": "disbanded"},
         {"name": "刪除隊", "type": "ngo", "delete_at": datetime.now(UTC)},
     )
     token = await _plain_user_token(redis)
@@ -86,7 +85,7 @@ async def test_suspended_disbanded_and_deleted_teams_are_left_out(client, redis)
     names = set(_names(await _post(client, token)))
 
     assert "啟用隊" in names
-    assert names.isdisjoint({"停用隊", "解散隊", "刪除隊"})
+    assert names.isdisjoint({"停用隊", "刪除隊"})
 
 
 @pytest.mark.asyncio

@@ -84,7 +84,7 @@ async def _managed_team(db: AsyncSession, actor: User, team_uuid) -> Team:
 
 
 class TeamNotActiveError(ValueError):
-    """Suspended or disbanded: a link to it would answer 404 at once. REST answers 409."""
+    """Suspended: a link to it would answer 404 at once. REST answers 409."""
 
 
 async def create_invite(db: AsyncSession, *, actor: User, team_uuid) -> IssuedInvite:

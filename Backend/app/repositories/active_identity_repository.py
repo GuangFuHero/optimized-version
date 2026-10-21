@@ -60,7 +60,7 @@ class ActiveIdentityRepository:
     ) -> list[ActiveIdentity]:
         """Every identity the user can switch to, platform first.
 
-        `include_inactive_teams` also lists those in a suspended or disbanded team: what the
+        `include_inactive_teams` also lists those in a suspended team: what the
         account holds, for eligibility checks and the RBAC admin's view (ADR-359 point 3).
         """
         rows = (

@@ -90,7 +90,7 @@ def upgrade() -> None:
     op.add_column("teams", sa.Column("contact_name", sa.String(length=100), nullable=True))
     op.add_column("teams", sa.Column("contact_phone", sa.String(length=20), nullable=True))
     op.create_check_constraint(
-        "ck_teams_status", "teams", "status IN ('active', 'suspended', 'disbanded')"
+        "ck_teams_status", "teams", "status IN ('active', 'suspended')"
     )
 
     op.execute(
@@ -115,7 +115,10 @@ def downgrade() -> None:
     op.drop_index("ix_role_requests_team_uuid", table_name="role_requests")
     op.drop_constraint("role_requests_invite_uuid_fkey", "role_requests", type_="foreignkey")
     op.drop_constraint("role_requests_team_uuid_fkey", "role_requests", type_="foreignkey")
-    for column in ("applicant_email", "applicant_phone", "applicant_name", "invite_uuid", "new_team_name", "team_uuid"):
+    added = (
+        "applicant_email", "applicant_phone", "applicant_name", "invite_uuid", "new_team_name", "team_uuid"
+    )
+    for column in added:
         op.drop_column("role_requests", column)
 
     op.execute("DROP TRIGGER IF EXISTS audit_trigger_team_invites ON team_invites;")

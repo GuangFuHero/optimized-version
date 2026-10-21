@@ -230,9 +230,9 @@ async def test_gov_widening_leaves_own_scope_alone(db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", ["suspended", "disbanded"])
+@pytest.mark.parametrize("status", ["suspended"])
 async def test_a_gov_team_that_is_not_active_does_not_widen(db, status):
-    """Only an active gov team reaches every station; a suspended or disbanded one keeps plain `team`.
+    """Only an active gov team reaches every station; a suspended or inactive one keeps plain `team`.
 
     assign_station already refuses a team that is not active. Widening one would hand it the
     nationwide reach it cannot even be given a single station with.
@@ -541,7 +541,7 @@ async def test_unassigning_clears_the_team(db):
 @pytest.mark.parametrize(
     ("target", "message"), [("missing", "Team not found"), ("suspended", "Team is not active")]
 )
-async def test_a_station_cannot_go_to_a_missing_or_suspended_team(db, target, message):
+async def test_a_station_cannot_go_to_a_missing_or_inactive_team(db, target, message):
     """Same create-time check as assign_zone_to_team: the target team must exist and be active."""
     gov = await _team(db, "Gov", "gov")
     author = await _user(db, "Author")

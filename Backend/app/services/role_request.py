@@ -511,7 +511,7 @@ async def approve(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, not
     note = _checked_note(note)
     reviewer_uuid = actor.uuid  # read before the commit expires `actor`
     # Lock the team before the request, the order set_team_status takes them in, so an approval
-    # and a disband cannot interleave: whichever runs second sees the other's result.
+    # and a suspension cannot interleave: whichever runs second sees the other's result.
     team_uuid = await db.scalar(select(RoleRequest.team_uuid).where(RoleRequest.uuid == request_uuid))
     if team_uuid is not None:
         await db.execute(select(Team.uuid).where(Team.uuid == team_uuid).with_for_update())

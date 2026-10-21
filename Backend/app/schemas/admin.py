@@ -161,9 +161,9 @@ class TeamMemberItem(BaseModel):
 
 
 class TeamStatusRequest(BaseModel):
-    """Body for suspending, restoring or disbanding a team (Spec/026, ADR-357)."""
+    """Body for suspending or restoring a team (Spec/026, ADR-357)."""
 
-    status: Literal["active", "suspended", "disbanded"]
+    status: Literal["active", "suspended"]
 
 
 class TeamResponse(BaseModel):

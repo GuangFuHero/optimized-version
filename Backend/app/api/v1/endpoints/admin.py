@@ -270,11 +270,10 @@ async def update_team(
 @router.post(
     "/teams/{team_uuid}/status",
     response_model=TeamResponse,
-    summary="停用／恢復／解散 team",
+    summary="停用／恢復 team",
     responses={
         403: {"description": "Permission Denied"},
         404: {"description": "Team not found"},
-        409: {"description": "The team is disbanded"},
     },
 )
 async def set_team_status(
@@ -283,15 +282,13 @@ async def set_team_status(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Super admin only. Suspending switches the team's identities off; disbanding ends membership."""
+    """Super admin only. Suspending switches the team's identities off; restoring brings them back."""
     try:
         team = await admin_service.set_team_status(
             db, actor=current_user, team_uuid=str(team_uuid), new_status=body.status
         )
     except AdminNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
-    except AdminConflictError as err:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
     return TeamResponse.model_validate(team)
 
 

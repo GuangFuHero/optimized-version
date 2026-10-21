@@ -1,4 +1,4 @@
-"""Suspending, restoring and disbanding a team (Spec/026 Task 9, ADR-357 points 3-4).
+"""Suspending and restoring a team (Spec/026 Task 9, ADR-357 points 3-4). There is no disbanding.
 
 Suspension switches the team's identities off at the one place every request resolves them
 (active_identity_repository), so these tests go through real tokens and real requests.
@@ -149,36 +149,18 @@ async def test_restoring_brings_the_identity_back_as_it_was(client, db_session, 
 
 
 @pytest.mark.asyncio
-async def test_disbanding_ends_membership_and_keeps_the_team_as_history(client, db_session, redis):
-    """Every grant in the team is removed; the row stays, not soft-deleted."""
+async def test_there_is_no_disbanding(client, db_session, redis):
+    """ADMIN-027 Story 4: a team stays, and its last admin with it (ADR-356, ADR-357)."""
     world = await World().build(db_session, redis)
 
     response = await world.set(client, "disbanded")
 
-    assert response.status_code == 200
-    grants = await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.team_uuid == world.team))
-    assert grants.first() is None
-    team = (
-        await db_session.execute(select(Team.status, Team.delete_at).where(Team.uuid == world.team))
-    ).one()
-    assert tuple(team) == ("disbanded", None)
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", ["active", "suspended"])
-async def test_a_disbanded_team_cannot_change_again(client, db_session, redis, status):
-    """There is nobody left in it to restore."""
-    world = await World().build(db_session, redis)
-    await world.set(client, "disbanded")
-
-    response = await world.set(client, status)
-
-    assert (response.status_code, response.json()["detail"]) == (409, "A disbanded team cannot be changed")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(("status", "note"), [("suspended", "團隊已停用"), ("disbanded", "團隊已解散")])
-async def test_leaving_active_rejects_the_teams_pending_requests(client, db_session, redis, status, note):
+@pytest.mark.parametrize(("status", "note"), [("suspended", "團隊已停用")])
+async def test_suspending_rejects_the_teams_pending_requests(client, db_session, redis, status, note):
     """Nobody could approve them any more; the applicant is told why."""
     world = await World().build(db_session, redis)
 

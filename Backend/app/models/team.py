@@ -18,7 +18,7 @@ class Team(Base, UUIDPKMixin, TimestampMixin):
 
     __tablename__ = "teams"
     __table_args__ = (
-        CheckConstraint("status IN ('active', 'suspended', 'disbanded')", name="ck_teams_status"),
+        CheckConstraint("status IN ('active', 'suspended')", name="ck_teams_status"),
     )
     # ADR-053: team-scope resources filter on this column; Team's boundary is its own uuid.
     __team_scope_attr__ = "uuid"

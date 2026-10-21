@@ -187,7 +187,7 @@ async def test_checks_refuse_a_request_with_the_wrong_target(migrated, columns):
                 await conn.execute(
                     text(
                         "INSERT INTO users (uuid, name, credibility_score)"
-                    " VALUES (gen_random_uuid(), 'c', 50) RETURNING uuid"
+                        " VALUES (gen_random_uuid(), 'c', 50) RETURNING uuid"
                     )
                 )
             ).scalar_one()
@@ -243,15 +243,16 @@ async def test_an_invite_expires_24_hours_after_the_database_created_it(migrated
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_team_status_is_one_of_three(migrated):
-    """ADR-357: active, suspended or disbanded."""
+@pytest.mark.parametrize("status", ["paused", "disbanded"])
+async def test_team_status_is_active_or_suspended(migrated, status):
+    """ADR-357: active or suspended; there is no disbanding (ADMIN-027 Story 4)."""
     async with migrated.connect() as conn:
         with pytest.raises(IntegrityError):
             await conn.execute(
                 text(
-                    "INSERT INTO teams (uuid, name, type, status)"
-                    " VALUES (gen_random_uuid(), 'x', 'gov', 'paused')"
-                )
+                    "INSERT INTO teams (uuid, name, type, status) VALUES (gen_random_uuid(), 'x', 'gov', :s)"
+                ),
+                {"s": status},
             )
 
 

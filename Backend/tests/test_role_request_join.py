@@ -130,7 +130,6 @@ async def test_refusals_name_what_to_fix(db, changes, message):
     [
         pytest.param({"type_": "ngo"}, id="wrong type"),
         pytest.param({"status": "suspended"}, id="suspended"),
-        pytest.param({"status": "disbanded"}, id="disbanded"),
         pytest.param({"delete_at": datetime.now(UTC)}, id="deleted"),
     ],
 )

@@ -260,7 +260,7 @@ async def _invite_case(client, db_session, redis, case: str) -> tuple[str, dict]
         await _expire(db_session, token)
     elif case == "unknown":
         token = "no-such-token"
-    elif case in ("suspended", "disbanded"):
+    elif case == "suspended":
         await db_session.execute(text("UPDATE teams SET status = :s"), {"s": case})
     elif case == "deleted":
         await db_session.execute(text("UPDATE teams SET delete_at = now()"))
@@ -269,7 +269,7 @@ async def _invite_case(client, db_session, redis, case: str) -> tuple[str, dict]
     return token, await _site_headers(db_session, redis, visitor)
 
 
-CASES = ["expired", "unknown", "suspended", "disbanded", "deleted"]
+CASES = ["expired", "unknown", "suspended", "deleted"]
 
 
 @pytest.mark.asyncio

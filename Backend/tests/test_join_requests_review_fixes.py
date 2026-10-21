@@ -67,33 +67,9 @@ async def test_renaming_to_null_is_a_field_to_fix(db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["add member", "edit"])
-async def test_a_disbanded_team_refuses_changes(db, action):
-    """Kept as history only (ADR-357)."""
-    team = await _team(db, status="disbanded")
-    team_uuid = str(team.uuid)
-    boss = await _super(db)
-    await _role(db, "member", {}, kind="team")
-    someone = User(name="x")
-    db.add(someone)
-    await db.flush()
-
-    with pytest.raises(AdminConflictError, match="^A disbanded team cannot be changed$"):
-        if action == "add member":
-            await admin_service.add_team_member(
-                db, actor=boss, team_uuid=team_uuid, user_uuid=str(someone.uuid)
-            )
-        else:
-            await admin_service.update_team(
-                db, actor=boss, team_uuid=team_uuid, changes={"contact_name": "x"}
-            )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("status", ["suspended", "disbanded"])
-async def test_no_invite_for_a_team_that_is_not_active(db, status):
+async def test_no_invite_for_a_suspended_team(db):
     """The link would 404 at once; say so instead of issuing it."""
-    team = await _team(db, status=status)
+    team = await _team(db, status="suspended")
     boss = await _super(db)
 
     with pytest.raises(team_invite.TeamNotActiveError):
@@ -139,8 +115,13 @@ async def test_a_suspended_teams_member_still_cannot_become_a_data_auditor(db):
 
 
 @pytest.mark.asyncio
-async def test_approving_while_the_team_is_disbanded_leaves_no_grant_in_it(db):
-    """Approval locks the team before the request, as disbanding does, so they cannot interleave."""
+async def test_approving_while_the_team_is_suspended_settles_one_way(db):
+    """Approval locks the team before the request, as suspending does, so they cannot interleave.
+
+    Either the approval lands first (approved, and the grant kept for when the team is restored)
+    or the suspension does (the request rejected with its note, no grant). Never an approved
+    request without its grant, or a grant for a request the suspension closed.
+    """
     await _role(db, "member", {}, kind="team")
     team = await _team(db)
     team_uuid = team.uuid
@@ -167,12 +148,12 @@ async def test_approving_while_the_team_is_disbanded_leaves_no_grant_in_it(db):
                 session, actor=await actor(session, *who[0]), request_uuid=request_uuid, note=None
             )
 
-        async def disband(session):
+        async def suspend(session):
             await admin_service.set_team_status(
-                session, actor=await actor(session, *who[1]), team_uuid=str(team_uuid), new_status="disbanded"
+                session, actor=await actor(session, *who[1]), team_uuid=str(team_uuid), new_status="suspended"
             )
 
-        outcomes = await asyncio.gather(approve(sessions[0]), disband(sessions[1]), return_exceptions=True)
+        outcomes = await asyncio.gather(approve(sessions[0]), suspend(sessions[1]), return_exceptions=True)
     finally:
         for session in sessions:
             await session.close()
@@ -186,8 +167,11 @@ async def test_approving_while_the_team_is_disbanded_leaves_no_grant_in_it(db):
     ]
     assert not unexpected, outcomes
     db.expire_all()
-    grants = await db.execute(select(UserRoleAssign).where(UserRoleAssign.team_uuid == team_uuid))
-    assert grants.first() is None
+    status = (await db.execute(select(role_request.RoleRequest.status))).scalar_one()
+    granted = (
+        await db.execute(select(UserRoleAssign).where(UserRoleAssign.team_uuid == team_uuid))
+    ).first() is not None
+    assert (status, granted) in {("approved", True), ("rejected", False)}
 
 
 def test_data_auditors_read_applicant_details_masked():
