@@ -5,10 +5,7 @@ import { useTeams } from '@rescue-frontend/data-access/admin';
 import { designTokens } from '@rescue-frontend/ui';
 
 import { STATION_TYPE_OPTIONS } from '../../type-options';
-import {
-  UNASSIGNED_TEAM,
-  type StationFilters,
-} from './model/station-filters';
+import { UNASSIGNED_TEAM, type StationFilters } from './model/station-filters';
 import { OPERATIONAL_STATUS_OPTIONS } from './model/status';
 
 const { color, typography } = designTokens;
@@ -25,8 +22,10 @@ export function StationFilterPanel({
   canViewTeams,
 }: StationFilterPanelProps) {
   const teams = useTeams({ enabled: canViewTeams });
-  const set = <K extends keyof StationFilters>(key: K, value: StationFilters[K]) =>
-    onChange({ ...filters, [key]: value });
+  const set = <K extends keyof StationFilters>(
+    key: K,
+    value: StationFilters[K],
+  ) => onChange({ ...filters, [key]: value });
 
   return (
     <Box
@@ -43,13 +42,19 @@ export function StationFilterPanel({
       <ChipRow
         label="類型"
         value={filters.type}
-        options={STATION_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+        options={STATION_TYPE_OPTIONS.map((o) => ({
+          value: o.value,
+          label: o.label,
+        }))}
         onChange={(v) => set('type', v)}
       />
       <ChipRow
         label="營運狀態"
         value={filters.status}
-        options={OPERATIONAL_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+        options={OPERATIONAL_STATUS_OPTIONS.map((o) => ({
+          value: o.value,
+          label: o.label,
+        }))}
         onChange={(v) => set('status', v)}
       />
       <ChipRow

@@ -173,7 +173,9 @@ function StationCard({
         borderBottom: `1px solid ${color.border.subtle}`,
         borderLeft: `3px solid ${selected ? color.bg.primary.default : 'transparent'}`,
         bgcolor: selected ? color.bg.primary.subtle : 'transparent',
-        '&:hover': { bgcolor: selected ? color.bg.primary.subtle : color.bg.neutral.subtle },
+        '&:hover': {
+          bgcolor: selected ? color.bg.primary.subtle : color.bg.neutral.subtle,
+        },
       }}
     >
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -182,15 +184,23 @@ function StationCard({
         </Typography>
         <Typography
           noWrap
-          sx={{ ...typography.body[300], color: color.fg.neutral.subtle, mt: '2px' }}
+          sx={{
+            ...typography.body[300],
+            color: color.fg.neutral.subtle,
+            mt: '2px',
+          }}
         >
           {[row.typeLabel, row.area].filter(Boolean).join(' · ')}
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', mt: '4px' }}>
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', gap: '10px', mt: '4px' }}
+        >
           <Typography
             sx={{
               ...typography.body[300],
-              color: row.teamName ? color.fg.neutral.subtle : color.fg.neutral.muted,
+              color: row.teamName
+                ? color.fg.neutral.subtle
+                : color.fg.neutral.muted,
             }}
           >
             {row.teamName ?? '未指派'}

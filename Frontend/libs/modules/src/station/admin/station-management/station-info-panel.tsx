@@ -7,7 +7,11 @@ import { EyeOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { getStationTypeLabel } from '../../type-options';
-import { formatAbsoluteTime, FreshnessCell, StatusBadge } from './station-cells';
+import {
+  formatAbsoluteTime,
+  FreshnessCell,
+  StatusBadge,
+} from './station-cells';
 
 const { color, radius, typography } = designTokens;
 
@@ -38,7 +42,10 @@ export function StationInfoPanel({
   now: Date;
 }) {
   const privateLabel = (label: string) => (
-    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+    <Box
+      component="span"
+      sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+    >
       {label}
       <Badge tone="warning" size="sm" icon={<EyeOff size={11} />}>
         不公開
@@ -66,9 +73,19 @@ export function StationInfoPanel({
           },
           { label: '物資狀況', value: station.supplyStatus || '—' },
           { label: '開放時間', value: station.opHour || '—' },
-          { label: privateLabel('聯絡人'), value: station.contactName || '—', note: masked },
-          { label: privateLabel('聯絡電話'), value: station.contactPhone || '—' },
-          { label: privateLabel('聯絡 Email'), value: station.contactEmail || '—' },
+          {
+            label: privateLabel('聯絡人'),
+            value: station.contactName || '—',
+            note: masked,
+          },
+          {
+            label: privateLabel('聯絡電話'),
+            value: station.contactPhone || '—',
+          },
+          {
+            label: privateLabel('聯絡 Email'),
+            value: station.contactEmail || '—',
+          },
           { label: '說明', value: station.description || '—' },
           { label: privateLabel('內部備註'), value: station.comment || '—' },
           { label: '建立時間', value: formatAbsoluteTime(station.createdAt) },
@@ -137,7 +154,9 @@ export function StationInfoPanel({
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Box>
-      <Typography sx={{ ...typography.label[400], mb: '8px' }}>{title}</Typography>
+      <Typography sx={{ ...typography.label[400], mb: '8px' }}>
+        {title}
+      </Typography>
       {children}
     </Box>
   );

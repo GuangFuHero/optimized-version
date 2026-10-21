@@ -41,7 +41,12 @@ function CellMenu({
           event.stopPropagation();
           setAnchor(event.currentTarget);
         }}
-        sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px', borderRadius: 1 }}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          borderRadius: 1,
+        }}
       >
         {trigger}
         <ChevronsUpDown size={13} />
@@ -66,7 +71,9 @@ export function QuickStatusCell({ row }: { row: StationRow }) {
       { uuid: row.uuid, input: { operationalStatus: status } },
       {
         onSuccess: () =>
-          toast.success(`已更新為「${getOperationalStatusMeta(status).label}」`),
+          toast.success(
+            `已更新為「${getOperationalStatusMeta(status).label}」`,
+          ),
       },
     );
   };

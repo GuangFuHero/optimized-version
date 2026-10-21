@@ -80,7 +80,7 @@
 
 - `admin/station-create/*`
 - `admin/station-detail/*`
-- `admin/station-list/*`
+- `admin/station-management/*`：admin `/stations` 頁（列表／地圖、抽屜、審查、匯入匯出）
 - `report/*`
 - `type-options.ts`
 

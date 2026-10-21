@@ -33,7 +33,9 @@ const TEXT_FIELDS = [
   'contactEmail',
 ] as const;
 
-export function emptyStationForm(position?: [number, number]): StationFormState {
+export function emptyStationForm(
+  position?: [number, number],
+): StationFormState {
   return {
     name: '',
     type: '',
@@ -80,7 +82,8 @@ export function validateStationForm(form: StationFormState): StationFormErrors {
   if (!form.name.trim()) errors.name = '請輸入站點名稱';
   if (!form.type) errors.type = '請選擇類型';
   if (!validCoordinate(form.latitude, 90)) errors.latitude = '請輸入有效的緯度';
-  if (!validCoordinate(form.longitude, 180)) errors.longitude = '請輸入有效的經度';
+  if (!validCoordinate(form.longitude, 180))
+    errors.longitude = '請輸入有效的經度';
   return errors;
 }
 
@@ -115,12 +118,16 @@ export function buildUpdateInput(
 ): UpdateStationInput {
   const input: Record<string, unknown> = {};
   for (const key of TEXT_FIELDS) {
-    if (form[key].trim() !== original[key].trim()) input[key] = form[key].trim();
+    if (form[key].trim() !== original[key].trim())
+      input[key] = form[key].trim();
   }
   if (form.operationalStatus !== original.operationalStatus) {
     input.operationalStatus = form.operationalStatus;
   }
-  if (form.latitude !== original.latitude || form.longitude !== original.longitude) {
+  if (
+    form.latitude !== original.latitude ||
+    form.longitude !== original.longitude
+  ) {
     input.geometry = point(form);
   }
   return input as UpdateStationInput;

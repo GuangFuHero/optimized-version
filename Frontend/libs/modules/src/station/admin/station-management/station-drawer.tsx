@@ -77,12 +77,16 @@ export function StationDrawer({
                 </Badge>
               ) : null}
               {data.pendingSuggestedFields.length > 0 ? (
-                <Badge tone="warning">{data.pendingSuggestedFields.length} 欄待審</Badge>
+                <Badge tone="warning">
+                  {data.pendingSuggestedFields.length} 欄待審
+                </Badge>
               ) : null}
             </Box>
             <Tabs value={tab} onChange={(_, next) => setTab(next)}>
               <Tab value="info" label="基本資料" />
-              {caps.canViewHistory ? <Tab value="history" label="版本歷史" /> : null}
+              {caps.canViewHistory ? (
+                <Tab value="history" label="版本歷史" />
+              ) : null}
             </Tabs>
           </Box>
         ) : null
@@ -116,12 +120,18 @@ export function StationDrawer({
       }
     >
       {notFound ? (
-        <Callout tone="warning">找不到這個站點，可能已刪除或不在你的權限範圍。</Callout>
+        <Callout tone="warning">
+          找不到這個站點，可能已刪除或不在你的權限範圍。
+        </Callout>
       ) : data ? (
         tab === 'history' && caps.canViewHistory ? (
           <StationHistoryPanel uuid={data.uuid} />
         ) : (
-          <StationInfoPanel station={data} canViewPii={caps.canViewPii} now={now} />
+          <StationInfoPanel
+            station={data}
+            canViewPii={caps.canViewPii}
+            now={now}
+          />
         )
       ) : null}
     </Sheet>

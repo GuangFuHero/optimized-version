@@ -88,8 +88,8 @@ describe('applyClientFilters', () => {
   });
 
   it('counts active filters', () => {
-    expect(countActiveFilters({ ...EMPTY_FILTERS, type: 'water', q: 'x' })).toBe(
-      1,
-    );
+    expect(
+      countActiveFilters({ ...EMPTY_FILTERS, type: 'water', q: 'x' }),
+    ).toBe(1);
   });
 });

@@ -77,20 +77,28 @@ export function StationTable({
       header: '指派 Team',
       meta: { width: '150px' },
       cell: ({ row }) =>
-        renderTeam ? renderTeam(row.original) : <TeamText name={row.original.teamName} />,
+        renderTeam ? (
+          renderTeam(row.original)
+        ) : (
+          <TeamText name={row.original.teamName} />
+        ),
     },
     {
       id: 'updated',
       header: '最後更新',
       meta: { width: '120px' },
-      cell: ({ row }) => <FreshnessCell updatedAt={row.original.updatedAt} now={now} />,
+      cell: ({ row }) => (
+        <FreshnessCell updatedAt={row.original.updatedAt} now={now} />
+      ),
     },
   ];
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {truncated ? (
-        <Callout tone="warning">只載入前 5,000 個站點，請用篩選縮小範圍。</Callout>
+        <Callout tone="warning">
+          只載入前 5,000 個站點，請用篩選縮小範圍。
+        </Callout>
       ) : null}
       <Box
         sx={{
@@ -113,7 +121,10 @@ export function StationTable({
                 <Muted>載入中…</Muted>
               </Box>
             ) : (
-              <StationEmptyState hasAnyStation={hasAnyStation} canAdd={canAdd} />
+              <StationEmptyState
+                hasAnyStation={hasAnyStation}
+                canAdd={canAdd}
+              />
             )
           }
         />
@@ -154,7 +165,9 @@ export function StationEmptyState({
 function StationNameCell({ row }: { row: StationRow }) {
   const TypeIcon = getStationTypeIcon(row.type);
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+    <Box
+      sx={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}
+    >
       <Box
         sx={{
           width: 36,
@@ -174,8 +187,12 @@ function StationNameCell({ row }: { row: StationRow }) {
         <Typography noWrap title={row.name} sx={typography.label[400]}>
           {row.name}
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', mt: '2px' }}>
-          <Typography sx={{ ...typography.data[300], color: color.fg.neutral.muted }}>
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', gap: '6px', mt: '2px' }}
+        >
+          <Typography
+            sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+          >
             {row.uuid.slice(0, 8)}
           </Typography>
           {row.isOfficial ? (
@@ -210,7 +227,10 @@ export function TeamText({ name }: { name: string | null }) {
 
 function Muted({ children }: { children: ReactNode }) {
   return (
-    <Typography noWrap sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}>
+    <Typography
+      noWrap
+      sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
+    >
       {children}
     </Typography>
   );

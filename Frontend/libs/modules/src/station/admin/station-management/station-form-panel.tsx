@@ -21,7 +21,10 @@ import {
   type StationFormErrors,
   type StationFormState,
 } from './model/station-form';
-import { OPERATIONAL_STATUS_OPTIONS, type OperationalStatus } from './model/status';
+import {
+  OPERATIONAL_STATUS_OPTIONS,
+  type OperationalStatus,
+} from './model/status';
 
 const { color, typography } = designTokens;
 
@@ -42,7 +45,10 @@ export function StationFormPanel({
   onSaved,
   onCancel,
 }: StationFormPanelProps) {
-  const station = useStation({ uuid: uuid ?? '' }, { enabled: mode === 'edit' });
+  const station = useStation(
+    { uuid: uuid ?? '' },
+    { enabled: mode === 'edit' },
+  );
   // Snapshot the station once it loads; a later refetch must not wipe edits in progress.
   const loaded = mode === 'edit' ? (station.data?.station ?? null) : null;
   const [original, setOriginal] = useState<StationFormState>(() =>
@@ -65,7 +71,10 @@ export function StationFormPanel({
     setForm(next);
   }, [loaded]);
 
-  const set = <K extends keyof StationFormState>(key: K, value: StationFormState[K]) => {
+  const set = <K extends keyof StationFormState>(
+    key: K,
+    value: StationFormState[K],
+  ) => {
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: undefined }));
   };
@@ -123,7 +132,10 @@ export function StationFormPanel({
     >
       {mode === 'new' && position ? (
         <Callout tone="info">
-          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <Box
+            component="span"
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
             <MapPin size={14} />
             座標已由地圖帶入：{position[0].toFixed(5)}, {position[1].toFixed(5)}
           </Box>
@@ -172,7 +184,9 @@ export function StationFormPanel({
           </MenuItem>
         ))}
       </TextField>
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+      <Box
+        sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}
+      >
         <TextInput
           label="緯度 *"
           value={form.latitude}
@@ -193,7 +207,9 @@ export function StationFormPanel({
         size="small"
         label="營運狀態"
         value={form.operationalStatus}
-        onChange={(e) => set('operationalStatus', e.target.value as OperationalStatus)}
+        onChange={(e) =>
+          set('operationalStatus', e.target.value as OperationalStatus)
+        }
       >
         {OPERATIONAL_STATUS_OPTIONS.map((option) => (
           <MenuItem key={option.value} value={option.value}>
@@ -221,7 +237,14 @@ export function StationFormPanel({
         minRows={2}
       />
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', color: color.fg.neutral.muted }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: color.fg.neutral.muted,
+        }}
+      >
         <EyeOff size={14} />
         <Typography sx={typography.body[300]}>
           {contactLocked
@@ -250,11 +273,26 @@ export function StationFormPanel({
         inputMode="email"
       />
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', pt: '8px' }}>
-        <Typography sx={{ ...typography.body[300], color: color.fg.neutral.muted, flex: 1 }}>
-          {mode === 'new' ? '後台新增的站點會標示為官方' : '儲存後自動記錄操作者與時間'}
+      <Box
+        sx={{ display: 'flex', alignItems: 'center', gap: '8px', pt: '8px' }}
+      >
+        <Typography
+          sx={{
+            ...typography.body[300],
+            color: color.fg.neutral.muted,
+            flex: 1,
+          }}
+        >
+          {mode === 'new'
+            ? '後台新增的站點會標示為官方'
+            : '儲存後自動記錄操作者與時間'}
         </Typography>
-        <Button variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onCancel}
+          disabled={submitting}
+        >
           取消
         </Button>
         <Button type="submit" size="sm" disabled={submitting}>
