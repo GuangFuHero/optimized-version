@@ -19,7 +19,7 @@
 - Task 13 完成：見 `verification.md`。本機全套件 2335 passed、0 failed；API 走查 41/41。
 - 2026-10-21 PR #93 review（jujuyuzu，CHANGES_REQUESTED）後：
   - 稽核全平台視角再遮 `user_contacts.value`、`user_identities.provider_subject`。
-  - 團隊成員名單：`UserDirectory` base + `PlatformUserDirectory`／`TeamMemberDirectory`，新權限 `team.member.view`（ADR-361）。
+  - 團隊成員名單：`UserDirectory` base + `PlatformUserDirectory`／`TeamMemberDirectory`，新權限 `team.member.view`（ADR-362）。
   - 邀請頁加 `pending_elsewhere`；交接說明補 LINE-only 帳號要等 #94；RBAC 矩陣、er-diagram、migration E501。
   - **拿掉團隊解散**（Popo，依 ADMIN-027 Story 4）：status 只剩 active／suspended；ADR-357 修訂、ADR-360 SUPERSEDED。
   - 前端產生的 contracts 重新產生並 commit（使用者同意）。

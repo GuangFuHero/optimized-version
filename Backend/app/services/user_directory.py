@@ -168,11 +168,6 @@ class TeamMemberDirectory(UserDirectory):
         ]
 
 
-def _decode(value) -> str:
-    """Redis runs in bytes mode (decode_responses=False); normalize a member to str."""
-    return value.decode() if isinstance(value, bytes) else value
-
-
 async def identities_by_user(db: AsyncSession, user_uuids: list[str]) -> dict[str, list[IdentitySummary]]:
     """Map each user_uuid to every identity they hold (ADR-073)."""
     if not user_uuids:

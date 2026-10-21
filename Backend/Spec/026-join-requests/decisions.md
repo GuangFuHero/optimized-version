@@ -223,7 +223,7 @@ Adding a phone is gated by ADR-220 whenever the account has something to prove i
    alone.
 5. **Who reads `real_name`**: the same people who read applicant details (ADR-287 point 7, ADR-354 point 3) —
    `role_request.review` holders anywhere, and whoever manages a team's members (its admins) in that team's
-   member list (`GET /admin/teams/{uuid}/members`, ADR-361). `GET /api/v1/admin/users` returns it only to `role_request.review` holders: `user.view`
+   member list (`GET /admin/teams/{uuid}/members`, ADR-362). `GET /api/v1/admin/users` returns it only to `role_request.review` holders: `user.view`
    at `all` is also seeded to `data_auditor`, which ADR-287 keeps away from these details. It is never in site
    responses, `UserRefType`, history actor names or notifications, which keep `users.name`.
 6. **`contact`** is no longer written or accepted; old rows keep theirs.
@@ -262,6 +262,7 @@ Team edit, status and the audit-log read API are open questions in the spec.
 > cannot be removed or demoted; step 4: an admin who wants the team gone removes the other members and stops
 > signing in, and the team stays) has no such feature, and disbanding removed every grant, the last admin's
 > included, which went round ADR-356. The `disbanded` status, its grant removal and its checks are gone.
+> Confirmed with Carol (product) on 2026-10-21; BE-038 Part B updated to match.
 
 **In plain words**: a team admin can edit their own team's name, tax ID and contact; a super admin can edit
 any team. Only a super admin suspends or restores a team. While a team is suspended its members are still
@@ -365,8 +366,10 @@ their queue (ADR-354 point 3).
    invites (409); the last-admin guard also covers the RBAC admin's role revoke; approving a member request
    locks the team before the request, the order suspending takes them in, so the two cannot interleave.
 5. **The platform audit view masks applicant details** (`reason`, `contact`, `applicant_*` on
-   `role_requests`; `real_name` on `users`) for callers without `role_request.review` — in practice data
-   auditors, who ADR-287 point 7 keeps from them. Team admins read their own team's, as in their queue.
+   `role_requests`; `real_name` on `users`) and, after PR #93 review, every account's login contacts and SSO
+   subjects (`value` on `user_contacts`, `provider_subject` on `user_identities`), which would otherwise undo
+   the first masking — for callers without `role_request.review`, in practice data auditors, who ADR-287
+   point 7 keeps from them. Team admins read their own team's applicants, as in their queue.
 
 **Consequences**:
 ➕ One rule for team names, whichever endpoint is used.
@@ -392,7 +395,7 @@ disbanded team until a super admin or a gov team reassigns them.
 
 ---
 
-### ADR-361 Account lists share one base; a team's member list has its own capability
+### ADR-362 Account lists share one base; a team's member list has its own capability
 
 > **Status: ACCEPTED (2026-10-21).** Popo, 2026-10-21, after PR #93 review asked where team admins read their
 > members: one base, one subclass for every account and one for a team's members, each with its own

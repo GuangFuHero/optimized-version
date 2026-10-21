@@ -8,7 +8,7 @@ Stories 1–5)
 **Branch**: `feat/join-requests`
 **Depends on**: `Spec/019-role-requests` (the application this extends), `Spec/010-multi-team-membership`
 (team identities, `act` claim), `Spec/012-account-profile` (verified contacts)
-**Decisions**: `decisions.md` in this folder (ADR-350 to ADR-361)
+**Decisions**: `decisions.md` in this folder (ADR-350 to ADR-362)
 
 ## Overview
 
@@ -120,7 +120,7 @@ No `revoked_at`, no `max_uses`, no `uses` (BE-038 step 1). The table is in `AUDI
 
 | Column | Type | Notes |
 |---|---|---|
-| `contact_name` | varchar(100) NULL | Shown to other teams in 所有團隊 |
+| `contact_name` | varchar(100) NULL | Shown where the team is already visible — its own members and super admins, not other teams (ADR-357 point 5) |
 | `contact_phone` | varchar(20) NULL | Same |
 
 `status` (exists, default `active`) gains the value `suspended` with a CHECK on the two; there is no disbanding
@@ -187,7 +187,7 @@ REST so that "returns 404" is a real HTTP status (ADR-353).
 | `GET /api/v1/admin/users` | Items gain `real_name`, filled only for `role_request.review` holders (data auditors also hold `user.view`, ADR-355 point 5) |
 | `PATCH /api/v1/admin/teams/{uuid}` *(new)* | Name, tax ID, `contact_name`, `contact_phone`. Team admin: own team; super admin: any (ADR-357) |
 | `POST /api/v1/admin/teams/{uuid}/status` *(new)* | `{"status": "active" \| "suspended"}`, super admin only |
-| `GET /api/v1/admin/teams/{uuid}/members` *(new)* | The team's members: `uuid`, `name`, `real_name` (admins and reviewers only), `role_uuid`, `role`. `team.member.view` covering the team (ADR-361) |
+| `GET /api/v1/admin/teams/{uuid}/members` *(new)* | The team's members: `uuid`, `name`, `real_name` (admins and reviewers only), `role_uuid`, `role`. `team.member.view` covering the team (ADR-362) |
 | `GET /api/v1/admin/teams` | Items gain `contact_name`, `contact_phone` |
 | `GET /api/v1/admin/audit-logs` *(new)* | `table`, `row_id`, `actor_uuid`, `from`, `to`, `limit` (≤ 100), `offset`; newest first (ADR-358) |
 
@@ -225,7 +225,7 @@ Approval does not also send `team_member_added`; the approval notice says it.
 | Team contact fields | `contact_name`, `contact_phone` on `teams`; in `TeamResponse`, visible where the team already is — not to other teams (ADR-356, ADR-357 point 5) | Designed |
 | Team edit | `PATCH /api/v1/admin/teams/{uuid}`: name, tax ID, contact fields. Super admin any team, team admin own team, via `team.edit` (seed adds `admin` at `team`) (ADR-357) | Designed |
 | Suspend / restore | `POST /api/v1/admin/teams/{uuid}/status`, super admin only. Suspended: grants kept but give no permission, identity cannot be used. No disbanding (ADMIN-027 Story 4, ADR-357) | Designed |
-| Member list | `GET /api/v1/admin/teams/{uuid}/members` on a user directory base shared with `/admin/users` (ADR-361) | Designed |
+| Member list | `GET /api/v1/admin/teams/{uuid}/members` on a user directory base shared with `/admin/users` (ADR-362) | Designed |
 | Audit-log read API | `GET /api/v1/admin/audit-logs`. `audit.view` at `all`: every row. Team admins (new capability `team.audit.view` at `team`): rows about their active team only — the team row, its grants, requests, invites, zone assignments (ADR-358) | Designed |
 
 ## API handover for the frontend
@@ -323,7 +323,8 @@ task that adds it:
 - Migration parent: Spec 025's head `a5e641c99923` (#92). Popo, 2026-10-21: #92 merges first and this PR is
   stacked on `feat/dedup-review-queue`, so `11f0025d521b` revises `a5e641c99923`, not main's `209c4375c3e1`.
 - New grants: `team.edit` and the new `team.audit.view` to `admin` at `team`; `team.audit.view` to
-  `super_admin` at `all` (ADR-357, ADR-358). The seed writes them on a new database; migration
+  `super_admin` at `all` (ADR-357, ADR-358); the new `team.member.view` to `admin` and `member` at `team`,
+  `super_admin` at `all` (ADR-362). The seed writes them on a new database; migration
   `79a19cabc98a` writes the missing ones on an existing database, keeping any scope set at runtime (ADR-055).
 - Migrations: `209c4375c3e1` → (#92) `1649d30b0122` → `a5e641c99923` → `11f0025d521b` → `0662cf1d2c83` →
   `79a19cabc98a`, one head.
