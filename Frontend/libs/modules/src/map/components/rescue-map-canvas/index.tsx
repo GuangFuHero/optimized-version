@@ -11,17 +11,24 @@ import {
 import { createPortal } from 'react-dom';
 
 import {
+  areaSignature,
+  areaTooltipLines,
+  largestAreasFirst,
+} from '../../areas';
+import { PUBLIC_ZONE_COLORS } from '../../constants';
+import {
   buildLocationCells,
   isCoarseTicket,
   locationCellBoundary,
   locationCellLabelFit,
 } from '../../location-cells';
 import type {
-  RescueMapClosureArea,
+  RescueMapArea,
   RescueMapControllerValue,
   RescueMapDraftPoint,
   RescueMapLocationCell,
   RescueMapMarkerItem,
+  RescueMapPublicZone,
   RescueMapViewportStoreSnapshot,
   RescueMapViewportStoreLike,
 } from '../../types';
@@ -91,8 +98,8 @@ interface MarkerHandle {
   iconSignature: string;
 }
 
-interface ClosureAreaHandle {
-  layerGroup: L.LayerGroup;
+interface AreaHandle {
+  layerGroup: L.FeatureGroup;
   signature: string;
 }
 
@@ -183,83 +190,100 @@ function createClusterIcon({
   });
 }
 
-function getClosureAreaStyle(status: string) {
-  const normalizedStatus = status.trim().toLowerCase();
+/** The 危險區's stripes, defined once by the canvas's own `<svg>` and filled in by id. */
+const HAZARD_STRIPES_ID = 'rescue-map-hazard-stripes';
 
-  if (normalizedStatus === 'dangerous' || normalizedStatus === 'active') {
-    return {
-      color: color.fg.warning,
-      fillColor: color.bg.warning.default,
-      fillOpacity: 0.18,
-      opacity: 0.84,
-      weight: 2,
-      dashArray: '8 4',
-    };
-  }
+// Areas lie under the overlay pane (400), so a guest's cells stay on top and take their taps, and
+// the 危險區 over the other zones.
+const PUBLIC_ZONE_PANE = 'rescueMapPublicZones';
+const HAZARD_ZONE_PANE = 'rescueMapHazardZones';
 
-  if (normalizedStatus === 'block') {
-    return {
-      color: color.fg.danger,
-      fillColor: color.bg.danger.default,
-      fillOpacity: 0.14,
-      opacity: 0.78,
-      weight: 2,
-      dashArray: '6 3',
-    };
-  }
+/**
+ * 危險區: orange and white stripes (designer 2026-09-25, prototype `wg-hazard.js`). Nothing else on
+ * the map is striped, so the stripes alone say 危險, to the colour-blind too. Filled densely: thinned
+ * out, the stripes read as a dirty orange.
+ */
+const HAZARD_ZONE_STYLE: L.PathOptions = {
+  pane: HAZARD_ZONE_PANE,
+  className: 'map-area',
+  color: color.bg.warning.hover,
+  weight: 2.5,
+  opacity: 1,
+  fillColor: `url(#${HAZARD_STRIPES_ID})`,
+  fillOpacity: 0.6,
+};
+
+/** 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx:617-624`). */
+function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
+  const zoneColor = PUBLIC_ZONE_COLORS[zone.kind];
 
   return {
-    color: color.brand.primary.subtle,
-    fillColor: primitives.color.orange[200],
-    fillOpacity: 0.12,
-    opacity: 0.72,
+    pane: PUBLIC_ZONE_PANE,
+    className: 'map-area',
+    color: zoneColor,
     weight: 2,
-    dashArray: '5 4',
+    opacity: 0.9,
+    fillColor: zoneColor,
+    fillOpacity: 0.16,
   };
 }
 
-function renderClosureAreas(
-  layerGroup: L.LayerGroup,
-  closureAreas: readonly RescueMapClosureArea[],
+/**
+ * Its name, teams and note, on hover, or on a tap, which also opens a Leaflet tooltip. Made of
+ * elements rather than HTML: the words are typed in the back office. Sticky, following the pointer,
+ * as the middle of a large area may lie off screen; and beside it, towards the map's middle, so it
+ * keeps clear of the screen's edge and of the crosshair's 「在這裡新增」, which a tap on the map
+ * raises above the same point.
+ */
+function bindAreaTooltip(
+  polygon: L.Polygon,
+  area: RescueMapArea | RescueMapPublicZone,
 ) {
-  closureAreas.forEach((area) => {
-    area.polygons.forEach((polygon) => {
-      L.polygon(polygon, getClosureAreaStyle(area.status)).addTo(layerGroup);
-    });
+  const content = document.createElement('div');
+
+  areaTooltipLines(area).forEach((line, index) => {
+    const row = document.createElement('div');
+    row.textContent = line;
+
+    if (index === 0) {
+      row.className = 'map-area-tooltip__name';
+    }
+
+    content.append(row);
+  });
+
+  polygon.bindTooltip(content, {
+    sticky: true,
+    direction: 'auto',
+    className: 'map-area-tooltip',
   });
 }
 
-function getClosureAreaSignature(area: RescueMapClosureArea): string {
-  let pointCount = 0;
-
-  area.polygons.forEach((rings) => {
-    rings.forEach((ring) => {
-      pointCount += ring.length;
-    });
-  });
-
-  return `${area.id}:${area.status}:${pointCount}`;
-}
-
-function renderClosureArea(
-  layerGroup: L.LayerGroup,
-  area: RescueMapClosureArea,
+function renderArea<T extends RescueMapArea>(
+  layerGroup: L.FeatureGroup,
+  area: T,
+  style: (area: T) => L.PathOptions,
 ) {
   area.polygons.forEach((polygon) => {
-    L.polygon(polygon, getClosureAreaStyle(area.status)).addTo(layerGroup);
+    const shape = L.polygon(polygon, style(area));
+    bindAreaTooltip(shape, area);
+    shape.addTo(layerGroup);
   });
 }
 
-function syncClosureAreaLayer({
+function syncAreaLayer<T extends RescueMapArea>({
   overlayLayer,
   areas,
   handles,
+  style,
 }: {
   overlayLayer: L.LayerGroup;
-  areas: readonly RescueMapClosureArea[];
-  handles: Map<string, ClosureAreaHandle>;
+  areas: readonly T[];
+  handles: Map<string, AreaHandle>;
+  style: (area: T) => L.PathOptions;
 }) {
   const nextIds = new Set(areas.map((area) => area.id));
+  let drawn = false;
 
   handles.forEach((handle, id) => {
     if (!nextIds.has(id)) {
@@ -269,17 +293,18 @@ function syncClosureAreaLayer({
   });
 
   areas.forEach((area) => {
-    const signature = getClosureAreaSignature(area);
+    const signature = areaSignature(area);
     const existing = handles.get(area.id);
 
     if (!existing) {
-      const layerGroup = L.layerGroup();
-      renderClosureArea(layerGroup, area);
+      const layerGroup = L.featureGroup();
+      renderArea(layerGroup, area, style);
       overlayLayer.addLayer(layerGroup);
       handles.set(area.id, {
         layerGroup,
         signature,
       });
+      drawn = true;
       return;
     }
 
@@ -288,9 +313,17 @@ function syncClosureAreaLayer({
     }
 
     existing.layerGroup.clearLayers();
-    renderClosureArea(existing.layerGroup, area);
+    renderArea(existing.layerGroup, area, style);
     existing.signature = signature;
+    drawn = true;
   });
+
+  // A newly drawn area lands on top; stack them again so a smaller one stays over a larger.
+  if (drawn) {
+    largestAreasFirst(areas).forEach((area) => {
+      handles.get(area.id)?.layerGroup.bringToFront();
+    });
+  }
 }
 
 /** Unsubscribe handle for the no-op store. Named so the empty body reads as deliberate. */
@@ -609,9 +642,8 @@ export function RescueMapCanvas({
     null,
   );
   const markerHandlesRef = useRef<Map<string, MarkerHandle>>(new Map());
-  const closureAreaHandlesRef = useRef<Map<string, ClosureAreaHandle>>(
-    new Map(),
-  );
+  const closureAreaHandlesRef = useRef<Map<string, AreaHandle>>(new Map());
+  const publicZoneHandlesRef = useRef<Map<string, AreaHandle>>(new Map());
   const controllerRef = useRef(controller);
   const onMapClickRef = useRef(onMapClick);
   const onMarkerClickRef = useRef(onMarkerClick);
@@ -653,6 +685,9 @@ export function RescueMapCanvas({
 
     // 移除 Leaflet 預設 attribution 前綴的旗標圖示，與地圖內容無關。
     map.attributionControl.setPrefix(false);
+
+    map.createPane(PUBLIC_ZONE_PANE).style.zIndex = '380';
+    map.createPane(HAZARD_ZONE_PANE).style.zIndex = '390';
 
     const overlayLayer = L.layerGroup();
     const cellLayer = L.layerGroup();
@@ -805,6 +840,7 @@ export function RescueMapCanvas({
 
       markerHandles.clear();
       closureAreaHandlesRef.current.clear();
+      publicZoneHandlesRef.current.clear();
       markerLayerRef.current = null;
       overlayLayerRef.current = null;
       cellLayerRef.current = null;
@@ -986,12 +1022,28 @@ export function RescueMapCanvas({
       return;
     }
 
-    syncClosureAreaLayer({
+    syncAreaLayer({
       overlayLayer,
       areas: controller.closureAreas,
       handles: closureAreaHandlesRef.current,
+      style: () => HAZARD_ZONE_STYLE,
     });
   }, [controller.closureAreas]);
+
+  useEffect(() => {
+    const overlayLayer = overlayLayerRef.current;
+
+    if (!overlayLayer) {
+      return;
+    }
+
+    syncAreaLayer({
+      overlayLayer,
+      areas: controller.publicZones,
+      handles: publicZoneHandlesRef.current,
+      style: getPublicZoneStyle,
+    });
+  }, [controller.publicZones]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1099,6 +1151,31 @@ export function RescueMapCanvas({
   return (
     <>
       <div ref={hostRef} style={{ width: '100%', height: '100%' }} />
+      {/* Not `display: none`, which leaves a pattern unpainted in some browsers. */}
+      <svg
+        width="0"
+        height="0"
+        aria-hidden="true"
+        focusable="false"
+        style={{ position: 'absolute' }}
+      >
+        <defs>
+          <pattern
+            id={HAZARD_STRIPES_ID}
+            patternUnits="userSpaceOnUse"
+            width="16"
+            height="16"
+            patternTransform="rotate(45)"
+          >
+            <rect
+              width="16"
+              height="16"
+              fill={primitives.color.neutral.white}
+            />
+            <rect width="8" height="16" fill={color.bg.warning.default} />
+          </pattern>
+        </defs>
+      </svg>
       {draftBubbleHost && draftPointAction
         ? createPortal(draftPointAction, draftBubbleHost)
         : null}

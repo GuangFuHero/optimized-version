@@ -38,6 +38,7 @@ import type {
   RescueMapDraftPoint,
   RescueMapLocationCell,
   RescueMapMarkerItem,
+  RescueMapPublicZone,
   RescueMapRouteState,
   RescueMapViewportStoreLike,
 } from './types';
@@ -148,6 +149,23 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-location-cell-wrapper:hover .map-location-cell': {
     transform: 'scale(1.06)',
   },
+  // A click focuses an area's shape, as its tooltip listens for focus, and Chrome rings it in blue.
+  // No key reaches it, so the ring would only ever follow a click.
+  '.map-area:focus': {
+    outline: 'none',
+  },
+  // An area's name, teams and note (rescue-map-canvas `bindAreaTooltip`). Leaflet keeps a tooltip
+  // on one line; a note can run long.
+  '.map-area-tooltip': {
+    whiteSpace: 'normal',
+    width: 'max-content',
+    maxWidth: 260,
+    ...displayTextSizeCss(13),
+    lineHeight: 1.5,
+  },
+  '.map-area-tooltip__name': {
+    fontWeight: 700,
+  },
 } as const;
 
 interface MapProps {
@@ -186,6 +204,8 @@ interface MapProps {
   draftPointAction?: ReactNode;
   /** 封閉區域疊圖資料。 */
   closureAreas?: readonly RescueMapClosureArea[];
+  /** 責任區與標示區疊圖資料。 */
+  publicZones?: readonly RescueMapPublicZone[];
   /** 以 external store 提供視角狀態，避免拖動時將 viewport 更新擴散到整個 React tree。 */
   viewportStore?: RescueMapViewportStoreLike;
   /** 只用於訪客提示文案（「登入後可看」）；遮不遮由後端決定。 */
@@ -207,6 +227,7 @@ export const Map = memo(function Map({
   onDraftPointChange,
   draftPointAction,
   closureAreas,
+  publicZones,
   viewportStore,
   isAuthenticated = false,
 }: MapProps = {}) {
@@ -215,6 +236,7 @@ export const Map = memo(function Map({
     onRouteStateChange,
     sourceMarkers: markers,
     closureAreas,
+    publicZones,
     // 視窗外的標記在地圖上本就不可見，關閉 bbox 過濾讓視角移動不重建 markers。
     filterMarkersByBbox: false,
   });

@@ -1,11 +1,10 @@
 'use client';
 
 import {
-  GetClosureAreasDocument,
+  GetMapAreasDocument,
   GetStationsDocument,
   GetTicketsDocument,
   createUrqlClient,
-  type GetClosureAreasQuery,
   type GetStationsQuery,
   type GetTicketsQuery,
 } from '@rescue-frontend/data-access';
@@ -15,14 +14,15 @@ import { fetchExchange, type CombinedError } from 'urql';
 import type {
   RescueMapClosureArea,
   RescueMapMarkerItem,
+  RescueMapPublicZone,
 } from '../types';
 import type { SiteRouteState } from '../../route/types';
 import { sessionExpiryFetch } from '../../session/end-expired-session';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import {
-  closureAreasSignature,
+  areaOverlaysSignature,
   dedupeMarkersById,
-  mapClosureAreaToOverlay,
+  mapAreasToOverlays,
   mapStationToMarker,
   mapTicketToMarker,
   toBoundsInput,
@@ -33,6 +33,7 @@ import { useSiteMapViewportStore } from './use-site-map-viewport-state';
 const EMPTY_LIVE_DATA_SNAPSHOT: SiteMapLiveDataSnapshot = {
   markers: [],
   closureAreas: [],
+  publicZones: [],
   isFetching: false,
   error: null,
   hasFetchedOnce: false,
@@ -46,6 +47,7 @@ const LIVE_QUERY_CONTEXT = {
 export interface SiteMapLiveDataSnapshot {
   markers: readonly RescueMapMarkerItem[];
   closureAreas: readonly RescueMapClosureArea[];
+  publicZones: readonly RescueMapPublicZone[];
   isFetching: boolean;
   error: CombinedError | null;
   hasFetchedOnce: boolean;
@@ -126,9 +128,7 @@ export function createSiteMapLiveDataStore(
 ): SiteMapLiveDataStore {
   let snapshot = initialState;
   let currentMarkerSignature = markersSignature(initialState.markers);
-  let currentClosureSignature = closureAreasSignature(
-    initialState.closureAreas,
-  );
+  let currentAreaSignature = areaOverlaysSignature(initialState);
   let currentErrorSignature = initialState.error?.message ?? '';
   const dismissedMarkerIds = new Set<string>();
   const listeners = new Set<() => void>();
@@ -138,13 +138,13 @@ export function createSiteMapLiveDataStore(
       (marker) => !dismissedMarkerIds.has(marker.id),
     );
     const nextMarkerSignature = markersSignature(filteredMarkers);
-    const nextClosureSignature = closureAreasSignature(next.closureAreas);
+    const nextAreaSignature = areaOverlaysSignature(next);
     const nextErrorSignature = next.error?.message ?? '';
     const unchanged =
       snapshot.isFetching === next.isFetching &&
       snapshot.hasFetchedOnce === next.hasFetchedOnce &&
       currentMarkerSignature === nextMarkerSignature &&
-      currentClosureSignature === nextClosureSignature &&
+      currentAreaSignature === nextAreaSignature &&
       currentErrorSignature === nextErrorSignature;
 
     if (unchanged) {
@@ -154,12 +154,13 @@ export function createSiteMapLiveDataStore(
     snapshot = {
       markers: filteredMarkers,
       closureAreas: next.closureAreas,
+      publicZones: next.publicZones,
       isFetching: next.isFetching,
       error: next.error,
       hasFetchedOnce: next.hasFetchedOnce,
     };
     currentMarkerSignature = nextMarkerSignature;
-    currentClosureSignature = nextClosureSignature;
+    currentAreaSignature = nextAreaSignature;
     currentErrorSignature = nextErrorSignature;
     emitStoreListeners(listeners);
   };
@@ -259,6 +260,7 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
         store.replaceData({
           markers: [],
           closureAreas: [],
+          publicZones: [],
           isFetching: false,
           error: null,
           hasFetchedOnce: store.getSnapshot().hasFetchedOnce,
@@ -268,7 +270,7 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
 
       store.setFetching(true);
 
-      const [markerResult, closureResult] = await Promise.all([
+      const [markerResult, areaResult] = await Promise.all([
         activeDataType === 'ticket'
           ? client
               .query(
@@ -299,7 +301,7 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
               .toPromise(),
         client
           .query(
-            GetClosureAreasDocument,
+            GetMapAreasDocument,
             {
               bounds,
               skip: 0,
@@ -327,18 +329,16 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
                 .items ?? [])
             : [],
       });
-      const closureAreas = (
-        (closureResult.data?.hazardousZones.items ??
-          []) as GetClosureAreasQuery['hazardousZones']['items']
-      )
-        .map((item) => mapClosureAreaToOverlay(item))
-        .filter((item): item is RescueMapClosureArea => Boolean(item));
+      const { closureAreas, publicZones } = mapAreasToOverlays(
+        areaResult.data?.areas.items ?? [],
+      );
 
       store.replaceData({
         markers,
         closureAreas,
+        publicZones,
         isFetching: false,
-        error: markerResult.error ?? closureResult.error ?? null,
+        error: markerResult.error ?? areaResult.error ?? null,
         hasFetchedOnce: true,
       });
     };

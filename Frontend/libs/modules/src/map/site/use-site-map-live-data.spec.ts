@@ -20,6 +20,7 @@ function storeWith(markers: RescueMapMarkerItem[]) {
   return createSiteMapLiveDataStore({
     markers,
     closureAreas: [],
+    publicZones: [],
     isFetching: false,
     error: null,
     hasFetchedOnce: true,
@@ -56,5 +57,47 @@ describe('replaceTicketStatus', () => {
     store.replaceTicketStatus('ticket-1', 'pending');
 
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('replaceData', () => {
+  const zone = {
+    id: 'zone-1',
+    label: '大平村',
+    comment: null,
+    polygons: [
+      [
+        [
+          [23.66, 121.42],
+          [23.67, 121.42],
+          [23.67, 121.43],
+        ],
+      ],
+    ] as [number, number][][][],
+    kind: 'team_zone' as const,
+    teams: ['慈濟基金會'],
+  };
+
+  it('tells the map when a zone changes what it says, and not when it is fetched again as it was', () => {
+    const store = createSiteMapLiveDataStore({
+      markers: [],
+      closureAreas: [],
+      publicZones: [zone],
+      isFetching: false,
+      error: null,
+      hasFetchedOnce: true,
+    });
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.replaceData({ ...store.getSnapshot(), publicZones: [{ ...zone }] });
+    expect(listener).not.toHaveBeenCalled();
+
+    store.replaceData({
+      ...store.getSnapshot(),
+      publicZones: [{ ...zone, teams: ['慈濟基金會', '紅十字會'] }],
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(store.getSnapshot().publicZones[0]?.teams).toHaveLength(2);
   });
 });
