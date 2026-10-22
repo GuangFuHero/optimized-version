@@ -9,6 +9,7 @@ import {
   addDays,
   DASHBOARD_QUICK_RANGES,
   DASHBOARD_TIME_ZONES,
+  isValidDateRange,
   localDateString,
   rangeLengthDays,
   rangeQuickDays,
@@ -93,6 +94,7 @@ function FilterField({
  */
 export function DashboardFilterBar({
   value,
+  dateProblem = null,
   onChange,
   syncedAt,
   devMode,
@@ -102,6 +104,8 @@ export function DashboardFilterBar({
   onEmptyPreviewChange,
 }: {
   value: DashboardFilters;
+  /** Why the dates on screen are not applied yet (`dateRangeProblem`), or null when they are. */
+  dateProblem?: string | null;
   onChange: (next: DashboardFilters) => void;
   /** `HH:MM:SS` of the last successful refresh, or null before the first one. */
   syncedAt: string | null;
@@ -112,7 +116,8 @@ export function DashboardFilterBar({
   onEmptyPreviewChange?: (empty: boolean) => void;
 }) {
   const { range, granularity, timeZone } = value;
-  const days = rangeLengthDays(range);
+  // A reversed range would read as e.g. "-4 天"; only a range the charts use gets a count.
+  const days = isValidDateRange(range) ? rangeLengthDays(range) : null;
   const today = localDateString(new Date(), timeZone);
 
   const setRange = (next: Partial<DashboardDateRange>) =>
@@ -162,6 +167,7 @@ export function DashboardFilterBar({
             component="input"
             type="date"
             aria-label="起日"
+            aria-invalid={dateProblem ? true : undefined}
             value={range.start_date ?? ''}
             // An emptied input means "no bound", not an empty string: the backend takes an absent
             // date as open-ended, but would 422 on "".
@@ -177,6 +183,7 @@ export function DashboardFilterBar({
             component="input"
             type="date"
             aria-label="訖日"
+            aria-invalid={dateProblem ? true : undefined}
             value={range.end_date ?? ''}
             onChange={(event) =>
               setRange({ end_date: event.target.value || undefined })
@@ -184,6 +191,17 @@ export function DashboardFilterBar({
             sx={{ ...controlSx, flex: 1, width: { mobile: 0, tablet: 'auto' } }}
           />
         </Stack>
+        {/* Polite, not an alert: it updates on every keystroke while a date is being typed. */}
+        <Typography
+          role="status"
+          sx={{
+            ...caption,
+            color: color.fg.danger,
+            display: dateProblem ? 'block' : 'none',
+          }}
+        >
+          {dateProblem}
+        </Typography>
       </FilterField>
 
       <FilterField label="每格代表">

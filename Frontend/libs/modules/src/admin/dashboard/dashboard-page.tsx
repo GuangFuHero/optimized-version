@@ -36,13 +36,14 @@ import {
 import { FieldTag } from './field-tag';
 import { DashboardFilterBar, type DashboardFilters } from './filters';
 import {
+  applyFilterChange,
   DASHBOARD_KPIS,
   DASHBOARD_TIME_ZONE,
+  dateRangeProblem,
   DEFAULT_LOOKBACK_DAYS,
   formatKpiValue,
   kpiAvailability,
   lookbackRange,
-  isValidDateRange,
   type AnalyticsCatalog,
   type DashboardDateRange,
   type DashboardKpi,
@@ -52,6 +53,12 @@ import {
 } from './kpis';
 
 const { color, typography, radius, shadow } = designTokens;
+
+const sameFilters = (a: DashboardFilters, b: DashboardFilters) =>
+  a.range.start_date === b.range.start_date &&
+  a.range.end_date === b.range.end_date &&
+  a.granularity === b.granularity &&
+  a.timeZone === b.timeZone;
 
 type ValueQuery = UseQueryResult<{ value: number }, Error>;
 
@@ -363,7 +370,8 @@ function DomainSection({
 
 export function DashboardPage() {
   const queryClient = useQueryClient();
-  // Incomplete date edits keep the last valid query range.
+  // What the filter card shows, and what the queries use: an invalid date edit keeps the last
+  // valid range in `applied` (see `applyFilterChange`).
   const [filters, setFilters] = useState<DashboardFilters>(() => ({
     range: lookbackRange(
       new Date(),
@@ -393,14 +401,15 @@ export function DashboardPage() {
 
   const changeFilters = (next: DashboardFilters) => {
     setFilters(next);
-    if (isValidDateRange(next.range)) {
-      setApplied(next);
+    const nextApplied = applyFilterChange(applied, next);
+    if (!sameFilters(nextApplied, applied)) {
+      setApplied(nextApplied);
       setSyncedAt(stamp());
     }
   };
 
   const refresh = async () => {
-    if (isValidDateRange(filters.range)) setApplied(filters);
+    setApplied(applyFilterChange(applied, filters));
     await queryClient.invalidateQueries({ queryKey: ['admin', 'analytics'] });
     setSyncedAt(stamp());
   };
@@ -479,6 +488,7 @@ export function DashboardPage() {
     >
       <DashboardFilterBar
         value={filters}
+        dateProblem={dateRangeProblem(filters.range, applied.range)}
         onChange={changeFilters}
         syncedAt={syncedAt}
         devMode={devMode}

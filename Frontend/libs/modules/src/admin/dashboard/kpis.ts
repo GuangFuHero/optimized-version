@@ -179,21 +179,56 @@ export function formatKpiValue(
   return { value: countFormat.format(value), unit };
 }
 
+/** A real calendar date written `YYYY-MM-DD`. */
+function isIsoDate(date: string | undefined): date is string {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return (
+    Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === date
+  );
+}
+
 /** Apply only complete, real calendar dates in ascending order. */
 export function isValidDateRange(range: DashboardDateRange): boolean {
   const { start_date, end_date } = range;
-  if (!start_date || !end_date) return false;
-  const dates = [start_date, end_date];
-  if (
-    !dates.every((date) => {
-      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-      const parsed = new Date(`${date}T00:00:00Z`);
-      return (
-        Number.isFinite(parsed.getTime()) &&
-        parsed.toISOString().slice(0, 10) === date
-      );
-    })
-  )
-    return false;
+  if (!isIsoDate(start_date) || !isIsoDate(end_date)) return false;
   return start_date <= end_date;
+}
+
+/**
+ * What the queries use after a filter edit. The dates wait until they form a valid range; the
+ * bucket size and the zone never wait for them — a half-typed date must not freeze the rest of the
+ * filter card.
+ */
+export function applyFilterChange<T extends { range: DashboardDateRange }>(
+  applied: T,
+  next: T,
+): T {
+  return isValidDateRange(next.range)
+    ? next
+    : { ...next, range: applied.range };
+}
+
+function formatRange({ start_date, end_date }: DashboardDateRange): string {
+  return `${start_date ?? '?'} → ${end_date ?? '?'}`;
+}
+
+/**
+ * Why the dates on screen are not the ones the charts use, or null when they are. `applied` is
+ * the range still in force, so the message can say which period the page is showing.
+ */
+export function dateRangeProblem(
+  range: DashboardDateRange,
+  applied: DashboardDateRange,
+): string | null {
+  if (isValidDateRange(range)) return null;
+  const showing = `圖表仍顯示 ${formatRange(applied)}。`;
+  if (!range.start_date || !range.end_date) {
+    return `起訖日期還沒選完，${showing}`;
+  }
+  if (!isIsoDate(range.start_date) || !isIsoDate(range.end_date)) {
+    return `日期無效，${showing}`;
+  }
+  return `起日晚於訖日，${showing}`;
 }

@@ -219,6 +219,62 @@ describe('dashboard states and filters', () => {
     await settle();
     expect(state.requests).toHaveLength(0);
   });
+  it('applies granularity and zone while the dates are invalid, and says why the dates wait', async () => {
+    await mount();
+    const start =
+      container.querySelector<HTMLInputElement>('[aria-label="起日"]');
+    const end =
+      container.querySelector<HTMLInputElement>('[aria-label="訖日"]');
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      'value',
+    )?.set;
+    const appliedEnd = end?.value;
+    // Reversed: the start after the end.
+    await act(async () => {
+      setter?.call(start, '2099-01-01');
+      start?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+    expect(container.textContent).toContain('起日晚於訖日');
+    expect(container.textContent).not.toMatch(/-\d+ 天/);
+    expect(start?.getAttribute('aria-invalid')).toBe('true');
+
+    state.requests = [];
+    const week = Array.from(container.querySelectorAll('button')).find(
+      (el) => el.textContent === '一週',
+    );
+    await act(async () => week?.click());
+    await settle();
+    const charts = state.requests.filter(({ kind }) => kind === 'chart');
+    expect(charts).toHaveLength(6);
+    expect(charts.every(({ query }) => query.x_granularity === 'week')).toBe(
+      true,
+    );
+    // Still the last valid range, not the reversed one.
+    expect(
+      state.requests.every(
+        ({ query }) =>
+          query.start_date !== '2099-01-01' && query.end_date === appliedEnd,
+      ),
+    ).toBe(true);
+
+    state.requests = [];
+    const zone = container.querySelector<HTMLSelectElement>('#dashboard-tz');
+    const other = Array.from(zone?.options ?? []).find(
+      (option) => option.value !== zone?.value,
+    );
+    expect(other).toBeDefined();
+    await act(async () => {
+      if (zone && other) zone.value = other.value;
+      zone?.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await settle();
+    expect(state.requests.length).toBeGreaterThan(0);
+    expect(state.requests.every(({ query }) => query.tz === other?.value)).toBe(
+      true,
+    );
+  });
   it('shows forbidden cards while other cards continue to render', async () => {
     state.forbidden = 'total_tickets';
     await mount();
