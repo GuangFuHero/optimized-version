@@ -328,6 +328,12 @@ def test_unrecognised_text_stays_whole_and_is_not_a_road():
     assert _set(parse_tw_address("我家在糖廠附近")) == {"full_address": "我家在糖廠附近"}
 
 
+def test_a_line_too_long_to_store_is_kept_whole():
+    """A line longer than the column is not split, so its cost stays bounded; saving it is refused."""
+    line = "花蓮縣光復鄉糖廠街19號" + "糖" * 250
+    assert parse_tw_address(line) == AddressParts(full_address=line)
+
+
 @pytest.mark.parametrize("blank", [None, "", "   "])
 def test_blank_parses_to_nothing(blank):
     """Blank input gives an empty address, not an error."""

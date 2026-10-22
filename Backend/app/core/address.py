@@ -34,6 +34,9 @@ COUNTIES: tuple[str, ...] = (
 )
 _COUNTY_SPELLINGS = {spelling: c for c in COUNTIES for spelling in (c, c.replace("臺", "台"))}
 
+# The longest line stored, and so the longest one split: splitting costs the square of the length.
+MAX_ADDRESS_LENGTH = 255
+
 _WHITESPACE_RE = re.compile(r"\s+")
 _POSTCODE_RE = re.compile(r"^\d{3}(?:\d{2,3})?")
 # 鄉/鎮/市 ends the name only when no 區 or road suffix follows, so 前鎮區 stays whole and 新市路 is a road.
@@ -135,6 +138,8 @@ def parse_tw_address(text: str | None) -> AddressParts:
     line = fold(text)
     if not line:
         return AddressParts()
+    if len(line) > MAX_ADDRESS_LENGTH:
+        return AddressParts(full_address=line)
     line = _DOOR_HYPHEN_RE.sub("之", line)
     postcode = _POSTCODE_RE.match(line)
     # Only a number in front of a county is a postcode; on its own it is the door, as in 100號.

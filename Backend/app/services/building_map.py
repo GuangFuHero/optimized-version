@@ -11,7 +11,7 @@ from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
 from app.models.geo import BuildingMap
 from app.repositories.geo_repository import building_map_repository, secondary_location_repository
-from app.services.address import apply_address, point_of
+from app.services.address import apply_address, point_of, unverify_if_moved
 from app.services.authz import require_gov_team, require_scope
 from app.services.geo_validation import validate_point
 
@@ -142,6 +142,7 @@ async def update_building_map(
     )
     if geometry is not None:
         validate_point(geometry, entity="Building map")
+        await unverify_if_moved(db, str(building.uuid), building.geometry, geometry)
         obj_in["geometry"] = geojson_to_geom(geometry)
     return await building_map_repository.update(db, db_obj=building, obj_in=obj_in)
 

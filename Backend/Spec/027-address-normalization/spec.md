@@ -51,7 +51,7 @@ Frontend                  Backend (GraphQL)         TGOS QueryAddr   TGOS GeoQue
 |---|---|
 | `verified` | The token is valid for this exact `fullAddress`, and TGOS's point is within 500 m of the pin. |
 | `pin_mismatch` | The token is valid, but TGOS's point is over 500 m from the pin. |
-| `unverified` | No valid token: typed and kept, not found, TGOS down, a bulk import, or edited after the lookup. |
+| `unverified` | No valid token: typed and kept, not found, TGOS down, a bulk import, or edited after the lookup. Also a station or building moved after it was confirmed. |
 | null | A pole, or no address. |
 
 ## Decisions
@@ -59,7 +59,8 @@ Frontend                  Backend (GraphQL)         TGOS QueryAddr   TGOS GeoQue
 - **Exact matches only.** TGOS's fuzzy matching returns the nearest existing number, which in a live test
   was a different house (9999號 → 19號; 5鄰10號 → 3鄰大全街12號).
 - **No address is refused for its content.** Only a part too long for its column is. Unparseable text is
-  stored as `fullAddress` with the parts empty and `unverified`, so no report is lost.
+  stored as `fullAddress` with the parts empty and `unverified`, so no report is lost. A line over 255
+  characters is refused before it is split, since splitting costs the square of the length.
 - **The token is a JWT signed with the backend's key**, typed `address`, holding the line and TGOS's
   point and expiring after a day. It cannot pass as a login token. Without it, any caller could claim
   `verified`.

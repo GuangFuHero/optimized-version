@@ -18,10 +18,13 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from jose import JWTError, jwt
 from shapely.geometry import shape
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.address import AddressParts, fold, parse_tw_address
+from app.core.address import MAX_ADDRESS_LENGTH, AddressParts, fold, parse_tw_address
 from app.core.config import settings
+from app.graphql.scalars import geom_to_geojson
 from app.models.secondary_location import SecondaryLocation
+from app.repositories.geo_repository import secondary_location_repository
 from app.services.column_lengths import check_lengths
 
 logger = logging.getLogger("app.address")
@@ -29,7 +32,6 @@ logger = logging.getLogger("app.address")
 FOUND, NOT_FOUND, AMBIGUOUS, UNAVAILABLE = "found", "not_found", "ambiguous", "unavailable"
 VERIFIED, PIN_MISMATCH, UNVERIFIED = "verified", "pin_mismatch", "unverified"
 
-MAX_ADDRESS_LENGTH = 255
 PIN_TOLERANCE_M = 500.0  # well beyond GPS error, well inside a rural 村
 _SEARCH_RADIUS_M = 500
 
@@ -237,3 +239,12 @@ def apply_address(sl: dict | None, *, point: tuple[float, float] | None) -> dict
     values["normalization_status"] = _grade(token, parts.full_address, point) if parts.full_address else None
     check_lengths(SecondaryLocation, **values)
     return values
+
+
+async def unverify_if_moved(db: AsyncSession, geometry_uuid: str, old_geometry, new_geometry: dict) -> None:
+    """Drop a confirmed address to unverified when its point moves, since its token is gone."""
+    if point_of(geom_to_geojson(old_geometry)) == point_of(new_geometry):
+        return
+    row = await secondary_location_repository.get_by_geometry(db, geometry_uuid)
+    if row is not None and row.normalization_status in (VERIFIED, PIN_MISMATCH):
+        row.normalization_status = UNVERIFIED

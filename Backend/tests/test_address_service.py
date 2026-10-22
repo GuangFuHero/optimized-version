@@ -300,6 +300,12 @@ def test_a_part_too_long_for_its_column_is_refused():
         apply_address({"full_address": f"花蓮縣光復鄉中正路{'1' * 21}號"}, point=None)
 
 
+def test_a_line_too_long_to_store_is_refused():
+    """A line longer than its column is refused whole."""
+    with pytest.raises(ValueError, match="full_address must be at most 255 characters"):
+        apply_address({"full_address": "花蓮縣光復鄉糖廠街19號" + "糖" * 250}, point=None)
+
+
 def test_an_address_token_is_not_a_login():
     """An address token cannot pass as an access token."""
     with pytest.raises(Exception, match="401"):

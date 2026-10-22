@@ -1,14 +1,18 @@
 """normalizeAddress / reverseGeocode, and a looked-up address saved through createTicket."""
 
 import pytest
+from sqlalchemy import select
 
 from app.core.config import settings
+from app.models.secondary_location import SecondaryLocation
 from tests.test_address_service import DOOR, TWO_KM_AWAY, _tgos_replies
 from tests.test_graphql.conftest import auth_header
+from tests.test_graphql.conftest import test_db as open_db
 
 pytestmark = pytest.mark.asyncio
 
 AT_THE_DOOR = {"type": "Point", "coordinates": [121.4206, 23.6587]}
+FAR_FROM_THE_DOOR = {"type": "Point", "coordinates": [TWO_KM_AWAY[1], TWO_KM_AWAY[0]]}
 LOOKUP_FIELDS = (
     "status fullAddress county town village neighborhood road no floor distanceM pinMismatch addressToken"
 )
@@ -27,6 +31,25 @@ mutation ($input: CreateTicketInput!) {
   } } }
 }
 """
+
+# A station or building, each created and moved with its own mutations.
+PLACES = {
+    "station": (
+        "mutation ($input: CreateStationInput!) {"
+        " createStation(input: $input) { ... on StationCreated { station { uuid } } } }",
+        "mutation ($uuid: UUID!, $input: UpdateStationInput!) {"
+        " updateStation(uuid: $uuid, input: $input) { uuid } }",
+        {"level": 3},
+        lambda data: data["createStation"]["station"]["uuid"],
+    ),
+    "building": (
+        "mutation ($input: CreateBuildingMapInput!) { createBuildingMap(input: $input) { uuid } }",
+        "mutation ($uuid: UUID!, $input: UpdateBuildingMapInput!) {"
+        " updateBuildingMap(uuid: $uuid, input: $input) { uuid } }",
+        {"name": "糖廠宿舍", "floorsAboveGround": 2},
+        lambda data: data["createBuildingMap"]["uuid"],
+    ),
+}
 
 
 @pytest.fixture(autouse=True)
@@ -152,10 +175,12 @@ async def test_a_pin_far_from_the_looked_up_address_saves_as_a_mismatch(client, 
     """The same token on a ticket pinned 2 km away stores a pin mismatch."""
     _, token = login_user_auth
     found = await _normalize(client, token)
-    far = {"type": "Point", "coordinates": [TWO_KM_AWAY[1], TWO_KM_AWAY[0]]}
 
     stored = await _file_ticket(
-        client, token, {"fullAddress": found["fullAddress"], "addressToken": found["addressToken"]}, far
+        client,
+        token,
+        {"fullAddress": found["fullAddress"], "addressToken": found["addressToken"]},
+        FAR_FROM_THE_DOOR,
     )
 
     assert stored["normalizationStatus"] == "pin_mismatch"
@@ -184,3 +209,32 @@ async def test_lookups_are_rate_limited_per_caller(client, login_user_auth):
     body = await _gql(client, NORMALIZE, {"address": "花蓮縣光復鄉糖廠街19號"}, token)
 
     assert body["errors"][0]["message"] == "Too many address lookups; try again in a minute"
+
+
+async def _stored_status(geometry_uuid: str) -> str | None:
+    async with open_db() as db:
+        return await db.scalar(
+            select(SecondaryLocation.normalization_status).where(
+                SecondaryLocation.geometry_uuid == geometry_uuid
+            )
+        )
+
+
+@pytest.mark.parametrize("place", PLACES)
+async def test_moving_a_confirmed_place_leaves_its_address_unverified(client, coordinator_auth, place):
+    """A station or building keeps `verified` when saved in place, and drops to unverified once moved."""
+    _, token = coordinator_auth
+    create, update, fields, uuid_of = PLACES[place]
+    found = await _normalize(client, token)
+    location = {"fullAddress": found["fullAddress"], "addressToken": found["addressToken"]}
+    body = await _gql(
+        client, create, {"input": {**fields, "geometry": AT_THE_DOOR, "secondaryLocation": location}}, token
+    )
+    assert body.get("errors") is None, body
+    uuid = uuid_of(body["data"])
+    assert await _stored_status(uuid) == "verified"
+
+    for geometry, status in ((AT_THE_DOOR, "verified"), (FAR_FROM_THE_DOOR, "unverified")):
+        body = await _gql(client, update, {"uuid": uuid, "input": {"geometry": geometry}}, token)
+        assert body.get("errors") is None, body
+        assert await _stored_status(uuid) == status
