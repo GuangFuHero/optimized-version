@@ -245,6 +245,8 @@ async def test_a_row_that_matches_nothing_is_created(db):
     station = await _station_named(db, "光復國小")
     assert str(station.created_by) == str(actor.uuid)
     assert station.source == "official"
+    # Closed until someone confirms it on site (ADMIN-026 import dialog).
+    assert station.operational_status == "temporarily_closed"
 
 
 @pytest.mark.asyncio
@@ -325,6 +327,25 @@ async def test_a_row_that_matches_updates_in_place(db):
     updated = await _station_named(db, "光復國小")
     assert str(updated.uuid) == original_uuid
     assert updated.comment == "第二版"
+
+
+@pytest.mark.asyncio
+async def test_an_update_leaves_a_reopened_station_open(db):
+    """Only a new station starts closed; re-importing must not close one someone reopened."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("光復國小", comment="第一版")])
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+    station = await _station_named(db, "光復國小")
+    station.operational_status = "active"
+    await db.commit()
+
+    raw, filename = _file([_row("光復國小", comment="第二版")])
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+
+    updated = await _station_named(db, "光復國小")
+    assert updated.comment == "第二版"
+    assert updated.operational_status == "active"
 
 
 @pytest.mark.asyncio
