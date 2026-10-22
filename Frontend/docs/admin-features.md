@@ -60,7 +60,9 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 刪除站點、列表上直接改營運狀態與指派 Team；後台新增的站點一律 `source: "official"`
 - 前台修改建議審查：依欄位決定採用／不採用（可改寫入值），一次送出附一則審核備註（`mergeStationSuggestions` 只收一個 `reviewNote`；ticket 寫「每一則附備註」，為了保持一次送出不可分割，維持一則）
 - 批次匯入（試算 → 欄位對應 → 確認，失敗列可下載）與匯出（單一類型，CSV／Excel）
-- 匯入一律官方：CSV（含貼上的內容）在確認匯入前由前端把每一列的 source 填成 `official`（沒有對應到 source 的欄就補一欄）；Excel 檔前端無法改寫，必須有一欄對應到 source，且試算看得到的列都填 `official` 才能確認
+- 匯入一律官方：後端批次匯入新增的站點一律存 `source: "official"`，不看檔案的 source 欄（CSV、Excel、貼上的內容都一樣）
+- 匯入視窗依設計稿：欄位對應一列三組、「試算結果」只列失敗的列（第幾列／欄位／原因）
+- .xlsx 表頭列上方的標題列（Numbers 匯出時會把表格名稱放在第一列）或空白列，由後端略過
 - 權限一律看後端回的 capabilities（`station.add/edit/delete/review/assign/import/export/view_history/view_pii`）
 
 **超出 ADMIN-026 的部分（依設計稿加入）：**
@@ -74,7 +76,8 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 已刪除站點無法重新啟用，也無法回溯到某個版本（沒有 restore／rollback）
 - 修改建議沒有記錄「投稿時的值」，也只給第一筆建議的時間：衝突判斷改用版本歷史，欄位在第一筆建議之後有被改過就標「衝突」。資源（station_property）欄位：有 `audit.view` 時用歷史的原始列比對 property uuid；沒有時歷史事件不帶 uuid，只能保守判斷（同欄位任一資源改過都算）
 - `stations` 查詢沒有 source／更新時間篩選，也不能排序
-- 匯入沒有「整批設定 source」的參數：CSV 由前端改寫，Excel 只能要求檔案自己帶 `official`，而且只檢查得到試算回傳的前幾列
+- 匯入視窗的提示照設計稿寫「新增的站點營運狀態一律『已關閉』」「可能重複的會送進『AI 重複審核』」，但後端批次匯入目前新增為「營運中」（`active`），也不經過重複檢查（`create_station` 不走 `dedup_submission`）
+- 設計稿的「這份檔案是『物資集散』，這列寫的是『避難收容』」：後端沒有這項檢查，列上的 type 會直接蓋過選的類型
 - 匯出只能選一種類型，不套用列表篩選
 - 站點照片只能附 URL，沒有上傳端點
 - 群眾評分沒有站點層級的統計 API：前端讀各資源的 `crowdSourcings { rating }` 自己加總。`CrowdSourcingType` 會公開回傳 `userUuid`，前端不查這個欄位，但後端仍應收起來

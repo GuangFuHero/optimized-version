@@ -5,7 +5,6 @@ import {
   ButtonBase,
   Dialog as MuiDialog,
   IconButton,
-  MenuItem,
   TextField,
   Typography,
 } from '@mui/material';
@@ -15,14 +14,7 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
-import {
-  CircleCheck,
-  CircleX,
-  Download,
-  FolderOpen,
-  Upload,
-  X,
-} from 'lucide-react';
+import { CircleCheck, Download, FolderOpen, Upload, X } from 'lucide-react';
 import {
   type ChangeEvent,
   type ReactNode,
@@ -40,16 +32,11 @@ import {
 import {
   downloadBase64,
   downloadBlob,
-  errorsOutsideSample,
+  importFieldLabel,
   importSummary,
-  isCsvFile,
-  lacksOfficialSource,
   mergeMapping,
-  type PreviewRow,
-  previewRows,
   STATION_IMPORT_FIELDS,
   stationImportTemplate,
-  withOfficialSource,
 } from './model/import';
 
 const { color, focusRing, motion, radius, typography } = designTokens;
@@ -58,32 +45,6 @@ type Preview = components['schemas']['BulkPreviewResponse'];
 type Result = components['schemas']['BulkImportResponse'];
 
 const SKIP = '__skip__';
-
-/**
- * The upload to commit: a CSV gets `source = official` on every row. A file that isn't UTF-8 goes
- * as it is, so the backend's own encoding error reaches the user; an .xlsx goes as it is, and
- * `lacksOfficialSource` holds the commit back unless it already carries the source.
- */
-async function officialUpload(
-  file: File,
-  mapping: Record<string, string>,
-): Promise<{ file: File; mapping: string }> {
-  const original = { file, mapping: JSON.stringify(mapping) };
-  if (!isCsvFile(file)) return original;
-  let text: string;
-  try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(
-      await file.arrayBuffer(),
-    );
-  } catch {
-    return original;
-  }
-  const official = withOfficialSource(text, mapping);
-  return {
-    file: new File([official.text], file.name, { type: 'text/csv' }),
-    mapping: JSON.stringify(official.mapping),
-  };
-}
 
 function downloadTemplate(stationType: string) {
   const label =
@@ -179,15 +140,15 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
     );
   };
 
-  const commit = async () => {
+  // The backend marks every imported station official, so the file goes as it is.
+  const commit = () => {
     if (!file || !stationType) return;
-    const upload = await officialUpload(file, mapped);
     commitImport.mutate(
       {
         params: { query: { station_type: stationType } },
         body: {
-          file: upload.file as unknown as string,
-          mapping: upload.mapping,
+          file: file as unknown as string,
+          mapping: JSON.stringify(mapped),
         },
       },
       {
@@ -206,13 +167,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
         string
       >)
     : {};
-  const rows = preview ? previewRows(preview, mapped) : [];
-  const laterErrors = preview ? errorsOutsideSample(preview) : [];
   const importable = summary ? summary.create + summary.update : 0;
-  const needsSourceColumn =
-    file !== null && !isCsvFile(file) && preview !== null
-      ? lacksOfficialSource(preview, mapped)
-      : false;
   const typeLabel = stationType ? getStationTypeLabel(stationType) : '';
 
   return (
@@ -316,7 +271,6 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                     e.target.value = '';
                   }}
                 />
-                {file && !pasted ? <Muted>已選擇：{file.name}</Muted> : null}
                 <Box
                   component="textarea"
                   aria-label="貼上 CSV 內容"
@@ -347,93 +301,101 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                     },
                   }}
                 />
+                {file && !pasted ? (
+                  <Typography
+                    sx={{
+                      ...typography.data[300],
+                      color: color.fg.neutral.muted,
+                    }}
+                  >
+                    已讀取：{file.name}
+                  </Typography>
+                ) : null}
                 <Muted>
-                  從「匯出」下載的檔案就是範本。新的站點必填：站點名稱、緯度、經度。檔案裡沒有聯絡人、電話、營運狀態，建立後再補。CSV
-                  匯入的站點一律標示為官方；Excel 檔請在每一列的 source 填
-                  official。
+                  從「匯出」下載的檔案就是範本。新的站點必填：站點名稱、緯度、經度。檔案裡沒有聯絡人、電話、營運狀態，建立後再補。
                 </Muted>
               </Step>
             ) : null}
 
             {preview ? (
-              <Step title="3 · 欄位對應" caption="檔案的每一欄要寫進哪個欄位">
+              <Step
+                title="3 · 欄位對應"
+                aside={<Muted>檔案的每一欄要寫進哪個欄位</Muted>}
+              >
                 <Box
                   sx={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '8px 16px',
+                    gridTemplateColumns: {
+                      xs: 'minmax(0, 96px) minmax(0, 1fr)',
+                      sm: 'repeat(3, minmax(0, 96px) minmax(0, 1fr))',
+                    },
+                    gap: '10px 12px',
+                    alignItems: 'center',
                   }}
                 >
-                  {preview.detected_headers.map((header) => {
-                    const unmapped = !mapped[header];
-                    return (
-                      <Box key={header} sx={{ display: 'contents' }}>
-                        <Typography
-                          sx={{
-                            ...typography.body[300],
-                            alignSelf: 'center',
-                            color: unmapped
-                              ? color.fg.neutral.muted
-                              : color.fg.neutral.default,
-                          }}
-                        >
-                          {header}
-                        </Typography>
-                        <TextField
-                          select
-                          size="small"
-                          value={mapped[header] ?? SKIP}
-                          onChange={(e) =>
-                            changeMapping(header, e.target.value)
-                          }
-                          disabled={busy}
-                        >
-                          <MenuItem value={SKIP}>（不匯入）</MenuItem>
-                          {STATION_IMPORT_FIELDS.map((field) => (
-                            <MenuItem key={field.value} value={field.value}>
-                              {field.label}
-                              {field.required ? <RequiredMark /> : null}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-                      </Box>
-                    );
-                  })}
+                  {preview.detected_headers.map((header) => (
+                    <Box key={header} sx={{ display: 'contents' }}>
+                      <Typography
+                        sx={{
+                          ...typography.body[300],
+                          color: mapped[header]
+                            ? color.fg.neutral.default
+                            : color.fg.neutral.muted,
+                          overflowWrap: 'anywhere',
+                        }}
+                      >
+                        {header}
+                      </Typography>
+                      <TextField
+                        select
+                        size="small"
+                        value={mapped[header] ?? SKIP}
+                        onChange={(e) => changeMapping(header, e.target.value)}
+                        disabled={busy}
+                        slotProps={{
+                          select: { native: true },
+                          htmlInput: { 'aria-label': `${header} 對應的欄位` },
+                        }}
+                      >
+                        <option value={SKIP}>（不匯入）</option>
+                        {STATION_IMPORT_FIELDS.map((field) => (
+                          <option key={field.value} value={field.value}>
+                            {field.required ? `${field.label} *` : field.label}
+                          </option>
+                        ))}
+                      </TextField>
+                    </Box>
+                  ))}
                 </Box>
               </Step>
             ) : null}
 
             {preview && summary ? (
               <Step
-                title="4 · 預覽與檢查"
-                caption={`還沒寫入。可匯入 ${importable} 列${
-                  summary.failedLines > 0
-                    ? `，無法匯入 ${summary.failedLines} 列`
-                    : ''
-                }。`}
+                title="4 · 試算結果"
+                aside={
+                  <>
+                    <Muted>還沒寫入</Muted>
+                    <Badge tone="success">新增 {summary.create}</Badge>
+                    <Badge tone="info">更新 {summary.update}</Badge>
+                    {summary.failedLines > 0 ? (
+                      <Badge tone="danger">失敗 {summary.failedLines}</Badge>
+                    ) : null}
+                  </>
+                }
               >
                 {summary.update > 0 ? (
                   <Muted>
-                    其中 {summary.update}{' '}
-                    列會更新既有站點：站名＋縣市＋鄉鎮對到既有的站點；只會改說明、開放時間、level、comment、公開範圍和位置（經緯度），空白的格子不動。站名與地址建立後不能用匯入改。
+                    「更新」是站名＋縣市＋鄉鎮對到既有的站點；只會改說明、開放時間、level、comment、公開範圍和位置（經緯度），空白的格子不動。站名與地址建立後不能用匯入改。
                   </Muted>
                 ) : null}
-                {rows.length > 0 ? <PreviewList rows={rows} /> : null}
-                {preview.row_count > rows.length ? (
-                  <Muted>
-                    只列出前 {rows.length} 列（共 {preview.row_count} 列）。
-                  </Muted>
+                {preview.errors.length > 0 ? (
+                  <ErrorList errors={preview.errors} />
                 ) : null}
-                {laterErrors.length > 0 ? (
-                  <ErrorList errors={laterErrors} />
-                ) : null}
-                {needsSourceColumn ? (
-                  <Callout tone="warning">
-                    Excel 檔要有一欄對應到「來源」，而且每一列都填
-                    official，匯入的站點才會是官方站點。也可以另存成 CSV
-                    再上傳，系統會自動補上。
-                  </Callout>
-                ) : null}
+                <Callout tone="warning">
+                  新增的站點營運狀態一律「已關閉」，需要有人到現場確認後再開啟。可能重複的會送進「AI
+                  重複審核」，不會在這裡擋下。
+                </Callout>
               </Step>
             ) : null}
           </Box>
@@ -451,7 +413,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
               {busy
                 ? '試算中…'
                 : summary
-                  ? `可匯入 ${importable} 列・略過 ${summary.failedLines} 列`
+                  ? `新增 ${summary.create}・更新 ${summary.update}・失敗 ${summary.failedLines}（共 ${preview?.row_count ?? 0} 列）`
                   : ''}
             </Muted>
             <Button variant="ghost" onClick={onClose}>
@@ -460,7 +422,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
             <Button
               onClick={commit}
               startIcon={<Upload size={17} />}
-              disabled={!summary?.canCommit || busy || needsSourceColumn}
+              disabled={!summary?.canCommit || busy}
             >
               {summary?.canCommit ? `確認匯入 ${importable} 列` : '確認匯入'}
             </Button>
@@ -515,100 +477,6 @@ function TypeChip({
       <Icon sx={{ fontSize: 16 }} aria-hidden />
       {label}
     </ButtonBase>
-  );
-}
-
-function PreviewList({ rows }: { rows: readonly PreviewRow[] }) {
-  return (
-    <Box
-      sx={{
-        maxHeight: 260,
-        overflowY: 'auto',
-        border: `1px solid ${color.border.default}`,
-        borderRadius: `${radius.md}px`,
-      }}
-    >
-      {rows.map((row) => {
-        const bad = row.errors.length > 0;
-        return (
-          <Box
-            key={row.line}
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: '44px 1fr',
-              gap: '10px',
-              p: '9px 12px',
-              borderBottom: `1px solid ${color.border.subtle}`,
-              opacity: bad ? 0.75 : 1,
-            }}
-          >
-            <Typography
-              sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
-            >
-              #{row.line}
-            </Typography>
-            <Box sx={{ minWidth: 0 }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                {bad ? (
-                  <CircleX
-                    size={14}
-                    color={color.fg.danger}
-                    aria-label="無法匯入"
-                  />
-                ) : (
-                  <CircleCheck
-                    size={14}
-                    color={color.fg.success}
-                    aria-label="可匯入"
-                  />
-                )}
-                <Typography sx={typography.label[300]}>
-                  {row.name || '（無名稱）'}
-                </Typography>
-                {row.type ? (
-                  <Typography
-                    sx={{
-                      ...typography.data[300],
-                      color: color.fg.neutral.muted,
-                    }}
-                  >
-                    {getStationTypeLabel(row.type)}
-                  </Typography>
-                ) : null}
-              </Box>
-              <Muted>{row.address || '（無地址）'}</Muted>
-              {row.errors.map((message, i) => (
-                <Typography
-                  key={i}
-                  sx={{ ...typography.data[300], color: color.fg.danger }}
-                >
-                  · {message}
-                </Typography>
-              ))}
-            </Box>
-          </Box>
-        );
-      })}
-    </Box>
-  );
-}
-
-function RequiredMark() {
-  return (
-    <Box
-      component="span"
-      aria-hidden
-      sx={{ color: color.fg.danger, ml: '2px' }}
-    >
-      *
-    </Box>
   );
 }
 
@@ -699,7 +567,7 @@ function ErrorList({
           }}
         >
           <span>第 {error.line} 列</span>
-          <span>{error.column || '整列'}</span>
+          <span>{importFieldLabel(error.column)}</span>
           <Box component="span" sx={{ color: color.fg.danger }}>
             {error.message}
           </Box>
@@ -712,12 +580,15 @@ function ErrorList({
 function Step({
   title,
   caption,
+  aside,
   trailing,
   children,
 }: {
   title: string;
   caption?: string;
-  /** Actions or badges at the end of the title row. */
+  /** A note or badges right after the title. */
+  aside?: ReactNode;
+  /** Actions at the end of the title row. */
   trailing?: ReactNode;
   children: ReactNode;
 }) {
@@ -731,9 +602,9 @@ function Step({
           gap: '8px 10px',
         }}
       >
-        <Typography sx={{ ...typography.label[400], flex: 1 }}>
-          {title}
-        </Typography>
+        <Typography sx={typography.label[400]}>{title}</Typography>
+        {aside}
+        <Box sx={{ flex: 1 }} />
         {trailing ? (
           <Box sx={{ display: 'inline-flex', flexWrap: 'wrap', gap: '8px' }}>
             {trailing}
