@@ -7,6 +7,7 @@ enum AccessStatus {
 
 enum AnnouncementFilter {
   ACTIVE
+  DRAFT
   ALL
 }
 
@@ -21,6 +22,12 @@ enum AnnouncementPlacement {
   all
 }
 
+enum AnnouncementStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
 type AnnouncementType {
   uuid: UUID!
   content: String!
@@ -33,11 +40,23 @@ type AnnouncementType {
   Display position (1 = top) among active announcements; null when inactive
   """
   order: Int
+  status: AnnouncementStatus!
 
-  """UUID of the user who created this announcement"""
-  createdBy: String
+  """When it last went live; null while a draft"""
+  publishedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
+
+  """Who created it. Null unless the caller holds announcement.edit"""
+  creator: UserRefType
+
+  """Who last changed it. Null unless the caller holds announcement.edit"""
+  updater: UserRefType
+
+  """
+  Who last activated it; null while a draft or unless the caller holds announcement.edit
+  """
+  publisher: UserRefType
 }
 
 type AreaConnection {
@@ -1829,6 +1848,11 @@ input UpsertTicketPropertyConfigInput {
 
   """Set false to retire the field without deleting its values"""
   isActive: Boolean = null
+}
+
+type UserRefType {
+  uuid: String!
+  name: String
 }
 
 enum Visibility {

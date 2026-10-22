@@ -48,6 +48,7 @@ export type AccessStatus = (typeof AccessStatus)[keyof typeof AccessStatus];
 export const AnnouncementFilter = {
   Active: 'ACTIVE',
   All: 'ALL',
+  Draft: 'DRAFT',
 } as const;
 
 export type AnnouncementFilter =
@@ -67,18 +68,33 @@ export const AnnouncementPlacement = {
 
 export type AnnouncementPlacement =
   (typeof AnnouncementPlacement)[keyof typeof AnnouncementPlacement];
+export const AnnouncementStatus = {
+  Active: 'ACTIVE',
+  Draft: 'DRAFT',
+  Inactive: 'INACTIVE',
+} as const;
+
+export type AnnouncementStatus =
+  (typeof AnnouncementStatus)[keyof typeof AnnouncementStatus];
 export type AnnouncementType = {
   __typename?: 'AnnouncementType';
   active: Scalars['Boolean']['output'];
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this announcement */
-  createdBy?: Maybe<Scalars['String']['output']>;
+  /** Who created it. Null unless the caller holds announcement.edit */
+  creator?: Maybe<UserRefType>;
   /** Display position (1 = top) among active announcements; null when inactive */
   order?: Maybe<Scalars['Int']['output']>;
   /** admin_page, public_page, or all (both pages) */
   placement: Scalars['String']['output'];
+  /** When it last went live; null while a draft */
+  publishedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who last activated it; null while a draft or unless the caller holds announcement.edit */
+  publisher?: Maybe<UserRefType>;
+  status: AnnouncementStatus;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who last changed it. Null unless the caller holds announcement.edit */
+  updater?: Maybe<UserRefType>;
   uuid: Scalars['UUID']['output'];
 };
 
@@ -1804,6 +1820,12 @@ export type UpsertTicketPropertyConfigInput = {
   unit?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type UserRefType = {
+  __typename?: 'UserRefType';
+  name?: Maybe<Scalars['String']['output']>;
+  uuid: Scalars['String']['output'];
+};
+
 export const Visibility = {
   Internal: 'internal',
   Public: 'public',
@@ -1822,6 +1844,18 @@ export type ZoneAssignmentType = {
 export type ZoneTeamAssignmentInput = {
   teamUuid: Scalars['UUID']['input'];
   zoneUuid: Scalars['UUID']['input'];
+};
+
+export type SiteAnnouncementsQueryVariables = Exact<{ [key: string]: never }>;
+
+export type SiteAnnouncementsQuery = {
+  __typename?: 'Query';
+  announcements: Array<{
+    __typename?: 'AnnouncementType';
+    uuid: string;
+    content: string;
+    publishedAt?: any | null;
+  }>;
 };
 
 export type PageInfoFieldsFragment = {
@@ -2620,6 +2654,48 @@ export const TicketNeedFieldsFragmentDoc = {
     },
   ],
 } as unknown as DocumentNode<TicketNeedFieldsFragment, unknown>;
+export const SiteAnnouncementsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'SiteAnnouncements' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'announcements' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'filter' },
+                value: { kind: 'EnumValue', value: 'ACTIVE' },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'placement' },
+                value: { kind: 'EnumValue', value: 'public_page' },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SiteAnnouncementsQuery,
+  SiteAnnouncementsQueryVariables
+>;
 export const GetStationsDocument = {
   kind: 'Document',
   definitions: [
