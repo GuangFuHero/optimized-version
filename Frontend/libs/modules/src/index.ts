@@ -112,6 +112,7 @@ export { AuthSessionProvider, useAuthSession } from './session/auth-session';
 
 export {
   SiteActionDrawer,
+  SiteNotFound,
   SiteShell,
   SiteTextScale,
   type SiteActionDrawerProps,
