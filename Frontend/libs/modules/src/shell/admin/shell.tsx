@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Drawer, useMediaQuery, useTheme } from '@mui/material';
-import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -61,6 +61,11 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
     { enabled: canViewAnnouncements },
   );
 
+  // Widening past the breakpoint closes the drawer, so it does not reopen on the next narrowing.
+  useEffect(() => {
+    if (!mobile) setMobileOpen(false);
+  }, [mobile]);
+
   return (
     <Box
       sx={{
@@ -84,39 +89,45 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
           bgcolor: color.bg.neutral.subtle,
         }}
       >
-        {mobile ? (
-          <Drawer
-            open={mobileOpen}
-            transitionDuration={reduceMotion ? 0 : undefined}
-            onClose={() => setMobileOpen(false)}
-            slotProps={{
-              paper: {
-                id: 'admin-mobile-navigation',
-                sx: { maxWidth: '85vw' },
-              },
+        {/* Both are rendered and CSS picks one: `useMediaQuery` is false during SSR and hydration,
+            so choosing in JS painted the 252px desktop sidebar on phones until the script ran. */}
+        <Drawer
+          open={mobile && mobileOpen}
+          transitionDuration={reduceMotion ? 0 : undefined}
+          onClose={() => setMobileOpen(false)}
+          slotProps={{
+            paper: {
+              id: 'admin-mobile-navigation',
+              sx: { maxWidth: '85vw' },
+            },
+          }}
+        >
+          <Box
+            sx={{ display: 'flex', height: '100%' }}
+            onClick={(event) => {
+              if ((event.target as HTMLElement).closest('a[href]'))
+                setMobileOpen(false);
             }}
           >
-            <Box
-              sx={{ display: 'flex', height: '100%' }}
-              onClick={(event) => {
-                if ((event.target as HTMLElement).closest('a[href]'))
-                  setMobileOpen(false);
-              }}
-            >
-              <AdminSidebar
-                collapsed={false}
-                onToggle={() => setMobileOpen(false)}
-                activeId={forbidden ? undefined : activeItem?.id}
-              />
-            </Box>
-          </Drawer>
-        ) : (
+            <AdminSidebar
+              collapsed={false}
+              onToggle={() => setMobileOpen(false)}
+              activeId={forbidden ? undefined : activeItem?.id}
+            />
+          </Box>
+        </Drawer>
+        <Box
+          sx={{
+            display: { mobile: 'none', tablet: 'flex' },
+            flexShrink: 0,
+          }}
+        >
           <AdminSidebar
             collapsed={collapsed}
             onToggle={() => setCollapsed((value) => !value)}
             activeId={forbidden ? undefined : activeItem?.id}
           />
-        )}
+        </Box>
         <Box
           sx={{
             flex: 1,
