@@ -25,6 +25,7 @@ export { ResetPasswordFormClient } from './auth/login/reset-password-form.client
 export { AccountSecurityClient } from './auth/session/account-security.client';
 export { AccountSecurityInBrowser } from './auth/session/account-security-in-browser.client';
 export { PortalSiteShell } from './auth/session/site-shell.client';
+export { SiteAnnouncementBanner } from './announcement';
 export { ROLE_DISPLAY_NAMES } from './constants/roles';
 
 export { ApplicationProviders, SiteProviders } from './providers';

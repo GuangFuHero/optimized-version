@@ -538,7 +538,8 @@ export function SiteListView() {
           '& .MuiDrawer-paper': {
             width: '100vw',
             maxWidth: '100vw',
-            height: '100dvh',
+            // The drawer's, which starts under the announcement banner if one is up.
+            height: '100%',
             overflow: 'hidden',
             bgcolor: 'transparent',
           },
