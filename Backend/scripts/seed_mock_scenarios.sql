@@ -4,6 +4,7 @@
 -- Scenario A | 花蓮光復土石流 2024-07-24:站 16、帳號 27(志工 20+NGO 4+官方 3)、單 30+avol01 的 7 張
 -- Scenario B | 宜蘭冬山水災   2025-10-03:站 9、帳號 10(志工 4+NGO 5+官方 1)、單 8
 -- 聯絡欄位混用電話與 LINE ID。
+-- 公告:前台、管理平台各一則上線(第 8b 節);那一頁已經有別的公告上線就不放。
 --
 -- 給測試者的帳號(密碼都是 Mock1234!):
 --   avol01@mock.test  建單者:我的任務 › 我建立的有 6 張(另有 1 張已刪除,不會出現),可以測刪一筆需求、
@@ -22,7 +23,8 @@
 --   app/services/ticket_status.py 由需求推導。承接紀錄 status 一律 accepted,人數不超過 quantity(ADR-291)。
 --
 -- UUID 前綴:users=c…、A 站=a…、B 站=b…、tickets=d…、tasks=e…、assignments=f…、teams=1…、
---   team_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…
+--   team_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…、
+--   announcements=9…
 -- 清除段照前綴刪,也照「建立者/承接者是 mock 帳號」刪:測試者在 staging 用 mock 帳號留下的單、站點、
 --   地圖區域、照片、申請會一起清掉,所以可以重跑。
 --
@@ -116,7 +118,8 @@ DELETE FROM briefings
                           WHERE created_by IN (SELECT uuid FROM mock_users));
 DELETE FROM briefing_templates WHERE created_by IN (SELECT uuid FROM mock_users);
 DELETE FROM announcements
- WHERE created_by IN (SELECT uuid FROM mock_users)
+ WHERE uuid::text LIKE '90000000-%'
+    OR created_by IN (SELECT uuid FROM mock_users)
     OR updated_by IN (SELECT uuid FROM mock_users)
     OR published_by IN (SELECT uuid FROM mock_users);
 DELETE FROM user_permission_assign
@@ -822,6 +825,43 @@ UPDATE tickets SET disaster_types = ARRAY['landslide']
 UPDATE tickets SET disaster_types = ARRAY['flood']
  WHERE uuid::text LIKE 'd0000000-%' AND right(uuid::text,12)::bigint BETWEEN 31 AND 38;
 
+-- 8b. 公告(Spec 007):前台(public_page)一則、管理平台(admin_page)一則,兩邊的公告條一打開就看得到。
+--     每頁最多一則上線(原型 D-12、ADR-363):那一頁已經有別人的公告上線(例如 staging 上真的在發的),
+--     這一則就不放,不動別人的公告。發布者寫 agov01,清除段才清得掉;實際上只有 super_admin 能發布(ADR-335)。
+INSERT INTO announcements (uuid, content, active, placement, created_by, updated_by,
+                           published_at, published_by, created_at, updated_at)
+SELECT v.uuid::uuid, v.content, true, v.placement,
+       'c0000000-0000-4000-8000-000000000025', 'c0000000-0000-4000-8000-000000000025',
+       now() - v.ago, 'c0000000-0000-4000-8000-000000000025', now() - v.ago, now() - v.ago
+  FROM (VALUES
+    ('90000000-0000-4000-8000-000000000001', '光復鄉中山路二段清淤中，封閉到另行通知；往大同村請改走中正路。',
+     'public_page', interval '3 hours'),
+    ('90000000-0000-4000-8000-000000000002', '今晚 20:00 在光復鄉公所三樓開協調會，各團隊請派一人出席。',
+     'admin_page', interval '1 hour')
+  ) AS v(uuid, content, placement, ago)
+ WHERE NOT EXISTS (
+         SELECT 1 FROM announcements a
+          WHERE a.active AND a.delete_at IS NULL
+            AND CASE WHEN v.placement = 'public_page' THEN a.placement IN ('public_page', 'all')
+                     ELSE a.placement <> 'public_page' END);
+-- 上線中的公告共用一條 1..N 的排序(display_order,ADR-309),ADR-363 會拿掉這個欄位。
+-- 欄位還在就照規則重編:別人的照原本順序在前,mock 的接在後面;清除段刪掉 mock 留下的空號也一起補上。
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'announcements'
+                AND column_name = 'display_order') THEN
+    EXECUTE $renumber$
+      UPDATE announcements a SET display_order = r.position
+        FROM (SELECT uuid,
+                     row_number() OVER (ORDER BY uuid::text LIKE '90000000-%', display_order, published_at)
+                       AS position
+                FROM announcements WHERE active AND delete_at IS NULL) r
+       WHERE a.uuid = r.uuid
+    $renumber$;
+  END IF;
+END $$;
+
 -- 9. 角色申請(功能 019):一筆審核中、一筆未通過附回覆,讓抽屜的兩種卡片一登入就看得到。
 --    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。審核人填資料庫裡現有的 super admin,
 --    沒有就留空(前台卡片只顯示回覆)。
@@ -957,6 +997,18 @@ BEGIN
    WHERE uuid::text LIKE 'f0000000-%' AND status <> 'accepted' LIMIT 1;
   IF bad IS NOT NULL THEN
     RAISE EXCEPTION 'mock seed: assignment % is not accepted, the only status the site writes', bad;
+  END IF;
+
+  -- 每頁最多一則上線(ADR-363):all 同時佔前台和管理平台。
+  SELECT m.uuid::text INTO bad FROM announcements m
+   WHERE m.uuid::text LIKE '90000000-%' AND m.active AND m.delete_at IS NULL
+     AND EXISTS (SELECT 1 FROM announcements a
+                  WHERE a.uuid <> m.uuid AND a.active AND a.delete_at IS NULL
+                    AND ((a.placement IN ('public_page', 'all') AND m.placement IN ('public_page', 'all'))
+                         OR (a.placement <> 'public_page' AND m.placement <> 'public_page')))
+   LIMIT 1;
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'mock seed: announcement % shares its page with another live one (ADR-363)', bad;
   END IF;
 
   SELECT ref_uuid::text INTO bad FROM photos
