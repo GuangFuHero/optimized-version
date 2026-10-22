@@ -2143,6 +2143,7 @@ export type GetTicketsWithNeedsQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
   status?: InputMaybe<Scalars['String']['input']>;
   priority?: InputMaybe<Scalars['String']['input']>;
+  q?: InputMaybe<Scalars['String']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
@@ -3833,6 +3834,11 @@ export const GetTicketsWithNeedsDocument = {
         },
         {
           kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           defaultValue: { kind: 'IntValue', value: '0' },
@@ -3882,6 +3888,11 @@ export const GetTicketsWithNeedsDocument = {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'priority' },
                 },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'q' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
               },
               {
                 kind: 'Argument',
