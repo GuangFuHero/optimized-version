@@ -74,7 +74,7 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
               已承接{'　'}
               {needName}
             </Typography>
-            {/* What the briefing page says too (`BriefingPlaceholder`), until it has more to offer. */}
+            {/* The moment they start to wonder what to bring (prototype `site-map.jsx:1241`). */}
             <Typography
               sx={{
                 mt: 0.25,
@@ -83,7 +83,7 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
                 lineHeight: 1.6,
               }}
             >
-              出發前請先跟現場聯絡人確認。
+              出發前先看行前資訊：怎麼過來、帶什麼、到了找誰。
             </Typography>
             {/* Bordered but not filled, on a line of its own and 44px tall, away from 關閉: a tap
                 meant to close must not carry the volunteer off the page they just claimed on

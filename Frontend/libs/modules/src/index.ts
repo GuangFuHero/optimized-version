@@ -126,7 +126,7 @@ export {
   TicketDetailDrawer,
   createTaskMatchTicketDetailOverrides,
 } from './ticket';
-export { BriefingPlaceholder, NeedClaimProvider } from './ticket/needs';
+export { NeedClaimProvider } from './ticket/needs';
 export type { ReloadedTicket } from './ticket/needs';
 export {
   clearAllHelpRequestDrafts,

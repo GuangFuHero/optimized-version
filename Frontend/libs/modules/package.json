@@ -4,6 +4,7 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
+    "./briefing": "./src/briefing/index.ts",
     "./session": "./src/session/index.ts",
     "./server": "./src/server.ts",
     "./document": "./src/document-layout.tsx"

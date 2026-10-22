@@ -91,8 +91,7 @@ function DetailLine({
 
 /**
  * The next thing to do on this page, not a hint to dismiss (prototype `BriefingDepartureBar`,
- * `site-actions.jsx:1943-1963`). Only above claims: without one there is nowhere to go. Its second
- * line says what the page says until the briefing has content.
+ * `site-actions.jsx:1943-1963`). Only above claims: without one there is nowhere to go.
  */
 function BriefingDepartureBar({ onLeave }: Pick<MyClaimsListProps, 'onLeave'>) {
   return (
@@ -136,7 +135,7 @@ function BriefingDepartureBar({ onLeave }: Pick<MyClaimsListProps, 'onLeave'>) {
             lineHeight: 1.5,
           }}
         >
-          準備中，出發前請先跟現場聯絡人確認
+          怎麼過來、帶什麼、到了找誰
         </Typography>
       </Box>
       <ChevronRightRoundedIcon
