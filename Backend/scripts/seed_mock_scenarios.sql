@@ -15,6 +15,7 @@
 --   avol04@mock.test  角色申請審核中(政府單位人員);撤回後要重跑 seed 才回得來
 --   avol05@mock.test  角色申請未通過,卡片上有審核回覆(社福團體人員)
 --   agov01@mock.test  光復鄉公所的團隊管理員:右上角有「前往後台」
+--   (不用登入)        行前資訊 /briefing:一份已發布的,裝備可以勾;另有一個土石流範本給後台用
 --
 -- 規則(第 11 節會檢查,不符就整個回滾):
 --   需求只用 pending/fulfilled/canceled(ADR-293)。湊滿的是 fulfilled+completed_at;停止招募的是
@@ -24,7 +25,7 @@
 --
 -- UUID 前綴:users=c…、A 站=a…、B 站=b…、tickets=d…、tasks=e…、assignments=f…、teams=1…、
 --   team_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…、
---   announcements=9…
+--   briefing_templates=7…、briefings=8…、announcements=9…
 -- 清除段照前綴刪,也照「建立者/承接者是 mock 帳號」刪:測試者在 staging 用 mock 帳號留下的單、站點、
 --   地圖區域、照片、申請會一起清掉,所以可以重跑。
 --
@@ -111,12 +112,15 @@ DELETE FROM routes
     OR destination_uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM base_geometries WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM briefings
- WHERE created_by IN (SELECT uuid FROM mock_users)
+ WHERE uuid::text LIKE '80000000-%'
+    OR created_by IN (SELECT uuid FROM mock_users)
     OR updated_by IN (SELECT uuid FROM mock_users)
     OR published_by IN (SELECT uuid FROM mock_users)
     OR template_uuid IN (SELECT uuid FROM briefing_templates
-                          WHERE created_by IN (SELECT uuid FROM mock_users));
-DELETE FROM briefing_templates WHERE created_by IN (SELECT uuid FROM mock_users);
+                          WHERE uuid::text LIKE '70000000-%'
+                             OR created_by IN (SELECT uuid FROM mock_users));
+DELETE FROM briefing_templates
+ WHERE uuid::text LIKE '70000000-%' OR created_by IN (SELECT uuid FROM mock_users);
 DELETE FROM announcements
  WHERE uuid::text LIKE '90000000-%'
     OR created_by IN (SELECT uuid FROM mock_users)
@@ -879,6 +883,85 @@ SELECT '60000000-0000-4000-8000-000000000002','ngo',
        now() - interval '2 days','c0000000-0000-4000-8000-000000000005',
        now() - interval '3 days', now() - interval '2 days';
 
+-- 9b. 志工行前資訊(Spec/007 BR-006:一列一版,state 的最新一筆已發布就是前台那一份):光復的一份,
+--     由公所災防課從土石流範本寫成、已發布。裝備寫成 `- [ ]`,前台才有可以勾的框;一律不寫 `[x]`
+--     (勾不勾是每台裝置自己的事,VB-BR-191a)。時間跟角色申請一樣用 now(),前台的「幾天前」才合理。
+--     網站上只有超級管理員能發布(pre_departure.publish);這裡直接寫入,跟第 9 節的審核人一樣不經權限。
+INSERT INTO briefing_templates (uuid, content, tags, state, created_by, created_at, updated_at) VALUES
+ ('70000000-0000-4000-8000-000000000001', $md$## 如何參與
+
+1. 先在地圖上找一件你能做的事，按「承接」。
+2. 出發前看完這一頁，照下面的清單打包。
+3. 到了先去（報到地點）報到，領識別證和分組。
+
+## 交通資訊
+
+（火車、開車各怎麼到；哪些路段管制）
+
+## 建議攜帶裝備
+
+- [ ] 雨鞋（較佳：長筒；避免：涼鞋、布鞋）
+- [ ] 工作手套（較佳：防割、止滑）
+- [ ] 長袖、長褲
+- [ ] 頭燈或手電筒
+- [ ] 個人水壺
+
+## 行前注意事項
+
+- 天黑前離開河道與坡地。
+- 不要自行進入封鎖線內。
+$md$, '["landslide"]', 'briefing', 'c0000000-0000-4000-8000-000000000025',
+  now() - interval '3 days', now() - interval '3 days');
+
+INSERT INTO briefings (uuid, template_uuid, content, tags, state, created_by, updated_by,
+                       published_at, published_by, created_at, updated_at) VALUES
+ ('80000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000001', $md$## 如何參與
+
+1. 先在地圖上找一件你能做的事，按「承接」；還沒承接也可以直接到報到處。
+2. 出發前看完這一頁，照下面的清單打包。
+3. 到了先去**光復車站前廣場**的志工報到處報到，找穿橘色背心的志工，領識別證和分組。
+
+## 交通資訊
+
+### 火車
+
+搭臺鐵到**光復站**，出站右轉步行 5 分鐘到報到處。假日車票很快賣完，回程車票請先訂好：[臺鐵訂票](https://www.railway.gov.tw/)。
+
+### 開車
+
+台 9 線光復段目前**單線管制**，請改走台 11 線。光復市區不要停路邊，停到光復國中操場（臨時停車場）。
+
+## 建議攜帶裝備
+
+### 穿的
+
+- [ ] 雨鞋（較佳：長筒；避免：涼鞋、布鞋）
+- [ ] 工作手套（較佳：防割、止滑）
+- [ ] 長袖、長褲（避免：短褲）
+- [ ] 換洗衣物一套
+
+### 帶的
+
+- [ ] 頭燈或手電筒
+- [ ] 個人水壺
+- [ ] 個人藥品、健保卡
+- [ ] 口罩
+
+鏟子、水桶、推車現場都有，不用帶。
+
+## 行前注意事項
+
+- 現場不提供住宿，請當天往返。
+- 下午 4 點前收工，天黑前離開河道與坡地。
+- 身體不適、懷孕、有慢性病的人請不要下泥地，可以到物資站幫忙。
+- 不要自行進入封鎖線內。
+
+> 緊急情況以頁面最上方的紅色緊急公告為準。
+$md$, '["landslide"]', 'briefing',
+  'c0000000-0000-4000-8000-000000000025', 'c0000000-0000-4000-8000-000000000025',
+  now() - interval '1 day', 'c0000000-0000-4000-8000-000000000025',
+  now() - interval '2 days', now() - interval '1 day');
+
 -- 10. 狀態照規則推導,跟網站做的一樣。
 -- 需求:承接人數到了 quantity 就是湊滿(services/ticket.py 的 assign_task_actor),
 --      completed_at 是最後一位承接的時間。
@@ -1022,6 +1105,16 @@ BEGIN
    LIMIT 1;
   IF bad IS NOT NULL THEN
     RAISE EXCEPTION 'mock seed: photo % is not an https link of at most 500 characters', bad;
+  END IF;
+
+  -- 行前資訊:發布過的才上前台;要有可以勾的項目,而且不能預先勾好(VB-BR-191a)。
+  SELECT uuid::text INTO bad FROM briefings
+   WHERE uuid::text LIKE '80000000-%'
+     AND (published_at IS NULL OR published_by IS NULL
+          OR content !~ '(^|\n)- \[ \] ' OR content ~* '(^|\n)- \[x\] ')
+   LIMIT 1;
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'mock seed: briefing % is unpublished, has nothing to tick, or comes ticked', bad;
   END IF;
 END $$;
 
