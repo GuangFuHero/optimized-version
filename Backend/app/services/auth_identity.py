@@ -20,6 +20,7 @@ from app.messaging.sms import build_login_method_changed_sms
 from app.models.auth import User
 from app.repositories.auth_repository import contact_repository, identity_repository
 from app.repositories.session_repository import SessionRepository
+from app.repositories.step_up_proof_repository import ProofHolder
 from app.services.auth_contact import (
     ACTION_LINK,
     ACTION_UNLINK,
@@ -78,6 +79,7 @@ async def link_identity(
     sms_sender,
     dispatch=None,
     verifiers=None,
+    proof_holder: ProofHolder | None = None,
 ) -> None:
     """Attach a verified SSO identity to the current account, proof first (ADR-217).
 
@@ -101,7 +103,7 @@ async def link_identity(
 
     await require_channel_proof(
         db, redis, actor=actor, step_up=step_up, action=ACTION_LINK, target=provider,
-        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
+        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, proof_holder=proof_holder,
     )
 
     try:
@@ -129,6 +131,7 @@ async def unlink_identity(
     sms_sender,
     dispatch=None,
     verifiers=None,
+    proof_holder: ProofHolder | None = None,
 ) -> None:
     """Remove one SSO login method, refusing to strand the account (ADR-218).
 
@@ -165,7 +168,7 @@ async def unlink_identity(
 
     await require_channel_proof(
         db, redis, actor=actor, step_up=step_up, action=ACTION_UNLINK, target=provider,
-        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
+        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers, proof_holder=proof_holder,
     )
 
     # The `users` row, not the identity rows: the invariant is about the *set* of login

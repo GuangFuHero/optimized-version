@@ -325,6 +325,9 @@ export interface paths {
      *     `app` (`site` or `admin`) is the app to come back to, at `return_to`, a path on it. The request must
      *     come from one of our pages (ADR-327), which for a navigation means its `Referer`. A start that is
      *     refused leaves `{p}_oauth` alone: a link from another site must not end a sign-in in another tab.
+     *
+     *     `purpose=step_up` proves a signed-in account at its provider instead of signing in (ADR-361): the
+     *     provider is asked to check the person afresh.
      */
     get: operations['start_oauth_api_v1_auth_oauth__provider__start_get'];
     put?: never;
@@ -547,7 +550,9 @@ export interface paths {
      *
      *     Replacing an existing contact of the same type additionally requires step-up (ADR-085).
      *     For an SSO-only account, the first call without `step_up` is what delivers the code to
-     *     the OLD channel, and answers 422 asking for it back.
+     *     the OLD channel, and answers 422 asking for it back. An account with no password and no
+     *     contact answers 422 `step_up_reauth_required` until this session has signed in at its
+     *     provider again (ADR-361).
      */
     post: operations['add_contact_api_v1_auth_contacts_post'];
     delete?: never;
@@ -4485,6 +4490,8 @@ export interface operations {
       query?: {
         app?: string | null;
         return_to?: string | null;
+        purpose?: 'sign_in' | 'step_up';
+        action?: string | null;
       };
       header?: never;
       path: {

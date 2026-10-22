@@ -61,6 +61,14 @@ async def test_adapter_valid_claims(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_adapter_reads_when_the_person_signed_in(monkeypatch):
+    """`auth_time`, which LINE adds when the request carried `max_age`, comes through (ADR-361)."""
+    _patch_client(monkeypatch, lambda req: httpx.Response(200, json={"sub": "U1", "auth_time": 1760000000}))
+    lid = await LineVerifyApiVerifier("chan").verify("tok")
+    assert lid.auth_time == 1760000000
+
+
+@pytest.mark.asyncio
 async def test_adapter_no_email_is_none(monkeypatch):
     """200 without email -> LineIdentity.email is None."""
     _patch_client(monkeypatch, lambda req: httpx.Response(200, json={"sub": "U1", "name": "A"}))
