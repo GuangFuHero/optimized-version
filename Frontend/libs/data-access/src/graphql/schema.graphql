@@ -128,6 +128,17 @@ enum BriefingState {
   DEBRIEF
 }
 
+enum BriefingStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum BriefingStatusFilter {
+  PUBLISHED
+  DRAFT
+  ALL
+}
+
 type BriefingTemplateType {
   uuid: UUID!
   content: String!
@@ -156,9 +167,10 @@ type BriefingType {
 
   """Lifecycle phase: 'briefing', 'in_field', or 'debrief'"""
   state: String!
+  status: BriefingStatus!
 
-  """UUID of the user who created this briefing"""
-  createdBy: String
+  """When it was published; null while a draft"""
+  publishedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
 }
@@ -821,7 +833,7 @@ type Query {
   announcement(uuid: UUID!): AnnouncementType
   briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!
   briefingTemplate(uuid: UUID!): BriefingTemplateType
-  briefings(state: BriefingState = null, tag: String = null): [BriefingType!]!
+  briefings(state: BriefingState = null, tag: String = null, status: BriefingStatusFilter! = PUBLISHED): [BriefingType!]!
   briefing(uuid: UUID!): BriefingType
   suggestableFields(targetType: String!): [SuggestableFieldType!]!
   areas(bounds: BoundsInput = null, includePrivate: Boolean! = false, skip: Int! = 0, limit: Int! = 50): AreaConnection!

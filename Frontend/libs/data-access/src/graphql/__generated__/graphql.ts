@@ -167,6 +167,21 @@ export const BriefingState = {
 } as const;
 
 export type BriefingState = (typeof BriefingState)[keyof typeof BriefingState];
+export const BriefingStatus = {
+  Draft: 'DRAFT',
+  Published: 'PUBLISHED',
+} as const;
+
+export type BriefingStatus =
+  (typeof BriefingStatus)[keyof typeof BriefingStatus];
+export const BriefingStatusFilter = {
+  All: 'ALL',
+  Draft: 'DRAFT',
+  Published: 'PUBLISHED',
+} as const;
+
+export type BriefingStatusFilter =
+  (typeof BriefingStatusFilter)[keyof typeof BriefingStatusFilter];
 export type BriefingTemplateType = {
   __typename?: 'BriefingTemplateType';
   content: Scalars['String']['output'];
@@ -185,10 +200,11 @@ export type BriefingType = {
   __typename?: 'BriefingType';
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this briefing */
-  createdBy?: Maybe<Scalars['String']['output']>;
+  /** When it was published; null while a draft */
+  publishedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
   state: Scalars['String']['output'];
+  status: BriefingStatus;
   /** Free-form categorization tags */
   tags: Array<Scalars['String']['output']>;
   /** UUID of the source template, or null for ad-hoc briefings */
@@ -968,6 +984,7 @@ export type QueryBriefingTemplatesArgs = {
 
 export type QueryBriefingsArgs = {
   state?: InputMaybe<BriefingState>;
+  status?: BriefingStatusFilter;
   tag?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -1858,6 +1875,18 @@ export type SiteAnnouncementsQuery = {
   }>;
 };
 
+export type CurrentBriefingQueryVariables = Exact<{ [key: string]: never }>;
+
+export type CurrentBriefingQuery = {
+  __typename?: 'Query';
+  briefings: Array<{
+    __typename?: 'BriefingType';
+    uuid: string;
+    content: string;
+    publishedAt?: any | null;
+  }>;
+};
+
 export type PageInfoFieldsFragment = {
   __typename?: 'PageInfo';
   totalCount: number;
@@ -2695,6 +2724,48 @@ export const SiteAnnouncementsDocument = {
 } as unknown as DocumentNode<
   SiteAnnouncementsQuery,
   SiteAnnouncementsQueryVariables
+>;
+export const CurrentBriefingDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'CurrentBriefing' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'briefings' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'state' },
+                value: { kind: 'EnumValue', value: 'BRIEFING' },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'status' },
+                value: { kind: 'EnumValue', value: 'PUBLISHED' },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CurrentBriefingQuery,
+  CurrentBriefingQueryVariables
 >;
 export const GetStationsDocument = {
   kind: 'Document',
