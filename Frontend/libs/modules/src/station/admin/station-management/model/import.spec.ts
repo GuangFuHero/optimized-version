@@ -2,17 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   countExportableByType,
-  errorsOutsideSample,
   exportFilename,
+  importFieldLabel,
   importSummary,
-  isCsvFile,
-  lacksOfficialSource,
   mergeMapping,
-  parseCsv,
-  previewRows,
   STATION_IMPORT_FIELDS,
   stationImportTemplate,
-  withOfficialSource,
 } from './import';
 import type { StationRow } from './station-row';
 
@@ -63,7 +58,7 @@ describe('exportFilename', () => {
 });
 
 describe('stationImportTemplate', () => {
-  it('names every import field and marks the example row official', () => {
+  it('names every import field and fills the example row', () => {
     const [header = '', row = '', rest] =
       stationImportTemplate('shelter').split('\r\n');
     const values = row.split(',');
@@ -74,7 +69,6 @@ describe('stationImportTemplate', () => {
     expect(header.split(',')).toEqual(
       STATION_IMPORT_FIELDS.map((f) => f.value),
     );
-    expect(cells['source']).toBe('official');
     expect(cells['type']).toBe('shelter');
     expect(rest).toBe('');
   });
@@ -91,47 +85,15 @@ describe('STATION_IMPORT_FIELDS', () => {
   });
 });
 
-describe('previewRows', () => {
-  const preview = {
-    sample_rows: [
-      {
-        站名: ' 甲站 ',
-        種類: 'water',
-        縣市: '花蓮縣',
-        鄉鎮: '光復鄉',
-        備註: 'x',
-      },
-      { 站名: '', 種類: 'shelter', 縣市: '', 鄉鎮: '', 備註: '' },
-    ],
-    errors: [
-      { line: 3, column: 'name', message: '必填' },
-      { line: 3, column: '', message: '整列錯誤' },
-      { line: 9, column: 'latitude', message: '格式錯誤' },
-    ],
-  };
-  const mapping = { 站名: 'name', 種類: 'type', 縣市: 'county', 鄉鎮: 'city' };
-
-  it('reads sample rows through the mapping and attaches their line errors', () => {
-    expect(previewRows(preview, mapping)).toEqual([
-      {
-        line: 2,
-        name: '甲站',
-        type: 'water',
-        address: '花蓮縣光復鄉',
-        errors: [],
-      },
-      {
-        line: 3,
-        name: '',
-        type: 'shelter',
-        address: '',
-        errors: ['name：必填', '整列錯誤'],
-      },
-    ]);
+describe('importFieldLabel', () => {
+  it('names a system field the way the mapping does', () => {
+    expect(importFieldLabel('type')).toBe('類型');
+    expect(importFieldLabel('latitude')).toBe('緯度');
   });
 
-  it('keeps only the errors past the sample for a separate list', () => {
-    expect(errorsOutsideSample(preview).map((e) => e.line)).toEqual([9]);
+  it('shows a whole-row error and an unknown column as they come', () => {
+    expect(importFieldLabel('')).toBe('整列');
+    expect(importFieldLabel('容納人數')).toBe('容納人數');
   });
 });
 
@@ -153,90 +115,5 @@ describe('countExportableByType', () => {
     const counts = countExportableByType(rows, null);
     expect(counts.get('shelter')).toBe(3);
     expect(counts.get('water')).toBe(1);
-  });
-});
-
-describe('parseCsv', () => {
-  it('keeps commas, quotes and line breaks inside quoted fields', () => {
-    expect(parseCsv('a,b\r\n"x, y","say ""hi""\nagain"\n')).toEqual([
-      ['a', 'b'],
-      ['x, y', 'say "hi"\nagain'],
-    ]);
-  });
-
-  it('reads a last line with no line break', () => {
-    expect(parseCsv('a\n1')).toEqual([['a'], ['1']]);
-  });
-});
-
-describe('withOfficialSource', () => {
-  it('appends an official source column when none is mapped', () => {
-    const result = withOfficialSource('\uFEFFname,lat\n甲站,23\n乙站\n', {
-      name: 'name',
-      lat: 'latitude',
-    });
-    expect(parseCsv(result.text)).toEqual([
-      ['name', 'lat', 'source'],
-      ['甲站', '23', 'official'],
-      ['乙站', '', 'official'],
-    ]);
-    expect(result.mapping).toEqual({
-      name: 'name',
-      lat: 'latitude',
-      source: 'source',
-    });
-  });
-
-  it('overwrites the column mapped to source', () => {
-    const result = withOfficialSource('站名,來源\n甲站,import\n乙站,\n', {
-      站名: 'name',
-      來源: 'source',
-    });
-    expect(parseCsv(result.text)).toEqual([
-      ['站名', '來源'],
-      ['甲站', 'official'],
-      ['乙站', 'official'],
-    ]);
-    expect(result.mapping).toEqual({ 站名: 'name', 來源: 'source' });
-  });
-
-  it('picks a free header name when an unmapped source column exists', () => {
-    const result = withOfficialSource('name,source\n甲站,user\n', {
-      name: 'name',
-    });
-    expect(parseCsv(result.text)[0]).toEqual(['name', 'source', 'source_']);
-    expect(result.mapping['source_']).toBe('source');
-  });
-
-  it('reads headers and rows the way the backend does, and leaves blank rows blank', () => {
-    const result = withOfficialSource(' name ,,\n甲站,x,y\n,\n', {
-      name: 'name',
-    });
-    expect(result.text).toBe('name,source\r\n甲站,official\r\n\r\n');
-  });
-});
-
-describe('lacksOfficialSource', () => {
-  const rows = (...sources: string[]) => ({
-    sample_rows: sources.map((s) => ({ 站名: '甲', 來源: s })),
-  });
-
-  it('needs a column mapped to source', () => {
-    expect(lacksOfficialSource(rows('official'), { 站名: 'name' })).toBe(true);
-  });
-
-  it('needs official on every sampled row', () => {
-    const mapping = { 站名: 'name', 來源: 'source' };
-    expect(lacksOfficialSource(rows('official', ' official '), mapping)).toBe(
-      false,
-    );
-    expect(lacksOfficialSource(rows('official', ''), mapping)).toBe(true);
-  });
-});
-
-describe('isCsvFile', () => {
-  it('goes by the extension, as the backend does', () => {
-    expect(isCsvFile({ name: '名單.CSV' })).toBe(true);
-    expect(isCsvFile({ name: '名單.xlsx' })).toBe(false);
   });
 });
