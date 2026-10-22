@@ -26,6 +26,15 @@ export function isAdminPermissionError(error: Error | null) {
  */
 export const SILENT_ERROR_META = 'silentError';
 
+/** The HTTP status behind a REST or GraphQL failure; undefined when there was no response. */
+function statusOf(error: Error): number | undefined {
+  if (error instanceof ApiError) return error.status;
+  if (error instanceof CombinedError && error.response instanceof Response) {
+    return error.response.status;
+  }
+  return undefined;
+}
+
 export function createAdminQueryClient(onError: (error: Error) => void) {
   const reportError = (error: Error) => {
     if (error instanceof ApiError && error.code === 'step_up_required') return;
@@ -48,9 +57,7 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
       onError: (error, query) => {
         if (query.meta?.quietErrors) return;
         const silent = query.meta?.[SILENT_ERROR_META] === true;
-        if (silent && !(error instanceof ApiError && error.status === 401)) {
-          return;
-        }
+        if (silent && statusOf(error) !== 401) return;
         if (!isAdminPermissionError(error)) reportError(error);
       },
     }),
@@ -59,13 +66,7 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
       queries: {
         staleTime: 30_000,
         retry: (count, error) => {
-          const status =
-            error instanceof ApiError
-              ? error.status
-              : error instanceof CombinedError &&
-                  error.response instanceof Response
-                ? error.response.status
-                : undefined;
+          const status = statusOf(error);
           if (
             status === 401 ||
             status === 403 ||
