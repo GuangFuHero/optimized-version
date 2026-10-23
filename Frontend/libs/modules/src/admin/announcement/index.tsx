@@ -31,6 +31,7 @@ import {
   SegmentedTabs,
   TextInput,
   Timeline,
+  timelineTimeFormatter,
   type BadgeTone,
   type TimelineItem,
 } from '@rescue-frontend/ui';
@@ -113,7 +114,7 @@ export function AnnouncementPage() {
           {
             id: announcement.uuid,
             at: announcement.publishedAt,
-            actor: announcement.publisher?.name ?? '發布者未提供',
+            actor: announcement.publisher?.name,
             tone: 'danger',
             icon: <Megaphone />,
             title: (
@@ -223,8 +224,9 @@ export function AnnouncementPage() {
         </Stack>
       )}
 
-      {publishing && canPublish ? (
+      {canPublish ? (
         <PublishAnnouncementDialog
+          open={publishing}
           live={live}
           onClose={() => setPublishing(false)}
         />
@@ -281,14 +283,13 @@ function LiveAnnouncement({
 
       {announcement.publishedAt ? (
         <Box sx={{ ...typography.data[300], color: color.fg.neutral.muted }}>
-          {announcement.publisher?.name ?? '發布者未提供'} 於{' '}
-          {new Date(announcement.publishedAt).toLocaleString('zh-TW', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          })}{' '}
+          {announcement.publisher?.name
+            ? `${announcement.publisher.name} `
+            : null}
+          於{' '}
+          <time dateTime={announcement.publishedAt}>
+            {timelineTimeFormatter.format(new Date(announcement.publishedAt))}
+          </time>{' '}
           發布
         </Box>
       ) : null}
@@ -337,9 +338,11 @@ function LiveAnnouncement({
 }
 
 function PublishAnnouncementDialog({
+  open,
   live,
   onClose,
 }: {
+  open: boolean;
   live: Announcement[];
   onClose: () => void;
 }) {
@@ -370,6 +373,10 @@ function PublishAnnouncementDialog({
       {
         onSuccess: () => {
           toast.success(`已發布到${target.label}`);
+          create.reset();
+          setContent('');
+          setPlacement(AnnouncementPlacement.PublicPage);
+          setConfirming(false);
           onClose();
         },
       },
@@ -397,7 +404,7 @@ function PublishAnnouncementDialog({
 
   return (
     <Dialog
-      open
+      open={open}
       title="發布公告"
       onClose={onClose}
       onConfirm={publish}

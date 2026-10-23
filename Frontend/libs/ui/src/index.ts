@@ -72,7 +72,11 @@ export { SidebarItem } from './components/SidebarItem';
 export type { SidebarItemProps } from './components/SidebarItem';
 export { TextInput } from './components/TextInput';
 export type { TextInputProps } from './components/TextInput';
-export { Timeline, TimelineChange } from './components/Timeline';
+export {
+  Timeline,
+  TimelineChange,
+  timelineTimeFormatter,
+} from './components/Timeline';
 export { backendEventsToTimelineItems } from './components/Timeline/backend-events';
 export type {
   TimelineChangeProps,

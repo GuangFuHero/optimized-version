@@ -34,7 +34,7 @@ export interface TimelineItem {
   tone?: TimelineTone;
 }
 
-const eventTime = new Intl.DateTimeFormat('zh-TW', {
+export const timelineTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
   timeZone: 'Asia/Taipei',
   year: 'numeric',
   month: '2-digit',
@@ -157,7 +157,7 @@ export function Timeline({
                   }}
                 >
                   <time dateTime={item.at}>
-                    {eventTime.format(new Date(item.at))}
+                    {timelineTimeFormatter.format(new Date(item.at))}
                   </time>
                   {item.actor != null ? (
                     <>
