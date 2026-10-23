@@ -1,17 +1,6 @@
-import {
-  ArrowRight,
-  History,
-  Plus,
-  Pencil,
-  Trash2,
-  RotateCcw,
-  UserPlus,
-  UserMinus,
-} from 'lucide-react';
+import { ArrowRight, History } from 'lucide-react';
 import { Box, Stack, Typography } from '@mui/material';
-import type { components } from '@rescue-frontend/data-access/openapi';
 import type { ReactNode } from 'react';
-import { z } from 'zod';
 
 import { designTokens } from '../../theme';
 
@@ -35,26 +24,15 @@ const TONES: Record<TimelineTone, { bg: string; fg: string }> = {
   danger: { bg: color.bg.danger.subtle, fg: color.fg.danger },
 };
 
-export type TimelineItem = components['schemas']['HistoryEventResponse'];
-
-const EVENTS = [
-  { type: 'CREATED', label: '建立', tone: 'success', Icon: Plus },
-  { type: 'UPDATED', label: '更新', tone: 'neutral', Icon: Pencil },
-  { type: 'DELETED', label: '刪除', tone: 'danger', Icon: Trash2 },
-  { type: 'RESTORED', label: '還原', tone: 'success', Icon: RotateCcw },
-  { type: 'ASSIGNED', label: '指派', tone: 'primary', Icon: UserPlus },
-  { type: 'UNASSIGNED', label: '解除指派', tone: 'secondary', Icon: UserMinus },
-] as const;
-
-const ENTITY_LABELS = new Map([
-  ['ticket', '任務單'],
-  ['station', '站點'],
-  ['task', '任務'],
-  ['task_property', '任務資源'],
-  ['task_assignment', '任務指派'],
-  ['station_property', '站點資源'],
-  ['secondary_location', '位置'],
-]);
+export interface TimelineItem {
+  id: string;
+  title: ReactNode;
+  at: string;
+  actor?: ReactNode;
+  content?: ReactNode;
+  icon?: ReactNode;
+  tone?: TimelineTone;
+}
 
 const eventTime = new Intl.DateTimeFormat('zh-TW', {
   timeZone: 'Asia/Taipei',
@@ -89,15 +67,13 @@ export function Timeline({
   return (
     <Box component="ol" sx={{ m: 0, p: 0, listStyle: 'none' }}>
       {items.map((item, index) => {
-        const event = EVENTS.find((event) => event.type === item.event_type);
-        const t = TONES[event?.tone ?? 'neutral'];
-        const Icon = event?.Icon ?? History;
+        const t = TONES[item.tone ?? 'neutral'];
         const last = index === items.length - 1;
 
         return (
           <Box
             component="li"
-            key={`${item.entity}:${item.at}:${item.event_type}:${index}`}
+            key={item.id}
             sx={{
               display: 'grid',
               gridTemplateColumns: '26px minmax(0, 1fr)',
@@ -123,7 +99,7 @@ export function Timeline({
                     },
                   }}
                 >
-                  <Icon />
+                  {item.icon ?? <History />}
                 </Box>
               ) : (
                 <Box
@@ -149,7 +125,6 @@ export function Timeline({
                 />
               )}
             </Stack>
-
             <Stack sx={{ minWidth: 0, gap: '4px', pb: last ? 0 : '16px' }}>
               <Stack
                 direction="row"
@@ -161,16 +136,18 @@ export function Timeline({
                   minHeight: 26,
                 }}
               >
-                <Typography
+                <Box
                   sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: '8px',
                     ...typography.label[400],
                     color: color.fg.neutral.default,
                   }}
                 >
-                  {event?.label ?? item.event_type}
-                  {' · '}
-                  {ENTITY_LABELS.get(item.entity) ?? item.entity}
-                </Typography>
+                  {item.title}
+                </Box>
                 <Typography
                   sx={{
                     ml: 'auto',
@@ -182,25 +159,23 @@ export function Timeline({
                   <time dateTime={item.at}>
                     {eventTime.format(new Date(item.at))}
                   </time>
-                  {' · '}
-                  {item.actor.name ??
-                    (item.actor.kind === 'system' ? '系統' : item.actor.kind)}
-                  {item.actor.is_removed ? '（已移除）' : null}
+                  {item.actor != null ? (
+                    <>
+                      {' · '}
+                      {item.actor}
+                    </>
+                  ) : null}
                 </Typography>
               </Stack>
-              {item.changes.length ? (
+              {item.content != null ? (
                 <Box
                   sx={{
                     ...typography.body[300],
                     color: color.fg.neutral.subtle,
+                    overflowWrap: 'anywhere',
                   }}
                 >
-                  {item.changes.map((change, changeIndex) => (
-                    <TimelineChange
-                      key={`${change.field}:${changeIndex}`}
-                      change={change}
-                    />
-                  ))}
+                  {item.content}
                 </Box>
               ) : null}
             </Stack>
@@ -211,18 +186,15 @@ export function Timeline({
   );
 }
 
+export type TimelineChangeData = { field: string } & (
+  | { kind: 'withheld' }
+  | { kind: 'values'; before: string; after: string }
+);
+
 export interface TimelineChangeProps {
-  change: components['schemas']['ChangeResponse'];
+  change: TimelineChangeData;
   label?: ReactNode;
 }
-
-const changeValue = z
-  .union([
-    z.string(),
-    z.null().transform(() => '未設定'),
-    z.json().transform((value) => JSON.stringify(value)),
-  ])
-  .catch('未設定');
 
 const changeChipSx = {
   display: 'inline-flex',
@@ -253,7 +225,7 @@ export function TimelineChange({
           {label}
         </Box>
       ) : null}
-      {change.changed ? (
+      {change.kind === 'withheld' ? (
         <Typography
           sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
         >
@@ -269,7 +241,7 @@ export function TimelineChange({
               textDecoration: 'line-through',
             }}
           >
-            {changeValue.parse(change.before)}
+            {change.before}
           </Box>
           <Box
             component={ArrowRight}
@@ -279,7 +251,7 @@ export function TimelineChange({
             component="span"
             sx={{ ...changeChipSx, color: color.fg.neutral.default }}
           >
-            {changeValue.parse(change.after)}
+            {change.after}
           </Box>
         </>
       )}

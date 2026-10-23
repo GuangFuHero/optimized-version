@@ -64,6 +64,8 @@ export type {
 } from './components/MetadataTable';
 export { RowAction } from './components/RowAction';
 export type { RowActionProps, RowActionTone } from './components/RowAction';
+export { SegmentedTabs } from './components/segmented-tabs';
+export type { SegmentedTabsProps } from './components/segmented-tabs';
 export { Sheet } from './components/Sheet';
 export type { SheetProps } from './components/Sheet';
 export { SidebarItem } from './components/SidebarItem';
@@ -71,8 +73,10 @@ export type { SidebarItemProps } from './components/SidebarItem';
 export { TextInput } from './components/TextInput';
 export type { TextInputProps } from './components/TextInput';
 export { Timeline, TimelineChange } from './components/Timeline';
+export { backendEventsToTimelineItems } from './components/Timeline/backend-events';
 export type {
   TimelineChangeProps,
+  TimelineChangeData,
   TimelineItem,
   TimelineProps,
   TimelineTone,
