@@ -21,14 +21,15 @@ const SESSION_KEEPING_CODES = new Set([
 function BackendProvider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() =>
     createAdminQueryClient((error) => {
-      toast.error(error.message);
       if (
         error instanceof ApiError &&
         error.status === 401 &&
         !SESSION_KEEPING_CODES.has(error.code ?? '')
       ) {
         endExpiredSession();
+        return;
       }
+      toast.error(error.message);
     }),
   );
   return (
