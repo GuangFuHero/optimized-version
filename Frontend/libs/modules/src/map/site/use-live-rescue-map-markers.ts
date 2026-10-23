@@ -11,6 +11,7 @@ import {
 } from '@rescue-frontend/data-access';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchExchange, type CombinedError } from 'urql';
+import { useDebounceValue } from 'usehooks-ts';
 
 import type { RescueMapMarkerItem } from '../types';
 import { resolveTicketSearch } from '../../list/ticket-list-rules';
@@ -35,19 +36,6 @@ const LIST_PAGE_SIZE = 100;
 
 // The header's search box writes every keystroke to the URL; ask the backend once typing pauses.
 const SEARCH_SETTLE_MS = 300;
-
-/** `value` once it has held still for `delay` ms; the first one at once. */
-function useSettledValue<T>(value: T, delay: number): T {
-  const [settled, setSettled] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), delay);
-
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-
-  return settled;
-}
 
 export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   const client = useMemo(
@@ -75,7 +63,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   const activeDataType = state?.dataType ?? 'station';
   const ticketStatus = resolveTicketStatusQueryValue(state?.subDataTypes);
   const ticketSearch = resolveTicketSearch(state?.search);
-  const settledQuery = useSettledValue(
+  const [settledQuery] = useDebounceValue(
     ticketSearch.kind === 'query' ? ticketSearch.q : undefined,
     SEARCH_SETTLE_MS,
   );
