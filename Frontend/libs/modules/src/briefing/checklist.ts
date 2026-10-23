@@ -12,13 +12,36 @@
  *   (H-1, which overturned 09-19's reset of the whole list).
  * - Marking works by remembering the whole list as last seen (`seen`): an item not in it is new to
  *   this device. Someone with no record yet sees no marks — to them every item is new.
+ *
+ * The record is kept in `localStorage` by `useBriefingChecklist`; this file only turns it into marks
+ * and back.
  */
+
+import { z } from 'zod';
 
 /** The prototype's key and shape: `{ checked: string[], seen: string[], at }`. */
 export const BRIEFING_CHECKLIST_KEY = 'wg.briefing.checklist.v2';
 
-/** The parts of `Storage` the checklist uses: `localStorage` on the site, a stand-in in tests. */
-export type ChecklistStorage = Pick<Storage, 'getItem' | 'setItem'>;
+// A field that will not read is dropped rather than the whole record: a broken `seen` still leaves
+// the ticks.
+const checklistRecordSchema = z.object({
+  checked: z.array(z.string()).catch([]),
+  seen: z.array(z.string()).catch([]),
+  at: z.number().catch(0),
+});
+
+export type ChecklistRecord = z.infer<typeof checklistRecordSchema>;
+
+/** A first visit: nothing ticked, nothing seen. */
+export const NO_RECORD: ChecklistRecord = { checked: [], seen: [], at: 0 };
+
+/**
+ * The record as stored. Throws on what is not one at all — not JSON, not an object — and
+ * `useLocalStorage` then starts from `NO_RECORD`.
+ */
+export function parseChecklistRecord(raw: string): ChecklistRecord {
+  return checklistRecordSchema.parse(JSON.parse(raw));
+}
 
 export interface ChecklistMarks {
   /** Ticked, and still on the list. */
@@ -29,75 +52,39 @@ export interface ChecklistMarks {
 
 export const NO_MARKS: ChecklistMarks = { checked: [], updated: [] };
 
-/** Null where the browser will not hand it over (site data blocked); reading it can throw. */
-export function localChecklistStorage(): ChecklistStorage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-function strings(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string')
-    : [];
-}
-
 /**
  * The marks for the list as it is now (`items`, in order). Only reads: the prototype's first
  * version deleted data while reading, and whichever caller ran first ate the notice.
  */
 export function readChecklist(
-  storage: ChecklistStorage | null,
+  record: ChecklistRecord,
   items: readonly string[],
 ): ChecklistMarks {
-  try {
-    const record: unknown = JSON.parse(
-      storage?.getItem(BRIEFING_CHECKLIST_KEY) ?? 'null',
-    );
-    if (typeof record !== 'object' || record === null) {
-      return NO_MARKS;
-    }
+  const now = new Set(items);
+  const seen = new Set(record.seen);
 
-    const now = new Set(items);
-    const seen = new Set(strings((record as { seen?: unknown }).seen));
-
-    return {
-      checked: strings((record as { checked?: unknown }).checked).filter(
-        (item) => now.has(item),
-      ),
-      updated: seen.size ? items.filter((item) => !seen.has(item)) : [],
-    };
-  } catch {
-    return NO_MARKS;
-  }
+  return {
+    checked: record.checked.filter((item) => now.has(item)),
+    updated: seen.size ? items.filter((item) => !seen.has(item)) : [],
+  };
 }
 
 /**
- * Saves the marks. What counts as seen is the list less what is still marked, so a mark the
- * volunteer has not dealt with is still there after a reload.
+ * The record to keep for the marks. What counts as seen is the list less what is still marked, so a
+ * mark the volunteer has not dealt with is still there after a reload.
  */
-export function writeChecklist(
-  storage: ChecklistStorage | null,
+export function recordChecklist(
   items: readonly string[],
   marks: ChecklistMarks,
   now = Date.now(),
-): void {
+): ChecklistRecord {
   const updated = new Set(marks.updated);
 
-  try {
-    storage?.setItem(
-      BRIEFING_CHECKLIST_KEY,
-      JSON.stringify({
-        checked: marks.checked,
-        seen: items.filter((item) => !updated.has(item)),
-        at: now,
-      }),
-    );
-  } catch {
-    // Not kept, then: the ticks are gone on the next visit, which the page already warns can happen.
-  }
+  return {
+    checked: [...marks.checked],
+    seen: items.filter((item) => !updated.has(item)),
+    at: now,
+  };
 }
 
 /** Ticks or unticks an item. Either way it has been looked at, so its 已更新 goes. */

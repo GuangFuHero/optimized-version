@@ -11,16 +11,19 @@ import {
   type ComponentProps,
   type ReactNode,
 } from 'react';
+import { useLocalStorage } from 'usehooks-ts';
 
 import { Badge } from '@rescue-frontend/ui';
 
 import {
+  BRIEFING_CHECKLIST_KEY,
   dismissUpdates,
-  localChecklistStorage,
   NO_MARKS,
+  NO_RECORD,
+  parseChecklistRecord,
   readChecklist,
+  recordChecklist,
   toggleItem,
-  writeChecklist,
   type ChecklistMarks,
 } from './checklist';
 import { taskItems, type TaskItem, type TaskNode } from './task-items';
@@ -45,6 +48,11 @@ interface ChecklistContextValue extends BriefingChecklist {
 
 const ChecklistContext = createContext<ChecklistContextValue | null>(null);
 
+// Read on the first render, where libs/ui's store waits for the next: so a ticked box never flashes
+// empty. Safe against the server's HTML, since no box shows a tick before the article has handed up
+// its items (`TaskList`), after hydration.
+const CHECKLIST_STORE = { deserializer: parseChecklistRecord };
+
 function sameItems(a: readonly TaskItem[], b: readonly TaskItem[]): boolean {
   return (
     a.length === b.length &&
@@ -60,7 +68,11 @@ function sameItems(a: readonly TaskItem[], b: readonly TaskItem[]): boolean {
  */
 export function useBriefingChecklist(): ChecklistContextValue {
   const [taskList, setTaskList] = useState<readonly TaskItem[]>([]);
-  const [marks, setMarks] = useState<ChecklistMarks>(NO_MARKS);
+  const [record, setRecord] = useLocalStorage(
+    BRIEFING_CHECKLIST_KEY,
+    NO_RECORD,
+    CHECKLIST_STORE,
+  );
 
   const items = useMemo(() => taskList.map((item) => item.label), [taskList]);
   const labels = useMemo(
@@ -68,18 +80,12 @@ export function useBriefingChecklist(): ChecklistContextValue {
     [taskList],
   );
 
-  // Read again whenever the list is new — a republished briefing marks what changed at once.
-  // Before paint, so a ticked box never flashes empty.
-  useLayoutEffect(() => {
-    setMarks(readChecklist(localChecklistStorage(), items));
-  }, [items]);
+  // Worked out again whenever the list is new — a republished briefing marks what changed at once.
+  const marks = useMemo(() => readChecklist(record, items), [record, items]);
 
   const save = useCallback(
-    (next: ChecklistMarks) => {
-      writeChecklist(localChecklistStorage(), items, next);
-      setMarks(next);
-    },
-    [items],
+    (next: ChecklistMarks) => setRecord(recordChecklist(items, next)),
+    [items, setRecord],
   );
 
   const setTaskItems = useCallback((next: TaskItem[]) => {
