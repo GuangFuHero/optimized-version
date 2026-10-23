@@ -1,378 +1,366 @@
 'use client';
 
-import {
-  Box,
-  CircularProgress,
-  Divider,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Stack,
-  Tab,
-  Tabs,
-  Typography,
-} from '@mui/material';
-import {
-  BookOpen,
-  Globe,
-  History,
-  Layers,
-  PencilLine,
-  Plus,
-  RefreshCw,
-  ShieldAlert,
-  Trash2,
-} from 'lucide-react';
-import { useId, useState } from 'react';
+import { Box, CircularProgress, Stack, Tab, Typography } from '@mui/material';
+import { BookOpen, PencilLine, Plus, Send, ShieldAlert } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 import {
   BriefingState,
+  BriefingStatus,
+  BriefingStatusFilter,
   useBriefings,
   useBriefingTemplates,
-  useCapability,
-  useDeleteBriefing,
+  useCurrentUser,
+  useGenerateBriefing,
+  usePublishBriefing,
 } from '@rescue-frontend/data-access/admin';
 import {
   Badge,
   Button,
   Callout,
-  Dialog,
+  Card,
   EmptyState,
-  Markdown,
-  MetadataTable,
+  Tabs,
   designTokens,
 } from '@rescue-frontend/ui';
 
-import { briefingTitle, type EditorSelection } from './briefing-content';
+import { briefingTime, type BriefingTemplate } from './briefing-content';
 import { BriefingEditor } from './briefing-editor';
+import { BriefingHistory } from './briefing-history';
+import { BriefingPreview, BriefingStamp } from './briefing-preview';
+import { BriefingPublicationNotice } from './briefing-publication-notice';
+import { BriefingVersions } from './briefing-versions';
+import { PublishBriefingDialog } from './publish-briefing-dialog';
 import { TemplatePicker } from './template-picker';
 
-const { color, radius, typography } = designTokens;
+const { color, typography } = designTokens;
 
-const briefingTime = new Intl.DateTimeFormat('zh-TW', {
-  timeZone: 'Asia/Taipei',
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
-
-function BriefingsContent() {
-  const id = useId();
-  const query = useBriefings({ state: BriefingState.Briefing });
-  const remove = useDeleteBriefing();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+function BriefingsContent({
+  canPublish,
+  canDiscard,
+}: {
+  canPublish: boolean;
+  canDiscard: boolean;
+}) {
+  const query = useBriefings({
+    state: BriefingState.Briefing,
+    status: BriefingStatusFilter.All,
+  });
+  const create = useGenerateBriefing();
+  const publish = usePublishBriefing();
+  const [editorUuid, setEditorUuid] = useState<string | null>(null);
   const [pickingTemplate, setPickingTemplate] = useState(false);
-  const templateQuery = useBriefingTemplates(
-    { state: BriefingState.Briefing },
-    { enabled: pickingTemplate },
-  );
-  const [editor, setEditor] = useState<EditorSelection | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showDraft, setShowDraft] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
   const [tab, setTab] = useState<'content' | 'history' | 'versions'>('content');
+  const templates = useBriefingTemplates(
+    { state: BriefingState.Briefing },
+    { enabled: pickingTemplate && canPublish },
+  );
   const briefings = query.data?.briefings ?? [];
-  const briefing =
-    briefings.find((item) => item.uuid === selectedId) ?? briefings[0];
+  const drafts = briefings.filter(
+    (item) => item.status === BriefingStatus.Draft,
+  );
+  const versions = briefings.filter(
+    (item) => item.status === BriefingStatus.Published,
+  );
+  const draft = drafts[0];
+  const published = versions[0];
+  const editor = drafts.find((item) => item.uuid === editorUuid);
+  const pending = create.isPending || publish.isPending;
+  const hasDraftChanges =
+    draft && (!published || draft.content !== published.content);
+  const viewing = showDraft && hasDraftChanges ? draft : (published ?? draft);
+
+  function startDraft(template?: BriefingTemplate) {
+    if (pending || query.isError) return;
+    create.mutate(
+      {
+        input: {
+          content: published?.content ?? template?.content ?? '',
+          state: BriefingState.Briefing,
+          tags: published?.tags ?? template?.tags ?? [],
+          templateUuid: published ? null : (template?.uuid ?? null),
+        },
+      },
+      {
+        onSuccess: ({ generateBriefing }) => {
+          setPickingTemplate(false);
+          setEditorUuid(generateBriefing.uuid);
+          create.reset();
+          if (!published) toast.success('草稿已建立，確認內容後再發布到前台。');
+        },
+      },
+    );
+  }
+
+  if (query.isPending) {
+    return (
+      <CircularProgress
+        aria-label="正在載入行前資訊"
+        sx={{ alignSelf: 'center', my: 6 }}
+      />
+    );
+  }
 
   if (editor) {
     return (
-      <BriefingEditor
-        selection={editor}
-        onClose={() => setEditor(null)}
-        onSaved={(uuid) => {
-          setSelectedId(uuid);
-          setEditor(null);
-        }}
-      />
+      <Stack sx={{ gap: 2 }}>
+        <BriefingPublicationNotice
+          published={published}
+          versionCount={versions.length}
+          hasDraftChanges={Boolean(hasDraftChanges)}
+        />
+        <BriefingEditor
+          key={editor.uuid}
+          draft={editor}
+          published={published}
+          versionCount={versions.length}
+          canPublish={canPublish}
+          canDiscard={canDiscard}
+          onClose={() => {
+            setEditorUuid(null);
+            setShowDraft(false);
+          }}
+        />
+      </Stack>
     );
   }
 
   return (
     <Stack sx={{ gap: 2 }}>
-      {query.isSuccess ? (
-        <Callout tone={briefing ? 'success' : 'warning'}>
-          {briefing ? (
-            <>
-              志工在前台<strong>看得到</strong>
-              行前資訊。儲存修改後，公開內容會立即更新。
-            </>
-          ) : (
-            <>
-              前台<strong>目前沒有行前資訊</strong>
-              。志工打開那一頁會看到空白提示。
-            </>
-          )}
+      {query.isError ? (
+        <Callout tone="danger">
+          行前資訊載入失敗，請重新整理後再操作。
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={query.isFetching}
+            onClick={() => void query.refetch()}
+          >
+            重新整理
+          </Button>
         </Callout>
       ) : null}
-      <Tabs
-        value={tab}
-        onChange={(_, value: typeof tab) => setTab(value)}
-        aria-label="行前資訊管理"
-      >
-        <Tab
-          id={`${id}-content`}
-          value="content"
-          label="內容"
-          aria-controls={`${id}-panel`}
-        />
-        <Tab
-          id={`${id}-history`}
-          value="history"
-          label="編輯紀錄"
-          aria-controls={`${id}-panel`}
-        />
-        <Tab
-          id={`${id}-versions`}
-          value="versions"
-          label="已發布版本"
-          aria-controls={`${id}-panel`}
-        />
-      </Tabs>
-      <Box role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${tab}`}>
-        {tab === 'content' ? (
-          <Stack sx={{ gap: 2 }}>
+      <BriefingPublicationNotice
+        published={published}
+        versionCount={versions.length}
+        hasDraftChanges={Boolean(hasDraftChanges)}
+      />
+      {draft || published ? (
+        <Tabs
+          value={tab}
+          onChange={(_, value: typeof tab) => {
+            setTab(value);
+            setShowDraft(false);
+          }}
+          aria-label="行前資訊"
+          sx={{ minWidth: 0 }}
+        >
+          <Tab
+            id="briefings-content-tab"
+            value="content"
+            label="內容"
+            aria-controls="briefings-content-panel"
+          />
+          <Tab
+            id="briefings-history-tab"
+            value="history"
+            label="編輯紀錄"
+            aria-controls="briefings-history-panel"
+          />
+          <Tab
+            id="briefings-versions-tab"
+            value="versions"
+            label="已發布版本"
+            aria-controls="briefings-versions-panel"
+          />
+        </Tabs>
+      ) : null}
+      {create.isError ? (
+        <Callout tone="danger">無法建立草稿。{create.error.message}</Callout>
+      ) : null}
+      {tab === 'history' && (draft || published) ? (
+        <Box
+          role="tabpanel"
+          id="briefings-history-panel"
+          aria-labelledby="briefings-history-tab"
+        >
+          <BriefingHistory briefings={briefings} versions={versions} />
+        </Box>
+      ) : tab === 'versions' && (draft || published) ? (
+        <Box
+          role="tabpanel"
+          id="briefings-versions-panel"
+          aria-labelledby="briefings-versions-tab"
+        >
+          <BriefingVersions versions={versions} />
+        </Box>
+      ) : viewing ? (
+        <Stack
+          role="tabpanel"
+          id="briefings-content-panel"
+          aria-labelledby="briefings-content-tab"
+          sx={{ gap: 2 }}
+        >
+          <Stack
+            direction="row"
+            sx={{ alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}
+          >
+            <Badge
+              tone={
+                !published ? 'warning' : hasDraftChanges ? 'info' : 'success'
+              }
+            >
+              {!published
+                ? '草稿'
+                : hasDraftChanges
+                  ? '對外中 · 有未發布的修改'
+                  : '對外中'}
+            </Badge>
+            <Typography
+              component="span"
+              sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+            >
+              {published?.publishedAt ? (
+                <>
+                  第 {versions.length} 版 ·{' '}
+                  <time dateTime={published.publishedAt}>
+                    {briefingTime(published.publishedAt)}
+                  </time>{' '}
+                  由 {published.publisher?.name ?? '發布者未提供'} 發布
+                </>
+              ) : (
+                '從未對外'
+              )}
+            </Typography>
             <Stack
               direction="row"
-              sx={{ alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}
+              sx={{ ml: 'auto', gap: 1, flexWrap: 'wrap' }}
             >
-              <Typography
-                component="h1"
-                sx={{ ...typography.heading[600], mr: 'auto' }}
-              >
-                前台現況
-              </Typography>
               <Button
-                variant="ghost"
-                size="sm"
-                startIcon={<RefreshCw size={16} />}
-                disabled={query.isFetching || remove.isPending}
-                onClick={() => void query.refetch()}
+                startIcon={<PencilLine size={16} />}
+                disabled={pending || query.isError}
+                onClick={() =>
+                  draft ? setEditorUuid(draft.uuid) : startDraft()
+                }
               >
-                重新整理
+                {create.isPending ? '建立草稿中…' : '編輯內容'}
               </Button>
-              {briefing ? (
+              {draft && canPublish && hasDraftChanges ? (
                 <Button
-                  startIcon={<PencilLine size={16} />}
-                  disabled={remove.isPending}
-                  onClick={() => setEditor({ kind: 'edit', briefing })}
+                  variant="outline"
+                  startIcon={<Send size={16} />}
+                  disabled={pending || query.isError || !draft.content.trim()}
+                  onClick={() => {
+                    publish.reset();
+                    setConfirmPublish(true);
+                  }}
                 >
-                  編輯內容
+                  {published ? '發布修改' : '發布到前台'}
                 </Button>
               ) : null}
             </Stack>
-
-            {query.isPending ? (
-              <CircularProgress
-                aria-label="正在載入行前資訊"
-                sx={{ alignSelf: 'center', my: 6 }}
-              />
-            ) : null}
-            {query.isError ? (
-              <Callout tone="danger">
-                行前資訊載入失敗，請按「重新整理」重試。
-              </Callout>
-            ) : null}
-            {query.isSuccess && !briefing ? (
-              <Box
-                sx={{
-                  bgcolor: color.bg.neutral.default,
-                  border: `1px solid ${color.border.default}`,
-                  borderRadius: `${radius.lg}px`,
-                  maxWidth: 620,
-                  alignSelf: 'center',
-                  width: '100%',
-                }}
-              >
-                <EmptyState
-                  icon={<BookOpen />}
-                  title="還沒有志工行前資訊"
-                  description="出發前，讓志工知道怎麼過來、帶什麼、到了找誰。可以選擇範本，也可以空白開始。"
-                  action={
-                    <Button
-                      startIcon={<Plus size={16} />}
-                      onClick={() => setPickingTemplate(true)}
-                    >
-                      新增行前資訊
-                    </Button>
-                  }
-                />
-              </Box>
-            ) : null}
-
-            {briefing ? (
-              <>
-                {briefings.length > 1 ? (
-                  <FormControl fullWidth sx={{ maxWidth: 780 }}>
-                    <InputLabel id="briefing-selection-label">
-                      選擇行前資訊
-                    </InputLabel>
-                    <Select
-                      labelId="briefing-selection-label"
-                      label="選擇行前資訊"
-                      value={briefing.uuid}
-                      disabled={remove.isPending}
-                      onChange={(event) => setSelectedId(event.target.value)}
-                    >
-                      {briefings.map((item) => (
-                        <MenuItem key={item.uuid} value={item.uuid}>
-                          {briefingTitle(item.content)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                ) : null}
-                <Box
-                  component="article"
-                  sx={{
-                    p: { mobile: 2, tablet: 3 },
-                    maxWidth: 780,
-                    border: `1px solid ${color.border.default}`,
-                    borderRadius: `${radius.lg}px`,
-                    bgcolor: color.bg.neutral.default,
-                  }}
-                >
-                  <Stack sx={{ gap: 2.5 }}>
-                    <Stack
-                      direction="row"
-                      sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}
-                    >
-                      <Globe size={16} color={color.fg.success} />
-                      <Typography component="h2" sx={typography.label[500]}>
-                        志工現在在前台看到的內容
-                      </Typography>
-                      <Badge tone="success">已公開</Badge>
-                      <Typography
-                        sx={{
-                          ...typography.body[300],
-                          ml: 'auto',
-                          color: color.fg.neutral.muted,
-                        }}
-                      >
-                        唯讀，修改請按「編輯內容」
-                      </Typography>
-                    </Stack>
-                    <Divider />
-                    <MetadataTable
-                      rows={[
-                        {
-                          label: '建立時間',
-                          value: briefing.createdAt
-                            ? briefingTime.format(new Date(briefing.createdAt))
-                            : null,
-                        },
-                        {
-                          label: '最後更新',
-                          value: briefing.updatedAt
-                            ? briefingTime.format(new Date(briefing.updatedAt))
-                            : null,
-                        },
-                      ]}
-                    />
-                    <Divider />
-                    {briefing.content.trim() ? (
-                      <Markdown source={briefing.content} navigation />
-                    ) : (
-                      <Typography sx={{ color: color.fg.neutral.muted }}>
-                        這份行前資訊沒有內容，請編輯補上。
-                      </Typography>
-                    )}
-                  </Stack>
-                </Box>
-                <Box
-                  component="details"
-                  sx={{
-                    maxWidth: 780,
-                    borderTop: `1px solid ${color.border.default}`,
-                    pt: 1.5,
-                  }}
-                >
-                  <Box
-                    component="summary"
-                    sx={{
-                      cursor: 'pointer',
-                      color: color.fg.neutral.subtle,
-                      ...typography.body[300],
-                      py: 1,
-                    }}
-                  >
-                    更多動作
-                  </Box>
-                  <Button
-                    variant="ghost"
-                    startIcon={<Trash2 size={16} />}
-                    sx={{ color: color.fg.danger }}
-                    disabled={remove.isPending}
-                    onClick={() => {
-                      remove.reset();
-                      setConfirmingDelete(true);
-                    }}
-                  >
-                    刪除行前資訊
-                  </Button>
-                </Box>
-                <Dialog
-                  open={confirmingDelete}
-                  onClose={() => setConfirmingDelete(false)}
-                  onConfirm={() => {
-                    if (remove.isPending) return;
-                    remove.mutate(
-                      { uuid: briefing.uuid },
-                      {
-                        onSuccess: () => {
-                          setConfirmingDelete(false);
-                          setSelectedId(null);
-                          toast.success('行前資訊已刪除，不再公開。');
-                        },
-                      },
-                    );
-                  }}
-                  title="確認刪除行前資訊？"
-                  confirmLabel={remove.isPending ? '刪除中…' : '確認刪除'}
-                  confirmTone="danger"
-                  submitting={remove.isPending}
-                  error={remove.error?.message}
-                >
-                  <Typography>
-                    刪除後，這份內容不再公開，且無法從此頁復原。
-                  </Typography>
-                </Dialog>
-              </>
-            ) : null}
           </Stack>
-        ) : (
-          <Box
-            sx={{
-              p: { mobile: 2, tablet: 3 },
-              bgcolor: color.bg.neutral.default,
-              border: `1px solid ${color.border.default}`,
-              borderRadius: `${radius.md}px`,
-            }}
-          >
-            <EmptyState
-              icon={tab === 'history' ? <History /> : <Layers />}
-              title={
-                tab === 'history' ? '尚未提供編輯紀錄' : '尚未提供過往版本'
-              }
-              description={
-                tab === 'history'
-                  ? '目前僅提供最新公開內容，儲存與修改的操作紀錄尚未開放查閱。'
-                  : '目前僅保留最新公開內容，尚未留存過往版本。修改前請另行備份需要保留的內容。'
-              }
-            />
-          </Box>
-        )}
-      </Box>
+          {published && draft && hasDraftChanges ? (
+            <Callout tone="info">
+              有一份還沒發布的修改，志工目前看到的仍是已發布的內容。
+              <BriefingStamp briefing={draft} />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDraft(!showDraft)}
+              >
+                {showDraft ? '看志工目前看到的' : '看未發布的修改'}
+              </Button>
+            </Callout>
+          ) : null}
+          {drafts.length > 1 ? (
+            <Callout tone="warning">
+              有 {drafts.length} 份未發布草稿，目前顯示最近儲存的一份。
+            </Callout>
+          ) : null}
+          <BriefingPreview
+            content={viewing.content}
+            briefing={viewing}
+            versionNumber={
+              viewing.status === BriefingStatus.Published
+                ? versions.length
+                : undefined
+            }
+            readOnly
+            tone={
+              viewing.status === BriefingStatus.Published
+                ? 'success'
+                : published
+                  ? 'info'
+                  : 'warning'
+            }
+            title={
+              viewing.status === BriefingStatus.Draft
+                ? published
+                  ? '未發布的修改（志工看不到）'
+                  : '這一份還沒對外，志工看不到'
+                : '志工現在在前台看到的內容'
+            }
+          />
+        </Stack>
+      ) : query.isSuccess ? (
+        <Card sx={{ maxWidth: 620, alignSelf: 'center', width: '100%', p: 4 }}>
+          <EmptyState
+            icon={<BookOpen />}
+            title="還沒有志工行前資訊"
+            description="一個專案只需要一份行前資訊。可以從範本開始，也可以空白開始，確認後再發布。"
+            action={
+              <Button
+                startIcon={<Plus size={16} />}
+                onClick={() => setPickingTemplate(true)}
+              >
+                新增行前資訊
+              </Button>
+            }
+          />
+        </Card>
+      ) : null}
+      {draft && canPublish ? (
+        <PublishBriefingDialog
+          open={confirmPublish}
+          onClose={() => setConfirmPublish(false)}
+          onConfirm={() => {
+            if (pending || query.isError || !draft.content.trim()) return;
+            publish.mutate(
+              { uuid: draft.uuid },
+              {
+                onSuccess: () => {
+                  setConfirmPublish(false);
+                  setShowDraft(false);
+                  toast.success('已發布到前台，志工現在看到的是這份內容。');
+                },
+              },
+            );
+          }}
+          hasPublished={Boolean(published)}
+          nextVersion={versions.length + 1}
+          content={draft.content}
+          submitting={pending}
+          confirmDisabled={!draft.content.trim() || query.isError}
+          error={publish.error?.message}
+        />
+      ) : null}
       {pickingTemplate ? (
         <TemplatePicker
-          templates={templateQuery.data?.briefingTemplates ?? []}
-          pending={templateQuery.isPending}
-          error={templateQuery.isError}
-          onRetry={() => void templateQuery.refetch()}
-          onClose={() => setPickingTemplate(false)}
-          onPick={(selection) => {
+          onClose={() => {
             setPickingTemplate(false);
-            setEditor(selection);
+            create.reset();
           }}
+          onPick={startDraft}
+          templates={templates.data?.briefingTemplates ?? []}
+          pending={canPublish && templates.isPending}
+          error={templates.isError}
+          onRetry={() => void templates.refetch()}
+          submitting={create.isPending}
+          creationError={create.error?.message}
         />
       ) : null}
     </Stack>
@@ -380,26 +368,40 @@ function BriefingsContent() {
 }
 
 export function BriefingsPage() {
-  const canPublish = useCapability('pre_departure.publish');
+  const user = useCurrentUser();
+  const identity = user.data?.active_identity;
+  const canManage = user.data?.capabilities.includes('pre_departure.edit');
 
   return (
-    <Box sx={{ p: { mobile: 2, tablet: 3 }, maxWidth: 1136, width: '100%' }}>
-      {canPublish.isPending ? (
+    <Box
+      sx={{
+        p: { mobile: '12px 16px 28px', tablet: '12px 28px 28px' },
+        maxWidth: 1136,
+        width: '100%',
+      }}
+    >
+      {user.isPending ? (
         <CircularProgress aria-label="正在確認身分" />
-      ) : canPublish.isError ? (
+      ) : user.isError ? (
         <Callout tone="danger">
           無法確認目前身分。
           <Button
             variant="ghost"
             size="sm"
-            disabled={canPublish.isFetching}
-            onClick={() => void canPublish.refetch()}
+            disabled={user.isFetching}
+            onClick={() => {
+              void user.refetch();
+            }}
           >
             重試
           </Button>
         </Callout>
-      ) : canPublish.data ? (
-        <BriefingsContent />
+      ) : canManage ? (
+        <BriefingsContent
+          key={`${identity?.role_uuid}:${identity?.team_uuid ?? ''}`}
+          canPublish={user.data.capabilities.includes('pre_departure.publish')}
+          canDiscard={user.data.capabilities.includes('pre_departure.delete')}
+        />
       ) : (
         <EmptyState
           icon={<ShieldAlert />}

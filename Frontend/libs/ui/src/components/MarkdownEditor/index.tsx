@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, IconButton, Stack, Tab, Tabs, Tooltip } from '@mui/material';
+import { Box, IconButton, Stack, Tab, Tooltip } from '@mui/material';
 import {
   EditorContent,
   useEditor,
@@ -30,6 +30,7 @@ import { Markdown } from '../Markdown';
 import { markdownExtensions } from '../Markdown/extensions';
 import { markdownSx } from '../Markdown/styles';
 import { TextInput } from '../TextInput';
+import { SegmentedTabs } from '../segmented-tabs';
 
 const { color, radius, typography } = designTokens;
 
@@ -165,6 +166,8 @@ export interface MarkdownEditorProps {
   label: string;
   helperText?: ReactNode;
   disabled?: boolean;
+  preview?: ReactNode;
+  previewLabel?: string;
 }
 
 export function MarkdownEditor({
@@ -173,6 +176,8 @@ export function MarkdownEditor({
   label,
   helperText,
   disabled = false,
+  preview,
+  previewLabel = '預覽',
 }: MarkdownEditorProps) {
   const id = useId();
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
@@ -232,7 +237,7 @@ export function MarkdownEditor({
 
   return (
     <Stack sx={{ gap: 1.5, width: '100%', minWidth: 0 }}>
-      <Tabs
+      <SegmentedTabs
         value={mode}
         onChange={(_, value: typeof mode) => setMode(value)}
         aria-label={`${label}模式`}
@@ -246,17 +251,20 @@ export function MarkdownEditor({
         <Tab
           id={`${id}-preview`}
           value="preview"
-          label="預覽"
+          label={previewLabel}
           aria-controls={`${id}-panel`}
         />
-      </Tabs>
+      </SegmentedTabs>
       <Box role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${mode}`}>
-        {mode === 'preview' ? (
-          <Markdown
-            source={editor?.getMarkdown() ?? defaultValue}
-            sx={frameSx}
-          />
-        ) : null}
+        {mode === 'preview'
+          ? (preview ?? (
+              <Markdown
+                source={editor?.getMarkdown() ?? defaultValue}
+                sx={frameSx}
+                navigation
+              />
+            ))
+          : null}
         <Stack sx={{ gap: 1.5, display: mode === 'edit' ? 'flex' : 'none' }}>
           <Stack
             direction="row"
