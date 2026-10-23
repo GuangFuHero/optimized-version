@@ -14,7 +14,7 @@ import {
   REFRESHABLE_CODES,
   refreshBackendSessionAsync,
 } from './session-refresh';
-import { SITE_REALM_HEADERS } from './site-realm';
+import { REALM_HEADER } from './site-realm';
 
 type Audience = 'site' | 'admin';
 
@@ -31,9 +31,7 @@ function forwardHeaders(
   backendPath: string,
   cookieHeader: string | null,
 ) {
-  const headers = new Headers(
-    audience === 'site' ? SITE_REALM_HEADERS : undefined,
-  );
+  const headers = new Headers({ [REALM_HEADER]: audience });
   // Origin and Referer: the backend refuses a cookie-authenticated write from any other site
   // (ADR-327), and it can only tell when the browser's own headers reach it.
   for (const name of ['content-type', 'accept', 'origin', 'referer']) {

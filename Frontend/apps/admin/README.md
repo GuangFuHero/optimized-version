@@ -2,7 +2,7 @@
 
 Run `pnpm dev:admin` from `Frontend/`. The app uses Next.js 16 and listens on port 3001. Pages use root routes such as `/dashboard`, `/map`, `/tickets`, and `/stations`; `/` opens the dashboard. Copy `.env.example` to `.env.local`. Both apps sign in with the backend's cookies, so a sign-in on one carries over to the other. Set `ADMIN_APP_URL` in the demo app to the deployed admin origin. The site's `/admin` entry redirects to that origin's root.
 
-Both apps use shared document layout, UI/session providers, GraphQL and REST proxy handlers, and Google reverse geocoding. The app's route files select the admin audience. Backend requests use the current token identity and omit the site's `X-WG-Realm` header. `API_BASE_URL` includes `/api`.
+Both apps use shared document layout, UI/session providers, GraphQL and REST proxy handlers, and Google reverse geocoding. The app's route files select the admin audience. Backend requests carry `X-WG-Realm: admin`, so they act as the identity switched to in the back office, or else the account's first back-office identity (ADR-329). `API_BASE_URL` includes `/api`.
 
 Authentication, map tiles, and attribution use `/api/v1/*`. The REST proxy forwards bodies and backend error codes, refreshes session cookies, and lets the backend enforce endpoint permissions. Public map GET responses use a seven-day server cache and a one-day browser cache without attaching a session. Google reverse geocoding stays under `/api/google/reverse-geocode` because the backend does not provide that endpoint.
 

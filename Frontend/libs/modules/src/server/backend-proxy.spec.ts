@@ -559,7 +559,7 @@ describe('site GraphQL proxy', () => {
 });
 
 describe('back-office REST proxy', () => {
-  it('signs in with the same cookies, refreshes them, and leaves the site realm off', async () => {
+  it('signs in with the same cookies, refreshes them, and marks the admin realm', async () => {
     const calls = fakeBackend((call) =>
       isRefresh(call)
         ? refreshed('access-27b', 'refresh-27b')
@@ -582,7 +582,7 @@ describe('back-office REST proxy', () => {
     }).toEqual({
       status: 200,
       cookies: ['wgdev_at=access-27a', 'wgdev_at=access-27b'],
-      realm: null,
+      realm: 'admin',
     });
   });
 });

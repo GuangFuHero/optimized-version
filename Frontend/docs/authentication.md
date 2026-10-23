@@ -196,7 +196,7 @@ Google、LINE 登入完回到哪個 app。
 後台跟前台用同一組 cookie 和同一套 proxy（`createBackendRestHandler('admin')`、`createBackendGraphqlHandler('admin')`），
 差別只有：
 
-- 不帶 `X-WG-Realm: site`，後端用目前切換到的身份回答。
+- 帶 `X-WG-Realm: admin`（ADR-329）：後端用在後台切換到的身份回答；登入後還是 `user` 時，改用第一個後台身份。沒有後台身份的帳號會拿到 403 `back_office_identity_required`，但不會被登出。
 - `apps/admin/src/proxy.ts` 跟前台一樣在 render 前 refresh。
 - `(portal)` layout 只看有沒有 `{prefix}_at` cookie，沒有就導向 `/login?callbackUrl=/`。session 是否還有效交給後端判斷。
 - 切換身份打 `POST /api/v1/auth/session/identity`，後端直接換掉 access cookie。`/auth/switch-identity` 只收 Bearer。
