@@ -14,9 +14,7 @@ import {
   REFRESHABLE_CODES,
   refreshBackendSessionAsync,
 } from './session-refresh';
-import { REALM_HEADER } from './site-realm';
-
-type Audience = 'site' | 'admin';
+import { REALM_HEADER, type Realm } from './site-realm';
 
 interface BackendRestContext {
   params: Promise<{ segments: string[] }>;
@@ -27,7 +25,7 @@ const MAP_STALE_SECONDS = 24 * 60 * 60;
 
 function forwardHeaders(
   request: NextRequest,
-  audience: Audience,
+  audience: Realm,
   backendPath: string,
   cookieHeader: string | null,
 ) {
@@ -145,7 +143,7 @@ async function forwardRequest(
   }
 }
 
-export function createBackendRestHandler(audience: Audience) {
+export function createBackendRestHandler(audience: Realm) {
   return (request: NextRequest, context: BackendRestContext) =>
     withClientIpAsync(async () => {
       const { segments } = await context.params;
@@ -238,7 +236,7 @@ function markIfSessionEnded(response: NextResponse, code: unknown) {
   return SESSION_ENDED_CODES.has(code) ? markSessionEnded(response) : response;
 }
 
-export function createBackendGraphqlHandler(audience: Audience) {
+export function createBackendGraphqlHandler(audience: Realm) {
   return (request: NextRequest) =>
     withClientIpAsync(async () => {
       const body = await readBodyAsync(request);

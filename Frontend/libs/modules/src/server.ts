@@ -9,7 +9,6 @@ export {
 } from './server/backend-api-url';
 export { withClientIpAsync } from './server/client-ip';
 
-export { SITE_REALM_HEADERS } from './server/site-realm';
 export { reverseGeocode } from './server/reverse-geocode';
 export {
   createBackendGraphqlHandler,
@@ -18,6 +17,7 @@ export {
 export { refreshBeforeRenderAsync } from './server/refresh-before-render';
 export {
   currentUserFromBackendAsync,
+  NO_BACK_OFFICE_IDENTITY,
   READ_IN_BROWSER,
   type CurrentUser,
 } from './server/current-user';

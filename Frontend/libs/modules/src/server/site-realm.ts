@@ -11,6 +11,4 @@
  */
 export const REALM_HEADER = 'X-WG-Realm';
 
-export const SITE_REALM_HEADERS: Readonly<Record<string, string>> = {
-  [REALM_HEADER]: 'site',
-};
+export type Realm = 'site' | 'admin';
