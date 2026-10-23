@@ -99,9 +99,9 @@ Component 不能設 cookie，瀏覽器留著已經輪替掉的 refresh token，�
 ## browser 的登入狀態（`useAuthSession`）
 
 `AuthSessionProvider` 讀 `/api/v1/users/me`，兩個 app 的 providers 都有掛。`useAuthSession()` 回傳
-`{ status, user, refetch }`：`status` 是 `loading`、`authenticated` 或 `unauthenticated`；`user` 只有 `uuid`、`name`。
+`{ status, user }`：`status` 是 `loading`、`authenticated` 或 `unauthenticated`；`user` 只有 `uuid`、`name`。
 
-重新讀的時機：頁面載入、視窗取得焦點、分頁回到前景、其他分頁通知登入或登出、呼叫 `refetch()`。
+重新讀的時機：頁面載入、視窗取得焦點、分頁回到前景、其他分頁通知登入或登出。
 
 跨分頁通知用 `BroadcastChannel('wg-auth')`，訊息是 `signed-in` 或 `signed-out`（`session/auth-broadcast.ts`）。
 

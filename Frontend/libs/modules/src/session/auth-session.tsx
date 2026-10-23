@@ -59,8 +59,7 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
 
 /**
  * Who is signed in: `loading` until the first answer, then `authenticated` with the person's
- * `uuid` and `name`, or `unauthenticated`. `refetch` reads it again — after signing in here, since
- * nothing else would tell this tab.
+ * `uuid` and `name`, or `unauthenticated`.
  */
 export function useAuthSession() {
   const store = useContext(AuthSessionContext);
@@ -68,11 +67,9 @@ export function useAuthSession() {
     throw new Error('useAuthSession needs an <AuthSessionProvider> above it.');
   }
 
-  const session = useSyncExternalStore(
+  return useSyncExternalStore(
     store.subscribe,
     store.getSnapshot,
     () => SERVER_SESSION,
   );
-
-  return { ...session, refetch: store.refetch };
 }
