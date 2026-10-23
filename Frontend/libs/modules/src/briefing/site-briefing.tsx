@@ -24,7 +24,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import { formatTaiwanTime } from '../ticket/my-claims/my-claims';
-import { briefingAge } from './briefing-age';
+import { timeAgo } from '../time';
 import {
   BRIEFING_MARKDOWN_COMPONENTS,
   BriefingChecklistProvider,
@@ -126,7 +126,7 @@ function BriefingPrintStyles() {
 /** When it was published, before the content: whether to pack by it depends on how fresh it is. */
 function BriefingStamp({ publishedAt }: { publishedAt: string | null }) {
   const at = formatTaiwanTime(publishedAt);
-  const age = briefingAge(publishedAt);
+  const age = timeAgo(publishedAt);
 
   return (
     <Stack data-briefing-stamp="" spacing={2}>
