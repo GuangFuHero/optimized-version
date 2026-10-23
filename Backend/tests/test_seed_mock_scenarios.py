@@ -47,6 +47,8 @@ REAL_TICKET = "99999999-0000-4000-8000-0000000000aa"
 REAL_NEED = "99999999-0000-4000-8000-0000000000cc"
 REAL_TICKET_2 = "99999999-0000-4000-8000-0000000000dd"
 REAL_TEAM = "99999999-0000-4000-8000-0000000000ee"
+REAL_STATION = "99999999-0000-4000-8000-0000000000ff"
+REAL_MERGE = "99999999-0000-4000-8000-000000000101"
 MOCK_NEED = "e0000000-0000-4000-8000-000000000001"
 BUILDING = "99999999-0000-4000-8000-0000000000bb"
 
@@ -233,6 +235,26 @@ async def _station_merge() -> None:
     )
 
 
+async def _real_merge_revoked_by_mock_account() -> None:
+    await _execute(
+        _CASE_DSN, f"INSERT INTO users (uuid, name, credibility_score) VALUES ('{REAL_USER}', '真人', 50)"
+    )
+    await _copy_row("base_geometries", MOCK_STATION, REAL_STATION, created_by="NULL")
+    await _copy_row(
+        "stations", MOCK_STATION, REAL_STATION, updated_by="NULL", team_uuid="NULL", child_station_uuid="NULL"
+    )
+    await _execute(
+        _CASE_DSN,
+        f"""INSERT INTO station_suggestion_merges (uuid, station_uuid, status, reviewed_by, revoked_by,
+                                                   revoked_at)
+            VALUES ('{REAL_MERGE}', '{REAL_STATION}', 'revoked', '{REAL_USER}', '{MOCK_USER}', now());
+            INSERT INTO station_update_suggestions (uuid, target_type, target_uuid, field_name, new_value,
+                                                    status, reviewed_by, created_by, merge_uuid)
+            VALUES (gen_random_uuid(), 'station', '{REAL_STATION}', 'name', '新站名', 'revoked',
+                    '{REAL_USER}', '{REAL_USER}', '{REAL_MERGE}')""",
+    )
+
+
 async def _building_by_mock_account() -> None:
     await _building(created_by=f"'{MOCK_USER}'")
 
@@ -325,6 +347,14 @@ RERUN_CASES = {
     "station suggestion merge on a mock station": (
         _station_merge,
         "SELECT NOT EXISTS (SELECT 1 FROM station_suggestion_merges)",
+    ),
+    "real merge revoked by a mock account": (
+        _real_merge_revoked_by_mock_account,
+        (
+            "SELECT EXISTS (SELECT 1 FROM station_suggestion_merges"
+            f" WHERE uuid = '{REAL_MERGE}' AND revoked_by IS NULL)"
+            f" AND EXISTS (SELECT 1 FROM station_update_suggestions WHERE merge_uuid = '{REAL_MERGE}')"
+        ),
     ),
     "building map pinned by a mock account": (
         _building_by_mock_account,

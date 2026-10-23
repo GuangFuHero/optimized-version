@@ -24,7 +24,8 @@
 -- UUID 前綴:users=c…、A 站=a…、B 站=b…、tickets=d…、tasks=e…、assignments=f…、teams=1…、
 --   team_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…
 -- 清除段照前綴刪,也照「建立者/承接者是 mock 帳號」刪:測試者在 staging 用 mock 帳號留下的單、站點、
---   地圖區域、照片、申請會一起清掉,所以可以重跑。
+--   地圖區域、建築地圖、照片、申請、邀請連結、站點建議與合併紀錄、去重紀錄會一起清掉,所以可以重跑。
+--   真人留下的資料不刪,只放掉指向 mock 帳號(或要刪的 mock 資料)的欄位。
 --
 -- 登入:全部 37 人,密碼 Mock1234!(salt_frontend=mockdata12345678;
 --   前端送出的 password=PBKDF2-HMAC-SHA256('Mock1234!', salt_frontend, 100000)
@@ -57,12 +58,12 @@ CREATE TEMP TABLE mock_tasks ON COMMIT DROP AS
 CREATE TEMP TABLE mock_invites ON COMMIT DROP AS
   SELECT uuid FROM team_invites
    WHERE team_uuid::text LIKE '10000000-%' OR created_by IN (SELECT uuid FROM mock_users);
--- 站點建議的合併紀錄:mock 站點上的,以及 mock 帳號審核或撤銷的(reviewed_by 不能空,只能刪)。
+-- 站點建議的合併紀錄:mock 站點上的,以及 mock 帳號審核的(reviewed_by 不能空,只能刪)。
+-- 真人審核、mock 帳號撤銷的留著,下面只放掉 revoked_by。
 CREATE TEMP TABLE mock_merges ON COMMIT DROP AS
   SELECT uuid FROM station_suggestion_merges
    WHERE station_uuid IN (SELECT uuid FROM mock_geometries)
-      OR reviewed_by IN (SELECT uuid FROM mock_users)
-      OR revoked_by IN (SELECT uuid FROM mock_users);
+      OR reviewed_by IN (SELECT uuid FROM mock_users);
 -- 去重配對:有一邊是 mock 的單、站點或需求就刪(low/high_uuid 沒有外鍵)。
 -- 兩邊都是真人資料的配對留著,判定可能已經改了那些資料,只放掉指向 mock 帳號的審核者。
 CREATE TEMP TABLE mock_pairs ON COMMIT DROP AS
@@ -97,6 +98,7 @@ DELETE FROM station_update_suggestions
     OR target_uuid IN (SELECT uuid::text FROM mock_geometries)
     OR merge_uuid IN (SELECT uuid FROM mock_merges);
 DELETE FROM station_suggestion_merges WHERE uuid IN (SELECT uuid FROM mock_merges);
+UPDATE station_suggestion_merges SET revoked_by = NULL WHERE revoked_by IN (SELECT uuid FROM mock_users);
 -- 承接紀錄:mock 的需求上的(含真人接的),以及 mock 帳號接別人的。
 DELETE FROM task_assignments
  WHERE uuid::text LIKE 'f0000000-%'
