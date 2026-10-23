@@ -13,7 +13,10 @@ import Link from 'next/link';
 import { Fragment } from 'react';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
-import { useProjectSettings } from '@rescue-frontend/data-access/admin';
+import {
+  useCapability,
+  useProjectSettings,
+} from '@rescue-frontend/data-access/admin';
 
 import {
   Badge,
@@ -150,10 +153,22 @@ function EventHeader({
   collapsed,
   onToggle,
 }: Pick<AdminSidebarProps, 'collapsed' | 'onToggle'>) {
-  const { data: settings, isPending, isError } = useProjectSettings();
+  const { data: canViewProject = false } = useCapability('project.view');
+  const {
+    data: projectSettings,
+    isPending,
+    isError,
+  } = useProjectSettings({ enabled: canViewProject });
+  const settings = canViewProject ? projectSettings : undefined;
   const name =
     settings?.name ??
-    (isPending ? '載入中…' : isError ? '無法載入專案' : '尚未設定專案');
+    (!canViewProject
+      ? '管理平台'
+      : isPending
+        ? '載入中…'
+        : isError
+          ? '無法載入專案'
+          : '尚未設定專案');
   const elapsedDays = settings?.started_at
     ? differenceInCalendarDays(new Date(), parseISO(settings.started_at))
     : -1;
