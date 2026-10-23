@@ -19,7 +19,7 @@ import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import { BACK_OFFICE_HREF, type SitePortalEntry } from '../../role-request';
 import { openHelpRequest } from '../../ticket/help-request/open-help-request';
-import { BRIEFING_HREF } from '../../ticket/needs/briefing';
+import { BRIEFING_HREF } from '../../briefing/href';
 import { PageHelpIcon } from './page-help';
 
 import { GuangFuBrandIcon } from '../../brand';

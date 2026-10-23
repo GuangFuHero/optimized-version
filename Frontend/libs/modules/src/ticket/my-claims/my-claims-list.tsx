@@ -20,8 +20,8 @@ import {
 } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
+import { BRIEFING_HREF } from '../../briefing/href';
 import { useSiteRouteState } from '../../route';
-import { BRIEFING_HREF } from '../needs/briefing';
 import { releaseErrorMessage } from '../needs/claim-error';
 import { announceTicketChanged } from '../ticket-changes';
 import {

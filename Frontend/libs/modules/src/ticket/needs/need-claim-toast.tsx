@@ -8,7 +8,7 @@ import Link from 'next/link';
 
 import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
-import { BRIEFING_HREF } from './briefing';
+import { BRIEFING_HREF } from '../../briefing/href';
 
 const { color, radius, shadow } = designTokens;
 

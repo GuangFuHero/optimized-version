@@ -8,8 +8,8 @@ import type { ReactNode } from 'react';
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { GuangFuMascot } from '../../brand';
+import { BRIEFING_HREF } from '../../briefing/href';
 import { SITE_MODULE_META } from '../../route/module-meta';
-import { BRIEFING_HREF } from '../../ticket/needs/briefing';
 
 const { color, focusRing, radius } = designTokens;
 
