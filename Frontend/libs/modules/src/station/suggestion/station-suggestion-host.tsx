@@ -84,12 +84,17 @@ export function StationSuggestionHost({
   );
   const [opening, setOpening] = useState<Opening | null>(null);
   const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  // The opening whose suggestion is on its way: a drawer opened after it is not kept waiting on it.
+  const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [toastOpen, setToastOpen] = useState(false);
+  // Read as a suggestion comes back: one sent from a drawer since closed and opened again — on
+  // another station, say — must not close the new drawer, nor leave its error there.
+  const lastOpeningId = useRef(0);
 
   const openDrawer = useCallback((stationUuid: string) => {
-    setOpening((current) => ({ id: (current?.id ?? 0) + 1, stationUuid }));
+    lastOpeningId.current += 1;
+    setOpening({ id: lastOpeningId.current, stationUuid });
     setSubmitError(null);
     setOpen(true);
   }, []);
@@ -109,11 +114,14 @@ export function StationSuggestionHost({
   };
 
   const submit = async (form: StationSuggestionForm) => {
-    if (!opening || submitting) {
+    if (!opening || submittingId === opening.id) {
       return;
     }
 
-    setSubmitting(true);
+    const { id } = opening;
+    const stillOpen = () => lastOpeningId.current === id;
+
+    setSubmittingId(id);
     setSubmitError(null);
 
     try {
@@ -123,14 +131,20 @@ export function StationSuggestionHost({
 
       // What was typed stays for another try.
       if (!result.data?.createStationSuggestion) {
-        setSubmitError(stationSuggestionErrorMessage(result.error ?? {}));
+        if (stillOpen()) {
+          setSubmitError(stationSuggestionErrorMessage(result.error ?? {}));
+        }
         return;
       }
 
-      setOpen(false);
+      if (stillOpen()) {
+        setOpen(false);
+      }
+
+      // Sent all the same, wherever the drawer went meanwhile.
       setToastOpen(true);
     } finally {
-      setSubmitting(false);
+      setSubmittingId((current) => (current === id ? null : current));
     }
   };
 
@@ -145,7 +159,7 @@ export function StationSuggestionHost({
           open={open}
           stationUuid={opening.stationUuid}
           isAuthenticated={isAuthenticated}
-          submitting={submitting}
+          submitting={submittingId === opening.id}
           submitError={submitError}
           onClose={() => setOpen(false)}
           onSignIn={signIn}
