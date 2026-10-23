@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
+  BriefingStatus,
   useDeleteBriefing,
   usePublishBriefing,
   useUpdateBriefing,
@@ -28,6 +29,8 @@ const { color, typography } = designTokens;
 
 export function BriefingEditor({
   draft,
+  available,
+  onRefresh,
   published,
   versionCount,
   canPublish,
@@ -35,6 +38,8 @@ export function BriefingEditor({
   onClose,
 }: {
   draft: Briefing;
+  available: boolean;
+  onRefresh: () => Promise<Briefing | undefined>;
   published?: Briefing;
   versionCount: number;
   canPublish: boolean;
@@ -48,20 +53,30 @@ export function BriefingEditor({
   const update = useUpdateBriefing();
   const publish = usePublishBriefing();
   const discard = useDeleteBriefing();
-  const pending = update.isPending || publish.isPending || discard.isPending;
+  const [checking, setChecking] = useState(false);
+  const pending =
+    checking || update.isPending || publish.isPending || discard.isPending;
   const error = update.error ?? publish.error ?? discard.error;
   const dirty = content !== draft.content;
   const empty = !content.trim();
 
   useEffect(() => {
     if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
     window.addEventListener('beforeunload', beforeUnload);
     return () => window.removeEventListener('beforeunload', beforeUnload);
   }, [dirty]);
 
   async function save(action: 'save' | 'leave' | 'publish') {
-    if (pending || (action === 'publish' && (empty || !canPublish))) return;
+    if (
+      pending ||
+      !available ||
+      (action === 'publish' && (empty || !canPublish))
+    )
+      return;
     update.reset();
     publish.reset();
     discard.reset();
@@ -79,6 +94,26 @@ export function BriefingEditor({
       }
     } catch {
       // Mutation errors remain visible while the editor keeps the working content.
+    }
+  }
+
+  async function discardDraft() {
+    if (pending || !canDiscard || !available) return;
+    setChecking(true);
+    try {
+      const latest = await onRefresh();
+      if (!latest || latest.status !== BriefingStatus.Draft) {
+        setConfirm(null);
+        toast.error('這份草稿已發布或已移除，沒有丟棄任何內容。');
+        return;
+      }
+      await discard.mutateAsync({ uuid: draft.uuid });
+      toast.success('草稿已丟棄。');
+      onClose();
+    } catch {
+      toast.error('無法丟棄草稿，請重新整理後再試。');
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -102,6 +137,23 @@ export function BriefingEditor({
         {dirty ? <Badge tone="warning">尚未儲存</Badge> : null}
         <BriefingStamp briefing={draft} />
       </Stack>
+      {!available ? (
+        <Callout tone="warning">
+          這份草稿已發布或已移除，目前的修改仍保留在編輯區。請先複製內容後再離開。
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              void navigator.clipboard.writeText(content).then(
+                () => toast.success('已複製 Markdown 內容。'),
+                () => toast.error('複製失敗，請從編輯區選取並複製內容。'),
+              );
+            }}
+          >
+            複製目前內容
+          </Button>
+        </Callout>
+      ) : null}
       <Callout tone="info">
         這裡改的是草稿，儲存不會變更前台內容。
         {published
@@ -132,7 +184,7 @@ export function BriefingEditor({
           onChange={setContent}
           label="行前資訊內容"
           helperText="用段落標題分段，段裡再用小標題細分。可勾項目讓志工在前台逐項打勾。"
-          disabled={pending}
+          disabled={pending || !available}
           previewLabel="志工看到的樣子"
           preview={
             <BriefingPreview
@@ -154,7 +206,7 @@ export function BriefingEditor({
               <Button
                 variant="outline"
                 startIcon={<Save size={16} />}
-                disabled={pending || !dirty}
+                disabled={pending || !dirty || !available}
                 onClick={() => void save('save')}
               >
                 {update.isPending ? '儲存中…' : '儲存草稿'}
@@ -162,7 +214,7 @@ export function BriefingEditor({
               {canPublish ? (
                 <Button
                   startIcon={<Send size={16} />}
-                  disabled={pending || empty}
+                  disabled={pending || empty || !available}
                   onClick={() => setConfirm('publish')}
                 >
                   發布到前台
@@ -207,7 +259,7 @@ export function BriefingEditor({
                     variant="ghost"
                     startIcon={<Trash2 size={16} />}
                     sx={{ mt: 1, color: color.fg.danger }}
-                    disabled={pending}
+                    disabled={pending || !available}
                     onClick={() => setConfirm('discard')}
                   >
                     丟棄草稿
@@ -234,16 +286,18 @@ export function BriefingEditor({
         content={content}
         savingChanges={dirty}
         submitting={pending}
-        confirmDisabled={empty || !canPublish}
+        confirmDisabled={empty || !canPublish || !available}
         error={error?.message}
       />
       <Dialog
+        variant="sectioned"
         open={confirm === 'leave'}
         onClose={() => setConfirm(null)}
         onConfirm={() => void save('leave')}
         title="有尚未儲存的修改"
         confirmLabel={pending ? '儲存中…' : '存成草稿再離開'}
         submitting={pending}
+        confirmDisabled={!available}
         error={error?.message}
       >
         <Typography>存成草稿後再離開，前台內容不會變更。</Typography>
@@ -257,29 +311,20 @@ export function BriefingEditor({
         </Button>
       </Dialog>
       <Dialog
+        variant="sectioned"
         open={confirm === 'discard'}
         onClose={() => setConfirm(null)}
-        onConfirm={() => {
-          if (pending || !canDiscard) return;
-          discard.mutate(
-            { uuid: draft.uuid },
-            {
-              onSuccess: () => {
-                toast.success('草稿已丟棄，前台內容沒有變更。');
-                onClose();
-              },
-            },
-          );
-        }}
+        onConfirm={() => void discardDraft()}
         title="確認丟棄草稿？"
         confirmLabel={discard.isPending ? '丟棄中…' : '確認丟棄'}
         confirmTone="danger"
         submitting={pending}
+        confirmDisabled={!available}
         error={discard.error?.message}
       >
         <Typography>
           草稿與尚未儲存的修改都會丟棄，無法復原。
-          {published ? '目前公開的內容會保留。' : '之後可以重新建立行前資訊。'}
+          丟棄前會重新確認這份內容仍是未發布草稿。
         </Typography>
       </Dialog>
     </Stack>

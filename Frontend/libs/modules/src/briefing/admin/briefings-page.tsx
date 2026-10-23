@@ -25,7 +25,11 @@ import {
   designTokens,
 } from '@rescue-frontend/ui';
 
-import { briefingTime, type BriefingTemplate } from './briefing-content';
+import {
+  briefingTime,
+  type Briefing,
+  type BriefingTemplate,
+} from './briefing-content';
 import { BriefingEditor } from './briefing-editor';
 import { BriefingHistory } from './briefing-history';
 import { BriefingPreview, BriefingStamp } from './briefing-preview';
@@ -49,7 +53,7 @@ function BriefingsContent({
   });
   const create = useGenerateBriefing();
   const publish = usePublishBriefing();
-  const [editorUuid, setEditorUuid] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Briefing | null>(null);
   const [pickingTemplate, setPickingTemplate] = useState(false);
   const [showDraft, setShowDraft] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
@@ -67,7 +71,7 @@ function BriefingsContent({
   );
   const draft = drafts[0];
   const published = versions[0];
-  const editor = drafts.find((item) => item.uuid === editorUuid);
+  const editor = drafts.find((item) => item.uuid === editing?.uuid);
   const pending = create.isPending || publish.isPending;
   const hasDraftChanges =
     draft && (!published || draft.content !== published.content);
@@ -87,7 +91,7 @@ function BriefingsContent({
       {
         onSuccess: ({ generateBriefing }) => {
           setPickingTemplate(false);
-          setEditorUuid(generateBriefing.uuid);
+          setEditing(generateBriefing);
           create.reset();
           if (!published) toast.success('草稿已建立，確認內容後再發布到前台。');
         },
@@ -95,7 +99,7 @@ function BriefingsContent({
     );
   }
 
-  if (query.isPending) {
+  if (query.isPending && !editing) {
     return (
       <CircularProgress
         aria-label="正在載入行前資訊"
@@ -104,7 +108,7 @@ function BriefingsContent({
     );
   }
 
-  if (editor) {
+  if (editing) {
     return (
       <Stack sx={{ gap: 2 }}>
         <BriefingPublicationNotice
@@ -113,14 +117,21 @@ function BriefingsContent({
           hasDraftChanges={Boolean(hasDraftChanges)}
         />
         <BriefingEditor
-          key={editor.uuid}
-          draft={editor}
+          key={editing.uuid}
+          draft={editor ?? editing}
+          available={Boolean(editor)}
+          onRefresh={async () => {
+            const result = await query.refetch({ throwOnError: true });
+            return result.data?.briefings.find(
+              (item) => item.uuid === editing.uuid,
+            );
+          }}
           published={published}
           versionCount={versions.length}
           canPublish={canPublish}
           canDiscard={canDiscard}
           onClose={() => {
-            setEditorUuid(null);
+            setEditing(null);
             setShowDraft(false);
           }}
         />
@@ -242,9 +253,7 @@ function BriefingsContent({
               <Button
                 startIcon={<PencilLine size={16} />}
                 disabled={pending || query.isError}
-                onClick={() =>
-                  draft ? setEditorUuid(draft.uuid) : startDraft()
-                }
+                onClick={() => (draft ? setEditing(draft) : startDraft())}
               >
                 {create.isPending ? '建立草稿中…' : '編輯內容'}
               </Button>
