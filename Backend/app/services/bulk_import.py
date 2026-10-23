@@ -361,9 +361,13 @@ async def _write_station(
             op_hour=fixed.get("op_hour"),
             level=fixed.get("level") or 0,
             comment=fixed.get("comment"),
-            # Provenance: a station that appeared through a file, not through the map UI.
-            source=fixed.get("source") or "import",
+            # Bulk import is admin-only, and an admin-created station is official (ADMIN-026),
+            # so the file's own `source` column does not get a say.
+            source="official",
             visibility=fixed.get("visibility") or "public",
+            # A listed station isn't known to be open: it stays closed until someone confirms it
+            # on site. Temporarily, not permanently, so the duplicate matcher still sees it.
+            operational_status="temporarily_closed",
             secondary_location={"location_type": "address", **address} if address else None,
         )
         progress.parent_written = True

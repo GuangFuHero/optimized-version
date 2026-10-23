@@ -223,7 +223,7 @@ async def test_a_file_over_the_row_cap_is_refused_before_anything_runs(db):
 
 @pytest.mark.asyncio
 async def test_a_row_that_matches_nothing_is_created(db):
-    """An unmatched row becomes a new station, owned by the importer and marked as imported."""
+    """An unmatched row becomes a new station, owned by the importer and marked official."""
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([_row("光復國小", capacity="120")])
@@ -235,7 +235,22 @@ async def test_a_row_that_matches_nothing_is_created(db):
     assert (outcome.created, outcome.updated, outcome.failed) == (1, 0, 0)
     station = await _station_named(db, "光復國小")
     assert str(station.created_by) == str(actor.uuid)
-    assert station.source == "import"
+    assert station.source == "official"
+    # Closed until someone confirms it on site (ADMIN-026 import dialog).
+    assert station.operational_status == "temporarily_closed"
+
+
+@pytest.mark.asyncio
+async def test_a_created_row_is_official_whatever_its_source_column_says(db):
+    """Bulk import is admin-only, and an admin-created station is official (ADMIN-026)."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw = write_csv((*HEADERS, "source"), [{**_row("光復國小"), "source": "user"}])
+
+    await commit_stations(db, actor=actor, raw=raw, filename="stations.csv", station_type="shelter")
+
+    station = await _station_named(db, "光復國小")
+    assert station.source == "official"
 
 
 @pytest.mark.asyncio
@@ -304,6 +319,25 @@ async def test_a_row_that_matches_updates_in_place(db):
     updated = await _station_named(db, "光復國小")
     assert str(updated.uuid) == original_uuid
     assert updated.comment == "第二版"
+
+
+@pytest.mark.asyncio
+async def test_an_update_leaves_a_reopened_station_open(db):
+    """Only a new station starts closed; re-importing must not close one someone reopened."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("光復國小", comment="第一版")])
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+    station = await _station_named(db, "光復國小")
+    station.operational_status = "active"
+    await db.commit()
+
+    raw, filename = _file([_row("光復國小", comment="第二版")])
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+
+    updated = await _station_named(db, "光復國小")
+    assert updated.comment == "第二版"
+    assert updated.operational_status == "active"
 
 
 @pytest.mark.asyncio

@@ -29,7 +29,8 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `shell/admin/*`
 - `station/admin/station-create`
 - `station/admin/station-detail`
-- `station/admin/station-list`
+- `station/admin/station-form`
+- `station/admin/station-management`
 - `ticket/admin/ticket-create`
 - `ticket/admin/ticket-detail`
 - `ticket/admin/ticket-list`
@@ -45,13 +46,42 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `page.tsx` + `admin-map-page.client.tsx` 已存在
 - 使用 `@rescue-frontend/modules` 的 `Map`
 - 已有「新增站點 / 新增任務」控制 UI
-- 依賴 `StationCreateDrawer`、`TicketCreateDrawer`
+- 依賴 `StationCreateDrawer`（共用的 `StationFormDrawer` 新增模式）、`TicketCreateDrawer`
 - 只有登入狀態會顯示建立 controls
 
-### `/stations`
+### `/stations`（資源站點管理 v2，ADMIN-026）
 
-- 已有 page 檔案
-- 對應的 reusable modules 位於 `station/admin/*`
+- `page.tsx` 掛載 `StationManagementPage`（`libs/modules/src/station/admin/station-management/`），接真實 API
+- 狀態統計（`/analytics/stations/data` 各營運狀態數量，點選即篩選該狀態；ticket 寫的 `/analytics/stations/value` 只回一個總數，沒有各狀態拆分）、篩選（類型、營運狀態、行政區、指派 Team、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換
+- 列表會分頁讀完權限範圍內所有站點（上限 5,000），官方認定、更新時間篩選與排序（開設中優先、最近更新優先）在前端做
+- 站點抽屜是 `/stations` 自己的 `StationDetailSheet`（`station-form` 的 `AdminStationDrawerLayout`／`AdminStationDrawerTabs`，編輯在同一個抽屜裡切換），不用地圖的 `StationDetailDrawer`：基本資料、照片、資源、群眾評分（各資源好／普通／差的筆數，只查 `rating`，不讀 `userUuid`）、聯絡資訊（無 `station.view_pii` 時顯示遮罩值且不可改）、版本歷史；`/stations?station=<uuid>` 直接開啟，給通知連結用
+- 新增／編輯用 `station/admin/station-form` 的 `StationFormDrawer`，與 `/map` 的新增共用同一份表單；地址只在新增時送出（`UpdateStationInput` 不能改 `secondaryLocation`）
+- 刪除站點、列表上直接改營運狀態與指派 Team；後台新增的站點一律 `source: "official"`
+- 前台修改建議審查：依欄位決定採用／不採用（可改寫入值），一次送出附一則審核備註（`mergeStationSuggestions` 只收一個 `reviewNote`；ticket 寫「每一則附備註」，為了保持一次送出不可分割，維持一則）
+- 批次匯入（試算 → 欄位對應 → 確認，失敗列可下載）與匯出（單一類型，CSV／Excel）
+- 匯入一律官方：後端批次匯入新增的站點一律存 `source: "official"`，不看檔案的 source 欄（CSV、Excel、貼上的內容都一樣）
+- 匯入新增的站點營運狀態一律 `temporarily_closed`（設計稿的「已關閉」），到現場確認後再開啟；更新既有站點不改營運狀態
+- 匯入視窗依設計稿：欄位對應一列三組、「試算結果」只列失敗的列（第幾列／欄位／原因）
+- .xlsx 表頭列上方的標題列（Numbers 匯出時會把表格名稱放在第一列）或空白列，由後端略過
+- 權限一律看後端回的 capabilities（`station.add/edit/delete/review/assign/import/export/view_history/view_pii`）
+
+**超出 ADMIN-026 的部分（依設計稿加入）：**
+
+- 篩選多了「行政區」（取自已載入站點）與「成立」（災後首週／首週之後，以專案 `started_at` 起算）
+- 匯出一次一種類型，各類型筆數只算自己 Team 的站點（team 角色的 `station.export` 只匯出指派給該 Team 的站點）
+- 地圖檢視：類型顏色圖釘、群集、圖例、縮放、飛到選取站點。改到共用的 `map/*`，但都是 admin 才開的選項，前台地圖不變
+
+**後端缺口（尚無 API，畫面未做或以前端方式替代）：**
+
+- 已刪除站點無法重新啟用，也無法回溯到某個版本（沒有 restore／rollback）
+- 修改建議沒有記錄「投稿時的值」，也只給第一筆建議的時間：衝突判斷改用版本歷史，欄位在第一筆建議之後有被改過就標「衝突」。資源（station_property）欄位：有 `audit.view` 時用歷史的原始列比對 property uuid；沒有時歷史事件不帶 uuid，只能保守判斷（同欄位任一資源改過都算）
+- `stations` 查詢沒有 source／更新時間篩選，也不能排序
+- 匯入視窗的提示照設計稿寫「可能重複的會送進『AI 重複審核』」，但後端批次匯入不經過重複檢查（`create_station` 不走 `dedup_submission`）
+- 設計稿的「這份檔案是『物資集散』，這列寫的是『避難收容』」：後端沒有這項檢查，列上的 type 會直接蓋過選的類型
+- 匯出只能選一種類型，不套用列表篩選
+- 站點照片只能附 URL，沒有上傳端點
+- 群眾評分沒有站點層級的統計 API：前端讀各資源的 `crowdSourcings { rating }` 自己加總。`CrowdSourcingType` 會公開回傳 `userUuid`，前端不查這個欄位，但後端仍應收起來
+- 營運狀態文字（開設中／暫時關閉／永久關閉）待產品確認是否改為兩態，只需改 `station/operational-status.ts`
 
 ### `/tickets`
 

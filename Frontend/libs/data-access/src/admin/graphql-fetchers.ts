@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { adminGraphqlClient, graphqlResponseData } from './client';
+import { collectAllPages } from './collect-pages';
 import * as documents from './graphql/__generated__/graphql';
 
 export interface AdminQueryOptions {
@@ -98,6 +99,39 @@ export function useStations(
   return useQuery({ ...stationsQuery(variables), enabled: options.enabled });
 }
 
+export type AllStationsQueryVariables = Omit<
+  documents.AdminStationsQueryVariables,
+  'skip' | 'limit'
+>;
+
+/** Every station matching `variables`, read page by page up to the collector's cap. */
+export const allStationsQuery = (variables: AllStationsQueryVariables = {}) =>
+  queryOptions({
+    queryKey: ['admin', 'stations', 'all', variables],
+    queryFn: ({ signal }) =>
+      collectAllPages(async (skip, limit) => {
+        const data = await adminGraphqlClient
+          .query(
+            documents.AdminStationsDocument,
+            { ...variables, skip, limit },
+            { fetchOptions: { credentials: 'include', signal } },
+          )
+          .toPromise()
+          .then(graphqlResponseData);
+        return {
+          items: data.stations.items,
+          hasNextPage: data.stations.pageInfo.hasNextPage,
+        };
+      }),
+  });
+
+export function useAllStations(
+  variables: AllStationsQueryVariables = {},
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({ ...allStationsQuery(variables), enabled: options.enabled });
+}
+
 export const stationQuery = (variables: documents.AdminStationQueryVariables) =>
   queryOptions({
     queryKey: ['admin', 'stations', 'station', variables],
@@ -116,6 +150,30 @@ export function useStation(
 ) {
   return useQuery({
     ...stationQuery(variables),
+    enabled: Boolean(variables.uuid) && options.enabled !== false,
+  });
+}
+
+export const stationReviewQuery = (
+  variables: documents.AdminStationReviewQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'stations', 'review', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminStationReviewDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useStationReview(
+  variables: documents.AdminStationReviewQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...stationReviewQuery(variables),
     enabled: Boolean(variables.uuid) && options.enabled !== false,
   });
 }
@@ -453,6 +511,21 @@ export function useDeleteStation() {
     mutationFn: (variables: documents.AdminDeleteStationMutationVariables) =>
       adminGraphqlClient
         .mutation(documents.AdminDeleteStationDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
+  });
+}
+
+export function useMergeStationSuggestions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminMergeStationSuggestionsMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminMergeStationSuggestionsDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
     onSuccess: () =>

@@ -1976,12 +1976,20 @@ export type AdminStationFieldsFragment = {
   visibility?: string | null;
   verificationStatus?: string | null;
   operationalStatus: string;
+  statusChangedAt?: string | null;
+  supplyStatus?: string | null;
+  pendingSuggestedFields: Array<string>;
   isDuplicate: boolean;
   isTemporary: boolean;
   isOfficial: boolean;
   createdBy?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  secondaryLocation?: {
+    __typename?: 'SecondaryLocationType';
+    county?: string | null;
+    city?: string | null;
+  } | null;
   assignedTeam?: {
     __typename?: 'AssignedTeamType';
     uuid: string;
@@ -2174,6 +2182,7 @@ export type AdminStationsQueryVariables = Exact<{
   q?: InputMaybe<Scalars['String']['input']>;
   assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   unassignedOnly?: InputMaybe<Scalars['Boolean']['input']>;
+  hasPendingSuggestions?: InputMaybe<Scalars['Boolean']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
@@ -2196,12 +2205,20 @@ export type AdminStationsQuery = {
       visibility?: string | null;
       verificationStatus?: string | null;
       operationalStatus: string;
+      statusChangedAt?: string | null;
+      supplyStatus?: string | null;
+      pendingSuggestedFields: Array<string>;
       isDuplicate: boolean;
       isTemporary: boolean;
       isOfficial: boolean;
       createdBy?: string | null;
       createdAt?: string | null;
       updatedAt?: string | null;
+      secondaryLocation?: {
+        __typename?: 'SecondaryLocationType';
+        county?: string | null;
+        city?: string | null;
+      } | null;
       assignedTeam?: {
         __typename?: 'AssignedTeamType';
         uuid: string;
@@ -2228,6 +2245,7 @@ export type AdminStationQuery = {
     __typename?: 'StationType';
     contactName?: string | null;
     contactPhone?: string | null;
+    contactEmail?: string | null;
     uuid: string;
     type?: string | null;
     name?: string | null;
@@ -2240,6 +2258,9 @@ export type AdminStationQuery = {
     visibility?: string | null;
     verificationStatus?: string | null;
     operationalStatus: string;
+    statusChangedAt?: string | null;
+    supplyStatus?: string | null;
+    pendingSuggestedFields: Array<string>;
     isDuplicate: boolean;
     isTemporary: boolean;
     isOfficial: boolean;
@@ -2275,6 +2296,10 @@ export type AdminStationQuery = {
       status: string;
       weightings: number;
       createdAt?: string | null;
+      crowdSourcings: Array<{
+        __typename?: 'CrowdSourcingType';
+        rating: string;
+      }>;
     }>;
     assignedTeam?: {
       __typename?: 'AssignedTeamType';
@@ -2283,6 +2308,73 @@ export type AdminStationQuery = {
       type: string;
     } | null;
   } | null;
+};
+
+export type AdminStationReviewQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type AdminStationReviewQuery = {
+  __typename?: 'Query';
+  station?: {
+    __typename?: 'StationType';
+    uuid: string;
+    type?: string | null;
+    name?: string | null;
+    description?: string | null;
+    geometry?: Geometry | null;
+    opHour?: string | null;
+    level: number;
+    comment?: string | null;
+    source?: string | null;
+    visibility?: string | null;
+    verificationStatus?: string | null;
+    operationalStatus: string;
+    statusChangedAt?: string | null;
+    supplyStatus?: string | null;
+    pendingSuggestedFields: Array<string>;
+    isDuplicate: boolean;
+    isTemporary: boolean;
+    isOfficial: boolean;
+    createdBy?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    properties: Array<{
+      __typename?: 'StationPropertyType';
+      uuid: string;
+      propertyName: string;
+      quantity?: number | null;
+      comment?: string | null;
+      pendingSuggestedFields: Array<string>;
+    }>;
+    suggestedFields: Array<{
+      __typename?: 'SuggestedFieldType';
+      targetType: string;
+      targetUuid: string;
+      fieldName: string;
+      proposedValues: Array<string>;
+      suggestionCount: number;
+      comments: Array<string>;
+      firstSuggestedAt?: string | null;
+    }>;
+    secondaryLocation?: {
+      __typename?: 'SecondaryLocationType';
+      county?: string | null;
+      city?: string | null;
+    } | null;
+    assignedTeam?: {
+      __typename?: 'AssignedTeamType';
+      uuid: string;
+      name: string;
+      type: string;
+    } | null;
+  } | null;
+  suggestableFields: Array<{
+    __typename?: 'SuggestableFieldType';
+    fieldName: string;
+    dataType: string;
+    enumOptions?: Array<string> | null;
+  }>;
 };
 
 export type AdminAnnouncementsQueryVariables = Exact<{
@@ -2645,12 +2737,20 @@ export type AdminUnassignTaskActorMutation = {
 
 export type AdminCreateStationMutationVariables = Exact<{
   input: CreateStationInput;
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 export type AdminCreateStationMutation = {
   __typename?: 'Mutation';
   createStation:
-    | { __typename: 'DuplicatesSuspected' }
+    | {
+        __typename: 'DuplicatesSuspected';
+        suspects: Array<{
+          __typename?: 'DuplicateSuspect';
+          relatedKind: string;
+          relatedUuid: string;
+        }>;
+      }
     | {
         __typename: 'StationCreated';
         station: {
@@ -2667,12 +2767,20 @@ export type AdminCreateStationMutation = {
           visibility?: string | null;
           verificationStatus?: string | null;
           operationalStatus: string;
+          statusChangedAt?: string | null;
+          supplyStatus?: string | null;
+          pendingSuggestedFields: Array<string>;
           isDuplicate: boolean;
           isTemporary: boolean;
           isOfficial: boolean;
           createdBy?: string | null;
           createdAt?: string | null;
           updatedAt?: string | null;
+          secondaryLocation?: {
+            __typename?: 'SecondaryLocationType';
+            county?: string | null;
+            city?: string | null;
+          } | null;
           assignedTeam?: {
             __typename?: 'AssignedTeamType';
             uuid: string;
@@ -2704,12 +2812,20 @@ export type AdminUpdateStationMutation = {
     visibility?: string | null;
     verificationStatus?: string | null;
     operationalStatus: string;
+    statusChangedAt?: string | null;
+    supplyStatus?: string | null;
+    pendingSuggestedFields: Array<string>;
     isDuplicate: boolean;
     isTemporary: boolean;
     isOfficial: boolean;
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    secondaryLocation?: {
+      __typename?: 'SecondaryLocationType';
+      county?: string | null;
+      city?: string | null;
+    } | null;
     assignedTeam?: {
       __typename?: 'AssignedTeamType';
       uuid: string;
@@ -2726,6 +2842,29 @@ export type AdminDeleteStationMutationVariables = Exact<{
 export type AdminDeleteStationMutation = {
   __typename?: 'Mutation';
   deleteStation: boolean;
+};
+
+export type AdminMergeStationSuggestionsMutationVariables = Exact<{
+  stationUuid: Scalars['UUID']['input'];
+  decisions: Array<SuggestionDecisionInput> | SuggestionDecisionInput;
+  reviewNote?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+export type AdminMergeStationSuggestionsMutation = {
+  __typename?: 'Mutation';
+  mergeStationSuggestions: {
+    __typename?: 'StationSuggestionMergeType';
+    uuid: string;
+    status: string;
+    changes: Array<{
+      __typename?: 'SuggestionChangeType';
+      targetType: string;
+      targetUuid: string;
+      fieldName: string;
+      before?: string | null;
+      after?: string | null;
+    }>;
+  };
 };
 
 export type AdminAssignStationMutationVariables = Exact<{
@@ -2749,12 +2888,20 @@ export type AdminAssignStationMutation = {
     visibility?: string | null;
     verificationStatus?: string | null;
     operationalStatus: string;
+    statusChangedAt?: string | null;
+    supplyStatus?: string | null;
+    pendingSuggestedFields: Array<string>;
     isDuplicate: boolean;
     isTemporary: boolean;
     isOfficial: boolean;
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    secondaryLocation?: {
+      __typename?: 'SecondaryLocationType';
+      county?: string | null;
+      city?: string | null;
+    } | null;
     assignedTeam?: {
       __typename?: 'AssignedTeamType';
       uuid: string;
@@ -2784,12 +2931,20 @@ export type AdminUnassignStationMutation = {
     visibility?: string | null;
     verificationStatus?: string | null;
     operationalStatus: string;
+    statusChangedAt?: string | null;
+    supplyStatus?: string | null;
+    pendingSuggestedFields: Array<string>;
     isDuplicate: boolean;
     isTemporary: boolean;
     isOfficial: boolean;
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    secondaryLocation?: {
+      __typename?: 'SecondaryLocationType';
+      county?: string | null;
+      city?: string | null;
+    } | null;
     assignedTeam?: {
       __typename?: 'AssignedTeamType';
       uuid: string;
@@ -3250,12 +3405,29 @@ export const AdminStationFieldsFragmentDoc = {
             name: { kind: 'Name', value: 'verificationStatus' },
           },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'statusChangedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pendingSuggestedFields' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+              ],
+            },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignedTeam' },
@@ -3942,6 +4114,15 @@ export const AdminStationsDocument = {
         },
         {
           kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'hasPendingSuggestions' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
+          defaultValue: { kind: 'BooleanValue', value: false },
+        },
+        {
+          kind: 'VariableDefinition',
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           defaultValue: { kind: 'IntValue', value: '0' },
@@ -4006,6 +4187,14 @@ export const AdminStationsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'unassignedOnly' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'hasPendingSuggestions' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'hasPendingSuggestions' },
                 },
               },
               {
@@ -4085,12 +4274,29 @@ export const AdminStationsDocument = {
             name: { kind: 'Name', value: 'verificationStatus' },
           },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'statusChangedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pendingSuggestedFields' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+              ],
+            },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignedTeam' },
@@ -4168,6 +4374,10 @@ export const AdminStationDocument = {
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'contactPhone' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'contactEmail' },
                 },
                 {
                   kind: 'Field',
@@ -4250,6 +4460,19 @@ export const AdminStationDocument = {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'createdAt' },
                       },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'crowdSourcings' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'rating' },
+                            },
+                          ],
+                        },
+                      },
                     ],
                   },
                 },
@@ -4284,12 +4507,29 @@ export const AdminStationDocument = {
             name: { kind: 'Name', value: 'verificationStatus' },
           },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'statusChangedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pendingSuggestedFields' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+              ],
+            },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignedTeam' },
@@ -4307,6 +4547,202 @@ export const AdminStationDocument = {
     },
   ],
 } as unknown as DocumentNode<AdminStationQuery, AdminStationQueryVariables>;
+export const AdminStationReviewDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminStationReview' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'station' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'AdminStationFields' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'properties' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'propertyName' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'quantity' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'comment' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'pendingSuggestedFields' },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'suggestedFields' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'targetType' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'targetUuid' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'fieldName' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'proposedValues' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suggestionCount' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'comments' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'firstSuggestedAt' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'suggestableFields' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'targetType' },
+                value: { kind: 'StringValue', value: 'station', block: false },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'fieldName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'dataType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'enumOptions' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'AdminStationFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'StationType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'verificationStatus' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'statusChangedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pendingSuggestedFields' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'assignedTeam' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminStationReviewQuery,
+  AdminStationReviewQueryVariables
+>;
 export const AdminAnnouncementsDocument = {
   kind: 'Document',
   definitions: [
@@ -5752,6 +6188,14 @@ export const AdminCreateStationDocument = {
             },
           },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -5766,6 +6210,14 @@ export const AdminCreateStationDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'input' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
                 },
               },
             ],
@@ -5794,6 +6246,35 @@ export const AdminCreateStationDocument = {
                                 kind: 'Name',
                                 value: 'AdminStationFields',
                               },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'DuplicatesSuspected' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspects' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedKind' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedUuid' },
                             },
                           ],
                         },
@@ -5832,12 +6313,29 @@ export const AdminCreateStationDocument = {
             name: { kind: 'Name', value: 'verificationStatus' },
           },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'statusChangedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pendingSuggestedFields' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+              ],
+            },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignedTeam' },
@@ -5951,12 +6449,29 @@ export const AdminUpdateStationDocument = {
             name: { kind: 'Name', value: 'verificationStatus' },
           },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'statusChangedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pendingSuggestedFields' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+              ],
+            },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignedTeam' },
@@ -6018,6 +6533,128 @@ export const AdminDeleteStationDocument = {
 } as unknown as DocumentNode<
   AdminDeleteStationMutation,
   AdminDeleteStationMutationVariables
+>;
+export const AdminMergeStationSuggestionsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminMergeStationSuggestions' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'stationUuid' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'decisions' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'ListType',
+              type: {
+                kind: 'NonNullType',
+                type: {
+                  kind: 'NamedType',
+                  name: { kind: 'Name', value: 'SuggestionDecisionInput' },
+                },
+              },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'reviewNote' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'mergeStationSuggestions' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'stationUuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'stationUuid' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'decisions' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'decisions' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'reviewNote' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'reviewNote' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'changes' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'targetType' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'targetUuid' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'fieldName' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'before' },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'after' } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminMergeStationSuggestionsMutation,
+  AdminMergeStationSuggestionsMutationVariables
 >;
 export const AdminAssignStationDocument = {
   kind: 'Document',
@@ -6112,12 +6749,29 @@ export const AdminAssignStationDocument = {
             name: { kind: 'Name', value: 'verificationStatus' },
           },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'statusChangedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pendingSuggestedFields' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+              ],
+            },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignedTeam' },
@@ -6212,12 +6866,29 @@ export const AdminUnassignStationDocument = {
             name: { kind: 'Name', value: 'verificationStatus' },
           },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'statusChangedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pendingSuggestedFields' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+              ],
+            },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignedTeam' },
