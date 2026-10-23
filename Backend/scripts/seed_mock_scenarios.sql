@@ -53,6 +53,22 @@ CREATE TEMP TABLE mock_tasks ON COMMIT DROP AS
    WHERE uuid::text LIKE 'e0000000-%'
       OR ticket_uuid IN (SELECT uuid FROM mock_geometries)
       OR created_by IN (SELECT uuid FROM mock_users);
+-- mock 團隊的邀請連結、mock 帳號開的邀請連結。
+CREATE TEMP TABLE mock_invites ON COMMIT DROP AS
+  SELECT uuid FROM team_invites
+   WHERE team_uuid::text LIKE '10000000-%' OR created_by IN (SELECT uuid FROM mock_users);
+-- 站點建議的合併紀錄:mock 站點上的,以及 mock 帳號審核或撤銷的(reviewed_by 不能空,只能刪)。
+CREATE TEMP TABLE mock_merges ON COMMIT DROP AS
+  SELECT uuid FROM station_suggestion_merges
+   WHERE station_uuid IN (SELECT uuid FROM mock_geometries)
+      OR reviewed_by IN (SELECT uuid FROM mock_users)
+      OR revoked_by IN (SELECT uuid FROM mock_users);
+-- 去重配對:有一邊是 mock 的單、站點或需求就刪(low/high_uuid 沒有外鍵)。
+-- 兩邊都是真人資料的配對留著,判定可能已經改了那些資料,只放掉指向 mock 帳號的審核者。
+CREATE TEMP TABLE mock_pairs ON COMMIT DROP AS
+  SELECT uuid FROM duplicate_pairs
+   WHERE low_uuid IN (SELECT uuid FROM mock_geometries UNION SELECT uuid FROM mock_tasks)
+      OR high_uuid IN (SELECT uuid FROM mock_geometries UNION SELECT uuid FROM mock_tasks);
 
 DELETE FROM team_zone_assign
  WHERE uuid::text LIKE '30000000-%'
@@ -62,12 +78,25 @@ DELETE FROM team_zone_assign
 DELETE FROM role_requests
  WHERE created_by IN (SELECT uuid FROM mock_users)
     OR reviewed_by IN (SELECT uuid FROM mock_users)
-    OR granted_team_uuid::text LIKE '10000000-%';
+    OR granted_team_uuid::text LIKE '10000000-%'
+    OR team_uuid::text LIKE '10000000-%';
+-- 真人用 mock 邀請連結送的申請留著,只放掉連結。
+UPDATE role_requests SET invite_uuid = NULL WHERE invite_uuid IN (SELECT uuid FROM mock_invites);
+DELETE FROM team_invites WHERE uuid IN (SELECT uuid FROM mock_invites);
+DELETE FROM dedup_audit_events
+ WHERE pair_uuid IN (SELECT uuid FROM mock_pairs)
+    OR primary_uuid IN (SELECT uuid FROM mock_geometries UNION SELECT uuid FROM mock_tasks)
+    OR duplicate_uuid IN (SELECT uuid FROM mock_geometries UNION SELECT uuid FROM mock_tasks);
+UPDATE dedup_audit_events SET actor_uuid = NULL WHERE actor_uuid IN (SELECT uuid FROM mock_users);
+DELETE FROM duplicate_pairs WHERE uuid IN (SELECT uuid FROM mock_pairs);
+UPDATE duplicate_pairs SET reviewed_by = NULL WHERE reviewed_by IN (SELECT uuid FROM mock_users);
 -- target_uuid 是字串,沒有外鍵。
 DELETE FROM station_update_suggestions
  WHERE created_by IN (SELECT uuid FROM mock_users)
     OR reviewed_by IN (SELECT uuid FROM mock_users)
-    OR target_uuid IN (SELECT uuid::text FROM mock_geometries);
+    OR target_uuid IN (SELECT uuid::text FROM mock_geometries)
+    OR merge_uuid IN (SELECT uuid FROM mock_merges);
+DELETE FROM station_suggestion_merges WHERE uuid IN (SELECT uuid FROM mock_merges);
 -- 承接紀錄:mock 的需求上的(含真人接的),以及 mock 帳號接別人的。
 DELETE FROM task_assignments
  WHERE uuid::text LIKE 'f0000000-%'
@@ -76,6 +105,13 @@ DELETE FROM task_assignments
 DELETE FROM task_properties WHERE task_uuid IN (SELECT uuid FROM mock_tasks);
 DELETE FROM ticket_tasks WHERE uuid IN (SELECT uuid FROM mock_tasks);
 DELETE FROM ticket_disaster_details WHERE ticket_uuid IN (SELECT uuid FROM mock_geometries);
+-- 建築地圖本身也是 geometry:mock 的地圖、mock 的單,對應都刪。
+DELETE FROM building_map_ticket_map
+ WHERE building_map_uuid IN (SELECT uuid FROM mock_geometries)
+    OR ticket_uuid IN (SELECT uuid FROM mock_geometries);
+-- 別人的單留著,只放掉 mock 帳號留下的檢核者。
+UPDATE tickets SET audited_by = NULL
+ WHERE audited_by IN (SELECT uuid FROM mock_users) AND uuid NOT IN (SELECT uuid FROM mock_geometries);
 DELETE FROM tickets WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM secondary_locations WHERE geometry_uuid IN (SELECT uuid FROM mock_geometries);
 -- photos.ref_uuid 沒有外鍵:照它屬於哪張單/哪個站點刪,也照上傳者刪
@@ -104,6 +140,12 @@ DELETE FROM stations WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM hazardous_zones WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM team_zones WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM area_polygons WHERE uuid IN (SELECT uuid FROM mock_geometries);
+DELETE FROM building_maps WHERE uuid IN (SELECT uuid FROM mock_geometries);
+-- 別人的需求留著,只放掉指向要刪的路線的欄位。
+UPDATE ticket_tasks SET route_uuid = NULL
+ WHERE route_uuid IN (SELECT uuid FROM routes
+                       WHERE origin_uuid IN (SELECT uuid FROM mock_geometries)
+                          OR destination_uuid IN (SELECT uuid FROM mock_geometries));
 DELETE FROM routes
  WHERE origin_uuid IN (SELECT uuid FROM mock_geometries)
     OR destination_uuid IN (SELECT uuid FROM mock_geometries);
