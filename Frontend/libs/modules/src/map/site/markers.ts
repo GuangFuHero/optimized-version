@@ -9,7 +9,7 @@ import {
 } from '@rescue-frontend/data-access';
 import type { Geometry, Polygon } from 'geojson';
 
-import { AREA_KIND_LABELS, areaSignature, isAreaKind } from '../areas';
+import { areaSignature, isAreaKind } from '../areas';
 import type {
   RescueMapArea,
   RescueMapClosureArea,
@@ -294,7 +294,7 @@ export function mapAreasToOverlays(
 
     const area: RescueMapArea = {
       id: item.uuid,
-      label: item.name?.trim() || AREA_KIND_LABELS[item.type],
+      name: item.name?.trim() || null,
       comment: item.note,
       polygons,
     };

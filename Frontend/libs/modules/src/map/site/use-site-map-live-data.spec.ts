@@ -63,7 +63,7 @@ describe('replaceTicketStatus', () => {
 describe('replaceData', () => {
   const zone = {
     id: 'zone-1',
-    label: '大平村',
+    name: '大平村',
     comment: null,
     polygons: [
       [

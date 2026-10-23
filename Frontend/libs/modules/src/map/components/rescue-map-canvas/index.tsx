@@ -11,7 +11,10 @@ import {
 import { createPortal } from 'react-dom';
 
 import {
+  areaKind,
+  areaLabelPlacement,
   areaSignature,
+  areaTitle,
   areaTooltipLines,
   largestAreasFirst,
 } from '../../areas';
@@ -98,8 +101,15 @@ interface MarkerHandle {
   iconSignature: string;
 }
 
+interface AreaLabel {
+  shape: L.Polygon;
+  marker: L.Marker;
+  element: HTMLElement;
+}
+
 interface AreaHandle {
   layerGroup: L.FeatureGroup;
+  labels: AreaLabel[];
   signature: string;
 }
 
@@ -213,7 +223,7 @@ const HAZARD_ZONE_STYLE: L.PathOptions = {
   fillOpacity: 0.6,
 };
 
-/** 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx:617-624`). */
+/** 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx`, 2026-10-23). */
 function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
   const zoneColor = PUBLIC_ZONE_COLORS[zone.kind];
 
@@ -221,15 +231,63 @@ function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
     pane: PUBLIC_ZONE_PANE,
     className: 'map-area',
     color: zoneColor,
-    weight: 2,
-    opacity: 0.9,
+    weight: 2.5,
+    opacity: 0.95,
     fillColor: zoneColor,
-    fillOpacity: 0.16,
+    fillOpacity: 0.14,
   };
 }
 
 /**
- * Its name, teams and note, on hover, or on a tap, which also opens a Leaflet tooltip. Made of
+ * The label every area wears, its kind and name (prototype ZONE-STYLE-102). Under the pins, which
+ * must stay tappable (prototype `zIndexOffset: -1000`). Not tappable itself until the designer
+ * settles what a tap on an area does: a tap goes through it to the area and the map below.
+ */
+function createAreaLabel(
+  shape: L.Polygon,
+  area: RescueMapArea | RescueMapPublicZone,
+): AreaLabel {
+  const element = document.createElement('div');
+  element.className =
+    areaKind(area) === 'hazardous_zone'
+      ? 'map-area-label map-area-label--hazard'
+      : 'map-area-label';
+  element.textContent = areaTitle(area);
+
+  const marker = L.marker(shape.getBounds().getCenter(), {
+    icon: L.divIcon({
+      className: 'map-area-label-anchor',
+      html: element,
+      iconSize: [0, 0],
+    }),
+    interactive: false,
+    keyboard: false,
+    zIndexOffset: -1000,
+  });
+
+  return { shape, marker, element };
+}
+
+/** Puts a label where `areaLabelPlacement` says, for the zoom the map is at now. */
+function placeAreaLabel(map: L.Map, { shape, marker, element }: AreaLabel) {
+  const bounds = shape.getBounds();
+  const northWest = map.latLngToLayerPoint(bounds.getNorthWest());
+  const southEast = map.latLngToLayerPoint(bounds.getSouthEast());
+  const place = areaLabelPlacement(
+    { width: southEast.x - northWest.x, height: southEast.y - northWest.y },
+    { width: element.offsetWidth, height: element.offsetHeight },
+  );
+
+  marker.setLatLng(
+    place === 'center'
+      ? bounds.getCenter()
+      : L.latLng(bounds.getSouth(), bounds.getCenter().lng),
+  );
+  element.dataset.place = place;
+}
+
+/**
+ * Its title, teams and note, on hover, or on a tap, which also opens a Leaflet tooltip. Made of
  * elements rather than HTML: the words are typed in the back office. Sticky, following the pointer,
  * as the middle of a large area may lie off screen; and beside it, towards the map's middle, so it
  * keeps clear of the screen's edge and of the crosshair's 「在這裡新增」, which a tap on the map
@@ -259,31 +317,39 @@ function bindAreaTooltip(
   });
 }
 
+/** Each part of the area, with its tooltip and its label. Returns the labels, to be placed. */
 function renderArea<T extends RescueMapArea>(
   layerGroup: L.FeatureGroup,
   area: T,
   style: (area: T) => L.PathOptions,
-) {
-  area.polygons.forEach((polygon) => {
+): AreaLabel[] {
+  return area.polygons.map((polygon) => {
     const shape = L.polygon(polygon, style(area));
     bindAreaTooltip(shape, area);
     shape.addTo(layerGroup);
+
+    const label = createAreaLabel(shape, area);
+    label.marker.addTo(layerGroup);
+
+    return label;
   });
 }
 
 function syncAreaLayer<T extends RescueMapArea>({
+  map,
   overlayLayer,
   areas,
   handles,
   style,
 }: {
+  map: L.Map;
   overlayLayer: L.LayerGroup;
   areas: readonly T[];
   handles: Map<string, AreaHandle>;
   style: (area: T) => L.PathOptions;
 }) {
   const nextIds = new Set(areas.map((area) => area.id));
-  let drawn = false;
+  const drawn: AreaHandle[] = [];
 
   handles.forEach((handle, id) => {
     if (!nextIds.has(id)) {
@@ -298,13 +364,11 @@ function syncAreaLayer<T extends RescueMapArea>({
 
     if (!existing) {
       const layerGroup = L.featureGroup();
-      renderArea(layerGroup, area, style);
+      const labels = renderArea(layerGroup, area, style);
       overlayLayer.addLayer(layerGroup);
-      handles.set(area.id, {
-        layerGroup,
-        signature,
-      });
-      drawn = true;
+      const handle = { layerGroup, labels, signature };
+      handles.set(area.id, handle);
+      drawn.push(handle);
       return;
     }
 
@@ -313,17 +377,24 @@ function syncAreaLayer<T extends RescueMapArea>({
     }
 
     existing.layerGroup.clearLayers();
-    renderArea(existing.layerGroup, area, style);
+    existing.labels = renderArea(existing.layerGroup, area, style);
     existing.signature = signature;
-    drawn = true;
+    drawn.push(existing);
+  });
+
+  if (drawn.length === 0) {
+    return;
+  }
+
+  // A label is measured once it is on the map.
+  drawn.forEach((handle) => {
+    handle.labels.forEach((label) => placeAreaLabel(map, label));
   });
 
   // A newly drawn area lands on top; stack them again so a smaller one stays over a larger.
-  if (drawn) {
-    largestAreasFirst(areas).forEach((area) => {
-      handles.get(area.id)?.layerGroup.bringToFront();
-    });
-  }
+  largestAreasFirst(areas).forEach((area) => {
+    handles.get(area.id)?.layerGroup.bringToFront();
+  });
 }
 
 /** Unsubscribe handle for the no-op store. Named so the empty body reads as deliberate. */
@@ -692,6 +763,8 @@ export function RescueMapCanvas({
     const overlayLayer = L.layerGroup();
     const cellLayer = L.layerGroup();
     const markerHandles = markerHandlesRef.current;
+    const closureAreaHandles = closureAreaHandlesRef.current;
+    const publicZoneHandles = publicZoneHandlesRef.current;
     let cancelled = false;
 
     mapRef.current = map;
@@ -802,9 +875,19 @@ export function RescueMapCanvas({
     const fitCellLabels = () =>
       fitLocationCellLabels(map, cellLabelsRef.current);
 
+    // An area grows and shrinks on screen with the zoom: whether its label fits inside it changes.
+    const placeAreaLabels = () => {
+      [closureAreaHandles, publicZoneHandles].forEach((handles) => {
+        handles.forEach((handle) => {
+          handle.labels.forEach((label) => placeAreaLabel(map, label));
+        });
+      });
+    };
+
     map.on('moveend', scheduleViewportSync);
     map.on('zoomend', scheduleViewportSync);
     map.on('zoomend', fitCellLabels);
+    map.on('zoomend', placeAreaLabels);
     map.on('click', handleMapClick);
     map.on('movestart', releaseDraftPoint);
     map.on('zoomstart', releaseDraftPoint);
@@ -833,14 +916,15 @@ export function RescueMapCanvas({
       map.off('moveend', scheduleViewportSync);
       map.off('zoomend', scheduleViewportSync);
       map.off('zoomend', fitCellLabels);
+      map.off('zoomend', placeAreaLabels);
       map.off('click', handleMapClick);
       map.off('movestart', releaseDraftPoint);
       map.off('zoomstart', releaseDraftPoint);
       cancelled = true;
 
       markerHandles.clear();
-      closureAreaHandlesRef.current.clear();
-      publicZoneHandlesRef.current.clear();
+      closureAreaHandles.clear();
+      publicZoneHandles.clear();
       markerLayerRef.current = null;
       overlayLayerRef.current = null;
       cellLayerRef.current = null;
@@ -1016,13 +1100,15 @@ export function RescueMapCanvas({
   }, [controller.markers, controller.selectedMarkerId]);
 
   useEffect(() => {
+    const map = mapRef.current;
     const overlayLayer = overlayLayerRef.current;
 
-    if (!overlayLayer) {
+    if (!map || !overlayLayer) {
       return;
     }
 
     syncAreaLayer({
+      map,
       overlayLayer,
       areas: controller.closureAreas,
       handles: closureAreaHandlesRef.current,
@@ -1031,13 +1117,15 @@ export function RescueMapCanvas({
   }, [controller.closureAreas]);
 
   useEffect(() => {
+    const map = mapRef.current;
     const overlayLayer = overlayLayerRef.current;
 
-    if (!overlayLayer) {
+    if (!map || !overlayLayer) {
       return;
     }
 
     syncAreaLayer({
+      map,
       overlayLayer,
       areas: controller.publicZones,
       handles: publicZoneHandlesRef.current,

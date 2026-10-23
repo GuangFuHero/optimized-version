@@ -123,7 +123,7 @@ describe('mapAreasToOverlays', () => {
     expect(closureAreas).toEqual([
       {
         id: 'area-1',
-        label: '堤防潰口',
+        name: '堤防潰口',
         comment: '勿靠近',
         polygons: [
           [
@@ -138,31 +138,31 @@ describe('mapAreasToOverlays', () => {
       },
     ]);
     expect(
-      publicZones.map(({ id, kind, label, teams }) => ({
+      publicZones.map(({ id, kind, name, teams }) => ({
         id,
         kind,
-        label,
+        name,
         teams,
       })),
     ).toEqual([
       {
         id: 'area-2',
         kind: 'team_zone',
-        label: '大平村',
+        name: '大平村',
         teams: ['慈濟基金會', '紅十字會'],
       },
-      { id: 'area-3', kind: 'mark_zone', label: '志工休息區', teams: [] },
+      { id: 'area-3', kind: 'mark_zone', name: '志工休息區', teams: [] },
     ]);
   });
 
-  it('names an area without a name after its kind', () => {
+  it('takes a name of only spaces as none', () => {
     const { closureAreas, publicZones } = mapAreasToOverlays([
       area({ name: null }),
       area({ uuid: 'area-2', type: 'mark_zone', name: '   ' }),
     ]);
 
-    expect(closureAreas[0]?.label).toBe('危險區');
-    expect(publicZones[0]?.label).toBe('標示區');
+    expect(closureAreas[0]?.name).toBeNull();
+    expect(publicZones[0]?.name).toBeNull();
   });
 
   it('draws every part of a MultiPolygon, and leaves out what it cannot draw', () => {

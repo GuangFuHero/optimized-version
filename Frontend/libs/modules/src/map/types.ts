@@ -106,8 +106,8 @@ export interface RescueMapAdministrativeArea {
 /** An area drawn on the back office's 互助地圖, as the public map shows it (backend `areas`, ADR-311). */
 export interface RescueMapArea {
   id: string;
-  /** Its name, or its kind's (危險區, 責任區, 標示區) when it has none. */
-  label: string;
+  /** Null when the back office gave it none. */
+  name: string | null;
   comment?: string | null;
   polygons: [number, number][][][];
 }

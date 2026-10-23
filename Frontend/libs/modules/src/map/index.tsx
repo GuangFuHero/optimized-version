@@ -166,6 +166,35 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-area-tooltip__name': {
     fontWeight: 700,
   },
+  // An area's label, 「責任區・大平村」 (rescue-map-canvas `createAreaLabel`; prototype `前台地圖 Site
+  // Map.html`, 2026-10-23). Its anchor is the area's middle, or its bottom edge when the label hangs
+  // below it, clear of the area.
+  '.map-area-label-anchor': {
+    background: 'none',
+    border: 'none',
+  },
+  '.map-area-label': {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    transform: 'translate(-50%, -50%)',
+    padding: '3px 8px',
+    borderRadius: 6,
+    border: `1px solid ${color.border.default}`,
+    backgroundColor: color.bg.neutral.default,
+    color: color.fg.neutral.default,
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.15)',
+    ...displayTextSizeCss(12),
+    fontWeight: 700,
+    lineHeight: 1.3,
+    whiteSpace: 'nowrap',
+  },
+  '.map-area-label[data-place="below"]': {
+    transform: 'translate(-50%, 4px)',
+  },
+  '.map-area-label--hazard': {
+    borderColor: color.bg.warning.hover,
+  },
 } as const;
 
 interface MapProps {

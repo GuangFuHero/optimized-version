@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  areaLabelPlacement,
   areaSignature,
+  areaTitle,
   areaTooltipLines,
   isAreaKind,
   largestAreasFirst,
@@ -10,7 +12,7 @@ import type { RescueMapPublicZone } from './types';
 
 const ZONE: RescueMapPublicZone = {
   id: 'zone-1',
-  label: '大平村',
+  name: '大平村',
   comment: '物資放村辦公處',
   polygons: [
     [
@@ -25,10 +27,27 @@ const ZONE: RescueMapPublicZone = {
   teams: ['慈濟基金會', '紅十字會'],
 };
 
+describe('areaTitle', () => {
+  it('writes the kind before the name, and the kind alone for an area without one', () => {
+    expect(areaTitle(ZONE)).toBe('責任區・大平村');
+    expect(areaTitle({ ...ZONE, kind: 'mark_zone', name: null })).toBe(
+      '標示區',
+    );
+    expect(
+      areaTitle({
+        id: 'hazard-1',
+        name: '堤防潰口',
+        comment: null,
+        polygons: [],
+      }),
+    ).toBe('危險區・堤防潰口');
+  });
+});
+
 describe('areaTooltipLines', () => {
-  it("tells a 責任區's name, its teams and its note, one to a line", () => {
+  it("tells a 責任區's title, its teams and its note, one to a line", () => {
     expect(areaTooltipLines(ZONE)).toEqual([
-      '大平村',
+      '責任區・大平村',
       '負責：慈濟基金會、紅十字會',
       '物資放村辦公處',
     ]);
@@ -42,15 +61,32 @@ describe('areaTooltipLines', () => {
         teams: [],
         comment: '  ',
       }),
-    ).toEqual(['大平村']);
+    ).toEqual(['標示區・大平村']);
     expect(
       areaTooltipLines({
         id: 'hazard-1',
-        label: '堤防潰口',
+        name: '堤防潰口',
         comment: null,
         polygons: [],
       }),
-    ).toEqual(['堤防潰口']);
+    ).toEqual(['危險區・堤防潰口']);
+  });
+});
+
+describe('areaLabelPlacement', () => {
+  const label = { width: 100, height: 22 };
+
+  it('puts the label in the middle of an area with 8px to spare all round', () => {
+    expect(areaLabelPlacement({ width: 116, height: 38 }, label)).toBe(
+      'center',
+    );
+  });
+
+  it('hangs it below an area too narrow or too short for it, such as a 休息區', () => {
+    expect(areaLabelPlacement({ width: 115, height: 200 }, label)).toBe(
+      'below',
+    );
+    expect(areaLabelPlacement({ width: 300, height: 37 }, label)).toBe('below');
   });
 });
 

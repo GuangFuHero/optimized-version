@@ -13,9 +13,27 @@ export function isAreaKind(value: string): value is RescueMapAreaKind {
   return Object.prototype.hasOwnProperty.call(AREA_KIND_LABELS, value);
 }
 
+/** A 危險區 on the 封閉區域 layer carries no kind of its own. */
+export function areaKind(
+  area: RescueMapArea | RescueMapPublicZone,
+): RescueMapAreaKind {
+  return 'kind' in area ? area.kind : 'hazardous_zone';
+}
+
 /**
- * What hovering over an area, or tapping it, tells (prototype `site-map.jsx:614`): its name, the
- * teams of a 責任區, and its note. One per line, as a note can run long.
+ * 「責任區・大平村」: its kind and name, as the label on the map writes it (prototype
+ * `site-map.jsx`, ZONE-STYLE-102), so a phone, which has no hover, tells the kinds apart. An area
+ * without a name is its kind alone.
+ */
+export function areaTitle(area: RescueMapArea | RescueMapPublicZone): string {
+  const kind = AREA_KIND_LABELS[areaKind(area)];
+
+  return area.name ? `${kind}・${area.name}` : kind;
+}
+
+/**
+ * What hovering over an area, or tapping it, tells: its title, the teams of a 責任區, and its
+ * note. One per line, as a note can run long.
  */
 export function areaTooltipLines(
   area: RescueMapArea | RescueMapPublicZone,
@@ -25,9 +43,29 @@ export function areaTooltipLines(
       ? `負責：${area.teams.join('、')}`
       : null;
 
-  return [area.label, teams, area.comment?.trim()].filter(
+  return [areaTitle(area), teams, area.comment?.trim()].filter(
     (line): line is string => Boolean(line),
   );
+}
+
+interface PixelSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * Where an area's label goes at the present zoom (prototype ZONE-LABEL-101): in its middle when the
+ * area has room for it with 8px to spare all round, else just below it. A label must not cover its
+ * own area, and a 休息區 is always small. Measured in pixels on screen, not by zoom level, as areas
+ * differ so much in size.
+ */
+export function areaLabelPlacement(
+  area: PixelSize,
+  label: PixelSize,
+): 'center' | 'below' {
+  return area.width >= label.width + 16 && area.height >= label.height + 16
+    ? 'center'
+    : 'below';
 }
 
 /**
@@ -62,7 +100,7 @@ export function areaSignature(
 ): string {
   return [
     area.id,
-    'kind' in area ? area.kind : 'hazardous_zone',
+    areaKind(area),
     JSON.stringify(area.polygons),
     ...areaTooltipLines(area),
   ].join('|');
