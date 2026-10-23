@@ -23,8 +23,7 @@ import {
   Markdown,
 } from '@rescue-frontend/ui';
 
-import { formatTaiwanTime } from '../ticket/my-claims/my-claims';
-import { timeAgo } from '../time';
+import { formatTaiwanTime, timeAgo } from '../time';
 import {
   BRIEFING_MARKDOWN_COMPONENTS,
   BriefingChecklistProvider,

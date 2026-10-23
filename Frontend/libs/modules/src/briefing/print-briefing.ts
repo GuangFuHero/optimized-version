@@ -1,4 +1,4 @@
-import { formatTaiwanTime } from '../ticket/my-claims/my-claims';
+import { formatTaiwanTime } from '../time';
 
 /** The class of the sheet that alone is printed; `BriefingPrintStyles` shows it only on paper. */
 export const BRIEFING_PRINT_SHEET = 'briefing-print-sheet';
