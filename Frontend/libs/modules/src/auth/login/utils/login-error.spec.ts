@@ -27,12 +27,6 @@ describe('loginErrorMessage', () => {
     expect(message).not.toBe(GENERIC_MESSAGE);
   });
 
-  // What a wrong password signs in to through next-auth's `authorize` (`?error=`). Anywhere else the
-  // same code means the session is gone.
-  it('reads a credentials_invalid as a wrong account or password', () => {
-    expect(loginErrorMessage('credentials_invalid')).toBe('帳號或密碼不正確。');
-  });
-
   it('says something general for a code it does not know, never the code itself', () => {
     expect(loginErrorMessage('some_new_backend_code')).toBe(GENERIC_MESSAGE);
   });

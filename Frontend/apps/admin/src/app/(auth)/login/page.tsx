@@ -27,11 +27,7 @@ export default function Index() {
   return (
     <Suspense fallback={null}>
       <AuthShell>
-        <LoginFormClient
-          defaultCallbackUrl="/"
-          signInWith="backend"
-          app="admin"
-        />
+        <LoginFormClient defaultCallbackUrl="/" app="admin" />
 
         {/* <AuthFooterLinks items={FOOTER_LINKS} /> */}
       </AuthShell>

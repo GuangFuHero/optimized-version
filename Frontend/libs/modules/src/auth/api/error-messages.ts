@@ -64,8 +64,7 @@ const MESSAGE_BY_CODE: Record<string, string> = {
 /**
  * Look up the copy for a backend error code, or `undefined` if we have none for it.
  *
- * For callers holding a bare code rather than an error — next-auth hands the login page one through
- * `?error=`, having discarded the error object on the way.
+ * For callers holding a bare code rather than an error — the login page's `?error=`.
  */
 export function messageForCode(code: string) {
   return MESSAGE_BY_CODE[code];
