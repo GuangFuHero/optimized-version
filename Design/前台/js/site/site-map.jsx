@@ -610,7 +610,9 @@
            · 區域比標籤大一圈 → 標籤放正中央
            · 區域放不下標籤   → 標籤移到區域**正下方**，留 4px 縫，區域整塊露出來
          ❌ 不要改回固定置中；❌ 不要用縮放級距寫死（區域大小差很多，要量實際像素）。
-         標籤可點，點了等於點區域（跳出負責單位與備註）。 */
+         🔒 ZONE-CLICK-101（10-23）**只有標籤可點**（跳出負責單位與備註），區域本身不可點。
+            責任區常常很大（整個鄉），區域若可點，在裡面點哪裡都只會跳說明，就不能點地圖「在這裡新增」任務。
+            ❌ 不要把區域改回可點、也不要在區域上 bindPopup 後靠點擊打開。 */
       const labels = [];
       function addLabel(poly, text, hazard) {
         const div = document.createElement('div');
@@ -644,9 +646,9 @@
       const fillColor = resolveCssToken(closureConfig.fillColor);
       controller.closureAreas.forEach((area) => {
         area.polygons.forEach((rings) => {
-          const poly = L.polygon(rings, H ? H.polygonStyle() : {
+          const poly = L.polygon(rings, Object.assign(H ? H.polygonStyle() : {
             color: strokeColor, weight: 2, opacity: 0.9, fillColor, fillOpacity: 0.18, dashArray: '6 4',
-          });
+          }, area.kind === 'hazard' ? { interactive: false } : {}));   // ZONE-CLICK-101
           if (area.kind === 'hazard') {
             // 後台畫的危險區：同責任區／標示區，類型寫在常駐標籤上（ZONE-STYLE-102）
             if (area.comment) poly.bindPopup(escHtml('危險區・' + area.label) + '<br>' + escHtml(area.comment));
@@ -663,13 +665,14 @@
             前台多在手機上用，手機沒有「滑過」。
          🔒 ZONE-COLOR-101 顏色照類型：責任區靛、標示區綠（wg-hazard.js 的 wgZoneColor）。
          🔄 2026-10-23 PM 裁示（照後端 ADR-311 10-11 修訂）：責任區前後台都公布被指派的單位（推翻 09-25 不顯示）。
-            常駐標籤只放「類型・名稱」（標籤太長會蓋住站點）；點區域或標籤跳出「負責：單位」與備註。 */
+            常駐標籤只放「類型・名稱」（標籤太長會蓋住站點）；點標籤跳出「負責：單位」與備註（ZONE-CLICK-101）。 */
       const KIND_LABEL = { assign: '責任區', mark: '標示區' };
       (controller.publicZones || []).forEach((area) => {
         const col = area.color || resolveCssToken(R.OVERLAY_LAYER_CONFIG['public-zones'].color);
         const kind = KIND_LABEL[area.kind] || '區域';
         area.polygons.forEach((rings) => {
-          const poly = L.polygon(rings, { color: col, weight: 2.5, opacity: 0.95, fillColor: col, fillOpacity: 0.14 });
+          // 🔒 ZONE-CLICK-101：區域本身不可點（interactive: false），點下去直接穿到地圖 →「在這裡新增」照常出現
+          const poly = L.polygon(rings, { color: col, weight: 2.5, opacity: 0.95, fillColor: col, fillOpacity: 0.14, interactive: false });
           const lines = [kind + '・' + area.label];
           if (area.kind === 'assign' && area.team) lines.push('負責：' + area.team);
           if (area.comment) lines.push(area.comment);
