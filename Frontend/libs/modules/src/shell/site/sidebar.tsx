@@ -23,7 +23,7 @@ import { BRIEFING_HREF } from '../../ticket/needs/briefing';
 import { PageHelpIcon } from './page-help';
 
 import { GuangFuBrandIcon } from '../../brand';
-import { useSiteRouteState } from '../../route';
+import { isSiteModulePath, useSiteRouteState } from '../../route';
 import { SITE_MODULES } from '../../route/constants';
 import { SITE_MODULE_META } from '../../route/module-meta';
 import { createSiteHref } from '../../route/serialize';
@@ -103,9 +103,7 @@ function SiteSidebarNav({
   state: SiteRouteState;
   pathname: string;
 }) {
-  // Every other address reads as the map to the route state (`resolveModule`); only the map and
-  // the list themselves light their entry.
-  const onModulePage = /^\/(map|list)(\/|$)/.test(pathname);
+  const onModulePage = isSiteModulePath(pathname);
 
   return (
     <Stack
