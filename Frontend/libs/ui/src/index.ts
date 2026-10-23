@@ -60,7 +60,7 @@ export type {
 } from './components/MapMarker';
 export { MetadataTable } from './components/MetadataTable';
 export { Markdown } from './components/Markdown';
-export type { MarkdownProps } from './components/Markdown';
+export type { MarkdownProps, MarkdownTask } from './components/Markdown';
 export { MarkdownEditor } from './components/MarkdownEditor';
 export type { MarkdownEditorProps } from './components/MarkdownEditor';
 export { localStorageKeys } from './constant/local-storage-keys';

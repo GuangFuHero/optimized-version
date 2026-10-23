@@ -23,6 +23,7 @@ export function PublishBriefingDialog({
   return (
     <Dialog
       {...props}
+      variant="sectioned"
       title="確認發布到前台？"
       confirmLabel={props.submitting ? '發布中…' : '確認發布'}
       cancelLabel="返回修改"

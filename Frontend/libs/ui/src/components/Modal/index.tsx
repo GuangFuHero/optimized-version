@@ -11,7 +11,7 @@ import {
 import { X } from 'lucide-react';
 import { useId, type FormEventHandler, type ReactNode } from 'react';
 
-import { designTokens } from '../../theme';
+import { designTokens, displayTextSize } from '../../theme';
 
 const { color, radius, shadow, typography } = designTokens;
 
@@ -64,8 +64,8 @@ export function Modal({
             maxWidth: 'calc(100% - 32px)',
             height,
             maxHeight: {
-              mobile: 'calc(100dvh - 32px)',
-              tablet: 'calc(100dvh - 48px)',
+              mobile: 'calc(100% - 32px)',
+              tablet: 'calc(100% - 48px)',
             },
             display: 'flex',
             flexDirection: 'column',
@@ -94,7 +94,7 @@ export function Modal({
           <Typography
             component="h2"
             id={`${id}-title`}
-            sx={{ ...typography.heading[600], fontSize: 19 }}
+            sx={{ ...typography.heading[600], fontSize: displayTextSize[20] }}
           >
             {title}
           </Typography>

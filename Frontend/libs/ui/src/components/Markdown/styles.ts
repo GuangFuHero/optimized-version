@@ -74,6 +74,24 @@ const content = {
     borderRadius: `${radius.md}px`,
     '& code': { p: 0, bgcolor: 'transparent' },
   },
+  '& table': { borderCollapse: 'collapse', width: '100%', my: 2 },
+  '& th, & td': {
+    border: `1px solid ${color.border.default}`,
+    p: 1,
+    verticalAlign: 'top',
+  },
+  '& th': { bgcolor: color.bg.neutral.subtle, fontWeight: 700 },
+  '& ul[data-type="taskList"] > li[data-task-updated="true"]::after': {
+    content: '"已更新"',
+    alignSelf: 'flex-start',
+    flexShrink: 0,
+    mt: '4px',
+    px: 1,
+    borderRadius: `${radius.full}px`,
+    ...typography.label[300],
+    bgcolor: color.bg.info.subtle,
+    color: color.fg.info,
+  },
   '& ul[data-type="taskList"]': { listStyle: 'none', pl: 0 },
   '& ul[data-type="taskList"] > li': {
     display: 'flex',
@@ -90,7 +108,7 @@ const content = {
   '& ul[data-type="taskList"] > li > div': { flex: 1, minWidth: 0 },
   '& ul[data-type="taskList"] > li > div > :is(ul, ol)': { mt: '8px' },
   '& ul[data-type="taskList"] > li > div > :last-child': { mb: 0 },
-  '& ul[data-type="taskList"] > li[data-checked="true"] > div': {
+  '& ul[data-type="taskList"] > li[data-checked="true"] > div > :not(ul, ol)': {
     opacity: 0.45,
   },
   '& ul[data-type="taskList"] input[type="checkbox"]': {

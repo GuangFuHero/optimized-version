@@ -22,7 +22,7 @@ import {
   RemoveFormatting,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import { designTokens } from '../../theme';
 import { Button } from '../Button';
@@ -184,6 +184,10 @@ export function MarkdownEditor({
   const [prompt, setPrompt] = useState<keyof typeof urlPrompts | null>(null);
   const [url, setUrl] = useState('');
   const [urlError, setUrlError] = useState('');
+  const initialContent = useRef({
+    source: defaultValue,
+    markdown: defaultValue,
+  });
   const editor = useEditor({
     extensions: markdownExtensions(),
     content: defaultValue,
@@ -194,9 +198,20 @@ export function MarkdownEditor({
         'aria-label': label,
         'aria-multiline': 'true',
         role: 'textbox',
+        translate: 'yes',
       },
     },
-    onUpdate: ({ editor }) => onChange(editor.getMarkdown()),
+    onCreate: ({ editor }) => {
+      initialContent.current.markdown = editor.getMarkdown();
+    },
+    onUpdate: ({ editor }) => {
+      const markdown = editor.getMarkdown();
+      onChange(
+        markdown === initialContent.current.markdown
+          ? initialContent.current.source
+          : markdown,
+      );
+    },
   });
   const active = useEditorState({
     editor,
@@ -205,7 +220,7 @@ export function MarkdownEditor({
   });
 
   useEffect(() => {
-    editor?.setEditable(!disabled);
+    editor?.setEditable(!disabled, false);
   }, [editor, disabled]);
 
   function openPrompt(kind: keyof typeof urlPrompts) {
@@ -215,7 +230,7 @@ export function MarkdownEditor({
   }
 
   function applyUrl() {
-    if (!editor || !prompt) return;
+    if (disabled || !editor || !prompt) return;
     const value = url.trim();
     if (!urlPrompts[prompt].pattern.test(value)) {
       setUrlError(urlPrompts[prompt].error);
@@ -331,6 +346,7 @@ export function MarkdownEditor({
             >
               <TextInput
                 autoFocus
+                disabled={disabled}
                 label={urlPrompts[prompt].label}
                 placeholder={urlPrompts[prompt].placeholder}
                 value={url}
@@ -341,7 +357,7 @@ export function MarkdownEditor({
                 }}
               />
               <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
-                <Button size="sm" type="submit">
+                <Button size="sm" type="submit" disabled={disabled}>
                   {urlPrompts[prompt].confirm}
                 </Button>
                 <Button

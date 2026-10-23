@@ -1,5 +1,6 @@
 import { Box } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
 
 import { Markdown } from './index';
 
@@ -122,7 +123,27 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Briefing: Story = { args: { articleId: 'briefing' } };
+export const Briefing: Story = {
+  render: function BriefingStory(args) {
+    const [checked, setChecked] = useState(new Set<string>());
+    return (
+      <Markdown
+        {...args}
+        checklist={{
+          checked,
+          onToggle: (label) =>
+            setChecked((current) => {
+              const next = new Set(current);
+              if (next.has(label)) next.delete(label);
+              else next.add(label);
+              return next;
+            }),
+        }}
+        navigation
+      />
+    );
+  },
+};
 
 export const Formatting: Story = {
   args: {
