@@ -13,9 +13,9 @@ import { createPortal } from 'react-dom';
 import {
   areaKind,
   areaLabelPlacement,
+  areaPopupLines,
   areaSignature,
   areaTitle,
-  areaTooltipLines,
   largestAreasFirst,
 } from '../../areas';
 import { PUBLIC_ZONE_COLORS } from '../../constants';
@@ -203,8 +203,8 @@ function createClusterIcon({
 /** The 危險區's stripes, defined once by the canvas's own `<svg>` and filled in by id. */
 const HAZARD_STRIPES_ID = 'rescue-map-hazard-stripes';
 
-// Areas lie under the overlay pane (400), so a guest's cells stay on top and take their taps, and
-// the 危險區 over the other zones.
+// Areas lie under the overlay pane (400), so a guest's cells are drawn over them, and the 危險區 over
+// the other zones.
 const PUBLIC_ZONE_PANE = 'rescueMapPublicZones';
 const HAZARD_ZONE_PANE = 'rescueMapHazardZones';
 
@@ -212,10 +212,13 @@ const HAZARD_ZONE_PANE = 'rescueMapHazardZones';
  * 危險區: orange and white stripes (designer 2026-09-25, prototype `wg-hazard.js`). Nothing else on
  * the map is striped, so the stripes alone say 危險, to the colour-blind too. Filled densely: thinned
  * out, the stripes read as a dirty orange.
+ *
+ * No area takes a tap (prototype ZONE-CLICK-101): a 責任區 is often a whole township, and a tap
+ * anywhere in it must still reach the map, for 「在這裡新增」. Its label tells about it instead.
  */
 const HAZARD_ZONE_STYLE: L.PathOptions = {
   pane: HAZARD_ZONE_PANE,
-  className: 'map-area',
+  interactive: false,
   color: color.bg.warning.hover,
   weight: 2.5,
   opacity: 1,
@@ -229,7 +232,7 @@ function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
 
   return {
     pane: PUBLIC_ZONE_PANE,
-    className: 'map-area',
+    interactive: false,
     color: zoneColor,
     weight: 2.5,
     opacity: 0.95,
@@ -239,9 +242,31 @@ function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
 }
 
 /**
+ * An area's title, teams and note, one to a line. Made of elements rather than HTML: the words are
+ * typed in the back office.
+ */
+function createAreaPopupContent(lines: readonly string[]) {
+  const content = document.createElement('div');
+
+  lines.forEach((line, index) => {
+    const row = document.createElement('div');
+    row.textContent = line;
+
+    if (index === 0) {
+      row.className = 'map-area-popup__name';
+    }
+
+    content.append(row);
+  });
+
+  return content;
+}
+
+/**
  * The label every area wears, its kind and name (prototype ZONE-STYLE-102). Under the pins, which
- * must stay tappable (prototype `zIndexOffset: -1000`). Not tappable itself until the designer
- * settles what a tap on an area does: a tap goes through it to the area and the map below.
+ * must stay tappable (prototype `zIndexOffset: -1000`). A tap on it, and only on it, opens the
+ * area's popup (prototype ZONE-CLICK-101) — when the popup has more to tell than the label, the
+ * teams or a note. Either way the tap stays off the map, as in the prototype.
  */
 function createAreaLabel(
   shape: L.Polygon,
@@ -260,15 +285,30 @@ function createAreaLabel(
       html: element,
       iconSize: [0, 0],
     }),
-    interactive: false,
     keyboard: false,
     zIndexOffset: -1000,
   });
+  const lines = areaPopupLines(area);
+
+  if (lines.length > 1) {
+    marker.bindPopup(createAreaPopupContent(lines), {
+      className: 'map-area-popup',
+      maxWidth: 260,
+    });
+  } else {
+    marker.on('click', L.DomEvent.stop);
+  }
 
   return { shape, marker, element };
 }
 
-/** Puts a label where `areaLabelPlacement` says, for the zoom the map is at now. */
+// How far a popup's tip reaches below where it is placed: Leaflet's own offset, less its tip.
+const POPUP_TIP_REACH = -3;
+
+/**
+ * Puts a label where `areaLabelPlacement` says, for the zoom the map is at now, and its popup to
+ * open just above it.
+ */
 function placeAreaLabel(map: L.Map, { shape, marker, element }: AreaLabel) {
   const bounds = shape.getBounds();
   const northWest = map.latLngToLayerPoint(bounds.getNorthWest());
@@ -284,40 +324,17 @@ function placeAreaLabel(map: L.Map, { shape, marker, element }: AreaLabel) {
       : L.latLng(bounds.getSouth(), bounds.getCenter().lng),
   );
   element.dataset.place = place;
+
+  // The label's top, from the point it hangs on (`.map-area-label` in `map/index.tsx`).
+  const labelTop = place === 'center' ? -element.offsetHeight / 2 : 4;
+  const popup = marker.getPopup();
+
+  if (popup) {
+    L.setOptions(popup, { offset: L.point(0, labelTop - POPUP_TIP_REACH) });
+  }
 }
 
-/**
- * Its title, teams and note, on hover, or on a tap, which also opens a Leaflet tooltip. Made of
- * elements rather than HTML: the words are typed in the back office. Sticky, following the pointer,
- * as the middle of a large area may lie off screen; and beside it, towards the map's middle, so it
- * keeps clear of the screen's edge and of the crosshair's 「在這裡新增」, which a tap on the map
- * raises above the same point.
- */
-function bindAreaTooltip(
-  polygon: L.Polygon,
-  area: RescueMapArea | RescueMapPublicZone,
-) {
-  const content = document.createElement('div');
-
-  areaTooltipLines(area).forEach((line, index) => {
-    const row = document.createElement('div');
-    row.textContent = line;
-
-    if (index === 0) {
-      row.className = 'map-area-tooltip__name';
-    }
-
-    content.append(row);
-  });
-
-  polygon.bindTooltip(content, {
-    sticky: true,
-    direction: 'auto',
-    className: 'map-area-tooltip',
-  });
-}
-
-/** Each part of the area, with its tooltip and its label. Returns the labels, to be placed. */
+/** Each part of the area, with its label. Returns the labels, to be placed. */
 function renderArea<T extends RescueMapArea>(
   layerGroup: L.FeatureGroup,
   area: T,
@@ -325,7 +342,6 @@ function renderArea<T extends RescueMapArea>(
 ): AreaLabel[] {
   return area.polygons.map((polygon) => {
     const shape = L.polygon(polygon, style(area));
-    bindAreaTooltip(shape, area);
     shape.addTo(layerGroup);
 
     const label = createAreaLabel(shape, area);

@@ -32,10 +32,10 @@ export function areaTitle(area: RescueMapArea | RescueMapPublicZone): string {
 }
 
 /**
- * What hovering over an area, or tapping it, tells: its title, the teams of a 責任區, and its
- * note. One per line, as a note can run long.
+ * What tapping an area's label tells (prototype ZONE-CLICK-101): its title, the teams of a 責任區,
+ * and its note. One per line, as a note can run long.
  */
-export function areaTooltipLines(
+export function areaPopupLines(
   area: RescueMapArea | RescueMapPublicZone,
 ): string[] {
   const teams =
@@ -70,7 +70,7 @@ export function areaLabelPlacement(
 
 /**
  * The areas, largest first, by the box around each. Drawn in this order, an area inside another
- * lies on top of it, so hovering over it tells about it rather than about the one around it.
+ * lies on top of it, its edge clear of the larger one's fill.
  */
 export function largestAreasFirst<T extends RescueMapArea>(
   areas: readonly T[],
@@ -102,6 +102,6 @@ export function areaSignature(
     area.id,
     areaKind(area),
     JSON.stringify(area.polygons),
-    ...areaTooltipLines(area),
+    ...areaPopupLines(area),
   ].join('|');
 }

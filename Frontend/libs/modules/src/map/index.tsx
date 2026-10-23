@@ -149,21 +149,14 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-location-cell-wrapper:hover .map-location-cell': {
     transform: 'scale(1.06)',
   },
-  // A click focuses an area's shape, as its tooltip listens for focus, and Chrome rings it in blue.
-  // No key reaches it, so the ring would only ever follow a click.
-  '.map-area:focus': {
-    outline: 'none',
-  },
-  // An area's name, teams and note (rescue-map-canvas `bindAreaTooltip`). Leaflet keeps a tooltip
-  // on one line; a note can run long.
-  '.map-area-tooltip': {
-    whiteSpace: 'normal',
-    width: 'max-content',
-    maxWidth: 260,
+  // An area's name, teams and note, opened from its label (rescue-map-canvas
+  // `createAreaPopupContent`). Leaflet's margin leaves room for its ×.
+  '.map-area-popup .leaflet-popup-content': {
+    margin: '10px 28px 10px 14px',
     ...displayTextSizeCss(13),
     lineHeight: 1.5,
   },
-  '.map-area-tooltip__name': {
+  '.map-area-popup__name': {
     fontWeight: 700,
   },
   // An area's label, 「責任區・大平村」 (rescue-map-canvas `createAreaLabel`; prototype `前台地圖 Site

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   areaLabelPlacement,
+  areaPopupLines,
   areaSignature,
   areaTitle,
-  areaTooltipLines,
   isAreaKind,
   largestAreasFirst,
 } from './areas';
@@ -44,9 +44,9 @@ describe('areaTitle', () => {
   });
 });
 
-describe('areaTooltipLines', () => {
+describe('areaPopupLines', () => {
   it("tells a 責任區's title, its teams and its note, one to a line", () => {
-    expect(areaTooltipLines(ZONE)).toEqual([
+    expect(areaPopupLines(ZONE)).toEqual([
       '責任區・大平村',
       '負責：慈濟基金會、紅十字會',
       '物資放村辦公處',
@@ -55,7 +55,7 @@ describe('areaTooltipLines', () => {
 
   it('leaves out what an area does not have: teams, or a note of only spaces', () => {
     expect(
-      areaTooltipLines({
+      areaPopupLines({
         ...ZONE,
         kind: 'mark_zone',
         teams: [],
@@ -63,7 +63,7 @@ describe('areaTooltipLines', () => {
       }),
     ).toEqual(['標示區・大平村']);
     expect(
-      areaTooltipLines({
+      areaPopupLines({
         id: 'hazard-1',
         name: '堤防潰口',
         comment: null,
