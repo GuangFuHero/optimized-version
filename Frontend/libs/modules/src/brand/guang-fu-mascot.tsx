@@ -1,60 +1,26 @@
 'use client';
 
-import { Box } from '@mui/material';
 import { useState, type CSSProperties } from 'react';
-
 import { designTokens } from '@rescue-frontend/ui';
 
-const { focusRing, typography } = designTokens;
+import styles from './guang-fu-mascot.module.css';
 
-/**
- * 光復寶寶's drawing, from the designer's `wg-mascot.jsx` (`origin/sucrelindesign` `bfc7bfd1`,
- * `Design/前台/assets/mascot/guangfu-baby-404.svg`): the paths untouched, only grouped so the parts
- * move apart — body and face, the sign with both hands, three drops of sweat.
- */
-const PATHS = {
-  body: 'M180.4,99c-4.4-19.6-2.5-33.6-10.2-52.5-10.7-26.4-36.8-39.7-67.1-38.1-33.3,1.8-53.1,21.8-60.1,50.6-3,12.2-3.1,18-5.5,30.2-3.3,16.7-15.4,35.6-9.6,51.3,6.8,18.3,36.3,22.5,54.3,24.1,22.1,2,45,2.1,67-.8,16.1-2.1,35.4-8.2,38.6-24.8,2.9-15.5-3.9-24.5-7.3-39.9Z',
-  leftEye:
-    'M118.4,38.5c-.6-.4-1.4-.6-2.2-.5-.2,0-.4,0-.6.2-.3.2-.3.5-.3.8,0,2.1,1.1,5.7,2.3,6,1.2.4,2.1,0,2.6-.5,1-1,.6-3-.4-4.7-.3-.5-.7-1-1.3-1.4Z',
-  rightEye:
-    'M131.8,38c-.6-.4-1.4-.6-2.2-.5-.2,0-.4,0-.6.2-.3.2-.3.5-.3.8,0,2.1,1.1,5.7,2.3,6,1.2.4,2.1,0,2.6-.5,1-1,.6-3-.4-4.7-.3-.5-.7-1-1.3-1.4Z',
-  rightBrow:
-    'M137.1,34.7c-.2.5-1,.5-1.5.4-1.5-.3-3-1.5-3.9-2.9-.5-.6-1-2.5.3-2.3.9.2,1.7,1.1,2.4,1.8.7.8,2.8,2,2.6,3h0Z',
-  leftBrow:
-    'M112.4,31.6c.8.6.9,1.9.7,2.8,0,.1,0,.3,0,.4-.2,1-.6,2-1.5,2.7-.4.3-.9.7-1.4.9s-.9.2-1-.2,0-.8.2-1.2c.2-.4.5-.7.9-1.1.4-.5.8-1.1,1.1-1.6,0-.1,0-.2.1-.3.2-.8-.2-1.8.6-2.4,0,0,.2,0,.3,0Z',
-  sign: 'M36.7,89.9c-.2,7.3-1.5,10.9,1.1,14.5,2.6,3.5,6.2,3.6,7.2,7.1.7,2.5-.7,4-2.5,8.5-.8,2-4.4,10.8-2.5,17.3,2.2,7.5,11.6,10.8,13.8,11.6,11.1,3.9,15.4-2.3,28.5-.8,14,1.6,13.3,9.1,25.9,10,14.3,1.1,16.2-8.5,31.2-7,8.9.9,12.7,4.8,21.7,2.9,1.9-.4,7-1.5,11.9-5.6,9.4-8,13-23.3,7.9-29.1-2.3-2.6-5.8-3.6-9.7-8.8-.6-.8-1.1-1.7-1.4-2.9-2-6.4,1-13.9,2.7-18.3,2.2-5.6,3.4-5.6,3.9-9,1-7-3.4-13-5.8-16.3-1.9-2.6-6.7-9-15.6-12-13.6-4.6-25.6,2.7-27.4,3.9-.6.4-1.9,1.8-4,3.2,0,0-4.1,2.7-9,4.1-6.9,2-16.2-1.6-22.7-3.5-18.7-5.4-33.9-2.4-42.1-.8-11.8,2.3-13.9,5.3-14.6,6.3-3.4,5.4,1.8,9.4,1.3,24.5Z',
-  signEdge:
-    'M110.5,158.7c-.7,0-1.5,0-2.2,0-6.3-.5-9.4-2.6-12.6-4.8-3.2-2.2-6.4-4.5-13.4-5.3-5.9-.7-10.1.2-13.8,1-4.7,1-8.7,1.9-14.9-.3-9.7-3.4-13-8.4-14-11.9-1.3-4.3-.5-10.2,2.4-17.4v-.2c.6-1.3,1-2.3,1.4-3.2,1-2.3,1.5-3.4,1.1-5-.5-1.8-1.8-2.6-3.3-3.6-1.3-.8-2.7-1.7-3.9-3.4-2-2.8-1.8-5.6-1.5-9.8.1-1.5.2-3.1.3-5,.2-7.2-.9-11.9-1.7-15.3-.9-3.9-1.5-6.4.4-9.4,1.7-2.7,6.7-4.9,14.8-6.5,8.2-1.6,23.5-4.6,42.3.8,1,.3,2,.6,3.1.9,6.1,1.9,13.7,4.2,19.4,2.5,4.7-1.3,8.8-4,8.8-4.1,1.3-.9,2.3-1.8,3-2.4.4-.4.8-.7,1-.8,3.2-2,14.7-8.3,27.7-3.9,9.2,3.1,14.1,9.9,15.8,12.1,2.4,3.3,6.9,9.4,5.9,16.6-.3,2-.8,2.9-1.6,4.2-.6,1.1-1.4,2.4-2.4,4.9-1.7,4.4-4.6,11.8-2.7,18,.3,1.1.8,2,1.4,2.8,2.3,3.2,4.5,4.8,6.4,6.2,1.2.8,2.3,1.6,3.2,2.7,1.8,2.1,2.7,5.4,2.4,9.4-.5,7.5-4.6,15.4-10.3,20.3-3.3,2.8-7.4,4.7-12.1,5.7-5.6,1.2-9.2.1-13.4-1.1-2.5-.7-5.1-1.5-8.4-1.8-7.5-.8-11.6,1.3-15.9,3.4-3.6,1.8-7.3,3.6-13,3.6ZM78.3,147.4c1.3,0,2.7,0,4.2.2,7.2.8,10.5,3.2,13.8,5.4,3.1,2.1,6,4.2,12.1,4.6,6.9.5,10.7-1.4,14.8-3.5,4.2-2.1,8.6-4.3,16.4-3.5,3.4.4,6.1,1.1,8.6,1.9,4,1.2,7.5,2.2,12.9,1.1,1.7-.3,6.8-1.4,11.7-5.5,5.5-4.6,9.5-12.6,10-19.7.3-3.8-.5-6.9-2.2-8.8-.8-1-1.9-1.7-3-2.5-1.9-1.4-4.2-3-6.6-6.3-.6-.9-1.1-1.9-1.5-3.1-2-6.5.9-14.1,2.7-18.6,1-2.6,1.8-3.9,2.4-5,.7-1.3,1.2-2.1,1.4-3.9.9-6.8-3.4-12.8-5.7-16-1.6-2.2-6.4-8.8-15.3-11.8-12.7-4.3-23.9,1.8-27,3.8-.2.1-.5.4-.9.7-.7.6-1.7,1.5-3.1,2.5-.2.1-4.2,2.8-9.1,4.2-6,1.7-13.7-.7-19.8-2.5-1.1-.3-2.1-.6-3.1-.9-18.6-5.3-33.8-2.4-41.9-.8-7.9,1.5-12.7,3.6-14.3,6.1-1.7,2.7-1.1,5-.3,8.8.8,3.5,1.9,8.3,1.7,15.5h0c0,1.9-.2,3.6-.3,5-.3,4.1-.5,6.6,1.3,9.2,1.1,1.5,2.4,2.3,3.6,3.2,1.6,1,3.1,2,3.6,4.1.5,1.9,0,3.3-1.1,5.6-.4.9-.9,1.9-1.4,3.1v.2c-2.9,7.1-3.7,12.8-2.5,16.9,1,3.3,4.1,8,13.5,11.3,5.9,2.1,9.9,1.2,14.4.3,2.8-.6,5.9-1.3,9.9-1.3Z',
-  leftHand:
-    'M38.4,88.5c2.3-.4,2.8,3.3,7.8,5.6,4.1,1.9,5.6.4,10.5,2.7,1.9.9,5.6,2.6,5.7,5.2,0,.8-.3,2.2-3.3,4.3-4,2.8-14.9,8.5-21.2,2.9-3.6-3.2-3.7-8.3-3.7-10.1,0-4.2,1.4-10.1,4.2-10.6Z',
-  rightHand:
-    'M181.6,115.3c-2.2.8-3.4-3.7-8.9-6-4.4-1.9-5.7.2-11-2.1-2-.9-6.1-2.6-6.7-5.7-.2-.9-.1-2.7,2.5-5.7,3.5-3.9,13.3-12.2,20.7-6,4.2,3.5,5.2,9.7,5.6,12,.9,5.1.5,12.6-2.2,13.5Z',
-};
-
-/** The three drops of sweat, and which way each flies off (in the drawing's units). */
-const DROPS = [
-  {
-    d: 'M193.6,38.2c1.7,2.2,4.1,5.2,2.9,7.9-1.1,2.6-5.1,3.9-7.9,2.9-1.5-.5-3-3.1-5.9-8.3-2.7-4.8-3.5-6.8-2.9-7.4,0,0,.1,0,.2-.1,3-1,5.9-.3,5.9-.3,4.4,1.1,7.1,4.5,7.7,5.2Z',
-    dx: '14px',
-    dy: '-12px',
-    delay: '0s',
-  },
-  {
-    d: 'M32.9,43.1c-2.7,2.3-7.7,4.3-11.1,2.2-3.2-2.1-3.5-7.5-2.2-11.1,3.5-9.6,20.8-11.2,22.5-8.2.4.8-.4,1.4-3.4,6.9-3.9,7.1-3.6,8.4-5.8,10.2Z',
-    dx: '-14px',
-    dy: '-10px',
-    delay: '.8s',
-  },
-  {
-    d: 'M23.7,75.4c-1.7,2.2-4.1,5.2-7,4.7-2.8-.5-4.9-4.1-4.7-7,.1-1.6,2.3-3.6,6.7-7.7,4.1-3.8,5.9-4.9,6.5-4.5,0,0,.1.1.1.2,1.7,2.7,1.6,5.7,1.6,5.7,0,4.5-2.7,8-3.3,8.7Z',
-    dx: '-16px',
-    dy: '6px',
-    delay: '1.6s',
-  },
+// Artwork and animation copied from design commit bfc7bfd157eb41c2b0e92718594c40b97dc73222.
+const P = [
+  'M180.4,99c-4.4-19.6-2.5-33.6-10.2-52.5-10.7-26.4-36.8-39.7-67.1-38.1-33.3,1.8-53.1,21.8-60.1,50.6-3,12.2-3.1,18-5.5,30.2-3.3,16.7-15.4,35.6-9.6,51.3,6.8,18.3,36.3,22.5,54.3,24.1,22.1,2,45,2.1,67-.8,16.1-2.1,35.4-8.2,38.6-24.8,2.9-15.5-3.9-24.5-7.3-39.9Z',
+  'M118.4,38.5c-.6-.4-1.4-.6-2.2-.5-.2,0-.4,0-.6.2-.3.2-.3.5-.3.8,0,2.1,1.1,5.7,2.3,6,1.2.4,2.1,0,2.6-.5,1-1,.6-3-.4-4.7-.3-.5-.7-1-1.3-1.4Z',
+  'M131.8,38c-.6-.4-1.4-.6-2.2-.5-.2,0-.4,0-.6.2-.3.2-.3.5-.3.8,0,2.1,1.1,5.7,2.3,6,1.2.4,2.1,0,2.6-.5,1-1,.6-3-.4-4.7-.3-.5-.7-1-1.3-1.4Z',
+  'M137.1,34.7c-.2.5-1,.5-1.5.4-1.5-.3-3-1.5-3.9-2.9-.5-.6-1-2.5.3-2.3.9.2,1.7,1.1,2.4,1.8.7.8,2.8,2,2.6,3h0Z',
+  'M112.4,31.6c.8.6.9,1.9.7,2.8,0,.1,0,.3,0,.4-.2,1-.6,2-1.5,2.7-.4.3-.9.7-1.4.9s-.9.2-1-.2,0-.8.2-1.2c.2-.4.5-.7.9-1.1.4-.5.8-1.1,1.1-1.6,0-.1,0-.2.1-.3.2-.8-.2-1.8.6-2.4,0,0,.2,0,.3,0Z',
+  'M36.7,89.9c-.2,7.3-1.5,10.9,1.1,14.5,2.6,3.5,6.2,3.6,7.2,7.1.7,2.5-.7,4-2.5,8.5-.8,2-4.4,10.8-2.5,17.3,2.2,7.5,11.6,10.8,13.8,11.6,11.1,3.9,15.4-2.3,28.5-.8,14,1.6,13.3,9.1,25.9,10,14.3,1.1,16.2-8.5,31.2-7,8.9.9,12.7,4.8,21.7,2.9,1.9-.4,7-1.5,11.9-5.6,9.4-8,13-23.3,7.9-29.1-2.3-2.6-5.8-3.6-9.7-8.8-.6-.8-1.1-1.7-1.4-2.9-2-6.4,1-13.9,2.7-18.3,2.2-5.6,3.4-5.6,3.9-9,1-7-3.4-13-5.8-16.3-1.9-2.6-6.7-9-15.6-12-13.6-4.6-25.6,2.7-27.4,3.9-.6.4-1.9,1.8-4,3.2,0,0-4.1,2.7-9,4.1-6.9,2-16.2-1.6-22.7-3.5-18.7-5.4-33.9-2.4-42.1-.8-11.8,2.3-13.9,5.3-14.6,6.3-3.4,5.4,1.8,9.4,1.3,24.5Z',
+  'M110.5,158.7c-.7,0-1.5,0-2.2,0-6.3-.5-9.4-2.6-12.6-4.8-3.2-2.2-6.4-4.5-13.4-5.3-5.9-.7-10.1.2-13.8,1-4.7,1-8.7,1.9-14.9-.3-9.7-3.4-13-8.4-14-11.9-1.3-4.3-.5-10.2,2.4-17.4v-.2c.6-1.3,1-2.3,1.4-3.2,1-2.3,1.5-3.4,1.1-5-.5-1.8-1.8-2.6-3.3-3.6-1.3-.8-2.7-1.7-3.9-3.4-2-2.8-1.8-5.6-1.5-9.8.1-1.5.2-3.1.3-5,.2-7.2-.9-11.9-1.7-15.3-.9-3.9-1.5-6.4.4-9.4,1.7-2.7,6.7-4.9,14.8-6.5,8.2-1.6,23.5-4.6,42.3.8,1,.3,2,.6,3.1.9,6.1,1.9,13.7,4.2,19.4,2.5,4.7-1.3,8.8-4,8.8-4.1,1.3-.9,2.3-1.8,3-2.4.4-.4.8-.7,1-.8,3.2-2,14.7-8.3,27.7-3.9,9.2,3.1,14.1,9.9,15.8,12.1,2.4,3.3,6.9,9.4,5.9,16.6-.3,2-.8,2.9-1.6,4.2-.6,1.1-1.4,2.4-2.4,4.9-1.7,4.4-4.6,11.8-2.7,18,.3,1.1.8,2,1.4,2.8,2.3,3.2,4.5,4.8,6.4,6.2,1.2.8,2.3,1.6,3.2,2.7,1.8,2.1,2.7,5.4,2.4,9.4-.5,7.5-4.6,15.4-10.3,20.3-3.3,2.8-7.4,4.7-12.1,5.7-5.6,1.2-9.2.1-13.4-1.1-2.5-.7-5.1-1.5-8.4-1.8-7.5-.8-11.6,1.3-15.9,3.4-3.6,1.8-7.3,3.6-13,3.6ZM78.3,147.4c1.3,0,2.7,0,4.2.2,7.2.8,10.5,3.2,13.8,5.4,3.1,2.1,6,4.2,12.1,4.6,6.9.5,10.7-1.4,14.8-3.5,4.2-2.1,8.6-4.3,16.4-3.5,3.4.4,6.1,1.1,8.6,1.9,4,1.2,7.5,2.2,12.9,1.1,1.7-.3,6.8-1.4,11.7-5.5,5.5-4.6,9.5-12.6,10-19.7.3-3.8-.5-6.9-2.2-8.8-.8-1-1.9-1.7-3-2.5-1.9-1.4-4.2-3-6.6-6.3-.6-.9-1.1-1.9-1.5-3.1-2-6.5.9-14.1,2.7-18.6,1-2.6,1.8-3.9,2.4-5,.7-1.3,1.2-2.1,1.4-3.9.9-6.8-3.4-12.8-5.7-16-1.6-2.2-6.4-8.8-15.3-11.8-12.7-4.3-23.9,1.8-27,3.8-.2.1-.5.4-.9.7-.7.6-1.7,1.5-3.1,2.5-.2.1-4.2,2.8-9.1,4.2-6,1.7-13.7-.7-19.8-2.5-1.1-.3-2.1-.6-3.1-.9-18.6-5.3-33.8-2.4-41.9-.8-7.9,1.5-12.7,3.6-14.3,6.1-1.7,2.7-1.1,5-.3,8.8.8,3.5,1.9,8.3,1.7,15.5h0c0,1.9-.2,3.6-.3,5-.3,4.1-.5,6.6,1.3,9.2,1.1,1.5,2.4,2.3,3.6,3.2,1.6,1,3.1,2,3.6,4.1.5,1.9,0,3.3-1.1,5.6-.4.9-.9,1.9-1.4,3.1v.2c-2.9,7.1-3.7,12.8-2.5,16.9,1,3.3,4.1,8,13.5,11.3,5.9,2.1,9.9,1.2,14.4.3,2.8-.6,5.9-1.3,9.9-1.3Z',
+  'M38.4,88.5c2.3-.4,2.8,3.3,7.8,5.6,4.1,1.9,5.6.4,10.5,2.7,1.9.9,5.6,2.6,5.7,5.2,0,.8-.3,2.2-3.3,4.3-4,2.8-14.9,8.5-21.2,2.9-3.6-3.2-3.7-8.3-3.7-10.1,0-4.2,1.4-10.1,4.2-10.6Z',
+  'M181.6,115.3c-2.2.8-3.4-3.7-8.9-6-4.4-1.9-5.7.2-11-2.1-2-.9-6.1-2.6-6.7-5.7-.2-.9-.1-2.7,2.5-5.7,3.5-3.9,13.3-12.2,20.7-6,4.2,3.5,5.2,9.7,5.6,12,.9,5.1.5,12.6-2.2,13.5Z',
+  'M193.6,38.2c1.7,2.2,4.1,5.2,2.9,7.9-1.1,2.6-5.1,3.9-7.9,2.9-1.5-.5-3-3.1-5.9-8.3-2.7-4.8-3.5-6.8-2.9-7.4,0,0,.1,0,.2-.1,3-1,5.9-.3,5.9-.3,4.4,1.1,7.1,4.5,7.7,5.2Z',
+  'M32.9,43.1c-2.7,2.3-7.7,4.3-11.1,2.2-3.2-2.1-3.5-7.5-2.2-11.1,3.5-9.6,20.8-11.2,22.5-8.2.4.8-.4,1.4-3.4,6.9-3.9,7.1-3.6,8.4-5.8,10.2Z',
+  'M23.7,75.4c-1.7,2.2-4.1,5.2-7,4.7-2.8-.5-4.9-4.1-4.7-7,.1-1.6,2.3-3.6,6.7-7.7,4.1-3.8,5.9-4.9,6.5-4.5,0,0,.1.1.1.2,1.7,2.7,1.6,5.7,1.6,5.7,0,4.5-2.7,8-3.3,8.7Z',
 ];
-
-// The drawing's own colours, as in the designer's file: artwork, not interface colour.
-const INK = {
+const C = {
   body: '#e4781e',
   ink: '#15191b',
   sign: '#2193ba',
@@ -62,213 +28,156 @@ const INK = {
   drop: '#65bddb',
 };
 
-interface GuangFuMascotProps {
-  /** What the sign says, and what a screen reader hears. */
-  code?: string;
-}
+const DROPS = [
+  { d: P[9], dx: '14px', dy: '-12px', delay: '0s' },
+  { d: P[10], dx: '-14px', dy: '-10px', delay: '.8s' },
+  { d: P[11], dx: '-16px', dy: '6px', delay: '1.6s' },
+];
 
-/**
- * 光復寶寶 holding up a sign, for the page that is not there: drops in, then looks left and right
- * for the way, blinking, sweating, with question marks drifting up. A tap makes it hop — a small
- * pleasure, nothing more, so it is a real button a keyboard reaches too.
- *
- * The motion only decorates: the words beside it say everything. With 減少動態效果 set it stands
- * still.
- */
-export function GuangFuMascot({ code = '404' }: GuangFuMascotProps) {
+const buttonStyle = {
+  '--mascot-focus': designTokens.focusRing.color,
+} satisfies CSSProperties & { '--mascot-focus': string };
+
+export function GuangFuMascot({
+  code = '404',
+  width = 'clamp(200px, 52vw, 260px)',
+}: {
+  code?: '404' | '403';
+  width?: CSSProperties['width'];
+}) {
+  const mood = code === '403' ? 'stop' : 'lost';
   const [hop, setHop] = useState(false);
-
+  const font = designTokens.typography.heading[800].fontFamily;
   return (
-    <Box
-      component="button"
+    <button
       type="button"
+      className={[styles['wgm-btn'], hop ? styles['wgm-hop'] : ''].join(' ')}
       aria-label={code}
       onClick={() => setHop(true)}
-      onAnimationEnd={(event) => {
-        if (event.animationName === 'guangFuMascotHop') {
-          setHop(false);
-        }
-      }}
-      className={hop ? 'hop' : undefined}
-      sx={{
-        display: 'block',
-        width: 'clamp(200px, 52vw, 260px)',
-        mx: 'auto',
-        p: 0,
-        border: 0,
-        borderRadius: '24px',
-        background: 'none',
-        cursor: 'pointer',
-        WebkitTapHighlightColor: 'transparent',
-        '&:focus-visible': {
-          outline: `${focusRing.width}px solid ${focusRing.color}`,
-          outlineOffset: '6px',
-        },
-        '& svg': { display: 'block', width: '100%', height: 'auto' },
-        '& svg *': { transformBox: 'fill-box' },
-        '& .enter': {
-          transformOrigin: '50% 100%',
-          animation: 'guangFuMascotEnter .7s cubic-bezier(.3, 1.6, .5, 1) both',
-        },
-        '&.hop .enter': {
-          animation: 'guangFuMascotHop .55s cubic-bezier(.3, .7, .4, 1)',
-        },
-        '& .whole': {
-          transformOrigin: '50% 100%',
-          animation: 'guangFuMascotLook 3.6s ease-in-out .7s infinite',
-        },
-        '& .shadow': {
-          transformOrigin: '50% 50%',
-          animation: 'guangFuMascotShadow 3.6s ease-in-out .7s infinite',
-        },
-        '& .eyes': {
-          transformOrigin: '50% 50%',
-          animation: 'guangFuMascotEyes 3.6s ease-in-out .7s infinite',
-        },
-        '& .lids': {
-          animation: 'guangFuMascotBlink 3.6s linear .7s infinite',
-        },
-        '& .drop': {
-          opacity: 0,
-          animation: 'guangFuMascotSweat 2.4s ease-out infinite',
-        },
-        '& .question': { opacity: 0, transformOrigin: '50% 50%' },
-        '& .question.first': {
-          animation: 'guangFuMascotWonder 3.6s ease-out 1.2s infinite',
-        },
-        '& .question.second': {
-          animation: 'guangFuMascotWonder 3.6s ease-out 3s infinite',
-        },
-        '@keyframes guangFuMascotEnter': {
-          '0%': { transform: 'translateY(-40px) scale(.8)', opacity: 0 },
-          '60%': { opacity: 1 },
-          '100%': { transform: 'none', opacity: 1 },
-        },
-        '@keyframes guangFuMascotLook': {
-          '0%, 100%': { transform: 'rotate(0) translateY(0)' },
-          '20%': { transform: 'rotate(-5deg) translateY(-6px)' },
-          '40%': { transform: 'rotate(-5deg) translateY(0)' },
-          '60%': { transform: 'rotate(5deg) translateY(-6px)' },
-          '80%': { transform: 'rotate(5deg) translateY(0)' },
-        },
-        '@keyframes guangFuMascotShadow': {
-          '0%, 100%, 40%, 80%': { transform: 'scaleX(1)', opacity: 1 },
-          '20%, 60%': { transform: 'scaleX(.85)', opacity: 0.7 },
-        },
-        '@keyframes guangFuMascotEyes': {
-          '0%, 100%': { transform: 'translateX(0)' },
-          '15%, 40%': { transform: 'translateX(-4px)' },
-          '55%, 80%': { transform: 'translateX(4px)' },
-        },
-        '@keyframes guangFuMascotBlink': {
-          '0%, 46%, 52%, 100%': { transform: 'scaleY(1)' },
-          '49%': { transform: 'scaleY(.1)' },
-        },
-        '@keyframes guangFuMascotSweat': {
-          '0%': { opacity: 0, transform: 'translate(0, 0) scale(.6)' },
-          '15%': { opacity: 1 },
-          '100%': {
-            opacity: 0,
-            transform: 'translate(var(--dx), var(--dy)) scale(1)',
-          },
-        },
-        '@keyframes guangFuMascotWonder': {
-          '0%': {
-            opacity: 0,
-            transform: 'translateY(8px) scale(.6) rotate(-10deg)',
-          },
-          '20%': { opacity: 1, transform: 'translateY(0) scale(1) rotate(0)' },
-          '60%': { opacity: 1 },
-          '100%': {
-            opacity: 0,
-            transform: 'translateY(-22px) scale(1) rotate(8deg)',
-          },
-        },
-        '@keyframes guangFuMascotHop': {
-          '0%': { transform: 'none' },
-          '25%': { transform: 'translateY(0) scale(1.08, .9)' },
-          '55%': { transform: 'translateY(-26px) scale(.95, 1.06)' },
-          '80%': { transform: 'translateY(0) scale(1.06, .94)' },
-          '100%': { transform: 'none' },
-        },
-        '@media (prefers-reduced-motion: reduce)': {
-          '& svg *, &.hop .enter': { animation: 'none !important' },
-        },
-      }}
+      style={{ ...buttonStyle, width }}
     >
       <svg
+        className={[styles.wgm, styles[`wgm--${mood}`]].join(' ')}
         viewBox="0 -14 210.4 196"
         aria-hidden="true"
         focusable="false"
-        overflow="visible"
       >
         <ellipse
-          className="shadow"
+          className={styles['wgm-shadow']}
           cx="109"
           cy="176"
           rx="62"
           ry="6"
-          fill={INK.ink}
+          fill={C.ink}
           fillOpacity=".12"
         />
-        <g className="enter">
-          <g className="whole">
-            <path fill={INK.body} d={PATHS.body} />
-            <g className="eyes">
-              <g className="lids">
-                <path fill={INK.ink} d={PATHS.leftEye} />
-                <path fill={INK.ink} d={PATHS.rightEye} />
+        <g
+          className={styles['wgm-in']}
+          onAnimationEnd={(event) => {
+            if (event.target === event.currentTarget) setHop(false);
+          }}
+        >
+          <g className={styles['wgm-all']}>
+            <g className={styles['wgm-head']}>
+              <path fill={C.body} d={P[0]} />
+              <g className={styles['wgm-eyes']}>
+                <g className={styles['wgm-lids']}>
+                  <path fill={C.ink} d={P[1]} />
+                  <path fill={C.ink} d={P[2]} />
+                </g>
+                <path fill={C.ink} d={P[3]} />
+                <path fill={C.ink} d={P[4]} />
               </g>
-              <path fill={INK.ink} d={PATHS.rightBrow} />
-              <path fill={INK.ink} d={PATHS.leftBrow} />
             </g>
-            <path fill={INK.sign} d={PATHS.sign} />
-            <path fill={INK.white} d={PATHS.signEdge} />
-            {/* Drawn as text, not the file's outlined digits, so the page's own face sets it. */}
-            <text
-              x="110"
-              y="126"
-              textAnchor="middle"
-              fill={INK.white}
-              fontWeight="800"
-              fontSize="38"
-              letterSpacing="1"
-              style={{ fontFamily: typography.heading[800].fontFamily }}
-            >
-              {code}
-            </text>
-            <path fill={INK.body} d={PATHS.leftHand} />
-            <path fill={INK.body} d={PATHS.rightHand} />
+            <g className={styles['wgm-sign']}>
+              <path fill={C.sign} d={P[5]} />
+              <path fill={C.white} d={P[6]} />
+              <text
+                x="110"
+                y="126"
+                textAnchor="middle"
+                fill={C.white}
+                fontFamily={font}
+                fontWeight="800"
+                fontSize="38"
+                letterSpacing="1"
+              >
+                {code}
+              </text>
+              <path fill={C.body} d={P[7]} />
+              <path fill={C.body} d={P[8]} />
+            </g>
           </g>
         </g>
-        {DROPS.map((drop) => (
-          <path
-            key={drop.d}
-            className="drop"
-            fill={INK.drop}
-            d={drop.d}
-            style={
-              {
-                '--dx': drop.dx,
-                '--dy': drop.dy,
-                animationDelay: drop.delay,
-              } as CSSProperties
-            }
-          />
-        ))}
-        <g
-          fill={INK.sign}
-          fontWeight="800"
-          style={{ fontFamily: typography.heading[800].fontFamily }}
-        >
-          <text className="question first" x="176" y="22" fontSize="26">
-            ?
-          </text>
-          <text className="question second" x="34" y="18" fontSize="20">
-            ?
-          </text>
-        </g>
+        {DROPS.map((drop) => {
+          const style = {
+            '--dx': drop.dx,
+            '--dy': drop.dy,
+            animationDelay: drop.delay,
+          } satisfies CSSProperties & { '--dx': string; '--dy': string };
+
+          return (
+            <path
+              key={drop.d}
+              className={styles['wgm-drop']}
+              fill={C.drop}
+              d={drop.d}
+              style={style}
+            />
+          );
+        })}
+        {mood === 'lost' ? (
+          <g fill={C.sign} fontFamily={font} fontWeight="800">
+            <text
+              className={[styles['wgm-q'], styles['wgm-q1']].join(' ')}
+              x="176"
+              y="22"
+              fontSize="26"
+            >
+              ?
+            </text>
+            <text
+              className={[styles['wgm-q'], styles['wgm-q2']].join(' ')}
+              x="34"
+              y="18"
+              fontSize="20"
+            >
+              ?
+            </text>
+          </g>
+        ) : (
+          <g transform="translate(170 6)">
+            <g className={styles['wgm-lock']}>
+              <path
+                d="M6 14 V9 a8 8 0 0 1 16 0 V14"
+                fill="none"
+                stroke={C.ink}
+                strokeWidth="3.4"
+                strokeLinecap="round"
+              />
+              <rect
+                x="1"
+                y="13"
+                width="26"
+                height="21"
+                rx="5"
+                fill={C.sign}
+                stroke={C.ink}
+                strokeWidth="2.4"
+              />
+              <circle cx="14" cy="22" r="3" fill={C.white} />
+              <rect
+                x="12.6"
+                y="23"
+                width="2.8"
+                height="6"
+                rx="1.4"
+                fill={C.white}
+              />
+            </g>
+          </g>
+        )}
       </svg>
-    </Box>
+    </button>
   );
 }

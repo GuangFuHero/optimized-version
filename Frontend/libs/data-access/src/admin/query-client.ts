@@ -3,6 +3,23 @@ import { CombinedError } from 'urql';
 
 import ApiError from '../rest/api-error';
 
+export function isAdminPermissionError(error: Error | null) {
+  if (error instanceof ApiError) {
+    return (
+      error.status === 403 &&
+      error.code !== 'step_up_required' &&
+      error.code !== 'back_office_identity_required' &&
+      error.code !== 'origin_not_allowed'
+    );
+  }
+  return (
+    error instanceof CombinedError &&
+    ((error.response instanceof Response && error.response.status === 403) ||
+      // Resolver HTTPExceptions arrive as GraphQL errors with an HTTP 200 response.
+      error.graphQLErrors.some((item) => item.message.startsWith('403:')))
+  );
+}
+
 export function createAdminQueryClient(onError: (error: Error) => void) {
   const reportError = (error: Error) => {
     if (error instanceof ApiError && error.code === 'step_up_required') return;
@@ -24,7 +41,7 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
       // is retried on the next poll, not reported.
       onError: (error, query) => {
         if (query.meta?.quietErrors) return;
-        reportError(error);
+        if (!isAdminPermissionError(error)) reportError(error);
       },
     }),
     mutationCache: new MutationCache({ onError: reportError }),

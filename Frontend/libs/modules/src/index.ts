@@ -99,7 +99,12 @@ export type {
 
 export { AnnouncementPage } from './admin/announcement';
 export { BackOfficePlaceholder } from './role-request';
-export { AdminPlaceholderPage, AdminShell, NoBackOfficeAccess } from './shell';
+export {
+  AdminErrorPage,
+  AdminPlaceholderPage,
+  AdminShell,
+  NoBackOfficeAccess,
+} from './shell';
 export type { AdminShellProps } from './shell';
 
 // The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.

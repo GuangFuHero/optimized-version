@@ -27,7 +27,7 @@ import {
   signOutHereAsync,
 } from '../../auth/session/sign-out';
 import { GuangFuBrandIcon } from '../../brand';
-import { ADMIN_NAV_SECTIONS, type AdminNavItem } from './nav';
+import { useAdminNavSections, type AdminNavItem } from './nav';
 
 const { color, radius, typography, motion } = designTokens;
 
@@ -42,6 +42,7 @@ export function AdminSidebar({
   onToggle,
   activeId,
 }: AdminSidebarProps) {
+  const sections = useAdminNavSections();
   const renderItem = (item: AdminNavItem) => (
     <SidebarItem
       key={item.id}
@@ -85,8 +86,9 @@ export function AdminSidebar({
           alignItems: collapsed ? 'center' : 'stretch',
         }}
       >
-        {ADMIN_NAV_SECTIONS.filter((section) => !section.footer).map(
-          (section, index) => (
+        {sections
+          .filter((section) => !section.footer)
+          .map((section, index) => (
             <Fragment key={section.label ?? index}>
               {section.label ? (
                 <Box
@@ -113,8 +115,7 @@ export function AdminSidebar({
               ) : null}
               {section.items.map(renderItem)}
             </Fragment>
-          ),
-        )}
+          ))}
       </Stack>
 
       <Stack
@@ -125,9 +126,9 @@ export function AdminSidebar({
           borderTop: `1px solid ${color.border.default}`,
         }}
       >
-        {ADMIN_NAV_SECTIONS.filter((section) => section.footer).flatMap(
-          (section) => section.items.map(renderItem),
-        )}
+        {sections
+          .filter((section) => section.footer)
+          .flatMap((section) => section.items.map(renderItem))}
         <SidebarItem
           icon={<LogOut />}
           label="登出"
