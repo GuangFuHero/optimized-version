@@ -16,6 +16,7 @@ import {
   AnnouncementPlacement,
   useAnnouncements,
   useCreateAnnouncement,
+  useCurrentUser,
   useSetAnnouncementActive,
   type AdminAnnouncementsQuery,
 } from '@rescue-frontend/data-access/admin';
@@ -88,9 +89,16 @@ function announcementPlacement(placement: Announcement['placement']) {
 export function AnnouncementPage() {
   const [publishing, setPublishing] = useState(false);
   const [tab, setTab] = useState<'live' | 'history'>('live');
+  const { data: user } = useCurrentUser();
+  const canEdit = user?.capabilities.includes('announcement.edit') ?? false;
+  const canPublish =
+    canEdit && (user?.capabilities.includes('announcement.publish') ?? false);
+  const activeTab = canEdit ? tab : 'live';
   const { data, isPending, isError } = useAnnouncements({
     filter:
-      tab === 'history' ? AnnouncementFilter.All : AnnouncementFilter.Active,
+      activeTab === 'history'
+        ? AnnouncementFilter.All
+        : AnnouncementFilter.Active,
     placement: AnnouncementPlacement.All,
   });
   const live =
@@ -136,15 +144,17 @@ export function AnnouncementPage() {
         direction="row"
         sx={{ alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}
       >
-        <Button
-          startIcon={<Megaphone size={16} />}
-          disabled={!data}
-          onClick={() => setPublishing(true)}
-        >
-          發布公告
-        </Button>
+        {canPublish ? (
+          <Button
+            startIcon={<Megaphone size={16} />}
+            disabled={!data}
+            onClick={() => setPublishing(true)}
+          >
+            發布公告
+          </Button>
+        ) : null}
         <SegmentedTabs
-          value={tab}
+          value={activeTab}
           onChange={(_, value: 'live' | 'history') => setTab(value)}
           aria-label="公告列表"
           sx={{ ml: 'auto', alignSelf: 'auto' }}
@@ -155,12 +165,14 @@ export function AnnouncementPage() {
             value="live"
             label="目前公告"
           />
-          <Tab
-            id="announcements-history-tab"
-            aria-controls="announcements-history-panel"
-            value="history"
-            label="歷史紀錄"
-          />
+          {canEdit ? (
+            <Tab
+              id="announcements-history-tab"
+              aria-controls="announcements-history-panel"
+              value="history"
+              label="歷史紀錄"
+            />
+          ) : null}
         </SegmentedTabs>
       </Stack>
 
@@ -168,7 +180,7 @@ export function AnnouncementPage() {
         <Box>載入公告中…</Box>
       ) : isError ? (
         <Callout tone="danger">無法載入公告，請重新整理頁面。</Callout>
-      ) : tab === 'live' ? (
+      ) : activeTab === 'live' ? (
         <Stack
           role="tabpanel"
           id="announcements-live-panel"
@@ -180,7 +192,11 @@ export function AnnouncementPage() {
               <EmptyState
                 icon={<Megaphone />}
                 title="目前沒有任何公告"
-                description="要對外或對內廣播一句話時，按「發布公告」。"
+                description={
+                  canPublish
+                    ? '要對外或對內廣播一句話時，按「發布公告」。'
+                    : undefined
+                }
               />
             </Box>
           ) : (
@@ -188,6 +204,7 @@ export function AnnouncementPage() {
               <LiveAnnouncement
                 key={announcement.uuid}
                 announcement={announcement}
+                canEdit={canEdit}
               />
             ))
           )}
@@ -206,7 +223,7 @@ export function AnnouncementPage() {
         </Stack>
       )}
 
-      {publishing ? (
+      {publishing && canPublish ? (
         <PublishAnnouncementDialog
           live={live}
           onClose={() => setPublishing(false)}
@@ -223,7 +240,13 @@ const cardSx = {
   border: `1px solid ${color.border.default}`,
 };
 
-function LiveAnnouncement({ announcement }: { announcement: Announcement }) {
+function LiveAnnouncement({
+  announcement,
+  canEdit,
+}: {
+  announcement: Announcement;
+  canEdit: boolean;
+}) {
   const [confirming, setConfirming] = useState(false);
   const deactivate = useSetAnnouncementActive();
   const target = TARGETS[announcementPlacement(announcement.placement)];
@@ -270,7 +293,7 @@ function LiveAnnouncement({ announcement }: { announcement: Announcement }) {
         </Box>
       ) : null}
 
-      {confirming ? (
+      {canEdit && confirming ? (
         <Stack
           sx={{
             gap: 1,
@@ -299,7 +322,7 @@ function LiveAnnouncement({ announcement }: { announcement: Announcement }) {
             </Button>
           </Stack>
         </Stack>
-      ) : (
+      ) : canEdit ? (
         <Button
           size="sm"
           variant="outline"
@@ -308,7 +331,7 @@ function LiveAnnouncement({ announcement }: { announcement: Announcement }) {
         >
           關閉公告
         </Button>
-      )}
+      ) : null}
     </Stack>
   );
 }
@@ -341,27 +364,35 @@ function PublishAnnouncementDialog({
     );
   });
 
+  function activateDraft(uuid: Announcement['uuid']) {
+    activate.mutate(
+      { uuid, active: true },
+      {
+        onSuccess: () => {
+          toast.success(`已發布到${target.label}`);
+          onClose();
+        },
+      },
+    );
+  }
+
   function publish() {
     if (!text || over || submitting) return;
     if (!confirming) {
       setConfirming(true);
       return;
     }
-    create.mutate(
-      { input: { content: text, placement } },
-      {
-        onSuccess: ({ createAnnouncement }) =>
-          activate.mutate(
-            { uuid: createAnnouncement.uuid, active: true },
-            {
-              onSuccess: () => {
-                toast.success(`已發布到${target.label}`);
-                onClose();
-              },
-            },
-          ),
-      },
-    );
+    if (create.data) {
+      activateDraft(create.data.createAnnouncement.uuid);
+    } else {
+      create.mutate(
+        { input: { content: text, placement } },
+        {
+          onSuccess: ({ createAnnouncement }) =>
+            activateDraft(createAnnouncement.uuid),
+        },
+      );
+    }
   }
 
   return (
@@ -375,7 +406,7 @@ function PublishAnnouncementDialog({
       submitting={submitting}
     >
       <ToggleButtonGroup
-        disabled={submitting}
+        disabled={submitting || create.isSuccess}
         exclusive
         fullWidth
         aria-label="發布目標"
@@ -464,7 +495,7 @@ function PublishAnnouncementDialog({
       ) : null}
 
       <TextInput
-        disabled={submitting}
+        disabled={submitting || create.isSuccess}
         autoFocus
         required
         multiline
