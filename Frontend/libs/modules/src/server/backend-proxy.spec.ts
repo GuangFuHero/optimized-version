@@ -79,6 +79,16 @@ function callAdminRest(path: string, cookie: string) {
   });
 }
 
+function callAdminGraphql(query: string, cookie: string) {
+  return createBackendGraphqlHandler('admin')(
+    new NextRequest('http://localhost:3001/api/graphql', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ query }),
+    }),
+  );
+}
+
 /** A browser's GraphQL request to the site's `/api/graphql` proxy route. */
 function callSiteGraphql(query: string, cookie?: string) {
   const headers = new Headers({ 'content-type': 'application/json' });
@@ -584,6 +594,48 @@ describe('back-office REST proxy', () => {
       cookies: ['wgdev_at=access-27a', 'wgdev_at=access-27b'],
       realm: 'admin',
     });
+  });
+
+  it('marks GraphQL requests with the admin realm too', async () => {
+    const calls = fakeBackend(() => Response.json({ data: { tickets: [] } }));
+
+    await callAdminGraphql('{ tickets { uuid } }', 'wgdev_at=access-28');
+
+    expect(calls[0].headers.get('x-wg-realm')).toBe('admin');
+  });
+
+  it('passes an account without a back-office identity through, signed in', async () => {
+    const calls = fakeBackend(() =>
+      Response.json(
+        {
+          detail: 'This account has no back-office identity',
+          code: 'back_office_identity_required',
+        },
+        { status: 403 },
+      ),
+    );
+
+    const response = await callAdminRest(
+      'tickets',
+      'wgdev_at=access-29; wgdev_rt=refresh-29',
+    );
+
+    expect({
+      status: response.status,
+      refreshed: calls.some(isRefresh),
+      session: response.headers.get('x-wg-session'),
+    }).toEqual({ status: 403, refreshed: false, session: null });
+  });
+
+  it('tells the browser when the backend says the session is gone', async () => {
+    fakeBackend(() => unauthorized('session_expired'));
+
+    const response = await callAdminRest(
+      'tickets',
+      'wgdev_at=access-30; wgdev_rt=refresh-30',
+    );
+
+    expect(response.headers.get('x-wg-session')).toBe('expired');
   });
 });
 
