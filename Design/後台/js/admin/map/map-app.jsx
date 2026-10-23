@@ -122,7 +122,7 @@
       // 危險區不參與色輪替：固定橘白斜紋（js/shared/wg-hazard.js），color 只給標籤底色用
       const color = form.kind === "hazard"
         ? (window.WGHazard ? window.WGHazard.stroke() : "#E65100")
-        : window.MAP_ZONE_COLORS[zones.length % window.MAP_ZONE_COLORS.length];
+        : window.wgZoneColor(form.kind);   // 🔒 ZONE-COLOR-101：照類型固定（後端存不了顏色）
       const zone = {
         id, kind: form.kind, name: form.name.trim(), ring: draft, color,
         team: form.kind === "assign" ? form.team : null, note: form.note.trim(),

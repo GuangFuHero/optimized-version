@@ -597,9 +597,44 @@
 
     // 封閉區域疊圖
     useEffect(() => {
-      const L = window.L, layer = overlayLayerRef.current;
-      if (!L || !layer) return;
+      const L = window.L, layer = overlayLayerRef.current, map = mapRef.current;
+      if (!L || !layer || !map) return;
       layer.clearLayers();
+      // 名稱與備註是後台人員打的字，塞進 HTML 前要轉義
+      const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+      /* 🔒 ZONE-LABEL-101（2026-10-23）區域名稱標籤**不可以蓋住區域本身**。
+         Sucre：「休息區一定都是非常小的」—— 原本標籤固定放在區域正中央，
+         小區域（休息區、集合點）在一般縮放下整塊被自己的標籤蓋掉，邊線與顏色都看不到。
+         做法：每次縮放後量一次區域在畫面上的大小（像素）——
+           · 區域比標籤大一圈 → 標籤放正中央
+           · 區域放不下標籤   → 標籤移到區域**正下方**，留 4px 縫，區域整塊露出來
+         ❌ 不要改回固定置中；❌ 不要用縮放級距寫死（區域大小差很多，要量實際像素）。
+         標籤可點，點了等於點區域（跳出負責單位與備註）。 */
+      const labels = [];
+      function addLabel(poly, text, hazard) {
+        const div = document.createElement('div');
+        div.className = 'wg-zone-label' + (hazard ? ' wg-zone-label--hazard' : '');
+        div.textContent = text;
+        const marker = L.marker(poly.getBounds().getCenter(), {
+          icon: L.divIcon({ className: 'wg-zone-label-anchor', html: div, iconSize: [0, 0] }),
+          keyboard: false, interactive: true,
+          zIndexOffset: -1000,   // 一律壓在站點／任務標記底下：標記要能點，名稱被蓋一點沒關係
+        }).on('click', (e) => { L.DomEvent.stop(e); if (poly.getPopup()) poly.openPopup(poly.getBounds().getCenter()); });
+        marker.addTo(layer);
+        labels.push({ poly, marker, div });
+      }
+      function placeLabels() {
+        labels.forEach(({ poly, marker, div }) => {
+          const b = poly.getBounds();
+          const nw = map.latLngToLayerPoint(b.getNorthWest()), se = map.latLngToLayerPoint(b.getSouthEast());
+          const w = se.x - nw.x, h = se.y - nw.y;
+          const fits = w >= div.offsetWidth + 16 && h >= div.offsetHeight + 16;
+          marker.setLatLng(fits ? b.getCenter() : L.latLng(b.getSouth(), b.getCenter().lng));
+          div.dataset.place = fits ? 'center' : 'below';
+        });
+      }
+
       /* 🔴 2026-09-25 Sucre：危險區是橘白斜紋（危險角錐的顏色）。
          封閉區域本來就是「危險地帶與暫時封鎖範圍」，所以整層一起換，前後台同一個樣子。 */
       const H = window.WGHazard;
@@ -609,19 +644,44 @@
       const fillColor = resolveCssToken(closureConfig.fillColor);
       controller.closureAreas.forEach((area) => {
         area.polygons.forEach((rings) => {
-          L.polygon(rings, H ? H.polygonStyle() : {
+          const poly = L.polygon(rings, H ? H.polygonStyle() : {
             color: strokeColor, weight: 2, opacity: 0.9, fillColor, fillOpacity: 0.18, dashArray: '6 4',
-          }).bindTooltip(area.label + (area.comment ? ' · ' + area.comment : ''), { direction: 'top' }).addTo(layer);
+          });
+          if (area.kind === 'hazard') {
+            // 後台畫的危險區：同責任區／標示區，類型寫在常駐標籤上（ZONE-STYLE-102）
+            if (area.comment) poly.bindPopup(escHtml('危險區・' + area.label) + '<br>' + escHtml(area.comment));
+            poly.addTo(layer);
+            addLabel(poly, '危險區・' + area.label, true);
+          } else {
+            poly.bindTooltip(area.label + (area.comment ? ' · ' + area.comment : ''), { direction: 'top' });
+            poly.addTo(layer);
+          }
         });
       });
-      /* 標示區域（志工休息區等）：實心淡色，用後台給的顏色。不帶責任單位。 */
+      /* 責任區、標示區（2026-10-23）
+         🔒 ZONE-STYLE-102 類型寫在**常駐**的名稱標籤上（「責任區・名稱」），不只放在滑過才出現的提示裡 ——
+            前台多在手機上用，手機沒有「滑過」。
+         🔒 ZONE-COLOR-101 顏色照類型：責任區靛、標示區綠（wg-hazard.js 的 wgZoneColor）。
+         🔄 2026-10-23 PM 裁示（照後端 ADR-311 10-11 修訂）：責任區前後台都公布被指派的單位（推翻 09-25 不顯示）。
+            常駐標籤只放「類型・名稱」（標籤太長會蓋住站點）；點區域或標籤跳出「負責：單位」與備註。 */
+      const KIND_LABEL = { assign: '責任區', mark: '標示區' };
       (controller.publicZones || []).forEach((area) => {
         const col = area.color || resolveCssToken(R.OVERLAY_LAYER_CONFIG['public-zones'].color);
+        const kind = KIND_LABEL[area.kind] || '區域';
         area.polygons.forEach((rings) => {
-          L.polygon(rings, { color: col, weight: 2, opacity: 0.9, fillColor: col, fillOpacity: 0.16 })
-            .bindTooltip(area.label + (area.comment ? ' · ' + area.comment : ''), { direction: 'top' }).addTo(layer);
+          const poly = L.polygon(rings, { color: col, weight: 2.5, opacity: 0.95, fillColor: col, fillOpacity: 0.14 });
+          const lines = [kind + '・' + area.label];
+          if (area.kind === 'assign' && area.team) lines.push('負責：' + area.team);
+          if (area.comment) lines.push(area.comment);
+          if (lines.length > 1) poly.bindPopup(lines.map(escHtml).join('<br>'));
+          poly.addTo(layer);
+          addLabel(poly, kind + '・' + area.label, false);
         });
       });
+      // 標籤要先畫上去才量得到寬度，所以等下一個 frame 再擺
+      const raf = requestAnimationFrame(placeLabels);
+      map.on('zoomend', placeLabels);
+      return () => { cancelAnimationFrame(raf); map.off('zoomend', placeLabels); };
     }, [controller.closureAreas, controller.publicZones]);
 
     // 選取時平移至標記

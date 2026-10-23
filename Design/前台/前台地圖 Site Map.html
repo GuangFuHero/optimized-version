@@ -16,6 +16,15 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
 <link rel="stylesheet" href="js/site/site.css?v=20260925b">
 <style id="__om-edit-overrides"></style>
+<style>
+/* 區域常駐名稱標籤（2026-10-23，ZONE-STYLE-102／ZONE-LABEL-101）：白底深字，類型＋名稱。
+   錨點在區域正中央（center）或區域下緣（below，標籤整個掛在下面，不蓋住區域） */
+.wg-zone-label-anchor{background:none;border:none}
+.wg-zone-label{position:absolute;left:0;top:0;transform:translate(-50%,-50%);padding:3px 8px;border-radius:6px;border:1px solid #CBD5E1;background:#fff;color:#0F172A;
+  font:700 12px/1.3 var(--font-chinese,"Noto Sans TC",sans-serif);box-shadow:0 1px 2px rgba(15,23,42,.15);white-space:nowrap;cursor:pointer}
+.wg-zone-label[data-place="below"]{transform:translate(-50%,4px)}
+.wg-zone-label--hazard{border-color:#E65100}
+</style>
 </head>
 <body>
 <div id="root"></div>
@@ -33,16 +42,16 @@
 <!-- 前後台共用狀態橋接（2026-08-22）：民眾建立的任務單與接任務狀態，後台任務管理讀同一份 -->
 <!-- QR 產生器（vendored，不走 CDN）：分享面板的現場列印張貼用 -->
 <script src="js/vendor/qrcode.js?v=20260925b"></script>
-<script src="js/shared/wg-bridge.js?v=20261006a"></script>
-<script src="js/shared/wg-hazard.js?v=20260925b"></script>
+<script src="js/shared/wg-bridge.js?v=20261023"></script>
+<script src="js/shared/wg-hazard.js?v=20261023"></script>
 <script src="js/site/site-route.js?v=20260925b"></script>
-<script src="js/site/site-data.js?v=20260925b"></script>
+<script src="js/site/site-data.js?v=20261023"></script>
 <script type="text/babel" src="js/site/site-controls.jsx?v=20260925b" data-presets="react"></script>
 <!-- 全站橫幅（EA-FEAT-001）：前台與後台共用同一支元件，realm 不同 -->
 <script src="js/admin/announce/an-data.js?v=20260925b"></script>
 <script type="text/babel" src="js/admin/announce/an-banner.jsx?v=20260925b" data-presets="react"></script>
 <!-- 2026-09-27：每一頁的「？」頁面說明 -->
-<script type="text/babel" src="js/shared/wg-help.jsx?v=20260927a" data-presets="react"></script>
+<script type="text/babel" src="js/shared/wg-help.jsx?v=20261023" data-presets="react"></script>
 <script type="text/babel" src="js/site/site-shell.jsx?v=20260925b" data-presets="react"></script>
 <!-- 登入入口的落點（2026-09-21）。UI 在 登入 Login.html，這一支只有導覽與身份寫入 -->
 <script src="js/site/site-auth.js?v=20260925b"></script>
@@ -54,7 +63,7 @@
 <script type="text/babel" src="js/site/site-actions.jsx?v=20261011a" data-presets="react"></script>
 <script type="text/babel" src="js/site/site-building.jsx?v=20260925b" data-presets="react"></script>
 <script type="text/babel" src="js/site/site-notify.jsx?v=20260925b" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-map.jsx?v=20260925b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-map.jsx?v=20261023" data-presets="react"></script>
 
 <script type="text/babel" data-presets="react">
 /* /map — app route composition（對應 apps/demo/src/app/(site)/map/[[...segments]]/page.tsx）

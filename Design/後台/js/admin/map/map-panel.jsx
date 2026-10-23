@@ -70,7 +70,7 @@
   function ZoneSwatch({ zone, kind, color, size }) {
     const s = size || 12;
     const k = zone ? zone.kind : kind;
-    const c = zone ? zone.color : color;
+    const c = zone ? (window.wgZoneColor ? window.wgZoneColor(zone.kind) : zone.color) : color;
     return k === "hazard"
       ? <span className="wg-hazard-swatch" style={{ display: "inline-block", width: s, height: s, borderRadius: 3, flexShrink: 0 }}></span>
       : <span style={{ display: "inline-block", width: s, height: s, borderRadius: 3, background: c, flexShrink: 0 }}></span>;
@@ -83,7 +83,7 @@
         <Switch checked={!!checked} onChange={onChange} disabled={disabled} label="前台可見" />
         <p className="wg-caption" style={{ margin: 0, color: "var(--color-fg-neutral-muted)", lineHeight: 1.65 }}>
           {checked
-            ? "民眾與志工在前台地圖看得到這一區的名稱、範圍與備註。" + (kind === "assign" ? "責任單位不會顯示。" : "")
+            ? "民眾與志工在前台地圖看得到這一區的名稱、範圍與備註。" + (kind === "assign" ? "責任區也會顯示負責單位（10-23 PM 裁示，照後端 ADR-311）。" : "")
             : "只有後台看得到。"}
         </p>
       </div>

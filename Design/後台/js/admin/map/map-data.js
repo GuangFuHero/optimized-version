@@ -112,9 +112,12 @@
   ];
   function kindLabel(k) { const d = ZONE_KINDS.find((x) => x.value === k); return d ? d.label : k; }
 
-  /** 寫給前台的形狀：只有前台需要的欄位。**不含責任單位**（那是後台的派工資訊）。 */
+  /** 寫給前台的形狀：只有前台需要的欄位。責任區帶 team（🔄 2026-10-23 PM 裁示（照後端 ADR-311 10-11 修訂）：責任區前後台都公布被指派的單位）。
+   *  ❌ 不帶區內任務單歸屬（那仍是後台的派工資訊）。 */
   function toPublicZone(z) {
-    return { id: z.id, kind: z.kind, name: z.name, ring: z.ring, color: z.color, note: z.note || "" };
+    // 🔒 不帶 color：後端沒有這個欄位，前台照類型用 wgZoneColor(kind)（ZONE-COLOR-102）
+    return { id: z.id, kind: z.kind, name: z.name, ring: z.ring, note: z.note || "",
+      ...(z.kind === "assign" && z.team ? { team: z.team } : null) };
   }
 
   // ── 資源站點 ──────────────────────────────────────────────────────────────
@@ -142,6 +145,7 @@
   // 🔴 2026-09-26：區域色**整組避開任務單的優先級色**（紅 #D32F2F／橘 #F57C00／藍 #2592B9／灰 #64748B）
   //    與危險區的橘。原本第一色 #2592B9 跟「一般」優先級的藍一模一樣，區域和單混成一片。
   //    改用靛、紫、綠、洋紅、深青、石板 —— 都夠深，當粗邊線時在淡色底圖上看得清楚。
+  //    🔒 10-23 起區域顏色照類型固定（js/shared/wg-hazard.js 的 wgZoneColor），這組只剩舊程式參考。
   const ZONE_COLORS = ["#4338CA", "#7E22CE", "#15803D", "#BE185D", "#0F766E", "#475569"];
 
   // 可指派的單位（2026-09-25 Sucre：全部團隊，含政府與非政府組織）。

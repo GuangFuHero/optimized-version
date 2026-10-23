@@ -1,4 +1,6 @@
 // map-canvas.jsx — 互助地圖的 Leaflet 畫布：任務單標點、資源站點、區域多邊形、手繪與邊界編輯
+// 🔒 ZONE-COLOR-101（10-23）：區域顏色照類型，畫的當下算（標示區改成責任區時會跟著換色）
+function zc(z) { return window.wgZoneColor ? window.wgZoneColor(z.kind) : z.color; }
 //
 // 圖資與互動沿用既有兩處實作，不另起爐灶：
 //   - 標點樣式與 tooltip：`js/admin/ticket/tk-map.jsx`（同一組優先級色）
@@ -37,8 +39,8 @@
   function zoneLabelHtml(z, on, dim) {
     const sw = z.kind === "hazard"
       ? `<span class="wg-hazard-swatch" style="width:12px;height:12px;border-radius:3px;flex-shrink:0"></span>`
-      : `<span style="width:12px;height:12px;border-radius:3px;flex-shrink:0;background:${z.color}"></span>`;
-    const border = z.kind === "hazard" ? "#E65100" : z.color;
+      : `<span style="width:12px;height:12px;border-radius:3px;flex-shrink:0;background:${zc(z)}"></span>`;
+    const border = z.kind === "hazard" ? "#E65100" : zc(z);
     const sub = z.kind === "hazard" ? "危險區" : (z.team || "");
     return `<div style="transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
         padding:5px 11px 5px 8px;border-radius:8px;background:#fff;color:#0F172A;border:${on ? 2 : 1.5}px solid ${border};
@@ -193,7 +195,7 @@
         if (hazard && window.WGHazard) window.WGHazard.ensure();
         const style = hazard && window.WGHazard
           ? { ...window.WGHazard.polygonStyle({ selected: on }), ...(dim ? { opacity: 0.5, fillOpacity: 0.3 } : {}) }
-          : { color: z.color, weight: on ? 4 : 3, opacity: dim ? 0.45 : 1, fillColor: z.color, fillOpacity: on ? 0.14 : dim ? 0.03 : 0.07 };
+          : { color: zc(z), weight: on ? 4 : 3, opacity: dim ? 0.45 : 1, fillColor: zc(z), fillOpacity: on ? 0.14 : dim ? 0.03 : 0.07 };
         const poly = L.polygon(z.ring, { ...style, interactive: !busy }).addTo(layer);
         poly.on("click", (e) => { window.L.DomEvent.stop(e); onSelectZone && onSelectZone(z.id); });
         if (labels) {

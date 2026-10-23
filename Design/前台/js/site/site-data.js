@@ -701,8 +701,11 @@
     if (!z || !Array.isArray(z.ring) || z.ring.length < 3) return null;
     return {
       id: 'wz-' + z.id, label: z.name, status: z.kind === 'hazard' ? 'closed' : 'open',
-      informationSource: '後台互助地圖', comment: z.note || '', color: z.color || null,
+      informationSource: '後台互助地圖', comment: z.note || '',
+      // 🔒 ZONE-COLOR-101：後端沒有顏色欄位，照類型固定（與後台同一支 wgZoneColor）
+      color: z.kind === 'hazard' ? null : (window.wgZoneColor ? window.wgZoneColor(z.kind) : null),
       kind: z.kind, polygons: [[z.ring]],
+      team: z.kind === 'assign' ? (z.team || null) : null,   // 🔄 2026-10-23 PM 裁示（照後端 ADR-311 10-11 修訂）：責任區前後台都公布被指派的單位
     };
   }
 

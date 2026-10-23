@@ -66,6 +66,17 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensure);
   else ensure();
 
+  /* ── 責任區／標示區的顏色（2026-10-23 定案：照類型固定）──────────────────
+   * 🔒 ZONE-COLOR-101 顏色只看類型：責任區靛 #4338CA、標示區綠 #15803D、危險區橘白斜紋（polygonStyle）。
+   *    後端 work_zones 沒有顏色欄位，也不給人選色 —— 前端照類型畫就好，不用存、不用算。
+   * 🔒 ZONE-COLOR-102 前後台都呼叫這一支，不要各自寫色碼。
+   * ⚠️ 已知代價：相鄰兩個責任區同色，靠邊線與常駐的名稱標籤分辨。
+   * 兩色都避開任務單優先級色（紅／橘／藍／灰）與危險區的橘（09-26）。 */
+  var ZONE_KIND_COLORS = { assign: '#4338CA', mark: '#15803D' };
+  function zoneColor(kind) { return ZONE_KIND_COLORS[kind] || ZONE_KIND_COLORS.mark; }
+  window.WG_ZONE_KIND_COLORS = ZONE_KIND_COLORS;
+  window.wgZoneColor = zoneColor;
+
   window.WGHazard = {
     PATTERN_ID: PATTERN_ID,
     ensure: ensure,
