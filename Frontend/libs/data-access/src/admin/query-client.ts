@@ -14,9 +14,8 @@ export function isAdminPermissionError(error: Error | null) {
   }
   return (
     error instanceof CombinedError &&
-    ((error.response instanceof Response && error.response.status === 403) ||
-      // Resolver HTTPExceptions arrive as GraphQL errors with an HTTP 200 response.
-      error.graphQLErrors.some((item) => item.message.startsWith('403:')))
+    // Resolver HTTPExceptions carry permission failures; transport 403s may have other causes.
+    error.graphQLErrors.some((item) => item.message.startsWith('403:'))
   );
 }
 
