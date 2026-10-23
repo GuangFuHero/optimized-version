@@ -17,7 +17,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `/audit`
 - `/settings`
 
-`/` 導向 `/dashboard`。Portal layout 要求 NextAuth session；未登入時導向 `/login?callbackUrl=/`。Backend 負責各 API 的 permission checks。兩個 app 共用 document layout、基本 providers 和 server proxy handlers；各 app 保留自己的 query cache。
+`/` 導向 `/dashboard`。Portal layout 要求登入 cookie；未登入時導向 `/login?callbackUrl=/`。Backend 負責各 API 的 permission checks。兩個 app 共用 document layout、基本 providers 和 server proxy handlers；各 app 保留自己的 query cache。
 
 ## 已存在的 Admin Modules
 

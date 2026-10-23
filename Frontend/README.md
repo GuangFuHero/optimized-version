@@ -10,7 +10,7 @@
 - **App framework**：Next.js 16（App Router）、React 19
 - **UI**：MUI 9 + Emotion、Leaflet / react-leaflet（地圖）
 - **資料存取**：urql 5、GraphQL Code Generator、openapi-fetch、TanStack Query；前台保留 urql graphcache
-- **驗證**：NextAuth 4（JWT session）+ 共用 REST proxy（`/api/v1/auth/*`）
+- **驗證**：後端的 `HttpOnly` session cookie + 共用 REST / GraphQL proxy（`/api/v1/*`、`/api/graphql`）
 - **語言/工具**：TypeScript 5.9（strict）、ESLint 9（flat config）、Prettier
 
 ---
@@ -36,8 +36,8 @@ cp .env.example .env.local
 - `AUTH_COOKIE_PREFIX`：登入 cookie 名稱的前綴，要跟後端的 `AUTH_COOKIE_PREFIX` 一樣（本機 `wgdev`）
 - `GOOGLE_MAPS_API_KEY`：選填，只用來在地圖上建立站點時預填地址
 
-前台的登入（密碼、Google、LINE）都由後端處理，前台沒有自己的登入 secret；Google、LINE 只在後端設定（見
-[`docs/authentication.md`](docs/authentication.md)）。後台還在用 NextAuth，設定見 [admin README](apps/admin/README.md)。
+前後台的登入（密碼、Google、LINE）都由後端處理，前端沒有自己的登入 secret；Google、LINE 只在後端設定（見
+[`docs/authentication.md`](docs/authentication.md)）。
 
 ### 3. 啟動開發環境
 
@@ -62,9 +62,8 @@ Frontend/
       src/app/
         (auth)/             # 登入 / 註冊 / 忘記密碼 等公開頁面
         (site)/             # 前台救災地圖 / 清單 / 帳號頁面
-        api/                # NextAuth、REST / GraphQL proxy、Google reverse geocode
+        api/                # REST / GraphQL proxy、Google reverse geocode
       src/modules/          # app-local composition，尚未提升為 libs/modules 的頁面實作
-      src/lib/               # server-side helpers（NextAuth options 等）
       src/providers/         # client-side context providers
 
   libs/

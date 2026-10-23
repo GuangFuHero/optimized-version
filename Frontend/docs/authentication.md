@@ -2,8 +2,8 @@
 
 ## Overview
 
-前台（`apps/demo`）的登入由後端負責：密碼、Google、LINE 都由後端驗證，後端把 token 放進 `HttpOnly` cookie。
-前端不保存、也讀不到 token。後台（`apps/admin`）在搬到後端登入之前還是用 NextAuth，見最後一節。
+前台（`apps/demo`）和後台（`apps/admin`）的登入都由後端負責：密碼、Google、LINE 都由後端驗證，後端把 token 放進
+`HttpOnly` cookie。前端不保存、也讀不到 token。後台的差異見最後一節。
 
 核心原則：
 
@@ -101,8 +101,7 @@ Component 不能設 cookie，瀏覽器留著已經輪替掉的 refresh token，�
 `AuthSessionProvider` 讀 `/api/v1/users/me`，兩個 app 的 providers 都有掛。`useAuthSession()` 回傳
 `{ status, user, refetch }`：`status` 是 `loading`、`authenticated` 或 `unauthenticated`；`user` 只有 `uuid`、`name`。
 
-重新讀的時機：頁面載入、視窗取得焦點、分頁回到前景、其他分頁通知登入或登出、呼叫 `refetch()`（後台用
-NextAuth 登入成功之後）。
+重新讀的時機：頁面載入、視窗取得焦點、分頁回到前景、其他分頁通知登入或登出、呼叫 `refetch()`。
 
 跨分頁通知用 `BroadcastChannel('wg-auth')`，訊息是 `signed-in` 或 `signed-out`（`session/auth-broadcast.ts`）。
 
@@ -119,8 +118,8 @@ browser 裡，`router.refresh()` 只會重畫 server 那部分，訪客會繼續
 
 ## 登入方式
 
-登入、註冊表單（`LoginFormClient`、`RegisterFormClient`）前後台共用，參數 `signInWith` 預設是 NextAuth；前台的
-`/login`、`/register` 傳 `signInWith="backend"`（登入表單還要傳 `app="site"`）。
+登入、註冊表單（`LoginFormClient`、`RegisterFormClient`）前後台共用。登入表單的 `app`（`site` 或 `admin`）決定
+Google、LINE 登入完回到哪個 app。
 
 ### 密碼
 
@@ -194,14 +193,12 @@ browser 裡，`router.refresh()` 只會重畫 server 那部分，訪客會繼續
 
 ## 後台（`apps/admin`）
 
-後台搬到後端登入之前，還是用 NextAuth：
+後台跟前台用同一組 cookie 和同一套 proxy（`createBackendRestHandler('admin')`、`createBackendGraphqlHandler('admin')`），
+差別只有：
 
-- `apps/admin/src/app/api/auth/[...nextauth]/route.ts`、`libs/modules/src/server/auth-options.ts`、
-  `libs/modules/src/server/server-backend-auth.ts`。
-- 後台的 proxy 用 NextAuth session 裡的 backend token 帶 `Authorization: Bearer`，不轉送瀏覽器的 cookie，也不替前台
-  的 session refresh。
-- 在那之前，後台要自己登入，前台的登入帶不過去。
-- 在那之前，後台的 Google、LINE 登入不能用：NextAuth 還在呼叫後端已經拿掉的 `/auth/sso/*`，會拿到 404。請用密碼登入。
-
-後台搬過去時要做的：登入、註冊頁改傳 `signInWith="backend"`（登入頁加 `app="admin"`），照 `apps/demo/src/proxy.ts`
-加上 render 前的 refresh，proxy 改成跟前台一樣轉送 cookie，然後拿掉 NextAuth。
+- 不帶 `X-WG-Realm: site`，後端用目前切換到的身份回答。
+- `apps/admin/src/proxy.ts` 跟前台一樣在 render 前 refresh。
+- `(portal)` layout 只看有沒有 `{prefix}_at` cookie，沒有就導向 `/login?callbackUrl=/`。session 是否還有效交給後端判斷。
+- 切換身份打 `POST /api/v1/auth/session/identity`，後端直接換掉 access cookie。`/auth/switch-identity` 只收 Bearer。
+- TanStack Query 收到 401 時（`password_incorrect`、`step_up_invalid` 除外）呼叫 `endExpiredSession()`，以訪客身份重新整理，
+  layout 再導向登入頁。
