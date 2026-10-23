@@ -87,26 +87,41 @@ export function Markdown({
     if (tr.docChanged) editor.view.dispatch(tr);
   }, [editor, checkboxes]);
 
-  const headings: { label: string; position: number }[] = [];
+  const headings: { label: string; position: number; level: 2 | 3 }[] = [];
   if (navigation)
     editor?.state.doc.descendants((node, position) => {
-      if (node.type.name === 'heading' && node.attrs.level === 2)
-        headings.push({ label: node.textContent, position });
+      if (
+        node.type.name === 'heading' &&
+        (node.attrs.level === 2 || node.attrs.level === 3)
+      )
+        headings.push({
+          label: node.textContent,
+          position,
+          level: node.attrs.level === 2 ? 2 : 3,
+        });
     });
+  const sectionHeadings = headings.filter((heading) => heading.level === 2);
+  const navigationHeadings = sectionHeadings.length
+    ? sectionHeadings
+    : headings;
 
   return (
     <Box
       className={className}
-      sx={[markdownSx, ...(Array.isArray(sx) ? sx : [sx])]}
+      sx={[
+        markdownSx,
+        { display: 'flex', flexDirection: 'column', gap: '14px' },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
     >
-      {headings.length > 1 ? (
+      {navigationHeadings.length > 1 ? (
         <Stack
           component="nav"
           aria-label="文章段落"
           direction="row"
           sx={{ flexWrap: 'wrap', gap: '6px', mb: '12px' }}
         >
-          {headings.map((heading) => (
+          {navigationHeadings.map((heading) => (
             <Button
               key={heading.position}
               variant="ghost"
@@ -117,6 +132,16 @@ export function Markdown({
                 color: designTokens.color.fg.neutral.subtle,
                 fontSize: 13,
                 minHeight: 44,
+                height: 44,
+                px: '12px',
+                borderRadius: `${designTokens.radius.full}px`,
+                '&:hover': {
+                  color: designTokens.color.brand.secondary.subtle,
+                  bgcolor: designTokens.color.bg.neutral.subtle,
+                  transform: 'none',
+                  boxShadow: 'none',
+                },
+                '&:active': { transform: 'none' },
               }}
               onClick={() => {
                 const node = editor?.view.nodeDOM(heading.position);

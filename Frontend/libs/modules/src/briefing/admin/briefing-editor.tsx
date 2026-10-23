@@ -1,52 +1,57 @@
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Check, Save, Send, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
-  BriefingState,
-  useGenerateBriefing,
+  useDeleteBriefing,
+  usePublishBriefing,
   useUpdateBriefing,
 } from '@rescue-frontend/data-access/admin';
 import {
   Badge,
   Button,
   Callout,
+  Card,
   Dialog,
   MarkdownEditor,
   designTokens,
 } from '@rescue-frontend/ui';
 
-import type { EditorSelection } from './briefing-content';
+import type { Briefing } from './briefing-content';
+import { BriefingPreview, BriefingStamp } from './briefing-preview';
+import { PublishBriefingDialog } from './publish-briefing-dialog';
 
-const { color, radius, typography } = designTokens;
+const { color, typography } = designTokens;
 
 export function BriefingEditor({
-  selection,
+  draft,
+  published,
+  versionCount,
+  canPublish,
+  canDiscard,
   onClose,
-  onSaved,
 }: {
-  selection: EditorSelection;
+  draft: Briefing;
+  published?: Briefing;
+  versionCount: number;
+  canPublish: boolean;
+  canDiscard: boolean;
   onClose: () => void;
-  onSaved: (uuid: string) => void;
 }) {
-  const [content, setContent] = useState(
-    selection.kind === 'edit'
-      ? selection.briefing.content
-      : (selection.template?.content ?? ''),
-  );
-  const [confirm, setConfirm] = useState<'save' | 'leave' | null>(null);
-  const create = useGenerateBriefing();
+  const [content, setContent] = useState(draft.content);
+  const [confirm, setConfirm] = useState<
+    'publish' | 'leave' | 'discard' | null
+  >(null);
   const update = useUpdateBriefing();
-  const pending = create.isPending || update.isPending;
-  const error = create.error ?? update.error;
-  const dirty =
-    selection.kind === 'edit'
-      ? content !== selection.briefing.content
-      : Boolean(content.trim());
-  const canSave = !pending && dirty && Boolean(content.trim());
+  const publish = usePublishBriefing();
+  const discard = useDeleteBriefing();
+  const pending = update.isPending || publish.isPending || discard.isPending;
+  const error = update.error ?? publish.error ?? discard.error;
+  const dirty = content !== draft.content;
+  const empty = !content.trim();
 
   useEffect(() => {
     if (!dirty) return;
@@ -55,34 +60,25 @@ export function BriefingEditor({
     return () => window.removeEventListener('beforeunload', beforeUnload);
   }, [dirty]);
 
-  function save() {
-    if (!canSave) return;
-    if (selection.kind === 'edit') {
-      update.mutate(
-        { uuid: selection.briefing.uuid, input: { content } },
-        {
-          onSuccess: ({ updateBriefing }) => {
-            toast.success('行前資訊已儲存，公開內容已更新。');
-            onSaved(updateBriefing.uuid);
-          },
-        },
-      );
-    } else {
-      create.mutate(
-        {
-          input: {
-            content,
-            state: BriefingState.Briefing,
-            templateUuid: selection.template?.uuid ?? null,
-          },
-        },
-        {
-          onSuccess: ({ generateBriefing }) => {
-            toast.success('行前資訊已建立並公開。');
-            onSaved(generateBriefing.uuid);
-          },
-        },
-      );
+  async function save(action: 'save' | 'leave' | 'publish') {
+    if (pending || (action === 'publish' && (empty || !canPublish))) return;
+    update.reset();
+    publish.reset();
+    discard.reset();
+    try {
+      if (dirty) {
+        await update.mutateAsync({ uuid: draft.uuid, input: { content } });
+      }
+      if (action === 'publish') {
+        await publish.mutateAsync({ uuid: draft.uuid });
+        toast.success('已發布到前台，志工現在看到的是這份內容。');
+        onClose();
+      } else {
+        toast.success('草稿已儲存，前台內容沒有變更。');
+        if (action === 'leave') onClose();
+      }
+    } catch {
+      // Mutation errors remain visible while the editor keeps the working content.
     }
   }
 
@@ -93,27 +89,31 @@ export function BriefingEditor({
         sx={{ gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}
       >
         <Button
-          variant="ghost"
+          variant="outline"
           startIcon={<ArrowLeft size={16} />}
           disabled={pending}
           onClick={() => (dirty ? setConfirm('leave') : onClose())}
         >
-          回到總覽
+          完成編輯
         </Button>
-        <Typography component="h1" sx={typography.heading[600]}>
-          {selection.kind === 'edit' ? '編輯行前資訊' : '新增行前資訊'}
-        </Typography>
+        <Badge tone={published ? 'info' : 'warning'}>
+          {published ? '編輯中的草稿' : '尚未發布'}
+        </Badge>
         {dirty ? <Badge tone="warning">尚未儲存</Badge> : null}
+        <BriefingStamp briefing={draft} />
       </Stack>
-      <Callout tone="warning">
-        儲存後會立即公開，所有志工與未登入的人都能閱讀。修改在確認儲存前不會公開。
+      <Callout tone="info">
+        這裡改的是草稿，儲存不會變更前台內容。
+        {published
+          ? '志工目前看到的仍是已發布的內容，直到你按下「發布到前台」。'
+          : '前台目前沒有行前資訊，要按「發布到前台」才會出現。'}
+        {published ? (
+          <BriefingStamp briefing={published} versionNumber={versionCount} />
+        ) : null}
       </Callout>
-      {selection.kind === 'new' && selection.template ? (
-        <Callout>請先核對範本中的地點、時間、聯絡方式與安全資訊。</Callout>
-      ) : null}
       {error ? (
         <Callout tone="danger">
-          儲存失敗，修改內容仍保留在編輯區。{error.message}
+          操作失敗，修改內容仍保留在編輯區。{error.message}
         </Callout>
       ) : null}
       <Box
@@ -121,77 +121,166 @@ export function BriefingEditor({
           display: 'grid',
           gridTemplateColumns: {
             mobile: '1fr',
-            desktop: 'minmax(0, 1fr) 260px',
+            desktop: 'minmax(0, 1fr) 280px',
           },
           gap: 2,
           alignItems: 'start',
         }}
       >
         <MarkdownEditor
-          defaultValue={content}
+          defaultValue={draft.content}
           onChange={setContent}
           label="行前資訊內容"
-          helperText="用段落標題分段，段裡再用小標題細分。標成可勾項目的每一行，志工能在前台逐項打勾。"
+          helperText="用段落標題分段，段裡再用小標題細分。可勾項目讓志工在前台逐項打勾。"
           disabled={pending}
+          previewLabel="志工看到的樣子"
+          preview={
+            <BriefingPreview
+              content={content}
+              title="目前編輯中的內容，發布前志工看不到這份修改。"
+            />
+          }
         />
-        <Stack
-          sx={{
-            gap: 2,
-            p: 2,
-            position: { desktop: 'sticky' },
-            top: 0,
-            bgcolor: color.bg.neutral.default,
-            border: `1px solid ${color.border.default}`,
-            borderRadius: `${radius.md}px`,
-          }}
-        >
-          <Typography
-            sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
-          >
-            {dirty ? '有尚未儲存的修改。' : '目前沒有未儲存的修改。'}字數{' '}
-            {Array.from(content).length}
-          </Typography>
-          <Button
-            startIcon={<Save size={16} />}
-            disabled={!canSave}
-            onClick={() => setConfirm('save')}
-          >
-            {pending ? '儲存中…' : '儲存並立即公開'}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() => (dirty ? setConfirm('leave') : onClose())}
-          >
-            完成編輯，回到總覽
-          </Button>
+        <Stack sx={{ gap: 2, position: { desktop: 'sticky' }, top: 0 }}>
+          <Card>
+            <Stack sx={{ gap: 1.5 }}>
+              <Typography
+                sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
+              >
+                {dirty ? '有尚未儲存的修改。' : '目前沒有未儲存的修改。'}
+                <br />
+                字數 {Array.from(content).length}
+              </Typography>
+              <Button
+                variant="outline"
+                startIcon={<Save size={16} />}
+                disabled={pending || !dirty}
+                onClick={() => void save('save')}
+              >
+                {update.isPending ? '儲存中…' : '儲存草稿'}
+              </Button>
+              {canPublish ? (
+                <Button
+                  startIcon={<Send size={16} />}
+                  disabled={pending || empty}
+                  onClick={() => setConfirm('publish')}
+                >
+                  發布到前台
+                </Button>
+              ) : (
+                <Typography sx={typography.body[300]}>
+                  目前身分可以儲存草稿，沒有發布權限。
+                </Typography>
+              )}
+              {empty ? (
+                <Typography sx={typography.body[300]}>
+                  草稿可以留白，發布前請補上內容。
+                </Typography>
+              ) : null}
+              <Button
+                variant="outline"
+                startIcon={<Check size={16} />}
+                disabled={pending}
+                onClick={() => (dirty ? setConfirm('leave') : onClose())}
+              >
+                完成編輯，回到總覽
+              </Button>
+              {canDiscard ? (
+                <Box
+                  component="details"
+                  sx={{
+                    borderTop: `1px solid ${color.border.default}`,
+                    pt: 1.5,
+                  }}
+                >
+                  <Box
+                    component="summary"
+                    sx={{
+                      cursor: 'pointer',
+                      ...typography.body[300],
+                      color: color.fg.neutral.muted,
+                    }}
+                  >
+                    更多動作
+                  </Box>
+                  <Button
+                    variant="ghost"
+                    startIcon={<Trash2 size={16} />}
+                    sx={{ mt: 1, color: color.fg.danger }}
+                    disabled={pending}
+                    onClick={() => setConfirm('discard')}
+                  >
+                    丟棄草稿
+                  </Button>
+                </Box>
+              ) : null}
+            </Stack>
+          </Card>
+          <Card>
+            <Typography
+              sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
+            >
+              寫給還沒出發、對現場不熟悉的人。請核對地點、時間、聯絡方式與安全資訊。
+            </Typography>
+          </Card>
         </Stack>
       </Box>
-      <Dialog
-        open={confirm === 'save'}
+      <PublishBriefingDialog
+        open={confirm === 'publish'}
         onClose={() => setConfirm(null)}
-        onConfirm={save}
-        title="確認儲存並公開？"
-        confirmLabel={pending ? '儲存中…' : '確認儲存並公開'}
+        onConfirm={() => void save('publish')}
+        hasPublished={Boolean(published)}
+        nextVersion={versionCount + 1}
+        content={content}
+        savingChanges={dirty}
         submitting={pending}
-        confirmDisabled={!canSave}
+        confirmDisabled={empty || !canPublish}
         error={error?.message}
-      >
-        <Typography>
-          {selection.kind === 'edit'
-            ? '儲存後會立即取代這份公開內容，舊內容無法從此頁復原。'
-            : '儲存後，所有志工與未登入的人都能立即閱讀這份內容。'}
-        </Typography>
-      </Dialog>
+      />
       <Dialog
         open={confirm === 'leave'}
         onClose={() => setConfirm(null)}
-        onConfirm={onClose}
-        title="離開編輯？"
-        confirmLabel="捨棄修改並離開"
-        confirmTone="danger"
+        onConfirm={() => void save('leave')}
+        title="有尚未儲存的修改"
+        confirmLabel={pending ? '儲存中…' : '存成草稿再離開'}
+        submitting={pending}
+        error={error?.message}
       >
-        <Typography>有尚未儲存的修改。離開後，這些修改將不會保留。</Typography>
+        <Typography>存成草稿後再離開，前台內容不會變更。</Typography>
+        <Button
+          variant="ghost"
+          disabled={pending}
+          onClick={onClose}
+          sx={{ alignSelf: 'flex-start', color: color.fg.danger }}
+        >
+          直接離開，不儲存修改
+        </Button>
+      </Dialog>
+      <Dialog
+        open={confirm === 'discard'}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => {
+          if (pending || !canDiscard) return;
+          discard.mutate(
+            { uuid: draft.uuid },
+            {
+              onSuccess: () => {
+                toast.success('草稿已丟棄，前台內容沒有變更。');
+                onClose();
+              },
+            },
+          );
+        }}
+        title="確認丟棄草稿？"
+        confirmLabel={discard.isPending ? '丟棄中…' : '確認丟棄'}
+        confirmTone="danger"
+        submitting={pending}
+        error={discard.error?.message}
+      >
+        <Typography>
+          草稿與尚未儲存的修改都會丟棄，無法復原。
+          {published ? '目前公開的內容會保留。' : '之後可以重新建立行前資訊。'}
+        </Typography>
       </Dialog>
     </Stack>
   );

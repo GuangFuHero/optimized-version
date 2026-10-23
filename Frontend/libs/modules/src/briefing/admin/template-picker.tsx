@@ -13,11 +13,7 @@ import {
   designTokens,
 } from '@rescue-frontend/ui';
 
-import {
-  briefingTitle,
-  type BriefingTemplate,
-  type EditorSelection,
-} from './briefing-content';
+import { briefingTitle, type BriefingTemplate } from './briefing-content';
 
 const { color, typography } = designTokens;
 
@@ -25,15 +21,19 @@ export interface TemplatePickerProps {
   templates: BriefingTemplate[];
   pending?: boolean;
   error?: boolean;
+  submitting?: boolean;
+  creationError?: string;
   onRetry: () => void;
   onClose: () => void;
-  onPick: (selection: Extract<EditorSelection, { kind: 'new' }>) => void;
+  onPick: (template?: BriefingTemplate) => void;
 }
 
 export function TemplatePicker({
   templates,
   pending,
   error,
+  submitting = false,
+  creationError,
   onRetry,
   onClose,
   onPick,
@@ -52,6 +52,7 @@ export function TemplatePicker({
       description={<>挑一個起點，選擇後可以自由修改內容。</>}
       width={920}
       height={700}
+      dismissible={!submitting}
       contentSx={{
         p: 0,
         overflow: 'hidden',
@@ -66,18 +67,14 @@ export function TemplatePicker({
         <>
           <Button
             startIcon={<Check size={16} />}
-            disabled={pending}
-            onClick={() =>
-              onPick({
-                kind: 'new',
-                template: selected,
-              })
-            }
+            disabled={submitting || (pending && selectedValue !== '')}
+            onClick={() => onPick(selected)}
           >
-            用{selected ? `「${briefingTitle(selected.content)}」範本` : '空白'}
-            建立
+            {submitting
+              ? '建立草稿中…'
+              : `用${selected ? `「${briefingTitle(selected.content)}」範本` : '空白'}建立`}
           </Button>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={submitting}>
             取消
           </Button>
           <Typography
@@ -87,7 +84,7 @@ export function TemplatePicker({
               color: color.fg.neutral.muted,
             }}
           >
-            先進入編輯，確認儲存後才會公開。
+            建立草稿後進入編輯，發布前志工看不到。
           </Typography>
         </>
       }
@@ -116,7 +113,12 @@ export function TemplatePicker({
         {error ? (
           <Callout tone="warning">
             範本載入失敗。你可以重試，或從空白開始。
-            <Button variant="ghost" size="sm" onClick={onRetry}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRetry}
+              disabled={submitting || pending}
+            >
               重試
             </Button>
           </Callout>
@@ -139,6 +141,7 @@ export function TemplatePicker({
             description={template.tags.join('、')}
             icon={<FileText size={18} />}
             selected={template.uuid === selected?.uuid}
+            disabled={submitting}
             onClick={() => setSelectedId(template.uuid)}
           />
         ))}
@@ -147,6 +150,7 @@ export function TemplatePicker({
           description="完全空白，連標題都沒有。已經有現成文案要貼進來時用這個。"
           icon={<FileText size={18} />}
           selected={!selected}
+          disabled={submitting}
           onClick={() => setSelectedId('')}
         />
       </Stack>
@@ -159,6 +163,9 @@ export function TemplatePicker({
           overflowY: 'auto',
         }}
       >
+        {creationError ? (
+          <Callout tone="danger">無法建立草稿。{creationError}</Callout>
+        ) : null}
         {!selected ? (
           <Stack
             sx={{

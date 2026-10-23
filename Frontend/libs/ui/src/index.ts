@@ -15,6 +15,7 @@ export type {
   ButtonVariant,
 } from './components/Button';
 export { Callout } from './components/Callout';
+export { Card } from './components/card';
 export type { CalloutProps, CalloutTone } from './components/Callout';
 export { CountBadge } from './components/CountBadge';
 export type { CountBadgeProps, CountBadgeTone } from './components/CountBadge';
@@ -72,6 +73,8 @@ export { RowAction } from './components/RowAction';
 export type { RowActionProps, RowActionTone } from './components/RowAction';
 export { SegmentedTabs } from './components/segmented-tabs';
 export type { SegmentedTabsProps } from './components/segmented-tabs';
+export { Tabs } from './components/tabs';
+export type { TabsProps } from './components/tabs';
 export { Sheet } from './components/Sheet';
 export type { SheetProps } from './components/Sheet';
 export { SidebarItem } from './components/SidebarItem';
