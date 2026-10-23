@@ -33,10 +33,15 @@ export function returnHint(callbackUrl: string | null): string | null {
 
 /**
  * Said once signed in, while the page goes on. With no page to go back to the sign-in ends on the
- * map, so it says that instead of the design's 「回到你剛剛那一頁」.
+ * site's map or the back office's dashboard, so it says that instead of the design's
+ * 「回到你剛剛那一頁」.
  */
-export function signedInMessage(callbackUrl: string | null): string {
-  return callbackUrl
-    ? '登入成功，正在回到你剛剛那一頁⋯'
+export function signedInMessage(
+  callbackUrl: string | null,
+  app: 'site' | 'admin',
+): string {
+  if (callbackUrl) return '登入成功，正在回到你剛剛那一頁⋯';
+  return app === 'admin'
+    ? '登入成功，正在前往後台⋯'
     : '登入成功，正在前往地圖⋯';
 }

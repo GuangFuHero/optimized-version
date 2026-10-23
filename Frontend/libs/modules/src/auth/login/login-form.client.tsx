@@ -99,7 +99,7 @@ export function LoginFormClient({
             safeReturnPath(requestedCallbackUrl, defaultCallbackUrl),
           );
         }}
-        successMessage={signedInMessage(requestedCallbackUrl)}
+        successMessage={signedInMessage(requestedCallbackUrl, app)}
         secondaryActionLabel="註冊帳號"
         onForgotPasswordAsync={() => {
           startTransition(() => {

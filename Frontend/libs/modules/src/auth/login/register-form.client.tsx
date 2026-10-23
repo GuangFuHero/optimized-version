@@ -31,11 +31,15 @@ interface PendingRegistration {
   normalizedIdentity: string;
 }
 
-export function RegisterFormClient() {
+export function RegisterFormClient({
+  defaultCallbackUrl = '/map',
+}: {
+  defaultCallbackUrl?: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   // The page the login page was asked to return to, carried here — a guest who pressed 「登入後接」
-  // and had no account yet lands back on that ticket. Nothing asked: the map.
+  // and had no account yet lands back on that ticket. Nothing asked: `defaultCallbackUrl`.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
   const [pendingRegistration, setPendingRegistration] =
     useState<PendingRegistration | null>(null);
@@ -69,7 +73,9 @@ export function RegisterFormClient() {
         code,
       });
       setVerificationSuccess('帳號驗證完成，正在登入。');
-      continueSignedIn(safeReturnPath(requestedCallbackUrl, '/map'));
+      continueSignedIn(
+        safeReturnPath(requestedCallbackUrl, defaultCallbackUrl),
+      );
     } catch (error) {
       setVerificationError(
         resolveAuthErrorMessage(error, VERIFY_FALLBACK_MESSAGE),
