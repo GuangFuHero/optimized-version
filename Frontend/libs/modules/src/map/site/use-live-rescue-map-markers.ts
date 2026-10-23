@@ -14,12 +14,12 @@ import { fetchExchange, type CombinedError } from 'urql';
 import { useDebounceValue } from 'usehooks-ts';
 
 import type { RescueMapMarkerItem } from '../types';
-import { resolveTicketSearch } from '../../list/ticket-list-rules';
 import type { SiteRouteState } from '../../route/types';
 import { sessionExpiryFetch } from '../../session/end-expired-session';
 import type { ReloadedTicket } from '../../ticket/needs/use-ticket-needs';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import { onTicketCreated } from '../../ticket/ticket-changes';
+import { resolveTicketSearch } from '../../ticket/ticket-search';
 import {
   dedupeMarkersById,
   mapStationToMarker,

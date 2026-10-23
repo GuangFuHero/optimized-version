@@ -36,11 +36,11 @@ import { SiteViewSwitch } from '../route/controls/view-switch';
 import { useAuthSession } from '../session/auth-session';
 import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
+import { resolveTicketSearch } from '../ticket/ticket-search';
 import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
 import {
   listTickets,
-  resolveTicketSearch,
   showsClosedTickets,
   type ListedTicket,
 } from './ticket-list-rules';

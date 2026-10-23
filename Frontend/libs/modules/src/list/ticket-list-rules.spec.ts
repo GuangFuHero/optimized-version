@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import type { TicketNeed } from '../ticket/needs';
-import {
-  listTickets,
-  resolveTicketSearch,
-  showsClosedTickets,
-} from './ticket-list-rules';
+import { listTickets, showsClosedTickets } from './ticket-list-rules';
 
 function need(overrides: Partial<TicketNeed> = {}): TicketNeed {
   return {
@@ -45,37 +41,6 @@ const ids = (markers: { marker: RescueMapMarkerItem }[]) =>
   markers.map(({ marker }) => marker.id);
 const needIds = (listed: { needs: readonly TicketNeed[] }) =>
   listed.needs.map(({ uuid }) => uuid);
-
-describe('resolveTicketSearch', () => {
-  it('searches nothing without a term', () => {
-    expect(resolveTicketSearch(undefined)).toEqual({ kind: 'none' });
-    expect(resolveTicketSearch('   ')).toEqual({ kind: 'none' });
-  });
-
-  it('asks for a second character: the backend takes 2 to 50', () => {
-    expect(resolveTicketSearch('醫')).toEqual({ kind: 'too-short' });
-    expect(resolveTicketSearch(' 水 ')).toEqual({ kind: 'too-short' });
-  });
-
-  it('sends a term of 2 to 50 characters as it is, trimmed', () => {
-    expect(resolveTicketSearch(' 清淤 ')).toEqual({ kind: 'query', q: '清淤' });
-    expect(resolveTicketSearch('醫'.repeat(50))).toEqual({
-      kind: 'query',
-      q: '醫'.repeat(50),
-    });
-  });
-
-  it('sends the first 50 characters of a longer term, which the backend would refuse whole', () => {
-    expect(resolveTicketSearch('醫'.repeat(51))).toEqual({
-      kind: 'query',
-      q: '醫'.repeat(50),
-    });
-  });
-
-  it('counts a character outside the BMP as one, as the backend does', () => {
-    expect(resolveTicketSearch('🚑')).toEqual({ kind: 'too-short' });
-  });
-});
 
 describe('showsClosedTickets', () => {
   it('is set by a status filter that asks for finished or cancelled tickets', () => {
