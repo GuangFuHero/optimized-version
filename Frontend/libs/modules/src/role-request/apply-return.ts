@@ -1,12 +1,10 @@
 /**
  * The way to LINE and back for an applicant whose account has only LINE to prove it is them
- * (backend ADR-361): the form is kept in this tab, the page goes to LINE to sign in again, and LINE
- * sends it back here with `apply=1` and the outcome (`step_up=ok`, or `step_up_error=<code>`). The
- * drawer then opens on the form as it was. Built as 請求協助's way back is (`help-return.ts`,
- * `help-request-draft.ts`).
+ * (backend ADR-361): the form is kept in this tab (`use-apply-draft.ts`), the page goes to LINE to
+ * sign in again, and LINE sends it back here with `apply=1` and the outcome (`step_up=ok`, or
+ * `step_up_error=<code>`). The drawer then opens on the form as it was. Built as 請求協助's way back
+ * is (`help-return.ts`).
  */
-
-import type { RoleRequestRole } from '@rescue-frontend/data-access';
 
 /** What reading the way back needs of a query: `URLSearchParams`, or Next's read-only one. */
 export interface ApplyReturnQuery {
@@ -82,88 +80,4 @@ export function buildPhoneStepUpHref(location: ApplyReturnLocation): string {
   });
 
   return `/api/v1/auth/oauth/line/start?${start}`;
-}
-
-/** The form as it was when the page left for LINE. */
-export interface ApplyDraft {
-  role: RoleRequestRole | null;
-  team: string | null;
-  newTeamName: string;
-  reason: string;
-  name: string;
-  phone: string;
-}
-
-/** The parts of `Storage` the draft uses: `sessionStorage` on the site, a stand-in in tests. */
-export type ApplyDraftStorage = Pick<
-  Storage,
-  'getItem' | 'setItem' | 'removeItem'
->;
-
-/** Raised when the form's shape changes, so a draft of the old shape is read as none. */
-const DRAFT_VERSION = 1;
-
-const DRAFT_KEY_PREFIX = 'wg:role-request-draft:';
-
-const ROLES = new Set<unknown>(['government', 'ngo', 'data_auditor']);
-
-/** Null where the browser will not hand it over (storage turned off); reading it can throw. */
-export function sessionApplyDraftStorage(): ApplyDraftStorage | null {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-function isApplyDraft(value: unknown): value is ApplyDraft {
-  return (
-    isRecord(value) &&
-    (value.role === null || ROLES.has(value.role)) &&
-    (value.team === null || typeof value.team === 'string') &&
-    typeof value.newTeamName === 'string' &&
-    typeof value.reason === 'string' &&
-    typeof value.name === 'string' &&
-    typeof value.phone === 'string'
-  );
-}
-
-/** Keyed by the account, so someone else signing in to the same tab does not see it. */
-export function writeApplyDraft(
-  storage: ApplyDraftStorage | null,
-  userId: string,
-  draft: ApplyDraft,
-): void {
-  try {
-    storage?.setItem(
-      `${DRAFT_KEY_PREFIX}${userId}`,
-      JSON.stringify({ v: DRAFT_VERSION, draft }),
-    );
-  } catch {
-    // Not kept, then: the person comes back to an empty form.
-  }
-}
-
-/** Read once: the draft is taken away as it is read, since it holds a name and a phone. */
-export function takeApplyDraft(
-  storage: ApplyDraftStorage | null,
-  userId: string,
-): ApplyDraft | null {
-  const key = `${DRAFT_KEY_PREFIX}${userId}`;
-
-  try {
-    const saved: unknown = JSON.parse(storage?.getItem(key) ?? 'null');
-    storage?.removeItem(key);
-
-    return isRecord(saved) &&
-      saved.v === DRAFT_VERSION &&
-      isApplyDraft(saved.draft)
-      ? saved.draft
-      : null;
-  } catch {
-    return null;
-  }
 }

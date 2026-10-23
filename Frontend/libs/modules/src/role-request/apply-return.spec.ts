@@ -4,31 +4,7 @@ import {
   buildPhoneStepUpHref,
   readApplyReturn,
   stripApplyReturn,
-  takeApplyDraft,
-  writeApplyDraft,
-  type ApplyDraft,
-  type ApplyDraftStorage,
 } from './apply-return';
-
-function memoryStorage(): ApplyDraftStorage & { items: Map<string, string> } {
-  const items = new Map<string, string>();
-
-  return {
-    items,
-    getItem: (key) => items.get(key) ?? null,
-    setItem: (key, value) => void items.set(key, value),
-    removeItem: (key) => void items.delete(key),
-  };
-}
-
-const DRAFT: ApplyDraft = {
-  role: 'ngo',
-  team: 'new',
-  newTeamName: '光復青年志工隊',
-  reason: '協會的物資組長',
-  name: '王志豪',
-  phone: '0912345678',
-};
 
 describe('buildPhoneStepUpHref', () => {
   it('goes to LINE for this one action, and back to the same page with the drawer to open', () => {
@@ -91,42 +67,5 @@ describe('stripApplyReturn', () => {
 
   it('hands an address without it back as it came', () => {
     expect(stripApplyReturn('/list?q=a%20b')).toBe('/list?q=a%20b');
-  });
-});
-
-describe('the draft', () => {
-  it('comes back once, for the account that left it', () => {
-    const storage = memoryStorage();
-    writeApplyDraft(storage, 'u-1', DRAFT);
-
-    expect(takeApplyDraft(storage, 'u-2')).toBeNull();
-    expect(takeApplyDraft(storage, 'u-1')).toEqual(DRAFT);
-    expect(takeApplyDraft(storage, 'u-1')).toBeNull();
-  });
-
-  it('reads a draft of another shape as none', () => {
-    const storage = memoryStorage();
-    storage.setItem(
-      'wg:role-request-draft:u-1',
-      JSON.stringify({ v: 1, draft: { ...DRAFT, role: 'super_admin' } }),
-    );
-
-    expect(takeApplyDraft(storage, 'u-1')).toBeNull();
-
-    // One left before the form named a team.
-    storage.setItem(
-      'wg:role-request-draft:u-1',
-      JSON.stringify({
-        v: 1,
-        draft: { role: 'ngo', reason: '物資組長', name: '王', phone: '' },
-      }),
-    );
-
-    expect(takeApplyDraft(storage, 'u-1')).toBeNull();
-  });
-
-  it('works without storage', () => {
-    writeApplyDraft(null, 'u-1', DRAFT);
-    expect(takeApplyDraft(null, 'u-1')).toBeNull();
   });
 });

@@ -10,6 +10,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useMutation } from 'urql';
 
@@ -22,14 +23,9 @@ import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 import { getCurrentUserAsync } from '../auth/api/client';
 import { useAuthSession } from '../session/auth-session';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
+import { readApplicantAccount } from './applicant';
 import { ApplicantSection } from './applicant-section';
-import {
-  buildPhoneStepUpHref,
-  sessionApplyDraftStorage,
-  takeApplyDraft,
-  writeApplyDraft,
-  type ApplyReturn,
-} from './apply-return';
+import { buildPhoneStepUpHref, type ApplyReturn } from './apply-return';
 import { roleRequestDrawerView } from './drawer-view';
 import { isTeamListRefusal, roleRequestErrorMessage } from './error';
 import {
@@ -43,7 +39,7 @@ import {
 import { RoleRequestCard } from './role-request-card';
 import { findTeamNamed, NEW_TEAM, reviewerText, teamTypeForRole } from './team';
 import { TeamPicker } from './team-picker';
-import { useApplicantAccount } from './use-applicant-account';
+import { useApplyDraft } from './use-apply-draft';
 import { usePhoneVerification } from './use-phone-verification';
 import { useRoleRequestTeams } from './use-role-request-teams';
 import { useWithdrawRoleRequest } from './use-withdraw-role-request';
@@ -107,8 +103,16 @@ export function RoleRequestDrawer({
   const resetWithdraw = withdraw.reset;
   const roleLabelId = useId();
   const userId = useAuthSession().user?.uuid ?? null;
-  const applicant = useApplicantAccount(open);
-  const account = applicant.account ?? NO_ACCOUNT;
+  // The account as the form needs it, while the drawer is open: the session itself holds only the
+  // uuid and the nickname. Read again once a phone is verified, which makes it the account's.
+  const applicant = useQuery({
+    queryKey: ['users', 'me'],
+    queryFn: getCurrentUserAsync,
+    select: readApplicantAccount,
+    enabled: open,
+  });
+  const account = applicant.data ?? NO_ACCOUNT;
+  const { keep: keepDraft, take: takeDraft } = useApplyDraft(userId);
   const teamType = teamTypeForRole(values.role);
   const teamList = useRoleRequestTeams(teamType, open);
 
@@ -118,9 +122,7 @@ export function RoleRequestDrawer({
    * than in the navigation, which would show its error as a page of JSON.
    */
   const goProveAtLine = async (phone: string) => {
-    if (userId) {
-      writeApplyDraft(sessionApplyDraftStorage(), userId, { ...values, phone });
-    }
+    keepDraft({ ...values, phone });
 
     try {
       await getCurrentUserAsync();
@@ -133,7 +135,7 @@ export function RoleRequestDrawer({
 
   const verification = usePhoneVerification({
     account,
-    onVerified: () => void applicant.reload(),
+    onVerified: () => void applicant.refetch(),
     onReauth: (phone) => void goProveAtLine(phone),
   });
   const resetVerification = verification.reset;
@@ -163,7 +165,7 @@ export function RoleRequestDrawer({
       return;
     }
 
-    const draft = takeApplyDraft(sessionApplyDraftStorage(), userId);
+    const draft = takeDraft();
 
     setTouched(false);
     setSubmitError(null);
@@ -181,9 +183,16 @@ export function RoleRequestDrawer({
     }
 
     onApplyReturnHandled?.();
-  }, [applyReturn, onApplyReturnHandled, open, resumeVerification, userId]);
+  }, [
+    applyReturn,
+    onApplyReturnHandled,
+    open,
+    resumeVerification,
+    takeDraft,
+    userId,
+  ]);
 
-  const nickname = applicant.account?.nickname;
+  const nickname = applicant.data?.nickname;
 
   useEffect(() => {
     if (open && nickname && !nameEdited) {
@@ -433,9 +442,9 @@ export function RoleRequestDrawer({
           />
         ) : null}
 
-        {applicant.account ? (
+        {applicant.data ? (
           <ApplicantSection
-            account={applicant.account}
+            account={applicant.data}
             name={values.name}
             onNameChange={(name) => {
               setNameEdited(true);
@@ -445,7 +454,7 @@ export function RoleRequestDrawer({
             phoneError={touched ? (errors.phone ?? null) : null}
             verification={verification}
           />
-        ) : applicant.failed ? (
+        ) : applicant.isError ? (
           <Alert severity="error">讀不到你的帳號資料，請關閉後再試一次。</Alert>
         ) : null}
 
