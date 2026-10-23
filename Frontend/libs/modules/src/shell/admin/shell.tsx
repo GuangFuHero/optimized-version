@@ -52,7 +52,13 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
       : notFound
         ? '找不到這一頁'
         : activeItem?.label;
-  const { data } = useAnnouncements({ filter: AnnouncementFilter.Active });
+  const canViewAnnouncements = Boolean(
+    user?.capabilities.includes('announcement.view_admin'),
+  );
+  const { data } = useAnnouncements(
+    { filter: AnnouncementFilter.Active },
+    { enabled: canViewAnnouncements },
+  );
 
   return (
     <Box
@@ -63,11 +69,12 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
         overflow: 'hidden',
       }}
     >
-      {data?.announcements.map((announcement) => (
-        <AnnouncementBanner key={announcement.uuid}>
-          {announcement.content}
-        </AnnouncementBanner>
-      ))}
+      {canViewAnnouncements &&
+        data?.announcements.map((announcement) => (
+          <AnnouncementBanner key={announcement.uuid}>
+            {announcement.content}
+          </AnnouncementBanner>
+        ))}
       <Box
         sx={{
           display: 'flex',
