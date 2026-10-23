@@ -3,6 +3,7 @@
  * stay out of the client-safe package barrel.
  */
 export { authOptions } from './server/auth-options';
+export { authCookieNames } from './server/auth-cookies';
 export { getServerAuthSession } from './server/auth-session';
 export { getBackendApiBaseUrl } from './server/backend-api-url';
 export { withClientIpAsync } from './server/client-ip';

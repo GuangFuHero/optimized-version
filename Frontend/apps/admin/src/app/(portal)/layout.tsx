@@ -1,5 +1,6 @@
 import { AdminShell } from '@rescue-frontend/modules';
-import { getServerAuthSession } from '@rescue-frontend/modules/server';
+import { authCookieNames } from '@rescue-frontend/modules/server';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 export default async function AdminLayout({
@@ -7,7 +8,8 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerAuthSession();
-  if (!session) redirect('/login?callbackUrl=/');
+  if (!(await cookies()).has(authCookieNames().access)) {
+    redirect('/login?callbackUrl=/');
+  }
   return <AdminShell>{children}</AdminShell>;
 }

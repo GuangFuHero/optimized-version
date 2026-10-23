@@ -102,6 +102,7 @@ export type { AdminShellProps } from './shell';
 
 // The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.
 export {
+  endExpiredSession,
   isSigningOutHere,
   markSigningOutHere,
   sessionExpiryFetch,

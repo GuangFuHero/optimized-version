@@ -10,9 +10,9 @@ import {
 
 import { Box, Divider, IconButton, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
-import { signOut } from 'next-auth/react';
 import { Fragment } from 'react';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
+import { toast } from 'sonner';
 import { useProjectSettings } from '@rescue-frontend/data-access/admin';
 
 import {
@@ -22,6 +22,10 @@ import {
   SidebarItem,
 } from '@rescue-frontend/ui';
 
+import {
+  SIGN_OUT_FAILED_MESSAGE,
+  signOutHereAsync,
+} from '../../auth/session/sign-out';
 import { GuangFuBrandIcon } from '../../brand';
 import { ADMIN_NAV_SECTIONS, type AdminNavItem } from './nav';
 
@@ -128,7 +132,13 @@ export function AdminSidebar({
           icon={<LogOut />}
           label="登出"
           collapsed={collapsed}
-          onClick={() => signOut({ callbackUrl: '/login?callbackUrl=/' })}
+          onClick={() => {
+            void signOutHereAsync().then((outcome) => {
+              if (outcome === 'still-signed-in') {
+                toast.error(SIGN_OUT_FAILED_MESSAGE);
+              }
+            });
+          }}
         />
       </Stack>
     </Box>

@@ -325,7 +325,7 @@ export function useUpdateCurrentUser() {
 }
 
 export interface SwitchIdentityInput {
-  body: paths['/api/v1/auth/switch-identity']['post']['requestBody']['content']['application/json'];
+  body: paths['/api/v1/auth/session/identity']['post']['requestBody']['content']['application/json'];
 }
 
 export function useSwitchIdentity() {
@@ -333,7 +333,7 @@ export function useSwitchIdentity() {
   return useMutation({
     mutationFn: ({ body }: SwitchIdentityInput) =>
       adminRestClient
-        .POST('/api/v1/auth/switch-identity', { body })
+        .POST('/api/v1/auth/session/identity', { body })
         .then(() => undefined),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
   });
