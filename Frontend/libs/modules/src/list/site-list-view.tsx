@@ -428,8 +428,12 @@ export function SiteListView() {
             </Typography>
           ) : null}
           {/* Not while a page is on its way: every search reloads the list, and it would read
-              as empty between keystrokes. */}
-          {listRows.length === 0 && hasFetchedOnce && !isFetching ? (
+              as empty between keystrokes. Nor while pages remain: the rows so far may all have
+              folded away (含已滿額), and only the sentinel below can ask for the next page. */}
+          {listRows.length === 0 &&
+          hasFetchedOnce &&
+          !isFetching &&
+          !hasNextPage ? (
             <Stack
               sx={{
                 height: '100%',
