@@ -52,13 +52,6 @@ export const AnnouncementFilter = {
 
 export type AnnouncementFilter =
   (typeof AnnouncementFilter)[keyof typeof AnnouncementFilter];
-export const AnnouncementMoveDirection = {
-  Down: 'DOWN',
-  Up: 'UP',
-} as const;
-
-export type AnnouncementMoveDirection =
-  (typeof AnnouncementMoveDirection)[keyof typeof AnnouncementMoveDirection];
 export const AnnouncementPlacement = {
   AdminPage: 'admin_page',
   All: 'all',
@@ -82,8 +75,6 @@ export type AnnouncementType = {
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** Who created it. Null unless the caller holds announcement.edit */
   creator?: Maybe<UserRefType>;
-  /** Display position (1 = top) among active announcements; null when inactive */
-  order?: Maybe<Scalars['Int']['output']>;
   /** admin_page, public_page, or all (both pages) */
   placement: Scalars['String']['output'];
   /** When it last went live; null while a draft */
@@ -599,7 +590,6 @@ export type Mutation = {
   detachStationPhoto: Scalars['Boolean']['output'];
   generateBriefing: BriefingType;
   mergeStationSuggestions: StationSuggestionMergeType;
-  moveAnnouncement: AnnouncementType;
   promoteMarkZone: HazardousZoneType;
   publishBriefing: BriefingType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
@@ -749,11 +739,6 @@ export type MutationMergeStationSuggestionsArgs = {
   decisions: Array<SuggestionDecisionInput>;
   reviewNote?: InputMaybe<Scalars['String']['input']>;
   stationUuid: Scalars['UUID']['input'];
-};
-
-export type MutationMoveAnnouncementArgs = {
-  direction: AnnouncementMoveDirection;
-  uuid: Scalars['UUID']['input'];
 };
 
 export type MutationPromoteMarkZoneArgs = {
@@ -2296,7 +2281,6 @@ export type AdminAnnouncementsQuery = {
     uuid: string;
     content: string;
     active: boolean;
-    order?: number | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;
@@ -2908,7 +2892,6 @@ export type AdminCreateAnnouncementMutation = {
     uuid: string;
     content: string;
     active: boolean;
-    order?: number | null;
   };
 };
 
@@ -2924,7 +2907,6 @@ export type AdminUpdateAnnouncementMutation = {
     uuid: string;
     content: string;
     active: boolean;
-    order?: number | null;
   };
 };
 
@@ -2935,20 +2917,6 @@ export type AdminDeleteAnnouncementMutationVariables = Exact<{
 export type AdminDeleteAnnouncementMutation = {
   __typename?: 'Mutation';
   deleteAnnouncement: boolean;
-};
-
-export type AdminMoveAnnouncementMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  direction: AnnouncementMoveDirection;
-}>;
-
-export type AdminMoveAnnouncementMutation = {
-  __typename?: 'Mutation';
-  moveAnnouncement: {
-    __typename?: 'AnnouncementType';
-    uuid: string;
-    order?: number | null;
-  };
 };
 
 export type AdminSetAnnouncementActiveMutationVariables = Exact<{
@@ -2962,7 +2930,6 @@ export type AdminSetAnnouncementActiveMutation = {
     __typename?: 'AnnouncementType';
     uuid: string;
     active: boolean;
-    order?: number | null;
   };
 };
 
@@ -4355,7 +4322,6 @@ export const AdminAnnouncementsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
               ],
@@ -6693,7 +6659,6 @@ export const AdminCreateAnnouncementDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
               ],
             },
           },
@@ -6766,7 +6731,6 @@ export const AdminUpdateAnnouncementDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
               ],
             },
           },
@@ -6819,77 +6783,6 @@ export const AdminDeleteAnnouncementDocument = {
 } as unknown as DocumentNode<
   AdminDeleteAnnouncementMutation,
   AdminDeleteAnnouncementMutationVariables
->;
-export const AdminMoveAnnouncementDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminMoveAnnouncement' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'direction' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'AnnouncementMoveDirection' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'moveAnnouncement' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'direction' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'direction' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminMoveAnnouncementMutation,
-  AdminMoveAnnouncementMutationVariables
 >;
 export const AdminSetAnnouncementActiveDocument = {
   kind: 'Document',
@@ -6951,7 +6844,6 @@ export const AdminSetAnnouncementActiveDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
               ],
             },
           },

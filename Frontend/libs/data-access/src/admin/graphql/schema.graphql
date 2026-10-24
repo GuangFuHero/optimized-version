@@ -11,11 +11,6 @@ enum AnnouncementFilter {
   ALL
 }
 
-enum AnnouncementMoveDirection {
-  UP
-  DOWN
-}
-
 enum AnnouncementPlacement {
   admin_page
   public_page
@@ -35,11 +30,6 @@ type AnnouncementType {
 
   """admin_page, public_page, or all (both pages)"""
   placement: String!
-
-  """
-  Display position (1 = top) among active announcements; null when inactive
-  """
-  order: Int
   status: AnnouncementStatus!
 
   """When it last went live; null while a draft"""
@@ -708,7 +698,6 @@ type Mutation {
   upsertDisasterType(input: UpsertDisasterTypeInput!): DisasterTypeType!
   createAnnouncement(input: CreateAnnouncementInput!): AnnouncementType!
   updateAnnouncement(uuid: UUID!, input: UpdateAnnouncementInput!): AnnouncementType!
-  moveAnnouncement(uuid: UUID!, direction: AnnouncementMoveDirection!): AnnouncementType!
   setAnnouncementActive(uuid: UUID!, active: Boolean!): AnnouncementType!
   deleteAnnouncement(uuid: UUID!): Boolean!
   createBriefingTemplate(input: CreateBriefingTemplateInput!): BriefingTemplateType!
