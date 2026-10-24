@@ -1746,6 +1746,11 @@ type TicketType {
   """
   secondaryLocation: SecondaryLocationType
   disasterDetails: [TicketDisasterDetailType!]!
+
+  """
+  The building map this ticket was filed under (createTicket's buildingMapUuid). Null when it was not filed under one, when that building map is deleted, and to a caller without ticket.view_detail on this ticket
+  """
+  buildingMapUuid: UUID
 }
 
 enum TriState {

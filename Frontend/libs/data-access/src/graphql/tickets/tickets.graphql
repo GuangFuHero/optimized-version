@@ -114,6 +114,9 @@ query GetTicketsWithNeeds(
 query GetTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...TicketFields
+    # The building it was filed inside, for 查看整棟 and 上一張／下一張 (modules/building). Null when
+    # it was not, and to a caller without ticket.view_detail: the building gives the place away.
+    buildingMapUuid
     # Where a volunteer is going, for the claim confirmation. Null without an address, and to a
     # caller without ticket.view_detail.
     secondaryLocation {
