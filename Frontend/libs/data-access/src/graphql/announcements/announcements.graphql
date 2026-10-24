@@ -1,0 +1,9 @@
+# 全站公告橫幅 (Backend Spec/007): the announcements live on the site, `public_page` and `all` alike.
+# Open to guests. The site shows one, the newest, so it reads `publishedAt` and leaves `order` out.
+query SiteAnnouncements {
+  announcements(filter: ACTIVE, placement: public_page) {
+    uuid
+    content
+    publishedAt
+  }
+}

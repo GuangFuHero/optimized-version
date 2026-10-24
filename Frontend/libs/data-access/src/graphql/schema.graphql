@@ -7,6 +7,7 @@ enum AccessStatus {
 
 enum AnnouncementFilter {
   ACTIVE
+  DRAFT
   ALL
 }
 
@@ -19,6 +20,12 @@ enum AnnouncementPlacement {
   admin_page
   public_page
   all
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
 }
 
 type AddressLookupType {
@@ -98,11 +105,23 @@ type AnnouncementType {
   Display position (1 = top) among active announcements; null when inactive
   """
   order: Int
+  status: AnnouncementStatus!
 
-  """UUID of the user who created this announcement"""
-  createdBy: String
+  """When it last went live; null while a draft"""
+  publishedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
+
+  """Who created it. Null unless the caller holds announcement.edit"""
+  creator: UserRefType
+
+  """Who last changed it. Null unless the caller holds announcement.edit"""
+  updater: UserRefType
+
+  """
+  Who last activated it; null while a draft or unless the caller holds announcement.edit
+  """
+  publisher: UserRefType
 }
 
 type AreaConnection {
@@ -174,6 +193,17 @@ enum BriefingState {
   DEBRIEF
 }
 
+enum BriefingStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum BriefingStatusFilter {
+  PUBLISHED
+  DRAFT
+  ALL
+}
+
 type BriefingTemplateType {
   uuid: UUID!
   content: String!
@@ -202,9 +232,10 @@ type BriefingType {
 
   """Lifecycle phase: 'briefing', 'in_field', or 'debrief'"""
   state: String!
+  status: BriefingStatus!
 
-  """UUID of the user who created this briefing"""
-  createdBy: String
+  """When it was published; null while a draft"""
+  publishedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
 }
@@ -867,7 +898,7 @@ type Query {
   announcement(uuid: UUID!): AnnouncementType
   briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!
   briefingTemplate(uuid: UUID!): BriefingTemplateType
-  briefings(state: BriefingState = null, tag: String = null): [BriefingType!]!
+  briefings(state: BriefingState = null, tag: String = null, status: BriefingStatusFilter! = PUBLISHED): [BriefingType!]!
   briefing(uuid: UUID!): BriefingType
   suggestableFields(targetType: String!): [SuggestableFieldType!]!
   areas(bounds: BoundsInput = null, includePrivate: Boolean! = false, skip: Int! = 0, limit: Int! = 50): AreaConnection!
@@ -1941,6 +1972,11 @@ input UpsertTicketPropertyConfigInput {
 
   """Set false to retire the field without deleting its values"""
   isActive: Boolean = null
+}
+
+type UserRefType {
+  uuid: String!
+  name: String
 }
 
 enum Visibility {

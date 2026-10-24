@@ -6,6 +6,7 @@
 import { SITE_FALLBACK_DATA_TYPE } from '../../route/constants';
 import { createSiteHref } from '../../route/serialize';
 import type { SiteModule, SiteRouteState } from '../../route/types';
+import { formatTaiwanTime } from '../../time';
 import { formatTicketAddress, type TicketAddressParts } from '../address';
 
 /** One row of `myTaskAssignments`, as `MyTaskAssignments` in `tickets.graphql` reads it. */
@@ -36,40 +37,6 @@ export interface MyClaim {
    * back. One that filled by itself can, and then recruits again.
    */
   recruitingStopped: boolean;
-}
-
-// Numbers only: `en-US` spells each part as digits, where `zh-TW` would add 上午／下午.
-const TAIWAN_TIME_FORMAT = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'Asia/Taipei',
-  month: 'numeric',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
-
-/**
- * A moment as 「9/30 14:05」, in Taiwan time whatever the device's zone, without the year — for a
- * list of what is still going on: claims to keep, requests filed (B's 我建立的). Null for a missing
- * or broken time.
- */
-export function formatTaiwanTime(
-  iso: string | null | undefined,
-): string | null {
-  const time = iso ? new Date(iso) : null;
-
-  if (!time || Number.isNaN(time.getTime())) {
-    return null;
-  }
-
-  const parts = Object.fromEntries(
-    TAIWAN_TIME_FORMAT.formatToParts(time).map((part) => [
-      part.type,
-      part.value,
-    ]),
-  );
-
-  return `${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 /** When the need was claimed. */

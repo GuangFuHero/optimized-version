@@ -12,7 +12,7 @@ const { color } = designTokens;
 /**
  * The back office until it is rebuilt — the old `/admin` pages are to be replaced wholesale, so none
  * of them is shown meanwhile: where 前往管理平台 leads. It says so and offers
- * the way back. Laid out like the briefing placeholder (`ticket/needs/briefing.tsx`).
+ * the way back.
  */
 export function BackOfficePlaceholder() {
   return (

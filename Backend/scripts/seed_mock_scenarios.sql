@@ -4,6 +4,7 @@
 -- Scenario A | 花蓮光復土石流 2024-07-24:站 16、帳號 27(志工 20+NGO 4+官方 3)、單 30+avol01 的 7 張
 -- Scenario B | 宜蘭冬山水災   2025-10-03:站 9、帳號 10(志工 4+NGO 5+官方 1)、單 8
 -- 聯絡欄位混用電話與 LINE ID。
+-- 公告:前台、管理平台各一則上線(第 8b 節);那一頁已經有別的公告上線就不放。
 --
 -- 給測試者的帳號(密碼都是 Mock1234!):
 --   avol01@mock.test  建單者:我的任務 › 我建立的有 6 張(另有 1 張已刪除,不會出現),可以測刪一筆需求、
@@ -14,6 +15,7 @@
 --   avol04@mock.test  角色申請審核中(政府單位人員);撤回後要重跑 seed 才回得來
 --   avol05@mock.test  角色申請未通過,卡片上有審核回覆(社福團體人員)
 --   agov01@mock.test  光復鄉公所的團隊管理員:右上角有「前往後台」
+--   (不用登入)        行前資訊 /briefing:一份已發布的,裝備可以勾;另有一個土石流範本給後台用
 --
 -- 規則(第 11 節會檢查,不符就整個回滾):
 --   需求只用 pending/fulfilled/canceled(ADR-293)。湊滿的是 fulfilled+completed_at;停止招募的是
@@ -22,7 +24,8 @@
 --   app/services/ticket_status.py 由需求推導。承接紀錄 status 一律 accepted,人數不超過 quantity(ADR-291)。
 --
 -- UUID 前綴:users=c…、A 站=a…、B 站=b…、tickets=d…、tasks=e…、assignments=f…、teams=1…、
---   team_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…
+--   team_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…、
+--   briefing_templates=7…、briefings=8…、announcements=9…
 -- 清除段照前綴刪,也照「建立者/承接者是 mock 帳號」刪:測試者在 staging 用 mock 帳號留下的單、站點、
 --   地圖區域、建築地圖、照片、申請、邀請連結、站點建議與合併紀錄、去重紀錄會一起清掉,所以可以重跑。
 --   真人留下的資料不刪,只放掉指向 mock 帳號(或要刪的 mock 資料)的欄位。
@@ -153,14 +156,18 @@ DELETE FROM routes
     OR destination_uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM base_geometries WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM briefings
- WHERE created_by IN (SELECT uuid FROM mock_users)
+ WHERE uuid::text LIKE '80000000-%'
+    OR created_by IN (SELECT uuid FROM mock_users)
     OR updated_by IN (SELECT uuid FROM mock_users)
     OR published_by IN (SELECT uuid FROM mock_users)
     OR template_uuid IN (SELECT uuid FROM briefing_templates
-                          WHERE created_by IN (SELECT uuid FROM mock_users));
-DELETE FROM briefing_templates WHERE created_by IN (SELECT uuid FROM mock_users);
+                          WHERE uuid::text LIKE '70000000-%'
+                             OR created_by IN (SELECT uuid FROM mock_users));
+DELETE FROM briefing_templates
+ WHERE uuid::text LIKE '70000000-%' OR created_by IN (SELECT uuid FROM mock_users);
 DELETE FROM announcements
- WHERE created_by IN (SELECT uuid FROM mock_users)
+ WHERE uuid::text LIKE '90000000-%'
+    OR created_by IN (SELECT uuid FROM mock_users)
     OR updated_by IN (SELECT uuid FROM mock_users)
     OR published_by IN (SELECT uuid FROM mock_users);
 DELETE FROM user_permission_assign
@@ -866,6 +873,43 @@ UPDATE tickets SET disaster_types = ARRAY['landslide']
 UPDATE tickets SET disaster_types = ARRAY['flood']
  WHERE uuid::text LIKE 'd0000000-%' AND right(uuid::text,12)::bigint BETWEEN 31 AND 38;
 
+-- 8b. 公告(Spec 007):前台(public_page)一則、管理平台(admin_page)一則,兩邊的公告條一打開就看得到。
+--     每頁最多一則上線(原型 D-12、ADR-363):那一頁已經有別人的公告上線(例如 staging 上真的在發的),
+--     這一則就不放,不動別人的公告。發布者寫 agov01,清除段才清得掉;實際上只有 super_admin 能發布(ADR-335)。
+INSERT INTO announcements (uuid, content, active, placement, created_by, updated_by,
+                           published_at, published_by, created_at, updated_at)
+SELECT v.uuid::uuid, v.content, true, v.placement,
+       'c0000000-0000-4000-8000-000000000025', 'c0000000-0000-4000-8000-000000000025',
+       now() - v.ago, 'c0000000-0000-4000-8000-000000000025', now() - v.ago, now() - v.ago
+  FROM (VALUES
+    ('90000000-0000-4000-8000-000000000001', '光復鄉中山路二段清淤中，封閉到另行通知；往大同村請改走中正路。',
+     'public_page', interval '3 hours'),
+    ('90000000-0000-4000-8000-000000000002', '今晚 20:00 在光復鄉公所三樓開協調會，各團隊請派一人出席。',
+     'admin_page', interval '1 hour')
+  ) AS v(uuid, content, placement, ago)
+ WHERE NOT EXISTS (
+         SELECT 1 FROM announcements a
+          WHERE a.active AND a.delete_at IS NULL
+            AND CASE WHEN v.placement = 'public_page' THEN a.placement IN ('public_page', 'all')
+                     ELSE a.placement <> 'public_page' END);
+-- 上線中的公告共用一條 1..N 的排序(display_order,ADR-309),ADR-363 會拿掉這個欄位。
+-- 欄位還在就照規則重編:別人的照原本順序在前,mock 的接在後面;清除段刪掉 mock 留下的空號也一起補上。
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'announcements'
+                AND column_name = 'display_order') THEN
+    EXECUTE $renumber$
+      UPDATE announcements a SET display_order = r.position
+        FROM (SELECT uuid,
+                     row_number() OVER (ORDER BY uuid::text LIKE '90000000-%', display_order, published_at)
+                       AS position
+                FROM announcements WHERE active AND delete_at IS NULL) r
+       WHERE a.uuid = r.uuid
+    $renumber$;
+  END IF;
+END $$;
+
 -- 9. 角色申請(功能 019):一筆審核中、一筆未通過附回覆,讓抽屜的兩種卡片一登入就看得到。
 --    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。審核人填資料庫裡現有的 super admin,
 --    沒有就留空(前台卡片只顯示回覆)。
@@ -882,6 +926,85 @@ SELECT '60000000-0000-4000-8000-000000000002','ngo',
          WHERE r.name = 'super_admin' AND r.kind = 'platform' ORDER BY ura.user_uuid LIMIT 1),
        now() - interval '2 days','c0000000-0000-4000-8000-000000000005',
        now() - interval '3 days', now() - interval '2 days';
+
+-- 9b. 志工行前資訊(Spec/007 BR-006:一列一版,state 的最新一筆已發布就是前台那一份):光復的一份,
+--     由公所災防課從土石流範本寫成、已發布。裝備寫成 `- [ ]`,前台才有可以勾的框;一律不寫 `[x]`
+--     (勾不勾是每台裝置自己的事,VB-BR-191a)。時間跟角色申請一樣用 now(),前台的「幾天前」才合理。
+--     網站上只有超級管理員能發布(pre_departure.publish);這裡直接寫入,跟第 9 節的審核人一樣不經權限。
+INSERT INTO briefing_templates (uuid, content, tags, state, created_by, created_at, updated_at) VALUES
+ ('70000000-0000-4000-8000-000000000001', $md$## 如何參與
+
+1. 先在地圖上找一件你能做的事，按「承接」。
+2. 出發前看完這一頁，照下面的清單打包。
+3. 到了先去（報到地點）報到，領識別證和分組。
+
+## 交通資訊
+
+（火車、開車各怎麼到；哪些路段管制）
+
+## 建議攜帶裝備
+
+- [ ] 雨鞋（較佳：長筒；避免：涼鞋、布鞋）
+- [ ] 工作手套（較佳：防割、止滑）
+- [ ] 長袖、長褲
+- [ ] 頭燈或手電筒
+- [ ] 個人水壺
+
+## 行前注意事項
+
+- 天黑前離開河道與坡地。
+- 不要自行進入封鎖線內。
+$md$, '["landslide"]', 'briefing', 'c0000000-0000-4000-8000-000000000025',
+  now() - interval '3 days', now() - interval '3 days');
+
+INSERT INTO briefings (uuid, template_uuid, content, tags, state, created_by, updated_by,
+                       published_at, published_by, created_at, updated_at) VALUES
+ ('80000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000001', $md$## 如何參與
+
+1. 先在地圖上找一件你能做的事，按「承接」；還沒承接也可以直接到報到處。
+2. 出發前看完這一頁，照下面的清單打包。
+3. 到了先去**光復車站前廣場**的志工報到處報到，找穿橘色背心的志工，領識別證和分組。
+
+## 交通資訊
+
+### 火車
+
+搭臺鐵到**光復站**，出站右轉步行 5 分鐘到報到處。假日車票很快賣完，回程車票請先訂好：[臺鐵訂票](https://www.railway.gov.tw/)。
+
+### 開車
+
+台 9 線光復段目前**單線管制**，請改走台 11 線。光復市區不要停路邊，停到光復國中操場（臨時停車場）。
+
+## 建議攜帶裝備
+
+### 穿的
+
+- [ ] 雨鞋（較佳：長筒；避免：涼鞋、布鞋）
+- [ ] 工作手套（較佳：防割、止滑）
+- [ ] 長袖、長褲（避免：短褲）
+- [ ] 換洗衣物一套
+
+### 帶的
+
+- [ ] 頭燈或手電筒
+- [ ] 個人水壺
+- [ ] 個人藥品、健保卡
+- [ ] 口罩
+
+鏟子、水桶、推車現場都有，不用帶。
+
+## 行前注意事項
+
+- 現場不提供住宿，請當天往返。
+- 下午 4 點前收工，天黑前離開河道與坡地。
+- 身體不適、懷孕、有慢性病的人請不要下泥地，可以到物資站幫忙。
+- 不要自行進入封鎖線內。
+
+> 緊急情況以頁面最上方的紅色緊急公告為準。
+$md$, '["landslide"]', 'briefing',
+  'c0000000-0000-4000-8000-000000000025', 'c0000000-0000-4000-8000-000000000025',
+  now() - interval '1 day', 'c0000000-0000-4000-8000-000000000025',
+  now() - interval '2 days', now() - interval '1 day');
 
 -- 10. 狀態照規則推導,跟網站做的一樣。
 -- 需求:承接人數到了 quantity 就是湊滿(services/ticket.py 的 assign_task_actor),
@@ -1003,6 +1126,18 @@ BEGIN
     RAISE EXCEPTION 'mock seed: assignment % is not accepted, the only status the site writes', bad;
   END IF;
 
+  -- 每頁最多一則上線(ADR-363):all 同時佔前台和管理平台。
+  SELECT m.uuid::text INTO bad FROM announcements m
+   WHERE m.uuid::text LIKE '90000000-%' AND m.active AND m.delete_at IS NULL
+     AND EXISTS (SELECT 1 FROM announcements a
+                  WHERE a.uuid <> m.uuid AND a.active AND a.delete_at IS NULL
+                    AND ((a.placement IN ('public_page', 'all') AND m.placement IN ('public_page', 'all'))
+                         OR (a.placement <> 'public_page' AND m.placement <> 'public_page')))
+   LIMIT 1;
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'mock seed: announcement % shares its page with another live one (ADR-363)', bad;
+  END IF;
+
   SELECT ref_uuid::text INTO bad FROM photos
    WHERE ref_uuid::text LIKE 'd0000000-%' GROUP BY ref_uuid HAVING count(*) > 10 LIMIT 1;
   IF bad IS NOT NULL THEN
@@ -1014,6 +1149,16 @@ BEGIN
    LIMIT 1;
   IF bad IS NOT NULL THEN
     RAISE EXCEPTION 'mock seed: photo % is not an https link of at most 500 characters', bad;
+  END IF;
+
+  -- 行前資訊:發布過的才上前台;要有可以勾的項目,而且不能預先勾好(VB-BR-191a)。
+  SELECT uuid::text INTO bad FROM briefings
+   WHERE uuid::text LIKE '80000000-%'
+     AND (published_at IS NULL OR published_by IS NULL
+          OR content !~ '(^|\n)- \[ \] ' OR content ~* '(^|\n)- \[x\] ')
+   LIMIT 1;
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'mock seed: briefing % is unpublished, has nothing to tick, or comes ticked', bad;
   END IF;
 END $$;
 

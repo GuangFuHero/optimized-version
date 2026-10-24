@@ -1,0 +1,9 @@
+# 志工行前資訊 (Backend Spec/007, BR-001 and BR-006): each published row is one version, newest first,
+# so the first is the one volunteers read. Anyone may read them, signed in or not.
+query CurrentBriefing {
+  briefings(state: BRIEFING, status: PUBLISHED) {
+    uuid
+    content
+    publishedAt
+  }
+}

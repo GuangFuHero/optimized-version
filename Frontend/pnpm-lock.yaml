@@ -305,6 +305,9 @@ importers:
       urql:
         specifier: ^5.0.1
         version: 5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5)
+      usehooks-ts:
+        specifier: ^3.1.1
+        version: 3.1.1(react@19.2.5)
       zod:
         specifier: ^4.3.6
         version: 4.3.6

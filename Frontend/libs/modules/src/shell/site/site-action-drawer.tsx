@@ -21,8 +21,12 @@ const DESKTOP_WIDTH_PX = 440;
 /**
  * How tall the sheet may grow on a phone, leaving a strip of the page above it so it reads as a
  * sheet over the page. `vh` first for browsers without `dvh`; `dvh` then follows the address bar.
+ * Never past the drawer's own top (`100%`), which sits under the announcement banner if one is up.
  */
-const PHONE_SHEET_HEIGHT = { vh: '92vh', dvh: '92dvh' } as const;
+const PHONE_SHEET_HEIGHT = {
+  vh: 'min(92vh, 100%)',
+  dvh: 'min(92dvh, 100%)',
+} as const;
 
 export interface SiteActionDrawerProps {
   open: boolean;
