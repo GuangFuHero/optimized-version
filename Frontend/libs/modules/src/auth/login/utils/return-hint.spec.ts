@@ -45,8 +45,8 @@ describe('signedInMessage', () => {
     );
   });
 
-  it('says the map, when there is none: that is where a sign-in from /login ends', () => {
-    expect(signedInMessage(null, 'site')).toBe('登入成功，正在前往地圖⋯');
+  it('names no place on the site, when there is none: the sign-in goes by who signed in', () => {
+    expect(signedInMessage(null, 'site')).toBe('登入成功，正在帶你過去⋯');
   });
 
   it('says the back office, when there is none in the back office: its /login ends on the dashboard', () => {

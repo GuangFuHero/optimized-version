@@ -32,9 +32,11 @@ export function returnHint(callbackUrl: string | null): string | null {
 }
 
 /**
- * Said once signed in, while the page goes on. With no page to go back to the sign-in ends on the
- * site's map or the back office's dashboard, so it says that instead of the design's
- * 「回到你剛剛那一頁」.
+ * Said once signed in, while the page goes on. With no page to go back to, the back office's sign-in
+ * ends on its dashboard. The site's ends in the back office or on the map, by who signed in
+ * (`signedInLandingAsync`), which is not known yet here, so it names neither. The design tells only
+ * those with an identity 「你有管理平台的身份」; said to everyone, ordinary accounts would see the
+ * platform's name, which they never do (design `更新說明.md` D-2).
  */
 export function signedInMessage(
   callbackUrl: string | null,
@@ -43,5 +45,5 @@ export function signedInMessage(
   if (callbackUrl) return '登入成功，正在回到你剛剛那一頁⋯';
   return app === 'admin'
     ? '登入成功，正在前往總覽儀表板⋯'
-    : '登入成功，正在前往地圖⋯';
+    : '登入成功，正在帶你過去⋯';
 }
