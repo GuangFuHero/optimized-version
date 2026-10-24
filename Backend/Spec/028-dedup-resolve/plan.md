@@ -130,6 +130,8 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 5：REST 端點（ADR-364）
 
+- ✅ 2026-10-24：`POST /admin/duplicate-pairs/{uuid}/resolve`；API 測試 13 個（seed 的 super_admin／data_auditor 200，user／team admin／member 403，格式錯 422×4，計畫拒絕 422，版本過期 409，404，處理後撤銷 409）。全套件 **2779 passed**，覆蓋率 96%。
+
 - [ ] `POST /admin/duplicate-pairs/{uuid}/resolve`，schema `ResolveRequest`；回傳處理後的卡（detail 形狀）。
   錯誤對應沿用 `_refusal`（404／409／422）。
 - [ ] 測試（API 層，用 seed 的角色）：

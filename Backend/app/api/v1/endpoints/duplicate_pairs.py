@@ -1,7 +1,9 @@
-"""Back-office AI 重複審核: list the duplicate pair cards, read, decide or revoke one (Spec 025 §2, ADR-338).
+"""Back-office AI 重複審核: list the duplicate pair cards, read, decide, revoke or resolve one.
 
-Mounted under /admin like role-requests. Endpoints stay thin (ADR-014): the capability checks
-(`ai_duplicate.view` / `review` / `revoke`) and every rule live in `app/services/dedup_review.py`.
+Spec 025 §2 (ADR-338) for the queue and verdicts; Spec 028 for the whole tickets on the detail and
+the resolve. Mounted under /admin like role-requests. Endpoints stay thin (ADR-014): the capability
+checks (`ai_duplicate.view` / `review` / `revoke`) and every rule live in the services
+(`dedup_review`, `dedup_resolve`).
 """
 
 from uuid import UUID
@@ -21,11 +23,12 @@ from app.schemas.duplicate_pair import (
     EntitySummaryResponse,
     PairSort,
     PairStatus,
+    ResolveRequest,
     SourceLayer,
     TicketForReviewResponse,
     TicketsForReviewResponse,
 )
-from app.services import dedup_review
+from app.services import dedup_resolve, dedup_review
 from app.services.dedup_review import DuplicatePairConflictError, DuplicatePairNotFoundError, PairItem
 
 router = APIRouter()
@@ -51,6 +54,15 @@ def _response(item: PairItem) -> dict:
         "low": EntitySummaryResponse.model_validate(item.low),
         "high": EntitySummaryResponse.model_validate(item.high),
     }
+
+
+def _detail(detail) -> DuplicatePairDetail:
+    """A card with its events and whole tickets, as the detail and a resolve answer it."""
+    return DuplicatePairDetail(
+        **_response(detail.item),
+        events=[DedupEventResponse.model_validate(event) for event in detail.events],
+        tickets=_tickets(detail.tickets),
+    )
 
 
 def _tickets(tickets) -> TicketsForReviewResponse | None:
@@ -111,11 +123,7 @@ async def get_duplicate_pair(
         detail = await dedup_review.get_pair(db, actor=current_user, pair_uuid=pair_uuid)
     except ValueError as err:
         raise _refusal(err) from err
-    return DuplicatePairDetail(
-        **_response(detail.item),
-        events=[DedupEventResponse.model_validate(event) for event in detail.events],
-        tickets=_tickets(detail.tickets),
-    )
+    return _detail(detail)
 
 
 @router.post("/duplicate-pairs/{pair_uuid}/confirm", response_model=DuplicatePairResponse)
@@ -164,3 +172,23 @@ async def revoke_duplicate_pair_verdict(
     except ValueError as err:
         raise _refusal(err) from err
     return DuplicatePairResponse(**_response(item))
+
+
+@router.post("/duplicate-pairs/{pair_uuid}/resolve", response_model=DuplicatePairDetail)
+async def resolve_duplicate_pair(
+    pair_uuid: UUID,
+    body: ResolveRequest,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-364).
+
+    409 when the card is already resolved or decided, a ticket is gone, or either ticket changed
+    since the reviewer read it (send back the detail's `version`s); 422 when the request cannot be
+    carried out as sent.
+    """
+    try:
+        result = await dedup_resolve.resolve(db, actor=current_user, pair_uuid=pair_uuid, request=body)
+    except ValueError as err:
+        raise _refusal(err) from err
+    return _detail(result.detail)
