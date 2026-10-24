@@ -116,7 +116,7 @@ const MAP_STATIC_GLOBAL_STYLES = {
     transform: 'translateY(0.5px)',
   },
   // 訪客概略區塊中央的數量（ADR-281）。沒有容器、沒有描邊、沒有陰影 —— 對比全由六角形的
-  // 填色負責（見 rescue-map-canvas 的 getLocationCellFill）。設計 2026-09-18：白字。
+  // 填色負責（見 rescue-map-canvas 的 getLocationCellColours）。設計 2026-10-24：淺底深字。
   '.map-location-cell-wrapper': {
     background: 'transparent',
     border: 'none',
@@ -127,13 +127,20 @@ const MAP_STATIC_GLOBAL_STYLES = {
     justifyContent: 'center',
     gap: 4,
     whiteSpace: 'nowrap',
-    color: color.fg.inverse,
+    color: color.fg.neutral.default,
     fontWeight: 800,
     lineHeight: 1,
     transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
   },
   '.map-location-cell__count': displayTextSizeCss(24),
   '.map-location-cell__unit': displayTextSizeCss(14),
+  // CELL-LABEL-101：格子在畫面上放不下「求助」就只留數字，連數字都放不下就改小字（rescue-map-canvas
+  // 的 fitLocationCellLabels，每次縮放重量）。
+  '.map-location-cell--count-only .map-location-cell__unit': {
+    display: 'none',
+  },
+  '.map-location-cell--small-count .map-location-cell__count':
+    displayTextSizeCss(14),
   // 選取由六角形自己加粗、加深表達；數字只放大，不換色 —— 換色會讓人以為是另一種狀態。
   '.map-location-cell--active': {
     transform: 'scale(1.12)',
