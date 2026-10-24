@@ -18,6 +18,7 @@ from app.services.tile_proxy import (  # noqa: E402
     fetch_tile,
     get_attribution,
     get_source_config,
+    resolve_tile_date,
 )
 from tests.conftest import TEST_REDIS_URL  # noqa: E402
 
@@ -333,7 +334,22 @@ async def test_fetch_tile_nasa_gibs_uses_day_before_newest_date(fake_redis):
     assert (data, ct) == (b"HLS_TILE", "image/png")
     assert sum(url.endswith("all.xml") for url in requested) == 1
     assert "/default/2026-10-21/GoogleMapsCompatible_Level12/10/2/1.png" in requested[1]
-    assert await fake_redis.hgetall("tile:nasa_gibs:satellite:date=2026-10-21:10:1:2")
+    assert await fake_redis.get("tile:nasa_gibs:date") == b"2026-10-21"
+    cached = await fake_redis.hgetall("tile:nasa_gibs:satellite:date=2026-10-21:10:1:2")
+    assert cached[b"data"] == b"HLS_TILE"
+
+
+@pytest.mark.asyncio
+async def test_resolve_tile_date_single_date_domain(fake_redis):
+    """A domain that ends in a lone date, not a range, still yields the day before it."""
+    domains = MagicMock()
+    domains.text = "<Domains><Domain>2026-03-02/2026-10-20/P1D,2026-10-22</Domain></Domains>"
+    client, _ = _gibs_client(domains)
+
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=client):
+        tile_date = await resolve_tile_date(fake_redis, "nasa_gibs", "https://example.test/all.xml")
+
+    assert tile_date == "2026-10-21"
 
 
 @pytest.mark.asyncio

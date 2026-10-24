@@ -118,6 +118,19 @@ export const BASE_LAYER_CONFIG: Record<
   },
 };
 
+/** 可選取並寫入偏好設定的底圖：已知、未隱藏且未停用。 */
+export function isSelectableBaseLayer(
+  layer: string,
+): layer is RescueMapBaseLayer {
+  if (!Object.prototype.hasOwnProperty.call(BASE_LAYER_CONFIG, layer)) {
+    return false;
+  }
+
+  const config = BASE_LAYER_CONFIG[layer as RescueMapBaseLayer];
+
+  return !config.hidden && !config.disabledReason;
+}
+
 export const RESCUE_MAP_OVERLAY_LAYER_ORDER: readonly RescueMapOverlayLayer[] =
   ['closure-areas', 'routes', 'secondary-locations'];
 
