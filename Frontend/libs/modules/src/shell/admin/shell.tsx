@@ -2,7 +2,6 @@
 
 import { Box } from '@mui/material';
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -29,7 +28,6 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const matchedItem = useActiveAdminNavItem();
   const activeItem = notFound ? undefined : matchedItem;
-  const pathname = usePathname();
   const { data: user } = useCurrentUser();
   const queryCache = useQueryClient().getQueryCache();
   const queryForbidden = useSyncExternalStore(
@@ -46,12 +44,11 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
       !user.capabilities.includes(activeItem.capability),
   );
   const forbidden = !notFound && (capabilityForbidden || queryForbidden);
-  const pageTitle =
-    forbidden || pathname === '/forbidden'
-      ? '沒有權限訪問此頁'
-      : notFound
-        ? '找不到這一頁'
-        : activeItem?.label;
+  const pageTitle = forbidden
+    ? '沒有權限訪問此頁'
+    : notFound
+      ? '找不到這一頁'
+      : activeItem?.label;
   const canViewAnnouncements = Boolean(
     user?.capabilities.includes('announcement.view_admin'),
   );
