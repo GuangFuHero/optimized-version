@@ -173,6 +173,8 @@ export function mapStationToMarker(
       isTemporary: station.isTemporary,
       isOfficial: station.isOfficial,
       operationalStatus: station.operationalStatus,
+      supplyStatus: station.supplyStatus,
+      supplyStatusUpdatedAt: station.supplyStatusUpdatedAt?.toString() ?? null,
       createdAt: station.createdAt?.toString() ?? null,
       updatedAt: station.updatedAt?.toString() ?? null,
     },

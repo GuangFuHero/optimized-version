@@ -18,6 +18,7 @@ import {
 import type { ApplyReturn } from '../../role-request/apply-return';
 import { RoleRequestReturn } from '../../role-request/role-request-return';
 import { SiteRouteProvider } from '../../route/use-site-route-state';
+import { StationSuggestionHost } from '../../station/suggestion/station-suggestion-host';
 import { HelpRequestHost } from '../../ticket/help-request/help-request-host';
 import { MobileRequestHelpFab } from '../../ticket/help-request/mobile-request-help';
 import { SiteMobileTopNavBar } from './mobile-top-navbar';
@@ -239,6 +240,9 @@ export function SiteShell({
 
       {/* Inside the route providers: once a ticket is filed it turns the page to it. */}
       <HelpRequestHost isAuthenticated={isAuthenticated} />
+
+      {/* Opened from a station's detail, on the map or the list (`openStationSuggestion`). */}
+      <StationSuggestionHost isAuthenticated={isAuthenticated} />
     </Box>
   );
 

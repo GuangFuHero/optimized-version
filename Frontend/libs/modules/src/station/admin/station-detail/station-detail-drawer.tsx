@@ -73,6 +73,7 @@ function resolveActivePanel({
   stationSummary,
   contactCard,
   resources,
+  supplyStatus,
   stationDetailPalette,
 }: {
   activeTab: StationDetailTabId;
@@ -81,6 +82,7 @@ function resolveActivePanel({
   stationSummary: StationSummaryProps;
   contactCard: StationDetailDrawerProps['contactCard'];
   resources: StationDetailDrawerProps['resources'];
+  supplyStatus: StationDetailDrawerProps['supplyStatus'];
   stationDetailPalette: StationDetailColorScheme;
 }): ReactNode {
   const injectedPanel = tabPanels?.[activeTab];
@@ -95,6 +97,7 @@ function resolveActivePanel({
         stationSummary={stationSummary}
         contactCard={contactCard}
         resources={resources}
+        supplyStatus={supplyStatus}
       />
     );
   }
@@ -112,6 +115,7 @@ export function StationDetailDrawer({
   onTabChange,
   contactCard,
   resources,
+  supplyStatus,
   tabPanels,
   footerAction,
   closeAction,
@@ -130,6 +134,7 @@ export function StationDetailDrawer({
     stationSummary,
     contactCard,
     resources,
+    supplyStatus,
     stationDetailPalette,
   });
 

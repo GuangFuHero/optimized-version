@@ -21,6 +21,8 @@ fragment StationFields on StationType {
   isTemporary
   isOfficial
   operationalStatus
+  supplyStatus
+  supplyStatusUpdatedAt
   createdBy
   createdAt
   updatedAt

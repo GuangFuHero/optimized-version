@@ -150,6 +150,8 @@ export interface RescueMapMarkerItem {
       | 'isTemporary'
       | 'isOfficial'
       | 'operationalStatus'
+      | 'supplyStatus'
+      | 'supplyStatusUpdatedAt'
       | 'createdAt'
       | 'updatedAt'
     >
