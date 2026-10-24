@@ -261,8 +261,6 @@ export function StationManagementPage() {
       {caps.canReview && reviewOpen ? (
         <ReviewQueueDialog
           open
-          canEdit={caps.canEdit}
-          canViewHistory={caps.canViewHistory}
           onClose={() => setReviewOpen(false)}
           onEditStation={(uuid) => {
             setReviewOpen(false);

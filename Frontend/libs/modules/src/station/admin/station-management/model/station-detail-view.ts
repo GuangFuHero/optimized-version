@@ -115,6 +115,22 @@ function formatDate(value: string | null | undefined): string {
   return Number.isNaN(time) ? '—' : isoDate.format(time);
 }
 
+/**
+ * The footer caption on a station the viewer cannot edit. A role that edits stations but not
+ * this one is `team`-scoped (WG-168), so name the team the station is not assigned to.
+ */
+export function readOnlyCaption({
+  canEditStations,
+  teamName,
+}: {
+  canEditStations: boolean;
+  teamName: string | null;
+}): string {
+  return canEditStations && teamName
+    ? `此站點未指派給 ${teamName}，僅可檢視`
+    : '此角色為唯讀檢視';
+}
+
 export function toStationDetailView(
   station: DetailStation,
   { canViewPii }: { canViewPii: boolean },

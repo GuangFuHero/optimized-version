@@ -141,7 +141,13 @@ function CellMenu({
   );
 }
 
+/** The status menu on a row the viewer may edit; a plain badge on one they may not (WG-168). */
 export function QuickStatusCell({ row }: { row: StationRow }) {
+  if (!row.canEdit) return <StatusBadge status={row.operationalStatus} />;
+  return <QuickStatusMenu row={row} />;
+}
+
+function QuickStatusMenu({ row }: { row: StationRow }) {
   const updateStation = useUpdateStation();
   const choose = (status: OperationalStatus) => {
     if (status === row.operationalStatus) return;

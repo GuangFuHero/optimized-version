@@ -25,6 +25,8 @@ export interface StationRow {
   /** [lat, lng] for Leaflet, or null when the station has no point. */
   position: [number, number] | null;
   pendingFieldCount: number;
+  /** The viewer may edit this station — the capability checked against this row's scope. */
+  canEdit: boolean;
   raw: AdminStationFieldsFragment;
 }
 
@@ -48,6 +50,7 @@ export function toStationRow(station: AdminStationFieldsFragment): StationRow {
     updatedAt: station.updatedAt ?? null,
     position: stationPoint(station.geometry),
     pendingFieldCount: station.pendingSuggestedFields.length,
+    canEdit: station.viewerCanEdit,
     raw: station,
   };
 }

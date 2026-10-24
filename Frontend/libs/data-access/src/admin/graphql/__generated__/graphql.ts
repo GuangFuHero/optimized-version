@@ -1126,6 +1126,7 @@ export type QueryStationsArgs = {
   limit?: Scalars['Int']['input'];
   operationalStatus?: InputMaybe<StationOperationalStatus>;
   q?: InputMaybe<Scalars['String']['input']>;
+  reviewableOnly?: Scalars['Boolean']['input'];
   skip?: Scalars['Int']['input'];
   stationType?: InputMaybe<Scalars['String']['input']>;
   unassignedOnly?: Scalars['Boolean']['input'];
@@ -1489,6 +1490,14 @@ export type StationType = {
   uuid: Scalars['UUID']['output'];
   /** Review state: 'unverified', 'ai_verified', or 'human_verified' */
   verificationStatus?: Maybe<Scalars['String']['output']>;
+  /** Whether the caller holds station.delete over this station, so a page offers a delete control only where the delete would be allowed */
+  viewerCanDelete: Scalars['Boolean']['output'];
+  /** Whether the caller holds station.edit over this station, so a page offers edit controls only where the edit would be allowed */
+  viewerCanEdit: Scalars['Boolean']['output'];
+  /** Whether the caller holds station.view_history over this station, so a page offers the timeline only where reading it would be allowed */
+  viewerCanViewHistory: Scalars['Boolean']['output'];
+  /** Whether the contact fields on this station come back unmasked for the caller */
+  viewerCanViewPii: Scalars['Boolean']['output'];
   /** Who can see this station: 'public' or 'restricted' */
   visibility?: Maybe<Scalars['String']['output']>;
 };
@@ -2080,6 +2089,10 @@ export type AdminStationFieldsFragment = {
   createdBy?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  viewerCanEdit: boolean;
+  viewerCanDelete: boolean;
+  viewerCanViewHistory: boolean;
+  viewerCanViewPii: boolean;
   secondaryLocation?: {
     __typename?: 'SecondaryLocationType';
     county?: string | null;
@@ -2315,6 +2328,10 @@ export type AdminStationsQuery = {
       createdBy?: string | null;
       createdAt?: string | null;
       updatedAt?: string | null;
+      viewerCanEdit: boolean;
+      viewerCanDelete: boolean;
+      viewerCanViewHistory: boolean;
+      viewerCanViewPii: boolean;
       secondaryLocation?: {
         __typename?: 'SecondaryLocationType';
         county?: string | null;
@@ -2368,6 +2385,10 @@ export type AdminStationQuery = {
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    viewerCanEdit: boolean;
+    viewerCanDelete: boolean;
+    viewerCanViewHistory: boolean;
+    viewerCanViewPii: boolean;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
       fullAddress?: string | null;
@@ -2446,6 +2467,10 @@ export type AdminStationReviewQuery = {
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    viewerCanEdit: boolean;
+    viewerCanDelete: boolean;
+    viewerCanViewHistory: boolean;
+    viewerCanViewPii: boolean;
     properties: Array<{
       __typename?: 'StationPropertyType';
       uuid: string;
@@ -2949,6 +2974,10 @@ export type AdminCreateStationMutation = {
           createdBy?: string | null;
           createdAt?: string | null;
           updatedAt?: string | null;
+          viewerCanEdit: boolean;
+          viewerCanDelete: boolean;
+          viewerCanViewHistory: boolean;
+          viewerCanViewPii: boolean;
           secondaryLocation?: {
             __typename?: 'SecondaryLocationType';
             county?: string | null;
@@ -2994,6 +3023,10 @@ export type AdminUpdateStationMutation = {
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    viewerCanEdit: boolean;
+    viewerCanDelete: boolean;
+    viewerCanViewHistory: boolean;
+    viewerCanViewPii: boolean;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
       county?: string | null;
@@ -3070,6 +3103,10 @@ export type AdminAssignStationMutation = {
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    viewerCanEdit: boolean;
+    viewerCanDelete: boolean;
+    viewerCanViewHistory: boolean;
+    viewerCanViewPii: boolean;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
       county?: string | null;
@@ -3113,6 +3150,10 @@ export type AdminUnassignStationMutation = {
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    viewerCanEdit: boolean;
+    viewerCanDelete: boolean;
+    viewerCanViewHistory: boolean;
+    viewerCanViewPii: boolean;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
       county?: string | null;
@@ -3682,6 +3723,13 @@ export const AdminStationFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanViewPii' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -4632,6 +4680,13 @@ export const AdminStationsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanViewPii' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -4886,6 +4941,13 @@ export const AdminStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanViewPii' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -5079,6 +5141,13 @@ export const AdminStationReviewDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanViewPii' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -6820,6 +6889,13 @@ export const AdminCreateStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanViewPii' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -6956,6 +7032,13 @@ export const AdminUpdateStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanViewPii' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -7256,6 +7339,13 @@ export const AdminAssignStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanViewPii' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -7373,6 +7463,13 @@ export const AdminUnassignStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanViewPii' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },

@@ -115,7 +115,10 @@ export function toServerVariables(filters: StationFilters) {
         : {}),
     // The backend rejects a keyword outside 2..50 characters.
     ...(q.length >= 2 && q.length <= 50 ? { q } : {}),
-    ...(filters.pending ? { hasPendingSuggestions: true } : {}),
+    // The queue is the caller's own: another team's suggestions are not theirs to decide (WG-168).
+    ...(filters.pending
+      ? { hasPendingSuggestions: true, reviewableOnly: true }
+      : {}),
   };
 }
 

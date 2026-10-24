@@ -9,12 +9,13 @@ detail queries.
 from uuid import UUID
 
 import strawberry
-from sqlalchemy import String, cast, exists, or_, select
+from sqlalchemy import String, cast, exists, false, or_, select
 
 from app.api.v1.endpoints.auth.deps import consume_rate_limit
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout
+from app.core.security import resolve_scope
 from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import (
     AddressLookupType,
@@ -37,6 +38,21 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services import address as address_service
+
+
+async def _reviewable_by(info: strawberry.types.Info) -> list:
+    """WHERE clauses keeping the stations the caller holds station.review over.
+
+    resolve_scope, not check_permission: a caller without the capability gets an empty list
+    rather than an error, and a gov team's `team` scope widens to all (ADR-285).
+    """
+    user = info.context["user"]
+    if user is None:
+        return [false()]
+    scope = await resolve_scope(
+        user, Perm.STATION_REVIEW, info.context["db"], cache=info.context["_rbac_cache"]
+    )
+    return scope_filter(scope, actor=user, model=Station)
 
 
 def _has_pending_suggestion():
@@ -76,6 +92,7 @@ class GeoQuery:
         assigned_team_uuid: UUID | None = None,
         unassigned_only: bool = False,
         has_pending_suggestions: bool = False,
+        reviewable_only: bool = False,
         skip: int = 0,
         limit: int = 50,
     ) -> StationConnection:
@@ -99,7 +116,10 @@ class GeoQuery:
             unassigned_only: Only the stations no team runs yet — gov's queue to hand out.
                 Mutually exclusive with assigned_team_uuid.
             has_pending_suggestions: When true, only stations with a pending suggestion on
-                themselves or one of their properties — the reviewer's queue.
+                themselves or one of their properties. Public, like pendingSuggestedFields.
+            reviewable_only: Only the stations the caller holds station.review over; with
+                has_pending_suggestions, the caller's own review queue (WG-168). Empty for a
+                caller without station.review, including a guest.
             skip: Pagination offset.
             limit: Max results per page (default 50).
 
@@ -123,6 +143,8 @@ class GeoQuery:
             extra_filters.append(~runs_it)
         if has_pending_suggestions:
             extra_filters.append(_has_pending_suggestion())
+        if reviewable_only:
+            extra_filters += await _reviewable_by(info)
         # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their

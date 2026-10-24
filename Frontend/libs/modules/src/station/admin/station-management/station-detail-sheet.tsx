@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { Box, Typography } from '@mui/material';
-import { useStation } from '@rescue-frontend/data-access/admin';
+import { useCurrentUser, useStation } from '@rescue-frontend/data-access/admin';
 import { Badge, Button, designTokens } from '@rescue-frontend/ui';
 import { EyeOff, PencilLine, ShieldCheck, Trash2 } from 'lucide-react';
 
@@ -17,6 +17,7 @@ import {
 } from '../station-form';
 import type { StationCapabilities } from './hooks/use-station-capabilities';
 import {
+  readOnlyCaption,
   toStationDetailView,
   type DetailStation,
   type StationDetailView,
@@ -82,7 +83,7 @@ export function StationDetailSheet({
         station={station}
         caps={caps}
         now={now}
-        activeTab={caps.canViewHistory ? activeTab : 'info'}
+        activeTab={station.viewerCanViewHistory ? activeTab : 'info'}
         onTabChange={setActiveTab}
         onClose={onClose}
         onEdit={() => onEdit(station.uuid)}
@@ -133,9 +134,12 @@ function StationDetailContent({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const view = toStationDetailView(station, { canViewPii: caps.canViewPii });
+  const view = toStationDetailView(station, {
+    canViewPii: station.viewerCanViewPii,
+  });
   const status = getOperationalStatusMeta(station.operationalStatus);
   const version = useLoadedStationVersion(station.uuid);
+  const teamName = useCurrentUser().data?.active_identity?.team ?? null;
 
   return (
     <AdminStationDrawerLayout
@@ -171,7 +175,7 @@ function StationDetailContent({
               <Badge tone="warning">{view.pendingFieldCount} 欄待審</Badge>
             ) : null}
           </Box>
-          {caps.canViewHistory ? (
+          {station.viewerCanViewHistory ? (
             <AdminStationDrawerTabs<DetailTab>
               ariaLabel="站點詳情分頁"
               tabs={[
@@ -189,7 +193,9 @@ function StationDetailContent({
       }
       footer={
         <>
-          {caps.canDelete ? (
+          {/* Per station, not the page capability: a `team`-scoped role holds the capability
+              but would get a 404 on another team's station (WG-168). */}
+          {station.viewerCanDelete ? (
             <Button
               variant="ghost"
               size="md"
@@ -201,7 +207,7 @@ function StationDetailContent({
             </Button>
           ) : null}
           <Box sx={{ flex: 1 }} />
-          {caps.canEdit ? (
+          {station.viewerCanEdit ? (
             <Button
               size="md"
               startIcon={<PencilLine size={17} />}
@@ -211,7 +217,7 @@ function StationDetailContent({
             </Button>
           ) : (
             <AdminStationDrawerCaption>
-              此角色為唯讀檢視
+              {readOnlyCaption({ canEditStations: caps.canEdit, teamName })}
             </AdminStationDrawerCaption>
           )}
         </>

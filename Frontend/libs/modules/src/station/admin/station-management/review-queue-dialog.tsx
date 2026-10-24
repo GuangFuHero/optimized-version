@@ -62,16 +62,12 @@ const ADOPTED = {
 
 interface ReviewQueueDialogProps {
   open: boolean;
-  canEdit: boolean;
-  canViewHistory: boolean;
   onClose: () => void;
   onEditStation: (uuid: string) => void;
 }
 
 export function ReviewQueueDialog({
   open,
-  canEdit,
-  canViewHistory,
   onClose,
   onEditStation,
 }: ReviewQueueDialogProps) {
@@ -81,6 +77,10 @@ export function ReviewQueueDialog({
   const current =
     stations.find((s) => s.uuid === selected) ?? stations[0] ?? null;
   const uuid = current?.uuid ?? '';
+  // Per station, not the page capabilities: a `team`-scoped reviewer may review a station
+  // whose history or edit is still out of reach under other grants (WG-168).
+  const canViewHistory = current?.raw.viewerCanViewHistory ?? false;
+  const canEdit = current?.canEdit ?? false;
 
   // Loaded here, not in the detail pane, so the list can flag the selected station's conflict.
   const review = useStationReview({ uuid });

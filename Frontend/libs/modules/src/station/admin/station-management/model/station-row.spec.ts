@@ -26,6 +26,8 @@ const base = {
   createdBy: null,
   createdAt: null,
   updatedAt: '2026-10-21T00:00:00Z',
+  viewerCanEdit: true,
+  viewerCanDelete: true,
   assignedTeam: {
     __typename: 'AssignedTeamType',
     uuid: 't1',
@@ -50,7 +52,12 @@ describe('toStationRow', () => {
       isOfficial: true,
       position: [23.67, 121.42],
       pendingFieldCount: 2,
+      canEdit: true,
     });
+  });
+
+  it('carries the per-station edit right, not the page capability', () => {
+    expect(toStationRow({ ...base, viewerCanEdit: false }).canEdit).toBe(false);
   });
 
   it('survives nulls', () => {

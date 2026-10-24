@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   countRatings,
+  readOnlyCaption,
   toStationDetailView,
   type DetailStation,
 } from './station-detail-view';
@@ -157,5 +158,25 @@ describe('countRatings', () => {
         { rating: 'sideways' },
       ]),
     ).toEqual({ up: 1, neutral: 1, down: 0 });
+  });
+});
+
+describe('readOnlyCaption', () => {
+  it('names the team when the role edits stations, just not this one', () => {
+    expect(
+      readOnlyCaption({ canEditStations: true, teamName: '壯闊台灣' }),
+    ).toBe('此站點未指派給 壯闊台灣，僅可檢視');
+  });
+
+  it('falls back to the role caption when the role edits no station', () => {
+    expect(
+      readOnlyCaption({ canEditStations: false, teamName: '壯闊台灣' }),
+    ).toBe('此角色為唯讀檢視');
+  });
+
+  it('falls back to the role caption without a team to name', () => {
+    expect(readOnlyCaption({ canEditStations: true, teamName: null })).toBe(
+      '此角色為唯讀檢視',
+    );
   });
 });

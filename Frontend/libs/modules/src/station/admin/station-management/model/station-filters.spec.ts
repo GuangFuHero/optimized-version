@@ -63,9 +63,10 @@ describe('toServerVariables', () => {
     ).toEqual({ assignedTeamUuid: 't1', q: '光復' });
   });
 
-  it('asks only for stations with pending suggestions when set', () => {
+  it('asks only for pending stations the caller can review when set', () => {
     expect(toServerVariables({ ...EMPTY_FILTERS, pending: true })).toEqual({
       hasPendingSuggestions: true,
+      reviewableOnly: true,
     });
   });
 });
