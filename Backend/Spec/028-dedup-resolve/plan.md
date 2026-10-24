@@ -78,6 +78,9 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 3：處理計畫 — 純函式（ADR-366、367、369、370、376、379）
 
+- ✅ 2026-10-24：`app/services/dedup_resolve_plan.py`、`ResolveRequest`（`app/schemas/duplicate_pair.py`，未知欄位 422）；純函式測試 33 個；
+  突變測試 9 條（類型、人數、漏列需求／細項、重複志工、重複列、主要單方向、細項搬移、全部取消）都會被抓到。全套件 **2741 passed**，覆蓋率 96%。
+
 - [ ] `dedup_resolve_plan.py`：
   ```python
   def build_plan(request: ResolveRequest, pair_kind: str,
