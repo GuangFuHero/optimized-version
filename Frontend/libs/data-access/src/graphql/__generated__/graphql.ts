@@ -1705,7 +1705,7 @@ export type TicketType = {
   auditedAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of who gave the last verdict. Null if never audited, or without ticket.audit here */
   auditedBy?: Maybe<Scalars['String']['output']>;
-  /** The building map this ticket was filed under (createTicket's buildingMapUuid). Null when it was not filed under one, when that building map is deleted, and to a caller without ticket.view_detail on this ticket */
+  /** The building map this ticket was filed under (createTicket's buildingMapUuid). Null when it was not filed under one, when that building map is deleted, and to a caller without ticket.view_detail here */
   buildingMapUuid?: Maybe<Scalars['UUID']['output']>;
   /** What differs from the content the last verdict was given on, field by field. Null if never audited, or to a caller without ticket.audit here. A need taken off since does not appear: it does not void a verdict. A value the caller could not read on the ticket itself (address, free text, triage answers) comes back null, the change still listed. Read it on one ticket at a time */
   changesSinceAudit?: Maybe<Array<TicketAuditChangeType>>;
