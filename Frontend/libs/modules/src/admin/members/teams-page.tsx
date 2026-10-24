@@ -13,7 +13,8 @@ import {
 
 import { Box, ButtonBase, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { createColumnHelper } from '@tanstack/react-table';
-import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -336,12 +337,15 @@ function TeamDetail({
   roster,
   candidates,
   teamTypes,
+  focusMemberUuid,
 }: {
   team: Team;
   teams: readonly Team[];
   roster: readonly RosterMember[];
   candidates: Parameters<typeof AddMemberDialog>[0]['candidates'];
   teamTypes: ReadonlyMap<string, string>;
+  /** Marked in the roster: the applicant just approved as this new team's admin. */
+  focusMemberUuid?: string | null;
 }) {
   const [adding, setAdding] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -450,6 +454,7 @@ function TeamDetail({
         </Stack>
         <MemberTable
           rows={roster}
+          highlightUuid={focusMemberUuid}
           actionsFor={running ? actionsFor : undefined}
           empty={
             <EmptyState
@@ -496,7 +501,12 @@ function TeamDetail({
 function SuperTeamsView() {
   const teamsQuery = useTeams();
   const usersQuery = useAllUsers();
-  const [selected, setSelected] = useState<string | null>(null);
+  // `?team=…&member=…`: where approving a new-team application leads (`newTeamHref`).
+  const searchParams = useSearchParams();
+  const [selected, setSelected] = useState<string | null>(() =>
+    searchParams.get('team'),
+  );
+  const focusMemberUuid = searchParams.get('member');
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -605,6 +615,9 @@ function SuperTeamsView() {
         roster={roster}
         candidates={users}
         teamTypes={teamTypes}
+        focusMemberUuid={
+          team.uuid === searchParams.get('team') ? focusMemberUuid : null
+        }
       />
       {createDialog}
     </Box>
@@ -920,7 +933,10 @@ function TeamsView() {
 export function TeamsPage() {
   return (
     <PageFrame>
-      <TeamsView />
+      {/* `useSearchParams` (SuperTeamsView) needs a boundary, or the route cannot prerender. */}
+      <Suspense fallback={<Typography sx={captionSx}>載入中…</Typography>}>
+        <TeamsView />
+      </Suspense>
     </PageFrame>
   );
 }
