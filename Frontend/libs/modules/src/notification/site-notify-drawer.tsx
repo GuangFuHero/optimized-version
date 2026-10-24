@@ -4,6 +4,7 @@ import AssignmentIndRoundedIcon from '@mui/icons-material/AssignmentIndRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import DoNotDisturbOnRoundedIcon from '@mui/icons-material/DoNotDisturbOnRounded';
 import HighlightOffRoundedIcon from '@mui/icons-material/HighlightOffRounded';
+import MergeRoundedIcon from '@mui/icons-material/MergeRounded';
 import NotificationsOffRoundedIcon from '@mui/icons-material/NotificationsOffRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
@@ -66,6 +67,8 @@ const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
   },
   'need-full': { icon: <CheckCircleRoundedIcon />, tone: color.fg.success },
   'called-off': { icon: <DoNotDisturbOnRoundedIcon />, tone: color.fg.danger },
+  // Not in the prototype, which has no notice for a duplicate review.
+  merged: { icon: <MergeRoundedIcon />, tone: color.brand.secondary.subtle },
   'role-approved': { icon: <VerifiedRoundedIcon />, tone: color.fg.success },
   'role-rejected': {
     icon: <HighlightOffRoundedIcon />,
@@ -340,9 +343,9 @@ function SiteNotifyContent({
         </Notice>
       ) : (
         notices.map((notice) => {
-          const ticketUuid = notice.needUuid
-            ? ticketOfNeed(notice.needUuid, lists)
-            : null;
+          const ticketUuid =
+            notice.ticketUuid ??
+            (notice.needUuid ? ticketOfNeed(notice.needUuid, lists) : null);
 
           return (
             <SiteNoticeRow

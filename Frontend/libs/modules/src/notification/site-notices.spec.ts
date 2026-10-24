@@ -51,6 +51,10 @@ describe('readSiteNotices', () => {
       task_assignment_removed: 'called-off',
       task_deleted: 'called-off',
       ticket_deleted: 'called-off',
+      dedup_task_merged: 'merged',
+      dedup_task_canceled: 'called-off',
+      dedup_ticket_merged: 'merged',
+      dedup_ticket_updated: 'merged',
       role_request_approved: 'role-approved',
       role_request_rejected: 'role-rejected',
     };
@@ -89,6 +93,7 @@ describe('readSiteNotices', () => {
         read: false,
         at: '10/21 14:05',
         needUuid: 'need-1',
+        ticketUuid: null,
       },
     ]);
   });
@@ -111,6 +116,32 @@ describe('readSiteNotices', () => {
       needOf('role_request_approved'),
       'an application is not a need',
     ).toBeNull();
+  });
+
+  it('opens the ticket a duplicate review kept, which each of its notices names (Spec 028 §6)', () => {
+    const dedup = [
+      'dedup_task_merged',
+      'dedup_task_canceled',
+      'dedup_ticket_merged',
+      'dedup_ticket_updated',
+    ].map((type) =>
+      row({ uuid: type, type, ref_type: 'ticket', ref_uuid: 'kept-ticket' }),
+    );
+
+    expect(
+      readSiteNotices(dedup).map(({ ticketUuid, needUuid }) => [
+        ticketUuid,
+        needUuid,
+      ]),
+    ).toEqual(Array(4).fill(['kept-ticket', null]));
+  });
+
+  it('does not open the ticket a deletion names, which is gone', () => {
+    const [deleted] = readSiteNotices([
+      row({ type: 'ticket_deleted', ref_type: 'ticket', ref_uuid: 'gone' }),
+    ]);
+
+    expect(deleted.ticketUuid).toBeNull();
   });
 });
 
