@@ -7,7 +7,7 @@
 
 import type { components } from '@rescue-frontend/data-access/openapi';
 
-import { formatTaiwanTime } from '../ticket/my-claims/my-claims';
+import { formatTaiwanTime } from '../time';
 
 /** One notification as `GET /notifications` sends it. */
 export type NotificationRow = components['schemas']['NotificationItem'];
