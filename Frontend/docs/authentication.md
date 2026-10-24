@@ -121,6 +121,11 @@ browser 裡，`router.refresh()` 只會重畫 server 那部分，訪客會繼續
 登入、註冊表單（`LoginFormClient`、`RegisterFormClient`）前後台共用。登入表單的 `app`（`site` 或 `admin`）決定
 Google、LINE 登入完回到哪個 app。
 
+前台登入頁沒有 `callbackUrl` 時，密碼、Google、LINE 登入完都先到 `/signed-in`（`signedInLandingAsync`）。它跟後台
+`(portal)` layout 一樣用 `currentUserFromBackendAsync(cookieHeader, 'admin')` 讀 `/users/me`：讀到人就導到 `/admin`
+（`next.config.js` 再轉到 `ADMIN_APP_URL`）；`NO_BACK_OFFICE_IDENTITY`、訪客、`READ_IN_BROWSER`、後端錯誤都導到
+`/map`。有 `callbackUrl` 時照舊回那一頁：人多半是做到一半被請去登入。註冊沒有這一步，新帳號還沒有後台身份。
+
 ### 密碼
 
 1. `GET /api/v1/auth/salt/:value` 取 `salt_frontend`。
