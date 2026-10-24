@@ -11,6 +11,7 @@ import {
 import { SiteBadge } from '../shell/site/site-badge';
 import type { RoleRequestRow } from './drawer-view';
 import { ROLE_REQUEST_LABELS } from './form';
+import { teamNoun } from './team';
 
 const { color, radius } = designTokens;
 
@@ -33,13 +34,33 @@ const submittedAt = new Intl.DateTimeFormat('zh-TW', {
   hourCycle: 'h23',
 });
 
+/** The team it asks to join, or the one it asks to found; none for a data auditor. */
+function teamLine(request: RoleRequestRow): string | null {
+  if (request.team) {
+    return request.team.name;
+  }
+
+  if (!request.newTeamName) {
+    return null;
+  }
+
+  const waiting = request.status === 'pending' ? '，待審核' : '';
+
+  return `${request.newTeamName}（新${teamNoun(request.requestedRole)}${waiting}）`;
+}
+
 /**
- * One application in the drawer (prototype `RoleRequestCard`, site-actions.jsx:267-294): when it was
- * sent, what it asks for, where it stands, the applicant's reason, and the reviewer's reply to a
- * rejection.
+ * One application in the drawer (prototype `RoleRequestCard`, site-actions.jsx:539-575): when it was
+ * sent, what it asks for and for which team, who sent it, where it stands, the applicant's reason,
+ * and the reviewer's reply to a rejection.
  */
 export function RoleRequestCard({ request }: { request: RoleRequestRow }) {
   const meta = STATUS_META[request.status] ?? STATUS_META.pending;
+  const team = teamLine(request);
+  // The phone comes masked (backend `mask_phone`); applications from before Spec/026 have neither.
+  const applicant = [request.applicantName, request.applicantPhone]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <Box
@@ -79,6 +100,30 @@ export function RoleRequestCard({ request }: { request: RoleRequestRow }) {
           >
             {ROLE_REQUEST_LABELS[request.requestedRole]}
           </Typography>
+          {applicant ? (
+            <Typography
+              sx={{
+                mt: 0.25,
+                color: color.fg.neutral.subtle,
+                fontSize: displayTextSize[12],
+                lineHeight: 1.4,
+              }}
+            >
+              {applicant}
+            </Typography>
+          ) : null}
+          {team ? (
+            <Typography
+              sx={{
+                mt: 0.25,
+                color: color.fg.neutral.subtle,
+                fontSize: displayTextSize[13],
+                lineHeight: 1.4,
+              }}
+            >
+              {team}
+            </Typography>
+          ) : null}
         </Box>
         <SiteBadge tone={meta.tone}>{meta.label}</SiteBadge>
       </Stack>

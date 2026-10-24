@@ -27,9 +27,14 @@ const LOGIN_METHOD_LABELS: ReadonlyArray<[provider: string, label: string]> = [
 ];
 
 /**
- * How the account signs in, for 「登入方式：…」: whether it has a password at all tells the
- * person which of 變更密碼 and 建立密碼 is theirs.
+ * Whether the account signs in with a password: the page shows it 變更密碼, and an account that
+ * signs in only with Google or LINE 建立登入密碼 instead — never both, for the person to pick from.
  */
+export function hasPassword(methods: readonly LoginMethod[]): boolean {
+  return methods.some((method) => method.provider === 'password');
+}
+
+/** How the account signs in, for 「登入方式：…」. */
 export function loginMethodsText(methods: readonly LoginMethod[]): string {
   const providers = new Set(methods.map((method) => method.provider));
 

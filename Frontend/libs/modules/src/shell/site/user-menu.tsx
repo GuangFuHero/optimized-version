@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
+import ShieldRoundedIcon from '@mui/icons-material/ShieldRounded';
 import {
   Avatar,
   ButtonBase,
@@ -47,10 +48,10 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
     setMyTasksOpen(true);
   };
 
-  // const handleOpenSecurity = () => {
-  //   setAnchorEl(null);
-  //   router.push('/account/security');
-  // };
+  const handleOpenSecurity = () => {
+    setAnchorEl(null);
+    router.push('/account/security');
+  };
 
   const handleSignOut = () => {
     setAnchorEl(null);
@@ -128,14 +129,18 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
           </Stack>
         </MenuItem>
         <Divider />
-        {/* <MenuItem onClick={handleOpenSecurity} sx={{ gap: 1 }}>
-          <PersonIcon sx={{ fontSize: 18 }} />
-          <Typography sx={{ fontSize: displayTextSize[14] }}>帳號安全</Typography>
-        </MenuItem> */}
         <MenuItem onClick={handleOpenMyTasks} sx={{ gap: 1 }}>
           <AssignmentRoundedIcon sx={{ fontSize: 18 }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>
             我的任務
+          </Typography>
+        </MenuItem>
+        {/* Not in the prototype's menu, which has no such page: added after 我的任務, the site's own
+            thing, and before 登出. */}
+        <MenuItem onClick={handleOpenSecurity} sx={{ gap: 1 }}>
+          <ShieldRoundedIcon sx={{ fontSize: 18 }} />
+          <Typography sx={{ fontSize: displayTextSize[14] }}>
+            帳號安全
           </Typography>
         </MenuItem>
         <MenuItem onClick={handleSignOut} sx={{ gap: 1 }}>

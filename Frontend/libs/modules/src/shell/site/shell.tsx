@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { Suspense, useCallback, useState, type ReactNode } from 'react';
 
 import { Box, Drawer } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -15,7 +15,10 @@ import {
   sitePortalEntry,
   useMyRoleRequests,
 } from '../../role-request';
+import type { ApplyReturn } from '../../role-request/apply-return';
+import { RoleRequestReturn } from '../../role-request/role-request-return';
 import { SiteRouteProvider } from '../../route/use-site-route-state';
+import { StationSuggestionHost } from '../../station/suggestion/station-suggestion-host';
 import { HelpRequestHost } from '../../ticket/help-request/help-request-host';
 import { MobileRequestHelpFab } from '../../ticket/help-request/mobile-request-help';
 import { SiteMobileTopNavBar } from './mobile-top-navbar';
@@ -57,6 +60,13 @@ export function SiteShell({
     setMobileDrawerOpen(false);
     setRoleRequestOpen(true);
   };
+  // Back from proving the person at LINE before adding a phone: the form opens again as it was.
+  const [applyReturn, setApplyReturn] = useState<ApplyReturn | null>(null);
+  const reopenRoleRequest = useCallback((back: ApplyReturn) => {
+    setApplyReturn(back);
+    setRoleRequestOpen(true);
+  }, []);
+  const clearApplyReturn = useCallback(() => setApplyReturn(null), []);
   // 這一頁怎麼用 on a phone, from the menu's row: the desktop's ？ holds its own.
   const pageHelp = usePageHelp();
   const [pageHelpOpen, setPageHelpOpen] = useState(false);
@@ -218,13 +228,21 @@ export function SiteShell({
         onClose={() => setRoleRequestOpen(false)}
         myRoleRequests={myRoleRequests}
         onSubmitted={refetchRoleRequests}
+        applyReturn={applyReturn}
+        onApplyReturnHandled={clearApplyReturn}
       />
+      <Suspense fallback={null}>
+        <RoleRequestReturn onReturn={reopenRoleRequest} />
+      </Suspense>
 
       {/* The map has its own, clear of its 「＋」 (`MapRequestHelpButton`). */}
       {pathname.startsWith('/map') ? null : <MobileRequestHelpFab />}
 
       {/* Inside the route providers: once a ticket is filed it turns the page to it. */}
       <HelpRequestHost isAuthenticated={isAuthenticated} />
+
+      {/* Opened from a station's detail, on the map or the list (`openStationSuggestion`). */}
+      <StationSuggestionHost isAuthenticated={isAuthenticated} />
     </Box>
   );
 

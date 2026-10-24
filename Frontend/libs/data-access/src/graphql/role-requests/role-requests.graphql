@@ -13,7 +13,23 @@ query MyRoleRequests {
       reviewNote
       createdAt
       closedAt
+      team {
+        uuid
+        name
+      }
+      newTeamName
+      applicantName
+      applicantPhone
     }
+  }
+}
+
+# The teams an applicant picks from (Spec/026): active ones of the type the identity names, by name.
+# Read when the drawer asks, not cached: a team suspended or founded since must not be offered.
+query RoleRequestTeams($type: RoleRequestTeamType!) {
+  roleRequestTeams(type: $type) {
+    uuid
+    name
   }
 }
 

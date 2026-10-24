@@ -394,6 +394,8 @@ export type CreateStationInput = {
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Data origin: 'user' (default) or 'official' */
   source?: Scalars['String']['input'];
+  /** Optional public line on what the station is short of */
+  supplyStatus?: InputMaybe<Scalars['String']['input']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: InputMaybe<Scalars['String']['input']>;
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
@@ -909,7 +911,7 @@ export type MutationWithdrawRoleRequestArgs = {
 
 export type MyRoleRequestsType = {
   __typename?: 'MyRoleRequestsType';
-  /** May send an application now: no back-office identity, none pending, not paused */
+  /** May send an application now: none pending and not paused. A back-office identity rules out only the data auditor choice (ADR-351) */
   canApply: Scalars['Boolean']['output'];
   /** Holds a role beyond `user`: the entry offers 前往後台 instead of applying */
   hasBackofficeIdentity: Scalars['Boolean']['output'];
@@ -984,6 +986,7 @@ export type Query = {
   normalizeAddress: AddressLookupType;
   /** The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute shared with normalizeAddress */
   reverseGeocode: AddressLookupType;
+  roleRequestTeams: Array<RoleRequestTeam>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stations: StationConnection;
@@ -1073,6 +1076,10 @@ export type QueryNormalizeAddressArgs = {
 export type QueryReverseGeocodeArgs = {
   lat: Scalars['Float']['input'];
   lng: Scalars['Float']['input'];
+};
+
+export type QueryRoleRequestTeamsArgs = {
+  type?: InputMaybe<RoleRequestTeamType>;
 };
 
 export type QueryStationArgs = {
@@ -1173,18 +1180,43 @@ export const RoleRequestStatus = {
 
 export type RoleRequestStatus =
   (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
+export type RoleRequestTeam = {
+  __typename?: 'RoleRequestTeam';
+  name: Scalars['String']['output'];
+  type: RoleRequestTeamType;
+  uuid: Scalars['UUID']['output'];
+};
+
+export const RoleRequestTeamType = {
+  Gov: 'GOV',
+  Ngo: 'NGO',
+} as const;
+
+export type RoleRequestTeamType =
+  (typeof RoleRequestTeamType)[keyof typeof RoleRequestTeamType];
 export type RoleRequestType = {
   __typename?: 'RoleRequestType';
+  applicantEmail?: Maybe<Scalars['String']['output']>;
+  applicantName?: Maybe<Scalars['String']['output']>;
+  /** Masked */
+  applicantPhone?: Maybe<Scalars['String']['output']>;
   /** When it was approved, rejected or withdrawn */
   closedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Spec 019 only; no longer sent (ADR-355) */
   contact?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['DateTime']['output'];
+  /** The team a new-team application founds */
+  newTeamName?: Maybe<Scalars['String']['output']>;
   reason: Scalars['String']['output'];
   requestedRole: RoleRequestRole;
   /** The reviewer's reply, if any */
   reviewNote?: Maybe<Scalars['String']['output']>;
   status: RoleRequestStatus;
+  /** The existing team a member request asks to join */
+  team?: Maybe<RoleRequestTeam>;
   uuid: Scalars['UUID']['output'];
+  /** Sent through a team's invite link */
+  viaInvite: Scalars['Boolean']['output'];
 };
 
 export type SecondaryLocationInput = {
@@ -1416,6 +1448,10 @@ export type StationType = {
   suggestedFields: Array<SuggestedFieldType>;
   /** Merges applied to this station, newest first; empty without station.review over this station */
   suggestionMerges: Array<StationSuggestionMergeType>;
+  /** What the station is short of, in free text, e.g. '飲用水見底、尿布尚有存量'. Public (ADR-333) */
+  supplyStatus?: Maybe<Scalars['String']['output']>;
+  /** When supply_status last changed; null while it has never been set */
+  supplyStatusUpdatedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1427,9 +1463,12 @@ export type StationType = {
 };
 
 export type SubmitRoleRequestInput = {
-  contact?: InputMaybe<Scalars['String']['input']>;
+  email?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  newTeamName?: InputMaybe<Scalars['String']['input']>;
   reason: Scalars['String']['input'];
   requestedRole: RoleRequestRole;
+  teamUuid?: InputMaybe<Scalars['UUID']['input']>;
 };
 
 export type SuggestableFieldType = {
@@ -1812,6 +1851,7 @@ export type UpdateStationInput = {
   opHour?: InputMaybe<Scalars['String']['input']>;
   /** Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed' */
   operationalStatus?: InputMaybe<StationOperationalStatus>;
+  supplyStatus?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
   /** Updated visibility: 'public', 'restricted', or 'internal' */
   visibility?: InputMaybe<Visibility>;
@@ -1984,6 +2024,8 @@ export type StationFieldsFragment = {
   isTemporary: boolean;
   isOfficial: boolean;
   operationalStatus: string;
+  supplyStatus?: string | null;
+  supplyStatusUpdatedAt?: any | null;
   createdBy?: string | null;
   createdAt?: any | null;
   updatedAt?: any | null;
@@ -2169,6 +2211,40 @@ export type CreateCrowdSourcingMutation = {
   };
 };
 
+export type GetStationForSuggestionQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type GetStationForSuggestionQuery = {
+  __typename?: 'Query';
+  station?: {
+    __typename?: 'StationType';
+    uuid: string;
+    name?: string | null;
+    type?: string | null;
+    description?: string | null;
+    opHour?: string | null;
+    operationalStatus: string;
+    supplyStatus?: string | null;
+    pendingSuggestedFields: Array<string>;
+  } | null;
+};
+
+export type CreateStationSuggestionMutationVariables = Exact<{
+  input: CreateStationSuggestionInput;
+}>;
+
+export type CreateStationSuggestionMutation = {
+  __typename?: 'Mutation';
+  createStationSuggestion: {
+    __typename?: 'StationSuggestionType';
+    uuid: string;
+    fieldName: string;
+    newValue: string;
+    status: string;
+  };
+};
+
 export type MyRoleRequestsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type MyRoleRequestsQuery = {
@@ -2186,8 +2262,29 @@ export type MyRoleRequestsQuery = {
       reviewNote?: string | null;
       createdAt: any;
       closedAt?: any | null;
+      newTeamName?: string | null;
+      applicantName?: string | null;
+      applicantPhone?: string | null;
+      team?: {
+        __typename?: 'RoleRequestTeam';
+        uuid: string;
+        name: string;
+      } | null;
     }>;
   };
+};
+
+export type RoleRequestTeamsQueryVariables = Exact<{
+  type: RoleRequestTeamType;
+}>;
+
+export type RoleRequestTeamsQuery = {
+  __typename?: 'Query';
+  roleRequestTeams: Array<{
+    __typename?: 'RoleRequestTeam';
+    uuid: string;
+    name: string;
+  }>;
 };
 
 export type SubmitRoleRequestMutationVariables = Exact<{
@@ -2641,6 +2738,11 @@ export const StationFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3020,6 +3122,11 @@ export const GetStationsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3205,6 +3312,11 @@ export const GetStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3526,6 +3638,11 @@ export const UpdateStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3705,6 +3822,127 @@ export const CreateCrowdSourcingDocument = {
   CreateCrowdSourcingMutation,
   CreateCrowdSourcingMutationVariables
 >;
+export const GetStationForSuggestionDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetStationForSuggestion' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'station' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'operationalStatus' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'supplyStatus' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'pendingSuggestedFields' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  GetStationForSuggestionQuery,
+  GetStationForSuggestionQueryVariables
+>;
+export const CreateStationSuggestionDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'CreateStationSuggestion' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'input' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'CreateStationSuggestionInput' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'createStationSuggestion' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'input' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'fieldName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'newValue' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CreateStationSuggestionMutation,
+  CreateStationSuggestionMutationVariables
+>;
 export const MyRoleRequestsDocument = {
   kind: 'Document',
   definitions: [
@@ -3757,6 +3995,35 @@ export const MyRoleRequestsDocument = {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'closedAt' },
                       },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'team' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'name' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'newTeamName' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'applicantName' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'applicantPhone' },
+                      },
                     ],
                   },
                 },
@@ -3768,6 +4035,58 @@ export const MyRoleRequestsDocument = {
     },
   ],
 } as unknown as DocumentNode<MyRoleRequestsQuery, MyRoleRequestsQueryVariables>;
+export const RoleRequestTeamsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'RoleRequestTeams' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'type' } },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'RoleRequestTeamType' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'roleRequestTeams' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'type' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'type' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  RoleRequestTeamsQuery,
+  RoleRequestTeamsQueryVariables
+>;
 export const SubmitRoleRequestDocument = {
   kind: 'Document',
   definitions: [
