@@ -1,8 +1,12 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
-import { listNotificationsAsync } from './api';
+import {
+  listNotificationsAsync,
+  siteNotificationKeys,
+  type NotificationPage,
+} from './api';
 import { countUnreadSiteNotices } from './site-notices';
 
 /**
@@ -11,94 +15,28 @@ import { countUnreadSiteNotices } from './site-notices';
  */
 const POLL_INTERVAL_MS = 60_000;
 
-/*
- * One count for the whole page. The desktop and the phone top bars are both mounted, one hidden by
- * CSS, and each holds a bell: kept here, the two share a single poll instead of each running one.
- */
-let unreadCount = 0;
-const listeners = new Set<() => void>();
-let timer: ReturnType<typeof setInterval> | undefined;
-// Only the latest read counts: one answering after a newer one would put an old count back.
-let latestRead = 0;
-
-function publish(count: number) {
-  if (count === unreadCount) {
-    return;
-  }
-
-  unreadCount = count;
-  listeners.forEach((listener) => listener());
-}
-
-async function readUnreadCountAsync() {
-  const read = ++latestRead;
-
-  try {
-    // The 100 newest unread at most: past nine the badge says 9+ anyway.
-    const { items } = await listNotificationsAsync({ unreadOnly: true });
-
-    if (read === latestRead) {
-      publish(countUnreadSiteNotices(items));
-    }
-  } catch {
-    // The last count stands: a read that failed says nothing new about what is unread. A session
-    // that ended is the proxy's to report, and `sessionExpiryFetch` acts on it.
-  }
-}
-
-function readIfInView() {
-  if (document.visibilityState === 'visible') {
-    void readUnreadCountAsync();
-  }
-}
-
-function start() {
-  void readUnreadCountAsync();
-  timer = setInterval(readIfInView, POLL_INTERVAL_MS);
-  // Back to the tab: read at once rather than at the next tick.
-  document.addEventListener('visibilitychange', readIfInView);
-}
-
-function stop() {
-  clearInterval(timer);
-  timer = undefined;
-  document.removeEventListener('visibilitychange', readIfInView);
-  // A read still on its way belongs to the bell that was, whoever signs in next.
-  latestRead += 1;
-  unreadCount = 0;
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-
-  if (listeners.size === 1) {
-    start();
-  }
-
-  return () => {
-    listeners.delete(listener);
-
-    if (listeners.size === 0) {
-      stop();
-    }
-  };
-}
-
-/** Count again now: a notice was just read in the drawer. */
-export function refreshUnreadSiteNotices(): void {
-  if (listeners.size > 0) {
-    void readUnreadCountAsync();
-  }
+function unreadCountOf({ items }: NotificationPage) {
+  return countUnreadSiteNotices(items);
 }
 
 /**
- * The bell's count, polled from the first bell mounted until the last one goes. A bell is there
- * only for a signed-in viewer, and signing out reloads the page.
+ * The bell's count. The desktop and the phone top bars are both mounted, one hidden by CSS, and each
+ * holds a bell: under one key the two share a single poll. TanStack holds the interval while the tab
+ * is hidden and reads at once when it comes back. A failed read keeps the last count and raises no
+ * error toast: nobody asked. A bell is there only for a signed-in viewer, and signing out reloads
+ * the page.
  */
 export function useUnreadSiteNotices(): number {
-  return useSyncExternalStore(
-    subscribe,
-    () => unreadCount,
-    () => 0,
-  );
+  const { data } = useQuery({
+    queryKey: siteNotificationKeys.unread,
+    // The 100 newest unread at most: past nine the badge says 9+ anyway.
+    queryFn: () => listNotificationsAsync({ unreadOnly: true }),
+    select: unreadCountOf,
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
+    meta: { quietErrors: true },
+  });
+
+  return data ?? 0;
 }

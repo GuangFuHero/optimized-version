@@ -1,11 +1,26 @@
 'use client';
 
 import { createRestClient, responseData } from '@rescue-frontend/data-access';
+import type { components } from '@rescue-frontend/data-access/openapi';
 
 import { sessionExpiryFetch } from '../session/end-expired-session';
 
 // Through the proxy, which refreshes a spent access token on the way, as `auth/api/client.ts` does.
 const notificationApiClient = createRestClient(sessionExpiryFetch);
+
+/** One page of `GET /notifications`. */
+export type NotificationPage =
+  components['schemas']['NotificationListResponse'];
+
+/**
+ * Where TanStack keeps the viewer's notifications: the bell's count and the drawer's list, both
+ * under `all`, which is invalidated once a notice is read.
+ */
+export const siteNotificationKeys = {
+  all: ['site-notifications'],
+  unread: ['site-notifications', 'unread'],
+  list: ['site-notifications', 'list'],
+} as const;
 
 /**
  * The most the backend sends in one page. The site shows only some of the kinds it sends, so it

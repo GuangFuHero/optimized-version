@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   bellLabel,
   countUnreadSiteNotices,
+  notMarkedRead,
   readSiteNotices,
   ticketOfNeed,
-  unreadBadgeText,
+  withReadState,
   type NotificationRow,
 } from './site-notices';
 
@@ -150,15 +151,49 @@ describe('countUnreadSiteNotices', () => {
   });
 });
 
-describe('unreadBadgeText', () => {
-  it('shows no badge when nothing is unread', () => {
-    expect(unreadBadgeText(0)).toBeNull();
+describe('withReadState', () => {
+  const rows = [row({ uuid: 'a' }), row({ uuid: 'b' }), row({ uuid: 'c' })];
+
+  it('marks only the notices named read, leaving the rest as they were', () => {
+    expect(
+      withReadState(rows, ['a', 'c'], true).map(({ uuid, read }) => [
+        uuid,
+        read,
+      ]),
+    ).toEqual([
+      ['a', true],
+      ['b', false],
+      ['c', true],
+    ]);
   });
 
-  it('shows the count up to nine, and 9+ past it', () => {
-    expect(unreadBadgeText(1)).toBe('1');
-    expect(unreadBadgeText(9)).toBe('9');
-    expect(unreadBadgeText(10)).toBe('9+');
+  it('puts a notice back to unread', () => {
+    const read = withReadState(rows, ['a', 'b'], true);
+
+    expect(
+      withReadState(read, ['b'], false).map(({ read: isRead }) => isRead),
+    ).toEqual([true, false, false]);
+  });
+});
+
+describe('notMarkedRead', () => {
+  it('names the notices whose PATCH failed, so they go back to unread', () => {
+    expect(
+      notMarkedRead(
+        ['a', 'b', 'c'],
+        [
+          { status: 'fulfilled', value: undefined },
+          { status: 'rejected', reason: new Error('offline') },
+          { status: 'fulfilled', value: undefined },
+        ],
+      ),
+    ).toEqual(['b']);
+  });
+
+  it('names none when every PATCH went through', () => {
+    expect(
+      notMarkedRead(['a'], [{ status: 'fulfilled', value: undefined }]),
+    ).toEqual([]);
   });
 });
 

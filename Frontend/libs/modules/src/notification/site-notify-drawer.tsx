@@ -8,9 +8,15 @@ import NotificationsOffRoundedIcon from '@mui/icons-material/NotificationsOffRou
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+  type QueryClient,
+} from '@tanstack/react-query';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
-import { useEffect, useState } from 'react';
 import { useQuery } from 'urql';
 
 import {
@@ -25,15 +31,20 @@ import {
   myClaimTicketHref,
   openClaimedTicket,
 } from '../ticket/my-claims/my-claims';
-import { listNotificationsAsync, markNotificationReadAsync } from './api';
 import {
+  listNotificationsAsync,
+  markNotificationReadAsync,
+  siteNotificationKeys,
+  type NotificationPage,
+} from './api';
+import {
+  notMarkedRead,
   readSiteNotices,
   ticketOfNeed,
-  type NotificationRow,
+  withReadState,
   type SiteNotice,
   type SiteNoticeKind,
 } from './site-notices';
-import { refreshUnreadSiteNotices } from './use-unread-site-notices';
 
 const { color, radius, typography } = designTokens;
 
@@ -62,11 +73,27 @@ const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
   },
 };
 
-/** What `GET /notifications` sent so far, page by page. */
-interface LoadedNotices {
-  rows: NotificationRow[];
-  page: number;
-  hasMore: boolean;
+/** The drawer's cached pages with those in `uuids` read, or unread again. */
+function setCachedReadState(
+  queryClient: QueryClient,
+  uuids: readonly string[],
+  read: boolean,
+) {
+  if (uuids.length === 0) {
+    return;
+  }
+
+  queryClient.setQueryData<InfiniteData<NotificationPage>>(
+    siteNotificationKeys.list,
+    (data) =>
+      data && {
+        ...data,
+        pages: data.pages.map((page) => ({
+          ...page,
+          items: withReadState(page.items, uuids, read),
+        })),
+      },
+  );
 }
 
 interface SiteNotifyDrawerProps {
@@ -199,6 +226,7 @@ function SiteNotifyContent({
   onClose,
 }: Pick<SiteNotifyDrawerProps, 'onClose'>) {
   const route = useSiteRouteState();
+  const queryClient = useQueryClient();
   const [requests] = useQuery({
     query: MyTicketsDocument,
     requestPolicy: 'network-only',
@@ -209,40 +237,40 @@ function SiteNotifyContent({
     requestPolicy: 'network-only',
     context: NEED_LISTS_QUERY_CONTEXT,
   });
-  const [loaded, setLoaded] = useState<LoadedNotices | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  // Read here since the notices came: shown read at once, without waiting for the backend.
-  const [readHere, setReadHere] = useState<ReadonlySet<string>>(new Set());
-
-  useEffect(() => {
-    let current = true;
-
-    listNotificationsAsync().then(
-      ({ items, has_more }) => {
-        if (current) {
-          setLoaded({ rows: items, page: 1, hasMore: has_more });
-        }
-      },
-      () => {
-        if (current) {
-          setFailed(true);
-        }
-      },
-    );
-
-    return () => {
-      current = false;
-    };
-  }, []);
+  const list = useInfiniteQuery({
+    queryKey: siteNotificationKeys.list,
+    queryFn: ({ pageParam }) => listNotificationsAsync({ page: pageParam }),
+    initialPageParam: 1,
+    getNextPageParam: (last, pages) =>
+      last.has_more ? pages.length + 1 : undefined,
+    refetchOnMount: 'always',
+    // The drawer says so itself, in place of the notices.
+    meta: { quietErrors: true },
+  });
+  // Shown read at once, and read for good in the background. A PATCH that fails (offline, a 5xx)
+  // puts its notice back to unread, and 全部標為已讀 with it, to try again; then both the list and
+  // the bell's count are read again from the backend.
+  const markRead = useMutation({
+    mutationFn: (uuids: string[]) =>
+      Promise.allSettled(uuids.map(markNotificationReadAsync)),
+    onMutate: async (uuids) => {
+      // A read of the list still on its way would put the notices back as they were.
+      await queryClient.cancelQueries({ queryKey: siteNotificationKeys.list });
+      setCachedReadState(queryClient, uuids, true);
+    },
+    onSuccess: (results, uuids) =>
+      setCachedReadState(queryClient, notMarkedRead(uuids, results), false),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: siteNotificationKeys.all }),
+  });
 
   // A list that could not be read leaves its needs' notices unlinked rather than holding up the rest.
   const listsSettled =
     Boolean(requests.data || requests.error) &&
     Boolean(claims.data || claims.error);
 
-  if (!loaded || !listsSettled) {
-    return failed ? (
+  if (!list.data || !listsSettled) {
+    return list.isError ? (
       <Notice>讀不到通知，請稍後再試一次。</Notice>
     ) : (
       <Notice>載入中…</Notice>
@@ -253,33 +281,19 @@ function SiteNotifyContent({
     requests: requests.data?.myTickets ?? [],
     claims: claims.data?.myTaskAssignments ?? [],
   };
-  const notices = readSiteNotices(loaded.rows).map((notice) =>
-    readHere.has(notice.uuid) ? { ...notice, read: true } : notice,
+  const notices = readSiteNotices(
+    list.data.pages.flatMap((page) => page.items),
   );
   const unread = notices.filter((notice) => !notice.read);
-
-  // Read for good in the background; the bell counts again once the backend has it.
-  const markRead = (toRead: readonly SiteNotice[]) => {
-    if (toRead.length === 0) {
-      return;
-    }
-
-    setReadHere((previous) => {
-      const next = new Set(previous);
-      toRead.forEach((notice) => next.add(notice.uuid));
-      return next;
-    });
-    void Promise.allSettled(
-      toRead.map((notice) => markNotificationReadAsync(notice.uuid)),
-    ).then(refreshUnreadSiteNotices);
-  };
 
   const openNotice = (
     event: MouseEvent<HTMLElement>,
     notice: SiteNotice,
     ticketUuid: string | null,
   ) => {
-    markRead(notice.read ? [] : [notice]);
+    if (!notice.read) {
+      markRead.mutate([notice.uuid]);
+    }
 
     if (!ticketUuid) {
       return;
@@ -296,29 +310,11 @@ function SiteNotifyContent({
     onClose();
   };
 
-  const loadMore = () => {
-    setLoadingMore(true);
-    listNotificationsAsync({ page: loaded.page + 1 })
-      .then(({ items, has_more }) =>
-        setLoaded((previous) =>
-          previous
-            ? {
-                rows: [...previous.rows, ...items],
-                page: previous.page + 1,
-                hasMore: has_more,
-              }
-            : previous,
-        ),
-      )
-      .catch(() => undefined)
-      .finally(() => setLoadingMore(false));
-  };
-
   return (
     <Stack spacing={1}>
       {unread.length > 0 ? (
         <ButtonBase
-          onClick={() => markRead(unread)}
+          onClick={() => markRead.mutate(unread.map((notice) => notice.uuid))}
           sx={{
             alignSelf: 'flex-end',
             px: 0.5,
@@ -359,10 +355,10 @@ function SiteNotifyContent({
         })
       )}
 
-      {loaded.hasMore ? (
+      {list.hasNextPage ? (
         <ButtonBase
-          disabled={loadingMore}
-          onClick={loadMore}
+          disabled={list.isFetchingNextPage}
+          onClick={() => void list.fetchNextPage()}
           sx={{
             alignSelf: 'center',
             py: 1,
@@ -372,7 +368,7 @@ function SiteNotifyContent({
             fontWeight: 500,
           }}
         >
-          {loadingMore ? '載入中…' : '載入更多'}
+          {list.isFetchingNextPage ? '載入中…' : '載入更多'}
         </ButtonBase>
       ) : null}
     </Stack>

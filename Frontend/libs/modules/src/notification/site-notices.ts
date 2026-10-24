@@ -135,13 +135,26 @@ export function countUnreadSiteNotices(
   return readSiteNotices(rows).filter((notice) => !notice.read).length;
 }
 
-/** The bell's badge: none at zero, and 9+ past nine, as the prototype's 16px dot holds. */
-export function unreadBadgeText(count: number): string | null {
-  if (count <= 0) {
-    return null;
-  }
+/** `rows` with those in `uuids` read, or unread again: what the drawer's cache holds meanwhile. */
+export function withReadState(
+  rows: readonly NotificationRow[],
+  uuids: readonly string[],
+  read: boolean,
+): NotificationRow[] {
+  const changing = new Set(uuids);
 
-  return count > 9 ? '9+' : String(count);
+  return rows.map((row) => (changing.has(row.uuid) ? { ...row, read } : row));
+}
+
+/**
+ * Those of `uuids` the backend did not mark read — a PATCH that failed, offline or a 5xx — from what
+ * each of their PATCHes came to, in the same order.
+ */
+export function notMarkedRead(
+  uuids: readonly string[],
+  results: readonly PromiseSettledResult<unknown>[],
+): string[] {
+  return uuids.filter((_, index) => results[index]?.status !== 'fulfilled');
 }
 
 /** The bell's name, with the count the badge shows only to the eye. */

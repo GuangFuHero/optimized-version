@@ -1,19 +1,18 @@
 'use client';
 
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
-import { Box, ButtonBase } from '@mui/material';
+import { ButtonBase } from '@mui/material';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { CountBadge, designTokens } from '@rescue-frontend/ui';
 
-import { bellLabel, unreadBadgeText } from './site-notices';
+import { siteNotificationKeys } from './api';
+import { bellLabel } from './site-notices';
 import { SiteNotifyDrawer } from './site-notify-drawer';
-import {
-  refreshUnreadSiteNotices,
-  useUnreadSiteNotices,
-} from './use-unread-site-notices';
+import { useUnreadSiteNotices } from './use-unread-site-notices';
 
-const { color, radius, typography } = designTokens;
+const { color } = designTokens;
 
 interface SiteNotifyBellProps {
   /** As big as its neighbours: the desktop bar's ？ (36), the phone bar's buttons (40). */
@@ -29,7 +28,7 @@ interface SiteNotifyBellProps {
  */
 export function SiteNotifyBell({ size, ringColor }: SiteNotifyBellProps) {
   const unread = useUnreadSiteNotices();
-  const badge = unreadBadgeText(unread);
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
 
   return (
@@ -41,7 +40,9 @@ export function SiteNotifyBell({ size, ringColor }: SiteNotifyBellProps) {
         onClick={() => {
           setOpen(true);
           // The drawer reads the notices afresh; the badge follows rather than waiting a minute.
-          refreshUnreadSiteNotices();
+          void queryClient.invalidateQueries({
+            queryKey: siteNotificationKeys.unread,
+          });
         }}
         sx={{
           position: 'relative',
@@ -58,9 +59,12 @@ export function SiteNotifyBell({ size, ringColor }: SiteNotifyBellProps) {
         }}
       >
         <NotificationsNoneRoundedIcon sx={{ fontSize: 24 }} />
-        {badge ? (
-          <Box
-            component="span"
+        {/* 9+ past nine, as the prototype's 16px dot holds; none at zero, where CountBadge says 0. */}
+        {unread > 0 ? (
+          <CountBadge
+            count={unread}
+            max={9}
+            tone="danger"
             aria-hidden
             sx={{
               position: 'absolute',
@@ -69,22 +73,10 @@ export function SiteNotifyBell({ size, ringColor }: SiteNotifyBellProps) {
               minWidth: 16,
               height: 16,
               px: '4px',
-              display: 'grid',
-              placeItems: 'center',
-              boxSizing: 'border-box',
-              borderRadius: `${radius.full}px`,
-              bgcolor: color.bg.danger.default,
-              color: color.fg.onDanger,
               boxShadow: `0 0 0 2px ${ringColor}`,
-              fontFamily: typography.data[300].fontFamily,
               fontSize: 10,
-              fontWeight: 700,
-              lineHeight: 1,
-              fontVariantNumeric: 'tabular-nums',
             }}
-          >
-            {badge}
-          </Box>
+          />
         ) : null}
       </ButtonBase>
 
