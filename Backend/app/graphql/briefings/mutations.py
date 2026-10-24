@@ -142,11 +142,13 @@ class BriefingMutation:
 
     @strawberry.mutation
     async def delete_briefing(self, info: strawberry.types.Info, uuid: UUID) -> bool:
-        """Soft-delete a briefing. Requires pre_departure.delete."""
+        """Soft-delete a draft briefing; published and inactive ones stay. Requires pre_departure.delete."""
         await check_permission(info, Perm.PREDEP_DELETE)
         db = info.context["db"]
-        b = await briefing_repository.get_by_uuid_active(db, uuid)
+        b = await briefing_repository.get_by_uuid_active(db, uuid, for_update=True)
         if not b:
             raise ValueError("Briefing not found")
+        if b.status != "draft":
+            raise ValueError("Only a draft can be deleted")
         await briefing_repository.soft_delete(db, db_obj=b)
         return True

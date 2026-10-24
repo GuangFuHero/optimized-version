@@ -160,10 +160,6 @@ async def test_publish_replaces_only_the_live_version_of_its_state(db):
     with pytest.raises(ValueError, match="Only a draft can be published"):
         await briefings.publish(db, uuid=uuids["old"], actor_uuid=uid)
 
-    # Deleting the live version empties its state rather than bringing the replaced one back.
-    await briefings.soft_delete(db, db_obj=await briefings.get_by_uuid_active(db, uuids["new"]))
-    assert await briefings.list_briefings(db, status="published", state="briefing") == []
-
 
 @pytest.mark.asyncio
 async def test_concurrent_publishes_in_one_state_leave_the_later_one_live(db):

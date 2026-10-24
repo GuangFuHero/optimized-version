@@ -305,7 +305,7 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 
 **Consequences**：
 ➕ 公開頁面拿不到草稿：前台的請求以 `user` 身分執行，`user` 沒有 `.edit`。
-➕ 刪掉目前版本，上一個已發布版本自動變回目前版本。**已被 ADR-364 推翻**：發布就取代，舊版已下架。
+➕ 刪掉目前版本，上一個已發布版本自動變回目前版本。**已被 ADR-364 推翻**：發布就取代，舊版已下架；只有草稿刪得掉。
 ➖ 從較舊版本開的草稿一樣能發布並成為目前版本；要不要警告由前端決定。
 ➖ 已上線公告的修改沒有草稿，存下去就公開，所以只有 `.edit` 的人改不動已上線的公告。
 ➖ 目前只有 `super_admin` 持有 `.edit` 與 `.publish`，所以權限調整實際上沒有人因此得到或失去權限。
@@ -408,6 +408,8 @@ operation 選的 `order`，在同一個 repo、同一個 PR 就改得完。
   （`(state) WHERE status = 'published' AND delete_at IS NULL`）。
 - **下架**：`takeDownBriefing(uuid)` 把上線中的列改成 `inactive`，權限與公告下線一樣要 `pre_departure.edit`。
   不是上線中的列會回 `Only a published briefing can be taken down`。
+- **只有草稿刪得掉**：`deleteBriefing` 鎖住那列再檢查，不是草稿就回 `Only a draft can be deleted`。上線過的每一版
+  都留著當發布紀錄，從這些列數出來的版本號也不會倒退；要讓一版離開前台就下架。鎖住那列，和同時進來的發布才會排隊，不會刪到剛上線的版本。
 - **再編輯**：`generateBriefing(input: {sourceBriefingUuid})` 把那一版的 `content`、`tags`、`state` 與
   `templateUuid` 複製成新草稿，原本那列不動。來源只能是 `published` 或 `inactive`：草稿本來就能直接改，
   拿來複製會回 `Only a published or inactive briefing can be copied`。輸入另外給的 `content`／`tags`／`state`
@@ -434,7 +436,7 @@ operation 選的 `order`，在同一個 repo、同一個 PR 就改得完。
 ➕ 「每個 state 最多一版公開」由 DB 擋，不只靠應用程式。
 ➕ 前台不用改，照舊取每個 state 的第一筆 `PUBLISHED`，沒有就顯示空狀態。
 ➖ 舊版不再公開，只有編輯者看得到。
-➖ 刪掉上線中的版本，前台會變空，不會再退回上一版（推翻 ADR-335 的「刪掉目前版本，上一個已發布版本自動變回
-  目前版本」）。
+➖ 上線中的版本不能刪，只能下架，下架後前台變空，不會再退回上一版（推翻 ADR-335 的「刪掉目前版本，上一個已發布
+  版本自動變回目前版本」）。
 ➖ 被取代和手動下架在資料上分不出來，都是 `inactive`、`updated_by` 是操作的人。
 ◾ 不在範圍：PRD VB-FEAT-001 依災害類型分四個固定段落的內容結構（ADR-274）。

@@ -229,8 +229,8 @@ briefing_templates                    briefings
   `pre_departure.edit` plus `pre_departure.publish` (the reply carries it); generating and editing a
   draft briefing require `pre_departure.edit` (plus `pre_departure.publish` when seeding from a
   template, since that copies its content); publishing one requires `pre_departure.publish`;
-  taking a published one down requires `pre_departure.edit`; deleting either kind requires
-  `pre_departure.delete`. Deletes are soft (`delete_at`).
+  taking a published one down requires `pre_departure.edit`; deleting a template or a draft
+  briefing requires `pre_departure.delete`. Deletes are soft (`delete_at`).
 - **BR-004**: `generateBriefing` copies the template's `content`, `tags` and `state` into a new
   draft briefing. A `templateUuid` that is unknown or soft-deleted raises `Briefing template not
   found` rather than producing an empty notice. `sourceBriefingUuid` instead copies a published or
@@ -251,7 +251,8 @@ briefing_templates                    briefings
   ```
   Publishing takes down the state's live row in the same transaction; `takeDownBriefing` takes it
   down with no replacement. An inactive row stays read-only, so editing it means copying it into
-  a new draft (BR-004). Deleting the live row leaves the state with nothing public.
+  a new draft (BR-004). Only a draft can be deleted, so every published version stays on
+  record; taking it down is how a version leaves the public site.
 - **BR-007**: `briefings(status:)` defaults to `PUBLISHED`, which lists each state's live row and
   is public; `DRAFT` and `ALL` (drafts, live and inactive rows) need `pre_departure.edit`.
   `briefing(uuid)` on a row that isn't live returns null without `pre_departure.edit`, the same as a

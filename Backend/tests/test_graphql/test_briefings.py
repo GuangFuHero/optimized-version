@@ -328,3 +328,24 @@ async def test_publish_replaces_take_down_empties_and_a_copy_starts_a_draft(
     assert _row(rows, v1)["status"] == _row(rows, v2)["status"] == "INACTIVE"
     from_draft = await _post(client, COPY, {"source": draft["uuid"]}, admin)
     assert "Only a published or inactive briefing can be copied" in str(from_draft.get("errors"))
+
+
+@pytest.mark.asyncio
+async def test_only_a_draft_can_be_deleted(client, briefing_admin_auth):
+    """A live or taken-down version is the record of what was published, so deleting refuses it."""
+    _, admin = briefing_admin_auth
+    gen = await _post(client, GENERATE_CONTENT, {"content": "live"}, admin)
+    uuid = gen["data"]["generateBriefing"]["uuid"]
+    published = await _post(client, PUBLISH, {"uuid": uuid}, admin)
+    assert "errors" not in published, published
+
+    refused = await _post(client, DELETE_BRIEFING, {"uuid": uuid}, admin)
+    assert "Only a draft can be deleted" in str(refused.get("errors"))
+    assert _row(await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"}), uuid) is not None
+
+    down = await _post(client, TAKE_DOWN, {"uuid": uuid}, admin)
+    assert "errors" not in down, down
+    refused = await _post(client, DELETE_BRIEFING, {"uuid": uuid}, admin)
+    assert "Only a draft can be deleted" in str(refused.get("errors"))
+    rows = await _post(client, LIST_BY_STATUS, {"status": "ALL"}, admin)
+    assert _row(rows, uuid)["status"] == "INACTIVE"
