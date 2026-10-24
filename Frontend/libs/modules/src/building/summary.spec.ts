@@ -8,6 +8,7 @@ import {
   isRescueTicket,
   opensByItself,
   quickClaimNeed,
+  removedFloorNote,
   showsTicketKinds,
   sortTickets,
   summarizeTicket,
@@ -262,15 +263,32 @@ describe('showsTicketKinds', () => {
 });
 
 describe('ticketUnitLabel', () => {
-  it('gives the room, and the floor as filed before it when it matched no floor', () => {
+  it('gives the room alone, the floor never', () => {
+    expect(ticketUnitLabel(ticket('a', { floor: '3F', room: ' 302 ' }))).toBe(
+      '302',
+    );
+    expect(ticketUnitLabel(ticket('b', { floor: '7F', room: '701' }))).toBe(
+      '701',
+    );
+    expect(ticketUnitLabel(ticket('c', { floor: '3F' }))).toBeNull();
+    expect(ticketUnitLabel(ticket('d', { room: '  ' }))).toBeNull();
+  });
+});
+
+describe('removedFloorNote', () => {
+  it('names the floor an unplaced ticket was filed on, which the building no longer has', () => {
     expect(
-      ticketUnitLabel(ticket('a', { floor: '3F', room: '302' }), true),
-    ).toBe('302');
-    expect(
-      ticketUnitLabel(ticket('b', { floor: '7F', room: '701' }), false),
-    ).toBe('7F 701');
-    expect(ticketUnitLabel(ticket('c', { floor: '3F' }), true)).toBeNull();
-    expect(ticketUnitLabel(ticket('d'), false)).toBeNull();
+      removedFloorNote(ticket('a', { floor: '7F', room: '701' }), false),
+    ).toBe('原本在 7F（這一層已從大樓設定移除）');
+    expect(removedFloorNote(ticket('b', { floor: ' B2 ' }), false)).toBe(
+      '原本在 B2（這一層已從大樓設定移除）',
+    );
+  });
+
+  it('has nothing to say for a ticket on its floor, or filed without one', () => {
+    expect(removedFloorNote(ticket('a', { floor: '3F' }), true)).toBeNull();
+    expect(removedFloorNote(ticket('b'), false)).toBeNull();
+    expect(removedFloorNote(ticket('c', { floor: '  ' }), false)).toBeNull();
   });
 });
 

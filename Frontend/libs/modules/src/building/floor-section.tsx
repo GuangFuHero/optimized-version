@@ -17,6 +17,7 @@ import {
   formatTicketRowTime,
   isClosedTicket,
   quickClaimNeed,
+  removedFloorNote,
   sortTickets,
   summarizeTicket,
   summarizeTickets,
@@ -44,7 +45,7 @@ function priorityStripe(ticket: BuildingTicket): string {
 
 interface TicketRowProps {
   ticket: BuildingTicket;
-  /** On one of the building's floors; an unplaced row shows the floor as filed. */
+  /** On one of the building's floors; an unplaced row says which floor it was on, if one. */
   placed: boolean;
   showKind: boolean;
   /** Someone on this floor gave a room: a row without one then says so. */
@@ -71,7 +72,8 @@ function TicketRow({
   const { marker } = ticket;
   const status = marker.ticketMeta?.status;
   const statusText = formatTicketStatusLabel(status);
-  const unit = ticketUnitLabel(ticket, placed);
+  const unit = ticketUnitLabel(ticket);
+  const removedFloor = removedFloorNote(ticket, placed);
   const description = [
     marker.subtitle.trim(),
     formatTicketRowTime(marker.ticketMeta?.createdAt),
@@ -94,7 +96,13 @@ function TicketRow({
     >
       <ButtonBase
         onClick={() => onOpen(marker)}
-        aria-label={[marker.title, unit, statusText, summary.needText]
+        aria-label={[
+          marker.title,
+          unit,
+          removedFloor,
+          statusText,
+          summary.needText,
+        ]
           .filter(Boolean)
           .join('，')}
         sx={{
@@ -171,6 +179,22 @@ function TicketRow({
               </Typography>
             ) : null}
           </Box>
+          {/* Its own line, not the chip: it tells a volunteer which floor to go to. */}
+          {removedFloor ? (
+            <Typography
+              component="span"
+              sx={{
+                display: 'block',
+                mt: '1px',
+                fontSize: displayTextSize[12],
+                lineHeight: 1.5,
+                fontWeight: 600,
+                color: color.fg.neutral.subtle,
+              }}
+            >
+              {removedFloor}
+            </Typography>
+          ) : null}
           {description ? (
             <Typography
               component="span"
@@ -281,9 +305,7 @@ export function FloorSection({
   const summary = summarizeTickets(tickets);
   const hot = summary.rescueOpen > 0;
   // Decided floor by floor: one floor of rented rooms has them, the rest may not.
-  const showUnit = tickets.some(
-    (ticket) => ticketUnitLabel(ticket, placed) !== null,
-  );
+  const showUnit = tickets.some((ticket) => ticketUnitLabel(ticket) !== null);
   const shown = useMemo(() => {
     const sorted = sortTickets(tickets);
 
