@@ -49,10 +49,9 @@ class BriefingRepository(GenericRepository[Briefing]):
         state: str | None = None,
         tag: str | None = None,
     ) -> list[Briefing]:
-        """List non-deleted briefings whose ``status`` is "published", "draft", or any ("all").
+        """List non-deleted briefings by ``status`` ("published", "draft" or "all"), optionally state and tag.
 
         Drafts come first, most recently edited first, then the rest newest published first.
-        Optionally filter by ``state`` (equality) and ``tag`` (JSONB array containment).
         """
         query = select(self.model).where(self.model.delete_at.is_(None))
         if status != "all":
@@ -76,12 +75,10 @@ class BriefingRepository(GenericRepository[Briefing]):
         tags: list | None = None,
         state: str | None = None,
     ) -> Briefing:
-        """Create a draft briefing, seeded from a template, copied from another briefing, or ad-hoc.
+        """Create a draft briefing, seeded from a template, copied from another briefing, or empty.
 
-        Omitted ``content``/``tags``/``state`` come from the seed, and copying a briefing keeps its
-        template link too; with no seed the briefing is empty. Raises ValueError if both seeds are
-        given or the one named is missing or soft-deleted, rather than silently producing an empty
-        briefing or an FK violation surfacing as "Unexpected error."
+        Omitted ``content``/``tags``/``state`` come from the seed, a copy keeps its template link too, and
+        a seed that is missing, soft-deleted or given alongside the other raises ValueError.
         """
         if template_uuid is not None and source_uuid is not None:
             raise ValueError("Give a template or a source briefing, not both")
@@ -119,16 +116,14 @@ class BriefingRepository(GenericRepository[Briefing]):
     async def publish(self, db: AsyncSession, *, uuid: Any, actor_uuid: str) -> Briefing:
         """Publish a draft as its state's live version, taking down the one live before it.
 
-        The lock makes concurrent publishes take turns, so each sees the row the last one put live;
-        the unique index refuses a second live row should anything skip it. Raises ValueError if
-        the briefing is missing or no longer a draft.
+        Raises ValueError unless it is a draft; the lock makes concurrent publishes take turns.
         """
         await db.execute(text("SELECT pg_advisory_xact_lock(hashtext('briefings.live'))"))
         target = await self.get_by_uuid_active(db, uuid, for_update=True)
         if target is None:
             raise ValueError("Briefing not found")
         if target.status != "draft":
-            raise ValueError("Briefing is already published")
+            raise ValueError("Only a draft can be published")
         live = await db.execute(
             select(self.model)
             .where(

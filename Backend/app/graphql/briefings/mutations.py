@@ -82,10 +82,9 @@ class BriefingMutation:
     async def generate_briefing(
         self, info: strawberry.types.Info, input: GenerateBriefingInput
     ) -> BriefingType:
-        """Generate a draft briefing, seeded from a template or another briefing. Requires pre_departure.edit.
+        """Generate a draft briefing, seeded from a template or another briefing; requires pre_departure.edit.
 
-        Seeding from a template copies its content, so that also requires pre_departure.publish, as
-        reading a template does.
+        Seeding from a template also requires pre_departure.publish, since reading a template does.
         """
         await check_permission(info, Perm.PREDEP_EDIT)
         if input.template_uuid is not None:
@@ -105,14 +104,14 @@ class BriefingMutation:
     async def update_briefing(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateBriefingInput
     ) -> BriefingType:
-        """Edit a draft briefing; a published one is read-only. Requires pre_departure.edit."""
+        """Edit a draft briefing; published and inactive ones are read-only. Requires pre_departure.edit."""
         await check_permission(info, Perm.PREDEP_EDIT)
         db = info.context["db"]
         b = await briefing_repository.get_by_uuid_active(db, uuid, for_update=True)
         if not b:
             raise ValueError("Briefing not found")
         if b.status != "draft":
-            raise ValueError("Published briefings are read-only")
+            raise ValueError("Only a draft can be edited")
         obj_in = _update_fields(input) | {"updated_by": str(info.context["user"].uuid)}
         b = await briefing_repository.update(db, db_obj=b, obj_in=obj_in)
         return BriefingType.from_model(b)

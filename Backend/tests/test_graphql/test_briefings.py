@@ -245,9 +245,9 @@ async def test_draft_stays_private_until_published_then_freezes(client, redis, b
     assert pub["data"]["publishBriefing"]["publishedAt"]
 
     again = await _post(client, PUBLISH, {"uuid": uuid}, editor_token)
-    assert "Briefing is already published" in str(again.get("errors"))
+    assert "Only a draft can be published" in str(again.get("errors"))
     frozen = await _post(client, UPDATE_CONTENT, {"uuid": uuid, "content": "v2"}, author_token)
-    assert "Published briefings are read-only" in str(frozen.get("errors"))
+    assert "Only a draft can be edited" in str(frozen.get("errors"))
 
     admin_row = _row(await _post(client, LIST_BY_STATUS, {"status": "ALL"}, author_token), uuid)
     assert admin_row["publisher"]["uuid"] == editor_uuid and admin_row["publisher"]["name"]
@@ -316,7 +316,7 @@ async def test_publish_replaces_take_down_empties_and_a_copy_reopens(
     again = await _post(client, TAKE_DOWN, {"uuid": v2}, admin)
     assert "Only a published briefing can be taken down" in str(again.get("errors"))
     edited = await _post(client, UPDATE_CONTENT, {"uuid": v2, "content": "v2 edited"}, admin)
-    assert "Published briefings are read-only" in str(edited.get("errors"))
+    assert "Only a draft can be edited" in str(edited.get("errors"))
 
     copy = await _post(client, COPY, {"source": v2}, admin)
     assert "errors" not in copy, copy

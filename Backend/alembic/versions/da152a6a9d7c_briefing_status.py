@@ -4,12 +4,9 @@ Revision ID: da152a6a9d7c
 Revises: 7370daf4c8f7
 Create Date: 2026-10-23
 
-`status` is draft, published (live) or inactive (replaced or taken down). The backfill keeps each
-state's newest published row live and marks its older published rows inactive, as publishing them
-one by one under the new rule would have; unpublished rows stay drafts.
-
-Downgrade soft-deletes the inactive rows before dropping the column, because the old schema lists
-every published row publicly and would put taken-down notices back on the site.
+The backfill keeps each state's newest published row live and marks its older published rows inactive,
+as publishing them one by one would have; unpublished rows become drafts. Downgrade soft-deletes the
+inactive rows first, because the old schema lists every published row publicly.
 """
 
 from collections.abc import Sequence
