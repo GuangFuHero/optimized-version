@@ -36,134 +36,134 @@ export function AdminErrorPage({ code }: { code: '404' | '403' }) {
     : '網址可能打錯了，或這個頁面已經移除。可以從左邊的選單前往其他頁面，或從這裡繼續：';
 
   return (
-    <Box sx={{ p: '12px 28px 28px' }}>
-      <Box
-        sx={{
-          maxWidth: 560,
-          mx: 'auto',
-          p: 'clamp(32px, 8vh, 80px) 16px 48px',
-          color: color.fg.neutral.default,
-        }}
-      >
-        <Box sx={{ mb: '16px', width: 'fit-content' }}>
-          <GuangFuMascot code={code} width="clamp(140px, 36vw, 180px)" />
-        </Box>
-        <Box>
-          <Typography
-            component="h2"
-            sx={{
-              ...typography.heading[700],
-              fontSize: 26,
-              lineHeight: 1.3,
-              mb: '12px',
-            }}
-          >
-            {forbidden ? '沒有權限訪問此頁' : '找不到這一頁'}
-          </Typography>
-          <Typography
-            sx={{
-              ...typography.body[400],
-              lineHeight: 1.7,
-              mb: forbidden && identity ? '12px' : '28px',
-              color: color.fg.neutral.default,
-            }}
-          >
-            {lead}
-          </Typography>
-          {forbidden && identity ? (
-            <Box sx={{ mb: '28px' }}>
-              <Box
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  justifyContent: 'flex-start',
-                  gap: '8px',
-                  p: '6px 12px',
-                  borderRadius: `${radius.full}px`,
-                  bgcolor: color.bg.neutral.default,
-                  border: `1px solid ${color.border.default}`,
-                  ...typography.body[300],
-                  lineHeight: 1.4,
-                  color: color.fg.neutral.subtle,
-                }}
-              >
-                <UserRound size={16} aria-hidden />
-                <span>目前身份</span>
-                <Box
-                  component="b"
-                  sx={{ fontWeight: 700, color: color.fg.neutral.default }}
-                >
-                  {user?.name} · {identityLabel(identity)}
-                </Box>
-              </Box>
-            </Box>
-          ) : null}
-        </Box>
-        <Stack component="nav" aria-label="繼續前往" sx={{ gap: '8px' }}>
-          {links.map((link) => (
+    <Box
+      sx={{
+        maxWidth: 560,
+        mx: 'auto',
+        p: 'clamp(24px, 6vh, 64px) 16px 48px',
+        color: color.fg.neutral.default,
+      }}
+    >
+      <Box sx={{ mb: '20px' }}>
+        <GuangFuMascot code={code} />
+      </Box>
+      <Box sx={{ textAlign: 'center' }}>
+        <Typography
+          component="h2"
+          sx={{
+            ...typography.heading[700],
+            fontSize: 28,
+            lineHeight: 1.3,
+            mb: '12px',
+          }}
+        >
+          {forbidden ? '沒有權限訪問此頁' : '找不到這一頁'}
+        </Typography>
+        <Typography
+          sx={{
+            ...typography.body[400],
+            lineHeight: 1.7,
+            maxWidth: 460,
+            mx: 'auto',
+            mb: forbidden && identity ? '14px' : '28px',
+            color: color.fg.neutral.subtle,
+          }}
+        >
+          {lead}
+        </Typography>
+        {forbidden && identity ? (
+          <Box sx={{ mb: '28px' }}>
             <Box
-              component={Link}
-              key={link.id}
-              href={link.href}
               sx={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '12px',
-                minHeight: 70,
-                p: '12px 16px',
-                borderRadius: `${radius.lg}px`,
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+                gap: '8px',
+                p: '6px 12px',
+                borderRadius: `${radius.full}px`,
                 bgcolor: color.bg.neutral.default,
                 border: `1px solid ${color.border.default}`,
-                color: 'inherit',
-                textDecoration: 'none',
-                transition: 'border-color .15s',
-                '&:hover': { borderColor: color.bg.primary.default },
-                '&:focus-visible': {
-                  borderColor: color.bg.primary.default,
-                  outline: `${focusRing.width}px solid ${focusRing.color}`,
-                  outlineOffset: `${focusRing.offset}px`,
-                },
+                ...typography.body[300],
+                lineHeight: 1.4,
+                color: color.fg.neutral.subtle,
               }}
             >
+              <UserRound size={16} aria-hidden />
+              <span>目前身份</span>
               <Box
+                component="b"
+                sx={{ fontWeight: 700, color: color.fg.neutral.default }}
+              >
+                {user?.name} · {identityLabel(identity)}
+              </Box>
+            </Box>
+          </Box>
+        ) : null}
+      </Box>
+      <Stack component="nav" aria-label="繼續前往" sx={{ gap: '8px' }}>
+        {links.map((link) => (
+          <Box
+            component={Link}
+            key={link.id}
+            href={link.href}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              minHeight: 70,
+              p: '12px 16px',
+              borderRadius: `${radius.lg}px`,
+              bgcolor: color.bg.neutral.default,
+              border: `1px solid ${color.border.default}`,
+              color: 'inherit',
+              textDecoration: 'none',
+              transition: 'border-color .15s',
+              '&:hover': { borderColor: color.bg.primary.default },
+              '&:focus-visible': {
+                borderColor: color.bg.primary.default,
+                outline: `${focusRing.width}px solid ${focusRing.color}`,
+                outlineOffset: `${focusRing.offset}px`,
+              },
+            }}
+          >
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                flexShrink: 0,
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: `${radius.full}px`,
+                bgcolor: color.bg.primary.subtle,
+              }}
+            >
+              <link.Icon size={20} aria-hidden />
+            </Box>
+            <Stack sx={{ gap: '2px', minWidth: 0 }}>
+              <Typography
                 sx={{
-                  width: 40,
-                  height: 40,
-                  flexShrink: 0,
-                  display: 'grid',
-                  placeItems: 'center',
-                  borderRadius: `${radius.full}px`,
-                  bgcolor: color.bg.primary.subtle,
+                  ...typography.body[400],
+                  fontWeight: 700,
+                  lineHeight: 1.4,
                 }}
               >
-                <link.Icon size={20} aria-hidden />
-              </Box>
-              <Stack sx={{ gap: '2px', minWidth: 0 }}>
-                <Typography
-                  sx={{
-                    ...typography.body[400],
-                    fontWeight: 700,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {link.label}
-                </Typography>
-                <Typography
-                  sx={{
-                    ...typography.body[300],
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                    color: color.fg.neutral.muted,
-                  }}
-                >
-                  {link.description}
-                </Typography>
-              </Stack>
-            </Box>
-          ))}
-        </Stack>
-      </Box>
+                {link.label}
+              </Typography>
+              <Typography
+                sx={{
+                  ...typography.body[300],
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  color: color.fg.neutral.muted,
+                }}
+              >
+                {link.description}
+              </Typography>
+            </Stack>
+          </Box>
+        ))}
+      </Stack>
     </Box>
   );
 }
