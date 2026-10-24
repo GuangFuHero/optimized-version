@@ -9,6 +9,7 @@ import {
   isLocationCellId,
   locationCellBoundary,
   locationCellId,
+  locationCellLabelFit,
 } from './location-cells';
 import type { RescueMapMarkerItem } from './types';
 
@@ -119,6 +120,25 @@ describe('locationCellBoundary', () => {
       expect(Math.abs(lat - CENTRE_A[0])).toBeLessThan(0.01);
       expect(Math.abs(lng - CENTRE_A[1])).toBeLessThan(0.01);
     }
+  });
+});
+
+describe('locationCellLabelFit', () => {
+  // 「203 求助」：數字 48px，加間距與「求助」共 88px。
+  const label = { whole: 88, count: 48 };
+
+  it('shows the whole label in a cell with 10px to spare', () => {
+    expect(locationCellLabelFit(98, label)).toBe('whole');
+  });
+
+  it('drops 求助 before it runs into the next cell, and keeps the count', () => {
+    expect(locationCellLabelFit(97, label)).toBe('count');
+    expect(locationCellLabelFit(58, label)).toBe('count');
+  });
+
+  it('shrinks the count in a cell too small even for it, rather than hide it', () => {
+    expect(locationCellLabelFit(57, label)).toBe('small-count');
+    expect(locationCellLabelFit(0, label)).toBe('small-count');
   });
 });
 
