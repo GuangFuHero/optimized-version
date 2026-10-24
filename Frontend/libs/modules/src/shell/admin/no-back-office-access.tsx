@@ -34,17 +34,17 @@ export function NoBackOfficeAccess({ siteUrl }: { siteUrl?: string }) {
         component="h1"
         sx={{ ...typography.heading[600], color: color.fg.neutral.default }}
       >
-        這個帳號還沒有後台管理權限
+        這個帳號還沒有管理權限
       </Typography>
       <Typography
         sx={{ ...typography.body[400], color: color.fg.neutral.subtle }}
       >
-        需要管理權限的話，請聯絡你的團隊或平台管理員。
+        如果你在政府單位或社福團體負責救災工作，可以回到公開地圖，按「申請管理權限」送出申請。
       </Typography>
       <Stack direction="row" sx={{ gap: '8px', mt: 1 }}>
         {siteUrl && (
           <Button variant="outline" href={new URL('/map', siteUrl).href}>
-            回到地圖
+            回到公開地圖
           </Button>
         )}
         <Button

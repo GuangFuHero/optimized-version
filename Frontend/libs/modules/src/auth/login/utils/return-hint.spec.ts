@@ -50,6 +50,8 @@ describe('signedInMessage', () => {
   });
 
   it('says the back office, when there is none in the back office: its /login ends on the dashboard', () => {
-    expect(signedInMessage(null, 'admin')).toBe('登入成功，正在前往後台⋯');
+    expect(signedInMessage(null, 'admin')).toBe(
+      '登入成功，正在前往總覽儀表板⋯',
+    );
   });
 });

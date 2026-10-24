@@ -42,6 +42,6 @@ export function signedInMessage(
 ): string {
   if (callbackUrl) return '登入成功，正在回到你剛剛那一頁⋯';
   return app === 'admin'
-    ? '登入成功，正在前往後台⋯'
+    ? '登入成功，正在前往總覽儀表板⋯'
     : '登入成功，正在前往地圖⋯';
 }
