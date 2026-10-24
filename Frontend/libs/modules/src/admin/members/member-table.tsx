@@ -78,12 +78,15 @@ export function RealName({
 export function MemberTable({
   rows,
   selfUuid,
+  highlightUuid,
   basic = false,
   actionsFor,
   empty,
 }: {
   rows: readonly RosterMember[];
   selfUuid?: string;
+  /** A row to mark, e.g. the person a review just added. */
+  highlightUuid?: string | null;
   basic?: boolean;
   actionsFor?: (member: RosterMember) => NeedAction[];
   empty?: ReactNode;
@@ -155,6 +158,11 @@ export function MemberTable({
       columns={columns}
       data={rows}
       getRowId={(row) => row.uuid}
+      getRowSx={(row) =>
+        row.uuid === highlightUuid
+          ? { bgcolor: color.bg.primary.subtle }
+          : {}
+      }
       // An empty roster has only its message to show, which a scrolling minimum would cut off.
       minWidth={basic || rows.length === 0 ? undefined : 640}
       empty={

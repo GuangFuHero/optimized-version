@@ -73,3 +73,31 @@ export function decisionConflict(backendMessage: string): DecisionConflict {
     }
   );
 }
+
+/**
+ * Where an approved new-team application leads (ADMIN-027 Story 5 step 3): the new team on 團隊,
+ * with the applicant — its first admin — marked in its 成員名單.
+ */
+export function newTeamHref(teamUuid: string, applicantUuid: string): string {
+  const query = new URLSearchParams({ team: teamUuid, member: applicantUuid });
+  return `/teams?${query.toString()}`;
+}
+
+/**
+ * The team an approved new-team application created, found by its name. The approval's response
+ * should name it in `team_uuid` (Spec 026 API handover), but the backend leaves that field as the
+ * team the request asked to join — empty for a new team — and keeps the new one in
+ * `granted_team_uuid`, which it does not return. Team names are unique, compared trimmed and
+ * ignoring case (ADR-352 point 3), so the name identifies it.
+ */
+export function teamUuidByName(
+  teams: readonly { uuid: string; name: string }[],
+  name: string | null | undefined,
+): string | null {
+  const wanted = name?.trim().toLowerCase();
+  if (!wanted) return null;
+  return (
+    teams.find((team) => team.name.trim().toLowerCase() === wanted)?.uuid ??
+    null
+  );
+}
