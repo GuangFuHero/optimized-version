@@ -8,6 +8,7 @@ import {
   OVERLAY_LAYER_CONFIG,
   RESCUE_MAP_INITIAL_VIEW,
   RESCUE_MAP_OVERLAY_LAYER_ORDER,
+  isSelectableBaseLayer,
 } from '../constants';
 import { RESCUE_MAP_MARKERS } from '../mock-data';
 import type {
@@ -109,9 +110,7 @@ function normalizeLayerPreferences(value: unknown): RescueMapLayerPreferences {
 
   const candidate = value as Partial<RescueMapLayerPreferences>;
   const baseLayer =
-    candidate.baseLayer &&
-    candidate.baseLayer in BASE_LAYER_CONFIG &&
-    !BASE_LAYER_CONFIG[candidate.baseLayer].hidden
+    candidate.baseLayer && isSelectableBaseLayer(candidate.baseLayer)
       ? candidate.baseLayer
       : undefined;
 
@@ -291,6 +290,10 @@ export function useRescueMapController({
 
   const setBaseLayer = useCallback(
     (layer: RescueMapBaseLayer) => {
+      if (!isSelectableBaseLayer(layer)) {
+        return;
+      }
+
       commit({ ...stateRef.current, baseLayer: layer });
       updateLayerPreferences((current) => ({ ...current, baseLayer: layer }));
     },

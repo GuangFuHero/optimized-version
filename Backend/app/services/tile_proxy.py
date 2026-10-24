@@ -1,7 +1,10 @@
 """Map tile proxy service — fetches tiles from upstream sources with Redis caching."""
 
 import base64
+import contextlib
+import re
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 import httpx
 
@@ -9,8 +12,7 @@ from app.schemas.map import AttributionResponse
 
 # 1×1 transparent PNG (67 bytes)
 BLANK_TILE = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAA"
-    "IAAQAABjkB6QAAAABJRU5ErkJggg=="
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIAAQAABjkB6QAAAABJRU5ErkJggg=="
 )
 
 
@@ -22,22 +24,28 @@ class SourceConfig:
     image_format: str
     headers: dict = field(default_factory=dict)
     verify_ssl: bool = True
+    # GIBS DescribeDomains URL; when set, `{date}` in url_template is the day before the newest date it lists.
+    dates_url: str | None = None
 
 
 SOURCE_REGISTRY: dict[tuple[str, str], SourceConfig] = {
+    # HLS Sentinel-2 at 30 m, native up to z12. Each day is one satellite pass, so areas outside it
+    # come back transparent.
     ("satellite", "nasa_gibs"): SourceConfig(
         url_template=(
             "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/"
-            "MODIS_Terra_CorrectedReflectance_TrueColor/default/"
-            "GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg"
+            "HLS_S30_Nadir_BRDF_Adjusted_Reflectance/default/{date}/"
+            "GoogleMapsCompatible_Level12/{z}/{y}/{x}.png"
         ),
-        image_format="image/jpeg",
+        image_format="image/png",
+        dates_url=(
+            "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/"
+            "HLS_S30_Nadir_BRDF_Adjusted_Reflectance/default/"
+            "GoogleMapsCompatible_Level12/all/all.xml"
+        ),
     ),
     ("satellite", "eox"): SourceConfig(
-        url_template=(
-            "https://tiles.maps.eox.at/wmts/1.0.0/"
-            "s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg"
-        ),
+        url_template=("https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg"),
         image_format="image/jpeg",
     ),
     ("satellite", "nlsc"): SourceConfig(
@@ -50,10 +58,7 @@ SOURCE_REGISTRY: dict[tuple[str, str], SourceConfig] = {
         verify_ssl=False,  # NLSC cert missing Subject Key Identifier — fails Python SSL validation
     ),
     ("satellite", "sinica"): SourceConfig(
-        url_template=(
-            "https://gis.sinica.edu.tw/tileserver/file-exists.php"
-            "?img={layer}/{z}/{x}/{y}"
-        ),
+        url_template=("https://gis.sinica.edu.tw/tileserver/file-exists.php?img={layer}/{z}/{x}/{y}"),
         image_format="image/png",
     ),
     ("road", "osm"): SourceConfig(
@@ -74,17 +79,16 @@ ATTRIBUTION_REGISTRY: dict[tuple[str, str], AttributionResponse] = {
         license="US Gov Open Data",
         attribution_text=(
             "Imagery provided by NASA's Global Imagery Browse Services (GIBS), "
-            "part of NASA's ESDIS"
+            "part of NASA's ESDIS (HLS, contains modified Copernicus Sentinel data)"
         ),
         attribution_url=(
-            "https://earthdata.nasa.gov/eosdis/science-system-description/"
-            "eosdis-components/gibs"
+            "https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs"
         ),
-        image_format="image/jpeg",
+        image_format="image/png",
         commercial_use=True,
         requires_logo=False,
         logo_url=None,
-        notes=None,
+        notes="One satellite pass from the day before GIBS's newest date; areas outside it are blank.",
     ),
     ("satellite", "eox"): AttributionResponse(
         source="eox",
@@ -180,6 +184,37 @@ def get_attribution(type_: str, source: str) -> AttributionResponse | None:
     return ATTRIBUTION_REGISTRY.get((type_, source))
 
 
+async def resolve_tile_date(redis, source: str, dates_url: str) -> str | None:
+    """Return the day before the newest date GIBS lists at dates_url, or None if it cannot be read.
+
+    The answer is cached in Redis for an hour so tile requests do not each ask GIBS.
+    """
+    cache_key = f"tile:{source}:date"
+    try:
+        cached = await redis.get(cache_key)
+        if cached:
+            return cached.decode()
+    except Exception:
+        pass  # Redis down — ask GIBS directly
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(dates_url)
+        # The domain is comma-separated date ranges such as "2026-03-02/2026-10-22/P1D", newest last.
+        domain = re.search(r"<Domain>([^<]+)</Domain>", response.text).group(1)
+        newest = domain.split(",")[-1].split("/")
+        tile_date = (
+            date.fromisoformat(newest[1] if len(newest) > 1 else newest[0]) - timedelta(days=1)
+        ).isoformat()
+    except Exception:
+        return None
+
+    with contextlib.suppress(Exception):
+        await redis.set(cache_key, tile_date, ex=3600)
+
+    return tile_date
+
+
 async def fetch_tile(
     redis,
     source: str,
@@ -194,9 +229,16 @@ async def fetch_tile(
     Checks Redis cache first. On miss, fetches upstream and caches result.
     On any upstream error, returns BLANK_TILE.
     If Redis is unavailable, bypasses cache and fetches upstream directly.
+    A source with `dates_url` resolves its tile date first, and the date becomes part of the cache key.
     """
     config = get_source_config(type_, source)
-    cache_key = build_cache_key(source, type_, z, x, y, query_params)
+    params = dict(query_params)
+    if config.dates_url:
+        tile_date = await resolve_tile_date(redis, source, config.dates_url)
+        if tile_date is None:
+            return BLANK_TILE, "image/png"
+        params["date"] = tile_date
+    cache_key = build_cache_key(source, type_, z, x, y, params)
 
     # --- Cache check ---
     try:
@@ -207,8 +249,9 @@ async def fetch_tile(
         cached = None  # Redis down — proceed to upstream
 
     # --- Upstream fetch ---
-    layer = query_params.get("layer", "")
-    url = config.url_template.format(z=z, x=x, y=y, layer=layer)
+    url = config.url_template.format(
+        z=z, x=x, y=y, layer=params.get("layer", ""), date=params.get("date", "")
+    )
 
     try:
         async with httpx.AsyncClient(timeout=10.0, verify=config.verify_ssl) as client:

@@ -78,10 +78,12 @@ function RescueMapLayerPanelContent({
           .map(([key, value]) => {
             const Icon = value.icon;
             const active = key === controller.baseLayer;
+            const disabled = Boolean(value.disabledReason);
 
             return (
               <ButtonBase
                 key={key}
+                disabled={disabled}
                 onClick={() => controller.setBaseLayer(key)}
                 sx={{
                   width: '100%',
@@ -105,6 +107,7 @@ function RescueMapLayerPanelContent({
                     backgroundColor: active
                       ? color.bg.secondary.subtle
                       : color.bg.neutral.default,
+                    opacity: disabled ? 0.52 : 1,
                     boxShadow: active ? shadow.md : 'none',
                   }}
                 >
@@ -142,7 +145,7 @@ function RescueMapLayerPanelContent({
                         color: color.fg.neutral.subtle,
                       }}
                     >
-                      {value.description}
+                      {value.disabledReason ?? value.description}
                     </Typography>
                     {value.licenseNote ? (
                       <Typography

@@ -796,6 +796,7 @@ export function RescueMapCanvas({
 
     const tileLayer = L.tileLayer(nextTileLayer.url, {
       attribution: nextTileLayer.attribution,
+      maxNativeZoom: nextTileLayer.maxNativeZoom,
     });
 
     tileLayer.addTo(map);

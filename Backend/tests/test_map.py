@@ -18,6 +18,7 @@ from app.services.tile_proxy import (  # noqa: E402
     fetch_tile,
     get_attribution,
     get_source_config,
+    resolve_tile_date,
 )
 from tests.conftest import TEST_REDIS_URL  # noqa: E402
 
@@ -101,7 +102,7 @@ def test_get_source_config_valid():
     config = get_source_config("satellite", "nasa_gibs")
     assert config is not None
     assert "{z}" in config.url_template
-    assert config.image_format == "image/jpeg"
+    assert config.image_format == "image/png"
 
 
 def test_get_source_config_invalid_combo():
@@ -131,7 +132,7 @@ def test_blank_tile_is_bytes():
     assert isinstance(BLANK_TILE, bytes)
     assert len(BLANK_TILE) > 0
     # Valid PNG starts with PNG magic bytes
-    assert BLANK_TILE[:8] == b'\x89PNG\r\n\x1a\n'
+    assert BLANK_TILE[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 @pytest_asyncio.fixture
@@ -147,15 +148,17 @@ async def fake_redis():
 @pytest.mark.asyncio
 async def test_fetch_tile_cache_hit(fake_redis):
     """Returns cached bytes and content-type on cache hit."""
-    key = "tile:nasa_gibs:satellite:_:10:1:2"
+    key = "tile:eox:satellite:_:10:1:2"
     await fake_redis.hset(key, mapping={"data": b"PNG_DATA", "ct": b"image/jpeg"})
     await fake_redis.expire(key, 604800)
 
     data, ct = await fetch_tile(
         redis=fake_redis,
-        source="nasa_gibs",
+        source="eox",
         type_="satellite",
-        z=10, x=1, y=2,
+        z=10,
+        x=1,
+        y=2,
         query_params={},
     )
     assert data == b"PNG_DATA"
@@ -179,9 +182,11 @@ async def test_fetch_tile_cache_miss_upstream_success(fake_redis):
 
         data, ct = await fetch_tile(
             redis=fake_redis,
-            source="nasa_gibs",
+            source="eox",
             type_="satellite",
-            z=10, x=1, y=2,
+            z=10,
+            x=1,
+            y=2,
             query_params={},
         )
 
@@ -189,7 +194,7 @@ async def test_fetch_tile_cache_miss_upstream_success(fake_redis):
     assert ct == "image/jpeg"
 
     # Verify stored in cache
-    key = "tile:nasa_gibs:satellite:_:10:1:2"
+    key = "tile:eox:satellite:_:10:1:2"
     cached = await fake_redis.hgetall(key)
     assert cached[b"data"] == b"REAL_TILE"
     ttl = await fake_redis.ttl(key)
@@ -213,9 +218,11 @@ async def test_fetch_tile_upstream_error_returns_blank(fake_redis):
 
         data, ct = await fetch_tile(
             redis=fake_redis,
-            source="nasa_gibs",
+            source="eox",
             type_="satellite",
-            z=10, x=1, y=2,
+            z=10,
+            x=1,
+            y=2,
             query_params={},
         )
 
@@ -245,7 +252,9 @@ async def test_fetch_tile_redis_down_fetches_upstream():
             redis=broken_redis,
             source="osm",
             type_="road",
-            z=5, x=0, y=0,
+            z=5,
+            x=0,
+            y=0,
             query_params={},
         )
 
@@ -279,12 +288,82 @@ async def test_fetch_tile_sinica_layer_in_url(fake_redis):
             redis=fake_redis,
             source="sinica",
             type_="satellite",
-            z=8, x=10, y=20,
+            z=8,
+            x=10,
+            y=20,
             query_params={"layer": "EARTH"},
         )
 
     assert "EARTH" in captured_url[0]
     assert "layer=EARTH" not in captured_url[0]  # param consumed, not forwarded as query string
+
+
+def _gibs_client(domains_response):
+    """Mock httpx client answering GIBS's dates URL with domains_response and any tile URL with a PNG."""
+    tile_response = MagicMock()
+    tile_response.status_code = 200
+    tile_response.content = b"HLS_TILE"
+    tile_response.headers = {"content-type": "image/png"}
+    requested = []
+
+    async def get(url, **kwargs):
+        requested.append(url)
+        return domains_response if url.endswith("all.xml") else tile_response
+
+    client = AsyncMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    client.get = get
+    return client, requested
+
+
+@pytest.mark.asyncio
+async def test_fetch_tile_nasa_gibs_uses_day_before_newest_date(fake_redis):
+    """NASA GIBS tiles use the day before the newest listed date, asked for once and part of the cache key."""
+    domains = MagicMock()
+    domains.text = (
+        "<Domains><DimensionDomain><Domain>2026-01-12/2026-02-28/P1D,2026-03-02/2026-10-22/P1D</Domain>"
+        "</DimensionDomain></Domains>"
+    )
+    client, requested = _gibs_client(domains)
+
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=client):
+        data, ct = await fetch_tile(fake_redis, "nasa_gibs", "satellite", 10, 1, 2, {})
+        await fetch_tile(fake_redis, "nasa_gibs", "satellite", 10, 1, 3, {})
+
+    assert (data, ct) == (b"HLS_TILE", "image/png")
+    assert sum(url.endswith("all.xml") for url in requested) == 1
+    assert "/default/2026-10-21/GoogleMapsCompatible_Level12/10/2/1.png" in requested[1]
+    assert await fake_redis.get("tile:nasa_gibs:date") == b"2026-10-21"
+    cached = await fake_redis.hgetall("tile:nasa_gibs:satellite:date=2026-10-21:10:1:2")
+    assert cached[b"data"] == b"HLS_TILE"
+
+
+@pytest.mark.asyncio
+async def test_resolve_tile_date_single_date_domain(fake_redis):
+    """A domain that ends in a lone date, not a range, still yields the day before it."""
+    domains = MagicMock()
+    domains.text = "<Domains><Domain>2026-03-02/2026-10-20/P1D,2026-10-22</Domain></Domains>"
+    client, _ = _gibs_client(domains)
+
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=client):
+        tile_date = await resolve_tile_date(fake_redis, "nasa_gibs", "https://example.test/all.xml")
+
+    assert tile_date == "2026-10-21"
+
+
+@pytest.mark.asyncio
+async def test_fetch_tile_nasa_gibs_unreadable_dates_returns_blank(fake_redis):
+    """When GIBS's dates cannot be read, NASA GIBS returns a blank tile without asking for the tile."""
+    domains = MagicMock()
+    domains.text = "<html>503 Service Unavailable</html>"
+    client, requested = _gibs_client(domains)
+
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=client):
+        data, ct = await fetch_tile(fake_redis, "nasa_gibs", "satellite", 10, 1, 2, {})
+
+    assert (data, ct) == (BLANK_TILE, "image/png")
+    assert len(requested) == 1
 
 
 # ===== Integration tests for endpoints =====
@@ -339,11 +418,11 @@ async def test_tile_endpoint_sinica_missing_layer(map_client):
 async def test_tile_endpoint_cache_hit_returns_tile(map_client):
     """Tile endpoint returns cached bytes and content-type on Redis cache hit."""
     ac, fake_redis = map_client
-    key = "tile:nasa_gibs:satellite:_:10:1:2"
+    key = "tile:eox:satellite:_:10:1:2"
     await fake_redis.hset(key, mapping={"data": b"CACHED_PNG", "ct": b"image/jpeg"})
     await fake_redis.expire(key, 604800)
 
-    resp = await ac.get("/api/v1/map/tile/satellite/nasa_gibs/10/1/2")
+    resp = await ac.get("/api/v1/map/tile/satellite/eox/10/1/2")
     assert resp.status_code == 200
     assert resp.content == b"CACHED_PNG"
     assert resp.headers["content-type"] == "image/jpeg"
@@ -360,7 +439,7 @@ async def test_tile_endpoint_upstream_error_returns_blank(map_client):
         mock_client.get = AsyncMock(side_effect=Exception("upstream down"))
         mock_client_cls.return_value = mock_client
 
-        resp = await ac.get("/api/v1/map/tile/satellite/nasa_gibs/10/1/2")
+        resp = await ac.get("/api/v1/map/tile/satellite/eox/10/1/2")
 
     assert resp.status_code == 200
     assert resp.content == BLANK_TILE
