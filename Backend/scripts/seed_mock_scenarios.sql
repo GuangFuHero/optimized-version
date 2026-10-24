@@ -927,10 +927,9 @@ SELECT '60000000-0000-4000-8000-000000000002','ngo',
        now() - interval '2 days','c0000000-0000-4000-8000-000000000005',
        now() - interval '3 days', now() - interval '2 days';
 
--- 9b. 志工行前資訊(Spec/007 BR-006:一列一版,state 的最新一筆已發布就是前台那一份):光復的一份,
---     由公所災防課從土石流範本寫成、已發布。裝備寫成 `- [ ]`,前台才有可以勾的框;一律不寫 `[x]`
---     (勾不勾是每台裝置自己的事,VB-BR-191a)。時間跟角色申請一樣用 now(),前台的「幾天前」才合理。
---     網站上只有超級管理員能發布(pre_departure.publish);這裡直接寫入,跟第 9 節的審核人一樣不經權限。
+-- 9b. 志工行前資訊:光復的一份,由公所災防課從土石流範本寫成、已發布。每個 state 最多一版上線,
+--     那個 state 已經有別人的上線,這一份就不放,不動別人的。裝備寫成 `- [ ]`,前台才有可以勾的框;
+--     一律不寫 `[x]`,勾不勾是每台裝置自己的事。時間用 now(),前台的「幾天前」才合理。
 INSERT INTO briefing_templates (uuid, content, tags, state, created_by, created_at, updated_at) VALUES
  ('70000000-0000-4000-8000-000000000001', $md$## 如何參與
 
@@ -957,9 +956,9 @@ INSERT INTO briefing_templates (uuid, content, tags, state, created_by, created_
 $md$, '["landslide"]', 'briefing', 'c0000000-0000-4000-8000-000000000025',
   now() - interval '3 days', now() - interval '3 days');
 
-INSERT INTO briefings (uuid, template_uuid, content, tags, state, created_by, updated_by,
-                       published_at, published_by, created_at, updated_at) VALUES
- ('80000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000001', $md$## 如何參與
+INSERT INTO briefings (uuid, template_uuid, content, tags, state, status, created_by, updated_by,
+                       published_at, published_by, created_at, updated_at)
+SELECT '80000000-0000-4000-8000-000000000001', '70000000-0000-4000-8000-000000000001', $md$## 如何參與
 
 1. 先在地圖上找一件你能做的事，按「承接」；還沒承接也可以直接到報到處。
 2. 出發前看完這一頁，照下面的清單打包。
@@ -1001,10 +1000,13 @@ INSERT INTO briefings (uuid, template_uuid, content, tags, state, created_by, up
 - 不要自行進入封鎖線內。
 
 > 緊急情況以頁面最上方的紅色緊急公告為準。
-$md$, '["landslide"]', 'briefing',
-  'c0000000-0000-4000-8000-000000000025', 'c0000000-0000-4000-8000-000000000025',
-  now() - interval '1 day', 'c0000000-0000-4000-8000-000000000025',
-  now() - interval '2 days', now() - interval '1 day');
+$md$, '["landslide"]', 'briefing', 'published',
+       'c0000000-0000-4000-8000-000000000025', 'c0000000-0000-4000-8000-000000000025',
+       now() - interval '1 day', 'c0000000-0000-4000-8000-000000000025',
+       now() - interval '2 days', now() - interval '1 day'
+ WHERE NOT EXISTS (
+         SELECT 1 FROM briefings b
+          WHERE b.state = 'briefing' AND b.status = 'published' AND b.delete_at IS NULL);
 
 -- 10. 狀態照規則推導,跟網站做的一樣。
 -- 需求:承接人數到了 quantity 就是湊滿(services/ticket.py 的 assign_task_actor),
@@ -1151,10 +1153,10 @@ BEGIN
     RAISE EXCEPTION 'mock seed: photo % is not an https link of at most 500 characters', bad;
   END IF;
 
-  -- 行前資訊:發布過的才上前台;要有可以勾的項目,而且不能預先勾好(VB-BR-191a)。
+  -- 行前資訊:上線的才給前台看;要有可以勾的項目,而且不能預先勾好。
   SELECT uuid::text INTO bad FROM briefings
    WHERE uuid::text LIKE '80000000-%'
-     AND (published_at IS NULL OR published_by IS NULL
+     AND (status <> 'published' OR published_by IS NULL
           OR content !~ '(^|\n)- \[ \] ' OR content ~* '(^|\n)- \[x\] ')
    LIMIT 1;
   IF bad IS NOT NULL THEN
