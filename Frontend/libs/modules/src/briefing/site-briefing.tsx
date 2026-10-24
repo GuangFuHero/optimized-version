@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import Link from 'next/link';
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useQuery } from 'urql';
 
 import { CurrentBriefingDocument } from '@rescue-frontend/data-access';
@@ -24,15 +24,11 @@ import {
 } from '@rescue-frontend/ui';
 
 import { formatTaiwanTime, timeAgo } from '../time';
-import {
-  BRIEFING_MARKDOWN_COMPONENTS,
-  BriefingChecklistProvider,
-  useBriefingChecklist,
-} from './briefing-checklist';
+import { useBriefingChecklist } from './briefing-checklist';
 import { ChecklistTools } from './checklist-tools';
 import { BRIEFING_PRINT_SHEET, printBriefing } from './print-briefing';
 
-const { color, focusRing, radius, typography } = designTokens;
+const { color, radius, typography } = designTokens;
 
 // The page shows its own loading line rather than suspend the frame around it.
 const BRIEFING_QUERY_CONTEXT = { suspense: false } as const;
@@ -74,9 +70,9 @@ function BriefingPrintStyles() {
             padding: '0 !important',
             border: '0 !important',
           },
-          [`${sheet} [data-briefing-stamp], ${sheet} [data-briefing-jump], ${sheet} [data-briefing-updated]`]:
+          [`${sheet} [data-briefing-stamp], ${sheet} [data-markdown-navigation]`]:
             { display: 'none !important' },
-          [`${sheet} .${BRIEFING_MARKDOWN}`]: {
+          [`${sheet} .${BRIEFING_MARKDOWN} .ProseMirror`]: {
             fontSize: '11.5pt !important',
             lineHeight: '1.7 !important',
             color: '#000 !important',
@@ -91,14 +87,22 @@ function BriefingPrintStyles() {
             margin: '10pt 0 4pt !important',
             breakAfter: 'avoid',
           },
-          [`${sheet} .task-list-item`]: {
+          [`${sheet} ul[data-type="taskList"] > li`]: {
             minHeight: '0 !important',
-            padding: '2pt 0 2pt 18pt !important',
+            padding: '2pt 0 !important',
             fontSize: 'inherit !important',
             breakInside: 'avoid',
           },
-          [`${sheet} [data-task-checked]`]: { color: '#000 !important' },
-          [`${sheet} .task-list-item input[type="checkbox"]`]: {
+          [`${sheet} ul[data-type="taskList"] > li > div > :not(ul, ol)`]: {
+            color: '#000 !important',
+            opacity: '1 !important',
+          },
+          [`${sheet} ul[data-type="taskList"] > li > label`]: {
+            height: 'auto !important',
+          },
+          [`${sheet} ul[data-type="taskList"] > li[data-task-updated="true"]::after`]:
+            { display: 'none !important' },
+          [`${sheet} ul[data-type="taskList"] > li input[type="checkbox"]`]: {
             width: '11pt !important',
             height: '11pt !important',
             top: 'calc(2pt + (1.7em - 11pt) / 2) !important',
@@ -106,9 +110,10 @@ function BriefingPrintStyles() {
             borderRadius: '1pt !important',
             background: '#fff !important',
           },
-          [`${sheet} .task-list-item input[type="checkbox"]::after`]: {
-            display: 'none !important',
-          },
+          [`${sheet} ul[data-type="taskList"] > li input[type="checkbox"]::after`]:
+            {
+              display: 'none !important',
+            },
           // Nothing to click on paper: the address goes beside the words.
           [`${sheet} a[href^="http"]::after`]: {
             content: '" (" attr(href) ")"',
@@ -150,79 +155,6 @@ function BriefingStamp({ publishedAt }: { publishedAt: string | null }) {
   );
 }
 
-interface Heading {
-  id: string;
-  text: string;
-}
-
-/**
- * Links to the article's own headings, to skip ahead in a long page — not tabs, nothing is hidden
- * (prototype VB-BR-19a): the top level of headings that are there, `##`, or `###` when there is no
- * `##`, and none at all for fewer than two. A click scrolls without touching the address, which is
- * the one to pass on (VB-BR-19a4).
- */
-function JumpLinks({ headings }: { headings: Heading[] }) {
-  if (headings.length < 2) {
-    return null;
-  }
-
-  return (
-    <Box
-      component="nav"
-      aria-label="章節"
-      data-briefing-jump=""
-      sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}
-    >
-      {headings.map((heading) => (
-        <Box
-          key={heading.id}
-          component="a"
-          href={`#${heading.id}`}
-          onClick={(event) => {
-            event.preventDefault();
-            document
-              .getElementById(heading.id)
-              ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }}
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            minHeight: 44,
-            px: '12px',
-            borderRadius: `${radius.full}px`,
-            bgcolor: color.bg.neutral.subtle,
-            color: color.fg.neutral.subtle,
-            boxShadow: `inset 0 0 0 1px ${color.border.default}`,
-            fontSize: displayTextSize[13],
-            textDecoration: 'none',
-            '&:hover': { color: color.brand.secondary.subtle },
-            '&:focus-visible': {
-              outline: `${focusRing.width}px solid ${focusRing.color}`,
-              outlineOffset: `${focusRing.offset}px`,
-            },
-          }}
-        >
-          {heading.text}
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
-function headingsIn(article: HTMLElement | null): Heading[] {
-  const read = (level: 'h2' | 'h3') =>
-    Array.from(
-      article?.querySelectorAll<HTMLElement>(`${level}[id]`) ?? [],
-      (heading) => ({
-        id: heading.id,
-        text: heading.textContent?.trim() ?? '',
-      }),
-    );
-  const h2 = read('h2');
-
-  return h2.length ? h2 : read('h3');
-}
-
 function BriefingArticle({
   content,
   publishedAt,
@@ -232,28 +164,8 @@ function BriefingArticle({
 }) {
   const checklist = useBriefingChecklist();
   const articleRef = useRef<HTMLDivElement>(null);
-  const [headings, setHeadings] = useState<Heading[]>([]);
-
-  // Read off the article as drawn, so the links carry the ids libs/ui's Markdown gave the headings.
-  useLayoutEffect(() => {
-    setHeadings(headingsIn(articleRef.current));
-  }, [content]);
-
-  // Drawn once per content: a tick reaches the boxes through the checklist's context, not by
-  // parsing the whole article again.
-  const markdown = useMemo(
-    () => (
-      <Markdown
-        source={content}
-        className={BRIEFING_MARKDOWN}
-        components={BRIEFING_MARKDOWN_COMPONENTS}
-      />
-    ),
-    [content],
-  );
-
   return (
-    <BriefingChecklistProvider checklist={checklist}>
+    <>
       <ChecklistTools
         checklist={checklist}
         onPrint={() => {
@@ -274,10 +186,19 @@ function BriefingArticle({
         }}
       >
         <BriefingStamp publishedAt={publishedAt} />
-        <JumpLinks headings={headings} />
-        {markdown}
+        <Markdown
+          source={content}
+          className={BRIEFING_MARKDOWN}
+          checklist={{
+            checked: checklist.checked,
+            updated: checklist.updated,
+            onToggle: checklist.toggle,
+          }}
+          onTasksChange={checklist.setTaskItems}
+          navigation
+        />
       </Stack>
-    </BriefingChecklistProvider>
+    </>
   );
 }
 
