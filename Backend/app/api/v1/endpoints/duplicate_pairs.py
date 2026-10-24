@@ -22,6 +22,8 @@ from app.schemas.duplicate_pair import (
     PairSort,
     PairStatus,
     SourceLayer,
+    TicketForReviewResponse,
+    TicketsForReviewResponse,
 )
 from app.services import dedup_review
 from app.services.dedup_review import DuplicatePairConflictError, DuplicatePairNotFoundError, PairItem
@@ -49,6 +51,14 @@ def _response(item: PairItem) -> dict:
         "low": EntitySummaryResponse.model_validate(item.low),
         "high": EntitySummaryResponse.model_validate(item.high),
     }
+
+
+def _tickets(tickets) -> TicketsForReviewResponse | None:
+    """Both sides' whole tickets (Spec 028 §2), or None for a station card."""
+    if tickets is None:
+        return None
+    low, high = (TicketForReviewResponse.model_validate(t) if t is not None else None for t in tickets)
+    return TicketsForReviewResponse(low=low, high=high)
 
 
 def _refusal(err: ValueError) -> HTTPException:
@@ -96,7 +106,7 @@ async def get_duplicate_pair(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """One card, its sides and its events, oldest first."""
+    """One card, its sides, its events (oldest first) and its two whole tickets."""
     try:
         detail = await dedup_review.get_pair(db, actor=current_user, pair_uuid=pair_uuid)
     except ValueError as err:
@@ -104,6 +114,7 @@ async def get_duplicate_pair(
     return DuplicatePairDetail(
         **_response(detail.item),
         events=[DedupEventResponse.model_validate(event) for event in detail.events],
+        tickets=_tickets(detail.tickets),
     )
 
 

@@ -74,10 +74,79 @@ class DedupEventResponse(BaseModel):
     created_at: datetime
 
 
+class PropertyForReviewResponse(BaseModel):
+    """One live item under a need (Spec 028 §2)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    uuid: UUID
+    property_name: str
+    property_value: str
+    quantity: int | None
+    status: str | None
+    comment: str | None
+
+
+class TaskForReviewResponse(BaseModel):
+    """One live need with its headcount and items (Spec 028 §2)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    uuid: UUID
+    task_type: str
+    task_name: str
+    task_description: str | None
+    quantity: int | None
+    status: str
+    claim_count: int
+    recruiting_stopped: bool
+    properties: list[PropertyForReviewResponse]
+
+
+class TicketForReviewResponse(BaseModel):
+    """A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-372).
+
+    Send `version` back unchanged when resolving: it says what the reviewer saw (ADR-373).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    uuid: UUID
+    version: str
+    title: str
+    description: str | None
+    priority: str
+    task_type: str | None
+    disaster_types: list[str]
+    person_trapped_reported: str | None
+    immediate_danger_reported: str | None
+    contact_name: str
+    contact_phone: str | None
+    contact_email: str | None
+    longitude: float | None
+    latitude: float | None
+    status: str
+    audit_status: str
+    created_by: UUID | None
+    created_at: datetime | None
+    tasks: list[TaskForReviewResponse]
+
+
+class TicketsForReviewResponse(BaseModel):
+    """The ticket on each side of the card; null where that ticket is cancelled or deleted."""
+
+    low: TicketForReviewResponse | None
+    high: TicketForReviewResponse | None
+
+
 class DuplicatePairDetail(DuplicatePairResponse):
-    """One card with every event recorded on it, oldest first."""
+    """One card with every event recorded on it, oldest first, and its two whole tickets.
+
+    `tickets` is null for a station card, which is not resolved (Spec 028, ADR-376).
+    """
 
     events: list[DedupEventResponse]
+    tickets: TicketsForReviewResponse | None
 
 
 class DuplicatePairDecision(BaseModel):

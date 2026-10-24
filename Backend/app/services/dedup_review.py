@@ -22,6 +22,7 @@ from app.models.auth import User
 from app.models.dedup import ENTITY_KINDS, PAIR_SOURCE_LAYERS, PAIR_STATUSES, DedupAuditEvent, DuplicatePair
 from app.repositories.dedup_repository import dedup_audit_event_repository, duplicate_pair_repository
 from app.services.authz import require_scope
+from app.services.dedup_review_tickets import TicketForReview, tickets_for_pair
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 
@@ -94,10 +95,15 @@ class PairPage:
 
 @dataclass(frozen=True)
 class PairDetail:
-    """One card, its sides and every event recorded on it, oldest first."""
+    """One card, its sides, every event recorded on it (oldest first) and its two whole tickets.
+
+    `tickets` is (low, high), None on a side whose ticket is cancelled or deleted, and None as a
+    whole for a station card (Spec 028 §2, ADR-372).
+    """
 
     item: PairItem
     events: list[DedupAuditEvent]
+    tickets: tuple[TicketForReview | None, TicketForReview | None] | None = None
 
 
 def _checked(values: Sequence[str] | None, allowed: Sequence[str], name: str) -> list[str] | None:
@@ -150,13 +156,17 @@ async def list_pairs(
 
 
 async def get_pair(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID) -> PairDetail:
-    """One live card with its sides and events."""
+    """One live card with its sides, events and whole tickets."""
     await require_scope(actor, Perm.AI_DUP_VIEW, db)
     pair = await duplicate_pair_repository.get_live(db, pair_uuid)
     if pair is None:
         raise DuplicatePairNotFoundError("Duplicate pair not found")
     (item,) = await _with_sides(db, [pair])
-    return PairDetail(item=item, events=await dedup_audit_event_repository.for_pair(db, pair.uuid))
+    return PairDetail(
+        item=item,
+        events=await dedup_audit_event_repository.for_pair(db, pair.uuid),
+        tickets=await tickets_for_pair(db, pair),
+    )
 
 
 async def _with_sides(db: AsyncSession, pairs: Sequence[DuplicatePair]) -> list[PairItem]:

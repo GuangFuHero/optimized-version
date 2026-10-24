@@ -53,6 +53,10 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 2：讀取兩張完整的單（ADR-372、373）
 
+- ✅ 2026-10-24：`app/services/dedup_review_tickets.py`；全套件 **2707 passed**（+20），覆蓋率 96%；之後補一個測試（兩邊都已取消），單檔 18 passed。
+  **改了設計**：`version` 改成內容雜湊，不用 `updated_at`。實測只改單的 `title`，`base_geometries.updated_at` 不變（ADR-373 已更新）。
+  plan 原寫的 `ticket_version(ticket, tasks, properties)` 改成 `ticket_version(TicketForReview)`。
+
 - [ ] `dedup_review_tickets.py`：
   ```python
   @dataclass(frozen=True)
