@@ -7,7 +7,7 @@
 commit 前看 `git diff --cached --stat`）。
 測試環境：專屬 DB 與 redis（Task 0 決定 port，不能和 025 的 5435／6390 共用）；
 `TEST_REDIS_URL` 一定要設，不能碰 6379（enerlyzer 的）。
-GraphQL 回傳的欄位要用 GraphQL 層測試，service 測試抓不到 session 過期（`MissingGreenlet`）。
+通知失敗 rollback 後的回傳，要用 API 層測試，service 測試抓不到 session 過期（`MissingGreenlet`）。
 
 ## 新增與修改的檔案
 
@@ -15,7 +15,6 @@ GraphQL 回傳的欄位要用 GraphQL 層測試，service 測試抓不到 sessio
 |---|---|
 | `alembic/versions/<new>_dedup_merge_refs.py` | 兩個新欄位（接 `79a19cabc98a`） |
 | `app/models/request.py`、`app/models/ticket_task.py` | `replaced_by_uuid`、`merged_into_uuid` |
-| `app/graphql/tickets/types.py` | `TicketType`、`TicketTaskType` 加兩個欄位 |
 | `app/services/dedup_review_tickets.py`（新） | 讀兩張完整的單、算 `version`（§2） |
 | `app/services/dedup_resolve_plan.py`（新） | 純函式：request ＋ 兩張單的快照 → 處理計畫，或 422（§3.3、§3.4） |
 | `app/services/dedup_resolve.py`（新） | 鎖、版本檢查、寫入、事件、通知（§3.5、§5、§6） |
@@ -30,6 +29,9 @@ GraphQL 回傳的欄位要用 GraphQL 層測試，service 測試抓不到 sessio
 
 ## Task 0：基準
 
+- ✅ 2026-10-24：`75f1a5689` 上 **2683 passed、0 failed，覆蓋率 96%**，`pytest -n 4` 跑 11 分 42 秒。
+  環境：`dedup028-testdb`（5436）、`dedup028-testredis`（6391，`TEST_REDIS_URL` db 15 往下、`REDIS_URL` db 1）。
+
 - [ ] 在 worktree `uv sync`，另裝 `pytest-cov`（`uv pip install --python .venv/bin/python pytest-cov`）。
 - [ ] 起專屬的 test DB（h3 image）與 redis，先查 port 沒被佔用。
 - [ ] 全套件跑一次（`COVERAGE_CORE=sysmon`、`pytest -n 4`），記下 passed 數與覆蓋率。
@@ -38,11 +40,12 @@ GraphQL 回傳的欄位要用 GraphQL 層測試，service 測試抓不到 sessio
 
 - [ ] migration：`tickets.replaced_by_uuid`（FK `tickets.uuid`，nullable）、`ticket_tasks.merged_into_uuid`（FK `ticket_tasks.uuid`，nullable）。
   downgrade 在有值時失敗，不默默丟掉紀錄（同 025 `a5e641c99923` 的作法）。
-- [ ] model 加欄位；`TicketType`、`TicketTaskType` 加 `replacedByUuid`、`mergedIntoUuid`。
+- [ ] model 加欄位。GraphQL 不加（ADR-371）。
+- [ ] migration 接 main 的 head `79a19cabc98a`。#96（`7370daf4c8f7`）、#98（`e4b7c2a19d63`）也接同一個 parent，開 PR 前依合併順序改 `down_revision`。
 - [ ] 測試：
   - migration upgrade／downgrade；有值時 downgrade 失敗。
   - FK：指向不存在的單 → 寫入失敗。
-  - GraphQL：查已取消的單（有權限看到已刪除單的身分）回傳 `replacedByUuid`。先確認現有 query 能不能查到已軟刪除的單；查不到就在本 Task 記下來，不擴大範圍。
+  - `test_migrations_match_models` 照常通過（migration 與 model 欄位一致）。
 
 ## Task 2：讀取兩張完整的單（ADR-372、373）
 
@@ -130,7 +133,7 @@ GraphQL 回傳的欄位要用 GraphQL 層測試，service 測試抓不到 sessio
   - 一位志工搬了兩項需求 → 只收一則 `dedup_task_merged`。
   - 審核員自己是 A 的開單者 → 不收。
   - 通知內容不含電話、Email。
-  - 通知服務丟例外 → 處理仍成功；GraphQL／REST 回傳不壞。
+  - 通知服務丟例外 → 處理仍成功；REST 回傳不壞。
 
 ## Task 7：合約檔與文件
 
@@ -146,7 +149,7 @@ GraphQL 回傳的欄位要用 GraphQL 層測試，service 測試抓不到 sessio
   2. 兩位志工各接 B.task1、A.task1；一位志工同時接了 A.task1 和 B.task1。
   3. data_auditor 收到待審通知，讀 detail 拿到兩張單與 `version`。
   4. 有人在中途改了 A → resolve 409 → 重讀 → resolve 成功（例二）。
-  5. 檢查 A、B、需求、接單紀錄、通知收件匣；B 在前台查得到 `replacedByUuid`。
+  5. 檢查 A、B、需求、接單紀錄、`replaced_by_uuid`／`merged_into_uuid`；各收件人的通知點開是主要單。
   6. 對同一張卡 revoke → 409。
 - [ ] 報告寫進 `verification.md`。完成後回報，**不自己開 PR**。
 
@@ -164,6 +167,6 @@ GraphQL 回傳的欄位要用 GraphQL 層測試，service 測試抓不到 sessio
 - 收到 409（`version` 對不上）→ 重新讀 detail，請審核員再比對一次。
 - request 要列出兩張單**每一項**需求、`keep`／`move` 的每一個細項（spec §3.3）。漏列會 422。
 - 「不是重複」仍用 `/reject`。
-- `TicketType.replacedByUuid`、`TicketTaskType.mergedIntoUuid`：前台點到被合併的單可以導向主要單。
+- 導向主要單靠通知（`ref_uuid` = 主要單），GraphQL 沒有新欄位。
 - 新通知類型：`dedup_task_merged`、`dedup_task_canceled`、`dedup_ticket_merged`、`dedup_ticket_updated`，
   都是 `ref_type = "ticket"`、`ref_uuid` = 主要單。

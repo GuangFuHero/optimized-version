@@ -127,9 +127,10 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 **Date**: 2026-10-24　**Status**: Accepted（Notion §12b 第 6 項；欄位形式為慣例，未另外拍板）
 
 **背景**：Notion §10e 第 2 項：刪掉 B 之後，B 上看不出是因為和 A 重複，只有配對卡知道。
-前台點到被取消的單也無法導向主要單。
 
-**決定**：兩張表各加一個 nullable FK。GraphQL 的 `Ticket`、`TicketTask` 回傳這兩個欄位。
+**決定**：兩張表各加一個 nullable FK，只做紀錄。
+- **GraphQL 不回傳**（使用者 10/24）。導向主要單靠通知：四種通知的 `ref_uuid` 都是主要單（ADR-378）。
+  被搬走的志工，接單紀錄已在主要單上，「我承接的」直接列出主要單；GraphQL 的 `ticket(uuid)` 本來就不回已軟刪除的單。
 既有的 `ticket_tasks.is_duplicate`、`dedup_group_id` 不用：它們是給慢層群組的，意思不同。
 
 ---
