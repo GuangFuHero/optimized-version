@@ -157,6 +157,7 @@ export type {
 
 export { AnnouncementPage } from './admin/announcement';
 export { DashboardPage } from './admin/dashboard';
+export { MembersPermissionsPage, TeamsPage } from './admin/members';
 export { SettingsPage } from './admin/settings/settings-page';
 export { BackOfficePlaceholder } from './role-request';
 export {

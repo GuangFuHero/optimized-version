@@ -5,7 +5,12 @@ export {
 } from './document-metadata';
 export type { PageMetadata } from './document-metadata';
 export { PointShareDrawer } from './point-share-drawer';
-export { createQrDataUrl, createQrSvg, downloadQrSvg } from './qr-code';
+export {
+  createQrDataUrl,
+  createQrSvg,
+  downloadQrPng,
+  downloadQrSvg,
+} from './qr-code';
 export { SITE_OPEN_GRAPH, SITE_SHARE_CARD } from './share-card';
 export {
   copyPointShareUrl,
