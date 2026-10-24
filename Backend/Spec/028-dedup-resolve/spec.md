@@ -245,7 +245,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `tickets` | 新增 `replaced_by_uuid`（FK `tickets.uuid`，nullable） | 整張被取消時指向主要單 |
 | `ticket_tasks` | 新增 `merged_into_uuid`（FK `ticket_tasks.uuid`，nullable） | 被併入時指向併入的那一項 |
 
-GraphQL 的 `Ticket`、`TicketTask` 加上這兩個欄位，前台點到被取消的單可以導向主要單。
+這兩個欄位只做紀錄，GraphQL 不回傳（ADR-371）。導向主要單靠通知：每則通知的 `ref_uuid` 都是主要單（§6）。
 
 不新增事件類型，`merged` 已經在 CHECK 裡。
 
