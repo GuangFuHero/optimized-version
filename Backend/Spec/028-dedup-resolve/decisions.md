@@ -225,6 +225,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 **決定**：
 - 通知寫在本 Spec，和 resolve 同一張 PR。要跟 Dennis 說一聲，DEDUP-009 的 notice 2、3 由這張做。
 - 四種類型：`dedup_task_merged`、`dedup_task_canceled`、`dedup_ticket_merged`、`dedup_ticket_updated`（spec §6）。
+- `dedup_task_merged` 也給整項 `move` 過去的需求上的志工：他們的聯絡人一樣換成主要單的（2026-10-24 Task 6 補，spec §6 原表漏了）。
 - commit 之後發送，失敗只記 log，不回滾處理（同 ADR-345）。
 - 通知內容不放聯絡人的電話與 Email，收件人到主要單頁面看。通知會留在收件匣，聯絡方式之後可能又改。
 - 審核員本人不收。

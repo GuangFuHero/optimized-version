@@ -141,6 +141,9 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 6：通知（ADR-378）
 
+- ✅ 2026-10-24：`app/services/dedup_resolve_notices.py`（覆蓋率 100%）；通知測試 9 個（含通知失敗時 REST 仍回 200）。全套件 **2788 passed**，覆蓋率 96%。
+  補了 spec §6 漏的收件人：整項 `move` 過去的需求上的志工也收 `dedup_task_merged`。
+
 - [ ] `dedup_resolve.py` 在 commit 之後發四種通知（spec §6）；失敗只記 log、rollback 後 refresh actor（同 `notify_new_cards`）。
 - [ ] 每一種、每位收件人只收一則；審核員本人不收（`dispatch` 本來就排除 `actor_uuid`）。
 - [ ] `Spec/Docs/er-diagram.md` 的通知類型清單加這四種。
