@@ -157,8 +157,11 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 只比單的 `updated_at` 不夠：改需求、接單都不會動到單的 `updated_at`。
 
 **決定**：
-- `version` 是一個不透明字串，由單的 `updated_at`、每一項還在的需求與細項的 uuid 與 `updated_at` 算出（雜湊）。
+- `version` 是一個不透明字串：審核員比對的**內容本身**的雜湊（sha256），包含單的欄位、每一項還在的需求、每一個還在的細項，需求與細項依 uuid 排序。
   細項也要算：request 必須列出每一個細項（ADR-379），審核員沒看到的新細項要擋下。
+- 不用 `updated_at`。2026-10-24 Task 2 實測：單繼承 `BaseGeometry`，`updated_at` 在 `base_geometries` 上；
+  只改單自己的欄位（例如 `title`），ORM 不會更新 `base_geometries`，`updated_at` 不變。用時間戳會漏掉這種修改。
+- 排除接單會動到的欄位：需求的 `claim_count`、`status`（滿額），單的 `status`、`audit_status`。
 - resolve 鎖住兩張單和需求之後重算，和 `expected_versions` 不同就回 409。前端重新載入、請審核員再比對一次。
 - 接單人數不算進 `version`：人數的檢查在鎖住之後做（ADR-369），接單不必讓審核員重新比對。
 
