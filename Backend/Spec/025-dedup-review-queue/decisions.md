@@ -19,6 +19,8 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 **理由**：判定只改配對卡，前端可以先讓審核清單上線；合併的範圍（逐欄位、取消、認領、撤銷寫回）
 大很多，混在一起會拖住整張票。
 
+> 2026-10-24：拆出去的合併已在 **Spec 028**（`028-dedup-resolve`，ADR-364～379）實作：選主要單、前端送最終值、另一張單一定取消、志工跟著搬、不能撤銷。
+
 ---
 
 ## ADR-337：super_admin 與 data_auditor 都拿到 `ai_duplicate.view`／`ai_duplicate.review`

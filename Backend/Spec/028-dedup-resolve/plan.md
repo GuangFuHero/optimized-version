@@ -157,6 +157,9 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 7：合約檔與文件
 
+- ✅ 2026-10-24：`pnpm schemas:generate` 只動到 REST 合約（`openapi.json`、`openapi.d.ts`，GraphQL 沒變），已單獨 commit `68bd0e523`；spec 狀態、025 ADR-336 註記已更新。
+  重掃所有遠端分支與本機 worktree：其他地方 ADR 最大號仍是 363，沒有人用 364～379，也沒有 Spec 028。
+
 - [ ] `cd Frontend && pnpm schemas:generate`，commit 產生的合約檔（Frontend CI 會 `git diff`）。
 - [ ] spec 的狀態更新；`Spec/025` ADR-336 加指向 028 的註記（ADR-341 已加）。
 - [ ] 重掃所有遠端分支的 ADR 號與 Spec 資料夾號，確認 364～379、028 沒有撞號。
