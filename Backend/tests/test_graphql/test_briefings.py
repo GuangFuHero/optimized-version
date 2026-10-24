@@ -291,7 +291,7 @@ async def test_edit_alone_drafts_but_cannot_publish_or_read_templates(client, re
 
 
 @pytest.mark.asyncio
-async def test_publish_replaces_take_down_empties_and_a_copy_reopens(
+async def test_publish_replaces_take_down_empties_and_a_copy_starts_a_draft(
     client, briefing_admin_auth, login_user_auth
 ):
     """Publishing v2 hides v1, taking v2 down leaves nothing public, and v2 is edited through a copy."""
