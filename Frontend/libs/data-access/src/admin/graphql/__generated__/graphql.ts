@@ -2483,6 +2483,18 @@ export type AdminTicketPropertyConfigsQuery = {
   }>;
 };
 
+export type AdminTeamDirectoryQueryVariables = Exact<{ [key: string]: never }>;
+
+export type AdminTeamDirectoryQuery = {
+  __typename?: 'Query';
+  roleRequestTeams: Array<{
+    __typename?: 'RoleRequestTeam';
+    uuid: string;
+    name: string;
+    type: RoleRequestTeamType;
+  }>;
+};
+
 export type AdminDisasterTypesQueryVariables = Exact<{
   includeInactive?: InputMaybe<Scalars['Boolean']['input']>;
 }>;
@@ -4907,6 +4919,36 @@ export const AdminTicketPropertyConfigsDocument = {
 } as unknown as DocumentNode<
   AdminTicketPropertyConfigsQuery,
   AdminTicketPropertyConfigsQueryVariables
+>;
+export const AdminTeamDirectoryDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminTeamDirectory' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'roleRequestTeams' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminTeamDirectoryQuery,
+  AdminTeamDirectoryQueryVariables
 >;
 export const AdminDisasterTypesDocument = {
   kind: 'Document',

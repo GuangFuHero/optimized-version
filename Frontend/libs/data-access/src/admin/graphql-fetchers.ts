@@ -807,3 +807,22 @@ export function useRemoveZoneFromTeam() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
   });
 }
+
+export const teamDirectoryQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'teams', 'TeamDirectory'],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminTeamDirectoryDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+/** Every active team, name and type only (Spec/026 `roleRequestTeams`). */
+export function useTeamDirectory(options: AdminQueryOptions = {}) {
+  return useQuery({ ...teamDirectoryQuery(), enabled: options.enabled });
+}

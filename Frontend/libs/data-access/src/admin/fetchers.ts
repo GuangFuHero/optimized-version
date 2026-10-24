@@ -2,12 +2,14 @@
 
 import {
   queryOptions,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
 import type { components, paths } from '../rest/openapi';
 import { adminRestClient } from './client';
+import ApiError from '../rest/api-error';
 import { responseData } from '../rest/openapi-client';
 import type { AdminQueryOptions } from './graphql-fetchers';
 
@@ -50,6 +52,33 @@ export function useUsers(
   options: AdminQueryOptions = {},
 ) {
   return useQuery({ ...usersQuery(params), enabled: options.enabled });
+}
+
+/** `/admin/users` pages by `skip`/`limit`; the member pages need every account to build rosters. */
+const ALL_USERS_PAGE_SIZE = 200;
+
+export const allUsersQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'users', 'AllUsers'],
+    queryFn: async ({ signal }) => {
+      const users: components['schemas']['AdminUserListItem'][] = [];
+      for (;;) {
+        const page = await adminRestClient
+          .GET('/api/v1/admin/users', {
+            params: {
+              query: { skip: users.length, limit: ALL_USERS_PAGE_SIZE },
+            },
+            signal,
+          })
+          .then(responseData);
+        users.push(...page);
+        if (page.length < ALL_USERS_PAGE_SIZE) return users;
+      }
+    },
+  });
+
+export function useAllUsers(options: AdminQueryOptions = {}) {
+  return useQuery({ ...allUsersQuery(), enabled: options.enabled });
 }
 
 export const teamsQuery = () =>
@@ -416,6 +445,86 @@ export function useRevokeUserSessions() {
   });
 }
 
+export type RoleRequestsQuery = NonNullable<
+  paths['/api/v1/admin/role-requests']['get']['parameters']['query']
+>;
+export interface RoleRequestsParams {
+  query?: RoleRequestsQuery;
+}
+
+export const roleRequestsQuery = (params: RoleRequestsParams = {}) =>
+  queryOptions({
+    queryKey: ['admin', 'role-requests', 'RoleRequests', params],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/admin/role-requests', { params, signal })
+        .then(responseData),
+  });
+
+export function useRoleRequests(
+  params: RoleRequestsParams = {},
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({ ...roleRequestsQuery(params), enabled: options.enabled });
+}
+
+export interface DecideRoleRequestInput {
+  params: paths['/api/v1/admin/role-requests/{request_uuid}/approve']['post']['parameters'];
+  body: paths['/api/v1/admin/role-requests/{request_uuid}/approve']['post']['requestBody']['content']['application/json'];
+}
+
+/**
+ * A decision answers 409 when it cannot be made as asked — most often because the other queue
+ * decided first (first decision wins, Spec/026). The caller says why; the queue is read again
+ * so a request decided elsewhere leaves it.
+ */
+const DECISION_META = { handledStatuses: [409] };
+
+function refetchQueueOnConflict(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  return (error: Error) => {
+    if (error instanceof ApiError && error.status === 409) {
+      void queryClient.invalidateQueries({
+        queryKey: ['admin', 'role-requests'],
+      });
+    }
+  };
+}
+
+export function useApproveRoleRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ params, body }: DecideRoleRequestInput) =>
+      adminRestClient
+        .POST('/api/v1/admin/role-requests/{request_uuid}/approve', {
+          params,
+          body,
+        })
+        .then(responseData),
+    meta: DECISION_META,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+    onError: refetchQueueOnConflict(queryClient),
+  });
+}
+
+export function useRejectRoleRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ params, body }: DecideRoleRequestInput) =>
+      adminRestClient
+        .POST('/api/v1/admin/role-requests/{request_uuid}/reject', {
+          params,
+          body,
+        })
+        .then(responseData),
+    meta: DECISION_META,
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'role-requests'] }),
+    onError: refetchQueueOnConflict(queryClient),
+  });
+}
+
 export interface CreateTeamInput {
   body: paths['/api/v1/admin/teams']['post']['requestBody']['content']['application/json'];
 }
@@ -459,6 +568,135 @@ export function useRemoveTeamMember() {
         })
         .then(responseData),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+  });
+}
+
+/** One team's members (Spec/026, ADR-362). A team is small; one page of the maximum covers it. */
+const TEAM_MEMBERS_PAGE_SIZE = 200;
+
+export const teamMembersQuery = (teamUuid: string) =>
+  queryOptions({
+    queryKey: ['admin', 'teams', 'TeamMembers', teamUuid],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/admin/teams/{team_uuid}/members', {
+          params: {
+            path: { team_uuid: teamUuid },
+            query: { limit: TEAM_MEMBERS_PAGE_SIZE },
+          },
+          signal,
+        })
+        .then(responseData),
+  });
+
+export function useTeamMembers(
+  teamUuid: string,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({ ...teamMembersQuery(teamUuid), enabled: options.enabled });
+}
+
+export interface UpdateTeamInput {
+  params: paths['/api/v1/admin/teams/{team_uuid}']['patch']['parameters'];
+  body: paths['/api/v1/admin/teams/{team_uuid}']['patch']['requestBody']['content']['application/json'];
+}
+
+export function useUpdateTeam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ params, body }: UpdateTeamInput) =>
+      adminRestClient
+        .PATCH('/api/v1/admin/teams/{team_uuid}', { params, body })
+        .then(responseData),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+  });
+}
+
+export interface SetTeamStatusInput {
+  params: paths['/api/v1/admin/teams/{team_uuid}/status']['post']['parameters'];
+  body: paths['/api/v1/admin/teams/{team_uuid}/status']['post']['requestBody']['content']['application/json'];
+}
+
+export function useSetTeamStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ params, body }: SetTeamStatusInput) =>
+      adminRestClient
+        .POST('/api/v1/admin/teams/{team_uuid}/status', { params, body })
+        .then(responseData),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+  });
+}
+
+export const teamInvitesQuery = (teamUuid: string) =>
+  queryOptions({
+    queryKey: ['admin', 'teams', 'TeamInvites', teamUuid],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/admin/teams/{team_uuid}/invites', {
+          params: { path: { team_uuid: teamUuid } },
+          signal,
+        })
+        .then(responseData),
+  });
+
+export function useTeamInvites(
+  teamUuid: string,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({ ...teamInvitesQuery(teamUuid), enabled: options.enabled });
+}
+
+export function useCreateTeamInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamUuid }: { teamUuid: string }) =>
+      adminRestClient
+        .POST('/api/v1/admin/teams/{team_uuid}/invites', {
+          params: { path: { team_uuid: teamUuid } },
+        })
+        .then(responseData),
+    onSuccess: (_, { teamUuid }) =>
+      queryClient.invalidateQueries({
+        queryKey: teamInvitesQuery(teamUuid).queryKey,
+      }),
+  });
+}
+
+export type AuditLogsQuery = Omit<
+  NonNullable<paths['/api/v1/admin/audit-logs']['get']['parameters']['query']>,
+  'limit' | 'offset'
+>;
+
+/** The backend's page cap (ADR-358). */
+export const AUDIT_LOGS_PAGE_SIZE = 100;
+
+/** Newest first, a page at a time; `fetchNextPage` reads older entries. */
+export function useAuditLogs(
+  query: AuditLogsQuery = {},
+  options: AdminQueryOptions = {},
+) {
+  return useInfiniteQuery({
+    queryKey: ['admin', 'audit-logs', 'AuditLogs', query],
+    queryFn: ({ pageParam, signal }) =>
+      adminRestClient
+        .GET('/api/v1/admin/audit-logs', {
+          params: {
+            query: {
+              ...query,
+              limit: AUDIT_LOGS_PAGE_SIZE,
+              offset: pageParam,
+            },
+          },
+          signal,
+        })
+        .then(responseData),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) =>
+      lastPage.length < AUDIT_LOGS_PAGE_SIZE
+        ? undefined
+        : pages.length * AUDIT_LOGS_PAGE_SIZE,
+    enabled: options.enabled,
   });
 }
 

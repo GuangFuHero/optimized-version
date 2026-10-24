@@ -43,7 +43,20 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
         if (!isAdminPermissionError(error)) reportError(error);
       },
     }),
-    mutationCache: new MutationCache({ onError: reportError }),
+    mutationCache: new MutationCache({
+      // A mutation can name the statuses it explains to the user itself, e.g. a review answering
+      // 409 because someone else decided first; those are not reported a second time.
+      onError: (error, _variables, _context, mutation) => {
+        const handled = mutation.meta?.['handledStatuses'];
+        if (
+          error instanceof ApiError &&
+          Array.isArray(handled) &&
+          handled.includes(error.status)
+        )
+          return;
+        reportError(error);
+      },
+    }),
     defaultOptions: {
       queries: {
         staleTime: 30_000,

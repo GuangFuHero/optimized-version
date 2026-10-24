@@ -316,6 +316,16 @@ query AdminTicketPropertyConfigs(
     isActive
   }
 }
+# Every active team's name and type (Spec/026): the 所有團隊 directory a team identity reads,
+# since `GET /admin/teams` lists only its own team.
+query AdminTeamDirectory {
+  roleRequestTeams {
+    uuid
+    name
+    type
+  }
+}
+
 query AdminDisasterTypes($includeInactive: Boolean = true) {
   disasterTypes(includeInactive: $includeInactive) {
     uuid
