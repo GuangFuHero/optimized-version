@@ -100,6 +100,9 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
 不寫 task／station 的 `is_duplicate`／`dedup_group_id`，不取消任何一筆。
 後續處理（合併、取消）屬於 ADR-336 的另一張票。
 
+> 2026-10-24：**部分被 ADR-364（Spec 028）取代**。confirm／reject 仍只改配對卡；
+> 新增的 `resolve` 會在同一筆交易裡改單、處理需求，並把卡改成 `confirmed`。
+
 ---
 
 ## ADR-342：撤銷 — 自己的判定用 review，撤別人的需要新權限 `ai_duplicate.revoke`
