@@ -66,7 +66,7 @@
    */
   function createCellIcon(cell, L, active) {
     const html = '<div class="wg-marker-stack">'
-      + '<div class="wg-cell' + (active ? ' wg-cell--active' : '') + '">'
+      + '<div class="wg-cell wg-cell--d' + Math.min(3, String(cell.count).length) + (active ? ' wg-cell--active' : '') + '">'
       + '<span class="wg-cell__n">' + cell.count + '</span>'
       + '<span class="wg-cell__u">求助</span>'
       + '</div></div>';
@@ -214,7 +214,9 @@
         const result = D.queryMarkers({
           dataType: state.dataType || R.SITE_FALLBACK_DATA_TYPE,
           stationType: singleStationType(state), ticketStatus: singleTicketStatus(state),
-          skip: 0, limit: 200, isAuthenticated,
+          /* 🔴 2026-10-24：原本 limit 200 —— 超過 200 張只畫前 200 張，訪客格子數字少算且沒有提示。
+             ⚠️ 正式版不要拉大 limit：訪客格子請後端直接回「每格幾筆」（聚合），登入後的圖釘依 bounds 查。 */
+          skip: 0, limit: 5000, isAuthenticated,
         });
         setSnapshot({
           markers: result.items, closureAreas: D.queryClosureAreas().items, publicZones: D.queryPublicZones().items,
@@ -426,6 +428,25 @@
       overlayLayerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
 
+      /* 🔒 CELL-LABEL-101（2026-10-24）單子一多，「203 求助」比格子還寬，壓到隔壁格。
+         每次縮放量一次六邊形在畫面上的寬度，算出「帶『求助』兩字還放得下幾位數」，
+         寫到地圖容器的 data-cell-room（0〜3）；site.css 依格子位數（.wg-cell--d1/d2/d3）
+         決定要不要藏「求助」。數字永遠不藏；連數字都放不下（data-cell-tiny）就縮小數字。
+         ❌ 不要用縮放級距寫死 —— 格子大小會跟著 H3 resolution 變，要量實際像素。 */
+      const measureCells = () => {
+        const c = map.getCenter();
+        const flatW = (D.GUEST_GRID_DIAMETER_M / 2) * Math.sqrt(3);   // 六邊形平行邊之間的寬度（公尺）
+        const dLng = flatW / (111320 * Math.cos((c.lat * Math.PI) / 180));
+        const w = map.latLngToContainerPoint([c.lat, c.lng + dLng]).x - map.latLngToContainerPoint(c).x;
+        const DIGIT = 15, UNIT = 34, PAD = 10;   // 24px 粗體數字一位約 15px、「求助」14px 約 34px
+        const room = Math.max(0, Math.min(3, Math.floor((w - PAD - 4 - UNIT) / DIGIT)));
+        const el = map.getContainer();
+        el.dataset.cellRoom = String(room);
+        el.dataset.cellTiny = w < DIGIT * 2 + PAD ? '1' : '0';
+      };
+      measureCells();
+      map.on('zoomend', measureCells);
+
       const publishViewport = () => {
         const c = map.getCenter(); const b = map.getBounds();
         viewportRef.current({
@@ -567,8 +588,13 @@
              ⚠️ 用 prim 層的 token 是因為**語意層沒有「更深的 primary」**：
                 --color-bg-primary-hover 是 orange-500，白字只有 3.54:1，
                 大字過得去、「求助」那行 14px 粗體過不去。 */
-          const stroke = resolveCssToken(cell.variant === 'urgent-ticket'
-            ? 'var(--color-bg-danger)' : 'var(--prim-color-orange-600)');
+          /* 🔄 2026-10-24：改回**淺底**，字改深色（site.css .wg-cell__n）。
+             上面 09-18 的 orange-600 @0.90 是為了撐白字，代價是整片地圖看起來像淪陷。
+             深字在淺底上對比更高（≥ 7.6:1，數字見 site.css）。
+             填色 orange-400、邊線深一階 orange-500，格子邊界在淺填色下仍清楚。 */
+          const urgent = cell.variant === 'urgent-ticket';
+          const fill = resolveCssToken(urgent ? 'var(--color-bg-danger)' : 'var(--prim-color-orange-400)');
+          const stroke = resolveCssToken(urgent ? 'var(--color-bg-danger-hover)' : 'var(--prim-color-orange-500)');
           /* 選取狀態改由**六邊形自己**表達（線變粗、底色變深）。
              原本是那顆圓形徽章放大 ＋ 加外框 —— 徽章拿掉之後，
              如果不把選取搬到六邊形上，點了就會完全沒有回饋。 */
@@ -588,7 +614,9 @@
                所以必須比以前濃。路網看得見的程度確實下降了，
                但訪客格子的用途是「這一區有幾件求助」，不是描街廓 —— 那是登入後
                看實際座標才需要的資訊。 */
-            color: stroke, weight: on ? 4 : 2, fillColor: stroke, fillOpacity: on ? 0.96 : 0.90,
+            /* 🔄 2026-10-24：0.90 → 0.28（選取 0.96 → 0.40）。字改深色後不需要濃底，路網與地名也看得見。
+               ❌ 不要再調回濃色 —— 那是為白字存在的。 */
+            color: stroke, weight: on ? 4 : 2, fillColor: fill, fillOpacity: on ? 0.40 : 0.28,
             interactive: true,
           }).on('click', () => selectRef.current(cell.id)).addTo(hexLayer);
         });

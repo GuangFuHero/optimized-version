@@ -119,11 +119,21 @@ button { font-family: inherit; }
    （DS 的判斷是「在淺橘上黑字比白字好讀」，量起來也是對的：黑字 8.24:1）。
    這裡用白字是 2026-09-18 的指定，代價是填色必須一起變深才及格 ——
    數字與取捨寫在 site-map.jsx 的 stroke 註解裡。 */
-.wg-cell__n { font: 800 var(--fs-24)/1 var(--font-data); color: var(--prim-color-neutral-white); }
-.wg-cell__u { font: 800 var(--fs-14)/1 var(--font-body); color: var(--prim-color-neutral-white); }
+/* 🔄 2026-10-24：**淺底深字**（推翻 09-18 白字）。填色 0.28，字用 --color-fg-neutral-default。
+   對比（深字 vs 六邊形疊在底圖上的實際色）：一般底圖 11.9:1、道路白 13.4:1、公園綠 10.8:1、
+   河流藍 9.0:1；紅格最低 7.6:1 —— 全部過 WCAG AAA。
+   🔒 淺底不可以配白字或橘字。仍然不要加 text-stroke / text-shadow。 */
+.wg-cell__n { font: 800 var(--fs-24)/1 var(--font-data); color: var(--color-fg-neutral-default); }
+.wg-cell__u { font: 800 var(--fs-14)/1 var(--font-body); color: var(--color-fg-neutral-default); }
 /* 選取狀態只加粗六邊形的邊與填色，字色不變 —— 白字在兩種濃度上都讀得到，
    換色只會讓人以為那是另一種狀態。 */
 .wg-cell--active { transform: scale(1.12); }
+/* 🔒 CELL-LABEL-101（2026-10-24）格子太小就藏「求助」兩字，數字永遠留著。
+   data-cell-room＝帶「求助」還放得下幾位數，由 site-map.jsx 每次縮放量實際像素算出。 */
+[data-cell-room="0"] .wg-cell__u,
+[data-cell-room="1"] .wg-cell--d2 .wg-cell__u, [data-cell-room="1"] .wg-cell--d3 .wg-cell__u,
+[data-cell-room="2"] .wg-cell--d3 .wg-cell__u { display: none; }
+[data-cell-tiny="1"] .wg-cell__n { font-size: var(--fs-14); }
 .wg-marker-wrapper:hover .wg-cell { transform: scale(1.06); }
 
 /* ---- 現場分區的建築標記（2026-09-18）---------------------------------------

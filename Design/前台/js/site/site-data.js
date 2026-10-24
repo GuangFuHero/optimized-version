@@ -33,6 +33,9 @@
    *  ⚠️ 這個數字是從聊天紀錄抄的，不是規格值，也還沒跟後端對過實際的 H3 resolution 編號。
    *  正式版不要讀這個常數，要問後端拿。 */
   const GUEST_GRID_DIAMETER_M = 550;
+  /** 網格換算經度用的參考緯度（光復鄉一帶）。見 snapToHexGridCenter 的 2026-10-24 註解。
+   *  ⚠️ 原型近似用；正式版用真 H3，沒有這個常數。 */
+  const HEX_REF_LAT = 23.67;
 
   /** 把座標吸附到六角網格中心。
    *  ⚠️ 這是「近似」不是真 H3 —— 真 H3 用的是球面上的固定索引，這裡是局部平面近似的
@@ -40,7 +43,11 @@
   function snapToHexGridCenter(lat, lng) {
     const size = GUEST_GRID_DIAMETER_M / 2;           // 外接圓半徑
     const mPerDegLat = 111320;
-    const mPerDegLng = 111320 * Math.cos((lat * Math.PI) / 180);
+    /* 🔴 2026-10-24 壓力測試抓到：原本用**每張單自己的緯度**換算經度。
+       x 是從格林威治起算（光復約 1240 萬公尺），緯度差 0.01° 就讓 x 偏掉約 950 公尺 ——
+       同一列的格子左右錯開，單一多就疊成一團、數字互相壓住。單子少的時候看不出來。
+       🔒 換算用**固定的參考緯度**，網格才是一張平整的蜂巢。❌ 不要改回用 `lat`。 */
+    const mPerDegLng = 111320 * Math.cos((HEX_REF_LAT * Math.PI) / 180);
     const x = lng * mPerDegLng;
     const y = lat * mPerDegLat;
 
