@@ -44,7 +44,7 @@ query($uuid: UUID!, $zoom: Float) {
   ticket(uuid: $uuid, zoom: $zoom) {
     uuid geometry description createdBy
     photos { url }
-    secondaryLocation { county city lane no }
+    secondaryLocation { county town road no }
     tasks {
       taskName taskDescription progressNote createdBy
       properties { propertyValue comment }
@@ -148,8 +148,8 @@ async def _full_ticket() -> tuple[str, str]:
                 geometry_uuid=uuid,
                 location_type="address",
                 county="花蓮縣",
-                city="光復鄉",
-                lane="中正路",
+                town="光復鄉",
+                road="中正路",
                 no="12號",
             )
         )

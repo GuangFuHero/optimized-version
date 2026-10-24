@@ -543,7 +543,7 @@
           "認證系統"
         ],
         "summary": "Start Oauth",
-        "description": "Send the browser to the provider's sign-in page, bound to this browser, this sign-in and this server.\n\n`app` (`site` or `admin`) is the app to come back to, at `return_to`, a path on it. The request must\ncome from one of our pages (ADR-327), which for a navigation means its `Referer`. A start that is\nrefused leaves `{p}_oauth` alone: a link from another site must not end a sign-in in another tab.",
+        "description": "Send the browser to the provider's sign-in page, bound to this browser, this sign-in and this server.\n\n`app` (`site` or `admin`) is the app to come back to, at `return_to`, a path on it. The request must\ncome from one of our pages (ADR-327), which for a navigation means its `Referer`. A start that is\nrefused leaves `{p}_oauth` alone: a link from another site must not end a sign-in in another tab.\n\n`purpose=step_up` proves a signed-in account at its provider instead of signing in (ADR-361): the\nprovider is asked to check the person afresh.",
         "operationId": "start_oauth_api_v1_auth_oauth__provider__start_get",
         "parameters": [
           {
@@ -585,6 +585,36 @@
                 }
               ],
               "title": "Return To"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "sign_in",
+                "step_up"
+              ],
+              "type": "string",
+              "default": "sign_in",
+              "title": "Purpose"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
             }
           }
         ],
@@ -1086,7 +1116,7 @@
           "認證系統"
         ],
         "summary": "Add Contact",
-        "description": "Start adding or replacing a contact: send a 6-digit code to the new value.\n\nReplacing an existing contact of the same type additionally requires step-up (ADR-085).\nFor an SSO-only account, the first call without `step_up` is what delivers the code to\nthe OLD channel, and answers 422 asking for it back.",
+        "description": "Start adding or replacing a contact: send a 6-digit code to the new value.\n\nReplacing an existing contact of the same type additionally requires step-up (ADR-085).\nFor an SSO-only account, the first call without `step_up` is what delivers the code to\nthe OLD channel, and answers 422 asking for it back. An account with no password and no\ncontact answers 422 `step_up_reauth_required` until this session has signed in at its\nprovider again (ADR-361).",
         "operationId": "add_contact_api_v1_auth_contacts_post",
         "security": [
           {

@@ -26,9 +26,9 @@ from app.repositories.geo_repository import (
     station_property_repository,
     station_repository,
 )
+from app.services.address import apply_address, point_of, unverify_if_moved
 from app.services.authz import require_gov_team, require_scope
 from app.services.geo_validation import (
-    check_address_lengths,
     normalize_contact_fields,
     normalize_supply_status,
     validate_point,
@@ -128,7 +128,7 @@ async def validate_station(
             "contact_phone": contact_phone,
         }
     )
-    check_address_lengths(secondary_location)
+    secondary_location = apply_address(secondary_location, point=point_of(geometry))
     return StationFields(
         point=geometry,
         values={
@@ -269,6 +269,7 @@ async def update_station(
     obj_in = normalize_contact_fields(changes)
     if geometry is not None:
         validate_point(geometry)
+        await unverify_if_moved(db, str(station.uuid), station.geometry, geometry)
         obj_in["geometry"] = geojson_to_geom(geometry)
     # Only re-stamp on an actual transition. Testing for the key's presence instead
     # meant a client that PUTs the whole form back bumped status_changed_at on every

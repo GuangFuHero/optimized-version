@@ -6,7 +6,6 @@ import strawberry
 
 from app.core.permissions import Perm
 from app.graphql.announcements.types import (
-    AnnouncementMoveDirection,
     AnnouncementType,
     CreateAnnouncementInput,
     UpdateAnnouncementInput,
@@ -17,7 +16,7 @@ from app.repositories.announcements_repository import announcement_repository
 
 @strawberry.type
 class AnnouncementMutation:
-    """Mutations for creating, editing, ordering, and removing announcements."""
+    """Mutations for creating, editing, publishing, and removing announcements."""
 
     @strawberry.mutation
     async def create_announcement(
@@ -44,39 +43,26 @@ class AnnouncementMutation:
         """Edit an announcement's content and, optionally, its placement. Requires announcement.edit.
 
         A live announcement's edits are public as soon as they're saved, so editing one also requires
-        announcement.publish.
+        announcement.publish, and moving one onto a page replaces what is live there.
         """
         await check_permission(info, Perm.ANN_EDIT)
-        db = info.context["db"]
-        a = await announcement_repository.get_by_uuid_active(db, uuid, for_update=True)
+        a = await announcement_repository.edit(
+            info.context["db"],
+            uuid=uuid,
+            content=input.content,
+            placement=input.placement.value if input.placement is not None else None,
+            actor_uuid=str(info.context["user"].uuid),
+            check_live=lambda: check_permission(info, Perm.ANN_PUBLISH),
+        )
         if not a:
             raise ValueError("Announcement not found")
-        if a.active:
-            await check_permission(info, Perm.ANN_PUBLISH)
-        changes = {"content": input.content, "updated_by": str(info.context["user"].uuid)}
-        if input.placement is not None:
-            changes["placement"] = input.placement.value
-        a = await announcement_repository.update(db, db_obj=a, obj_in=changes)
-        return AnnouncementType.from_model(a)
-
-    @strawberry.mutation
-    async def move_announcement(
-        self, info: strawberry.types.Info, uuid: UUID, direction: AnnouncementMoveDirection
-    ) -> AnnouncementType:
-        """Move an active announcement up or down one position. Requires announcement.edit."""
-        await check_permission(info, Perm.ANN_EDIT)
-        a = await announcement_repository.move(
-            info.context["db"], uuid=uuid, up=(direction is AnnouncementMoveDirection.UP)
-        )
-        if a is None:
-            raise ValueError("Announcement not found or not active")
         return AnnouncementType.from_model(a)
 
     @strawberry.mutation
     async def set_announcement_active(
         self, info: strawberry.types.Info, uuid: UUID, active: bool
     ) -> AnnouncementType:
-        """Activate (append at end, which publishes a draft) or deactivate (remove from order).
+        """Activate (publishing it, and replacing what is live on its pages) or deactivate.
 
         Activating requires announcement.publish and deactivating announcement.edit.
         """
@@ -90,7 +76,7 @@ class AnnouncementMutation:
 
     @strawberry.mutation
     async def delete_announcement(self, info: strawberry.types.Info, uuid: UUID) -> bool:
-        """Soft-delete an announcement and close the order gap. Requires announcement.delete."""
+        """Soft-delete an announcement, taking it down if live. Requires announcement.delete."""
         await check_permission(info, Perm.ANN_DELETE)
         ok = await announcement_repository.soft_delete_announcement(info.context["db"], uuid=uuid)
         if not ok:

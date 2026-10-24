@@ -522,7 +522,10 @@ class CreateHelpRequestInput:
     )
     secondary_location: SecondaryLocationInput | None = strawberry.field(
         default=None,
-        description="The address as typed goes in `landmarkNote`, with `floor` and `room`",
+        description=(
+            "The address line goes in `fullAddress` (with its `addressToken` if looked up), "
+            "with `floor` and `room`"
+        ),
     )
     tasks: list[HelpRequestTaskInput] = strawberry.field(description="At least one need, at most 20")
     photo_urls: list[str] | None = strawberry.field(

@@ -23,6 +23,9 @@ from app.core.config import settings
 # provider exactly as built by `redirect_uri`, so it must not change without updating them.
 CALLBACK_PATH = "/api/v1/auth/oauth/{provider}/callback"
 
+# How long ago, in seconds, the person may have signed in at the provider for a step-up to count (ADR-361).
+FRESH_SIGN_IN_MAX_AGE = 300
+
 
 @dataclass(frozen=True)
 class OAuthProvider:
@@ -82,21 +85,28 @@ def code_challenge(code_verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
-def build_authorize_url(provider: OAuthProvider, *, state: str, nonce: str, code_verifier: str) -> str:
-    """The provider's sign-in page, asking for an authorization code bound to this state and nonce."""
-    query = urlencode(
-        {
-            "response_type": "code",
-            "client_id": provider.client_id,
-            "redirect_uri": redirect_uri(provider),
-            "scope": provider.scope,
-            "state": state,
-            "nonce": nonce,
-            "code_challenge": code_challenge(code_verifier),
-            "code_challenge_method": "S256",
-        }
-    )
-    return f"{provider.authorize_url}?{query}"
+def build_authorize_url(
+    provider: OAuthProvider, *, state: str, nonce: str, code_verifier: str, fresh_sign_in: bool = False
+) -> str:
+    """The provider's sign-in page, asking for an authorization code bound to this state and nonce.
+
+    `fresh_sign_in` asks the provider to check the person again even if they are signed in there, and to say
+    when it did (`auth_time`), for a step-up (ADR-361). LINE documents both: `prompt=login` shows its sign-in
+    screen and turns auto login off, and `max_age` puts `auth_time` in the token.
+    """
+    params = {
+        "response_type": "code",
+        "client_id": provider.client_id,
+        "redirect_uri": redirect_uri(provider),
+        "scope": provider.scope,
+        "state": state,
+        "nonce": nonce,
+        "code_challenge": code_challenge(code_verifier),
+        "code_challenge_method": "S256",
+    }
+    if fresh_sign_in:
+        params |= {"prompt": "login", "max_age": str(FRESH_SIGN_IN_MAX_AGE)}
+    return f"{provider.authorize_url}?{urlencode(params)}"
 
 
 class OAuthExchangeError(Exception):

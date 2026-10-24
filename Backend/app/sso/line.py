@@ -15,6 +15,9 @@ class LineIdentity:
     sub: str
     name: str | None
     email: str | None
+    # When the person signed in at LINE, in UNIX seconds. LINE includes it only when the authorization request
+    # carried `max_age`, which a step-up's does (ADR-361).
+    auth_time: int | None = None
 
 
 class LineTokenVerificationError(Exception):
@@ -70,7 +73,14 @@ class LineVerifyApiVerifier:
             isinstance(token_nonce, str) and hmac.compare_digest(token_nonce.encode(), nonce.encode())
         ):
             raise LineTokenVerificationError("LINE token carries another nonce, or none")
-        return LineIdentity(sub=str(sub), name=claims.get("name"), email=claims.get("email"))
+        auth_time = claims.get("auth_time")
+        return LineIdentity(
+            sub=str(sub),
+            name=claims.get("name"),
+            email=claims.get("email"),
+            # Anything but a whole number of seconds reads as absent, which a step-up refuses.
+            auth_time=auth_time if type(auth_time) is int else None,
+        )
 
 
 def get_line_verifier() -> LineTokenVerifier:

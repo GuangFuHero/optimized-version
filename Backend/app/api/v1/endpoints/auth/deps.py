@@ -2,13 +2,14 @@
 
 import os
 
-from fastapi import Request, Response, status
+from fastapi import Depends, Request, Response, status
 
-from app.core import auth_cookies
+from app.core import auth_cookies, security
 from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.normalize import normalize_email, normalize_phone
 from app.core.request_auth import authenticated_by_cookie
+from app.repositories.step_up_proof_repository import ProofHolder
 from app.schemas.auth import TokenPair
 from app.services import auth_session
 
@@ -21,6 +22,31 @@ if hits == 1 then
 end
 return hits
 """
+
+
+def reauth_required(err) -> ApiError:
+    """The 422 that sends the person to their provider to prove the account (ADR-361), naming which ones.
+
+    One builder for every endpoint behind `require_channel_proof`, so the answer cannot differ between them.
+    """
+    return ApiError(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        ErrorCode.STEP_UP_REAUTH_REQUIRED,
+        detail=str(err),
+        extra={"providers": err.providers},
+    )
+
+
+async def get_step_up_holder(
+    request: Request, session: tuple[str, str | None] = Depends(security.get_current_session)
+) -> ProofHolder | None:
+    """What this request can spend a step-up proof with: its session and its browser's secret (ADR-361).
+
+    None when it lacks either, and the third proof then asks for a step-up as if none were on record.
+    """
+    _, sid = session
+    secret = auth_cookies.read_step_up_cookie(request)
+    return ProofHolder(sid, secret) if sid and secret else None
 
 
 def _normalize_identifier(type_: str, value: str) -> str:

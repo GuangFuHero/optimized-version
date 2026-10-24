@@ -24,7 +24,8 @@
 -- UUID 前綴:users=c…、A 站=a…、B 站=b…、tickets=d…、tasks=e…、assignments=f…、teams=1…、
 --   team_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…
 -- 清除段照前綴刪,也照「建立者/承接者是 mock 帳號」刪:測試者在 staging 用 mock 帳號留下的單、站點、
---   地圖區域、照片、申請會一起清掉,所以可以重跑。
+--   地圖區域、建築地圖、照片、申請、邀請連結、站點建議與合併紀錄、去重紀錄會一起清掉,所以可以重跑。
+--   真人留下的資料不刪,只放掉指向 mock 帳號(或要刪的 mock 資料)的欄位。
 --
 -- 登入:全部 37 人,密碼 Mock1234!(salt_frontend=mockdata12345678;
 --   前端送出的 password=PBKDF2-HMAC-SHA256('Mock1234!', salt_frontend, 100000)
@@ -53,6 +54,22 @@ CREATE TEMP TABLE mock_tasks ON COMMIT DROP AS
    WHERE uuid::text LIKE 'e0000000-%'
       OR ticket_uuid IN (SELECT uuid FROM mock_geometries)
       OR created_by IN (SELECT uuid FROM mock_users);
+-- mock 團隊的邀請連結、mock 帳號開的邀請連結。
+CREATE TEMP TABLE mock_invites ON COMMIT DROP AS
+  SELECT uuid FROM team_invites
+   WHERE team_uuid::text LIKE '10000000-%' OR created_by IN (SELECT uuid FROM mock_users);
+-- 站點建議的合併紀錄:mock 站點上的,以及 mock 帳號審核的(reviewed_by 不能空,只能刪)。
+-- 真人審核、mock 帳號撤銷的留著,下面只放掉 revoked_by。
+CREATE TEMP TABLE mock_merges ON COMMIT DROP AS
+  SELECT uuid FROM station_suggestion_merges
+   WHERE station_uuid IN (SELECT uuid FROM mock_geometries)
+      OR reviewed_by IN (SELECT uuid FROM mock_users);
+-- 去重配對:有一邊是 mock 的單、站點或需求就刪(low/high_uuid 沒有外鍵)。
+-- 兩邊都是真人資料的配對留著,判定可能已經改了那些資料,只放掉指向 mock 帳號的審核者。
+CREATE TEMP TABLE mock_pairs ON COMMIT DROP AS
+  SELECT uuid FROM duplicate_pairs
+   WHERE low_uuid IN (SELECT uuid FROM mock_geometries UNION SELECT uuid FROM mock_tasks)
+      OR high_uuid IN (SELECT uuid FROM mock_geometries UNION SELECT uuid FROM mock_tasks);
 
 DELETE FROM team_zone_assign
  WHERE uuid::text LIKE '30000000-%'
@@ -62,12 +79,26 @@ DELETE FROM team_zone_assign
 DELETE FROM role_requests
  WHERE created_by IN (SELECT uuid FROM mock_users)
     OR reviewed_by IN (SELECT uuid FROM mock_users)
-    OR granted_team_uuid::text LIKE '10000000-%';
+    OR granted_team_uuid::text LIKE '10000000-%'
+    OR team_uuid::text LIKE '10000000-%';
+-- 真人用 mock 邀請連結送的申請留著,只放掉連結。
+UPDATE role_requests SET invite_uuid = NULL WHERE invite_uuid IN (SELECT uuid FROM mock_invites);
+DELETE FROM team_invites WHERE uuid IN (SELECT uuid FROM mock_invites);
+DELETE FROM dedup_audit_events
+ WHERE pair_uuid IN (SELECT uuid FROM mock_pairs)
+    OR primary_uuid IN (SELECT uuid FROM mock_geometries UNION SELECT uuid FROM mock_tasks)
+    OR duplicate_uuid IN (SELECT uuid FROM mock_geometries UNION SELECT uuid FROM mock_tasks);
+UPDATE dedup_audit_events SET actor_uuid = NULL WHERE actor_uuid IN (SELECT uuid FROM mock_users);
+DELETE FROM duplicate_pairs WHERE uuid IN (SELECT uuid FROM mock_pairs);
+UPDATE duplicate_pairs SET reviewed_by = NULL WHERE reviewed_by IN (SELECT uuid FROM mock_users);
 -- target_uuid 是字串,沒有外鍵。
 DELETE FROM station_update_suggestions
  WHERE created_by IN (SELECT uuid FROM mock_users)
     OR reviewed_by IN (SELECT uuid FROM mock_users)
-    OR target_uuid IN (SELECT uuid::text FROM mock_geometries);
+    OR target_uuid IN (SELECT uuid::text FROM mock_geometries)
+    OR merge_uuid IN (SELECT uuid FROM mock_merges);
+DELETE FROM station_suggestion_merges WHERE uuid IN (SELECT uuid FROM mock_merges);
+UPDATE station_suggestion_merges SET revoked_by = NULL WHERE revoked_by IN (SELECT uuid FROM mock_users);
 -- 承接紀錄:mock 的需求上的(含真人接的),以及 mock 帳號接別人的。
 DELETE FROM task_assignments
  WHERE uuid::text LIKE 'f0000000-%'
@@ -76,6 +107,13 @@ DELETE FROM task_assignments
 DELETE FROM task_properties WHERE task_uuid IN (SELECT uuid FROM mock_tasks);
 DELETE FROM ticket_tasks WHERE uuid IN (SELECT uuid FROM mock_tasks);
 DELETE FROM ticket_disaster_details WHERE ticket_uuid IN (SELECT uuid FROM mock_geometries);
+-- 建築地圖本身也是 geometry:mock 的地圖、mock 的單,對應都刪。
+DELETE FROM building_map_ticket_map
+ WHERE building_map_uuid IN (SELECT uuid FROM mock_geometries)
+    OR ticket_uuid IN (SELECT uuid FROM mock_geometries);
+-- 別人的單留著,只放掉 mock 帳號留下的檢核者。
+UPDATE tickets SET audited_by = NULL
+ WHERE audited_by IN (SELECT uuid FROM mock_users) AND uuid NOT IN (SELECT uuid FROM mock_geometries);
 DELETE FROM tickets WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM secondary_locations WHERE geometry_uuid IN (SELECT uuid FROM mock_geometries);
 -- photos.ref_uuid 沒有外鍵:照它屬於哪張單/哪個站點刪,也照上傳者刪
@@ -104,6 +142,12 @@ DELETE FROM stations WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM hazardous_zones WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM team_zones WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM area_polygons WHERE uuid IN (SELECT uuid FROM mock_geometries);
+DELETE FROM building_maps WHERE uuid IN (SELECT uuid FROM mock_geometries);
+-- 別人的需求留著,只放掉指向要刪的路線的欄位。
+UPDATE ticket_tasks SET route_uuid = NULL
+ WHERE route_uuid IN (SELECT uuid FROM routes
+                       WHERE origin_uuid IN (SELECT uuid FROM mock_geometries)
+                          OR destination_uuid IN (SELECT uuid FROM mock_geometries));
 DELETE FROM routes
  WHERE origin_uuid IN (SELECT uuid FROM mock_geometries)
     OR destination_uuid IN (SELECT uuid FROM mock_geometries);
@@ -529,15 +573,15 @@ INSERT INTO tickets (uuid, title, description, contact_name, contact_email, cont
 UPDATE base_geometries SET delete_at = '2024-07-25 12:00+08', updated_at = '2024-07-25 12:00+08'
  WHERE uuid = 'd0000000-0000-4000-8000-000000000045';
 
--- 3b. 地址 — avol01 的單照網站「請求協助」的寫法:地址整行放 landmark_note,樓層、戶另外放。
-INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, landmark_note, floor, room) VALUES
- ('40000000-0000-4000-8000-000000000039','d0000000-0000-4000-8000-000000000039','address','花蓮縣光復鄉中山路二段45號','1樓',NULL),
- ('40000000-0000-4000-8000-000000000040','d0000000-0000-4000-8000-000000000040','address','花蓮縣光復鄉大安村大安路6號',NULL,NULL),
- ('40000000-0000-4000-8000-000000000041','d0000000-0000-4000-8000-000000000041','address','花蓮縣光復鄉大全街88號',NULL,NULL),
- ('40000000-0000-4000-8000-000000000042','d0000000-0000-4000-8000-000000000042','address','花蓮縣光復鄉建國路一段20號',NULL,NULL),
- ('40000000-0000-4000-8000-000000000043','d0000000-0000-4000-8000-000000000043','address','花蓮縣光復鄉中正路二段77號','3樓','302室'),
- ('40000000-0000-4000-8000-000000000044','d0000000-0000-4000-8000-000000000044','address','花蓮縣光復鄉林森路200號',NULL,NULL),
- ('40000000-0000-4000-8000-000000000045','d0000000-0000-4000-8000-000000000045','address','花蓮縣光復鄉中華路3號',NULL,NULL);
+-- 3b. 地址 — avol01 的單:整行在 full_address,也拆好各欄;沒經 TGOS 確認,所以是 unverified。
+INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, full_address, county, town, village, road, section, no, normalization_status, floor, room) VALUES
+ ('40000000-0000-4000-8000-000000000039','d0000000-0000-4000-8000-000000000039','address','花蓮縣光復鄉中山路二段45號','花蓮縣','光復鄉',NULL,'中山路','二段','45號','unverified','1樓',NULL),
+ ('40000000-0000-4000-8000-000000000040','d0000000-0000-4000-8000-000000000040','address','花蓮縣光復鄉大安村大安路6號','花蓮縣','光復鄉','大安村','大安路',NULL,'6號','unverified',NULL,NULL),
+ ('40000000-0000-4000-8000-000000000041','d0000000-0000-4000-8000-000000000041','address','花蓮縣光復鄉大全街88號','花蓮縣','光復鄉',NULL,'大全街',NULL,'88號','unverified',NULL,NULL),
+ ('40000000-0000-4000-8000-000000000042','d0000000-0000-4000-8000-000000000042','address','花蓮縣光復鄉建國路一段20號','花蓮縣','光復鄉',NULL,'建國路','一段','20號','unverified',NULL,NULL),
+ ('40000000-0000-4000-8000-000000000043','d0000000-0000-4000-8000-000000000043','address','花蓮縣光復鄉中正路二段77號','花蓮縣','光復鄉',NULL,'中正路','二段','77號','unverified','3樓','302室'),
+ ('40000000-0000-4000-8000-000000000044','d0000000-0000-4000-8000-000000000044','address','花蓮縣光復鄉林森路200號','花蓮縣','光復鄉',NULL,'林森路',NULL,'200號','unverified',NULL,NULL),
+ ('40000000-0000-4000-8000-000000000045','d0000000-0000-4000-8000-000000000045','address','花蓮縣光復鄉中華路3號','花蓮縣','光復鄉',NULL,'中華路',NULL,'3號','unverified',NULL,NULL);
 
 -- 3c. 照片 — 網站只存網址:ref_type 'geometry'、ref_uuid=單、created_by=建單者,created_at 錯開保持順序。
 --     avol01 的 (d) 兩張載得出來(picsum.photos/seed/… 每次回同一張圖)、一張載不出來(主機在,圖不在);

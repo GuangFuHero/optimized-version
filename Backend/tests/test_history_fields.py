@@ -89,7 +89,17 @@ def test_a_tickets_address_and_coordinate_are_detail_without_a_masker():
     ADR-141/142: they are withheld rather than masked, since inventing a partial address or
     a partial coordinate would fabricate plausible-looking location data.
     """
-    for column in ("county", "city", "lane", "no", "floor", "room"):
+    for column in (
+        "full_address",
+        "county",
+        "town",
+        "road",
+        "lane",
+        "no",
+        "normalization_status",
+        "floor",
+        "room",
+    ):
         spec = FIELD_TIERS[("ticket", "secondary_locations")][column]
         assert spec.tier is Tier.DETAIL and spec.mask is None, column
     geometry = FIELD_TIERS[("ticket", "base_geometries")]["geometry"]
@@ -103,7 +113,17 @@ def test_a_stations_address_and_coordinate_are_public():
     had never been corrected. The same two tables under a ticket are detail (ADR-284) —
     which is the whole reason the classification is keyed by (entity, table).
     """
-    for column in ("county", "city", "lane", "no", "floor", "room"):
+    for column in (
+        "full_address",
+        "county",
+        "town",
+        "road",
+        "lane",
+        "no",
+        "normalization_status",
+        "floor",
+        "room",
+    ):
         assert FIELD_TIERS[("station", "secondary_locations")][column].tier is Tier.PUBLIC
     assert FIELD_TIERS[("station", "base_geometries")]["geometry"].tier is Tier.PUBLIC
 

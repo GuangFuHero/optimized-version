@@ -113,7 +113,7 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     """
     response = JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.detail, "code": exc.code},
+        content={**exc.extra, "detail": exc.detail, "code": exc.code},
         headers=exc.headers,
     )
     if exc.code in _SIGNED_OUT and authenticated_by_cookie(request):

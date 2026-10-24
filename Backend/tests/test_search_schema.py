@@ -47,9 +47,7 @@ async def test_station_search_text_is_generated_from_name_and_description(db):
     """search_text is maintained by PostgreSQL, not the application."""
     await _insert_station(db, _STATION_UUID, "光復國小", "收容所兼物資集散")
 
-    value = await db.scalar(
-        text("SELECT search_text FROM stations WHERE uuid = :u"), {"u": _STATION_UUID}
-    )
+    value = await db.scalar(text("SELECT search_text FROM stations WHERE uuid = :u"), {"u": _STATION_UUID})
     assert "光復國小" in value
     assert "收容所兼物資集散" in value
 
@@ -58,9 +56,7 @@ async def test_station_search_text_truncates_long_description(db):
     """Description beyond 500 chars must not enter the index (ADR-081 cost ceiling)."""
     await _insert_station(db, _LONG_UUID, "A", "水" * 600)
 
-    value = await db.scalar(
-        text("SELECT search_text FROM stations WHERE uuid = :u"), {"u": _LONG_UUID}
-    )
+    value = await db.scalar(text("SELECT search_text FROM stations WHERE uuid = :u"), {"u": _LONG_UUID})
     assert value.count("水") == 500
 
 
@@ -84,9 +80,7 @@ async def test_ticket_search_text_excludes_pii(db):
     )
     await db.commit()
 
-    value = await db.scalar(
-        text("SELECT search_text FROM tickets WHERE uuid = :u"), {"u": _TICKET_UUID}
-    )
+    value = await db.scalar(text("SELECT search_text FROM tickets WHERE uuid = :u"), {"u": _TICKET_UUID})
     assert "需要飲用水" in value
     assert "王小姐" not in value
     assert "wang@example.com" not in value
@@ -113,8 +107,8 @@ async def test_address_search_text_concatenates_without_a_separator(db):
     await db.execute(
         text(
             "INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, county, "
-            "city, lane, alley, no) VALUES (gen_random_uuid(), :u, 'address', '花蓮縣', "
-            "'光復鄉', '中正路', '12巷', '3號')"
+            "town, road, lane, alley, no) VALUES (gen_random_uuid(), :u, 'address', '花蓮縣', "
+            "'光復鄉', '中正路', '12巷', '1弄', '3號')"
         ),
         {"u": _ADDRESS_UUID},
     )
@@ -161,7 +155,9 @@ EXPECTED_SOURCE_COLUMNS = {
     "task_properties": {"property_name", "property_value"},
     "secondary_locations": {
         "county",
-        "city",
+        "town",
+        "road",
+        "section",
         "lane",
         "alley",
         "no",
@@ -212,9 +208,7 @@ async def test_station_search_index_is_usable_by_the_planner(db):
     """
     await db.execute(text("SET LOCAL enable_seqscan = off"))
     rows = (
-        await db.execute(
-            text("EXPLAIN SELECT uuid FROM stations WHERE search_text ILIKE '%光復%'")
-        )
+        await db.execute(text("EXPLAIN SELECT uuid FROM stations WHERE search_text ILIKE '%光復%'"))
     ).all()
     plan = "\n".join(row[0] for row in rows)
     assert "ix_stations_search_text_trgm" in plan, plan
@@ -261,10 +255,7 @@ async def _index_rows_for(db, term: str) -> int:
     await db.execute(text("SET LOCAL enable_seqscan = off"))
     rows = (
         await db.execute(
-            text(
-                "EXPLAIN (ANALYZE) SELECT uuid FROM stations "
-                f"WHERE search_text ILIKE '%{term}%'"
-            )
+            text(f"EXPLAIN (ANALYZE) SELECT uuid FROM stations WHERE search_text ILIKE '%{term}%'")
         )
     ).all()
     return _bitmap_index_scan_rows("\n".join(row[0] for row in rows))
@@ -305,9 +296,7 @@ async def test_two_character_query_gets_no_selectivity_from_the_trigram_index(db
     two_char = await _index_rows_for(db, "信義")
     three_char = await _index_rows_for(db, "信義路")
 
-    assert three_char == 1, (
-        f"a 3-character term must be selective, index returned {three_char} rows"
-    )
+    assert three_char == 1, f"a 3-character term must be selective, index returned {three_char} rows"
     assert two_char > total, (
         "if this fails, a 2-character term became selective — pg_trgm or the planner "
         f"changed and ADR-150 should be revisited (index returned {two_char} rows)"
@@ -350,9 +339,7 @@ async def test_unbounded_columns_are_truncated(db, table):
         if max_length is not None:
             continue
         # PostgreSQL renders the fragment as: "left"((COALESCE(col, ''...))::text, 500)
-        assert re.search(
-            rf'"?left"?\s*\(\s*\(*\s*COALESCE\(\s*{re.escape(col)}\b', expr, re.I
-        ), (
+        assert re.search(rf'"?left"?\s*\(\s*\(*\s*COALESCE\(\s*{re.escape(col)}\b', expr, re.I), (
             f"{table}.{col} has no length limit and is not truncated in search_text — "
             f"use truncated() rather than plain() in the model AND in the migration "
             f"(ADR-081/151). Expression was:\n{expr}"

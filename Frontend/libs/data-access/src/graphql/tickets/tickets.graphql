@@ -114,11 +114,17 @@ query GetTicket($uuid: UUID!) {
     # Where a volunteer is going, for the claim confirmation. Null without an address, and to a
     # caller without ticket.view_detail.
     secondaryLocation {
+      fullAddress
       county
-      city
+      town
+      village
+      neighborhood
+      road
+      section
       lane
       alley
       no
+      normalizationStatus
       buildingSection
       floor
       room
@@ -273,11 +279,17 @@ query MyTaskAssignments {
       contactName
       contactPhone
       secondaryLocation {
+        fullAddress
         county
-        city
+        town
+        village
+        neighborhood
+        road
+        section
         lane
         alley
         no
+        normalizationStatus
         buildingSection
         floor
         room

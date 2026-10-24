@@ -53,33 +53,54 @@ async def _ticket_with_two_tasks(db):
     """A ticket carrying everything the two-hop expansion is supposed to reach."""
     actor = await _user(db)
     ticket = Tickets(
-        uuid=uuidlib.uuid4(), property_name="request", created_by=str(actor.uuid),
-        title="需要飲用水", contact_name="王小姐", status="pending", priority="high",
+        uuid=uuidlib.uuid4(),
+        property_name="request",
+        created_by=str(actor.uuid),
+        title="需要飲用水",
+        contact_name="王小姐",
+        status="pending",
+        priority="high",
     )
     db.add(ticket)
     await db.flush()
 
-    db.add(SecondaryLocation(
-        uuid=uuidlib.uuid4(), geometry_uuid=str(ticket.uuid),
-        location_type="address", county="花蓮縣", city="光復鄉",
-    ))
+    db.add(
+        SecondaryLocation(
+            uuid=uuidlib.uuid4(),
+            geometry_uuid=str(ticket.uuid),
+            location_type="address",
+            county="花蓮縣",
+            town="光復鄉",
+        )
+    )
 
     tasks = []
     for n in range(2):
         task = TicketTask(
-            uuid=uuidlib.uuid4(), ticket_uuid=str(ticket.uuid), task_type="cleanup",
-            task_name=f"清淤 {n}", created_by=str(actor.uuid),
+            uuid=uuidlib.uuid4(),
+            ticket_uuid=str(ticket.uuid),
+            task_type="cleanup",
+            task_name=f"清淤 {n}",
+            created_by=str(actor.uuid),
         )
         db.add(task)
         await db.flush()
         tasks.append(task)
-        db.add(TaskProperty(
-            uuid=uuidlib.uuid4(), task_uuid=str(task.uuid),
-            property_name="人力", property_value="5",
-        ))
-        db.add(TaskAssignment(
-            uuid=uuidlib.uuid4(), task_uuid=str(task.uuid), actor_uuid=str(actor.uuid),
-        ))
+        db.add(
+            TaskProperty(
+                uuid=uuidlib.uuid4(),
+                task_uuid=str(task.uuid),
+                property_name="人力",
+                property_value="5",
+            )
+        )
+        db.add(
+            TaskAssignment(
+                uuid=uuidlib.uuid4(),
+                task_uuid=str(task.uuid),
+                actor_uuid=str(actor.uuid),
+            )
+        )
     await db.flush()
     return ticket, tasks, actor
 
@@ -124,8 +145,13 @@ async def test_a_ticket_with_no_children_still_resolves(db):
     """A brand-new ticket has no tasks yet; expansion must not depend on finding any."""
     actor = await _user(db)
     ticket = Tickets(
-        uuid=uuidlib.uuid4(), property_name="request", created_by=str(actor.uuid),
-        title="孤兒單", contact_name="李先生", status="pending", priority="low",
+        uuid=uuidlib.uuid4(),
+        property_name="request",
+        created_by=str(actor.uuid),
+        title="孤兒單",
+        contact_name="李先生",
+        status="pending",
+        priority="low",
     )
     db.add(ticket)
     await db.flush()
@@ -141,19 +167,31 @@ async def test_station_expansion_stops_at_one_hop(db):
     """A station's children reference it directly — there is no second hop to make."""
     actor = await _user(db)
     station = Station(
-        uuid=uuidlib.uuid4(), property_name="station", created_by=str(actor.uuid),
-        name="光復國小避難所", type="shelter",
+        uuid=uuidlib.uuid4(),
+        property_name="station",
+        created_by=str(actor.uuid),
+        name="光復國小避難所",
+        type="shelter",
     )
     db.add(station)
     await db.flush()
-    db.add(SecondaryLocation(
-        uuid=uuidlib.uuid4(), geometry_uuid=str(station.uuid), location_type="address",
-    ))
-    db.add(StationProperty(
-        uuid=uuidlib.uuid4(), station_uuid=str(station.uuid),
-        property_type="supply", property_name="飲用水", quantity=100,
-        created_by=str(actor.uuid),
-    ))
+    db.add(
+        SecondaryLocation(
+            uuid=uuidlib.uuid4(),
+            geometry_uuid=str(station.uuid),
+            location_type="address",
+        )
+    )
+    db.add(
+        StationProperty(
+            uuid=uuidlib.uuid4(),
+            station_uuid=str(station.uuid),
+            property_type="supply",
+            property_name="飲用水",
+            quantity=100,
+            created_by=str(actor.uuid),
+        )
+    )
     await db.flush()
 
     ids = await resolve_scope_ids(db, entity=STATION, uuid=station.uuid)
@@ -219,8 +257,14 @@ async def test_entity_exists_returns_none_for_an_unknown_uuid(db):
 def _audit(table, action, row_id, *, old=None, new=None, at=None, user=None):
     """An audit row shaped exactly the way `audit_trigger_func()` writes one."""
     return AuditLog(
-        uuid=uuidlib.uuid4(), table_name=table, action=action, row_id=row_id,
-        old_values=old, new_values=new, user_uuid=user, client_ip="10.0.0.1",
+        uuid=uuidlib.uuid4(),
+        table_name=table,
+        action=action,
+        row_id=row_id,
+        old_values=old,
+        new_values=new,
+        user_uuid=user,
+        client_ip="10.0.0.1",
         created_at=at or datetime.now(UTC),
     )
 
@@ -254,13 +298,19 @@ async def test_a_cancelled_assignment_is_still_in_the_timeline(db):
 async def test_a_live_assignment_is_not_returned_twice(db):
     """It matches both access paths, so the union has to de-duplicate."""
     ticket, tasks, actor = await _ticket_with_two_tasks(db)
-    live = (await db.execute(
-        select(TaskAssignment).where(TaskAssignment.task_uuid == str(tasks[0].uuid))
-    )).scalars().first()
-    db.add(_audit(
-        "task_assignments", "INSERT", live.uuid,
-        new={"task_uuid": str(tasks[0].uuid), "actor_uuid": str(actor.uuid)},
-    ))
+    live = (
+        (await db.execute(select(TaskAssignment).where(TaskAssignment.task_uuid == str(tasks[0].uuid))))
+        .scalars()
+        .first()
+    )
+    db.add(
+        _audit(
+            "task_assignments",
+            "INSERT",
+            live.uuid,
+            new={"task_uuid": str(tasks[0].uuid), "actor_uuid": str(actor.uuid)},
+        )
+    )
     await db.flush()
 
     ids = await resolve_scope_ids(db, entity=TICKET, uuid=ticket.uuid)
@@ -274,8 +324,7 @@ async def test_truncation_is_reported_rather_than_silent(db):
     """Past the cap the caller is told, instead of quietly receiving a partial history."""
     ticket, _, _ = await _ticket_with_two_tasks(db)
     for _ in range(6):
-        db.add(_audit("tickets", "UPDATE", ticket.uuid, old={"status": "a"},
-                      new={"status": "b"}))
+        db.add(_audit("tickets", "UPDATE", ticket.uuid, old={"status": "a"}, new={"status": "b"}))
     await db.flush()
 
     ids = await resolve_scope_ids(db, entity=TICKET, uuid=ticket.uuid)
@@ -298,10 +347,12 @@ def test_creating_a_resource_is_one_event_not_two():
     """ADR-134: base_geometries + tickets share a row_id and a transaction timestamp."""
     row_id = uuidlib.uuid4()
     at = _at()
-    events = build_events([
-        _audit("base_geometries", "INSERT", row_id, new={"property_name": "request"}, at=at),
-        _audit("tickets", "INSERT", row_id, new={"title": "需要飲用水"}, at=at),
-    ])
+    events = build_events(
+        [
+            _audit("base_geometries", "INSERT", row_id, new={"property_name": "request"}, at=at),
+            _audit("tickets", "INSERT", row_id, new={"title": "需要飲用水"}, at=at),
+        ]
+    )
 
     assert len(events) == 1
     assert events[0].event_type == CREATED
@@ -313,20 +364,34 @@ def test_a_soft_delete_reads_as_deleted_not_updated():
 
     Reported literally, "who deleted this ticket" would have no answer at all.
     """
-    events = build_events([
-        _audit("base_geometries", "UPDATE", uuidlib.uuid4(),
-               old={"delete_at": None}, new={"delete_at": "2026-08-22T14:00:00Z"}),
-    ])
+    events = build_events(
+        [
+            _audit(
+                "base_geometries",
+                "UPDATE",
+                uuidlib.uuid4(),
+                old={"delete_at": None},
+                new={"delete_at": "2026-08-22T14:00:00Z"},
+            ),
+        ]
+    )
 
     assert events[0].event_type == DELETED
 
 
 def test_undeleting_reads_as_restored():
     """The reverse transition on delete_at is a restore, not a plain edit (ADR-135)."""
-    events = build_events([
-        _audit("base_geometries", "UPDATE", uuidlib.uuid4(),
-               old={"delete_at": "2026-08-22T14:00:00Z"}, new={"delete_at": None}),
-    ])
+    events = build_events(
+        [
+            _audit(
+                "base_geometries",
+                "UPDATE",
+                uuidlib.uuid4(),
+                old={"delete_at": "2026-08-22T14:00:00Z"},
+                new={"delete_at": None},
+            ),
+        ]
+    )
 
     assert events[0].event_type == RESTORED
 
@@ -334,21 +399,29 @@ def test_undeleting_reads_as_restored():
 def test_assignment_rows_get_their_own_event_types():
     """Taking and dropping a task are distinct events, not two "updates"."""
     payload = {"task_uuid": str(uuidlib.uuid4())}
-    events = build_events([
-        _audit("task_assignments", "INSERT", uuidlib.uuid4(), new=payload, at=_at(0)),
-        _audit("task_assignments", "DELETE", uuidlib.uuid4(), old=payload, at=_at(1)),
-    ])
+    events = build_events(
+        [
+            _audit("task_assignments", "INSERT", uuidlib.uuid4(), new=payload, at=_at(0)),
+            _audit("task_assignments", "DELETE", uuidlib.uuid4(), old=payload, at=_at(1)),
+        ]
+    )
 
     assert [e.event_type for e in events] == [UNASSIGNED, ASSIGNED]  # newest first
 
 
 def test_only_columns_that_moved_become_changes():
     """An edit that rewrites a row must not report every column as changed."""
-    events = build_events([
-        _audit("tickets", "UPDATE", uuidlib.uuid4(),
-               old={"title": "同", "status": "pending", "priority": "medium"},
-               new={"title": "同", "status": "in_progress", "priority": "high"}),
-    ])
+    events = build_events(
+        [
+            _audit(
+                "tickets",
+                "UPDATE",
+                uuidlib.uuid4(),
+                old={"title": "同", "status": "pending", "priority": "medium"},
+                new={"title": "同", "status": "in_progress", "priority": "high"},
+            ),
+        ]
+    )
 
     assert {c.field for c in events[0].changes} == {"status", "priority"}
 
@@ -383,10 +456,11 @@ def test_a_null_actor_is_the_system_not_a_missing_person():
 
 def test_a_crawler_insert_is_attributed_to_the_crawler():
     """ADR-137: source refines a system write, but only on INSERT."""
-    events = build_events([
-        _audit("stations", "INSERT", uuidlib.uuid4(),
-               new={"name": "光復國小", "source": "crawler"}),
-    ])
+    events = build_events(
+        [
+            _audit("stations", "INSERT", uuidlib.uuid4(), new={"name": "光復國小", "source": "crawler"}),
+        ]
+    )
 
     assert events[0].actor_kind == "crawler"
 
@@ -398,11 +472,18 @@ def test_a_person_editing_a_crawler_row_is_not_the_crawler():
     in the payload of every later edit — including edits made by a human being.
     """
     someone = uuidlib.uuid4()
-    events = build_events([
-        _audit("stations", "UPDATE", uuidlib.uuid4(),
-               old={"op_hour": "0800-1700", "source": "crawler"},
-               new={"op_hour": "24h", "source": "crawler"}, user=someone),
-    ])
+    events = build_events(
+        [
+            _audit(
+                "stations",
+                "UPDATE",
+                uuidlib.uuid4(),
+                old={"op_hour": "0800-1700", "source": "crawler"},
+                new={"op_hour": "24h", "source": "crawler"},
+                user=someone,
+            ),
+        ]
+    )
 
     assert events[0].actor_kind == "user"
     assert events[0].actor_uuid == someone
@@ -410,20 +491,28 @@ def test_a_person_editing_a_crawler_row_is_not_the_crawler():
 
 def test_a_system_update_stays_system_and_is_never_guessed():
     """No user and not an INSERT: there is nothing to attribute it to, so it is not guessed."""
-    events = build_events([
-        _audit("stations", "UPDATE", uuidlib.uuid4(),
-               old={"op_hour": "0800-1700", "source": "crawler"},
-               new={"op_hour": "24h", "source": "crawler"}),
-    ])
+    events = build_events(
+        [
+            _audit(
+                "stations",
+                "UPDATE",
+                uuidlib.uuid4(),
+                old={"op_hour": "0800-1700", "source": "crawler"},
+                new={"op_hour": "24h", "source": "crawler"},
+            ),
+        ]
+    )
 
     assert events[0].actor_kind == "system"
 
 
 def test_an_unrecognised_source_does_not_invent_a_kind():
     """`source` has no enum or constraint anywhere (ADR-137), so it holds arbitrary text."""
-    events = build_events([
-        _audit("stations", "INSERT", uuidlib.uuid4(), new={"source": "whatever"}),
-    ])
+    events = build_events(
+        [
+            _audit("stations", "INSERT", uuidlib.uuid4(), new={"source": "whatever"}),
+        ]
+    )
 
     assert events[0].actor_kind == "system"
 
@@ -439,11 +528,17 @@ def test_editing_an_assignment_is_an_update_not_a_removal():
     """
     payload = {"task_uuid": str(uuidlib.uuid4())}
 
-    events = build_events([
-        _audit("task_assignments", "UPDATE", uuidlib.uuid4(),
-               old={**payload, "status": "accepted"},
-               new={**payload, "status": "completed"}),
-    ])
+    events = build_events(
+        [
+            _audit(
+                "task_assignments",
+                "UPDATE",
+                uuidlib.uuid4(),
+                old={**payload, "status": "accepted"},
+                new={**payload, "status": "completed"},
+            ),
+        ]
+    )
 
     assert events[0].event_type == UPDATED
 
@@ -452,9 +547,11 @@ def test_only_a_hard_delete_reads_as_unassigned():
     """The case ADR-132 and the second access path exist to preserve."""
     payload = {"task_uuid": str(uuidlib.uuid4())}
 
-    events = build_events([
-        _audit("task_assignments", "DELETE", uuidlib.uuid4(), old=payload),
-    ])
+    events = build_events(
+        [
+            _audit("task_assignments", "DELETE", uuidlib.uuid4(), old=payload),
+        ]
+    )
 
     assert events[0].event_type == UNASSIGNED
 
@@ -469,8 +566,15 @@ def _rendered(rows, *, entity=TICKET):
 
 def test_a_child_events_entity_names_the_child_not_the_resource():
     """Otherwise a task edit and a ticket edit are byte-identical on the wire."""
-    rows = [_audit("ticket_tasks", "UPDATE", uuidlib.uuid4(),
-                   old={"status": "pending"}, new={"status": "in_progress"})]
+    rows = [
+        _audit(
+            "ticket_tasks",
+            "UPDATE",
+            uuidlib.uuid4(),
+            old={"status": "pending"},
+            new={"status": "in_progress"},
+        )
+    ]
 
     assert _rendered(rows)[0]["entity"] == "task"
 
@@ -496,7 +600,6 @@ def test_the_resources_own_tables_still_report_the_resource():
 
 def test_a_station_child_names_itself_too():
     """The station side of the same rule."""
-    rows = [_audit("station_properties", "UPDATE", uuidlib.uuid4(),
-                   old={"quantity": 1}, new={"quantity": 2})]
+    rows = [_audit("station_properties", "UPDATE", uuidlib.uuid4(), old={"quantity": 1}, new={"quantity": 2})]
 
     assert _rendered(rows, entity=STATION)[0]["entity"] == "station_property"
