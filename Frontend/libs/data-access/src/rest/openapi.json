@@ -9770,6 +9770,39 @@
         "title": "Perm",
         "description": "A capability key. Every RBAC check (checkpoint 1) is keyed on one of these."
       },
+      "PhotoForReviewResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "url",
+          "created_at"
+        ],
+        "title": "PhotoForReviewResponse",
+        "description": "One live photo on a ticket (Spec 028, ADR-383)."
+      },
       "ProjectSettingsResponse": {
         "properties": {
           "uuid": {
@@ -10089,6 +10122,31 @@
         "title": "ResetPasswordRequest",
         "description": "Body to complete a logged-out password reset (new_password already frontend-hashed)."
       },
+      "ResolvePhoto": {
+        "properties": {
+          "photo": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Photo"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "cancel"
+            ],
+            "title": "Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "photo",
+          "action"
+        ],
+        "title": "ResolvePhoto",
+        "description": "One photo of either ticket: kept on the primary, or cancelled (ADR-383).\n\nA kept photo of the other ticket moves over to the primary."
+      },
       "ResolvePrimaryTask": {
         "properties": {
           "task": {
@@ -10258,6 +10316,37 @@
             },
             "type": "array",
             "title": "Secondary Tasks"
+          },
+          "photos": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ResolvePhoto"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photos"
+          },
+          "disaster_details": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disaster Details"
           },
           "note": {
             "anyOf": [
@@ -11513,6 +11602,23 @@
             },
             "type": "array",
             "title": "Tasks"
+          },
+          "photos": {
+            "items": {
+              "$ref": "#/components/schemas/PhotoForReviewResponse"
+            },
+            "type": "array",
+            "title": "Photos"
+          },
+          "disaster_details": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Disaster Details"
           }
         },
         "type": "object",
@@ -11535,7 +11641,9 @@
           "audit_status",
           "created_by",
           "created_at",
-          "tasks"
+          "tasks",
+          "photos",
+          "disaster_details"
         ],
         "title": "TicketForReviewResponse",
         "description": "A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-372).\n\nSend `version` back unchanged when resolving: it says what the reviewer saw (ADR-373)."
