@@ -69,6 +69,11 @@ class Tickets(BaseGeometry):
     immediate_danger_reported: Mapped[str | None] = mapped_column(
         String(20), nullable=True, comment="立即生命危險：yes/no/unknown"
     )
+    # Set when a dedup resolve cancels this ticket into another (Spec 028, ADR-371). A record
+    # only: nobody is redirected through it, the notices point at the kept ticket.
+    replaced_by_uuid: Mapped[str | None] = mapped_column(
+        ForeignKey("tickets.uuid"), nullable=True, comment="重複審核合併後取代此單的單"
+    )
 
     # Keyword-search column (ADR-079/081). contact_name / contact_email / contact_phone are
     # deliberately absent: they are masked per-field in the API, and letting them feed the

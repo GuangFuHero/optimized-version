@@ -38,6 +38,10 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 1：兩個新欄位（ADR-371）
 
+- ✅ 2026-10-24：migration `c3f1a9d27b54`（接 `79a19cabc98a`）；全套件 **2687 passed**（基準 +4），覆蓋率 96%。
+  第一次全套件抓到 plan 漏掉的兩處（3 failed）：`history_fields.py` 要把兩個欄位分類（列為 `_FK` 排除，時間軸顯示的是刪除事件）；
+  `seed_mock_scenarios.sql` 的清除段要先放掉別人的單／需求指向 mock 資料的這兩個參照。
+
 - [ ] migration：`tickets.replaced_by_uuid`（FK `tickets.uuid`，nullable）、`ticket_tasks.merged_into_uuid`（FK `ticket_tasks.uuid`，nullable）。
   downgrade 在有值時失敗，不默默丟掉紀錄（同 025 `a5e641c99923` 的作法）。
 - [ ] model 加欄位。GraphQL 不加（ADR-371）。

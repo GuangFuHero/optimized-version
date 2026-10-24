@@ -105,6 +105,9 @@ DELETE FROM task_assignments
     OR task_uuid IN (SELECT uuid FROM mock_tasks)
     OR actor_uuid IN (SELECT uuid FROM mock_users);
 DELETE FROM task_properties WHERE task_uuid IN (SELECT uuid FROM mock_tasks);
+-- 別人的需求若在重複審核時併進 mock 的需求，只放掉這個紀錄（Spec 028）。
+UPDATE ticket_tasks SET merged_into_uuid = NULL
+ WHERE merged_into_uuid IN (SELECT uuid FROM mock_tasks) AND uuid NOT IN (SELECT uuid FROM mock_tasks);
 DELETE FROM ticket_tasks WHERE uuid IN (SELECT uuid FROM mock_tasks);
 DELETE FROM ticket_disaster_details WHERE ticket_uuid IN (SELECT uuid FROM mock_geometries);
 -- 建築地圖本身也是 geometry:mock 的地圖、mock 的單,對應都刪。
@@ -114,6 +117,9 @@ DELETE FROM building_map_ticket_map
 -- 別人的單留著,只放掉 mock 帳號留下的檢核者。
 UPDATE tickets SET audited_by = NULL
  WHERE audited_by IN (SELECT uuid FROM mock_users) AND uuid NOT IN (SELECT uuid FROM mock_geometries);
+-- 別人的單若在重複審核時被 mock 的單取代，只放掉這個紀錄（Spec 028）。
+UPDATE tickets SET replaced_by_uuid = NULL
+ WHERE replaced_by_uuid IN (SELECT uuid FROM mock_geometries) AND uuid NOT IN (SELECT uuid FROM mock_geometries);
 DELETE FROM tickets WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM secondary_locations WHERE geometry_uuid IN (SELECT uuid FROM mock_geometries);
 -- photos.ref_uuid 沒有外鍵:照它屬於哪張單/哪個站點刪,也照上傳者刪
