@@ -1,32 +1,20 @@
 import { resolveClientIp } from '@rescue-frontend/data-access/server';
 import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
 
-import { isSessionExpired, SESSION_EXPIRED, SESSION_HEADER } from '../session';
+import { SESSION_EXPIRED, SESSION_HEADER } from '../session';
 import {
   authCookieNames,
   cookieHeaderAfter,
   cookieValue,
   forwardedCookieHeader,
 } from './auth-cookies';
-import { getBackendApiBaseUrl } from './backend-api-url';
+import { getBackendApiBaseUrl, getBackendGraphqlUrl } from './backend-api-url';
 import { withClientIpAsync } from './client-ip';
 import {
   REFRESHABLE_CODES,
   refreshBackendSessionAsync,
 } from './session-refresh';
-import {
-  applyAccessTokenAsync,
-  applyBackendAuthResponseCookies,
-  expireSessionResponse,
-  getBackendGraphqlUrl,
-  refreshUnavailableResponse,
-  resolveBackendAuthTokenAsync,
-  type ResolvedBackendAuth,
-} from './server-backend-auth';
-import { SITE_REALM_HEADERS } from './site-realm';
-
-type Audience = 'site' | 'admin';
+import { REALM_HEADER, type Realm } from './site-realm';
 
 interface BackendRestContext {
   params: Promise<{ segments: string[] }>;
@@ -35,21 +23,13 @@ interface BackendRestContext {
 const MAP_CACHE_SECONDS = 7 * 24 * 60 * 60;
 const MAP_STALE_SECONDS = 24 * 60 * 60;
 
-const switchedAccessToken = z.object({
-  access_token: z.string(),
-  expires_in: z.number(),
-});
-
 function forwardHeaders(
   request: NextRequest,
-  audience: Audience,
+  audience: Realm,
   backendPath: string,
   cookieHeader: string | null,
-  accessToken?: string,
 ) {
-  const headers = new Headers(
-    audience === 'site' ? SITE_REALM_HEADERS : undefined,
-  );
+  const headers = new Headers({ [REALM_HEADER]: audience });
   // Origin and Referer: the backend refuses a cookie-authenticated write from any other site
   // (ADR-327), and it can only tell when the browser's own headers reach it.
   for (const name of ['content-type', 'accept', 'origin', 'referer']) {
@@ -58,44 +38,9 @@ function forwardHeaders(
   }
   const cookie = forwardedCookieHeader(cookieHeader, backendPath);
   if (cookie) headers.set('cookie', cookie);
-  if (accessToken) headers.set('authorization', `Bearer ${accessToken}`);
   const clientIp = resolveClientIp(request.headers);
   if (clientIp) headers.set('x-forwarded-for', clientIp);
   return headers;
-}
-
-/**
- * The back office still signs in with next-auth until its own move to the backend login: its
- * requests keep the bearer token from next-auth's session. The site never reads it, so a next-auth
- * session left in a browser from before the move is ignored rather than sent ahead of the new
- * cookies (the backend prefers a bearer token, ADR-327).
- */
-function resolveNextAuthForAdminAsync(request: NextRequest) {
-  return resolveBackendAuthTokenAsync(request);
-}
-
-/**
- * The browser's cookies, for the site's requests only. The back office's proxy gets the site's
- * login cookies too (localhost's ports share them, and so do the staging hosts), but until its own
- * move it signs in with the bearer token alone: it neither sends them on nor refreshes the site's
- * session on their behalf.
- */
-function siteCookieHeader(request: NextRequest, audience: Audience) {
-  return audience === 'site' ? request.headers.get('cookie') : null;
-}
-
-function applySession(
-  response: NextResponse,
-  request: NextRequest,
-  auth: ResolvedBackendAuth,
-) {
-  return isSessionExpired({
-    refreshFailed: auth.refreshFailed,
-    sentToken: Boolean(auth.token?.accessToken),
-    backendStatus: response.status,
-  })
-    ? expireSessionResponse(response, request, auth)
-    : applyBackendAuthResponseCookies(response, auth);
 }
 
 /** Read once: a request whose access token turns out spent is sent again with the same body. */
@@ -198,7 +143,7 @@ async function forwardRequest(
   }
 }
 
-export function createBackendRestHandler(audience: Audience) {
+export function createBackendRestHandler(audience: Realm) {
   return (request: NextRequest, context: BackendRestContext) =>
     withClientIpAsync(async () => {
       const { segments } = await context.params;
@@ -206,11 +151,6 @@ export function createBackendRestHandler(audience: Audience) {
         request.method === 'GET' &&
         segments[0] === 'map' &&
         ['tile', 'attribution'].includes(segments[1] ?? '');
-      const auth =
-        publicMap || audience === 'site'
-          ? null
-          : await resolveNextAuthForAdminAsync(request);
-      if (auth?.refreshUnavailable) return refreshUnavailableResponse();
       const url = new URL(
         `${getBackendApiBaseUrl()}/v1/${segments.map(encodeURIComponent).join('/')}`,
       );
@@ -219,45 +159,19 @@ export function createBackendRestHandler(audience: Audience) {
         forwardRequest(
           request,
           url,
-          forwardHeaders(
-            request,
-            audience,
-            segments.join('/'),
-            cookieHeader,
-            auth?.token?.accessToken,
-          ),
+          forwardHeaders(request, audience, segments.join('/'), cookieHeader),
           publicMap,
           body,
         );
       // A public tile is the same for everyone and cached once for all: it goes without cookies.
-      const cookieHeader = publicMap
-        ? null
-        : siteCookieHeader(request, audience);
+      const cookieHeader = publicMap ? null : request.headers.get('cookie');
       // Signing in reads the password, not the cookies: a wrong one is `credentials_invalid`, which
       // clears nothing, and whoever is already signed in on this browser stays so.
       const signingIn =
         request.method === 'POST' && segments.join('/') === 'auth/session';
-      const response = signingIn
-        ? await send(cookieHeader)
-        : await sendWithRefreshAsync(cookieHeader, send);
-      if (
-        auth?.token &&
-        response.ok &&
-        segments.join('/') === 'auth/switch-identity'
-      ) {
-        return applyBackendAuthResponseCookies(
-          new NextResponse(null, {
-            status: 204,
-            headers: { 'cache-control': 'no-store' },
-          }),
-          await applyAccessTokenAsync(
-            request,
-            auth.token,
-            switchedAccessToken.parse(await response.json()),
-          ),
-        );
-      }
-      return auth ? applySession(response, request, auth) : response;
+      return signingIn
+        ? send(cookieHeader)
+        : sendWithRefreshAsync(cookieHeader, send);
     });
 }
 
@@ -304,7 +218,11 @@ async function sendWithRefreshAsync(
         refresh.setCookies,
       );
     case 'unavailable':
-      return refreshUnavailableResponse();
+      // The site reads a 503 as a dropped connection: 「連線失敗，請…再試一次」.
+      return NextResponse.json(
+        { detail: '暫時無法確認登入狀態，請稍後再試一次。' },
+        { status: 503 },
+      );
   }
 }
 
@@ -318,42 +236,20 @@ function markIfSessionEnded(response: NextResponse, code: unknown) {
   return SESSION_ENDED_CODES.has(code) ? markSessionEnded(response) : response;
 }
 
-export function createBackendGraphqlHandler(audience: Audience) {
+export function createBackendGraphqlHandler(audience: Realm) {
   return (request: NextRequest) =>
     withClientIpAsync(async () => {
-      const auth =
-        audience === 'admin'
-          ? await resolveNextAuthForAdminAsync(request)
-          : null;
-      if (auth?.refreshUnavailable) return refreshUnavailableResponse();
-      if (auth && !auth.token?.accessToken) {
-        return applySession(
-          NextResponse.json(
-            { detail: 'Please sign in.', code: 'unauthenticated' },
-            { status: 401, headers: { 'cache-control': 'no-store' } },
-          ),
-          request,
-          auth,
-        );
-      }
       const body = await readBodyAsync(request);
-      const response = await sendWithRefreshAsync(
-        siteCookieHeader(request, audience),
+      return sendWithRefreshAsync(
+        request.headers.get('cookie'),
         (cookieHeader) =>
           forwardRequest(
             request,
             new URL(getBackendGraphqlUrl()),
-            forwardHeaders(
-              request,
-              audience,
-              'graphql',
-              cookieHeader,
-              auth?.token?.accessToken,
-            ),
+            forwardHeaders(request, audience, 'graphql', cookieHeader),
             false,
             body,
           ),
       );
-      return auth ? applySession(response, request, auth) : response;
     });
 }

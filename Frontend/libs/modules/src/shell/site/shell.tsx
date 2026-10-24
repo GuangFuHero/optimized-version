@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 
 import { getRescueColorScheme, layoutSizes } from '@rescue-frontend/ui';
 
+import { SITE_BANNER_HEIGHT, SiteAnnouncementBanner } from '../../announcement';
 import { SiteMapRouteProvider } from '../../map/site/use-site-map-route-state';
 import {
   RoleRequestDrawer,
@@ -78,7 +79,8 @@ export function SiteShell({
           mobile: `${layoutSizes.site.mobileTopNavBarHeight}px minmax(0, 1fr)`,
           tablet: `${layoutSizes.site.desktopTopNavBarHeight}px minmax(0, 1fr)`,
         },
-        height: '100dvh',
+        // The announcement banner above pushes the page down, not its foot off the screen.
+        height: `calc(100dvh - ${SITE_BANNER_HEIGHT})`,
         bgcolor: rescue.adminShell.topNavBar.frame,
         transition: {
           mobile: 'none',
@@ -230,9 +232,16 @@ export function SiteShell({
     </Box>
   );
 
-  return pathname.startsWith('/map') ? (
-    <SiteMapRouteProvider>{content}</SiteMapRouteProvider>
-  ) : (
-    <SiteRouteProvider>{content}</SiteRouteProvider>
+  return (
+    <>
+      {/* Above the whole page (prototype `site-shell.jsx:670-676`), and outside the route
+          providers, so going between the map and the list does not take it down and up again. */}
+      <SiteAnnouncementBanner />
+      {pathname.startsWith('/map') ? (
+        <SiteMapRouteProvider>{content}</SiteMapRouteProvider>
+      ) : (
+        <SiteRouteProvider>{content}</SiteRouteProvider>
+      )}
+    </>
   );
 }

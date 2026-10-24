@@ -19,7 +19,14 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
   };
 
   return new QueryClient({
-    queryCache: new QueryCache({ onError: reportError }),
+    queryCache: new QueryCache({
+      // A query nobody asked for, such as a background poll, sets `meta.quietErrors`: its failure
+      // is retried on the next poll, not reported.
+      onError: (error, query) => {
+        if (query.meta?.quietErrors) return;
+        reportError(error);
+      },
+    }),
     mutationCache: new MutationCache({ onError: reportError }),
     defaultOptions: {
       queries: {

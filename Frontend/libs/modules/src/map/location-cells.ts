@@ -86,6 +86,29 @@ export function isCoarseTicket(marker: RescueMapMarkerItem): boolean {
   return marker.detailType === 'ticket' && Boolean(marker.locationCell);
 }
 
+/** 格子中央的字兩側至少要留的空間（px），跟原型 `measureCells` 的 PAD 一樣。 */
+const LOCATION_CELL_LABEL_SPARE_PX = 10;
+
+/**
+ * 「12 求助」在格子裡放得下多少（原型 CELL-LABEL-101，2026-10-24）：整句；只放數字（「求助」會壓到
+ * 隔壁格）；或連數字都放不下，數字改小字。數字永遠不藏。
+ *
+ * `across` 是格子此刻在畫面上平行兩邊之間的寬度（px），每次縮放都重量，不照縮放級距寫死 —— 格子
+ * 大小跟著 H3 resolution 走。`label` 是字本身量到的寬度：整句，與只有數字。
+ */
+export function locationCellLabelFit(
+  across: number,
+  label: { whole: number; count: number },
+): 'whole' | 'count' | 'small-count' {
+  if (across >= label.whole + LOCATION_CELL_LABEL_SPARE_PX) {
+    return 'whole';
+  }
+
+  return across >= label.count + LOCATION_CELL_LABEL_SPARE_PX
+    ? 'count'
+    : 'small-count';
+}
+
 /** 六角形頂點，Leaflet 的 `[lat, lng]` 順序（h3-js 預設即是）。 */
 export function locationCellBoundary(cell: string): [number, number][] {
   return cellToBoundary(cell).map(([lat, lng]) => [lat, lng]);

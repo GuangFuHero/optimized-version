@@ -90,6 +90,7 @@ export type AddressLookupType = {
 export const AnnouncementFilter = {
   Active: 'ACTIVE',
   All: 'ALL',
+  Draft: 'DRAFT',
 } as const;
 
 export type AnnouncementFilter =
@@ -109,18 +110,33 @@ export const AnnouncementPlacement = {
 
 export type AnnouncementPlacement =
   (typeof AnnouncementPlacement)[keyof typeof AnnouncementPlacement];
+export const AnnouncementStatus = {
+  Active: 'ACTIVE',
+  Draft: 'DRAFT',
+  Inactive: 'INACTIVE',
+} as const;
+
+export type AnnouncementStatus =
+  (typeof AnnouncementStatus)[keyof typeof AnnouncementStatus];
 export type AnnouncementType = {
   __typename?: 'AnnouncementType';
   active: Scalars['Boolean']['output'];
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this announcement */
-  createdBy?: Maybe<Scalars['String']['output']>;
+  /** Who created it. Null unless the caller holds announcement.edit */
+  creator?: Maybe<UserRefType>;
   /** Display position (1 = top) among active announcements; null when inactive */
   order?: Maybe<Scalars['Int']['output']>;
   /** admin_page, public_page, or all (both pages) */
   placement: Scalars['String']['output'];
+  /** When it last went live; null while a draft */
+  publishedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who last activated it; null while a draft or unless the caller holds announcement.edit */
+  publisher?: Maybe<UserRefType>;
+  status: AnnouncementStatus;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who last changed it. Null unless the caller holds announcement.edit */
+  updater?: Maybe<UserRefType>;
   uuid: Scalars['UUID']['output'];
 };
 
@@ -193,6 +209,21 @@ export const BriefingState = {
 } as const;
 
 export type BriefingState = (typeof BriefingState)[keyof typeof BriefingState];
+export const BriefingStatus = {
+  Draft: 'DRAFT',
+  Published: 'PUBLISHED',
+} as const;
+
+export type BriefingStatus =
+  (typeof BriefingStatus)[keyof typeof BriefingStatus];
+export const BriefingStatusFilter = {
+  All: 'ALL',
+  Draft: 'DRAFT',
+  Published: 'PUBLISHED',
+} as const;
+
+export type BriefingStatusFilter =
+  (typeof BriefingStatusFilter)[keyof typeof BriefingStatusFilter];
 export type BriefingTemplateType = {
   __typename?: 'BriefingTemplateType';
   content: Scalars['String']['output'];
@@ -211,10 +242,11 @@ export type BriefingType = {
   __typename?: 'BriefingType';
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this briefing */
-  createdBy?: Maybe<Scalars['String']['output']>;
+  /** When it was published; null while a draft */
+  publishedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
   state: Scalars['String']['output'];
+  status: BriefingStatus;
   /** Free-form categorization tags */
   tags: Array<Scalars['String']['output']>;
   /** UUID of the source template, or null for ad-hoc briefings */
@@ -1000,6 +1032,7 @@ export type QueryBriefingTemplatesArgs = {
 
 export type QueryBriefingsArgs = {
   state?: InputMaybe<BriefingState>;
+  status?: BriefingStatusFilter;
   tag?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -1884,6 +1917,12 @@ export type UpsertTicketPropertyConfigInput = {
   unit?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type UserRefType = {
+  __typename?: 'UserRefType';
+  name?: Maybe<Scalars['String']['output']>;
+  uuid: Scalars['String']['output'];
+};
+
 export const Visibility = {
   Internal: 'internal',
   Public: 'public',
@@ -1902,6 +1941,30 @@ export type ZoneAssignmentType = {
 export type ZoneTeamAssignmentInput = {
   teamUuid: Scalars['UUID']['input'];
   zoneUuid: Scalars['UUID']['input'];
+};
+
+export type SiteAnnouncementsQueryVariables = Exact<{ [key: string]: never }>;
+
+export type SiteAnnouncementsQuery = {
+  __typename?: 'Query';
+  announcements: Array<{
+    __typename?: 'AnnouncementType';
+    uuid: string;
+    content: string;
+    publishedAt?: any | null;
+  }>;
+};
+
+export type CurrentBriefingQueryVariables = Exact<{ [key: string]: never }>;
+
+export type CurrentBriefingQuery = {
+  __typename?: 'Query';
+  briefings: Array<{
+    __typename?: 'BriefingType';
+    uuid: string;
+    content: string;
+    publishedAt?: any | null;
+  }>;
 };
 
 export type PageInfoFieldsFragment = {
@@ -2265,6 +2328,7 @@ export type GetTicketsWithNeedsQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
   status?: InputMaybe<Scalars['String']['input']>;
   priority?: InputMaybe<Scalars['String']['input']>;
+  q?: InputMaybe<Scalars['String']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
@@ -2758,6 +2822,90 @@ export const TicketNeedFieldsFragmentDoc = {
     },
   ],
 } as unknown as DocumentNode<TicketNeedFieldsFragment, unknown>;
+export const SiteAnnouncementsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'SiteAnnouncements' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'announcements' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'filter' },
+                value: { kind: 'EnumValue', value: 'ACTIVE' },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'placement' },
+                value: { kind: 'EnumValue', value: 'public_page' },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SiteAnnouncementsQuery,
+  SiteAnnouncementsQueryVariables
+>;
+export const CurrentBriefingDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'CurrentBriefing' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'briefings' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'state' },
+                value: { kind: 'EnumValue', value: 'BRIEFING' },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'status' },
+                value: { kind: 'EnumValue', value: 'PUBLISHED' },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CurrentBriefingQuery,
+  CurrentBriefingQueryVariables
+>;
 export const GetStationsDocument = {
   kind: 'Document',
   definitions: [
@@ -4129,6 +4277,11 @@ export const GetTicketsWithNeedsDocument = {
         },
         {
           kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           defaultValue: { kind: 'IntValue', value: '0' },
@@ -4178,6 +4331,11 @@ export const GetTicketsWithNeedsDocument = {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'priority' },
                 },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'q' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
               },
               {
                 kind: 'Argument',

@@ -4,7 +4,7 @@
  * gets no ？ at all.
  */
 
-export type SitePageHelpKey = 'site:map' | 'site:list';
+export type SitePageHelpKey = 'site:map' | 'site:list' | 'site:briefing';
 
 export interface PageHelp {
   title: string;
@@ -44,15 +44,28 @@ export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
     ],
     note: '沒有登入時，看不到任務的地址與照片，保護求助者的隱私。',
   },
+  // The designer's draft as it stands (`wg-help.jsx:141-145`), not yet read by the team.
+  'site:briefing': {
+    title: '志工行前資訊',
+    what: '出發當志工之前，先看這一頁。',
+    can: [
+      '了解怎麼參與、交通方式與注意事項',
+      '勾選打包清單（只存在這台裝置）',
+      '列印帶在身上',
+    ],
+  },
 };
 
-/** The page an address is on, if it has words of its own: 行前資訊 and the account pages do not. */
+/** The page an address is on, if it has words of its own: the account pages do not. */
 export function pageHelpKey(pathname: string): SitePageHelpKey | null {
   if (/^\/map(\/|$)/.test(pathname)) {
     return 'site:map';
   }
+  if (/^\/list(\/|$)/.test(pathname)) {
+    return 'site:list';
+  }
 
-  return /^\/list(\/|$)/.test(pathname) ? 'site:list' : null;
+  return pathname === '/briefing' ? 'site:briefing' : null;
 }
 
 /** The parts of `Storage` the marks use: `localStorage` on the site, a stand-in in tests. */

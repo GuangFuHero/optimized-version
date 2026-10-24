@@ -40,12 +40,18 @@ describe('returnHint', () => {
 
 describe('signedInMessage', () => {
   it('says the person is on the way back, when there is a page to go back to', () => {
-    expect(signedInMessage('/list/station')).toBe(
+    expect(signedInMessage('/list/station', 'site')).toBe(
       '登入成功，正在回到你剛剛那一頁⋯',
     );
   });
 
-  it('says the map, when there is none: that is where a sign-in from /login ends', () => {
-    expect(signedInMessage(null)).toBe('登入成功，正在前往地圖⋯');
+  it('names no place on the site, when there is none: the sign-in goes by who signed in', () => {
+    expect(signedInMessage(null, 'site')).toBe('登入成功，正在帶你過去⋯');
+  });
+
+  it('says the back office, when there is none in the back office: its /login ends on the dashboard', () => {
+    expect(signedInMessage(null, 'admin')).toBe(
+      '登入成功，正在前往總覽儀表板⋯',
+    );
   });
 });

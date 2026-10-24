@@ -10,6 +10,8 @@ import {
 } from 'react';
 
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
+import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
@@ -34,12 +36,20 @@ import { SiteViewSwitch } from '../route/controls/view-switch';
 import { useAuthSession } from '../session/auth-session';
 import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
+import { resolveTicketSearch } from '../ticket/ticket-search';
 import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
+import {
+  listTickets,
+  showsClosedTickets,
+  type ListedTicket,
+} from './ticket-list-rules';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
+
+const ACTION_ICON = { fontSize: 14 } as const;
 
 /**
  * 前台列表模組：與地圖共用路由狀態與篩選邏輯，支援維度切換、子分類篩選與詳情雙向綁定。
@@ -51,6 +61,7 @@ export function SiteListView() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const {
     markers: sourceMarkers,
+    ticketQuery,
     isFetching,
     hasFetchedOnce,
     hasNextPage,
@@ -64,9 +75,40 @@ export function SiteListView() {
     onRouteStateChange: replace,
     sourceMarkers,
     filterMarkersByOverlayLayers: false,
+    // Tickets were searched by the backend, or wait for a second character; stations still are here.
+    filterMarkersBySearch:
+      (state.dataType ?? SITE_FALLBACK_DATA_TYPE) !== 'ticket',
   });
 
   const dataType = controller.dataType ?? SITE_FALLBACK_DATA_TYPE;
+
+  // 含已滿額: full needs, and the tickets left with nothing else, fold away until asked for.
+  const [showFullNeeds, setShowFullNeeds] = useState(false);
+  // A status filter set to finished or cancelled asks for them outright: nothing left to fold.
+  const closedTicketsAsked = showsClosedTickets(controller.subDataTypes);
+  const ticketList = useMemo(
+    () =>
+      dataType === 'ticket'
+        ? listTickets(controller.markers, {
+            showFull: showFullNeeds || closedTicketsAsked,
+            q: ticketQuery,
+          })
+        : null,
+    [
+      closedTicketsAsked,
+      controller.markers,
+      dataType,
+      showFullNeeds,
+      ticketQuery,
+    ],
+  );
+  const listRows: readonly {
+    marker: RescueMapMarkerItem;
+    needs?: ListedTicket['needs'];
+  }[] = ticketList?.tickets ?? controller.markers.map((marker) => ({ marker }));
+  const searchTooShort =
+    dataType === 'ticket' &&
+    resolveTicketSearch(state.search).kind === 'too-short';
 
   // A linked ticket that no loaded page holds — the list loads a page at a time — fetched on its
   // own so its drawer still opens.
@@ -315,9 +357,48 @@ export function SiteListView() {
           >
             <SiteViewSwitch module="list" />
           </SiteControlSurface>
-          <Typography sx={{ ml: 'auto', fontSize: displayTextSize[13], color: color.fg.neutral.subtle }}>
-            共 {controller.markers.length} 筆
-          </Typography>
+          <Stack
+            direction="row"
+            sx={{ ml: 'auto', alignItems: 'center', gap: 1.5 }}
+          >
+            {/* The ticket side lists needs, so it counts them: the count matches the lines shown. */}
+            <Typography
+              sx={{
+                fontSize: displayTextSize[13],
+                color: color.fg.neutral.subtle,
+              }}
+            >
+              {ticketList
+                ? `共 ${ticketList.needCount} 筆需求`
+                : `共 ${controller.markers.length} 筆`}
+            </Typography>
+            {ticketList &&
+            ticketList.fullNeedCount > 0 &&
+            !closedTicketsAsked ? (
+              <RowAction
+                icon={
+                  showFullNeeds ? (
+                    <VisibilityRoundedIcon sx={ACTION_ICON} />
+                  ) : (
+                    <VisibilityOffRoundedIcon sx={ACTION_ICON} />
+                  )
+                }
+                label={`含已滿額（${ticketList.fullNeedCount}）`}
+                aria-pressed={showFullNeeds}
+                onClick={() => setShowFullNeeds((current) => !current)}
+                // Greyed while off, as the prototype has it — but in readable greys, since it
+                // still takes a tap.
+                sx={
+                  showFullNeeds
+                    ? undefined
+                    : {
+                        color: color.fg.neutral.subtle,
+                        background: color.bg.neutral.subtle,
+                      }
+                }
+              />
+            ) : null}
+          </Stack>
         </Box>
 
         <Box
@@ -333,7 +414,26 @@ export function SiteListView() {
             },
           }}
         >
-          {controller.markers.length === 0 ? (
+          {searchTooShort ? (
+            // The backend searches 2 to 50 characters; with one the list stays as it was.
+            <Typography
+              role="status"
+              sx={{
+                mb: 1.5,
+                fontSize: displayTextSize[13],
+                color: color.fg.neutral.subtle,
+              }}
+            >
+              搜尋請輸入至少 2 個字
+            </Typography>
+          ) : null}
+          {/* Not while a page is on its way: every search reloads the list, and it would read
+              as empty between keystrokes. Nor while pages remain: the rows so far may all have
+              folded away (含已滿額), and only the sentinel below can ask for the next page. */}
+          {listRows.length === 0 &&
+          hasFetchedOnce &&
+          !isFetching &&
+          !hasNextPage ? (
             <Stack
               sx={{
                 height: '100%',
@@ -346,10 +446,11 @@ export function SiteListView() {
             </Stack>
           ) : (
             <Stack spacing={1.5}>
-              {controller.markers.map((marker) => (
+              {listRows.map(({ marker, needs }) => (
                 <SiteListRow
                   key={marker.id}
                   marker={marker}
+                  needs={needs}
                   active={marker.id === controller.selectedMarkerId}
                   isAuthenticated={isAuthenticated}
                   onSelect={() => controller.setSelectedMarkerId(marker.id)}
@@ -441,7 +542,8 @@ export function SiteListView() {
           '& .MuiDrawer-paper': {
             width: '100vw',
             maxWidth: '100vw',
-            height: '100dvh',
+            // The drawer's, which starts under the announcement banner if one is up.
+            height: '100%',
             overflow: 'hidden',
             bgcolor: 'transparent',
           },

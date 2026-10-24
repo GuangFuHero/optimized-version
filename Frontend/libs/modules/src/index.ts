@@ -25,6 +25,7 @@ export { ResetPasswordFormClient } from './auth/login/reset-password-form.client
 export { AccountSecurityClient } from './auth/session/account-security.client';
 export { AccountSecurityInBrowser } from './auth/session/account-security-in-browser.client';
 export { PortalSiteShell } from './auth/session/site-shell.client';
+export { SiteAnnouncementBanner } from './announcement';
 export { ROLE_DISPLAY_NAMES } from './constants/roles';
 
 export { ApplicationProviders, SiteProviders } from './providers';
@@ -96,12 +97,14 @@ export type {
   PointShareTarget,
 } from './point-share';
 
+export { AnnouncementPage } from './admin/announcement';
 export { BackOfficePlaceholder } from './role-request';
-export { AdminPlaceholderPage, AdminShell } from './shell';
+export { AdminPlaceholderPage, AdminShell, NoBackOfficeAccess } from './shell';
 export type { AdminShellProps } from './shell';
 
 // The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.
 export {
+  endExpiredSession,
   isSigningOutHere,
   markSigningOutHere,
   sessionExpiryFetch,
@@ -112,6 +115,7 @@ export { AuthSessionProvider, useAuthSession } from './session/auth-session';
 
 export {
   SiteActionDrawer,
+  SiteNotFound,
   SiteShell,
   SiteTextScale,
   type SiteActionDrawerProps,
@@ -124,7 +128,7 @@ export {
   TicketDetailDrawer,
   createTaskMatchTicketDetailOverrides,
 } from './ticket';
-export { BriefingPlaceholder, NeedClaimProvider } from './ticket/needs';
+export { NeedClaimProvider } from './ticket/needs';
 export type { ReloadedTicket } from './ticket/needs';
 export {
   clearAllHelpRequestDrafts,

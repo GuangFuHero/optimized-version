@@ -13,13 +13,10 @@ import {
   type ReactNode,
 } from 'react';
 
+import { resolveModule } from './module-path';
 import { parseSiteRouteState } from './parse';
 import { createSiteHref } from './serialize';
 import type { SiteModule, SiteRouteState } from './types';
-
-function resolveModule(pathname: string): SiteModule {
-  return pathname.startsWith('/list') ? 'list' : 'map';
-}
 
 function extractSegments(pathname: string, module: SiteModule): string[] {
   const prefix = module === 'list' ? '/list' : '/map';
