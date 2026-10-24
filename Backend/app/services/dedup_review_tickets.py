@@ -12,14 +12,16 @@ queries, however many needs and items the tickets have.
 import hashlib
 import json
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dedup import DuplicatePair
+from app.models.photo import Photo
 from app.models.request import Tickets
+from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 
 
@@ -33,6 +35,15 @@ class PropertyForReview:
     quantity: int | None
     status: str | None
     comment: str | None
+
+
+@dataclass(frozen=True)
+class PhotoForReview:
+    """One live photo on a ticket (ADR-383)."""
+
+    uuid: str
+    url: str
+    created_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -77,11 +88,13 @@ class TicketForReview:
     created_by: str | None
     created_at: datetime | None
     tasks: tuple[TaskForReview, ...]
+    photos: tuple[PhotoForReview, ...] = ()
+    disaster_details: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 # What a claim moves, which must not move the version (ADR-373): a need's headcount and the status
 # a claim fills, and the ticket status (and audit status) worked out from them.
-_TICKET_SKIPPED = {"version", "status", "audit_status", "tasks"}
+_TICKET_SKIPPED = {"version", "status", "audit_status", "tasks", "photos"}
 _TASK_SKIPPED = {"claim_count", "status", "properties"}
 
 
@@ -90,9 +103,10 @@ def ticket_version(ticket: TicketForReview) -> str:
 
     Made from the content itself, not from `updated_at`: a ticket's `updated_at` lives on
     `base_geometries`, which an edit to the ticket's own columns does not touch. Every field the
-    reviewer can compare or edit goes in — the ticket's, each live need's and each live item's —
-    with needs and items sorted by uuid. What a claim moves stays out: the headcount is checked
-    under the locks when resolving, and a claim need not send the reviewer back.
+    reviewer can compare or edit goes in — the ticket's, each live need's and item's, its photos
+    and disaster-field answers (ADR-383, 384) — with needs, items and photos sorted by uuid.
+    What a claim moves stays out: the headcount is checked under the locks when resolving, and a
+    claim need not send the reviewer back.
     """
     content = {k: v for k, v in asdict(ticket).items() if k not in _TICKET_SKIPPED}
     content["tasks"] = sorted(
@@ -105,6 +119,7 @@ def ticket_version(ticket: TicketForReview) -> str:
         ),
         key=lambda t: t["uuid"],
     )
+    content["photos"] = sorted((asdict(p) for p in ticket.photos), key=lambda p: p["uuid"])
     digest = json.dumps(content, sort_keys=True, default=str, ensure_ascii=False)
     return hashlib.sha256(digest.encode()).hexdigest()
 
@@ -141,6 +156,22 @@ async def tickets_for_review(db: AsyncSession, ticket_uuids: Iterable[str]) -> d
     if not ticket_rows:
         return {}
     live = [str(ticket.uuid) for ticket, _, _ in ticket_rows]
+    parts = await _parts(db, live)
+    return {str(ticket.uuid): _ticket(ticket, lon, lat, parts) for ticket, lon, lat in ticket_rows}
+
+
+@dataclass(frozen=True)
+class _Parts:
+    """Everything under the live tickets, one query each."""
+
+    tasks: list
+    properties: list
+    claims: dict
+    photos: list
+    details: list
+
+
+async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
     tasks = (
         await db.scalars(
             select(TicketTask)
@@ -149,19 +180,16 @@ async def tickets_for_review(db: AsyncSession, ticket_uuids: Iterable[str]) -> d
         )
     ).all()
     task_ids = [task.uuid for task in tasks]
-    properties = (
-        (
+    properties, claims = [], {}
+    if task_ids:
+        properties = (
             await db.scalars(
                 select(TaskProperty)
                 .where(TaskProperty.task_uuid.in_(task_ids), TaskProperty.delete_at.is_(None))
                 .order_by(TaskProperty.created_at, TaskProperty.uuid)
             )
         ).all()
-        if task_ids
-        else []
-    )
-    claims = (
-        dict(
+        claims = dict(
             (
                 await db.execute(
                     select(TaskAssignment.task_uuid, func.count())
@@ -170,17 +198,32 @@ async def tickets_for_review(db: AsyncSession, ticket_uuids: Iterable[str]) -> d
                 )
             ).all()
         )
-        if task_ids
-        else {}
-    )
-    return {
-        str(ticket.uuid): _ticket(ticket, lon, lat, tasks, properties, claims)
-        for ticket, lon, lat in ticket_rows
-    }
+    photos = (
+        await db.scalars(
+            select(Photo)
+            .where(Photo.ref_type == "geometry", Photo.ref_uuid.in_(live), Photo.delete_at.is_(None))
+            .order_by(Photo.created_at, Photo.uuid)
+        )
+    ).all()
+    details = (
+        await db.scalars(
+            select(TicketDisasterDetail)
+            .where(TicketDisasterDetail.ticket_uuid.in_(live), TicketDisasterDetail.delete_at.is_(None))
+            # The order every reader of these rows uses (tickets_repository.list_by_ticket, the
+            # GraphQL loader): rows written in one transaction share created_at, so anything else
+            # reshuffles a multi-select between reads — and would move the version with it.
+            .order_by(TicketDisasterDetail.property_name, TicketDisasterDetail.value)
+        )
+    ).all()
+    return _Parts(tasks=tasks, properties=properties, claims=claims, photos=photos, details=details)
 
 
-def _ticket(ticket: Tickets, lon, lat, tasks, properties, claims) -> TicketForReview:
-    own_tasks = [task for task in tasks if str(task.ticket_uuid) == str(ticket.uuid)]
+def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
+    own_tasks = [task for task in parts.tasks if str(task.ticket_uuid) == str(ticket.uuid)]
+    answers: dict[str, list[str]] = {}
+    for detail in parts.details:
+        if str(detail.ticket_uuid) == str(ticket.uuid):
+            answers.setdefault(detail.property_name, []).append(detail.value)
     review = TicketForReview(
         uuid=str(ticket.uuid),
         version="",
@@ -208,7 +251,7 @@ def _ticket(ticket: Tickets, lon, lat, tasks, properties, claims) -> TicketForRe
                 task_description=task.task_description,
                 quantity=task.quantity,
                 status=task.status,
-                claim_count=claims.get(task.uuid, 0),
+                claim_count=parts.claims.get(task.uuid, 0),
                 recruiting_stopped=task.recruiting_stopped_at is not None,
                 properties=tuple(
                     PropertyForReview(
@@ -219,12 +262,18 @@ def _ticket(ticket: Tickets, lon, lat, tasks, properties, claims) -> TicketForRe
                         status=prop.status,
                         comment=prop.comment,
                     )
-                    for prop in properties
+                    for prop in parts.properties
                     if prop.task_uuid == task.uuid
                 ),
             )
             for task in own_tasks
         ),
+        photos=tuple(
+            PhotoForReview(uuid=str(photo.uuid), url=photo.url, created_at=photo.created_at)
+            for photo in parts.photos
+            if str(photo.ref_uuid) == str(ticket.uuid)
+        ),
+        disaster_details={name: tuple(values) for name, values in answers.items()},
     )
     return replace(review, version=ticket_version(review))
 

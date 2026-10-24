@@ -149,3 +149,35 @@ async def test_a_failing_notice_still_answers_through_rest(client, db_session, r
 
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "confirmed"
+
+
+async def test_the_notices_name_the_primary_as_renamed(db):
+    """ADR-381: renamed in the same resolve, the notices use the new title."""
+    reviewer, ids = await _world(db)
+    request = _example_one(ids, await _versions(db, reviewer, ids), ticket={"title": "民生街 12 號（合併）"})
+
+    await _resolve(db, reviewer, ids, request)
+
+    titles = {n.title for n in await _all(db)}
+    assert all("A 一樓淹水" not in title for title in titles)
+    assert any("民生街 12 號（合併）" in title for title in titles)
+
+
+async def test_picking_the_primary_as_it_is_does_not_tell_its_owner(db):
+    """ADR-382: A untouched, every need of B cancelled — A's owner hears nothing."""
+    reviewer, ids = await _world(db)
+    request = _example_one(
+        ids,
+        await _versions(db, reviewer, ids),
+        primary_tasks=[
+            {"task": ids["a1"], "action": "keep", "properties": [{"property": ids["pa1"], "action": "keep"}]},
+            {"task": ids["a2"], "action": "keep", "properties": []},
+        ],
+        secondary_tasks=[{"task": ids[k], "action": "cancel"} for k in ("b1", "b2", "b3")],
+    )
+
+    await _resolve(db, reviewer, ids, request)
+
+    sent = await _sent(db)
+    assert "dedup_ticket_updated" not in sent
+    assert sent["dedup_ticket_merged"] == {ids["owner_b"]}

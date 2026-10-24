@@ -76,7 +76,7 @@ def _notices(outcome) -> list[dict]:
                 "explicit_recipients": [outcome.secondary_owner],
             }
         )
-    if outcome.primary_owner and _primary_changed(plan):
+    if outcome.primary_owner and _primary_changed(outcome):
         notices.append(
             {
                 "event_type": "dedup_ticket_updated",
@@ -107,13 +107,23 @@ def _secondary_body(outcome) -> str:
     return f"重複審核認定這兩張單是同一件事，你的單已取消。{summary}。之後請看這張單。"
 
 
-def _primary_changed(plan) -> bool:
+def _primary_changed(outcome) -> bool:
+    """Whether anything on the primary ticket changed (ADR-382).
+
+    The other ticket's cancelled needs are not the primary's: picking A as it is, with every need
+    of B cancelled, leaves A untouched and its owner is not told otherwise.
+    """
+    plan = outcome.plan
+    own_canceled = [uuid for uuid in plan.canceled_tasks if uuid not in outcome.secondary_task_uuids]
     return bool(
         plan.ticket_changes
         or plan.absorbed
-        or plan.canceled_tasks
+        or own_canceled
         or plan.property_changes
         or plan.property_moves
         or plan.canceled_properties
+        or plan.moved_photos
+        or plan.canceled_photos
+        or plan.disaster_details is not None
         or any(k.moved or k.changes for k in plan.kept_tasks)
     )

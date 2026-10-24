@@ -186,15 +186,19 @@ commit 前看 `git diff --cached --stat`）。
 依 `SPEC028_CODE_REVIEW.md`，使用者同意修 1、2、3、4、6、8、9，並決定 B 的照片與災害欄位答案由審核員選（ADR-383、384）。
 
 - [x] 1. rebase 到 main `2e95aec0d`，migration 改接 `7370daf4c8f7`（`ec0e6633d`）
-- [ ] 2. `priority`／`task_type` 長度 → 422（ADR-380）
-- [ ] 3. 通知用處理後的標題（ADR-381）
-- [ ] 4. 主要單沒變不通知它的開單者（ADR-382）
-- [ ] 5. 照片：detail 回傳、`version`、request 逐張 keep／cancel（ADR-383）
-- [ ] 6. 災害欄位答案：detail 回傳、`version`、request 完整一份（ADR-384）
-- [ ] 7. `_check_size` 改呼叫 `_validate_need_size`
-- [ ] 8. 重複接單一次 DELETE
-- [ ] 9. 主要單判斷、同一張單檢查各留一處
+- [x] 2. `priority`／`task_type` 長度 → 422（ADR-380）
+- [x] 3. 通知用處理後的標題（ADR-381）
+- [x] 4. 主要單沒變不通知它的開單者（ADR-382）
+- [x] 5. 照片：detail 回傳、`version`、request 逐張 keep／cancel（ADR-383）
+- [x] 6. 災害欄位答案：detail 回傳、`version`、request 完整一份（ADR-384）
+- [x] 7. `_check_size` 改呼叫 `_validate_need_size`
+- [x] 8. 重複接單一次 DELETE
+- [x] 9. 主要單判斷、同一張單檢查各留一處
 - [ ] 每條先寫會失敗的測試；全套件；合約檔重產；Docker 從零重做
+- 2026-10-24：全套件 **2912 passed**（rebase 後含 #96／#98 的測試），覆蓋率 96%；突變測試 12 條都會被抓到。
+  TDD 例外：讀取層「照片與答案算進 version」先寫了實作，事後用突變測試確認測試有效。
+  第一次全套件抓到一個隨機失敗：災害欄位答案在同一交易寫入時 `created_at` 相同，依 uuid 排序會亂序（也會讓 version 亂跳），
+  且漏了 `delete_at` 過濾。改成和 `tickets_repository.list_by_ticket`、GraphQL loader 一樣依 `(property_name, value)` 排序並排除軟刪除。
 
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 

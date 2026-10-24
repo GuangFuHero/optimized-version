@@ -16,14 +16,16 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disaster_types import validate_disaster_types
 from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.dedup import DedupAuditEvent, DuplicatePair
+from app.models.photo import Photo
 from app.models.request import Tickets
+from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.services.authz import require_scope
 from app.services.dedup_resolve_notices import send_resolve_notices
@@ -87,18 +89,12 @@ async def resolve(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, reques
 
     low, high, claimants = await _locked_snapshot(db, pair, request)
     plan = build_plan(request, pair_kind=pair.entity_kind, low=low, high=high, claimants=claimants)
-    primary, secondary = (low, high) if request.primary == "low" else (high, low)
+    primary, secondary = (low, high) if plan.primary_uuid == low.uuid else (high, low)
     ticket_changes = await _checked_ticket_changes(db, plan.ticket_changes, primary)
 
     now = datetime.now(UTC)
     tasks = await _tasks_by_uuid(db, (primary.uuid, secondary.uuid))
-    await _write_primary(db, plan.primary_uuid, ticket_changes)
-    await _write_needs(db, plan, tasks, now)
-    await _write_items(db, plan, now)
-    await _cancel_secondary(db, plan, now)
-    await db.flush()
-    await recompute_ticket_status(db, ticket_uuid=plan.primary_uuid)
-    await void_stale_verdict(db, plan.primary_uuid)
+    await _write(db, plan, ticket_changes, tasks, now)
 
     before_status = pair.status
     pair.status = "confirmed"
@@ -106,12 +102,24 @@ async def resolve(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, reques
     pair.reviewed_at = now
     after = (await tickets_for_review(db, (plan.primary_uuid,)))[plan.primary_uuid]
     db.add(_merged_event(pair, plan, request, reviewer, note, before_status, (low, high), claimants, after))
-    outcome = _outcome(plan, primary, secondary, claimants, tasks)
+    outcome = _outcome(plan, after, secondary, claimants, tasks)
     await db.commit()
 
     await send_resolve_notices(db, outcome=outcome, actor=actor, actor_uuid=reviewer)
     await db.refresh(pair)
     return ResolveResult(detail=await pair_detail(db, pair), outcome=outcome)
+
+
+async def _write(db: AsyncSession, plan: ResolvePlan, ticket_changes: dict, tasks, now: datetime) -> None:
+    """Everything the plan changes on the tickets, then the primary's status and verdict."""
+    await _write_primary(db, plan.primary_uuid, ticket_changes)
+    await _write_needs(db, plan, tasks, now)
+    await _write_items(db, plan, now)
+    await _write_photos_and_answers(db, plan, now)
+    await _cancel_secondary(db, plan, now)
+    await db.flush()
+    await recompute_ticket_status(db, ticket_uuid=plan.primary_uuid)
+    await void_stale_verdict(db, plan.primary_uuid)
 
 
 async def _locked_snapshot(db: AsyncSession, pair: DuplicatePair, request):
@@ -123,8 +131,6 @@ async def _locked_snapshot(db: AsyncSession, pair: DuplicatePair, request):
     low_uuid, high_uuid = await ticket_uuids_for_pair(db, pair)
     if not low_uuid or not high_uuid:
         raise DuplicatePairConflictError("A side of this card is gone")
-    if low_uuid == high_uuid:
-        raise ResolveRefused("Both sides are needs of the same ticket: there are no two tickets to merge")
     for ticket_uuid in sorted((low_uuid, high_uuid)):
         await db.scalar(select(Tickets.uuid).where(Tickets.uuid == ticket_uuid).with_for_update())
     await db.scalars(
@@ -183,15 +189,14 @@ async def _write_needs(
     db: AsyncSession, plan: ResolvePlan, tasks: dict[str, TicketTask], now: datetime
 ) -> None:
     """Fold, move, change and cancel needs; move the people on folded needs; settle each kept need."""
-    dropped = set(plan.dropped_assignments)
+    if plan.dropped_assignments:
+        # Someone already on the need it folds into keeps that place; this one goes (ADR-368).
+        await db.execute(
+            delete(TaskAssignment).where(
+                tuple_(TaskAssignment.task_uuid, TaskAssignment.actor_uuid).in_(plan.dropped_assignments)
+            )
+        )
     for absorbed_uuid, into_uuid in plan.absorbed.items():
-        for task_uuid, person in dropped:
-            if task_uuid == absorbed_uuid:
-                await db.execute(
-                    delete(TaskAssignment).where(
-                        TaskAssignment.task_uuid == absorbed_uuid, TaskAssignment.actor_uuid == person
-                    )
-                )
         await db.execute(
             update(TaskAssignment)
             .where(TaskAssignment.task_uuid == absorbed_uuid)
@@ -239,6 +244,29 @@ async def _write_items(db: AsyncSession, plan: ResolvePlan, now: datetime) -> No
         await db.execute(
             update(TaskProperty).where(TaskProperty.uuid.in_(plan.canceled_properties)).values(delete_at=now)
         )
+
+
+async def _write_photos_and_answers(db: AsyncSession, plan: ResolvePlan, now: datetime) -> None:
+    """Move the other ticket's kept photos over, soft-delete cancelled ones, replace the answers.
+
+    Photos: ADR-383. The primary's disaster answers are replaced whole when the request gives
+    them (ADR-384), as setTicketDisasterDetails does.
+    """
+    if plan.moved_photos:
+        await db.execute(
+            update(Photo).where(Photo.uuid.in_(plan.moved_photos)).values(ref_uuid=plan.primary_uuid)
+        )
+    if plan.canceled_photos:
+        await db.execute(update(Photo).where(Photo.uuid.in_(plan.canceled_photos)).values(delete_at=now))
+    if plan.disaster_details is None:
+        return
+    await db.execute(
+        delete(TicketDisasterDetail).where(TicketDisasterDetail.ticket_uuid == plan.primary_uuid)
+    )
+    for name, values in plan.disaster_details.items():
+        # dict.fromkeys keeps the order sent and drops repeats, as setTicketDisasterDetails does.
+        for value in dict.fromkeys(v for v in values if v):
+            db.add(TicketDisasterDetail(ticket_uuid=plan.primary_uuid, property_name=name, value=value))
 
 
 async def _cancel_secondary(db: AsyncSession, plan: ResolvePlan, now: datetime) -> None:
@@ -291,6 +319,9 @@ def _merged_event(
                 "dropped_assignments": [list(pair_) for pair_ in plan.dropped_assignments],
                 "moved_properties": plan.property_moves,
                 "canceled_properties": list(plan.canceled_properties),
+                "moved_photos": list(plan.moved_photos),
+                "canceled_photos": list(plan.canceled_photos),
+                "disaster_details": plan.disaster_details,
             }
         ),
         reversible=False,

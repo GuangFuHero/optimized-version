@@ -6,7 +6,12 @@ import pytest
 
 from app.schemas.duplicate_pair import ResolveRequest
 from app.services.dedup_resolve_plan import ResolveRefused, build_plan
-from app.services.dedup_review_tickets import PropertyForReview, TaskForReview, TicketForReview
+from app.services.dedup_review_tickets import (
+    PhotoForReview,
+    PropertyForReview,
+    TaskForReview,
+    TicketForReview,
+)
 
 
 def _task(uuid, task_type="hr", quantity=2, properties=(), name="清淤") -> TaskForReview:
@@ -50,6 +55,8 @@ def _ticket(uuid, *tasks) -> TicketForReview:
         created_by="owner",
         created_at=None,
         tasks=tuple(tasks),
+        photos=(),
+        disaster_details={},
     )
 
 
@@ -412,3 +419,107 @@ def test_an_unknown_field_is_refused_by_the_schema():
 
     with pytest.raises(ValidationError):
         _request(ticket={"titel": "錯字"})
+
+
+# --- code review round (ADR-380, 383, 384) ------------------------------------------------
+
+
+@pytest.mark.parametrize(("field", "limit"), [("priority", 20), ("task_type", 50)])
+def test_ticket_fields_longer_than_their_column_are_refused(field, limit):
+    """ADR-380: past the column the database would raise, and REST would answer 500."""
+    assert f"at most {limit}" in _refused(_request(ticket={field: "x" * (limit + 1)}))
+    assert _plan(_request(ticket={field: "x" * limit})).ticket_changes == {field: "x" * limit}
+
+
+def _with_photos(ticket, *uuids):
+    return replace(
+        ticket, photos=tuple(PhotoForReview(uuid=u, url=f"https://x/{u}.jpg", created_at=None) for u in uuids)
+    )
+
+
+PH = {key: f"00000000-0000-0000-0000-0000000001{n:02d}" for n, key in enumerate(["pA", "pB", "pB2"])}
+
+
+def test_photos_of_the_other_ticket_kept_move_and_the_rest_are_cancelled():
+    """ADR-383: B's kept photo hangs under A; a cancelled one is soft-deleted; A's kept one stays."""
+    low, high = _with_photos(LOW, PH["pA"]), _with_photos(HIGH, PH["pB"], PH["pB2"])
+    request = _request(
+        photos=[
+            {"photo": PH["pA"], "action": "keep"},
+            {"photo": PH["pB"], "action": "keep"},
+            {"photo": PH["pB2"], "action": "cancel"},
+        ]
+    )
+
+    plan = _plan(request, low=low, high=high)
+
+    assert (plan.moved_photos, plan.canceled_photos) == ((PH["pB"],), (PH["pB2"],))
+
+
+@pytest.mark.parametrize(
+    ("photos", "expected"),
+    [
+        ([{"photo": PH["pA"], "action": "keep"}], "Every photo must be named"),
+        (None, "Every photo must be named"),
+        (
+            [
+                {"photo": PH["pA"], "action": "keep"},
+                {"photo": PH["pA"], "action": "keep"},
+                {"photo": PH["pB"], "action": "keep"},
+            ],
+            "more than once",
+        ),
+        (
+            [
+                {"photo": PH["pA"], "action": "keep"},
+                {"photo": PH["pB"], "action": "keep"},
+                {"photo": "00000000-0000-0000-0000-000000000999", "action": "keep"},
+            ],
+            "not on either ticket",
+        ),
+    ],
+    ids=["one left out", "list missing", "named twice", "a stranger's photo"],
+)
+def test_photos_follow_the_need_rules(photos, expected):
+    """ADR-383: every photo of both tickets is named once."""
+    low, high = _with_photos(LOW, PH["pA"]), _with_photos(HIGH, PH["pB"])
+    request = _request(photos=photos) if photos is not None else _request()
+
+    assert expected in _refused(request, low=low, high=high)
+
+
+def test_no_photos_needs_no_list():
+    """Neither ticket has a photo: the request may leave `photos` out."""
+    plan = _plan()
+
+    assert (plan.moved_photos, plan.canceled_photos) == ((), ())
+
+
+def test_the_disaster_answers_sent_replace_the_primarys():
+    """ADR-384: the request gives the primary's full answers."""
+    high = replace(HIGH, disaster_details={"power_outage": ("yes",)})
+
+    plan = _plan(_request(disaster_details={"power_outage": ["yes"], "utility_hazards": ["gas"]}), high=high)
+
+    assert plan.disaster_details == {"power_outage": ["yes"], "utility_hazards": ["gas"]}
+
+
+def test_the_other_tickets_answers_cannot_be_left_unsaid():
+    """ADR-384: B has answers, so the request must say what A ends with."""
+    high = replace(HIGH, disaster_details={"power_outage": ("yes",)})
+
+    assert "disaster_details" in _refused(high=high)
+
+
+def test_answers_only_on_the_primary_may_be_left_alone():
+    """Only A has answers and none are sent: A keeps them."""
+    low = replace(LOW, disaster_details={"power_outage": ("no",)})
+
+    assert _plan(low=low).disaster_details is None
+
+
+def test_disaster_answers_past_the_size_limits_are_refused():
+    """ADR-267's ceilings, as for setTicketDisasterDetails."""
+    high = replace(HIGH, disaster_details={"power_outage": ("yes",)})
+
+    assert "上限" in _refused(_request(disaster_details={"note": ["長" * 501]}), high=high)

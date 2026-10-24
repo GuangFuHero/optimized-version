@@ -103,6 +103,16 @@ class TaskForReviewResponse(BaseModel):
     properties: list[PropertyForReviewResponse]
 
 
+class PhotoForReviewResponse(BaseModel):
+    """One live photo on a ticket (Spec 028, ADR-383)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    uuid: UUID
+    url: str
+    created_at: datetime | None
+
+
 class TicketForReviewResponse(BaseModel):
     """A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-372).
 
@@ -130,6 +140,8 @@ class TicketForReviewResponse(BaseModel):
     created_by: UUID | None
     created_at: datetime | None
     tasks: list[TaskForReviewResponse]
+    photos: list[PhotoForReviewResponse]
+    disaster_details: dict[str, list[str]]
 
 
 class TicketsForReviewResponse(BaseModel):
@@ -226,6 +238,16 @@ class ResolveSecondaryTask(_Strict):
     properties: list[ResolveProperty] | None = None
 
 
+class ResolvePhoto(_Strict):
+    """One photo of either ticket: kept on the primary, or cancelled (ADR-383).
+
+    A kept photo of the other ticket moves over to the primary.
+    """
+
+    photo: UUID
+    action: Literal["keep", "cancel"]
+
+
 class ResolveVersions(_Strict):
     """The `version` of each side's ticket as the reviewer read it (ADR-373)."""
 
@@ -241,4 +263,6 @@ class ResolveRequest(_Strict):
     ticket: ResolveTicketValues | None = None
     primary_tasks: list[ResolvePrimaryTask]
     secondary_tasks: list[ResolveSecondaryTask] = Field(default_factory=list)
+    photos: list[ResolvePhoto] | None = None
+    disaster_details: dict[str, list[str]] | None = None
     note: str | None = None

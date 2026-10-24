@@ -599,3 +599,83 @@ async def test_a_reject_and_a_resolve_at_once_leave_one_decision(db):
     pair = await db.get(DuplicatePair, pair_uuid)
     b = await _row(db, Tickets, ids["b"])
     assert (pair.status, b.status) in {("confirmed", "cancelled"), ("rejected", "pending")}
+
+
+# --- code review round: photos, answers (ADR-383, 384) ------------------------------------
+
+
+async def _photos_and_answers(db, ids):
+    """B: two photos and an answer; A: one photo and its own answer."""
+    from app.models.photo import Photo
+    from app.models.ticket_disaster_detail import TicketDisasterDetail
+
+    made = {}
+    for key, ticket in (("pA", "a"), ("pB", "b"), ("pB2", "b")):
+        photo = Photo(
+            ref_uuid=ids[ticket],
+            ref_type="geometry",
+            url=f"https://example.com/{key}.jpg",
+            created_by=ids["owner_a"],
+        )
+        db.add(photo)
+        await db.flush()
+        made[key] = str(photo.uuid)
+    db.add(TicketDisasterDetail(ticket_uuid=ids["a"], property_name="power_outage", value="no"))
+    db.add(TicketDisasterDetail(ticket_uuid=ids["b"], property_name="utility_hazards", value="gas"))
+    await db.flush()
+    return made
+
+
+async def test_photos_and_answers_land_on_the_primary(db):
+    """B's kept photo hangs under A, the cancelled one is soft-deleted; A's answers are replaced whole."""
+    from app.models.photo import Photo
+    from app.models.ticket_disaster_detail import TicketDisasterDetail
+
+    reviewer, ids = await _world(db)
+    photos = await _photos_and_answers(db, ids)
+    request = _example_one(
+        ids,
+        await _versions(db, reviewer, ids),
+        photos=[
+            {"photo": photos["pA"], "action": "keep"},
+            {"photo": photos["pB"], "action": "keep"},
+            {"photo": photos["pB2"], "action": "cancel"},
+        ],
+        disaster_details={"power_outage": ["yes"], "utility_hazards": ["gas"]},
+    )
+
+    await _resolve(db, reviewer, ids, request)
+
+    rows = {
+        str(p.uuid): p
+        for p in (await db.scalars(select(Photo).execution_options(populate_existing=True))).all()
+    }
+    assert (str(rows[photos["pA"]].ref_uuid), rows[photos["pA"]].delete_at) == (ids["a"], None)
+    assert (str(rows[photos["pB"]].ref_uuid), rows[photos["pB"]].delete_at) == (ids["a"], None)
+    assert rows[photos["pB2"]].delete_at is not None
+    answers = await db.execute(
+        select(
+            TicketDisasterDetail.ticket_uuid, TicketDisasterDetail.property_name, TicketDisasterDetail.value
+        )
+    )
+    assert sorted((str(t), n, v) for t, n, v in answers.all()) == sorted(
+        [
+            (ids["a"], "power_outage", "yes"),
+            (ids["a"], "utility_hazards", "gas"),
+            (ids["b"], "utility_hazards", "gas"),
+        ]
+    )
+
+
+async def test_the_other_tickets_answers_must_be_decided(db):
+    """ADR-384 through the service: B has answers, the request says nothing, the resolve is refused."""
+    reviewer, ids = await _world(db)
+    photos = await _photos_and_answers(db, ids)
+    request = _example_one(
+        ids,
+        await _versions(db, reviewer, ids),
+        photos=[{"photo": p, "action": "keep"} for p in photos.values()],
+    )
+
+    with pytest.raises(ResolveRefused, match="disaster_details"):
+        await _resolve(db, reviewer, ids, request)
