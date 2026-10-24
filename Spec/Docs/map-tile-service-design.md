@@ -61,7 +61,7 @@ Static config mapping `(type, source)` to upstream URL template:
 
 | source | URL template | Image format | Special headers |
 |---|---|---|---|
-| `nasa_gibs` | `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg` | `image/jpeg` | none |
+| `nasa_gibs` | `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/HLS_S30_Nadir_BRDF_Adjusted_Reflectance/default/{date}/GoogleMapsCompatible_Level12/{z}/{y}/{x}.png` | `image/png` | none |
 | `eox` | `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg` | `image/jpeg` | none |
 | `nlsc` | `https://wmts.nlsc.gov.tw/wmts/PHOTO_MIX/default/EPSG:3857/{z}/{y}/{x}` | `image/png` | `Referer: https://maps.nlsc.gov.tw/` |
 | `sinica` | `https://gis.sinica.edu.tw/tileserver/file-exists.php?img={layer}/{z}/{x}/{y}` | `image/png` | none |
@@ -70,6 +70,8 @@ Static config mapping `(type, source)` to upstream URL template:
 
 > Note: `nlsc` requires a `Referer` header — set this in `tile_proxy.py` per-source config, not in the route handler.  
 > Note: `sinica` ToS is unconfirmed — confirm before production use.  
+> Note: `nasa_gibs` is HLS Sentinel-2 (30 m, native max z12). `{date}` is the day before the newest date in GIBS's `.../GoogleMapsCompatible_Level12/all/all.xml`, cached in Redis (`tile:nasa_gibs:date`) for an hour and included in the tile cache key. Each day is one satellite pass, so it can be cloudy and is blank outside the swath.  
+> Note: `carto` now needs an API key (`?key=`); without one every tile is an "API KEY REQUIRED" image, so the frontend marks it unavailable.  
 > Note: `{layer}` in the `sinica` URL template is substituted from the `?layer=` query param at request time.
 
 ---
@@ -160,7 +162,7 @@ Returns structured metadata for a given `type`/`source` combination. Used by the
 
 | source | name | attribution_text | license | commercial_use | requires_logo | logo_url |
 |---|---|---|---|---|---|---|
-| `nasa_gibs` | NASA GIBS | `Imagery provided by NASA's Global Imagery Browse Services (GIBS), part of NASA's ESDIS` | US Gov Open Data | true | false | null |
+| `nasa_gibs` | NASA GIBS | `Imagery provided by NASA's Global Imagery Browse Services (GIBS), part of NASA's ESDIS (HLS, contains modified Copernicus Sentinel data)` | US Gov Open Data | true | false | null |
 | `eox` | Sentinel-2 Cloudless by EOX | `Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)` | CC BY-NC-SA 4.0 | false | false | null |
 | `nlsc` | 內政部國土測繪中心 | `© 內政部國土測繪中心` | Taiwan Gov | false | false | null |
 | `sinica` | 中央研究院 | `© 中央研究院` | Academic (unconfirmed) | false | false | null |
