@@ -136,6 +136,33 @@ def test_xlsx_skips_blank_rows_above_the_headers():
     assert table.headers == ("name", "level")
 
 
+def test_xlsx_skips_a_title_row_with_a_blank_row_under_it():
+    """A blank spacer between the title and the header must not make the title look like one."""
+    raw = _xlsx_bytes(
+        [
+            ["資源站點匯入範本_避難收容", None, None],
+            [None, None, None],
+            ["name", "latitude", "longitude"],
+            ["光復國小", 23.67, 121.42],
+        ]
+    )
+
+    table = read_table(raw, "stations.xlsx")
+
+    assert table.headers == ("name", "latitude", "longitude")
+    assert table.rows == ({"name": "光復國小", "latitude": "23.67", "longitude": "121.42"},)
+
+
+def test_xlsx_skips_several_blank_rows_above_the_headers():
+    """More than one blank row above the header used to be read as an empty header row."""
+    table = read_table(
+        _xlsx_bytes([[None], [None], [None], ["name", "level"], ["光復國小", 2]]), "stations.xlsx"
+    )
+
+    assert table.headers == ("name", "level")
+    assert table.rows == ({"name": "光復國小", "level": "2"},)
+
+
 def test_xlsx_a_single_column_sheet_keeps_its_first_row_as_the_header():
     """One filled cell is only a title when the row under it is wider."""
     table = read_table(_xlsx_bytes([["name"], ["光復國小"]]), "stations.xlsx")
