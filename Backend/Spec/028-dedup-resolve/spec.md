@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-24
 **Feature**: 028-dedup-resolve
-**Status**：草案，待使用者審閱。尚未寫 plan、尚未實作。
+**Status**：Task 1～7 已實作（2026-10-24，全套件 2788 passed、覆蓋率 96%）。Task 8 Docker 從零驗證未做。PR 尚未開。
 **Base**: `main` @ `a272dfdd4`，分支 `feat/dedup-resolve`
 **Notion**: DEDUP-007（審核動作與後端）、DEDUP-008（AI 重複審核頁，前端 Ethan）、DEDUP-009（通知，Dennis）、
 「dedup 10/23 update — 討論頁」§12
