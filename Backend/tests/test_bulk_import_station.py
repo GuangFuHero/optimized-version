@@ -37,17 +37,27 @@ from tests.conftest import acting_as
 IN_ZONE = Point(121.50, 25.00)
 
 CAPACITY = f"{DYNAMIC_PREFIX}capacity_total"
-HEADERS = ("uuid", "name", "type", "comment", "latitude", "longitude", "county", "city", CAPACITY)
+HEADERS = ("uuid", "name", "type", "comment", "latitude", "longitude", "address", CAPACITY)
 
 
 def _row(
-    name, *, comment="", capacity="", latitude="25.0", longitude="121.5",
-    county="花蓮縣", city="光復鄉",
+    name,
+    *,
+    comment="",
+    capacity="",
+    latitude="25.0",
+    longitude="121.5",
+    address="花蓮縣光復鄉中山路三段10號",
 ):
     return {
-        "uuid": "", "name": name, "type": "shelter", "comment": comment,
-        "latitude": latitude, "longitude": longitude,
-        "county": county, "city": city, CAPACITY: capacity,
+        "uuid": "",
+        "name": name,
+        "type": "shelter",
+        "comment": comment,
+        "latitude": latitude,
+        "longitude": longitude,
+        "address": address,
+        CAPACITY: capacity,
     }
 
 
@@ -75,11 +85,15 @@ async def _grant(db, user: User, *perms_and_scopes, team: Team | None = None) ->
             permission = Permission(key=perm.value)
             db.add(permission)
             await db.flush()
-        db.add(
-            RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope)
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+    db.add(
+        UserRoleAssign(
+            user_uuid=user.uuid,
+            role_uuid=role.uuid,
+            team_uuid=team.uuid if team is not None else None,
+            role_kind=kind,
         )
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
-                          team_uuid=team.uuid if team is not None else None, role_kind=kind))
+    )
     # Before the commit: `expire_on_commit` is True on this fixture, so reading `role.uuid`
     # afterwards would lazily reload it and raise MissingGreenlet under asyncio.
     acting_as(user, role, team)
@@ -92,7 +106,8 @@ async def _importer(db, *, scope="all", team: Team | None = None) -> User:
     db.add(actor)
     await db.flush()
     await _grant(
-        db, actor,
+        db,
+        actor,
         (Perm.STATION_IMPORT, "all"),
         (Perm.STATION_ADD, "all"),
         (Perm.STATION_EDIT, scope),
@@ -104,17 +119,17 @@ async def _importer(db, *, scope="all", team: Team | None = None) -> User:
 
 
 async def _configs(db) -> None:
-    db.add(StationPropertyConfig(
-        station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
-    ))
+    db.add(
+        StationPropertyConfig(
+            station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
+        )
+    )
     await db.commit()
 
 
 async def _count_stations(db) -> int:
     return (
-        await db.execute(
-            select(func.count()).select_from(Station).where(Station.delete_at.is_(None))
-        )
+        await db.execute(select(func.count()).select_from(Station).where(Station.delete_at.is_(None)))
     ).scalar_one()
 
 
@@ -134,9 +149,7 @@ async def test_preview_writes_nothing(db):
     actor = await _importer(db)
     raw, filename = _file([_row("光復國小")])
 
-    result = await preview_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    result = await preview_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert result.to_create == 1
     assert await _count_stations(db) == 0
@@ -160,15 +173,15 @@ async def test_preview_reports_every_problem_at_once(db):
     """One fix per upload would make a broken file take all afternoon (ADR-112)."""
     await _configs(db)
     actor = await _importer(db)
-    raw, filename = _file([
-        _row("好資料"),
-        _row("沒座標", latitude="", longitude=""),
-        _row("壞數量", capacity="abc"),
-    ])
-
-    result = await preview_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
+    raw, filename = _file(
+        [
+            _row("好資料"),
+            _row("沒座標", latitude="", longitude=""),
+            _row("壞數量", capacity="abc"),
+        ]
     )
+
+    result = await preview_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert {error.line for error in result.errors} == {3, 4}
     assert result.to_create == 1
@@ -181,9 +194,7 @@ async def test_preview_suggests_a_mapping_and_names_what_it_could_not_place(db):
     actor = await _importer(db)
     raw = write_csv(("name", "自訂欄"), [{"name": "光復國小", "自訂欄": "x"}])
 
-    result = await preview_stations(
-        db, actor=actor, raw=raw, filename="stations.csv", station_type="shelter"
-    )
+    result = await preview_stations(db, actor=actor, raw=raw, filename="stations.csv", station_type="shelter")
 
     assert result.suggested_mapping["name"] == "name"
     assert result.unmapped_headers == ("自訂欄",)
@@ -193,16 +204,16 @@ async def test_preview_suggests_a_mapping_and_names_what_it_could_not_place(db):
 async def test_preview_explains_which_dynamic_fields_the_file_cannot_carry(db):
     """A file silently missing half a type's fields reads as data loss (ADR-118)."""
     await _configs(db)
-    db.add(StationPropertyConfig(
-        station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
-    ))
+    db.add(
+        StationPropertyConfig(
+            station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
+        )
+    )
     await db.commit()
     actor = await _importer(db)
     raw, filename = _file([_row("光復國小")])
 
-    result = await preview_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    result = await preview_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert [s["property_name"] for s in result.skipped_columns] == ["pet_friendly"]
     assert "boolean" in result.skipped_columns[0]["reason"]
@@ -228,9 +239,7 @@ async def test_a_row_that_matches_nothing_is_created(db):
     actor = await _importer(db)
     raw, filename = _file([_row("光復國小", capacity="120")])
 
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert (outcome.created, outcome.updated, outcome.failed) == (1, 0, 0)
     station = await _station_named(db, "光復國小")
@@ -254,12 +263,15 @@ async def test_a_created_row_gets_its_address_and_dynamic_value(db):
         )
     ).scalar_one()
     prop = (
-        await db.execute(
-            select(StationProperty).where(StationProperty.station_uuid == station.uuid)
-        )
+        await db.execute(select(StationProperty).where(StationProperty.station_uuid == station.uuid))
     ).scalar_one()
 
-    assert (address.county, address.city) == ("花蓮縣", "光復鄉")
+    assert (address.county, address.town, address.road, address.normalization_status) == (
+        "花蓮縣",
+        "光復鄉",
+        "中山路",
+        "unverified",
+    )
     assert prop.quantity == 120
 
 
@@ -273,9 +285,7 @@ async def test_importing_without_the_add_capability_fails_every_new_row(db):
     await _configs(db)
     raw, filename = _file([_row("光復國小")])
 
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert (outcome.created, outcome.failed) == (0, 1)
     assert await _count_stations(db) == 0
@@ -295,9 +305,7 @@ async def test_a_row_that_matches_updates_in_place(db):
     original_uuid = str(original.uuid)
 
     raw, filename = _file([_row("光復國小", comment="第二版")])
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert (outcome.created, outcome.updated) == (0, 1)
     assert await _count_stations(db) == 1
@@ -325,7 +333,7 @@ async def test_importing_the_same_file_twice_changes_nothing_the_second_time(db)
     """Idempotence is what makes re-uploading a corrected file safe (ADR-106)."""
     await _configs(db)
     actor = await _importer(db)
-    raw, filename = _file([_row("光復國小"), _row("大進國小", city="大進里")])
+    raw, filename = _file([_row("光復國小"), _row("大進國小", address="花蓮縣鳳林鎮")])
 
     first = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
     second = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
@@ -358,24 +366,30 @@ async def test_a_team_scoped_importer_cannot_update_another_teams_station(db):
     author_uuid = str((await db.execute(select(User.uuid).where(User.name == "author"))).scalar_one())
     for name, team_uuid in (("本隊站", mine_uuid), ("他隊站", other_uuid)):
         station = Station(
-            geometry=from_shape(Point(121.90, 25.40), srid=4326), created_by=author_uuid,
+            geometry=from_shape(Point(121.90, 25.40), srid=4326),
+            created_by=author_uuid,
             team_uuid=team_uuid,
-            type="shelter", name=name, level=0, visibility="public",
+            type="shelter",
+            name=name,
+            level=0,
+            visibility="public",
         )
         db.add(station)
         await db.flush()
-        db.add(SecondaryLocation(
-            geometry_uuid=str(station.uuid), location_type="address", county="宜蘭縣", city="蘇澳鎮"
-        ))
+        db.add(
+            SecondaryLocation(
+                geometry_uuid=str(station.uuid), location_type="address", county="宜蘭縣", town="蘇澳鎮"
+            )
+        )
     await db.commit()
 
-    raw, filename = _file([
-        _row(name, comment="匯入的備註", county="宜蘭縣", city="蘇澳鎮", latitude="25.40", longitude="121.90")
-        for name in ("本隊站", "他隊站")
-    ])
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
+    raw, filename = _file(
+        [
+            _row(name, comment="匯入的備註", address="宜蘭縣蘇澳鎮", latitude="25.40", longitude="121.90")
+            for name in ("本隊站", "他隊站")
+        ]
     )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert (outcome.updated, outcome.failed) == (1, 1)
     assert (await _station_named(db, "本隊站")).comment == "匯入的備註"
@@ -390,15 +404,15 @@ async def test_good_rows_land_while_bad_rows_are_reported(db):
     """Row by row, not all or nothing (ADR-112)."""
     await _configs(db)
     actor = await _importer(db)
-    raw, filename = _file([
-        _row("好站一"),
-        _row("壞站", capacity="abc"),
-        _row("好站二", city="大進里"),
-    ])
-
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
+    raw, filename = _file(
+        [
+            _row("好站一"),
+            _row("壞站", capacity="abc"),
+            _row("好站二", address="花蓮縣鳳林鎮"),
+        ]
     )
+
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert (outcome.created, outcome.failed) == (2, 1)
     assert await _count_stations(db) == 2
@@ -412,9 +426,7 @@ async def test_the_error_report_is_the_original_rows_plus_a_reason(db):
     actor = await _importer(db)
     raw, filename = _file([_row("好站"), _row("壞站", capacity="abc")])
 
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
     report = read_table(base64.b64decode(outcome.error_report.content_base64), outcome.error_report.filename)
 
     assert outcome.error_report.filename == "stations-errors.csv"
@@ -430,9 +442,7 @@ async def test_a_clean_import_produces_no_report(db):
     actor = await _importer(db)
     raw, filename = _file([_row("光復國小")])
 
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert outcome.error_report is None
     assert outcome.batch_id
@@ -445,9 +455,7 @@ async def test_two_rows_sharing_a_key_both_fail(db):
     actor = await _importer(db)
     raw, filename = _file([_row("光復國小", comment="A"), _row("光復國小", comment="B")])
 
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert (outcome.created, outcome.failed) == (0, 2)
     assert await _count_stations(db) == 0
@@ -460,9 +468,7 @@ async def test_a_row_declaring_another_type_is_refused(db):
     actor = await _importer(db)
     raw, filename = _file([{**_row("加水站"), "type": "water"}])
 
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert outcome.failed == 1
     assert "water" in outcome.errors[0].message
@@ -516,7 +522,8 @@ async def _importer_without_edit(db) -> User:
     db.add(actor)
     await db.flush()
     await _grant(
-        db, actor,
+        db,
+        actor,
         (Perm.STATION_IMPORT, "all"),
         (Perm.STATION_ADD, "all"),
         (Perm.STATION_CONTRIBUTE, "all"),
@@ -534,22 +541,25 @@ async def test_a_row_refused_mid_file_does_not_take_the_rest_of_the_file_with_it
     """
     await _configs(db)
     existing = Station(
-        geometry=from_shape(IN_ZONE, srid=4326), type="shelter", name="既有站",
-        level=0, visibility="public",
+        geometry=from_shape(IN_ZONE, srid=4326),
+        type="shelter",
+        name="既有站",
+        level=0,
+        visibility="public",
     )
     db.add(existing)
     await db.flush()
-    db.add(SecondaryLocation(
-        geometry_uuid=str(existing.uuid), location_type="address", county="花蓮縣", city="光復鄉"
-    ))
+    db.add(
+        SecondaryLocation(
+            geometry_uuid=str(existing.uuid), location_type="address", county="花蓮縣", town="光復鄉"
+        )
+    )
     await db.commit()
 
     actor = await _importer_without_edit(db)
     raw, filename = _file([_row("既有站", comment="改不動"), _row("新站一"), _row("新站二")])
 
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert (outcome.created, outcome.updated, outcome.failed) == (2, 0, 1)
     assert await _station_named(db, "新站一") is not None
@@ -563,20 +573,23 @@ async def test_a_row_refused_before_it_wrote_anything_is_not_reported_as_partial
     await _configs(db)
     actor = await _importer_without_edit(db)
     existing = Station(
-        geometry=from_shape(IN_ZONE, srid=4326), type="shelter", name="既有站",
-        level=0, visibility="public",
+        geometry=from_shape(IN_ZONE, srid=4326),
+        type="shelter",
+        name="既有站",
+        level=0,
+        visibility="public",
     )
     db.add(existing)
     await db.flush()
-    db.add(SecondaryLocation(
-        geometry_uuid=str(existing.uuid), location_type="address", county="花蓮縣", city="光復鄉"
-    ))
+    db.add(
+        SecondaryLocation(
+            geometry_uuid=str(existing.uuid), location_type="address", county="花蓮縣", town="光復鄉"
+        )
+    )
     await db.commit()
 
     raw, filename = _file([_row("既有站", comment="改不動")])
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert outcome.failed == 1
     assert outcome.partial_rows == ()
@@ -595,14 +608,10 @@ async def test_a_row_that_failed_after_writing_its_station_is_reported_as_partia
     async def refuse(*args, **kwargs):
         raise ValueError("這個值存不進去")
 
-    monkeypatch.setattr(
-        "app.services.station.create_station_property", refuse
-    )
+    monkeypatch.setattr("app.services.station.create_station_property", refuse)
     raw, filename = _file([_row("半進站", capacity="120")])
 
-    outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert outcome.failed == 1
     assert outcome.partial_rows == (2,)
@@ -615,23 +624,28 @@ async def test_an_ambiguous_match_does_not_name_the_rows_it_matched(db):
     await _configs(db)
     for _ in range(2):
         station = Station(
-            geometry=from_shape(IN_ZONE, srid=4326), type="shelter", name="同名站",
-            level=0, visibility="public",
+            geometry=from_shape(IN_ZONE, srid=4326),
+            type="shelter",
+            name="同名站",
+            level=0,
+            visibility="public",
         )
         db.add(station)
         await db.flush()
-        db.add(SecondaryLocation(
-            geometry_uuid=str(station.uuid), location_type="address",
-            county="花蓮縣", city="光復鄉",
-        ))
+        db.add(
+            SecondaryLocation(
+                geometry_uuid=str(station.uuid),
+                location_type="address",
+                county="花蓮縣",
+                town="光復鄉",
+            )
+        )
     await db.commit()
 
     actor = await _importer(db)
     raw, filename = _file([_row("同名站")])
 
-    result = await preview_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
-    )
+    result = await preview_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     message = result.errors[0].message
     assert "2 筆" in message

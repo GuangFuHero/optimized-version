@@ -491,11 +491,17 @@ secondary_locations {
     uuid uuid PK
     uuid geometry_uuid FK "FK to base_geometries"
     string location_type "address/pole"
-    string county "nullable, address only"
-    string city "nullable, address only"
-    string lane "nullable, address only — holds the ROAD/street name despite the name (COMMENT ON COLUMN)"
-    string alley "nullable, address only — holds the 巷弄 despite the name (COMMENT ON COLUMN)"
-    string no "nullable, address only"
+    string full_address "nullable, String(255) — the whole line without 樓/室; official when TGOS confirmed it"
+    string county "nullable, 縣市"
+    string town "nullable, 鄉鎮市區"
+    string village "nullable, 村里"
+    string neighborhood "nullable, String(10), 鄰 e.g. 3鄰"
+    string road "nullable, String(100), 路／街／大道"
+    string section "nullable, String(10), 段 e.g. 一段"
+    string lane "nullable, 巷 e.g. 469巷"
+    string alley "nullable, 弄 e.g. 1弄"
+    string no "nullable, 號 e.g. 19號 / 19之1號"
+    string normalization_status "nullable, verified/pin_mismatch/unverified — set from the address token on every write"
     string building_section "nullable, 樓棟／區域 e.g. A棟／東翼 (feature 018)"
     string floor "nullable, address only — free text: B1/1F/RF, never coerced to a number"
     string room "nullable, address only — 房號／空間 e.g. 302, 樓梯間"
@@ -507,16 +513,18 @@ secondary_locations {
     string pole_type "nullable, pole only"
     uuid pole_photo_uuid FK "nullable, pole only, FK to photos (see Tickets diagram), ON DELETE SET NULL"
     string pole_note "nullable, pole only — EXCLUDED from search_text (free-text note, ADR-079)"
-    string search_text "GENERATED ALWAYS AS county+city+lane+alley+no+floor+room+pole_id, STORED"
+    string search_text "GENERATED ALWAYS AS county+town+road+section+lane+alley+no+floor+room+pole_id, STORED"
 }
 %% INDEX: ix_secondary_locations_search_text_trgm USING gin (search_text gin_trgm_ops)
 %% NOTE: the five feature-018 columns (building_section/space_description/victim_space/
 %% access_status/landmark_note) are deliberately NOT in search_text (ADR-250). Only stations
 %% are searchable through this table at all (ADR-146), and which room a trapped person is
 %% hiding in is not something to make findable by substring.
+%% NOTE: the address parts come from parsing full_address on every write; village and neighborhood
+%% stay out of search_text so a search like 光復鄉糖廠街 still matches.
 %% NOTE: who may READ a row depends on the parent. A station's address is public (it is on the
-%% map already); a ticket's needs ticket.view_pii, and TicketType.secondaryLocation resolves to
-%% null without it (ADR-268).
+%% map already); a ticket's needs ticket.view_detail, and TicketType.secondaryLocation resolves to
+%% null without it.
 base_geometries ||--|| secondary_locations : "has secondary location"
 
 %% Inheritance: a drawn map area (ADR-311). Its geometry, on base_geometries, is always a

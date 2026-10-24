@@ -96,11 +96,17 @@ query AdminTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...AdminTicketFields
     secondaryLocation {
+      fullAddress
       county
-      city
+      town
+      village
+      neighborhood
+      road
+      section
       lane
       alley
       no
+      normalizationStatus
       floor
       room
       landmarkNote
@@ -179,11 +185,17 @@ query AdminStation($uuid: UUID!) {
     contactName
     contactPhone
     secondaryLocation {
+      fullAddress
       county
-      city
+      town
+      village
+      neighborhood
+      road
+      section
       lane
       alley
       no
+      normalizationStatus
       floor
       room
       poleId

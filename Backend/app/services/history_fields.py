@@ -102,11 +102,17 @@ HISTORY_MODELS = {
 }
 
 _ADDRESS_COLUMNS = (
+    "full_address",
     "county",
-    "city",
+    "town",
+    "village",
+    "neighborhood",
+    "road",
+    "section",
     "lane",
     "alley",
     "no",
+    "normalization_status",
     "floor",
     "room",
     "pole_id",

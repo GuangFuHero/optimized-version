@@ -166,6 +166,7 @@ main() {
     gcloud auth list --filter=status:ACTIVE --format='value(account)' | grep -q . \
         || die "no active gcloud identity (VM service account?)"
     [ -z "$(git status --porcelain)" ] || die "git working tree not clean"
+    [[ -f .env.tgos ]] || printf 'WARNING: .env.tgos missing; address lookups will answer "unavailable"\n' >&2
 
     log "[2/9] recording rollback baseline (from the RUNNING container, not tags)"
     OLD_SHA=$(git rev-parse HEAD)
