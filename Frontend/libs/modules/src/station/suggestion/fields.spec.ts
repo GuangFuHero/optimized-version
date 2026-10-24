@@ -12,6 +12,7 @@ import {
 } from './fields';
 
 const STATION: StationSuggestionSnapshot = {
+  uuid: 'f0000000-0000-4000-8000-000000000001',
   name: '光復國小收容所',
   type: 'shelter',
   description: '體育館正門',
@@ -53,10 +54,16 @@ describe('startSuggestion', () => {
   });
 
   it('reads a station without a status as running, and a missing value as empty', () => {
-    expect(startSuggestion({}, 'operational_status').value).toBe('active');
-    expect(startSuggestion({ supplyStatus: null }, 'supply_status').value).toBe(
-      '',
-    );
+    expect(
+      startSuggestion(
+        { ...STATION, operationalStatus: '' },
+        'operational_status',
+      ).value,
+    ).toBe('active');
+    expect(
+      startSuggestion({ ...STATION, supplyStatus: null }, 'supply_status')
+        .value,
+    ).toBe('');
   });
 });
 
@@ -149,7 +156,12 @@ describe('hasPendingSuggestion', () => {
   it('knows which fields already wait for review', () => {
     expect(hasPendingSuggestion(STATION, 'op_hour')).toBe(true);
     expect(hasPendingSuggestion(STATION, 'supply_status')).toBe(false);
-    expect(hasPendingSuggestion({}, 'op_hour')).toBe(false);
+    expect(
+      hasPendingSuggestion(
+        { ...STATION, pendingSuggestedFields: [] },
+        'op_hour',
+      ),
+    ).toBe(false);
   });
 });
 

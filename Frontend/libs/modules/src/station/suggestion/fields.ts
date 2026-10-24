@@ -5,7 +5,11 @@
  * `visibility`); the site offers what the public can see and judge.
  */
 
-import type { CreateStationSuggestionInput } from '@rescue-frontend/data-access';
+import {
+  StationOperationalStatus,
+  type CreateStationSuggestionInput,
+  type GetStationForSuggestionQuery,
+} from '@rescue-frontend/data-access';
 
 import { STATION_TYPE_OPTIONS } from '../type-options';
 
@@ -20,16 +24,13 @@ export type StationSuggestionFieldName =
   | 'type'
   | 'supply_status';
 
-/** The station as the form reads it: the values now, and which fields already have a suggestion. */
-export interface StationSuggestionSnapshot {
-  name?: string | null;
-  type?: string | null;
-  description?: string | null;
-  opHour?: string | null;
-  operationalStatus?: string | null;
-  supplyStatus?: string | null;
-  pendingSuggestedFields?: readonly string[] | null;
-}
+/**
+ * The station as the form reads it, as `GetStationForSuggestion` returns it: the values now, and
+ * which fields already have a suggestion.
+ */
+export type StationSuggestionSnapshot = NonNullable<
+  GetStationForSuggestionQuery['station']
+>;
 
 export interface StationSuggestionChoice {
   value: string;
@@ -47,11 +48,12 @@ export interface StationSuggestionField {
   read: (station: StationSuggestionSnapshot) => string;
 }
 
-// The site's words for the three, not the prototype form's 開放中: the detail says 營運中.
+// The site's words for the three, not the prototype form's 開放中: the detail says 營運中. The values
+// are the schema's: one renamed there follows at codegen, one taken out fails typecheck.
 const OPERATIONAL_STATUS_CHOICES: readonly StationSuggestionChoice[] = [
-  { value: 'active', label: '營運中' },
-  { value: 'temporarily_closed', label: '暫停服務' },
-  { value: 'permanently_closed', label: '已關閉' },
+  { value: StationOperationalStatus.Active, label: '營運中' },
+  { value: StationOperationalStatus.TemporarilyClosed, label: '暫停服務' },
+  { value: StationOperationalStatus.PermanentlyClosed, label: '已關閉' },
 ];
 
 /**
@@ -67,7 +69,8 @@ export const STATION_SUGGESTION_FIELDS: readonly StationSuggestionField[] = [
     choices: OPERATIONAL_STATUS_CHOICES,
     helper: '站點現在還開不開？',
     // A station without one is running, as the backend defaults it.
-    read: (station) => station.operationalStatus || 'active',
+    read: (station) =>
+      station.operationalStatus || StationOperationalStatus.Active,
   },
   {
     name: 'op_hour',
@@ -191,7 +194,7 @@ export function hasPendingSuggestion(
   station: StationSuggestionSnapshot,
   name: StationSuggestionFieldName,
 ): boolean {
-  return station.pendingSuggestedFields?.includes(name) ?? false;
+  return station.pendingSuggestedFields.includes(name);
 }
 
 export function toCreateStationSuggestionInput(
