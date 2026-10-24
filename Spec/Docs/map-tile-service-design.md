@@ -86,11 +86,11 @@ All sources use a single unified key format:
 tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}
 ```
 
-`{sorted_params}` is a comma-separated string of `key=value` pairs sorted alphabetically by key. When no query params are provided, `{sorted_params}` is `_`.
+`{sorted_params}` is a comma-separated string of `key=value` pairs sorted alphabetically by key. When no query params are provided, `{sorted_params}` is `_`. `nasa_gibs` adds its resolved `date` as a param.
 
 Examples:
 ```
-tile:nasa_gibs:satellite:_:10:123:456
+tile:nasa_gibs:satellite:date=2026-10-21:10:123:456
 tile:eox:satellite:_:10:123:456
 tile:sinica:satellite:layer=EARTH:10:123:456
 tile:sinica:satellite:layer=EARTH,style=default:10:123:456
