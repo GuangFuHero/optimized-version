@@ -52,6 +52,8 @@ export type {
 
 export { SiteListView } from './list';
 
+export { BuildingDrawer } from './building';
+
 export { Map, readRescueMapMarkers } from './map';
 export { hasRescueMapDetailItem } from './map/location-cells';
 export type {
