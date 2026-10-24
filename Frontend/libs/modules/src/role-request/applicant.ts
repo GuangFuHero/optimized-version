@@ -16,7 +16,7 @@ export const APPLICANT_NAME_MAX_LENGTH = 100;
 /** What the form needs to know of the signed-in account. */
 export interface ApplicantAccount {
   /** The nickname, which the name starts from. */
-  nickname: string;
+  nickname: CurrentUser['name'];
   /** In E.164 (`+886912345678`), or null when the account has none verified. */
   verifiedPhone: string | null;
   /** A password account proves it is the person with the password before adding a phone. */
