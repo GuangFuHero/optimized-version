@@ -1,22 +1,14 @@
 /**
- * Server-only entry point. These modules read `next/headers` and next-auth's server APIs, so they
- * stay out of the client-safe package barrel.
+ * Server-only entry point. These modules read `next/headers` and the backend's login cookies, so
+ * they stay out of the client-safe package barrel.
  */
-export { authOptions } from './server/auth-options';
-export { getServerAuthSession } from './server/auth-session';
-export { getBackendApiBaseUrl } from './server/backend-api-url';
-export { withClientIpAsync } from './server/client-ip';
+export { authCookieNames } from './server/auth-cookies';
 export {
-  applyBackendAuthResponseCookies,
-  expireSessionResponse,
-  type ResolvedBackendAuth,
+  getBackendApiBaseUrl,
   getBackendGraphqlUrl,
-  getServerBackendAccessTokenAsync,
-  refreshUnavailableResponse,
-  resolveBackendAuthTokenAsync,
-} from './server/server-backend-auth';
+} from './server/backend-api-url';
+export { withClientIpAsync } from './server/client-ip';
 
-export { SITE_REALM_HEADERS } from './server/site-realm';
 export { reverseGeocode } from './server/reverse-geocode';
 export {
   createBackendGraphqlHandler,
@@ -25,6 +17,7 @@ export {
 export { refreshBeforeRenderAsync } from './server/refresh-before-render';
 export {
   currentUserFromBackendAsync,
+  NO_BACK_OFFICE_IDENTITY,
   READ_IN_BROWSER,
   type CurrentUser,
 } from './server/current-user';

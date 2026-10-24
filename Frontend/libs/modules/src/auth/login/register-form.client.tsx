@@ -1,7 +1,6 @@
 'use client';
 
 import { Alert, Button, TextField } from '@mui/material';
-import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
@@ -11,9 +10,7 @@ import {
   registerAsync,
   resendVerificationAsync,
   verifyAndSignInAsync,
-  verifyAsync,
 } from '../api/client';
-import { useAuthSession } from '../../session/auth-session';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
 import { continueSignedIn } from './continue-signed-in';
@@ -29,36 +26,21 @@ const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
 const VERIFY_FALLBACK_MESSAGE = '驗證失敗，請稍後再試。';
 const RESEND_FALLBACK_MESSAGE = '重新發送失敗，請稍後再試。';
 
-/**
- * The account exists by this point — the code was accepted and only the automatic sign-in failed.
- * Telling the user "verification failed" would send them back to register and straight into a 409.
- */
-const SIGN_IN_FAILED_MESSAGE =
-  '帳號已建立完成，但自動登入沒有成功。請返回登入頁手動登入。';
-
-class SignInFailedError extends Error {}
-
 interface PendingRegistration {
   identityType: AuthIdentityType;
   normalizedIdentity: string;
 }
 
-/**
- * Who signs the new account in: next-auth by default, the back office's way until its own move to
- * the backend login (③); or the backend, which does it in the same request that takes the code.
- */
 export function RegisterFormClient({
-  signInWith = 'next-auth',
+  defaultCallbackUrl = '/map',
 }: {
-  signInWith?: 'next-auth' | 'backend';
+  defaultCallbackUrl?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { refetch: refetchSession } = useAuthSession();
   // The page the login page was asked to return to, carried here — a guest who pressed 「登入後接」
-  // and had no account yet lands back on that ticket. Nothing asked: the map.
+  // and had no account yet lands back on that ticket. Nothing asked: `defaultCallbackUrl`.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
-  const callbackUrl = requestedCallbackUrl ?? '/map';
   const [pendingRegistration, setPendingRegistration] =
     useState<PendingRegistration | null>(null);
   const [verificationCode, setVerificationCode] = useState('');
@@ -84,63 +66,19 @@ export function RegisterFormClient({
     setVerificationSuccess(undefined);
 
     try {
-      if (signInWith === 'backend') {
-        // One request: when it fails no account was made, never one made and left signed out.
-        await verifyAndSignInAsync({
-          type: pendingRegistration.identityType,
-          value: pendingRegistration.normalizedIdentity,
-          code,
-        });
-        setVerificationSuccess('帳號驗證完成，正在登入。');
-        continueSignedIn(safeReturnPath(requestedCallbackUrl, '/map'));
-        return;
-      }
-
-      const tokenPair = await verifyAsync({
+      // One request: when it fails no account was made, never one made and left signed out.
+      await verifyAndSignInAsync({
         type: pendingRegistration.identityType,
         value: pendingRegistration.normalizedIdentity,
         code,
       });
-
-      // Past this line the account exists. Every way sign-in can fail — a returned `error`, a
-      // thrown network blip, a 500 from the next-auth route — means the same thing to the user, so
-      // they all have to arrive as the same error. Letting a throw escape to the outer catch would
-      // report "verification failed" and send them back to register, straight into a 409.
-      let result: Awaited<ReturnType<typeof signIn>>;
-
-      try {
-        result = await signIn('credentials', {
-          username: pendingRegistration.normalizedIdentity,
-          password: '',
-          accessToken: tokenPair.access_token,
-          refreshToken: tokenPair.refresh_token,
-          tokenType: tokenPair.token_type ?? 'bearer',
-          expiresIn: String(tokenPair.expires_in),
-          callbackUrl,
-          redirect: false,
-        });
-      } catch (error) {
-        throw new SignInFailedError(
-          error instanceof Error ? error.message : 'sign-in threw',
-        );
-      }
-
-      if (result?.error) {
-        throw new SignInFailedError(result.error);
-      }
-
       setVerificationSuccess('帳號驗證完成，正在登入。');
-
-      // Nothing else tells this tab it is signed in now (next-auth's provider used to).
-      await refetchSession();
-      startTransition(() => {
-        router.replace(result?.url ?? callbackUrl, { scroll: false });
-      });
+      continueSignedIn(
+        safeReturnPath(requestedCallbackUrl, defaultCallbackUrl),
+      );
     } catch (error) {
       setVerificationError(
-        error instanceof SignInFailedError
-          ? SIGN_IN_FAILED_MESSAGE
-          : resolveAuthErrorMessage(error, VERIFY_FALLBACK_MESSAGE),
+        resolveAuthErrorMessage(error, VERIFY_FALLBACK_MESSAGE),
       );
     } finally {
       setIsVerifying(false);

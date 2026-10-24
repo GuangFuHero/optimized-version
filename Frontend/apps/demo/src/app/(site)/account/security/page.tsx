@@ -22,6 +22,7 @@ export default async function AccountSecurityPage() {
   // could not, or a stale one, is left for the browser (`READ_IN_BROWSER`).
   const user = await currentUserFromBackendAsync(
     (await headers()).get('cookie'),
+    'site',
   );
 
   if (!user) {

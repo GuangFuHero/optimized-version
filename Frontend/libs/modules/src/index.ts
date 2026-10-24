@@ -96,12 +96,14 @@ export type {
   PointShareTarget,
 } from './point-share';
 
+export { AnnouncementPage } from './admin/announcement';
 export { BackOfficePlaceholder } from './role-request';
-export { AdminPlaceholderPage, AdminShell } from './shell';
+export { AdminPlaceholderPage, AdminShell, NoBackOfficeAccess } from './shell';
 export type { AdminShellProps } from './shell';
 
 // The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.
 export {
+  endExpiredSession,
   isSigningOutHere,
   markSigningOutHere,
   sessionExpiryFetch,

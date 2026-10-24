@@ -1,3 +1,3 @@
-import { AdminPlaceholderPage } from '@rescue-frontend/modules';
+import { AnnouncementPage } from '@rescue-frontend/modules';
 
-export default AdminPlaceholderPage;
+export default AnnouncementPage;
