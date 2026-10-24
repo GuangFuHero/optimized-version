@@ -260,3 +260,8 @@
     MAP_UNDO_SECONDS: 5,
   });
 })();
+
+/* 🔒 ZONE-NAME-101（2026-10-24）區域名稱上限 10 個字（Unicode 字元數）。前台 site-map.jsx 的 ZONE_NAME_MAX 同值。
+   ⚠️ 後端 work_zones.name 是 varchar(100)，目前只有前端擋。 */
+window.MAP_ZONE_NAME_MAX = 10;
+window.mapZoneNameCount = function (s) { return [...String(s || "")].length; };

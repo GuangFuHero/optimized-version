@@ -463,7 +463,15 @@
     const set = (k) => (v) => setForm((s) => ({ ...s, [k]: v }));
     const split = window.mapSplitByAssignment(preview.tickets, form.team);
     const assigning = form.kind === "assign" && form.team;
-    const canSave = !!form.kind && !!form.name.trim() && (form.kind !== "assign" || !!form.team);
+    /* 🔒 ZONE-NAME-101（2026-10-24）名稱最多 10 個字 —— 前台地圖標籤 12px，10 字約佔手機地圖寬度一半，
+       再長標籤會蓋住兩三個格子、找不到空位只能藏起來（ZONE-LABEL-102）。
+       字數＝Unicode 字元數（[...s].length），中文、英數、空白、標點都算 1，與緊急公告 50 字同一種算法。
+       ❌ 不要用 <input maxLength>：它算 UTF-16 長度（emoji 算 2），而且中文輸入法選字到一半會被截斷、
+          貼上時默默砍掉後半段。改成照打、顯示字數、超過就不能建立。
+       地點說明（「光復車站前廣場」這類括號內容）請寫在備註。 */
+    const nameLen = window.mapZoneNameCount(form.name.trim());
+    const nameOver = nameLen > window.MAP_ZONE_NAME_MAX;
+    const canSave = !!form.kind && !!form.name.trim() && !nameOver && (form.kind !== "assign" || !!form.team);
     const cta = assigning ? `建立並指派 ${split.unassigned.length + (form.overwrite ? split.others.length : 0)} 張` : form.kind ? `建立${window.mapKindLabel(form.kind)}` : "建立區域";
     return (
       <Frame
@@ -507,7 +515,16 @@
         <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <span className="wg-caption" style={cap}>名稱 <span style={{ color: "var(--color-fg-danger, #D32F2F)" }}>*</span></span>
           <input autoFocus value={form.name} onChange={(e) => set("name")(e.target.value)}
-            placeholder={form.kind === "hazard" ? "例：馬太鞍溪堤防潰口" : form.kind === "assign" ? "例：光復鄉 大平村" : "例：糖廠志工休息區"} style={inputStyle} />
+            placeholder={form.kind === "hazard" ? "例：馬太鞍溪堤防潰口" : form.kind === "assign" ? "例：光復鄉 大平村" : "例：糖廠志工休息區"}
+            aria-invalid={nameOver} aria-describedby="map-zone-name-hint"
+            style={nameOver ? { ...inputStyle, borderColor: "var(--color-border-danger, #D32F2F)" } : inputStyle} />
+          <span id="map-zone-name-hint" className="wg-caption" style={{ display: "flex", gap: 8,
+            color: nameOver ? "var(--color-fg-danger, #B71C1C)" : "var(--color-fg-neutral-muted)" }}>
+            <span style={{ flex: 1 }}>{nameOver
+              ? `超過 ${nameLen - window.MAP_ZONE_NAME_MAX} 個字。名稱會顯示在前台地圖上，太長會蓋住旁邊；地點說明請寫在備註`
+              : "會顯示在前台地圖上。地點說明（例如在哪個廣場）請寫在備註"}</span>
+            <span style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{nameLen}／{window.MAP_ZONE_NAME_MAX}</span>
+          </span>
         </label>
 
         {form.kind === "assign" && (

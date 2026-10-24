@@ -18,11 +18,11 @@
 <style id="__om-edit-overrides"></style>
 <style>
 /* 區域常駐名稱標籤（2026-10-23，ZONE-STYLE-102／ZONE-LABEL-101）：白底深字，類型＋名稱。
-   錨點在區域正中央（center）或區域下緣（below，標籤整個掛在下面，不蓋住區域） */
+   位置由 site-map.jsx 的 placeLabels 找空位決定（center／below／above／right／hidden） */
 .wg-zone-label-anchor{background:none;border:none}
 .wg-zone-label{position:absolute;left:0;top:0;transform:translate(-50%,-50%);padding:3px 8px;border-radius:6px;border:1px solid #CBD5E1;background:#fff;color:#0F172A;
   font:700 12px/1.3 var(--font-chinese,"Noto Sans TC",sans-serif);box-shadow:0 1px 2px rgba(15,23,42,.15);white-space:nowrap;cursor:pointer}
-.wg-zone-label[data-place="below"]{transform:translate(-50%,4px)}
+/* ZONE-LABEL-102（10-24）：位置由 site-map.jsx 算好（標籤中心點），一律置中，不再用 data-place 位移 */
 .wg-zone-label--hazard{border-color:#E65100}
 </style>
 </head>
@@ -63,7 +63,7 @@
 <script type="text/babel" src="js/site/site-actions.jsx?v=20261011a" data-presets="react"></script>
 <script type="text/babel" src="js/site/site-building.jsx?v=20260925b" data-presets="react"></script>
 <script type="text/babel" src="js/site/site-notify.jsx?v=20260925b" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-map.jsx?v=20261024a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-map.jsx?v=20261024b" data-presets="react"></script>
 
 <script type="text/babel" data-presets="react">
 /* /map — app route composition（對應 apps/demo/src/app/(site)/map/[[...segments]]/page.tsx）

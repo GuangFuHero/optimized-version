@@ -384,6 +384,7 @@
     const markerLayerRef = useRef(null);
     const overlayLayerRef = useRef(null);
     const hexLayerRef = useRef(null);
+    const placeLabelsRef = useRef(null);   // 區域標籤避讓（ZONE-LABEL-102），格子／圖釘重畫後要重算
     const markerRefs = useRef(new Map());
     const selectRef = useRef(onSelectMarker);
     selectRef.current = onSelectMarker;
@@ -621,6 +622,8 @@
           }).on('click', () => selectRef.current(cell.id)).addTo(hexLayer);
         });
       }
+      // 格子數字與圖釘換了位置或大小 → 區域標籤重新找空位（ZONE-LABEL-102）
+      requestAnimationFrame(() => { if (placeLabelsRef.current) placeLabelsRef.current(); });
     }, [controller.markers, controller.selectedMarkerId]);
 
     // 封閉區域疊圖
@@ -641,29 +644,107 @@
          🔒 ZONE-CLICK-101（10-23）**只有標籤可點**（跳出負責單位與備註），區域本身不可點。
             責任區常常很大（整個鄉），區域若可點，在裡面點哪裡都只會跳說明，就不能點地圖「在這裡新增」任務。
             ❌ 不要把區域改回可點、也不要在區域上 bindPopup 後靠點擊打開。 */
+      /* 🔒 ZONE-NAME-101（2026-10-24）區域名稱最多 10 個字（Unicode 字元數，中英數標點都算 1）。
+         後台建立時就擋（map-data.js MAP_ZONE_NAME_MAX）；這裡是舊資料的保險：
+         超過 10 字的標籤顯示前 9 字＋「…」，點標籤跳出的說明一律寫全名。
+         ⚠️ 用 [...s] 切字，不要用 s.length / s.slice（emoji、罕用字會被切成兩半）。 */
+      const ZONE_NAME_MAX = 10;
+      const shortZoneName = (name) => {
+        const cs = [...String(name || '')];
+        return cs.length > ZONE_NAME_MAX ? cs.slice(0, ZONE_NAME_MAX - 1).join('') + '…' : cs.join('');
+      };
       const labels = [];
-      function addLabel(poly, text, hazard) {
+      /* rank 0＝危險區（避讓時先挑位置；🚨 危險區優先是設計端定的，待裁示）。責任區 1、標示區 2 */
+      function addLabel(poly, kindLabel, name, rank) {
+        const full = kindLabel + '・' + name;
+        const text = kindLabel + '・' + shortZoneName(name);
+        if (text !== full && !poly.getPopup()) poly.bindPopup(escHtml(full));   // 被截短的，點了至少看得到全名
         const div = document.createElement('div');
-        div.className = 'wg-zone-label' + (hazard ? ' wg-zone-label--hazard' : '');
+        div.className = 'wg-zone-label' + (rank === 0 ? ' wg-zone-label--hazard' : '');
         div.textContent = text;
+        div.title = full;
         const marker = L.marker(poly.getBounds().getCenter(), {
           icon: L.divIcon({ className: 'wg-zone-label-anchor', html: div, iconSize: [0, 0] }),
           keyboard: false, interactive: true,
-          zIndexOffset: -1000,   // 一律壓在站點／任務標記底下：標記要能點，名稱被蓋一點沒關係
+          zIndexOffset: -1000,   // 一律壓在站點／任務標記底下（避讓之後本來就不會重疊，這是保險）
         }).on('click', (e) => { L.DomEvent.stop(e); if (poly.getPopup()) poly.openPopup(poly.getBounds().getCenter()); });
         marker.addTo(layer);
-        labels.push({ poly, marker, div });
+        labels.push({ poly, marker, div, rank });
       }
+      /* 🔒 ZONE-LABEL-102（2026-10-24，B2 回報：訪客格子的數字蓋住區域標籤、12 級整個光復擠成一團）
+         取代 ZONE-LABEL-101 的「放得下置中、放不下掛下面」，改成**找空位**：
+           1. 障礙物＝畫面上所有格子數字與圖釘（.wg-marker-stack），它們位置不動、一律優先
+           2. 標籤排隊：危險區先，其他依區域在畫面上的面積由小到大（小區域位置少，先挑）。
+              每張依序試（只算區域在畫面裡的那一塊）：
+                區域裡面（放得下才試：5×5 個點、離中央近的先）→ 區域正下方 → 正上方 → 右側
+              第一個不碰到「障礙物或已經放好的標籤」的位置就用
+              也避開浮在地圖上的按鈕與卡片，以及畫面外（underUi）
+           3. 全部都碰到 → **這次不寫字，只畫區域**（區域照畫，斜紋本身就說明是危險區）；
+              放大後重算，有空位就會出現
+           4. 時機：縮放完、格子／圖釘重畫完（placeLabelsRef）都重算
+         ⚠️ 被藏起來的標籤點不到（ZONE-CLICK-101 只有標籤可點），那一區的負責單位與備註要放大才看得到。
+         ❌ 不要改回「數字蓋標籤」或「標籤蓋數字」；❌ 不要用縮放級距寫死，要量實際像素。 */
       function placeLabels() {
-        labels.forEach(({ poly, marker, div }) => {
-          const b = poly.getBounds();
-          const nw = map.latLngToLayerPoint(b.getNorthWest()), se = map.latLngToLayerPoint(b.getSouthEast());
-          const w = se.x - nw.x, h = se.y - nw.y;
-          const fits = w >= div.offsetWidth + 16 && h >= div.offsetHeight + 16;
-          marker.setLatLng(fits ? b.getCenter() : L.latLng(b.getSouth(), b.getCenter().lng));
-          div.dataset.place = fits ? 'center' : 'below';
+        if (!labels.length) return;
+        const host = map.getContainer();
+        const hr = host.getBoundingClientRect();
+        const PAD = 3, GAP = 4;
+        const hit = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+        const taken = [];
+        /* 地圖上面還浮著按鈕與卡片（站點／任務切換、篩選、請求協助、統計卡）。
+           量五個點（四角＋中心），最上層的元素不在地圖裡＝被蓋住或在畫面外，不擺這裡。
+           pointer-events:none 的透明外框 elementFromPoint 會略過，只有真的按鈕會擋。 */
+        const underUi = (bx) => [[bx.l + PAD, bx.t + PAD], [bx.r - PAD, bx.t + PAD], [bx.l + PAD, bx.b - PAD], [bx.r - PAD, bx.b - PAD],
+          [(bx.l + bx.r) / 2, (bx.t + bx.b) / 2]].some(([x, y]) => {
+          const el = document.elementFromPoint(hr.left + x, hr.top + y);
+          return !el || !host.contains(el);
+        });
+        host.querySelectorAll('.wg-marker-stack').forEach((el) => {
+          const r = el.getBoundingClientRect();
+          if (!r.width || !r.height) return;
+          taken.push({ l: r.left - hr.left - PAD, t: r.top - hr.top - PAD, r: r.right - hr.left + PAD, b: r.bottom - hr.top + PAD });
+        });
+        /* 排隊順序：危險區先挑；其他（責任區、標示區）依區域在畫面上的面積**由小到大** ——
+           大區域裡面能擺的位置多，小區域（休息區、集合點）只有幾個位置可選，讓小的先挑才不會被大的擠掉。 */
+        const areaPx = (poly) => {
+          const bd = poly.getBounds();
+          const a1 = map.latLngToContainerPoint(bd.getNorthWest()), a2 = map.latLngToContainerPoint(bd.getSouthEast());
+          return Math.abs((a2.x - a1.x) * (a2.y - a1.y));
+        };
+        labels.map((lb) => ({ ...lb, order: [lb.rank === 0 ? 0 : 1, areaPx(lb.poly)] }))
+          .sort((x, y) => x.order[0] - y.order[0] || x.order[1] - y.order[1])
+          .forEach(({ poly, marker, div }) => {
+          div.style.display = '';
+          const w = div.offsetWidth, h = div.offsetHeight;
+          const bd = poly.getBounds();
+          const nw = map.latLngToContainerPoint(bd.getNorthWest()), se = map.latLngToContainerPoint(bd.getSouthEast());
+          /* 只看區域在**畫面裡**的那一塊：大區域（整個鄉的責任區）中心常在畫面外，
+             照中心擺等於標籤不在畫面上。完全在畫面外的區域不用擺。 */
+          const vw = host.clientWidth, vh = host.clientHeight;
+          const l = Math.max(nw.x, 0), t = Math.max(nw.y, 0), r = Math.min(se.x, vw), btm = Math.min(se.y, vh);
+          if (r <= l || btm <= t) { div.style.display = 'none'; div.dataset.place = 'offscreen'; return; }
+          const cx = (l + r) / 2, cy = (t + btm) / 2;
+          const cands = [];
+          /* 放得下 → 先試區域裡面：在區域（畫面內那塊）均勻取 5×5 個點，離中央近的先試
+             （大區域中央常剛好壓著格子數字；只試九宮格時手機上常整排被按鈕擋掉） */
+          if (r - l >= w + 16 && btm - t >= h + 16) {
+            const x0 = l + w / 2 + 8, x1 = r - w / 2 - 8, y0 = t + h / 2 + 8, y1 = btm - h / 2 - 8;
+            const pts = [];
+            for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) pts.push([x0 + (x1 - x0) * i / 4, y0 + (y1 - y0) * j / 4]);
+            pts.sort((p1, p2) => Math.hypot(p1[0] - cx, p1[1] - cy) - Math.hypot(p2[0] - cx, p2[1] - cy))
+              .forEach(([x, y]) => cands.push(['center', x, y]));
+          }
+          /* 放不下或裡面都被佔了 → 區域外：正下方 → 正上方 → 右側 */
+          cands.push(['below', cx, btm + GAP + h / 2], ['above', cx, t - GAP - h / 2], ['right', r + GAP + w / 2, cy]);
+          const boxOf = (x, y) => ({ l: x - w / 2 - PAD, t: y - h / 2 - PAD, r: x + w / 2 + PAD, b: y + h / 2 + PAD });
+          const pick = cands.find(([, x, y]) => { const bx = boxOf(x, y); return !taken.some((t) => hit(bx, t)) && !underUi(bx); });
+          if (!pick) { div.style.display = 'none'; div.dataset.place = 'hidden'; return; }
+          marker.setLatLng(map.containerPointToLatLng([pick[1], pick[2]]));
+          div.dataset.place = pick[0];
+          taken.push(boxOf(pick[1], pick[2]));
         });
       }
+      placeLabelsRef.current = placeLabels;
 
       /* 🔴 2026-09-25 Sucre：危險區是橘白斜紋（危險角錐的顏色）。
          封閉區域本來就是「危險地帶與暫時封鎖範圍」，所以整層一起換，前後台同一個樣子。 */
@@ -681,7 +762,7 @@
             // 後台畫的危險區：同責任區／標示區，類型寫在常駐標籤上（ZONE-STYLE-102）
             if (area.comment) poly.bindPopup(escHtml('危險區・' + area.label) + '<br>' + escHtml(area.comment));
             poly.addTo(layer);
-            addLabel(poly, '危險區・' + area.label, true);
+            addLabel(poly, '危險區', area.label, 0);
           } else {
             poly.bindTooltip(area.label + (area.comment ? ' · ' + area.comment : ''), { direction: 'top' });
             poly.addTo(layer);
@@ -706,13 +787,13 @@
           if (area.comment) lines.push(area.comment);
           if (lines.length > 1) poly.bindPopup(lines.map(escHtml).join('<br>'));
           poly.addTo(layer);
-          addLabel(poly, kind + '・' + area.label, false);
+          addLabel(poly, kind, area.label, area.kind === 'assign' ? 1 : 2);
         });
       });
       // 標籤要先畫上去才量得到寬度，所以等下一個 frame 再擺
       const raf = requestAnimationFrame(placeLabels);
       map.on('zoomend', placeLabels);
-      return () => { cancelAnimationFrame(raf); map.off('zoomend', placeLabels); };
+      return () => { cancelAnimationFrame(raf); map.off('zoomend', placeLabels); placeLabelsRef.current = null; };
     }, [controller.closureAreas, controller.publicZones]);
 
     // 選取時平移至標記
