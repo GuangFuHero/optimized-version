@@ -166,7 +166,6 @@ async def test_author_names_stay_hidden_on_the_site(client, db_session, redis, f
             Announcement(
                 content="停水",
                 active=True,
-                display_order=1,
                 placement="public_page",
                 created_by=account.uuid,
                 updated_by=account.uuid,

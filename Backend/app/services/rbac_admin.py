@@ -28,7 +28,13 @@ from app.schemas.rbac_admin import (
     RoleGrants,
     UserPermissionsResponse,
 )
-from app.services.admin import SUPER_ADMIN_ROLE_NAME, _remaining_super_admins
+from app.services.admin import (
+    SUPER_ADMIN_ROLE_NAME,
+    TEAM_ADMIN_ROLE_NAME,
+    AdminConflictError,
+    _remaining_super_admins,
+    refuse_last_team_admin,
+)
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 
@@ -109,7 +115,7 @@ async def get_user_permissions_detail(db: AsyncSession, user_uuid: str) -> UserP
     user = await user_repository.get_by_uuid(db, user_uuid)
     if user is None:
         raise RbacNotFoundError("User not found")
-    identities = await active_identity_repository.list_for_user(db, user_uuid)
+    identities = await active_identity_repository.list_for_user(db, user_uuid, include_inactive_teams=True)
     roles_by_uuid = {str(role.uuid): role for role in await user_repository.get_role_refs(db, user_uuid)}
     direct = await user_repository.get_direct_grants(db, user_uuid)
 
@@ -361,6 +367,12 @@ async def unassign_user_role(
         remaining = await _remaining_super_admins(db, role_uuid, excluding=user_uuid)
         if remaining == 0:
             raise RbacConflictError("Cannot remove the last super_admin")
+    if team_uuid is not None and role.name == TEAM_ADMIN_ROLE_NAME:
+        # A team keeps at least one admin, whichever endpoint takes the grant away (ADR-356).
+        try:
+            await refuse_last_team_admin(db, team_uuid=team_uuid, user_uuid=user_uuid)
+        except AdminConflictError as err:
+            raise RbacConflictError(str(err)) from err
 
     await user_repository.unassign_role(
         db, user_uuid=user_uuid, role_uuid=role_uuid, team_uuid=team_uuid

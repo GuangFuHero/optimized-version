@@ -17,6 +17,9 @@ class User(Base, UUIDPKMixin, TimestampMixin):
 
     __tablename__ = "users"
     name: Mapped[str] = mapped_column(String(100))  # display nickname; no longer the login id, not unique
+    # The name a back-office applicant gave, written on approval (Spec 026, ADR-355). Back office
+    # only; `name` stays the nickname everywhere else.
+    real_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     credibility_score: Mapped[float] = mapped_column(Float, default=50.0)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Written only when a refresh token is rotated (ADR-093), so the value is at most one

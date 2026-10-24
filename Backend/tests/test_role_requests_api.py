@@ -130,7 +130,7 @@ async def test_a_refusal_carries_the_status_that_says_why(client, db_session, re
         response = await client.get(URL, params={"status": "super_admin"}, headers=headers)
     else:
         target = str(uuid.uuid4()) if case == "an application that does not exist" else request_uuid
-        note = "字" * 501 if case == "a reply over 500 characters" else None
+        note = "字" * 501 if case == "a reply over 500 characters" else "理由"
         response = await client.post(f"{URL}/{target}/reject", json={"note": note}, headers=headers)
 
     assert response.status_code == expected, response.text
@@ -162,16 +162,18 @@ async def test_approving_returns_the_approved_application(client, db_session, re
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("requested_role", ["government", "ngo"])
-async def test_a_government_or_ngo_application_is_not_approved_yet(client, db_session, redis, requested_role):
-    """ADR-288 placeholder: refused in the service's words, and the application stays pending."""
+async def test_a_government_or_ngo_application_naming_no_team_is_not_approved(
+    client, db_session, redis, requested_role
+):
+    """Sent before Spec 026: there is no team to grant, so 409 and the application stays pending."""
     applicant_uuid, _ = await _account(db_session, "王小明", "user")
     request_uuid = await _application(db_session, applicant_uuid, requested_role=requested_role)
     headers = await _reviewer_headers(db_session, redis)
 
     response = await client.post(f"{URL}/{request_uuid}/approve", json={}, headers=headers)
 
-    assert response.status_code == 422, response.text
-    assert response.json()["detail"] == "Approving government and NGO applications is not available yet"
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "This application names no team; the applicant should apply again"
 
 
 @pytest.mark.asyncio

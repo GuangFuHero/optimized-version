@@ -306,9 +306,9 @@ async def ticket_with_address(coordinator_auth):
                 geometry_uuid=ticket.uuid,
                 location_type="address",
                 county="花蓮縣",
-                city="光復鄉",
-                lane="中正路",
-                alley="12巷",
+                town="光復鄉",
+                road="中正路",
+                lane="12巷",
                 no="3號",
                 floor="4樓",
                 room="A室",
@@ -414,9 +414,9 @@ async def station_with_address(coordinator_auth):
                 geometry_uuid=station.uuid,
                 location_type="address",
                 county="花蓮縣",
-                city="鳳林鎮",
-                lane="中正路",
-                alley="12巷",
+                town="鳳林鎮",
+                road="中正路",
+                lane="12巷",
                 no="3號",
             )
         )
@@ -476,13 +476,7 @@ async def test_station_search_reaches_into_its_address(client, station_with_addr
 
 @pytest.mark.asyncio
 async def test_station_search_spans_two_address_fields(client, station_with_address):
-    """A query running two address fields together must match (ADR-081/155).
-
-    "光復鄉中正路" is how a user actually types an address — 鳳林鎮 sits in `city` and
-    中正路 in `lane`, so no single column holds the whole string. This is the case the
-    single concatenated search_text column exists for; with a separator between the parts
-    the contiguous ILIKE could never match it.
-    """
+    """A query typed across two address fields must match: 鳳林鎮 is in `town`, 中正路 in `road`."""
     found = _uuids(await _stations(client, q="鳳林鎮中正路"), "stations")
     assert station_with_address in found
 

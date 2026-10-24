@@ -90,7 +90,13 @@ async def _zoned_team(db) -> Team:
 
 
 async def _station(
-    db, *, name: str, point: Point, creator: User, quantity: int | None = None, team: Team | None = None,
+    db,
+    *,
+    name: str,
+    point: Point,
+    creator: User,
+    quantity: int | None = None,
+    team: Team | None = None,
     comment: str | None = None,
 ) -> Station:
     station = Station(
@@ -107,7 +113,11 @@ async def _station(
     await db.flush()
     db.add(
         SecondaryLocation(
-            geometry_uuid=str(station.uuid), location_type="address", county="花蓮縣", city="光復鄉"
+            geometry_uuid=str(station.uuid),
+            location_type="address",
+            full_address="花蓮縣光復鄉",
+            county="花蓮縣",
+            town="光復鄉",
         )
     )
     if quantity is not None:
@@ -196,7 +206,7 @@ async def test_station_export_writes_the_shared_column_layout(db):
     assert f"{DYNAMIC_PREFIX}capacity_total" in table.headers
     assert f"{DYNAMIC_PREFIX}pet_friendly" not in table.headers  # ADR-118: not storable
     assert table.rows[0]["name"] == "光復國小"
-    assert table.rows[0]["county"] == "花蓮縣"
+    assert table.rows[0]["address"] == "花蓮縣光復鄉"
     assert table.rows[0][f"{DYNAMIC_PREFIX}capacity_total"] == "120"
 
 

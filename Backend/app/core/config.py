@@ -21,8 +21,7 @@ class Settings(BaseSettings):
     # Docker 內部連線預設: postgresql+asyncpg://postgres:postgres@db:5432/postgres
     # 本地開發連線預設: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
     SQLALCHEMY_DATABASE_URL: str = os.getenv(
-        "SQLALCHEMY_DATABASE_URL", 
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+        "SQLALCHEMY_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
     )
 
     # JWT 密鑰
@@ -30,8 +29,8 @@ class Settings(BaseSettings):
     # 正式環境一律從外部 Secret Manager 注入。
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-for-local-dev")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15            # short-lived access token
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 14              # refresh token lifetime (Redis TTL)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # short-lived access token
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 14  # refresh token lifetime (Redis TTL)
     # How long a rotated refresh token still yields the token it was rotated into (ADR-330); 0 turns it off.
     REFRESH_REUSE_GRACE_SECONDS: int = 30
 
@@ -79,6 +78,13 @@ class Settings(BaseSettings):
     LINE_CHANNEL_ID: str = os.getenv("LINE_CHANNEL_ID", "")
     LINE_CHANNEL_SECRET: str = os.getenv("LINE_CHANNEL_SECRET", "")
 
+    # Keys for TGOS 全國門牌位置比對服務 (ADDR) and 坐標回傳門牌服務 (GEO), set only in a .env file.
+    # Left empty, every address lookup answers "unavailable".
+    TGOS_ADDR_APP_ID: str = os.getenv("TGOS_ADDR_APP_ID", "")
+    TGOS_ADDR_API_KEY: str = os.getenv("TGOS_ADDR_API_KEY", "")
+    TGOS_GEO_APP_ID: str = os.getenv("TGOS_GEO_APP_ID", "")
+    TGOS_GEO_API_KEY: str = os.getenv("TGOS_GEO_API_KEY", "")
+
     # Where a Google or LINE sign-in sends the browser back to: the site's or the back office's own URL,
     # by the `app` it was started for (ADR-331). Local values by default, like APP_BASE_URL.
     SITE_APP_URL: str = os.getenv("SITE_APP_URL", "http://localhost:3000")
@@ -103,16 +109,13 @@ class Settings(BaseSettings):
     def JWT_SIGNING_KEY(self) -> str:
         """將原始 SECRET_KEY 進行 SHA-256 雜湊，產生更強大的簽名密鑰。"""
         import hashlib
+
         return hashlib.sha256(self.SECRET_KEY.encode()).hexdigest()
 
     # 環境設定 (development, testing, staging, production)。未設定時視為 production，開發用的功能預設關閉。
     ENV: str = os.getenv("ENV", "production")
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=True
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=True)
 
 
 settings = Settings()

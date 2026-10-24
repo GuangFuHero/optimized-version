@@ -41,6 +41,10 @@ them by number.
 
 ## Non-goals
 
+> **Spec 026 (2026-10-20) changes these**: government and NGO applications are approved into a team or a new
+> team, team admins review their own team's requests, and joining a team goes through this form and through
+> invite links (ADR-350 to ADR-352, ADR-354).
+
 - **Approving government and NGO applications.** Which team the applicant joins, and with which team role,
   waits on the designer and the product owner. Those applications can be sent, withdrawn and rejected;
   approving one is refused and it stays pending (ADR-288). `role_requests.granted_team_uuid` exists for when
@@ -53,6 +57,10 @@ them by number.
 - **Team admins reviewing applications to their own team.** Only `role_request.review` holders review.
 
 ## Rules
+
+> **Spec 026 (2026-10-20)**: AC-RE-101 now applies to data auditor applications only — a team request is
+> refused only to a member of that team (ADR-351). A rejection requires a reason. Applicant details replace
+> `contact` (ADR-355).
 
 | Rule | Where it is enforced |
 |---|---|

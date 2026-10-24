@@ -44,6 +44,48 @@ export const AccessStatus = {
 } as const;
 
 export type AccessStatus = (typeof AccessStatus)[keyof typeof AccessStatus];
+export type AddressLookupType = {
+  __typename?: 'AddressLookupType';
+  /** Send back with fullAddress on save, within a day, so the address is stored as verified */
+  addressToken?: Maybe<Scalars['String']['output']>;
+  /** 弄, e.g. '1弄' */
+  alley?: Maybe<Scalars['String']['output']>;
+  /** A 棟 typed after the 號, split off for the building-section field */
+  buildingSection?: Maybe<Scalars['String']['output']>;
+  /** 縣市 */
+  county?: Maybe<Scalars['String']['output']>;
+  /** Metres between the 門牌 and the lat/lng you passed */
+  distanceM?: Maybe<Scalars['Float']['output']>;
+  /** A 樓 typed after the 號, split off for the floor field */
+  floor?: Maybe<Scalars['String']['output']>;
+  /** The official address line, e.g. '花蓮縣光復鄉大進村3鄰糖廠街19號'. Send it back unchanged */
+  fullAddress?: Maybe<Scalars['String']['output']>;
+  /** 巷, e.g. '469巷' */
+  lane?: Maybe<Scalars['String']['output']>;
+  /** Latitude of the 門牌's official point */
+  lat?: Maybe<Scalars['Float']['output']>;
+  /** Longitude of the 門牌's official point */
+  lng?: Maybe<Scalars['Float']['output']>;
+  /** 鄰, e.g. '3鄰' */
+  neighborhood?: Maybe<Scalars['String']['output']>;
+  /** 號, e.g. '19號' */
+  no?: Maybe<Scalars['String']['output']>;
+  /** True when the 門牌 is over 500 m from the lat/lng you passed */
+  pinMismatch: Scalars['Boolean']['output'];
+  /** 路／街／大道 */
+  road?: Maybe<Scalars['String']['output']>;
+  /** A 室 typed after the 號, split off for the room field */
+  room?: Maybe<Scalars['String']['output']>;
+  /** 段, e.g. '一段' */
+  section?: Maybe<Scalars['String']['output']>;
+  /** 'found'; 'not_found'; 'ambiguous' (several addresses match, so add the 鄉鎮市區); or 'unavailable' (TGOS could not answer; saving still works, as unverified) */
+  status: Scalars['String']['output'];
+  /** 鄉鎮市區 */
+  town?: Maybe<Scalars['String']['output']>;
+  /** 村里 */
+  village?: Maybe<Scalars['String']['output']>;
+};
+
 export const AnnouncementFilter = {
   Active: 'ACTIVE',
   All: 'ALL',
@@ -52,13 +94,6 @@ export const AnnouncementFilter = {
 
 export type AnnouncementFilter =
   (typeof AnnouncementFilter)[keyof typeof AnnouncementFilter];
-export const AnnouncementMoveDirection = {
-  Down: 'DOWN',
-  Up: 'UP',
-} as const;
-
-export type AnnouncementMoveDirection =
-  (typeof AnnouncementMoveDirection)[keyof typeof AnnouncementMoveDirection];
 export const AnnouncementPlacement = {
   AdminPage: 'admin_page',
   All: 'all',
@@ -82,8 +117,6 @@ export type AnnouncementType = {
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** Who created it. Null unless the caller holds announcement.edit */
   creator?: Maybe<UserRefType>;
-  /** Display position (1 = top) among active announcements; null when inactive */
-  order?: Maybe<Scalars['Int']['output']>;
   /** admin_page, public_page, or all (both pages) */
   placement: Scalars['String']['output'];
   /** When it last went live; null while a draft */
@@ -327,7 +360,7 @@ export type CreateHelpRequestInput = {
   geometry: Scalars['GeoJSON']['input'];
   /** Scene photos as links to images kept elsewhere — the platform stores no image. At most 10, each an https:// URL of at most 500 characters */
   photoUrls?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** The address as typed goes in `landmarkNote`, with `floor` and `room` */
+  /** The address line goes in `fullAddress` (with its `addressToken` if looked up), with `floor` and `room` */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** At least one need, at most 20 */
   tasks: Array<HelpRequestTaskInput>;
@@ -599,7 +632,6 @@ export type Mutation = {
   detachStationPhoto: Scalars['Boolean']['output'];
   generateBriefing: BriefingType;
   mergeStationSuggestions: StationSuggestionMergeType;
-  moveAnnouncement: AnnouncementType;
   promoteMarkZone: HazardousZoneType;
   publishBriefing: BriefingType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
@@ -751,11 +783,6 @@ export type MutationMergeStationSuggestionsArgs = {
   stationUuid: Scalars['UUID']['input'];
 };
 
-export type MutationMoveAnnouncementArgs = {
-  direction: AnnouncementMoveDirection;
-  uuid: Scalars['UUID']['input'];
-};
-
 export type MutationPromoteMarkZoneArgs = {
   input: PromoteMarkZoneInput;
   uuid: Scalars['UUID']['input'];
@@ -878,7 +905,7 @@ export type MutationWithdrawRoleRequestArgs = {
 
 export type MyRoleRequestsType = {
   __typename?: 'MyRoleRequestsType';
-  /** May send an application now: no back-office identity, none pending, not paused */
+  /** May send an application now: none pending and not paused. A back-office identity rules out only the data auditor choice (ADR-351) */
   canApply: Scalars['Boolean']['output'];
   /** Holds a role beyond `user`: the entry offers 前往後台 instead of applying */
   hasBackofficeIdentity: Scalars['Boolean']['output'];
@@ -949,6 +976,11 @@ export type Query = {
   myRoleRequests: MyRoleRequestsType;
   myTaskAssignments: Array<MyTaskAssignmentType>;
   myTickets: Array<TicketType>;
+  /** Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute shared with reverseGeocode */
+  normalizeAddress: AddressLookupType;
+  /** The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute shared with normalizeAddress */
+  reverseGeocode: AddressLookupType;
+  roleRequestTeams: Array<RoleRequestTeam>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stations: StationConnection;
@@ -1027,6 +1059,21 @@ export type QueryHazardousZonesArgs = {
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
+};
+
+export type QueryNormalizeAddressArgs = {
+  address: Scalars['String']['input'];
+  lat?: InputMaybe<Scalars['Float']['input']>;
+  lng?: InputMaybe<Scalars['Float']['input']>;
+};
+
+export type QueryReverseGeocodeArgs = {
+  lat: Scalars['Float']['input'];
+  lng: Scalars['Float']['input'];
+};
+
+export type QueryRoleRequestTeamsArgs = {
+  type?: InputMaybe<RoleRequestTeamType>;
 };
 
 export type QueryStationArgs = {
@@ -1127,36 +1174,60 @@ export const RoleRequestStatus = {
 
 export type RoleRequestStatus =
   (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
+export type RoleRequestTeam = {
+  __typename?: 'RoleRequestTeam';
+  name: Scalars['String']['output'];
+  type: RoleRequestTeamType;
+  uuid: Scalars['UUID']['output'];
+};
+
+export const RoleRequestTeamType = {
+  Gov: 'GOV',
+  Ngo: 'NGO',
+} as const;
+
+export type RoleRequestTeamType =
+  (typeof RoleRequestTeamType)[keyof typeof RoleRequestTeamType];
 export type RoleRequestType = {
   __typename?: 'RoleRequestType';
+  applicantEmail?: Maybe<Scalars['String']['output']>;
+  applicantName?: Maybe<Scalars['String']['output']>;
+  /** Masked */
+  applicantPhone?: Maybe<Scalars['String']['output']>;
   /** When it was approved, rejected or withdrawn */
   closedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Spec 019 only; no longer sent (ADR-355) */
   contact?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['DateTime']['output'];
+  /** The team a new-team application founds */
+  newTeamName?: Maybe<Scalars['String']['output']>;
   reason: Scalars['String']['output'];
   requestedRole: RoleRequestRole;
   /** The reviewer's reply, if any */
   reviewNote?: Maybe<Scalars['String']['output']>;
   status: RoleRequestStatus;
+  /** The existing team a member request asks to join */
+  team?: Maybe<RoleRequestTeam>;
   uuid: Scalars['UUID']['output'];
+  /** Sent through a team's invite link */
+  viaInvite: Scalars['Boolean']['output'];
 };
 
 export type SecondaryLocationInput = {
   /** Whether the space can be entered right now */
   accessStatus?: InputMaybe<AccessStatus>;
-  alley?: InputMaybe<Scalars['String']['input']>;
+  /** The addressToken from the same lookup. With it, and fullAddress unchanged, the address is stored as verified; without it, as unverified */
+  addressToken?: InputMaybe<Scalars['String']['input']>;
   /** 樓棟／區域, e.g. 'A棟'; leave empty if unknown */
   buildingSection?: InputMaybe<Scalars['String']['input']>;
-  city?: InputMaybe<Scalars['String']['input']>;
-  county?: InputMaybe<Scalars['String']['input']>;
   /** Floor label: 'B1', '1F', 'RF'. Free text on purpose */
   floor?: InputMaybe<Scalars['String']['input']>;
+  /** The address line, ideally exactly as normalizeAddress or reverseGeocode returned it. The backend splits it into county … no; a 樓/室 at its end fills floor and room when those are empty */
+  fullAddress?: InputMaybe<Scalars['String']['input']>;
   /** 地標補充 — entrance, landmark, building, which side of the road */
   landmarkNote?: InputMaybe<Scalars['String']['input']>;
-  lane?: InputMaybe<Scalars['String']['input']>;
   /** Type of secondary location: 'address' (default) or 'pole' */
   locationType?: Scalars['String']['input'];
-  no?: InputMaybe<Scalars['String']['input']>;
   poleId?: InputMaybe<Scalars['String']['input']>;
   poleNote?: InputMaybe<Scalars['String']['input']>;
   poleType?: InputMaybe<Scalars['String']['input']>;
@@ -1172,34 +1243,51 @@ export type SecondaryLocationType = {
   __typename?: 'SecondaryLocationType';
   /** Whether the space can be entered: 'accessible', 'restricted', 'inaccessible', 'unknown'. A current observation, not a safety certification */
   accessStatus?: Maybe<Scalars['String']['output']>;
+  /** 弄, e.g. '1弄' */
   alley?: Maybe<Scalars['String']['output']>;
   /** 樓棟／區域, e.g. 'A棟', '東翼' */
   buildingSection?: Maybe<Scalars['String']['output']>;
-  city?: Maybe<Scalars['String']['output']>;
+  /** 縣市, e.g. '花蓮縣' */
   county?: Maybe<Scalars['String']['output']>;
   /** Floor label as spoken: 'B1', '1F', 'RF' — never coerced to a number */
   floor?: Maybe<Scalars['String']['output']>;
+  /** The whole address line, without floor or room: official when TGOS confirmed it, as typed otherwise */
+  fullAddress?: Maybe<Scalars['String']['output']>;
   /** UUID of the parent station or ticket this location belongs to */
   geometryUuid: Scalars['String']['output'];
   /** 地標補充 — how to find the entrance when coordinates are not enough */
   landmarkNote?: Maybe<Scalars['String']['output']>;
+  /** 巷, e.g. '469巷' */
   lane?: Maybe<Scalars['String']['output']>;
   /** Type of secondary location: 'address' or 'pole' */
   locationType: Scalars['String']['output'];
+  /** 鄰, e.g. '3鄰' */
+  neighborhood?: Maybe<Scalars['String']['output']>;
+  /** 號, e.g. '19號' or '19之1號' */
   no?: Maybe<Scalars['String']['output']>;
+  /** 'verified' (TGOS confirmed the address near the pin), 'pin_mismatch' (confirmed, but over 500 m from the pin) or 'unverified'; null when there is no address */
+  normalizationStatus?: Maybe<Scalars['String']['output']>;
   /** Utility pole identifier (only set when location_type is 'pole') */
   poleId?: Maybe<Scalars['String']['output']>;
   /** Additional notes about the pole location */
   poleNote?: Maybe<Scalars['String']['output']>;
   /** Type of utility pole, e.g. '電線桿' (electricity pole), '電話線桿' (telephone pole) */
   poleType?: Maybe<Scalars['String']['output']>;
+  /** 路／街／大道, e.g. '糖廠街' */
+  road?: Maybe<Scalars['String']['output']>;
   /** 房號／空間, e.g. '302', '樓梯間' */
   room?: Maybe<Scalars['String']['output']>;
+  /** 段, e.g. '一段' */
+  section?: Maybe<Scalars['String']['output']>;
   /** 空間描述, e.g. '三房兩廳' */
   spaceDescription?: Maybe<Scalars['String']['output']>;
+  /** 鄉鎮市區, e.g. '光復鄉' */
+  town?: Maybe<Scalars['String']['output']>;
   uuid: Scalars['UUID']['output'];
   /** 求救者所在空間, e.g. '主臥衣櫃' */
   victimSpace?: Maybe<Scalars['String']['output']>;
+  /** 村里, e.g. '大進村' */
+  village?: Maybe<Scalars['String']['output']>;
 };
 
 export type StationConnection = {
@@ -1370,9 +1458,12 @@ export type StationType = {
 };
 
 export type SubmitRoleRequestInput = {
-  contact?: InputMaybe<Scalars['String']['input']>;
+  email?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  newTeamName?: InputMaybe<Scalars['String']['input']>;
   reason: Scalars['String']['input'];
   requestedRole: RoleRequestRole;
+  teamUuid?: InputMaybe<Scalars['UUID']['input']>;
 };
 
 export type SuggestableFieldType = {
@@ -2043,11 +2134,17 @@ export type AdminTicketQuery = {
     updatedAt?: string | null;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
+      fullAddress?: string | null;
       county?: string | null;
-      city?: string | null;
+      town?: string | null;
+      village?: string | null;
+      neighborhood?: string | null;
+      road?: string | null;
+      section?: string | null;
       lane?: string | null;
       alley?: string | null;
       no?: string | null;
+      normalizationStatus?: string | null;
       floor?: string | null;
       room?: string | null;
       landmarkNote?: string | null;
@@ -2215,11 +2312,17 @@ export type AdminStationQuery = {
     updatedAt?: string | null;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
+      fullAddress?: string | null;
       county?: string | null;
-      city?: string | null;
+      town?: string | null;
+      village?: string | null;
+      neighborhood?: string | null;
+      road?: string | null;
+      section?: string | null;
       lane?: string | null;
       alley?: string | null;
       no?: string | null;
+      normalizationStatus?: string | null;
       floor?: string | null;
       room?: string | null;
       poleId?: string | null;
@@ -2263,7 +2366,6 @@ export type AdminAnnouncementsQuery = {
     uuid: string;
     content: string;
     active: boolean;
-    order?: number | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;
@@ -2875,7 +2977,6 @@ export type AdminCreateAnnouncementMutation = {
     uuid: string;
     content: string;
     active: boolean;
-    order?: number | null;
   };
 };
 
@@ -2891,7 +2992,6 @@ export type AdminUpdateAnnouncementMutation = {
     uuid: string;
     content: string;
     active: boolean;
-    order?: number | null;
   };
 };
 
@@ -2902,20 +3002,6 @@ export type AdminDeleteAnnouncementMutationVariables = Exact<{
 export type AdminDeleteAnnouncementMutation = {
   __typename?: 'Mutation';
   deleteAnnouncement: boolean;
-};
-
-export type AdminMoveAnnouncementMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  direction: AnnouncementMoveDirection;
-}>;
-
-export type AdminMoveAnnouncementMutation = {
-  __typename?: 'Mutation';
-  moveAnnouncement: {
-    __typename?: 'AnnouncementType';
-    uuid: string;
-    order?: number | null;
-  };
 };
 
 export type AdminSetAnnouncementActiveMutationVariables = Exact<{
@@ -2929,7 +3015,6 @@ export type AdminSetAnnouncementActiveMutation = {
     __typename?: 'AnnouncementType';
     uuid: string;
     active: boolean;
-    order?: number | null;
   };
 };
 
@@ -3529,12 +3614,33 @@ export const AdminTicketDocument = {
                     selections: [
                       {
                         kind: 'Field',
+                        name: { kind: 'Name', value: 'fullAddress' },
+                      },
+                      {
+                        kind: 'Field',
                         name: { kind: 'Name', value: 'county' },
                       },
-                      { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'village' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'neighborhood' },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'road' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'section' },
+                      },
                       { kind: 'Field', name: { kind: 'Name', value: 'lane' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'alley' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'no' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'normalizationStatus' },
+                      },
                       { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'room' } },
                       {
@@ -4144,12 +4250,33 @@ export const AdminStationDocument = {
                     selections: [
                       {
                         kind: 'Field',
+                        name: { kind: 'Name', value: 'fullAddress' },
+                      },
+                      {
+                        kind: 'Field',
                         name: { kind: 'Name', value: 'county' },
                       },
-                      { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'village' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'neighborhood' },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'road' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'section' },
+                      },
                       { kind: 'Field', name: { kind: 'Name', value: 'lane' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'alley' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'no' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'normalizationStatus' },
+                      },
                       { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'room' } },
                       {
@@ -4322,7 +4449,6 @@ export const AdminAnnouncementsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
               ],
@@ -6660,7 +6786,6 @@ export const AdminCreateAnnouncementDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
               ],
             },
           },
@@ -6733,7 +6858,6 @@ export const AdminUpdateAnnouncementDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
               ],
             },
           },
@@ -6786,77 +6910,6 @@ export const AdminDeleteAnnouncementDocument = {
 } as unknown as DocumentNode<
   AdminDeleteAnnouncementMutation,
   AdminDeleteAnnouncementMutationVariables
->;
-export const AdminMoveAnnouncementDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminMoveAnnouncement' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'direction' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'AnnouncementMoveDirection' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'moveAnnouncement' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'direction' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'direction' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminMoveAnnouncementMutation,
-  AdminMoveAnnouncementMutationVariables
 >;
 export const AdminSetAnnouncementActiveDocument = {
   kind: 'Document',
@@ -6918,7 +6971,6 @@ export const AdminSetAnnouncementActiveDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'order' } },
               ],
             },
           },

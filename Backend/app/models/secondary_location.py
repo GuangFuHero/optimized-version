@@ -13,18 +13,22 @@ class SecondaryLocation(Base, UUIDPKMixin):
     __tablename__ = "secondary_locations"
     geometry_uuid: Mapped[str] = mapped_column(ForeignKey("base_geometries.uuid"), index=True)
     location_type: Mapped[str] = mapped_column(String(50))  # address/pole
-    county: Mapped[str | None] = mapped_column(String(50))
-    city: Mapped[str | None] = mapped_column(String(50))
-    # NOTE: these two columns are named after 巷/弄 but hold something else in practice —
-    # `lane` carries the road/street name (路/街) and `alley` carries 巷弄. Do not "fix" the
-    # data to match the names; downstream address rendering relies on the actual usage.
-    lane: Mapped[str | None] = mapped_column(
-        String(20), comment="路／街名（road）——欄位名為 lane，但實際存路名，非巷"
+    # The address split into its parts, each numbered one keeping its unit (3鄰, 一段, 469巷).
+    # `full_address` is the whole line: official when TGOS confirmed it, as typed otherwise.
+    full_address: Mapped[str | None] = mapped_column(String(255), comment="完整地址（不含樓、室）")
+    county: Mapped[str | None] = mapped_column(String(50), comment="縣市")
+    town: Mapped[str | None] = mapped_column(String(50), comment="鄉鎮市區")
+    village: Mapped[str | None] = mapped_column(String(50), comment="村里")
+    neighborhood: Mapped[str | None] = mapped_column(String(10), comment="鄰，例如 3鄰")
+    road: Mapped[str | None] = mapped_column(String(100), comment="路／街／大道")
+    section: Mapped[str | None] = mapped_column(String(10), comment="段，例如 一段")
+    lane: Mapped[str | None] = mapped_column(String(20), comment="巷，例如 469巷")
+    alley: Mapped[str | None] = mapped_column(String(20), comment="弄，例如 1弄")
+    no: Mapped[str | None] = mapped_column(String(20), comment="號，例如 19號、19之1號")
+    # verified / pin_mismatch / unverified, set from the address token on every write.
+    normalization_status: Mapped[str | None] = mapped_column(
+        String(20), comment="地址是否經 TGOS 確認：verified / pin_mismatch / unverified"
     )
-    alley: Mapped[str | None] = mapped_column(
-        String(20), comment="巷弄——欄位名為 alley，但實際存巷弄"
-    )
-    no: Mapped[str | None] = mapped_column(String(20))
     # 棟／區域. Not covered by the Taiwanese postal grammar, which runs 號 → 樓 → 室 with no
     # slot for a building within a compound — but "A棟" is how a reporter actually locates
     # themselves in a housing estate, so it sits between 號 and 樓 here.
@@ -62,23 +66,16 @@ class SecondaryLocation(Base, UUIDPKMixin):
     )
     pole_note: Mapped[str | None] = mapped_column(String)
 
-    # Keyword-search column (ADR-079/081). Every address part is short, so nothing is
-    # truncated. `pole_note` is excluded (free-text note), and so is the whole space-detail
-    # set — `building_section` / `space_description` / `victim_space` / `access_status` /
-    # `landmark_note` (ADR-250). Only stations are searchable through this column at all
-    # (ADR-146), and describing which room a trapped person is hiding in is not something to
-    # make findable by substring.
-    #
-    # separator="" (ADR-155): a Chinese address is one continuous string — nobody types
-    # "光復鄉 中正路". With the default space separator the stored value would be
-    # "花蓮縣 光復鄉 中正路 …" and the contiguous ILIKE '%光復鄉中正路%' could never match,
-    # which is exactly the cross-field case ADR-081 exists for.
+    # Keyword search over the address from 縣市 to 室 plus the pole id, joined with no separator because
+    # an address is typed as one string (光復鄉糖廠街); 村里, 鄰 and the free-text fields are left out.
     search_text: Mapped[str] = mapped_column(
         String,
         Computed(
             search_text_expression(
                 plain("county"),
-                plain("city"),
+                plain("town"),
+                plain("road"),
+                plain("section"),
                 plain("lane"),
                 plain("alley"),
                 plain("no"),

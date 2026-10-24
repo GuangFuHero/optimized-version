@@ -7,6 +7,7 @@ instead of a blanket 400 (ADR-032).
 
 import json
 import logging
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from fastapi import HTTPException, status
@@ -20,6 +21,7 @@ from app.core.rbac_scopes import Scope, scope_filter
 from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.rbac import Role, UserPermissionAssign, UserRoleAssign
+from app.models.role_request import RoleRequest
 from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
 from app.repositories.session_repository import SessionRepository
@@ -31,6 +33,8 @@ from app.services.notification_service import NotificationService
 logger = logging.getLogger(__name__)
 
 SUPER_ADMIN_ROLE_NAME = "super_admin"
+# The team role that manages the team (Spec/026): a team must keep at least one (ADR-356).
+TEAM_ADMIN_ROLE_NAME = "admin"
 # Joining a team means being granted a role in it (ADR-072); `member` is the least-privileged
 # one, so it is what an add-without-a-role means.
 DEFAULT_TEAM_ROLE = "member"
@@ -38,6 +42,10 @@ DEFAULT_TEAM_ROLE = "member"
 
 class AdminNotFoundError(ValueError):
     """A referenced user, role, or team does not exist."""
+
+
+class AdminValidationError(ValueError):
+    """A field to fix. REST answers 422."""
 
 
 class AdminConflictError(ValueError):
@@ -138,6 +146,42 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
     return assignment
 
 
+async def refuse_last_team_admin(db: AsyncSession, *, team_uuid, user_uuid) -> None:
+    """Refuse taking the team's only `admin` away (ADR-356).
+
+    Locks every admin grant in the team FOR UPDATE first, as _remaining_super_admins does, so two
+    admins demoting each other at once serialize on the same rows and cannot both see another
+    admin left. A user who is not an admin of the team passes.
+    """
+    rows = await db.execute(
+        select(UserRoleAssign.user_uuid)
+        .join(Role, Role.uuid == UserRoleAssign.role_uuid)
+        .where(UserRoleAssign.team_uuid == team_uuid, Role.name == TEAM_ADMIN_ROLE_NAME)
+        .with_for_update(of=UserRoleAssign)
+    )
+    admins = {str(holder) for (holder,) in rows.all()}
+    if str(user_uuid) in admins and len(admins) == 1:
+        raise AdminConflictError("Cannot remove the team's only admin")
+
+
+async def grant_team_role(db: AsyncSession, *, user_uuid, team_uuid, role: Role) -> None:
+    """Make `role` the user's one role in the team. Neither commits nor notifies.
+
+    One role per team per user: whatever team role they held IN THIS TEAM is replaced, and
+    their roles in other teams are left alone (ADR-072). Shared by add_team_member and by
+    approving a join request (Spec/026, ADR-354 point 4), which commits it together with the
+    request's new status.
+    """
+    await db.execute(
+        delete(UserRoleAssign).where(
+            UserRoleAssign.user_uuid == user_uuid,
+            UserRoleAssign.team_uuid == team_uuid,
+        )
+    )
+    db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role.uuid, team_uuid=team_uuid, role_kind="team"))
+    await db.flush()
+
+
 async def add_team_member(
     db: AsyncSession, *, actor: User, team_uuid: str, user_uuid: str, team_role_name: str | None = None
 ) -> User:
@@ -168,17 +212,9 @@ async def add_team_member(
     if role is None or role.kind != "team":
         raise AdminNotFoundError(f"Team role '{team_role_name or DEFAULT_TEAM_ROLE}' not found")
 
-    # One role per team per user: replace whatever team role they held IN THIS TEAM, leaving
-    # their roles in other teams alone.
-    await db.execute(
-        delete(UserRoleAssign).where(
-            UserRoleAssign.user_uuid == target.uuid,
-            UserRoleAssign.team_uuid == team.uuid,
-        )
-    )
-    db.add(UserRoleAssign(
-        user_uuid=target.uuid, role_uuid=role.uuid, team_uuid=team.uuid, role_kind="team"
-    ))
+    if role.name != TEAM_ADMIN_ROLE_NAME:
+        await refuse_last_team_admin(db, team_uuid=team.uuid, user_uuid=target.uuid)
+    await grant_team_role(db, user_uuid=target.uuid, team_uuid=team.uuid, role=role)
 
     # Read every attribute we still need BEFORE committing: the session runs with
     # expire_on_commit=True (app/db/session.py), so `team` and `actor` are expired the
@@ -234,6 +270,7 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
     ).first()
     if held is None:
         raise AdminNotFoundError("User is not a member of this team")
+    await refuse_last_team_admin(db, team_uuid=team.uuid, user_uuid=target.uuid)
 
     # Leaving a team is revoking every grant scoped to it — that IS the membership now
     # (ADR-072). Grants in the user's other teams, and their platform grant, are untouched:
@@ -374,11 +411,111 @@ async def revoke_user_sessions(db: AsyncSession, redis, *, actor: User, user_uui
 async def create_team(
     db: AsyncSession, *, actor: User, name: str, type_: str, tax_id: str | None = None
 ) -> Team:
-    """Create a gov/ngo team (checkpoint 1 only — team.edit, super_admin in seed, ADR-054)."""
-    await require_scope(actor, Perm.TEAM_EDIT, db)
+    """Create a gov/ngo team (team.edit at `all`, super_admin in seed, ADR-054).
+
+    Since Spec/026 team admins hold team.edit at `team` to edit their own team (ADR-357), so
+    creating one asks for `all` explicitly: checkpoint 1 alone would let any scope through.
+    """
+    if await require_scope(actor, Perm.TEAM_EDIT, db) != Scope.ALL:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
+    # One rule for team names everywhere (ADR-352 point 3), under the same lock as founding one.
+    name = name.strip()
+    await team_repository.lock_name(db, name)
+    if await team_repository.name_taken(db, name):
+        raise AdminConflictError("A team with this name already exists")
     return await team_repository.create(
         db, obj_in={"name": name, "type": type_, "tax_id": tax_id}
     )
+
+
+async def update_team(db: AsyncSession, *, actor: User, team_uuid: str, changes: dict) -> Team:
+    """Edit a team's name, tax ID or contact (Spec/026, ADR-357 point 1).
+
+    team.edit with checkpoint 2 on the team: a team admin edits their own, a super admin any;
+    another team is not found (ADR-023). A new name must not be taken (ADR-352 point 3).
+    """
+    team = await db.scalar(select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None)))
+    if team is None:
+        raise AdminNotFoundError("Team not found")
+    await require_scope(
+        actor,
+        Perm.TEAM_EDIT,
+        db,
+        resource=SimpleNamespace(created_by=None, team_uuid=team.uuid, geometry=None),
+    )
+    if "name" in changes:
+        changes = {**changes, "name": (changes["name"] or "").strip()}
+        if not changes["name"]:
+            raise AdminValidationError("Team name is required")
+        await team_repository.lock_name(db, changes["name"])
+        if await team_repository.name_taken(db, changes["name"], excluding=team.uuid):
+            raise AdminConflictError("A team with this name already exists")
+    for field, value in changes.items():
+        setattr(team, field, value)
+    await db.commit()
+    await db.refresh(team)
+    return team
+
+
+TEAM_STATUSES = ("active", "suspended")
+# What a pending request for a team that is suspended is closed with (ADR-357 point 4).
+_CLOSED_NOTE = "團隊已停用"
+
+
+async def set_team_status(db: AsyncSession, *, actor: User, team_uuid: str, new_status: str) -> Team:
+    """Suspend or restore a team (Spec/026, ADR-357 points 3–4). Super admin only.
+
+    Suspended: members keep their grants, but the identities resolve to nothing until it is
+    restored (active_identity_repository), and the team's pending join requests are rejected
+    with a note and their applicants told. There is no disbanding: a team stays, and its last
+    admin with it (ADMIN-027 Story 4, ADR-356).
+    """
+    if await require_scope(actor, Perm.TEAM_EDIT, db) != Scope.ALL:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
+    if new_status not in TEAM_STATUSES:
+        raise AdminValidationError(f"Unknown team status: {new_status}")
+    team = await db.scalar(
+        select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None)).with_for_update()
+    )
+    if team is None:
+        raise AdminNotFoundError("Team not found")
+    if team.status == new_status:
+        return team
+    team.status = new_status
+    team_id, actor_uuid = team.uuid, actor.uuid  # read before the commit expires them
+    closed = []
+    if new_status == "suspended":
+        closed = await _close_pending_requests(db, team_id, actor_uuid, _CLOSED_NOTE)
+    await db.commit()
+    for request_uuid, applicant_uuid in closed:
+        await NotificationService.dispatch(
+            db,
+            event_type="role_request_rejected",
+            title="你的加入團隊申請沒有通過",
+            body=_CLOSED_NOTE,
+            actor_uuid=actor_uuid,
+            ref_type="role_request",
+            ref_uuid=request_uuid,
+            explicit_recipients=[applicant_uuid],
+        )
+    await db.refresh(team)
+    return team
+
+
+async def _close_pending_requests(db: AsyncSession, team_uuid, reviewer_uuid, note: str) -> list[tuple]:
+    """Reject the team's pending member requests; return (request uuid, applicant uuid) pairs."""
+    pending = (
+        await db.execute(
+            select(RoleRequest)
+            .where(RoleRequest.team_uuid == team_uuid, RoleRequest.status == "pending")
+            .with_for_update()
+        )
+    ).scalars().all()
+    now = datetime.now(UTC)
+    for request in pending:
+        request.status, request.review_note = "rejected", note
+        request.reviewed_by, request.closed_at = reviewer_uuid, now
+    return [(request.uuid, request.created_by) for request in pending]
 
 
 async def list_teams(db: AsyncSession, *, actor: User, scope: Scope) -> list[Team]:

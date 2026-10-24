@@ -44,6 +44,8 @@ AUDIT_EVENT_TYPES = (
     "merged",
     "unmerged",
     "manual_note",
+    # A reviewer undid a confirm/reject (ADR-344). Kept apart from `unmerged`, which undoes a merge.
+    "verdict_revoked",
     # Slow-layer values, listed now so the CHECK needs no later migration.
     "group_welded",
     "weld_kept",

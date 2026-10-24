@@ -425,6 +425,9 @@ def session_id_of_access_token(token: str) -> str | None:
     Only for signing a browser out (ADR-325): a token past its 15 minutes still says which session
     the browser holds, and refusing to read it would leave that session running. The signature is
     still checked, so nobody can name a session that is not theirs.
+
+    And for a browser coming back from a step-up at its provider (ADR-361), which only asks whether
+    this is the session that left; the caller still checks the session is live and whose it is.
     """
     try:
         payload = jwt.decode(

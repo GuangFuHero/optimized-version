@@ -40,7 +40,8 @@ class FakeLineVerifier:
         if nonce is not None and claims.get("nonce") != nonce:
             raise LineTokenVerificationError("nonce mismatch")
         return LineIdentity(
-            sub=str(claims["sub"]), name=claims.get("name"), email=claims.get("email")
+            sub=str(claims["sub"]), name=claims.get("name"), email=claims.get("email"),
+            auth_time=claims.get("auth_time"),
         )
 
 

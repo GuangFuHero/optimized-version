@@ -29,7 +29,7 @@ from tests.conftest import acting_as, seed_disaster_types
 pytestmark = pytest.mark.asyncio
 
 POINT = {"type": "Point", "coordinates": [121.5601, 23.6701]}
-ADDRESS = {"location_type": "address", "county": "花蓮縣", "city": "光復鄉"}
+ADDRESS = {"location_type": "address", "full_address": "花蓮縣光復鄉"}
 
 # The keyword names batch import and the GraphQL resolvers call `create_*` with.
 CREATE_TICKET_PARAMS = [
@@ -113,7 +113,8 @@ async def test_validate_ticket_writes_nothing(db):
     assert fields.values["contact_name"] == "王小明"  # normalized, ready to insert
     assert fields.values["disaster_types"] == ["flood"]
     assert fields.point == POINT
-    assert fields.secondary_location == ADDRESS
+    assert fields.secondary_location | ADDRESS == fields.secondary_location  # split, not replaced
+    assert (fields.secondary_location["county"], fields.secondary_location["town"]) == ("花蓮縣", "光復鄉")
     assert await _rows(db, Tickets) == 0
     assert await _rows(db, SecondaryLocation) == 0
 

@@ -75,25 +75,40 @@ async def _acting(db, role: Role, team: Team | None = None) -> User:
 
 
 async def test_super_admin_lists_everything_the_seed_grants_it(db):
-    """Not every Perm: ai_duplicate.* has no feature yet and role_request.add is the citizen's alone."""
+    """Every Perm but role_request.add, which is the citizen's alone."""
     actor = await _acting(db, await _seed_role(db, "super_admin"))
 
     capabilities = await authz.capabilities(actor, db)
 
-    assert [perm for perm in Perm if perm not in capabilities] == [
-        Perm.AI_DUP_VIEW,
-        Perm.AI_DUP_REVIEW,
-        Perm.ROLE_REQUEST_ADD,
-    ]
+    assert [perm for perm in Perm if perm not in capabilities] == [Perm.ROLE_REQUEST_ADD]
     # A platform identity is never fenced by the gov-team rule.
     assert set(capabilities) >= GOV_TEAM_ONLY_PERMS
+
+
+async def test_data_auditor_reviews_duplicates_but_cannot_revoke_others_verdicts(db):
+    """ADR-337/342: the auditor works the AI 重複審核 queue; undoing others' verdicts is super_admin's."""
+    actor = await _acting(db, await _seed_role(db, "data_auditor"))
+
+    capabilities = set(await authz.capabilities(actor, db))
+
+    assert {Perm.AI_DUP_VIEW, Perm.AI_DUP_REVIEW} <= capabilities
+    assert Perm.AI_DUP_REVOKE not in capabilities
+
+
+AI_DUP_PERMS = {Perm.AI_DUP_VIEW, Perm.AI_DUP_REVIEW, Perm.AI_DUP_REVOKE}
+
+
+@pytest.mark.parametrize("role_name", sorted(set(GRANTS) - {"super_admin", "data_auditor"}))
+async def test_no_other_seeded_role_touches_the_duplicate_queue(role_name):
+    """Only super_admin and data_auditor see the AI 重複審核 page (DEDUP-008)."""
+    assert not AI_DUP_PERMS & set(GRANTS[role_name])
 
 
 @pytest.mark.parametrize("role_name", ["admin", "member"])
 @pytest.mark.parametrize(
     ("team_type", "team_status", "fenced"),
-    [("gov", "active", False), ("ngo", "active", True), ("gov", "inactive", True)],
-    ids=["active-gov", "ngo", "inactive-gov"],
+    [("gov", "active", False), ("ngo", "active", True), ("gov", "suspended", True)],
+    ids=["active-gov", "ngo", "suspended-gov"],
 )
 async def test_gov_only_capabilities_answer_as_require_gov_team_does(
     db, role_name, team_type, team_status, fenced

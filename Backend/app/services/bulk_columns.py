@@ -124,13 +124,9 @@ STATION_COLUMNS: tuple[ColumnSpec, ...] = (
     _c("visibility", ENUM, enum_options=_VISIBILITY_OPTIONS, max_length=50),
     _c("latitude", FLOAT, required_on_create=True),
     _c("longitude", FLOAT, required_on_create=True),
-    # The address lives in `secondary_locations`, which `UpdateStationInput` cannot reach at
-    # all; county/city are also part of the match key.
-    _create_only(_c("county", max_length=50)),
-    _create_only(_c("city", max_length=50)),
-    _create_only(_c("lane", max_length=20)),
-    _create_only(_c("alley", max_length=20)),
-    _create_only(_c("no", max_length=20)),
+    # The address line, split into its parts on import; it can only be set at creation. Its 縣市
+    # and 鄉鎮市區 are part of the match key.
+    _create_only(_c("address", max_length=255)),
     _create_only(_c("floor", max_length=20)),
     _create_only(_c("room", max_length=20)),
     _readonly(_c("verification_status")),

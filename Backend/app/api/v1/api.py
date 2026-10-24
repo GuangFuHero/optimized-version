@@ -5,14 +5,17 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     admin,
     analytics,
+    audit_logs,
     auth,
     bulk,
+    duplicate_pairs,
     history,
     map,
     notifications,
     rbac_admin,
     rbac_test,
     role_requests,
+    team_invites,
     users,
 )
 from app.core.config import settings
@@ -36,6 +39,16 @@ api_router.include_router(rbac_admin.router, prefix="/admin", tags=["RBAC 管理
 
 # 註冊後台人員申請審核 API（列表 / 通過 / 不通過，Spec/019）
 api_router.include_router(role_requests.router, prefix="/admin", tags=["後台人員申請審核"])
+
+# 註冊 AI 重複審核 API（列表 / 單張配對卡，Spec 025）
+api_router.include_router(duplicate_pairs.router, prefix="/admin", tags=["AI 重複審核"])
+
+# 註冊稽核紀錄讀取 API（全平台 / 自己團隊，Spec/026 ADR-358）
+api_router.include_router(audit_logs.router, prefix="/admin", tags=["稽核紀錄"])
+
+# 註冊團隊邀請連結 API（team admin 建立／列出；登入者打開／申請，Spec/026）
+api_router.include_router(team_invites.admin_router, prefix="/admin", tags=["團隊邀請連結"])
+api_router.include_router(team_invites.router, prefix="/invites", tags=["團隊邀請連結"])
 
 
 def rbac_test_enabled(env: str) -> bool:

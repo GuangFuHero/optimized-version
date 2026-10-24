@@ -44,6 +44,7 @@ from app.models.station_property import (  # noqa: F401
     StationUpdateSuggestion,
 )
 from app.models.team import Team, TeamZone, TeamZoneAssign  # noqa: F401
+from app.models.team_invite import TeamInvite  # noqa: F401
 from app.models.ticket_disaster_detail import TicketDisasterDetail  # noqa: F401
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask  # noqa: F401
 
