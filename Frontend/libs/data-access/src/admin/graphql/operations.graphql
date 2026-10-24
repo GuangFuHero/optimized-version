@@ -562,6 +562,11 @@ mutation AdminPublishBriefing($uuid: UUID!) {
     ...AdminBriefingFields
   }
 }
+mutation AdminTakeDownBriefing($uuid: UUID!) {
+  takeDownBriefing(uuid: $uuid) {
+    ...AdminBriefingFields
+  }
+}
 mutation AdminDeleteBriefing($uuid: UUID!) {
   deleteBriefing(uuid: $uuid)
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Stack, Typography } from '@mui/material';
-import { ArrowLeft, Check, Save, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, EyeOff, Save, Send, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -16,14 +16,13 @@ import {
   Button,
   Callout,
   Card,
-  Dialog,
   MarkdownEditor,
   designTokens,
 } from '@rescue-frontend/ui';
 
 import type { Briefing } from './briefing-content';
 import { BriefingPreview, BriefingStamp } from './briefing-preview';
-import { PublishBriefingDialog } from './publish-briefing-dialog';
+import { TakeDownBriefingConfirm } from './take-down-briefing-confirm';
 
 const { color, typography } = designTokens;
 
@@ -48,7 +47,7 @@ export function BriefingEditor({
 }) {
   const [content, setContent] = useState(draft.content);
   const [confirm, setConfirm] = useState<
-    'publish' | 'leave' | 'discard' | null
+    'publish' | 'leave' | 'discard' | 'takeDown' | null
   >(null);
   const update = useUpdateBriefing();
   const publish = usePublishBriefing();
@@ -194,80 +193,188 @@ export function BriefingEditor({
           }
         />
         <Stack sx={{ gap: 2, position: { desktop: 'sticky' }, top: 0 }}>
-          <Card>
-            <Stack sx={{ gap: 1.5 }}>
-              <Typography
-                sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
-              >
-                {dirty ? '有尚未儲存的修改。' : '目前沒有未儲存的修改。'}
-                <br />
-                字數 {Array.from(content).length}
-              </Typography>
-              <Button
-                variant="outline"
-                startIcon={<Save size={16} />}
-                disabled={pending || !dirty || !available}
-                onClick={() => void save('save')}
-              >
-                {update.isPending ? '儲存中…' : '儲存草稿'}
-              </Button>
-              {canPublish ? (
-                <Button
-                  startIcon={<Send size={16} />}
-                  disabled={pending || empty || !available}
-                  onClick={() => setConfirm('publish')}
-                >
-                  發布到前台
-                </Button>
+          {confirm === 'publish' ? (
+            <Callout tone="danger">
+              <strong>確認發布？</strong>
+              <br />
+              發布後，<strong>所有志工立刻看到這一份</strong>（含未登入的人）。
+              {published ? (
+                <>
+                  目前的第 {versionCount} 版會<strong>整份被取代</strong>
+                  ，舊內容不會殘留在頁面上。
+                </>
               ) : (
-                <Typography sx={typography.body[300]}>
-                  目前身分可以儲存草稿，沒有發布權限。
-                </Typography>
+                '這會是第一次對外。'
               )}
-              {empty ? (
-                <Typography sx={typography.body[300]}>
-                  草稿可以留白，發布前請補上內容。
-                </Typography>
-              ) : null}
-              <Button
-                variant="outline"
-                startIcon={<Check size={16} />}
-                disabled={pending}
-                onClick={() => (dirty ? setConfirm('leave') : onClose())}
-              >
-                完成編輯，回到總覽
-              </Button>
-              {canDiscard ? (
-                <Box
-                  component="details"
+              <Stack direction="row" sx={{ gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                <Button
+                  size="sm"
+                  disabled={pending || empty || !canPublish || !available}
+                  onClick={() => void save('publish')}
+                >
+                  {publish.isPending ? '發布中…' : '確認發布'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => setConfirm(null)}
+                >
+                  返回修改
+                </Button>
+              </Stack>
+            </Callout>
+          ) : confirm === 'discard' ? (
+            <Callout tone="danger">
+              <strong>確認丟棄草稿？</strong>
+              <br />
+              {published
+                ? `丟棄後回到目前對外的第 ${versionCount} 版，草稿的修改救不回來。`
+                : '丟棄後草稿的修改救不回來。'}
+              <Stack direction="row" sx={{ gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                <Button
+                  size="sm"
+                  disabled={pending || !available}
+                  onClick={() => void discardDraft()}
+                >
+                  {discard.isPending ? '丟棄中…' : '確認丟棄'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => setConfirm(null)}
+                >
+                  取消
+                </Button>
+              </Stack>
+            </Callout>
+          ) : confirm === 'leave' ? (
+            <Callout tone="warning">
+              有還沒儲存的修改，離開就沒了。
+              <Stack direction="row" sx={{ gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                <Button
+                  size="sm"
+                  disabled={pending || !available}
+                  onClick={() => void save('leave')}
+                >
+                  {update.isPending ? '儲存中…' : '存成草稿再離開'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={onClose}
+                >
+                  直接離開
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => setConfirm(null)}
+                >
+                  取消
+                </Button>
+              </Stack>
+            </Callout>
+          ) : published && confirm === 'takeDown' ? (
+            <TakeDownBriefingConfirm
+              briefing={published}
+              onClose={() => setConfirm(null)}
+            />
+          ) : (
+            <Card>
+              <Stack sx={{ gap: 1.5 }}>
+                <Typography
                   sx={{
-                    borderTop: `1px solid ${color.border.default}`,
-                    pt: 1.5,
+                    ...typography.body[300],
+                    color: color.fg.neutral.subtle,
                   }}
                 >
+                  {dirty ? '有尚未儲存的修改。' : '目前沒有未儲存的修改。'}
+                  <br />
+                  字數 {Array.from(content).length}
+                </Typography>
+                <Button
+                  variant="outline"
+                  startIcon={<Save size={16} />}
+                  disabled={pending || !dirty || !available}
+                  onClick={() => void save('save')}
+                >
+                  {update.isPending ? '儲存中…' : '儲存草稿'}
+                </Button>
+                {canPublish ? (
+                  <Button
+                    startIcon={<Send size={16} />}
+                    disabled={pending || empty || !available}
+                    onClick={() => setConfirm('publish')}
+                  >
+                    發布到前台
+                  </Button>
+                ) : (
+                  <Typography sx={typography.body[300]}>
+                    目前身分可以儲存草稿，沒有發布權限。
+                  </Typography>
+                )}
+                {empty ? (
+                  <Typography sx={typography.body[300]}>
+                    草稿可以留白，發布前請補上內容。
+                  </Typography>
+                ) : null}
+                <Button
+                  variant="outline"
+                  startIcon={<Check size={16} />}
+                  disabled={pending}
+                  onClick={() => (dirty ? setConfirm('leave') : onClose())}
+                >
+                  完成編輯，回到總覽
+                </Button>
+                {canDiscard || published ? (
                   <Box
-                    component="summary"
+                    component="details"
                     sx={{
-                      cursor: 'pointer',
-                      ...typography.body[300],
-                      color: color.fg.neutral.muted,
+                      borderTop: `1px solid ${color.border.default}`,
+                      pt: 1.5,
                     }}
                   >
-                    更多動作
+                    <Box
+                      component="summary"
+                      sx={{
+                        cursor: 'pointer',
+                        ...typography.body[300],
+                        color: color.fg.neutral.muted,
+                      }}
+                    >
+                      更多動作
+                    </Box>
+                    {canDiscard ? (
+                      <Button
+                        variant="ghost"
+                        startIcon={<Trash2 size={16} />}
+                        sx={{ mt: 1, color: color.fg.danger }}
+                        disabled={pending || !available}
+                        onClick={() => setConfirm('discard')}
+                      >
+                        丟棄草稿
+                      </Button>
+                    ) : null}
+                    {published ? (
+                      <Button
+                        variant="ghost"
+                        startIcon={<EyeOff size={16} />}
+                        sx={{ mt: 1, color: color.fg.danger }}
+                        disabled={pending}
+                        onClick={() => setConfirm('takeDown')}
+                      >
+                        從前台下架
+                      </Button>
+                    ) : null}
                   </Box>
-                  <Button
-                    variant="ghost"
-                    startIcon={<Trash2 size={16} />}
-                    sx={{ mt: 1, color: color.fg.danger }}
-                    disabled={pending || !available}
-                    onClick={() => setConfirm('discard')}
-                  >
-                    丟棄草稿
-                  </Button>
-                </Box>
-              ) : null}
-            </Stack>
-          </Card>
+                ) : null}
+              </Stack>
+            </Card>
+          )}
           <Card>
             <Typography
               sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
@@ -277,56 +384,6 @@ export function BriefingEditor({
           </Card>
         </Stack>
       </Box>
-      <PublishBriefingDialog
-        open={confirm === 'publish'}
-        onClose={() => setConfirm(null)}
-        onConfirm={() => void save('publish')}
-        hasPublished={Boolean(published)}
-        nextVersion={versionCount + 1}
-        content={content}
-        savingChanges={dirty}
-        submitting={pending}
-        confirmDisabled={empty || !canPublish || !available}
-        error={error?.message}
-      />
-      <Dialog
-        variant="sectioned"
-        open={confirm === 'leave'}
-        onClose={() => setConfirm(null)}
-        onConfirm={() => void save('leave')}
-        title="有尚未儲存的修改"
-        confirmLabel={pending ? '儲存中…' : '存成草稿再離開'}
-        submitting={pending}
-        confirmDisabled={!available}
-        error={error?.message}
-      >
-        <Typography>存成草稿後再離開，前台內容不會變更。</Typography>
-        <Button
-          variant="ghost"
-          disabled={pending}
-          onClick={onClose}
-          sx={{ alignSelf: 'flex-start', color: color.fg.danger }}
-        >
-          直接離開，不儲存修改
-        </Button>
-      </Dialog>
-      <Dialog
-        variant="sectioned"
-        open={confirm === 'discard'}
-        onClose={() => setConfirm(null)}
-        onConfirm={() => void discardDraft()}
-        title="確認丟棄草稿？"
-        confirmLabel={discard.isPending ? '丟棄中…' : '確認丟棄'}
-        confirmTone="danger"
-        submitting={pending}
-        confirmDisabled={!available}
-        error={discard.error?.message}
-      >
-        <Typography>
-          草稿與尚未儲存的修改都會丟棄，無法復原。
-          丟棄前會重新確認這份內容仍是未發布草稿。
-        </Typography>
-      </Dialog>
     </Stack>
   );
 }
