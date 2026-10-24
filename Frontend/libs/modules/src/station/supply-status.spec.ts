@@ -32,6 +32,10 @@ describe('describeSupplyStatus', () => {
   });
 
   it('gives the date on Taiwan’s clock once it is over a week old', () => {
+    expect(
+      describeSupplyStatus('飲用水見底', before(7 * DAY - MINUTE), NOW)
+        ?.updated,
+    ).toBe('6 天前更新');
     // 2026-10-09 20:00 UTC is already 10-10 in Taipei.
     expect(
       describeSupplyStatus('飲用水見底', '2026-10-09T20:00:00Z', NOW)?.updated,
