@@ -6,7 +6,7 @@
 **Base**: `main` @ `a272dfdd4`，分支 `feat/dedup-resolve`
 **Notion**: DEDUP-007（審核動作與後端）、DEDUP-008（AI 重複審核頁，前端 Ethan）、DEDUP-009（通知，Dennis）、
 「dedup 10/23 update — 討論頁」§12
-**Decisions**: `decisions.md`（ADR-364～379）
+**Decisions**: `decisions.md`（ADR-364～384；380～384 是 code review 那一輪）
 **前一份**：Spec 025（PR #92，判定＋撤銷）。本 Spec 是 ADR-336 拆出去的「後半段」。
 
 ## 概述
@@ -121,6 +121,8 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `created_by`、`created_at` | 開單者 |
 | `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`recruiting_stopped`、`properties` |
 | `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`property_value`、`quantity`、`status`、`comment` |
+| `photos` | 還在的照片：`uuid`、`url`、`created_at`（ADR-383） |
+| `disaster_details` | 災害欄位答案：`{property_name: [value, …]}`（ADR-384） |
 
 清單 API（`GET /admin/duplicate-pairs`）**不加**這個欄位，避免一頁 200 張卡都載入完整的單。
 
@@ -155,6 +157,8 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `ticket` | | 主要單要改的欄位。只帶要改的。可改的欄位見 §3.2 |
 | `primary_tasks` | ✓ | 主要單**每一項**還在的需求（ADR-367） |
 | `secondary_tasks` | ✓ | 另一張單**每一項**還在、而且沒被 `absorb` 的需求 |
+| `photos` | 兩張單有照片時 ✓ | 兩張單**每一張**還在的照片：`keep` 或 `cancel`（ADR-383） |
+| `disaster_details` | 另一張單有災害欄位答案時 ✓ | 主要單處理後**完整的**災害欄位答案，整份取代（ADR-384） |
 | `note` | | 審核員備註，上限 1000 字 |
 
 ### 3.2 主要單可改的欄位
@@ -163,6 +167,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 `immediate_danger_reported`、`contact_name`、`contact_phone`、`contact_email`。
 
 - 驗證和建單時相同：長度、`disaster_types` 的合法值（`validate_disaster_types`，`keep` = 主要單現有的）。
+- `priority` 最多 20 字、`task_type` 最多 50 字（欄位長度），超過回 422（ADR-380）。`priority` 的合法值不驗，同 `updateTicket`（ADR-126）。
 - `status` 不能改，照需求推算。
 - 位置、地址不在這一版（ADR-366）。
 
@@ -201,6 +206,25 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `move` | 整項搬到主要單：`ticket_uuid` 改成主要單，uuid、接單紀錄都不變。可帶 `values` |
 | `cancel` | 取消 |
 
+### 3.3.1 照片與災害欄位答案（ADR-383、384）
+
+```json
+"photos": [
+  { "photo": "<A 的照片>", "action": "keep" },
+  { "photo": "<B 的照片>", "action": "keep" },
+  { "photo": "<B 的另一張照片>", "action": "cancel" }
+],
+"disaster_details": { "power_outage": ["yes"], "utility_hazards": ["gas", "water"] }
+```
+
+- **照片**：兩張單每一張還在的照片都要列出。
+  - `keep`：留在主要單，B 的照片改掛到主要單（`ref_uuid` = 主要單）。
+  - `cancel`：軟刪除。
+- **災害欄位答案**：主要單處理後的完整答案，整份取代（同 `setTicketDisasterDetails`）。值由前端輸入，可以從 A、B 挑，也可以改。
+  - 另一張單有答案時必填，不能漏，否則 422。只有主要單有答案時可省略，省略就不動。
+  - 大小限制同 `setTicketDisasterDetails`（ADR-267）。
+- 地址仍不在這一版（ADR-366），留在已取消的另一張單上。
+
 ### 3.4 檢查（全部通過才寫入）
 
 | 情況 | 回應 |
@@ -218,6 +242,10 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `quantity` 不合 `_validate_need_size`（rescue 以外必填、至少 1） | 422 |
 | `keep`／`move` 的項目漏列、重複列細項，或列了不屬於它的細項 | 422（ADR-379） |
 | 主要單處理後沒有任何需求 | 422 |
+| `priority` 超過 20 字、`task_type` 超過 50 字 | 422（ADR-380） |
+| 照片漏列、重複列，或列了不屬於這兩張單的照片 | 422（ADR-383） |
+| 另一張單有災害欄位答案，但 request 沒帶 `disaster_details` | 422（ADR-384） |
+| `disaster_details` 超過大小限制 | 422（ADR-267） |
 
 ### 3.5 寫入順序（一筆交易）
 
@@ -227,7 +255,8 @@ B ticket                        B ticket：已取消，replaced_by = A
 4. 記錄處理前的完整內容（§5）。
 5. 改主要單的欄位。
 6. 處理每一項需求與細項；搬接單紀錄（ADR-368）；重算需求狀態（ADR-369）。
-7. 另一張單取消＋軟刪除，`replaced_by_uuid` = 主要單（ADR-370）。
+7. 照片改掛或軟刪除；帶了 `disaster_details` 就取代主要單的答案（ADR-383、384）。
+8. 另一張單取消＋軟刪除，`replaced_by_uuid` = 主要單（ADR-370）。
 8. 主要單 `recompute_ticket_status`、`void_stale_verdict`。
 9. 配對卡 → `confirmed`，記 `reviewed_by`、`reviewed_at`。
 10. 寫 `merged` 事件。
@@ -261,7 +290,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `decision_reason` | `note` |
 | `before_state` | `{pair_status, tickets: {low: …, high: …}}`：兩張單處理前的完整內容（同 `TicketForReview`，含需求與每一項的接單人 uuid） |
 | `after_state` | `{pair_status: "confirmed", tickets: {…}}`：處理後的內容 |
-| `affected_refs` | `{request: <原始 request>, absorbed: {<B.task>: <A.task>}, moved: […], canceled_tasks: […], moved_assignments: […], dropped_assignments: […], moved_properties: […], canceled_properties: […]}` |
+| `affected_refs` | `{request: <原始 request>, absorbed: {<B.task>: <A.task>}, moved: […], canceled_tasks: […], moved_assignments: […], dropped_assignments: […], moved_properties: […], canceled_properties: […], moved_photos: […], canceled_photos: […]}` |
 | `reversible` | `false`（ADR-375） |
 
 ## 6. 通知（ADR-378）

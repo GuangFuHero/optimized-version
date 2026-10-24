@@ -158,6 +158,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 **決定**：
 - `version` 是一個不透明字串：審核員比對的**內容本身**的雜湊（sha256），包含單的欄位、每一項還在的需求、每一個還在的細項，需求與細項依 uuid 排序。
+  2026-10-24 code review 後加入照片與災害欄位答案（ADR-383、384）。
   細項也要算：request 必須列出每一個細項（ADR-379），審核員沒看到的新細項要擋下。
 - 不用 `updated_at`。2026-10-24 Task 2 實測：單繼承 `BaseGeometry`，`updated_at` 在 `base_geometries` 上；
   只改單自己的欄位（例如 `title`），ORM 不會更新 `base_geometries`，`updated_at` 不變。用時間戳會漏掉這種修改。
@@ -245,3 +246,71 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 - `cancel` 的需求不帶 `properties`。
 
 **理由**：和需求同一套規則（ADR-367），前端選什麼就寫什麼。自動全搬會出現兩個同名品項，不搬會讓 B 的品項不見。
+
+---
+
+# Code review 那一輪（2026-10-24，`SPEC028_CODE_REVIEW.md`）
+
+ADR-380～384。審查共 10 條，修 1、2、3、4、6、8、9；7（`_settle` 抽成共用）超出範圍不修；10 在 Postgres 上重現不出來。
+第 1 條（migration parent）是程序問題，不另寫 ADR：rebase 到 main `2e95aec0d`，`down_revision` 改成 `7370daf4c8f7`（commit `ec0e6633d`）。
+
+---
+
+## ADR-380：主要單的 `priority`、`task_type` 檢查長度
+
+**Date**: 2026-10-24　**Status**: Accepted（code review 第 2 條；使用者同意修）
+
+**背景**：`tickets.priority` 是 `String(20)`、`task_type` 是 `String(50)`。處理 API 沒檢查長度，實測超過時資料庫丟 `DBAPIError`，REST 回 500。
+
+**決定**：`_ticket_changes` 檢查兩個欄位的長度，超過回 422。合法值仍不驗（ADR-126，`updateTicket` 也不驗）。
+
+---
+
+## ADR-381：通知用處理後的標題
+
+**Date**: 2026-10-24　**Status**: Accepted（code review 第 3 條；使用者同意修）
+
+**背景**：通知的主要單標題取自處理前的快照。request 同時改了標題時，通知寫的是已經不存在的舊標題。
+
+**決定**：通知用處理後的快照（`after`）的標題。另一張單的標題不會被改，照舊。
+
+---
+
+## ADR-382：主要單沒有變動時，不通知主要單的開單者
+
+**Date**: 2026-10-24　**Status**: Accepted（code review 第 4 條；使用者同意修）
+
+**背景**：判斷「主要單有沒有變」時，把另一張單被取消的需求也算進去。只是「選 A、B 全部取消」時，A 沒有任何變動，A 的開單者也收到「你的單已更新」；兩張單同一人開的，會收到兩則。
+
+**決定**：只看主要單自己的變動：欄位、它的需求（保留的改值、併入、取消）、搬進來的需求、細項、照片、災害欄位答案。另一張單被取消的需求不算。
+
+---
+
+## ADR-383：照片由審核員逐張選
+
+**Date**: 2026-10-24　**Status**: Accepted（使用者拍板）
+
+**背景**：code review 第 5 條。另一張單取消後，它的照片留在已取消的單上；GraphQL 不回已刪除的單，照片就看不到了。審核頁也沒有顯示照片。
+
+**決定**：
+- detail 回傳兩張單還在的照片（`ref_type = "geometry"`、`ref_uuid` = 單）。照片算進 `version`。
+- request 的 `photos` 列出兩張單**每一張**照片，`keep` 或 `cancel`，比照需求的規則（ADR-367）：漏列、重複、不屬於這兩張單，回 422。
+- `keep` 的另一張單照片改掛到主要單；`cancel` 軟刪除。
+- 兩張單都沒有照片時，`photos` 可以省略。
+- 不檢查照片張數上限：建單的上限（`HELP_REQUEST_PHOTO_MAX`）只管民眾一次送出的數量。合併後超過，是兩邊的照片加起來，由審核員決定要留幾張。（慣例，未另外拍板）
+
+---
+
+## ADR-384：災害欄位答案由審核員給出完整的一份
+
+**Date**: 2026-10-24　**Status**: Accepted（使用者拍板）
+
+**背景**：code review 第 5 條。另一張單的災害欄位答案（`ticket_disaster_details`，例如是否斷電）取消後看不到，審核頁也沒有顯示。
+
+**決定**：
+- detail 回傳兩張單的答案 `{property_name: [values]}`，算進 `version`。
+- request 的 `disaster_details` 是主要單處理後**完整的**答案，整份取代，做法同 `setTicketDisasterDetails`（不驗欄位是否存在於設定，ADR-092；驗大小，ADR-267）。值由前端輸入，可以從兩邊挑，也可以改。
+- 另一張單有答案時 `disaster_details` 必填，避免沒看到就丟掉；只有主要單有答案時可省略，省略就不動。
+- 地址仍不在這一版（ADR-366）。地址牽動位置，和快層比對、地圖相關，另開票。
+
+**為什麼不逐筆列出**：同一個欄位兩邊常常都有答案（例如兩邊都答了是否斷電），逐筆 keep／cancel 會留下互相矛盾的答案。給出完整的一份，和民眾送出表單的方式一致。

@@ -181,6 +181,21 @@ commit 前看 `git diff --cached --stat`）。
 
 ---
 
+## Task 9：code review 修正（ADR-380～384）
+
+依 `SPEC028_CODE_REVIEW.md`，使用者同意修 1、2、3、4、6、8、9，並決定 B 的照片與災害欄位答案由審核員選（ADR-383、384）。
+
+- [x] 1. rebase 到 main `2e95aec0d`，migration 改接 `7370daf4c8f7`（`ec0e6633d`）
+- [ ] 2. `priority`／`task_type` 長度 → 422（ADR-380）
+- [ ] 3. 通知用處理後的標題（ADR-381）
+- [ ] 4. 主要單沒變不通知它的開單者（ADR-382）
+- [ ] 5. 照片：detail 回傳、`version`、request 逐張 keep／cancel（ADR-383）
+- [ ] 6. 災害欄位答案：detail 回傳、`version`、request 完整一份（ADR-384）
+- [ ] 7. `_check_size` 改呼叫 `_validate_need_size`
+- [ ] 8. 重複接單一次 DELETE
+- [ ] 9. 主要單判斷、同一張單檢查各留一處
+- [ ] 每條先寫會失敗的測試；全套件；合約檔重產；Docker 從零重做
+
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
 | 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |
