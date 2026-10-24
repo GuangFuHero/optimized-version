@@ -2,7 +2,8 @@
 
 **Date**: 2026-10-24
 **Feature**: 028-dedup-resolve
-**Status**：已實作並完成 Docker 從零驗證（2026-10-24，`38ee6e232`，全套件 2788 passed、覆蓋率 96%，見 `verification.md`）。PR 尚未開。
+**Status**：已實作、code review 修正完成，並完成 Docker 從零驗證（2026-10-24，`55cb19729`，全套件 2912 passed、覆蓋率 96%，見 `verification.md`）。PR 尚未開。
+**Base**（rebase 後）：`main` @ `2e95aec0d`
 **Base**: `main` @ `a272dfdd4`，分支 `feat/dedup-resolve`
 **Notion**: DEDUP-007（審核動作與後端）、DEDUP-008（AI 重複審核頁，前端 Ethan）、DEDUP-009（通知，Dennis）、
 「dedup 10/23 update — 討論頁」§12
