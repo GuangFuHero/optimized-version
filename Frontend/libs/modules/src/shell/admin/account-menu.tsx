@@ -59,10 +59,13 @@ export function AccountMenu() {
   const identity = user?.active_identity;
   const identities = user?.identities ?? [];
   const switchIdentity = useSwitchIdentity();
-  const { data: teams } = useTeams({ enabled: Boolean(identity?.team_uuid) });
-  const teamType = teams?.find(
-    (team) => team.uuid === identity?.team_uuid,
-  )?.type;
+  const canViewTeams = Boolean(
+    identity?.team_uuid && user?.capabilities.includes('team.view'),
+  );
+  const { data: teams } = useTeams({ enabled: canViewTeams });
+  const teamType = canViewTeams
+    ? teams?.find((team) => team.uuid === identity?.team_uuid)?.type
+    : undefined;
   const platformRole = identity?.team_uuid
     ? teamType && TEAM_TYPE_DISPLAY_NAMES.get(teamType)
     : identity && '平台身分';

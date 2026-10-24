@@ -911,7 +911,7 @@ export type MutationWithdrawRoleRequestArgs = {
 
 export type MyRoleRequestsType = {
   __typename?: 'MyRoleRequestsType';
-  /** May send an application now: no back-office identity, none pending, not paused */
+  /** May send an application now: none pending and not paused. A back-office identity rules out only the data auditor choice (ADR-351) */
   canApply: Scalars['Boolean']['output'];
   /** Holds a role beyond `user`: the entry offers 前往後台 instead of applying */
   hasBackofficeIdentity: Scalars['Boolean']['output'];
@@ -986,6 +986,7 @@ export type Query = {
   normalizeAddress: AddressLookupType;
   /** The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute shared with normalizeAddress */
   reverseGeocode: AddressLookupType;
+  roleRequestTeams: Array<RoleRequestTeam>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stations: StationConnection;
@@ -1075,6 +1076,10 @@ export type QueryNormalizeAddressArgs = {
 export type QueryReverseGeocodeArgs = {
   lat: Scalars['Float']['input'];
   lng: Scalars['Float']['input'];
+};
+
+export type QueryRoleRequestTeamsArgs = {
+  type?: InputMaybe<RoleRequestTeamType>;
 };
 
 export type QueryStationArgs = {
@@ -1175,18 +1180,43 @@ export const RoleRequestStatus = {
 
 export type RoleRequestStatus =
   (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
+export type RoleRequestTeam = {
+  __typename?: 'RoleRequestTeam';
+  name: Scalars['String']['output'];
+  type: RoleRequestTeamType;
+  uuid: Scalars['UUID']['output'];
+};
+
+export const RoleRequestTeamType = {
+  Gov: 'GOV',
+  Ngo: 'NGO',
+} as const;
+
+export type RoleRequestTeamType =
+  (typeof RoleRequestTeamType)[keyof typeof RoleRequestTeamType];
 export type RoleRequestType = {
   __typename?: 'RoleRequestType';
+  applicantEmail?: Maybe<Scalars['String']['output']>;
+  applicantName?: Maybe<Scalars['String']['output']>;
+  /** Masked */
+  applicantPhone?: Maybe<Scalars['String']['output']>;
   /** When it was approved, rejected or withdrawn */
   closedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Spec 019 only; no longer sent (ADR-355) */
   contact?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['DateTime']['output'];
+  /** The team a new-team application founds */
+  newTeamName?: Maybe<Scalars['String']['output']>;
   reason: Scalars['String']['output'];
   requestedRole: RoleRequestRole;
   /** The reviewer's reply, if any */
   reviewNote?: Maybe<Scalars['String']['output']>;
   status: RoleRequestStatus;
+  /** The existing team a member request asks to join */
+  team?: Maybe<RoleRequestTeam>;
   uuid: Scalars['UUID']['output'];
+  /** Sent through a team's invite link */
+  viaInvite: Scalars['Boolean']['output'];
 };
 
 export type SecondaryLocationInput = {
@@ -1433,9 +1463,12 @@ export type StationType = {
 };
 
 export type SubmitRoleRequestInput = {
-  contact?: InputMaybe<Scalars['String']['input']>;
+  email?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  newTeamName?: InputMaybe<Scalars['String']['input']>;
   reason: Scalars['String']['input'];
   requestedRole: RoleRequestRole;
+  teamUuid?: InputMaybe<Scalars['UUID']['input']>;
 };
 
 export type SuggestableFieldType = {
@@ -2229,8 +2262,29 @@ export type MyRoleRequestsQuery = {
       reviewNote?: string | null;
       createdAt: any;
       closedAt?: any | null;
+      newTeamName?: string | null;
+      applicantName?: string | null;
+      applicantPhone?: string | null;
+      team?: {
+        __typename?: 'RoleRequestTeam';
+        uuid: string;
+        name: string;
+      } | null;
     }>;
   };
+};
+
+export type RoleRequestTeamsQueryVariables = Exact<{
+  type: RoleRequestTeamType;
+}>;
+
+export type RoleRequestTeamsQuery = {
+  __typename?: 'Query';
+  roleRequestTeams: Array<{
+    __typename?: 'RoleRequestTeam';
+    uuid: string;
+    name: string;
+  }>;
 };
 
 export type SubmitRoleRequestMutationVariables = Exact<{
@@ -3941,6 +3995,35 @@ export const MyRoleRequestsDocument = {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'closedAt' },
                       },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'team' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'name' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'newTeamName' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'applicantName' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'applicantPhone' },
+                      },
                     ],
                   },
                 },
@@ -3952,6 +4035,58 @@ export const MyRoleRequestsDocument = {
     },
   ],
 } as unknown as DocumentNode<MyRoleRequestsQuery, MyRoleRequestsQueryVariables>;
+export const RoleRequestTeamsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'RoleRequestTeams' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'type' } },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'RoleRequestTeamType' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'roleRequestTeams' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'type' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'type' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  RoleRequestTeamsQuery,
+  RoleRequestTeamsQueryVariables
+>;
 export const SubmitRoleRequestDocument = {
   kind: 'Document',
   definitions: [

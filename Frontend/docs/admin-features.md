@@ -74,7 +74,9 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 ## 目前缺口
 
-部分列表與管理頁仍使用 demo 資料或 placeholder。`@rescue-frontend/data-access/admin` 已提供 TanStack Query hooks，REST 使用 generated OpenAPI types，GraphQL 使用 urql 與 The Guild typed documents。後續頁面可直接串接這些 hooks，共用 query client callback 會顯示 error toast。
+部分列表與管理頁仍使用 demo 資料或 placeholder。`@rescue-frontend/data-access/admin` 已提供 TanStack Query hooks，REST 使用 generated OpenAPI types，GraphQL 使用 urql 與 The Guild typed documents。後續頁面可直接串接這些 hooks；一般錯誤由共用 query client callback 顯示 error toast。
+
+頁面與 shell 的 optional reads 必須用對應的 capability 控制 query 的 `enabled`，取得權限前保持 `false`，失去權限時隱藏 cached data。任一 active admin query 的 permission 403 都會讓 `AdminShell` 在目前 URL 顯示整頁 403；mutation failures 仍走原本的 error handling。
 
 ## 建議閱讀順序
 
