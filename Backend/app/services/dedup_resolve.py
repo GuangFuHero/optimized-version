@@ -26,6 +26,7 @@ from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.services.authz import require_scope
+from app.services.dedup_resolve_notices import send_resolve_notices
 from app.services.dedup_resolve_plan import RESOLVABLE_KINDS, ResolvePlan, ResolveRefused, build_plan
 from app.services.dedup_review import (
     PENDING_STATUSES,
@@ -57,6 +58,7 @@ class ResolveOutcome:
     moved_people: dict[str, tuple[str, ...]]
     canceled_people: dict[str, tuple[str, ...]]
     task_names: dict[str, str]
+    secondary_task_uuids: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -107,6 +109,7 @@ async def resolve(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, reques
     outcome = _outcome(plan, primary, secondary, claimants, tasks)
     await db.commit()
 
+    await send_resolve_notices(db, outcome=outcome, actor=actor, actor_uuid=reviewer)
     await db.refresh(pair)
     return ResolveResult(detail=await pair_detail(db, pair), outcome=outcome)
 
@@ -296,10 +299,13 @@ def _merged_event(
 
 def _outcome(plan, primary, secondary, claimants, tasks) -> ResolveOutcome:
     dropped = set(plan.dropped_assignments)
+    # Whoever now answers to the primary ticket's contact: the people on a folded need who moved
+    # over, and the people on a need moved over whole (ADR-378).
     moved = {
         absorbed: tuple(sorted(p for p in claimants.get(absorbed, set()) if (absorbed, p) not in dropped))
         for absorbed in plan.absorbed
     }
+    moved |= {k.uuid: tuple(sorted(claimants.get(k.uuid, set()))) for k in plan.kept_tasks if k.moved}
     canceled = {task: tuple(sorted(claimants.get(task, set()))) for task in plan.canceled_tasks}
     return ResolveOutcome(
         plan=plan,
@@ -310,4 +316,5 @@ def _outcome(plan, primary, secondary, claimants, tasks) -> ResolveOutcome:
         moved_people=moved,
         canceled_people=canceled,
         task_names={uuid: task.task_name for uuid, task in tasks.items()},
+        secondary_task_uuids=frozenset(task.uuid for task in secondary.tasks),
     )
