@@ -6,9 +6,10 @@ expire_on_commit=True, so UUIDs are captured eagerly and state is re-read via li
 immediately before asserting.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
@@ -124,21 +125,85 @@ async def test_generated_briefing_is_a_draft(db):
 
 @pytest.mark.asyncio
 async def test_list_puts_drafts_first_then_newest_published(db):
-    """Drafts lead, then published rows by publish time, whatever order they were created in."""
+    """Drafts lead, then the rest by publish time, whatever order they were created in."""
     uid = await _user(db)
-    now = datetime.now(UTC)
-    contents = ["published first", "published last", "draft"]
+    contents = ["published last", "published first", "draft"]
     uuids = {
         c: str((await briefings.generate_briefing(db, created_by=uid, content=c)).uuid) for c in contents
     }
-    for content, published_at in (("published last", now), ("published first", now - timedelta(hours=1))):
-        row = await briefings.get_by_uuid_active(db, uuids[content])
-        await briefings.update(db, db_obj=row, obj_in={"published_at": published_at, "published_by": uid})
+    for content in ("published first", "published last"):
+        await briefings.publish(db, uuid=uuids[content], actor_uuid=uid)
 
     listed = await briefings.list_briefings(db, status="all")
-    assert [b.content for b in listed] == ["draft", "published last", "published first"]
+    assert [(b.content, b.status) for b in listed] == [
+        ("draft", "draft"),
+        ("published last", "published"),
+        ("published first", "inactive"),
+    ]
     published = await briefings.list_briefings(db, status="published")
-    assert [b.content for b in published] == ["published last", "published first"]
+    assert [b.content for b in published] == ["published last"]
+
+
+@pytest.mark.asyncio
+async def test_publish_replaces_only_the_live_version_of_its_state(db):
+    """Publishing takes down the version live in the same state and leaves other states alone."""
+    uid = await _user(db)
+    uuids = {}
+    for content, state in (("old", "briefing"), ("field", "in_field"), ("new", "briefing")):
+        b = await briefings.generate_briefing(db, created_by=uid, content=content, state=state)
+        uuids[content] = str(b.uuid)
+        await briefings.publish(db, uuid=uuids[content], actor_uuid=uid)
+
+    statuses = {b.content: b.status for b in await briefings.list_briefings(db, status="all")}
+    assert statuses == {"old": "inactive", "field": "published", "new": "published"}
+    with pytest.raises(ValueError, match="already published"):
+        await briefings.publish(db, uuid=uuids["old"], actor_uuid=uid)
+
+
+@pytest.mark.asyncio
+async def test_schema_refuses_a_second_live_version_or_a_status_at_odds_with_published_at(db):
+    """The unique index and checks hold even for writes that skip publish."""
+    uid = await _user(db)
+    now = datetime.now(UTC)
+    live = await briefings.generate_briefing(db, created_by=uid, content="live")
+    await briefings.publish(db, uuid=str(live.uuid), actor_uuid=uid)
+    for obj_in in (
+        {"status": "published", "published_at": now},
+        {"status": "inactive"},
+        {"status": "draft", "published_at": now},
+    ):
+        b = await briefings.generate_briefing(db, created_by=uid, content="x")
+        with pytest.raises(IntegrityError):
+            await briefings.update(db, db_obj=b, obj_in=obj_in)
+        await db.rollback()
+
+
+@pytest.mark.asyncio
+async def test_generate_from_a_source_briefing_copies_it_and_leaves_it_alone(db):
+    """A copy carries the source's content, tags, state and template link into a new draft."""
+    uid = await _user(db)
+    t = await templates.create(db, obj_in={"content": "tpl", "created_by": uid})
+    tpl_uuid = str(t.uuid)
+    src = await briefings.generate_briefing(
+        db, created_by=uid, template_uuid=tpl_uuid, content="meet at the station", tags=["x"], state="debrief"
+    )
+    src_uuid = str(src.uuid)
+    await briefings.publish(db, uuid=src_uuid, actor_uuid=uid)
+
+    copy = await briefings.generate_briefing(db, created_by=uid, source_uuid=src_uuid)
+    copy_uuid = str(copy.uuid)
+    got = {str(b.uuid): b for b in await briefings.list_briefings(db, status="all")}
+    assert copy_uuid != src_uuid and got[copy_uuid].status == "draft"
+    assert (got[copy_uuid].content, got[copy_uuid].tags, got[copy_uuid].state) == (
+        "meet at the station",
+        ["x"],
+        "debrief",
+    )
+    assert str(got[copy_uuid].template_uuid) == tpl_uuid
+    assert got[src_uuid].status == "published"
+
+    with pytest.raises(ValueError, match="not both"):
+        await briefings.generate_briefing(db, created_by=uid, template_uuid=tpl_uuid, source_uuid=src_uuid)
 
 
 @pytest.mark.asyncio
@@ -147,12 +212,9 @@ async def test_locked_fetch_sees_a_publish_committed_elsewhere(db):
     uid = await _user(db)
     b_uuid = str((await briefings.generate_briefing(db, created_by=uid, content="x")).uuid)
     stale = await briefings.get_by_uuid_active(db, b_uuid)
-    assert stale.published_at is None
+    assert stale.status == "draft"
     async with AsyncSession(db.bind) as other:
-        row = await briefings.get_by_uuid_active(other, b_uuid)
-        await briefings.update(
-            other, db_obj=row, obj_in={"published_at": datetime.now(UTC), "published_by": uid}
-        )
+        await briefings.publish(other, uuid=b_uuid, actor_uuid=uid)
 
     locked = await briefings.get_by_uuid_active(db, b_uuid, for_update=True)
-    assert locked.published_at is not None
+    assert locked.status == "published"

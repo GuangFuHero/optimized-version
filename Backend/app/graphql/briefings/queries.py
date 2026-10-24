@@ -62,8 +62,8 @@ class BriefingQuery:
     ) -> list[BriefingType]:
         """List non-deleted briefings, optionally filtered by state and/or tag.
 
-        Published ones are public (pre_departure.view), newest first, so the first per state is
-        the current version; DRAFT and ALL need pre_departure.edit.
+        PUBLISHED lists each state's live version and is public (pre_departure.view); DRAFT and ALL
+        need pre_departure.edit.
         """
         await check_permission(info, Perm.PREDEP_VIEW)
         if status is not BriefingStatusFilter.PUBLISHED:
@@ -75,9 +75,9 @@ class BriefingQuery:
 
     @strawberry.field
     async def briefing(self, info: strawberry.types.Info, uuid: UUID) -> BriefingType | None:
-        """Fetch a single non-deleted briefing by UUID; public once published, else pre_departure.edit."""
+        """Fetch a single non-deleted briefing by UUID; public while live, else pre_departure.edit."""
         await check_permission(info, Perm.PREDEP_VIEW)
         m = await briefing_repository.get_by_uuid_active(info.context["db"], uuid)
-        if m and m.published_at is None:
+        if m and m.status != "published":
             await check_permission(info, Perm.PREDEP_EDIT)
         return BriefingType.from_model(m) if m else None
