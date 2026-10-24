@@ -1224,7 +1224,7 @@ export interface paths {
     };
     /**
      * Get Duplicate Pair
-     * @description One card, its sides and its events, oldest first.
+     * @description One card, its sides, its events (oldest first) and its two whole tickets.
      */
     get: operations['get_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__get'];
     put?: never;
@@ -1289,6 +1289,30 @@ export interface paths {
      * @description Undo a card's verdict, back to the queue; someone else's needs ai_duplicate.revoke (ADR-342).
      */
     post: operations['revoke_duplicate_pair_verdict_api_v1_admin_duplicate_pairs__pair_uuid__revoke_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/duplicate-pairs/{pair_uuid}/resolve': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resolve Duplicate Pair
+     * @description Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-364).
+     *
+     *     409 when the card is already resolved or decided, a ticket is gone, or either ticket changed
+     *     since the reviewer read it (send back the detail's `version`s); 422 when the request cannot be
+     *     carried out as sent.
+     */
+    post: operations['resolve_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__resolve_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2676,7 +2700,9 @@ export interface components {
     };
     /**
      * DuplicatePairDetail
-     * @description One card with every event recorded on it, oldest first.
+     * @description One card with every event recorded on it, oldest first, and its two whole tickets.
+     *
+     *     `tickets` is null for a station card, which is not resolved (Spec 028, ADR-376).
      */
     DuplicatePairDetail: {
       /**
@@ -2726,6 +2752,7 @@ export interface components {
       high: components['schemas']['EntitySummaryResponse'];
       /** Events */
       events: components['schemas']['DedupEventResponse'][];
+      tickets: components['schemas']['TicketsForReviewResponse'] | null;
     };
     /**
      * DuplicatePairPage
@@ -3347,6 +3374,21 @@ export interface components {
       | 'rbac.assign'
       | 'rbac.edit';
     /**
+     * PhotoForReviewResponse
+     * @description One live photo on a ticket (Spec 028, ADR-383).
+     */
+    PhotoForReviewResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Url */
+      url: string;
+      /** Created At */
+      created_at: string | null;
+    };
+    /**
      * ProjectSettingsResponse
      * @description The deployment's single project settings row, or its unset shape before first write.
      */
@@ -3373,6 +3415,27 @@ export interface components {
       disaster_types?: string[] | null;
       /** Started At */
       started_at?: string | null;
+    };
+    /**
+     * PropertyForReviewResponse
+     * @description One live item under a need (Spec 028 §2).
+     */
+    PropertyForReviewResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Property Name */
+      property_name: string;
+      /** Property Value */
+      property_value: string;
+      /** Quantity */
+      quantity: number | null;
+      /** Status */
+      status: string | null;
+      /** Comment */
+      comment: string | null;
     };
     /**
      * RefreshRequest
@@ -3455,6 +3518,166 @@ export interface components {
        * @description Frontend salt (hex)
        */
       salt_frontend: string;
+    };
+    /**
+     * ResolvePhoto
+     * @description One photo of either ticket: kept on the primary, or cancelled (ADR-383).
+     *
+     *     A kept photo of the other ticket moves over to the primary.
+     */
+    ResolvePhoto: {
+      /**
+       * Photo
+       * Format: uuid
+       */
+      photo: string;
+      /**
+       * Action
+       * @enum {string}
+       */
+      action: 'keep' | 'cancel';
+    };
+    /**
+     * ResolvePrimaryTask
+     * @description One need of the primary ticket: kept (absorbing needs of the other ticket) or cancelled.
+     */
+    ResolvePrimaryTask: {
+      /**
+       * Task
+       * Format: uuid
+       */
+      task: string;
+      /**
+       * Action
+       * @enum {string}
+       */
+      action: 'keep' | 'cancel';
+      /** Absorb */
+      absorb?: string[];
+      values?: components['schemas']['ResolveTaskValues'] | null;
+      /** Properties */
+      properties?: components['schemas']['ResolveProperty'][] | null;
+    };
+    /**
+     * ResolveProperty
+     * @description One item of a kept or moved need, or of a need it absorbs (ADR-379).
+     */
+    ResolveProperty: {
+      /**
+       * Property
+       * Format: uuid
+       */
+      property: string;
+      /**
+       * Action
+       * @enum {string}
+       */
+      action: 'keep' | 'cancel';
+      values?: components['schemas']['ResolvePropertyValues'] | null;
+    };
+    /**
+     * ResolvePropertyValues
+     * @description A kept item's fields to set.
+     */
+    ResolvePropertyValues: {
+      /** Property Value */
+      property_value?: string | null;
+      /** Quantity */
+      quantity?: number | null;
+      /** Comment */
+      comment?: string | null;
+    };
+    /**
+     * ResolveRequest
+     * @description Resolve a card: keep `primary`, cancel the other ticket, say what happens to every need.
+     */
+    ResolveRequest: {
+      /**
+       * Primary
+       * @enum {string}
+       */
+      primary: 'low' | 'high';
+      expected_versions: components['schemas']['ResolveVersions'];
+      ticket?: components['schemas']['ResolveTicketValues'] | null;
+      /** Primary Tasks */
+      primary_tasks: components['schemas']['ResolvePrimaryTask'][];
+      /** Secondary Tasks */
+      secondary_tasks?: components['schemas']['ResolveSecondaryTask'][];
+      /** Photos */
+      photos?: components['schemas']['ResolvePhoto'][] | null;
+      /** Disaster Details */
+      disaster_details?: {
+        [key: string]: string[];
+      } | null;
+      /** Note */
+      note?: string | null;
+    };
+    /**
+     * ResolveSecondaryTask
+     * @description One need of the other ticket not absorbed: moved to the primary ticket or cancelled.
+     */
+    ResolveSecondaryTask: {
+      /**
+       * Task
+       * Format: uuid
+       */
+      task: string;
+      /**
+       * Action
+       * @enum {string}
+       */
+      action: 'move' | 'cancel';
+      values?: components['schemas']['ResolveTaskValues'] | null;
+      /** Properties */
+      properties?: components['schemas']['ResolveProperty'][] | null;
+    };
+    /**
+     * ResolveTaskValues
+     * @description A kept or moved need's fields to set.
+     */
+    ResolveTaskValues: {
+      /** Task Name */
+      task_name?: string | null;
+      /** Task Description */
+      task_description?: string | null;
+      /** Quantity */
+      quantity?: number | null;
+    };
+    /**
+     * ResolveTicketValues
+     * @description The primary ticket's fields to set (Spec 028 §3.2).
+     */
+    ResolveTicketValues: {
+      /** Title */
+      title?: string | null;
+      /** Description */
+      description?: string | null;
+      /** Priority */
+      priority?: string | null;
+      /** Task Type */
+      task_type?: string | null;
+      /** Disaster Types */
+      disaster_types?: string[] | null;
+      /** Person Trapped Reported */
+      person_trapped_reported?: ('yes' | 'no' | 'unknown') | null;
+      /** Immediate Danger Reported */
+      immediate_danger_reported?: ('yes' | 'no' | 'unknown') | null;
+      /** Contact Name */
+      contact_name?: string | null;
+      /** Contact Phone */
+      contact_phone?: string | null;
+      /** Contact Email */
+      contact_email?: string | null;
+    };
+    /**
+     * ResolveVersions
+     * @description The `version` of each side's ticket as the reviewer read it (ADR-373).
+     */
+    ResolveVersions: {
+      /** Low */
+      low: string;
+      /** High */
+      high: string;
     };
     /**
      * RoleGrants
@@ -3725,6 +3948,33 @@ export interface components {
       team_uuid?: string | null;
     };
     /**
+     * TaskForReviewResponse
+     * @description One live need with its headcount and items (Spec 028 §2).
+     */
+    TaskForReviewResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Task Type */
+      task_type: string;
+      /** Task Name */
+      task_name: string;
+      /** Task Description */
+      task_description: string | null;
+      /** Quantity */
+      quantity: number | null;
+      /** Status */
+      status: string;
+      /** Claim Count */
+      claim_count: number;
+      /** Recruiting Stopped */
+      recruiting_stopped: boolean;
+      /** Properties */
+      properties: components['schemas']['PropertyForReviewResponse'][];
+    };
+    /**
      * TeamMemberItem
      * @description One row of a team's member list (Spec/026): their role in this team, nothing else.
      *
@@ -3809,6 +4059,61 @@ export interface components {
       status: 'active' | 'suspended';
     };
     /**
+     * TicketForReviewResponse
+     * @description A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-372).
+     *
+     *     Send `version` back unchanged when resolving: it says what the reviewer saw (ADR-373).
+     */
+    TicketForReviewResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Version */
+      version: string;
+      /** Title */
+      title: string;
+      /** Description */
+      description: string | null;
+      /** Priority */
+      priority: string;
+      /** Task Type */
+      task_type: string | null;
+      /** Disaster Types */
+      disaster_types: string[];
+      /** Person Trapped Reported */
+      person_trapped_reported: string | null;
+      /** Immediate Danger Reported */
+      immediate_danger_reported: string | null;
+      /** Contact Name */
+      contact_name: string;
+      /** Contact Phone */
+      contact_phone: string | null;
+      /** Contact Email */
+      contact_email: string | null;
+      /** Longitude */
+      longitude: number | null;
+      /** Latitude */
+      latitude: number | null;
+      /** Status */
+      status: string;
+      /** Audit Status */
+      audit_status: string;
+      /** Created By */
+      created_by: string | null;
+      /** Created At */
+      created_at: string | null;
+      /** Tasks */
+      tasks: components['schemas']['TaskForReviewResponse'][];
+      /** Photos */
+      photos: components['schemas']['PhotoForReviewResponse'][];
+      /** Disaster Details */
+      disaster_details: {
+        [key: string]: string[];
+      };
+    };
+    /**
      * TicketYMetric
      * @description What to measure (the Y axis) for a ticket/task chart — see app/services/ticket_analytics.py.
      * @enum {string}
@@ -3825,6 +4130,14 @@ export interface components {
       | 'net_backlog_change'
       | 'task_completion_distribution'
       | 'duplicate_count';
+    /**
+     * TicketsForReviewResponse
+     * @description The ticket on each side of the card; null where that ticket is cancelled or deleted.
+     */
+    TicketsForReviewResponse: {
+      low: components['schemas']['TicketForReviewResponse'] | null;
+      high: components['schemas']['TicketForReviewResponse'] | null;
+    };
     /**
      * TokenPair
      * @description Access + refresh token pair returned by login/refresh.
@@ -6348,6 +6661,43 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['DuplicatePairResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  resolve_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__resolve_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        pair_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ResolveRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DuplicatePairDetail'];
         };
       };
       /** @description Validation Error */

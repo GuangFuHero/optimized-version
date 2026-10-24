@@ -22,6 +22,7 @@ from app.models.auth import User
 from app.models.dedup import ENTITY_KINDS, PAIR_SOURCE_LAYERS, PAIR_STATUSES, DedupAuditEvent, DuplicatePair
 from app.repositories.dedup_repository import dedup_audit_event_repository, duplicate_pair_repository
 from app.services.authz import require_scope
+from app.services.dedup_review_tickets import TicketForReview, tickets_for_pair
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 
@@ -94,10 +95,15 @@ class PairPage:
 
 @dataclass(frozen=True)
 class PairDetail:
-    """One card, its sides and every event recorded on it, oldest first."""
+    """One card, its sides, every event recorded on it (oldest first) and its two whole tickets.
+
+    `tickets` is (low, high), None on a side whose ticket is cancelled or deleted, and None as a
+    whole for a station card (Spec 028 §2, ADR-372).
+    """
 
     item: PairItem
     events: list[DedupAuditEvent]
+    tickets: tuple[TicketForReview | None, TicketForReview | None] | None = None
 
 
 def _checked(values: Sequence[str] | None, allowed: Sequence[str], name: str) -> list[str] | None:
@@ -150,13 +156,32 @@ async def list_pairs(
 
 
 async def get_pair(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID) -> PairDetail:
-    """One live card with its sides and events."""
+    """One live card with its sides, events and whole tickets."""
     await require_scope(actor, Perm.AI_DUP_VIEW, db)
     pair = await duplicate_pair_repository.get_live(db, pair_uuid)
     if pair is None:
         raise DuplicatePairNotFoundError("Duplicate pair not found")
+    return await pair_detail(db, pair)
+
+
+async def pair_detail(db: AsyncSession, pair: DuplicatePair) -> PairDetail:
+    """A card's sides, events and whole tickets, as `get_pair` and a resolve return it."""
     (item,) = await _with_sides(db, [pair])
-    return PairDetail(item=item, events=await dedup_audit_event_repository.for_pair(db, pair.uuid))
+    return PairDetail(
+        item=item,
+        events=await dedup_audit_event_repository.for_pair(db, pair.uuid),
+        tickets=await tickets_for_pair(db, pair),
+    )
+
+
+async def has_merged_event(db: AsyncSession, pair: DuplicatePair) -> bool:
+    """Whether the card was resolved (Spec 028): a resolve leaves a `merged` event and has no undo."""
+    found = await db.scalar(
+        select(DedupAuditEvent.uuid)
+        .where(DedupAuditEvent.pair_uuid == pair.uuid, DedupAuditEvent.event_type == "merged")
+        .limit(1)
+    )
+    return found is not None
 
 
 async def _with_sides(db: AsyncSession, pairs: Sequence[DuplicatePair]) -> list[PairItem]:
@@ -210,9 +235,9 @@ async def _decide(
 ) -> PairItem:
     """Lock the card, check it is pending, write the verdict and its event in one commit."""
     await require_scope(actor, Perm.AI_DUP_REVIEW, db)
-    note = _checked_note(note)
+    note = checked_note(note)
     reviewer_uuid = actor.uuid  # read before the commit expires `actor`
-    pair = await _lock(db, pair_uuid)
+    pair = await lock_pair(db, pair_uuid)
     if pair.status not in PENDING_STATUSES:
         raise DuplicatePairConflictError(f"Duplicate pair is already {pair.status}")
     before = pair.status
@@ -246,9 +271,12 @@ async def revoke(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID) -> Pair
     """
     await require_scope(actor, Perm.AI_DUP_REVIEW, db)
     actor_uuid = actor.uuid  # read before the commit expires `actor`
-    pair = await _lock(db, pair_uuid)
+    pair = await lock_pair(db, pair_uuid)
     if pair.status not in VERDICTS:
         raise DuplicatePairConflictError(f"Duplicate pair is {pair.status}: there is no verdict to revoke")
+    if await has_merged_event(db, pair):
+        # ADR-375: a resolve changed the tickets; undoing the verdict alone would leave them changed.
+        raise DuplicatePairConflictError("Duplicate pair was resolved; a resolution cannot be revoked")
     if pair.reviewed_by != actor_uuid:
         try:
             await require_scope(actor, Perm.AI_DUP_REVOKE, db)
@@ -293,7 +321,7 @@ async def _status_before_latest_verdict(db: AsyncSession, pair: DuplicatePair) -
     return restored
 
 
-async def _lock(db: AsyncSession, pair_uuid: uuid.UUID) -> DuplicatePair:
+async def lock_pair(db: AsyncSession, pair_uuid: uuid.UUID) -> DuplicatePair:
     """The live card FOR UPDATE, so two reviewers acting on it are settled one after the other."""
     pair = await db.scalar(
         select(DuplicatePair)
@@ -306,7 +334,7 @@ async def _lock(db: AsyncSession, pair_uuid: uuid.UUID) -> DuplicatePair:
     return pair
 
 
-def _checked_note(note: str | None) -> str | None:
+def checked_note(note: str | None) -> str | None:
     """The reviewer's note trimmed, or None if blank; refused when longer than NOTE_MAX_LENGTH."""
     note = (note or "").strip() or None
     if note is not None and len(note) > NOTE_MAX_LENGTH:

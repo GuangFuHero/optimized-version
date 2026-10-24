@@ -604,7 +604,7 @@ async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
     ticket.status = "cancelled"
     ticket.delete_at = now
     for need in needs:
-        _mark_need_deleted(need, now)
+        mark_need_deleted(need, now)
     claimants = set()
     if needs:
         on_needs = await db.scalars(
@@ -627,7 +627,7 @@ async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
     )
 
 
-def _mark_need_deleted(task: TicketTask, now: datetime) -> None:
+def mark_need_deleted(task: TicketTask, now: datetime) -> None:
     """Cancel and soft-delete a need at once; completed_at goes with the fulfilled state it leaves."""
     task.status = "canceled"
     task.canceled_at = now
@@ -656,7 +656,7 @@ async def delete_ticket_task(db: AsyncSession, *, actor: User, uuid: str) -> Non
     await require_scope(actor, Perm.TICKET_DELETE, db, resource=ticket)
 
     ticket, task = await _lock_ticket_and_task(db, task_uuid=uuid)
-    _mark_need_deleted(task, datetime.now(UTC))
+    mark_need_deleted(task, datetime.now(UTC))
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     claimants = [str(a.actor_uuid) for a in await task_assignment_repository.list_by_task(db, uuid)]
