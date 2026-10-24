@@ -21,7 +21,7 @@ from app.repositories.briefings_repository import (
 
 
 async def _can_edit(info: strawberry.types.Info) -> bool:
-    """Whether the caller holds pre_departure.edit; never raises."""
+    """Whether the caller holds pre_departure.edit; a denial reads as False rather than raising."""
     user = info.context["user"]
     if user is None:
         return False
