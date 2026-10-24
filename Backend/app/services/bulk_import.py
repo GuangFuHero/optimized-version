@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.address import parse_tw_address
 from app.core.permissions import Perm
 from app.core.tabular import Table, read_table, write_csv, write_xlsx
 from app.models.auth import User
@@ -256,11 +257,17 @@ def _split_dynamic(columns: tuple[ColumnSpec, ...], values: dict) -> tuple[dict,
 # --- stations ---
 
 
+def _station_key(row: dict[str, str]) -> tuple:
+    """A file row's match key, with 縣市 and 鄉鎮市區 read from its address line."""
+    parts = parse_tw_address(row.get("address"))
+    return station_key(row.get("name"), parts.county, parts.town)
+
+
 async def _plan_stations(
     db: AsyncSession, *, station_type: str, rows: list[dict[str, str]], columns
 ) -> list[RowPlan]:
     index = await build_station_index(db)
-    keys = [station_key(row.get("name"), row.get("county"), row.get("city")) for row in rows]
+    keys = [_station_key(row) for row in rows]
     collisions = duplicate_key_rows(keys)
 
     plans = []
@@ -347,8 +354,8 @@ async def _write_station(
         station_uuid = plan.match_uuid
     else:
         address = {
-            key: fixed.pop(key)
-            for key in ("county", "city", "lane", "alley", "no", "floor", "room")
+            column: fixed.pop(key)
+            for key, column in (("address", "full_address"), ("floor", "floor"), ("room", "room"))
             if key in fixed
         }
         station = await station_service.create_station(

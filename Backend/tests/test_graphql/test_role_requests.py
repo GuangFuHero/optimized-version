@@ -4,18 +4,24 @@ Wiring only: the rules themselves are observed at the service (tests/test_role_r
 """
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
 
 from app.core.permissions import Perm
+from app.models.auth import UserContact
 from app.models.rbac import Permission, Role, RolePermissionAssign
+from app.models.team import Team
 from tests.test_graphql.conftest import _create_user_with_role, auth_header
 from tests.test_graphql.conftest import test_db as graphql_db  # renamed so pytest does not collect it
 
 SUBMIT = """
 mutation($input: SubmitRoleRequestInput!) {
-    submitRoleRequest(input: $input) { uuid requestedRole reason contact status }
+    submitRoleRequest(input: $input) {
+        uuid requestedRole reason status applicantName applicantPhone applicantEmail newTeamName viaInvite
+        team { uuid name type }
+    }
 }
 """
 
@@ -27,10 +33,10 @@ WITHDRAW = """
 mutation($uuid: UUID!) { withdrawRoleRequest(uuid: $uuid) { uuid status closedAt } }
 """
 
-APPLICATION = {"requestedRole": "data_auditor", "reason": "協助檢查重複通報", "contact": "03-8701234"}
+APPLICATION = {"requestedRole": "data_auditor", "reason": "協助檢查重複通報", "name": "王小明"}
 
 
-async def _citizen_token(redis) -> str:
+async def _citizen_token(redis, phone: str | None = None) -> str:
     """A token for a fresh account holding the platform `user` role, as registration leaves it.
 
     The GraphQL fixtures seed their own role names, not the production `user` that the
@@ -49,7 +55,15 @@ async def _citizen_token(redis) -> str:
                 db.add(permission)
             await db.flush()
             db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
-    _, token = await _create_user_with_role(redis, "user")
+    user_uuid, token = await _create_user_with_role(redis, "user")
+    # Applying needs a verified phone since Spec 026 (ADR-355). Unique by value, so one per test run.
+    async with graphql_db() as db:
+        phone = f"+8869{uuid.uuid4().int % 10**8:08d}" if phone is None else phone
+        db.add(
+            UserContact(
+                user_uuid=user_uuid, type="phone", value=phone, verified=True, verified_at=datetime.now(UTC)
+            )
+        )
     return token
 
 
@@ -69,7 +83,12 @@ async def test_submitting_returns_the_pending_application(client, redis):
     assert "errors" not in body, body
     submitted = body["data"]["submitRoleRequest"]
     assert submitted["status"] == "pending"
-    assert {key: submitted[key] for key in APPLICATION} == APPLICATION
+    assert (submitted["requestedRole"], submitted["reason"], submitted["applicantName"]) == (
+        "data_auditor",
+        "協助檢查重複通報",
+        "王小明",
+    )
+    assert (submitted["team"], submitted["newTeamName"], submitted["viaInvite"]) == (None, None, False)
 
 
 @pytest.mark.asyncio
@@ -82,7 +101,7 @@ async def test_my_role_requests_reports_what_the_entry_needs(client, redis):
 
     assert body["data"]["myRoleRequests"] == {
         "hasBackofficeIdentity": False,
-        "canApply": False,
+        "canApply": False,  # one pending already
         "requests": [{"requestedRole": "data_auditor", "status": "pending"}],
     }
 
@@ -135,3 +154,48 @@ async def test_a_refused_withdrawal_reaches_the_caller_in_its_own_words(client, 
     body = await _post(client, WITHDRAW, token, {"uuid": request_uuid})
 
     assert body["errors"][0]["message"] == "Role request is no longer pending"
+
+
+@pytest.mark.asyncio
+async def test_a_team_application_names_the_team_and_masks_the_phone(client, redis):
+    """Spec 026: the form sends the team; the card shows it, with the phone masked."""
+    async with graphql_db() as db:
+        team = Team(name="花蓮縣光復鄉公所", type="gov", status="active")
+        db.add(team)
+        await db.flush()
+        team_uuid = str(team.uuid)
+    token = await _citizen_token(redis, phone=f"+8869{uuid.uuid4().int % 10**8:08d}")
+    application = {
+        "requestedRole": "government",
+        "reason": "公所承辦",
+        "name": "王小明",
+        "teamUuid": team_uuid,
+    }
+
+    body = await _post(client, SUBMIT, token, {"input": application})
+
+    assert "errors" not in body, body
+    submitted = body["data"]["submitRoleRequest"]
+    assert submitted["team"] == {"uuid": team_uuid, "name": "花蓮縣光復鄉公所", "type": "GOV"}
+    assert "*" in submitted["applicantPhone"]
+
+
+@pytest.mark.asyncio
+async def test_a_team_refusal_reaches_the_caller_in_its_own_words(client, redis):
+    """A government / NGO application without a team is refused in words the form maps."""
+    token = await _citizen_token(redis)
+    application = {"requestedRole": "ngo", "reason": "協會", "name": "王小明"}
+
+    body = await _post(client, SUBMIT, token, {"input": application})
+
+    assert body["errors"][0]["message"] == "Pick a team or name a new one"
+
+
+@pytest.mark.asyncio
+async def test_contact_is_no_longer_accepted(client, redis):
+    """ADR-355: the free-text contact gave way to a verified phone."""
+    token = await _citizen_token(redis)
+
+    body = await _post(client, SUBMIT, token, {"input": {**APPLICATION, "contact": "03-8701234"}})
+
+    assert "contact" in body["errors"][0]["message"]

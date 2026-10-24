@@ -6,9 +6,9 @@
  * request only, so whatever identity someone switched to in the back office, the site treats them
  * as an ordinary signed-in user. Nothing about the session changes.
  *
- * Back-office pages must reach the backend on a path that does not add it, or every back-office
- * request would act as `user`.
+ * The back office marks its requests `admin` instead (ADR-329): the same session acts as the
+ * identity switched to there, or else the caller's first back-office identity.
  */
-export const SITE_REALM_HEADERS: Readonly<Record<string, string>> = {
-  'X-WG-Realm': 'site',
-};
+export const REALM_HEADER = 'X-WG-Realm';
+
+export type Realm = 'site' | 'admin';

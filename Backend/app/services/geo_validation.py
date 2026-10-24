@@ -33,7 +33,9 @@ def validate_polygon(geojson: dict, *, entity: str = "Area") -> None:
 
 
 _CONTACT_LIMITS = {  # stations.contact_* / tickets.contact_* — same widths in both tables
-    "contact_name": 100, "contact_email": 100, "contact_phone": 50,
+    "contact_name": 100,
+    "contact_email": 100,
+    "contact_phone": 50,
 }
 
 
@@ -94,8 +96,8 @@ def normalize_supply_status(value: str | None) -> str | None:
 def check_address_lengths(fields: dict | None) -> None:
     """Refuse an address part longer than its `secondary_locations` column.
 
-    Every path that writes an address calls this first, because a part past its `varchar(n)` fails
-    at INSERT as "Unexpected error.". Values are checked as they will be stored, not stripped first.
+    For an address copied in already split, such as a building's; every other write goes through
+    `apply_address`, which checks the same.
     """
     if fields:
         check_lengths(SecondaryLocation, **fields)

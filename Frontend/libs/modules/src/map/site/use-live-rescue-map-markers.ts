@@ -11,6 +11,7 @@ import {
 } from '@rescue-frontend/data-access';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchExchange, type CombinedError } from 'urql';
+import { useDebounceValue } from 'usehooks-ts';
 
 import type { RescueMapMarkerItem } from '../types';
 import type { SiteRouteState } from '../../route/types';
@@ -18,6 +19,7 @@ import { sessionExpiryFetch } from '../../session/end-expired-session';
 import type { ReloadedTicket } from '../../ticket/needs/use-ticket-needs';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import { onTicketCreated } from '../../ticket/ticket-changes';
+import { resolveTicketSearch } from '../../ticket/ticket-search';
 import {
   dedupeMarkersById,
   mapStationToMarker,
@@ -31,6 +33,9 @@ const IMPERATIVE_QUERY_CONTEXT = {
 };
 
 const LIST_PAGE_SIZE = 100;
+
+// The header's search box writes every keystroke to the URL; ask the backend once typing pauses.
+const SEARCH_SETTLE_MS = 300;
 
 export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   const client = useMemo(
@@ -57,6 +62,13 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   const [loadedCount, setLoadedCount] = useState(0);
   const activeDataType = state?.dataType ?? 'station';
   const ticketStatus = resolveTicketStatusQueryValue(state?.subDataTypes);
+  const ticketSearch = resolveTicketSearch(state?.search);
+  const [settledQuery] = useDebounceValue(
+    ticketSearch.kind === 'query' ? ticketSearch.q : undefined,
+    SEARCH_SETTLE_MS,
+  );
+  // Tickets only: stations are still filtered on the page, so a search must not reload them.
+  const ticketQuery = activeDataType === 'ticket' ? settledQuery : undefined;
   const requestIdRef = useRef(0);
 
   const loadPage = useCallback(
@@ -109,6 +121,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
         .query(GetTicketsWithNeedsDocument, {
           bounds: undefined,
           status: ticketStatus,
+          q: ticketQuery,
           skip,
           limit: LIST_PAGE_SIZE,
         }, IMPERATIVE_QUERY_CONTEXT)
@@ -149,7 +162,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
       setHasNextPage(result.data?.tickets.pageInfo.hasNextPage ?? false);
       setLoadedCount(skip + nextItems.length);
     },
-    [activeDataType, client, ticketStatus],
+    [activeDataType, client, ticketQuery, ticketStatus],
   );
 
   useEffect(() => {
@@ -162,9 +175,10 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   }, [loadPage]);
 
   // A ticket filed through 請求協助 is the newest there is, so it goes first, where the first page
-  // would put it. Not into stations, nor past a status filter: changing either reloads the list.
+  // would put it. Not into stations, nor past a status filter or a search: changing any of them
+  // reloads the list.
   useEffect(() => {
-    if (activeDataType !== 'ticket' || ticketStatus) {
+    if (activeDataType !== 'ticket' || ticketStatus || ticketQuery) {
       return;
     }
 
@@ -183,7 +197,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
         dedupeMarkersById([{ ...marker, needs }, ...current]),
       );
     });
-  }, [activeDataType, ticketStatus]);
+  }, [activeDataType, ticketQuery, ticketStatus]);
 
   const markers = useMemo(() => {
     const dismissedIdSet = new Set(dismissedMarkerIds);
@@ -254,6 +268,8 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
 
   return {
     markers,
+    /** The `q` the loaded tickets were searched with, once typing settled; undefined for none. */
+    ticketQuery,
     error,
     isFetching,
     hasFetchedOnce,

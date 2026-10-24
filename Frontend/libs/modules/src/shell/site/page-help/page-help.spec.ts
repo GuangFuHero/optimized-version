@@ -41,8 +41,12 @@ describe('pageHelpKey', () => {
     expect(pageHelpKey('/list/ticket/pending')).toBe('site:list');
   });
 
+  it('finds the briefing', () => {
+    expect(pageHelpKey('/briefing')).toBe('site:briefing');
+  });
+
   it('has nothing for a page without words of its own, nor for one only named alike', () => {
-    expect(pageHelpKey('/briefing')).toBeNull();
+    expect(pageHelpKey('/briefings')).toBeNull();
     expect(pageHelpKey('/account/security')).toBeNull();
     expect(pageHelpKey('/mapping')).toBeNull();
     expect(pageHelpKey('/listings')).toBeNull();

@@ -93,9 +93,13 @@ async def view_pii_after_upgrade():
         await _alembic("head")
 
         async with engine.connect() as conn:
+            # Only ticket.view_pii: later migrations grant other capabilities to these roles
+            # (e.g. Spec 026's team admin grants), which would overwrite a role's entry here.
             scopes = dict((await conn.execute(text(
                 "SELECT r.name, a.scope FROM role_permission_assign a"
                 " JOIN roles r ON r.uuid = a.role_uuid"
+                " JOIN permissions p ON p.uuid = a.permission_uuid"
+                " WHERE p.key = 'ticket.view_pii'"
             ))).all())
         await engine.dispose()
 

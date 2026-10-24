@@ -17,17 +17,21 @@ class RoleRequestMutation:
     async def submit_role_request(
         self, info: strawberry.types.Info, input: SubmitRoleRequestInput
     ) -> RoleRequestType:
-        """Apply to become back-office staff. Stays pending until a super admin decides.
+        """Apply to join a team, found one, or become a data auditor. Stays pending until decided.
 
-        Refused to anyone who already holds a back-office identity, to anyone with an
-        application still pending, and to everyone while role_request.add is switched off.
+        Refused to anyone with an application still pending, to a member of the team asked for,
+        to anyone holding a back-office identity who asks to be a data auditor, and to everyone
+        while role_request.add is switched off.
         """
         request = await role_request_service.submit(
             info.context["db"],
             actor=require_authenticated(info),
             requested_role=input.requested_role.value,
             reason=input.reason,
-            contact=input.contact,
+            name=input.name,
+            email=input.email,
+            team_uuid=input.team_uuid,
+            new_team_name=input.new_team_name,
         )
         return RoleRequestType.from_model(request)
 

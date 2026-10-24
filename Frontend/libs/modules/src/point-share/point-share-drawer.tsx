@@ -129,7 +129,8 @@ export function PointShareDrawer({
       sx={{
         '& .MuiDrawer-paper': isPhone
           ? {
-              height: '92dvh',
+              // Never past the drawer's top, under the announcement banner if one is up.
+              height: 'min(92dvh, 100%)',
               borderRadius: `${radius.lg}px ${radius.lg}px 0 0`,
               bgcolor: color.bg.neutral.default,
             }

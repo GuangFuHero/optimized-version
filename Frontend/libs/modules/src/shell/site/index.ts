@@ -1,3 +1,4 @@
+export { SiteNotFound } from './not-found';
 export { SiteShell } from './shell';
 export {
   SiteActionDrawer,

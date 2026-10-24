@@ -621,19 +621,6 @@ export function useDeleteAnnouncement() {
   });
 }
 
-export function useMoveAnnouncement() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminMoveAnnouncementMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminMoveAnnouncementDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'announcements'] }),
-  });
-}
-
 export function useSetAnnouncementActive() {
   const queryClient = useQueryClient();
   return useMutation({

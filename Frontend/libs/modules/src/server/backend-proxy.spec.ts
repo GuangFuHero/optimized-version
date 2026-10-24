@@ -1,4 +1,3 @@
-import { encode } from 'next-auth/jwt';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -78,6 +77,16 @@ function callAdminRest(path: string, cookie: string) {
   return createBackendRestHandler('admin')(request, {
     params: Promise.resolve({ segments }),
   });
+}
+
+function callAdminGraphql(query: string, cookie: string) {
+  return createBackendGraphqlHandler('admin')(
+    new NextRequest('http://localhost:3001/api/graphql', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ query }),
+    }),
+  );
 }
 
 /** A browser's GraphQL request to the site's `/api/graphql` proxy route. */
@@ -260,26 +269,6 @@ describe('site REST proxy', () => {
     });
 
     expect(calls[0].headers.get('cookie')).toBeNull();
-  });
-
-  it('ignores a next-auth session left in the browser from before the move', async () => {
-    vi.stubEnv('NEXTAUTH_SECRET', 'test-secret');
-    const leftover = await encode({
-      secret: 'test-secret',
-      token: {
-        sub: 'user-19',
-        accessToken: 'old-bearer-19',
-        refreshToken: 'old-refresh-19',
-        accessTokenExpiresAt: Date.now() + 10 * 60 * 1000,
-      },
-    });
-    const calls = fakeBackend();
-
-    await callSiteRest('users/me', {
-      cookie: `next-auth.session-token=${leftover}; wgdev_at=access-19`,
-    });
-
-    expect(calls[0].headers.get('authorization')).toBeNull();
   });
 });
 
@@ -579,41 +568,74 @@ describe('site GraphQL proxy', () => {
   });
 });
 
-describe('back-office REST proxy, until its own move', () => {
-  it("signs in with its next-auth bearer token alone, leaving the site's cookies and session be", async () => {
-    // localhost:3000 and :3001 share cookies, and so do the staging hosts: the site's login cookies
-    // reach the back office's proxy. It still signs in through next-auth until its own move, so it
-    // neither sends them on nor refreshes the site's session when its bearer token is turned down.
-    vi.stubEnv('NEXTAUTH_SECRET', 'test-secret');
-    const session = await encode({
-      secret: 'test-secret',
-      token: {
-        sub: 'user-27',
-        accessToken: 'admin-bearer-27',
-        refreshToken: 'admin-refresh-27',
-        accessTokenExpiresAt: Date.now() + 10 * 60 * 1000,
-      },
-    });
+describe('back-office REST proxy', () => {
+  it('signs in with the same cookies, refreshes them, and marks the admin realm', async () => {
     const calls = fakeBackend((call) =>
       isRefresh(call)
         ? refreshed('access-27b', 'refresh-27b')
-        : unauthorized('access_token_stale'),
+        : call.headers.get('cookie') === 'wgdev_at=access-27a'
+          ? unauthorized('access_token_stale')
+          : Response.json([]),
     );
 
-    await callAdminRest(
+    const response = await callAdminRest(
       'tickets',
-      `next-auth.session-token=${session}; wgdev_at=access-27a; wgdev_rt=refresh-27a`,
+      'wgdev_at=access-27a; wgdev_rt=refresh-27a',
     );
 
     expect({
-      authorization: calls[0].headers.get('authorization'),
-      cookie: calls[0].headers.get('cookie'),
-      refreshes: calls.filter(isRefresh).length,
+      status: response.status,
+      cookies: calls
+        .filter((call) => !isRefresh(call))
+        .map((call) => call.headers.get('cookie')),
+      realm: calls[0].headers.get('x-wg-realm'),
     }).toEqual({
-      authorization: 'Bearer admin-bearer-27',
-      cookie: null,
-      refreshes: 0,
+      status: 200,
+      cookies: ['wgdev_at=access-27a', 'wgdev_at=access-27b'],
+      realm: 'admin',
     });
+  });
+
+  it('marks GraphQL requests with the admin realm too', async () => {
+    const calls = fakeBackend(() => Response.json({ data: { tickets: [] } }));
+
+    await callAdminGraphql('{ tickets { uuid } }', 'wgdev_at=access-28');
+
+    expect(calls[0].headers.get('x-wg-realm')).toBe('admin');
+  });
+
+  it('passes an account without a back-office identity through, signed in', async () => {
+    const calls = fakeBackend(() =>
+      Response.json(
+        {
+          detail: 'This account has no back-office identity',
+          code: 'back_office_identity_required',
+        },
+        { status: 403 },
+      ),
+    );
+
+    const response = await callAdminRest(
+      'tickets',
+      'wgdev_at=access-29; wgdev_rt=refresh-29',
+    );
+
+    expect({
+      status: response.status,
+      refreshed: calls.some(isRefresh),
+      session: response.headers.get('x-wg-session'),
+    }).toEqual({ status: 403, refreshed: false, session: null });
+  });
+
+  it('tells the browser when the backend says the session is gone', async () => {
+    fakeBackend(() => unauthorized('session_expired'));
+
+    const response = await callAdminRest(
+      'tickets',
+      'wgdev_at=access-30; wgdev_rt=refresh-30',
+    );
+
+    expect(response.headers.get('x-wg-session')).toBe('expired');
   });
 });
 

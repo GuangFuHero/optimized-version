@@ -1,6 +1,6 @@
 """The browser's sign-in cookies: their names, their attributes, and reading them back (ADR-326).
 
-Three cookies, all named with `AUTH_COOKIE_PREFIX` so production, staging and a developer's machine
+Four cookies, all named with `AUTH_COOKIE_PREFIX` so production, staging and a developer's machine
 never read or clear one another's:
 
 - `{p}_at` holds the access token, `{p}_rt` the refresh token. Both go to every path (`Path=/`)
@@ -10,6 +10,9 @@ never read or clear one another's:
   dropping it and the user silently turning into a guest.
 - `{p}_oauth` holds the state of a sign-in in progress with Google or LINE, for ten minutes, and
   only travels to the OAuth endpoints.
+- `{p}_step_up` holds the secret that lets this browser, and no other holding the same session, spend
+  the proof a step-up at the provider left (ADR-361). It lasts as long as the proof and only travels
+  to the auth endpoints, where the request the step-up was for is repeated.
 
 Every one is `HttpOnly` (page scripts cannot read a token), `SameSite=Lax` (another site's form
 cannot send it) and `Secure` unless `AUTH_COOKIE_SECURE` says otherwise. Clearing writes the same
@@ -27,6 +30,7 @@ from app.core.config import settings
 OAUTH_COOKIE_PATH = "/api/v1/auth/oauth"
 # An OAuth round trip is a few clicks at the provider; a sign-in left longer than this starts over.
 OAUTH_COOKIE_MAX_AGE = 600
+STEP_UP_COOKIE_PATH = "/api/v1/auth"
 
 
 def access_cookie_name() -> str:
@@ -42,6 +46,11 @@ def refresh_cookie_name() -> str:
 def oauth_cookie_name() -> str:
     """`{p}_oauth`: the state of an OAuth sign-in in progress."""
     return f"{settings.AUTH_COOKIE_PREFIX}_oauth"
+
+
+def step_up_cookie_name() -> str:
+    """`{p}_step_up`: this browser's secret for spending a step-up proof."""
+    return f"{settings.AUTH_COOKIE_PREFIX}_step_up"
 
 
 def _attributes(path: str) -> dict:
@@ -98,6 +107,11 @@ def clear_oauth_cookie(response: Response) -> None:
     _clear(response, oauth_cookie_name(), path=OAUTH_COOKIE_PATH)
 
 
+def set_step_up_cookie(response: Response, secret: str, *, max_age: int) -> None:
+    """Hand the browser back from a step-up the secret its proof is spent with, as long as the proof lasts."""
+    _set(response, step_up_cookie_name(), secret, path=STEP_UP_COOKIE_PATH, max_age=max_age)
+
+
 def _read(request: Request, name: str) -> str | None:
     return request.cookies.get(name) or None
 
@@ -115,3 +129,8 @@ def read_refresh_cookie(request: Request) -> str | None:
 def read_oauth_cookie(request: Request) -> str | None:
     """The OAuth state the browser sent, or None."""
     return _read(request, oauth_cookie_name())
+
+
+def read_step_up_cookie(request: Request) -> str | None:
+    """The step-up secret the browser sent, or None."""
+    return _read(request, step_up_cookie_name())

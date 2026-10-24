@@ -7,6 +7,7 @@ enum AccessStatus {
 
 enum AnnouncementFilter {
   ACTIVE
+  DRAFT
   ALL
 }
 
@@ -21,6 +22,77 @@ enum AnnouncementPlacement {
   all
 }
 
+enum AnnouncementStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+type AddressLookupType {
+  """
+  'found'; 'not_found'; 'ambiguous' (several addresses match, so add the 鄉鎮市區); or 'unavailable' (TGOS could not answer; saving still works, as unverified)
+  """
+  status: String!
+
+  """
+  The official address line, e.g. '花蓮縣光復鄉大進村3鄰糖廠街19號'. Send it back unchanged
+  """
+  fullAddress: String
+
+  """縣市"""
+  county: String
+
+  """鄉鎮市區"""
+  town: String
+
+  """村里"""
+  village: String
+
+  """鄰, e.g. '3鄰'"""
+  neighborhood: String
+
+  """路／街／大道"""
+  road: String
+
+  """段, e.g. '一段'"""
+  section: String
+
+  """巷, e.g. '469巷'"""
+  lane: String
+
+  """弄, e.g. '1弄'"""
+  alley: String
+
+  """號, e.g. '19號'"""
+  no: String
+
+  """A 棟 typed after the 號, split off for the building-section field"""
+  buildingSection: String
+
+  """A 樓 typed after the 號, split off for the floor field"""
+  floor: String
+
+  """A 室 typed after the 號, split off for the room field"""
+  room: String
+
+  """Latitude of the 門牌's official point"""
+  lat: Float
+
+  """Longitude of the 門牌's official point"""
+  lng: Float
+
+  """Metres between the 門牌 and the lat/lng you passed"""
+  distanceM: Float
+
+  """True when the 門牌 is over 500 m from the lat/lng you passed"""
+  pinMismatch: Boolean!
+
+  """
+  Send back with fullAddress on save, within a day, so the address is stored as verified
+  """
+  addressToken: String
+}
+
 type AnnouncementType {
   uuid: UUID!
   content: String!
@@ -33,11 +105,23 @@ type AnnouncementType {
   Display position (1 = top) among active announcements; null when inactive
   """
   order: Int
+  status: AnnouncementStatus!
 
-  """UUID of the user who created this announcement"""
-  createdBy: String
+  """When it last went live; null while a draft"""
+  publishedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
+
+  """Who created it. Null unless the caller holds announcement.edit"""
+  creator: UserRefType
+
+  """Who last changed it. Null unless the caller holds announcement.edit"""
+  updater: UserRefType
+
+  """
+  Who last activated it; null while a draft or unless the caller holds announcement.edit
+  """
+  publisher: UserRefType
 }
 
 type AreaConnection {
@@ -109,6 +193,17 @@ enum BriefingState {
   DEBRIEF
 }
 
+enum BriefingStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum BriefingStatusFilter {
+  PUBLISHED
+  DRAFT
+  ALL
+}
+
 type BriefingTemplateType {
   uuid: UUID!
   content: String!
@@ -137,9 +232,10 @@ type BriefingType {
 
   """Lifecycle phase: 'briefing', 'in_field', or 'debrief'"""
   state: String!
+  status: BriefingStatus!
 
-  """UUID of the user who created this briefing"""
-  createdBy: String
+  """When it was published; null while a draft"""
+  publishedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
 }
@@ -285,7 +381,7 @@ input CreateHelpRequestInput {
   """Optional; the account's own email is never filled in for it"""
   contactEmail: String = null
 
-  """The address as typed goes in `landmarkNote`, with `floor` and `room`"""
+  """The address line goes in `fullAddress` (with its `addressToken` if looked up), with `floor` and `room`"""
   secondaryLocation: SecondaryLocationInput = null
 
   """At least one need, at most 20"""
@@ -802,7 +898,7 @@ type Query {
   announcement(uuid: UUID!): AnnouncementType
   briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!
   briefingTemplate(uuid: UUID!): BriefingTemplateType
-  briefings(state: BriefingState = null, tag: String = null): [BriefingType!]!
+  briefings(state: BriefingState = null, tag: String = null, status: BriefingStatusFilter! = PUBLISHED): [BriefingType!]!
   briefing(uuid: UUID!): BriefingType
   suggestableFields(targetType: String!): [SuggestableFieldType!]!
   areas(bounds: BoundsInput = null, includePrivate: Boolean! = false, skip: Int! = 0, limit: Int! = 50): AreaConnection!
@@ -810,6 +906,16 @@ type Query {
   teamZone(uuid: UUID!): TeamZoneType
   zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): TeamZoneConnection!
   myRoleRequests: MyRoleRequestsType!
+
+  """
+  Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute shared with reverseGeocode
+  """
+  normalizeAddress(address: String!, lat: Float = null, lng: Float = null): AddressLookupType!
+
+  """
+  The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute shared with normalizeAddress
+  """
+  reverseGeocode(lat: Float!, lng: Float!): AddressLookupType!
 }
 
 enum RoleRequestRole {
@@ -843,11 +949,16 @@ type RoleRequestType {
 input SecondaryLocationInput {
   """Type of secondary location: 'address' (default) or 'pole'"""
   locationType: String! = "address"
-  county: String = null
-  city: String = null
-  lane: String = null
-  alley: String = null
-  no: String = null
+
+  """
+  The address line, ideally exactly as normalizeAddress or reverseGeocode returned it. The backend splits it into county … no; a 樓/室 at its end fills floor and room when those are empty
+  """
+  fullAddress: String = null
+
+  """
+  The addressToken from the same lookup. With it, and fullAddress unchanged, the address is stored as verified; without it, as unverified
+  """
+  addressToken: String = null
 
   """樓棟／區域, e.g. 'A棟'; leave empty if unknown"""
   buildingSection: String = null
@@ -882,11 +993,43 @@ type SecondaryLocationType {
 
   """Type of secondary location: 'address' or 'pole'"""
   locationType: String!
+
+  """
+  The whole address line, without floor or room: official when TGOS confirmed it, as typed otherwise
+  """
+  fullAddress: String
+
+  """縣市, e.g. '花蓮縣'"""
   county: String
-  city: String
+
+  """鄉鎮市區, e.g. '光復鄉'"""
+  town: String
+
+  """村里, e.g. '大進村'"""
+  village: String
+
+  """鄰, e.g. '3鄰'"""
+  neighborhood: String
+
+  """路／街／大道, e.g. '糖廠街'"""
+  road: String
+
+  """段, e.g. '一段'"""
+  section: String
+
+  """巷, e.g. '469巷'"""
   lane: String
+
+  """弄, e.g. '1弄'"""
   alley: String
+
+  """號, e.g. '19號' or '19之1號'"""
   no: String
+
+  """
+  'verified' (TGOS confirmed the address near the pin), 'pin_mismatch' (confirmed, but over 500 m from the pin) or 'unverified'; null when there is no address
+  """
+  normalizationStatus: String
 
   """樓棟／區域, e.g. 'A棟', '東翼'"""
   buildingSection: String
@@ -1829,6 +1972,11 @@ input UpsertTicketPropertyConfigInput {
 
   """Set false to retire the field without deleting its values"""
   isActive: Boolean = null
+}
+
+type UserRefType {
+  uuid: String!
+  name: String
 }
 
 enum Visibility {

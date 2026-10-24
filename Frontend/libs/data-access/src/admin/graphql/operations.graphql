@@ -96,11 +96,17 @@ query AdminTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...AdminTicketFields
     secondaryLocation {
+      fullAddress
       county
-      city
+      town
+      village
+      neighborhood
+      road
+      section
       lane
       alley
       no
+      normalizationStatus
       floor
       room
       landmarkNote
@@ -179,11 +185,17 @@ query AdminStation($uuid: UUID!) {
     contactName
     contactPhone
     secondaryLocation {
+      fullAddress
       county
-      city
+      town
+      village
+      neighborhood
+      road
+      section
       lane
       alley
       no
+      normalizationStatus
       floor
       room
       poleId
@@ -207,12 +219,20 @@ query AdminStation($uuid: UUID!) {
     }
   }
 }
-query AdminAnnouncements($filter: AnnouncementFilter = ALL) {
-  announcements(filter: $filter, placement: admin_page) {
+query AdminAnnouncements(
+  $filter: AnnouncementFilter = ALL
+  $placement: AnnouncementPlacement = admin_page
+) {
+  announcements(filter: $filter, placement: $placement) {
     uuid
     content
     active
-    order
+    placement
+    publishedAt
+    publisher {
+      uuid
+      name
+    }
     createdAt
     updatedAt
   }
@@ -485,7 +505,6 @@ mutation AdminCreateAnnouncement($input: CreateAnnouncementInput!) {
     uuid
     content
     active
-    order
   }
 }
 mutation AdminUpdateAnnouncement(
@@ -496,26 +515,15 @@ mutation AdminUpdateAnnouncement(
     uuid
     content
     active
-    order
   }
 }
 mutation AdminDeleteAnnouncement($uuid: UUID!) {
   deleteAnnouncement(uuid: $uuid)
 }
-mutation AdminMoveAnnouncement(
-  $uuid: UUID!
-  $direction: AnnouncementMoveDirection!
-) {
-  moveAnnouncement(uuid: $uuid, direction: $direction) {
-    uuid
-    order
-  }
-}
 mutation AdminSetAnnouncementActive($uuid: UUID!, $active: Boolean!) {
   setAnnouncementActive(uuid: $uuid, active: $active) {
     uuid
     active
-    order
   }
 }
 mutation AdminGenerateBriefing($input: GenerateBriefingInput!) {

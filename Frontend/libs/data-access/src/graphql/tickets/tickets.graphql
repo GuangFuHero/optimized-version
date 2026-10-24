@@ -77,11 +77,13 @@ query GetTickets(
 }
 
 # The site list's page of tickets, each with the needs its rows claim. The map keeps GetTickets:
-# it has no claim buttons, so it has no use for the needs.
+# it has no claim buttons, so it has no use for the needs. `q` is the header's search, 2 to 50
+# characters: the backend reads the tickets' text and their needs, every page of them.
 query GetTicketsWithNeeds(
   $bounds: BoundsInput
   $status: String
   $priority: String
+  $q: String
   $skip: Int = 0
   $limit: Int = 50
   $zoom: Float
@@ -90,6 +92,7 @@ query GetTicketsWithNeeds(
     bounds: $bounds
     status: $status
     priority: $priority
+    q: $q
     skip: $skip
     limit: $limit
     zoom: $zoom
@@ -114,11 +117,17 @@ query GetTicket($uuid: UUID!) {
     # Where a volunteer is going, for the claim confirmation. Null without an address, and to a
     # caller without ticket.view_detail.
     secondaryLocation {
+      fullAddress
       county
-      city
+      town
+      village
+      neighborhood
+      road
+      section
       lane
       alley
       no
+      normalizationStatus
       buildingSection
       floor
       room
@@ -273,11 +282,17 @@ query MyTaskAssignments {
       contactName
       contactPhone
       secondaryLocation {
+        fullAddress
         county
-        city
+        town
+        village
+        neighborhood
+        road
+        section
         lane
         alley
         no
+        normalizationStatus
         buildingSection
         floor
         room

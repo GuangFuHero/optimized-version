@@ -37,7 +37,7 @@ async def _author(db) -> User:
     return author
 
 
-async def _station(db, author, *, name, county="花蓮縣", city="光復鄉", with_address=True) -> Station:
+async def _station(db, author, *, name, county="花蓮縣", town="光復鄉", with_address=True) -> Station:
     station = Station(
         geometry=from_shape(POINT, srid=4326),
         created_by=str(author.uuid),
@@ -51,7 +51,7 @@ async def _station(db, author, *, name, county="花蓮縣", city="光復鄉", wi
     if with_address:
         db.add(
             SecondaryLocation(
-                geometry_uuid=str(station.uuid), location_type="address", county=county, city=city
+                geometry_uuid=str(station.uuid), location_type="address", county=county, town=town
             )
         )
         await db.flush()
@@ -109,9 +109,9 @@ async def test_one_station_with_the_same_key_is_a_match(db):
 
 @pytest.mark.asyncio
 async def test_the_same_name_in_another_district_is_not_a_match(db):
-    """A "光復國小" exists all over Taiwan — the county/city half of the key is what separates them."""
+    """A "光復國小" exists all over Taiwan; the 縣市 and 鄉鎮市區 in the key tell them apart."""
     author = await _author(db)
-    await _station(db, author, name="光復國小", county="花蓮縣", city="光復鄉")
+    await _station(db, author, name="光復國小", county="花蓮縣", town="光復鄉")
 
     result = (await build_station_index(db)).look_up(station_key("光復國小", "臺北市", "大安區"))
 

@@ -76,6 +76,7 @@ async def _check_all(conn: AsyncConnection) -> None:
 
     await _insert_event(conn, event_type="hint_shown", version="fast-v1")
     await _insert_event(conn, event_type="manual_note", version=None)  # not every event is an engine's
+    await _insert_event(conn, event_type="verdict_revoked", version=None)  # an undone verdict (ADR-344)
     assert await _rejects(conn, _insert_event(conn, event_type="hint_dismissed", version="fast-v1"))
 
     columns = (
@@ -121,7 +122,7 @@ async def _drop(admin) -> None:
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def migrated_db_url():
-    """A throwaway database migrated up, one step down, and up again (the dedup migration is head)."""
+    """A throwaway database migrated up, one step down, and up again (the newest migration is dedup's)."""
     admin = create_async_engine(_ADMIN_DB_URL, isolation_level="AUTOCOMMIT")
     try:
         await _drop(admin)

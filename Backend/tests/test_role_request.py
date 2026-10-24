@@ -7,6 +7,7 @@ tests/test_graphql/test_role_requests.py.
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import HTTPException
@@ -15,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.permissions import Perm
-from app.models.auth import User
+from app.models.auth import User, UserContact
 from app.models.notification import Notification
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.role_request import RoleRequest
@@ -48,23 +49,55 @@ async def _role(db, name: str, grants: dict[Perm, str], kind: str = "platform") 
     return role
 
 
+def _unique_phone() -> str:
+    """A Taiwanese mobile number no other test account holds (contacts are unique by value)."""
+    return f"+8869{uuid.uuid4().int % 10**8:08d}"
+
+
 async def _citizen(db, name: str = "申請人") -> User:
-    """A signed-in account holding only the platform `user` role, as registration leaves it."""
+    """A signed-in account holding only the platform `user` role, as registration leaves it.
+
+    It has a verified phone, which applying requires since Spec 026 (ADR-355).
+    """
     user = User(name=name)
     db.add(user)
     await db.flush()  # assigns the uuid; the session does not autoflush, as the app's does not
     role = await _role(db, "user", {Perm.ROLE_REQUEST_ADD: "all"})
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    db.add(
+        UserContact(
+            user_uuid=user.uuid,
+            type="phone",
+            value=_unique_phone(),
+            verified=True,
+            verified_at=datetime.now(UTC),
+        )
+    )
     await db.flush()
     return acting_as(user, role)
 
 
-async def _submit(db, actor: User, requested_role: str = "data_auditor", reason: str = REASON, contact=None):
-    """Apply as `actor`. Submitting commits, so an actor loaded earlier may be expired by now."""
+async def _some_team(db, requested_role: str) -> uuid.UUID:
+    """An active team of the type `requested_role` picks from (Spec 026 ADR-352)."""
+    type_ = "gov" if requested_role == "government" else "ngo"
+    team = Team(name=f"隊-{uuid.uuid4().hex[:8]}", type=type_, status="active")
+    db.add(team)
+    await db.flush()
+    return team.uuid
+
+
+async def _submit(db, actor: User, requested_role: str = "data_auditor", reason: str = REASON, **details):
+    """Apply as `actor`. Submitting commits, so an actor loaded earlier may be expired by now.
+
+    A government / NGO application names a team since Spec 026; one is made up when the test
+    does not care which (ADR-350 point 2).
+    """
+    names_a_team = "team_uuid" in details or "new_team_name" in details
+    if requested_role in ("government", "ngo") and not names_a_team:
+        details["team_uuid"] = await _some_team(db, requested_role)
+    details.setdefault("name", "王小明")
     await refresh_actor(db, actor)
-    return await role_request.submit(
-        db, actor=actor, requested_role=requested_role, reason=reason, contact=contact
-    )
+    return await role_request.submit(db, actor=actor, requested_role=requested_role, reason=reason, **details)
 
 
 async def _state(db, actor: User) -> role_request.RoleRequestState:
@@ -89,7 +122,7 @@ async def _reviewer(db) -> User:
     return acting_as(reviewer, super_admin)
 
 
-async def _reject(db, reviewer: User, request_uuid, note: str | None = None):
+async def _reject(db, reviewer: User, request_uuid, note: str | None = "資料不足，請補上單位證明"):
     """Turn an application down as `reviewer`, refreshed first for the same reason as in _submit."""
     await refresh_actor(db, reviewer)
     return await role_request.reject(db, actor=reviewer, request_uuid=request_uuid, note=note)
@@ -128,23 +161,24 @@ async def test_an_application_waits_for_review_and_blocks_another(db):
     """Once sent, the drawer shows only the pending card (AC-RE-106)."""
     citizen = await _citizen(db)
 
-    await _submit(db, citizen, "data_auditor", REASON, contact="03-8701234 分機 12")
+    await _submit(db, citizen, "data_auditor", REASON, name="王小明")
 
     state = await _state(db, citizen)
     [request] = state.requests
     assert (request.requested_role, request.status) == ("data_auditor", "pending")
-    assert (request.reason, request.contact) == (REASON, "03-8701234 分機 12")
+    assert (request.reason, request.applicant_name) == (REASON, "王小明")
     assert state.can_apply is False
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("backoffice", ["team member", "data auditor"])
-async def test_someone_with_a_backoffice_identity_cannot_apply(db, backoffice):
+async def test_someone_with_a_backoffice_identity_cannot_apply_to_be_a_data_auditor(db, backoffice):
     """A team identity or another platform role already opens the back office.
 
-    Joining a team goes by invitation, not through this form. A data auditor keeps `user`
-    alongside (Spec/019: approval adds rather than replaces), so it is the extra role that
-    counts, not the absence of `user`.
+    A data auditor keeps `user` alongside (Spec/019: approval adds rather than replaces), so it
+    is the extra role that counts, not the absence of `user`. Since Spec 026 the entry still
+    offers to apply — a team request remains open to them (ADR-351) — and the data auditor
+    choice is what is refused.
     """
     citizen = await _citizen(db)
     if backoffice == "team member":
@@ -158,7 +192,7 @@ async def test_someone_with_a_backoffice_identity_cannot_apply(db, backoffice):
     await db.flush()
 
     state = await _state(db, citizen)
-    assert (state.has_backoffice_identity, state.can_apply) == (True, False)
+    assert (state.has_backoffice_identity, state.can_apply) == (True, True)
     with pytest.raises(ValueError, match="back-office identity"):
         await _submit(db, citizen)
 
@@ -193,7 +227,7 @@ async def test_two_tabs_submitting_at_once_leave_one_application(db):
             actor = await session.get(User, user_uuid)
             actor.active_identity = identity
             await role_request.submit(
-                session, actor=actor, requested_role="data_auditor", reason=REASON, contact=None
+                session, actor=actor, requested_role="data_auditor", reason=REASON, name="王小明"
             )
 
         outcomes = await asyncio.gather(*(apply(session) for session in sessions), return_exceptions=True)
@@ -232,14 +266,14 @@ async def test_a_rejected_applicant_may_apply_again_at_once(db):
     [
         ({"reason": "   "}, "Reason is required"),
         ({"reason": "字" * 501}, "Reason must be at most 500 characters"),
-        ({"contact": "9" * 101}, "Contact must be at most 100 characters"),
+        ({"name": "名" * 101}, "Name must be at most 100 characters"),
         ({"requested_role": "super_admin"}, "Cannot apply for super_admin"),
     ],
 )
 async def test_an_incomplete_or_oversized_application_is_refused(db, changes, message):
     """Refused with a message the drawer can show, before the table's CHECKs are ever reached."""
     citizen = await _citizen(db)
-    application = {"requested_role": "data_auditor", "reason": REASON, "contact": None, **changes}
+    application = {"requested_role": "data_auditor", "reason": REASON, **changes}
 
     with pytest.raises(ValueError, match=message):
         await _submit(db, citizen, **application)
@@ -248,7 +282,7 @@ async def test_an_incomplete_or_oversized_application_is_refused(db, changes, me
 
 @pytest.mark.asyncio
 async def test_only_your_own_applications_are_listed(db):
-    """Reason and contact are the applicant's own words and often name their unit and phone."""
+    """Reason and the applicant's details often name their unit and phone."""
     me = await _citizen(db, "甲")
     someone_else = await _citizen(db, "乙")
     await _submit(db, someone_else, "government", "別人的理由")
@@ -393,15 +427,17 @@ async def test_rejecting_records_who_decided_and_their_reply(db):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("note", [None, "   "])
-async def test_a_blank_reply_is_no_reply(db, note):
-    """Nothing typed and only spaces typed read the same: the card falls back to its default."""
+async def test_a_rejection_without_a_reason_is_refused(db, note):
+    """Spec 026 (BE-038 step 4): the applicant always hears why, so a blank reason is refused."""
     reviewer = await _reviewer(db)
     citizen = await _citizen(db)
     request = await _submit(db, citizen)
+    request_uuid = request.uuid
 
-    rejected = await _reject(db, reviewer, request.uuid, note=note)
-
-    assert rejected.review_note is None
+    with pytest.raises(ValueError, match="^A reason is required$"):
+        await _reject(db, reviewer, request_uuid, note=note)
+    [still] = (await _state(db, citizen)).requests
+    assert still.status == "pending"
 
 
 @pytest.mark.asyncio
@@ -460,15 +496,9 @@ async def test_only_a_reviewer_can_reject(db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("note", "body"),
-    [
-        ("請附上單位證明後再申請", "請附上單位證明後再申請"),
-        (None, "你原本的權限沒有任何改變，可以再送一次申請。"),
-    ],
-)
+@pytest.mark.parametrize(("note", "body"), [("請附上單位證明後再申請", "請附上單位證明後再申請")])
 async def test_the_applicant_hears_they_were_turned_down(db, note, body):
-    """ADR-287, in the prototype's words (wg-bridge.js): the reply if there is one, else reassurance."""
+    """ADR-287: the applicant reads the reason, which is required since Spec 026."""
     reviewer = await _reviewer(db)
     citizen = await _citizen(db)
     citizen_uuid = citizen.uuid
@@ -502,13 +532,14 @@ async def test_the_review_list_is_oldest_first_and_names_the_applicant(db, statu
         if name == "乙":
             await _withdraw(db, citizen, request.uuid)
 
-    entries = await role_request.list_for_review(db, status=status, skip=skip, limit=limit)
+    reviewer = await _reviewer(db)
+    await refresh_actor(db, reviewer)
+    entries = await role_request.list_for_review(db, actor=reviewer, status=status, skip=skip, limit=limit)
 
     assert [entry.applicant_name for entry in entries] == applicants
     assert all(entry.request.reason == REASON for entry in entries)
 
 
-_NOT_OPEN_YET = "Approving government and NGO applications is not available yet"
 
 
 @pytest.mark.asyncio
@@ -528,24 +559,8 @@ async def test_an_approved_data_auditor_keeps_user_beside_the_new_role(db):
     assert approved.closed_at is not None
     assert await _platform_roles(db, citizen_uuid) == ["data_auditor", "user"]
     state = await _state(db, citizen)
-    assert (state.has_backoffice_identity, state.can_apply) == (True, False)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("requested_role", ["government", "ngo"])
-async def test_a_government_or_ngo_application_cannot_be_approved_yet(db, requested_role):
-    """ADR-288: which team they join is not decided yet, so it stays pending."""
-    reviewer = await _reviewer(db)
-    citizen = await _citizen(db)
-    citizen_uuid = citizen.uuid
-    request = await _submit(db, citizen, requested_role)
-    request_uuid = request.uuid
-
-    with pytest.raises(ValueError, match=f"^{_NOT_OPEN_YET}$"):
-        await _approve(db, reviewer, request_uuid)
-    [still] = (await _state(db, citizen)).requests
-    assert still.status == "pending"
-    assert await _platform_roles(db, citizen_uuid) == ["user"]
+    # Still offered: a data auditor may ask to join a team (Spec 026, ADR-351).
+    assert (state.has_backoffice_identity, state.can_apply) == (True, True)
 
 
 @pytest.mark.asyncio

@@ -27,17 +27,18 @@ import { SiteUserMenu } from './user-menu';
 const { color, typography } = designTokens;
 
 /**
- * 場域標籤：只回答「我現在在前台」。
+ * 場域標籤：只回答「我現在在公開地圖，不是管理平台」。
  *
- * 靜態、不可點 —— 旁邊將來會有「前往管理平台」切換鈕，可點的長相會讓兩者混淆。
- * 未登入者也顯示，因為這是狀態資訊，不是權限控制項。
+ * 只給有管理平台身份的人看，條件跟旁邊的「前往管理平台」一樣（原型 `site-shell.jsx:207-221`）：
+ * 名字只在兩邊並排時才有意義，只有跨得過去的人才有並排這件事。使用者那一側不取名字，要指稱時講「公開地圖」。
+ * 靜態、不可點 —— 旁邊的「前往管理平台」可以點，長得一樣會讓兩者混淆。
  * 只放桌機：手機頂欄 56px 高、360px 寬，已經被漢堡、品牌、搜尋、使用者選單佔滿。
  */
 function SiteRealmBadge() {
   return (
     <Box
       component="span"
-      title="你目前在前台公開頁面"
+      title="你目前在公開地圖，不是管理平台"
       sx={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -56,7 +57,7 @@ function SiteRealmBadge() {
       }}
     >
       <PublicRoundedIcon sx={{ fontSize: 12, color: color.fg.neutral.muted }} />
-      公開頁面
+      公開地圖
     </Box>
   );
 }
@@ -114,7 +115,7 @@ export function SiteTopNavBar({
         >
           島嶼守望
         </Typography>
-        <SiteRealmBadge />
+        {portalEntry === 'backOffice' ? <SiteRealmBadge /> : null}
         <SitePortalSwitch entry={portalEntry} onApply={onApplyRoleRequest} />
       </Stack>
 

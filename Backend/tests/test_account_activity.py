@@ -242,7 +242,7 @@ async def test_a_session_count_bug_is_not_reported_as_a_redis_outage(caplog):
     Inside the `except`, such a bug degraded every user's count to `null` and logged it as
     "Redis unavailable", sending whoever investigated at a subsystem that was working.
     """
-    from app.api.v1.endpoints.admin import _session_counts
+    from app.services.user_directory import session_counts as _session_counts
 
     class _ShortPipeline:
         def __init__(self, owner):
@@ -276,7 +276,7 @@ async def test_a_session_count_bug_is_not_reported_as_a_redis_outage(caplog):
 
 async def test_redis_being_down_still_degrades_quietly(caplog):
     """The behaviour the `except` exists for has to survive narrowing its scope."""
-    from app.api.v1.endpoints.admin import _session_counts
+    from app.services.user_directory import session_counts as _session_counts
 
     class _DeadRedis:
         def pipeline(self):

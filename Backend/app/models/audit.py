@@ -3,17 +3,22 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import UUID, DateTime, String, func
+from sqlalchemy import UUID, DateTime, Index, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, UUIDPKMixin
+
+# The team a grant, invite, zone assignment or join request row names, whichever state was kept.
+TEAM_UUID_OF_ROW = "(COALESCE(new_values, old_values) ->> 'team_uuid')"
 
 
 class AuditLog(Base, UUIDPKMixin):
     """ORM model representing an audit log entry for database mutations."""
 
     __tablename__ = "audit_logs"
+    # The team view of the audit-log API filters on the team a row names (Spec/026, ADR-358).
+    __table_args__ = (Index("ix_audit_logs_team_uuid", text(TEAM_UUID_OF_ROW)),)
 
     table_name: Mapped[str] = mapped_column(String(100), comment="異動資料表名稱")
     action: Mapped[str] = mapped_column(String(20), comment="異動類型 (INSERT, UPDATE, DELETE)")
