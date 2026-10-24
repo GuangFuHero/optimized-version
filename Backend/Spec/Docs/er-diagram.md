@@ -321,13 +321,17 @@ announcements {
     timestamp published_at "nullable; NULL = draft (never activated), else when it last went live"
     uuid published_by FK "nullable, FK to users; who last activated it"
     boolean active
-    int display_order "nullable; non-null iff active and not deleted; unique among live (app-enforced)"
     text placement "admin_page / public_page / all (both); default all; enum enforced in GraphQL, not DB"
     text content
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
 }
+%% UNIQUE(active) WHERE active AND delete_at IS NULL AND placement IN ('public_page', 'all')
+%%   -- uq_announcements_live_public_page: at most one live announcement on the site
+%% UNIQUE(active) WHERE active AND delete_at IS NULL AND placement <> 'public_page'
+%%   -- uq_announcements_live_admin_page: at most one on the admin portal
+%% One on `all` counts on both pages. Publishing takes down the live ones it overlaps (ADR-363).
 users ||--o{ announcements : "authors"
 users ||--o{ announcements : "last updated"
 users ||--o{ announcements : "last published"

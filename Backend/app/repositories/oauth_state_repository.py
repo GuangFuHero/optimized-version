@@ -17,7 +17,12 @@ OAUTH_STATE = "oauth_state:"
 
 @dataclass(frozen=True)
 class PendingSignIn:
-    """One sign-in in progress, as its start recorded it."""
+    """One sign-in in progress, as its start recorded it.
+
+    `purpose` is `step_up` when it proves a signed-in account instead of signing in (ADR-361): for `action`,
+    by session `sid` of account `user_uuid`. It defaults to `sign_in`, so a record written before these
+    fields existed still reads as one.
+    """
 
     state: str
     provider: str
@@ -25,6 +30,10 @@ class PendingSignIn:
     return_to: str
     code_verifier: str
     nonce: str
+    purpose: str = "sign_in"
+    action: str | None = None
+    sid: str | None = None
+    user_uuid: str | None = None
 
 
 class OAuthStateRepository:
@@ -34,7 +43,17 @@ class OAuthStateRepository:
         """Initialize with a `redis.asyncio` client (decode_responses=False)."""
         self.redis = redis
 
-    async def create(self, provider: str, app: str, return_to: str) -> PendingSignIn:
+    async def create(
+        self,
+        provider: str,
+        app: str,
+        return_to: str,
+        *,
+        purpose: str = "sign_in",
+        action: str | None = None,
+        sid: str | None = None,
+        user_uuid: str | None = None,
+    ) -> PendingSignIn:
         """Record a new sign-in with a fresh state, PKCE verifier and nonce, for the cookie's lifetime."""
         record = PendingSignIn(
             state=secrets.token_urlsafe(32),
@@ -43,6 +62,10 @@ class OAuthStateRepository:
             return_to=return_to,
             code_verifier=new_code_verifier(),
             nonce=secrets.token_urlsafe(32),
+            purpose=purpose,
+            action=action,
+            sid=sid,
+            user_uuid=user_uuid,
         )
         await self.redis.set(OAUTH_STATE + record.state, json.dumps(asdict(record)), ex=OAUTH_COOKIE_MAX_AGE)
         return record

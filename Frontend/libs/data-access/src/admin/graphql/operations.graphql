@@ -224,7 +224,6 @@ query AdminAnnouncements($filter: AnnouncementFilter = ALL) {
     uuid
     content
     active
-    order
     createdAt
     updatedAt
   }
@@ -497,7 +496,6 @@ mutation AdminCreateAnnouncement($input: CreateAnnouncementInput!) {
     uuid
     content
     active
-    order
   }
 }
 mutation AdminUpdateAnnouncement(
@@ -508,26 +506,15 @@ mutation AdminUpdateAnnouncement(
     uuid
     content
     active
-    order
   }
 }
 mutation AdminDeleteAnnouncement($uuid: UUID!) {
   deleteAnnouncement(uuid: $uuid)
 }
-mutation AdminMoveAnnouncement(
-  $uuid: UUID!
-  $direction: AnnouncementMoveDirection!
-) {
-  moveAnnouncement(uuid: $uuid, direction: $direction) {
-    uuid
-    order
-  }
-}
 mutation AdminSetAnnouncementActive($uuid: UUID!, $active: Boolean!) {
   setAnnouncementActive(uuid: $uuid, active: $active) {
     uuid
     active
-    order
   }
 }
 mutation AdminGenerateBriefing($input: GenerateBriefingInput!) {

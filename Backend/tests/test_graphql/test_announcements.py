@@ -1,8 +1,8 @@
-"""GraphQL integration tests for announcements (wiring, permissions, relative ordering).
+"""GraphQL integration tests for announcements (wiring, permissions, one live on each page).
 
 The GraphQL test DB is shared across tests and not reset between them, so assertions filter
-to the UUIDs each test creates and check relative ordering rather than absolute positions.
-Strict contiguity of display_order is covered by tests/test_announcements_repository.py.
+to the UUIDs each test creates. Each publish replaces what is live on its pages, earlier tests'
+announcements included; tests/test_announcements_repository.py covers the transitions in full.
 """
 
 from uuid import UUID
@@ -18,25 +18,19 @@ from tests.test_graphql.conftest import test_db as _test_db
 
 CREATE = """
 mutation($content: String!) {
-  createAnnouncement(input: {content: $content}) { uuid content active order status publishedAt }
+  createAnnouncement(input: {content: $content}) { uuid content active status publishedAt }
 }
 """
 
 LIST = """
 query($filter: AnnouncementFilter!) {
-  announcements(filter: $filter) { uuid content active order }
-}
-"""
-
-MOVE = """
-mutation($uuid: UUID!, $dir: AnnouncementMoveDirection!) {
-  moveAnnouncement(uuid: $uuid, direction: $dir) { uuid content order }
+  announcements(filter: $filter) { uuid content active }
 }
 """
 
 SET_ACTIVE = """
 mutation($uuid: UUID!, $active: Boolean!) {
-  setAnnouncementActive(uuid: $uuid, active: $active) { uuid content active order status }
+  setAnnouncementActive(uuid: $uuid, active: $active) { uuid content active status }
 }
 """
 
@@ -95,18 +89,17 @@ async def _create(client, token, content):
 
 
 @pytest.mark.asyncio
-async def test_published_announcements_list_publicly_in_order(client, content_admin_auth):
-    """Published announcements are active with integer order and appear on the public ACTIVE list."""
+async def test_publishing_replaces_the_live_one_on_its_page(client, content_admin_auth):
+    """A published announcement lists publicly until the next one on its page replaces it."""
     _, token = content_admin_auth
     a = await _create(client, token, "first")
-    b = await _create(client, token, "second")
-    assert a["active"] is True and isinstance(a["order"], int) and a["status"] == "ACTIVE"
+    assert a["active"] is True and a["status"] == "ACTIVE"
+    mine = {a["uuid"]}
+    assert await _listed(client, mine, LIST, {"filter": "ACTIVE"}) == mine  # no auth → public
 
-    body = await _post(client, LIST, {"filter": "ACTIVE"})  # no auth → public
-    assert "errors" not in body, body
-    mine = [x for x in body["data"]["announcements"] if x["uuid"] in {a["uuid"], b["uuid"]}]
-    assert [x["content"] for x in mine] == ["first", "second"]
-    assert mine[0]["order"] < mine[1]["order"]
+    b = await _create(client, token, "second")
+    mine.add(b["uuid"])
+    assert await _listed(client, mine, LIST, {"filter": "ACTIVE"}) == {b["uuid"]}
 
 
 @pytest.mark.asyncio
@@ -116,7 +109,7 @@ async def test_create_makes_a_draft_that_only_editors_see(client, content_admin_
     body = await _post(client, CREATE, {"content": "draft"}, token)
     assert "errors" not in body, body
     d = body["data"]["createAnnouncement"]
-    assert (d["status"], d["active"], d["order"], d["publishedAt"]) == ("DRAFT", False, None, None)
+    assert (d["status"], d["active"], d["publishedAt"]) == ("DRAFT", False, None)
 
     assert await _listed(client, {d["uuid"]}, LIST, {"filter": "ACTIVE"}) == set()
     assert await _listed(client, {d["uuid"]}, LIST, {"filter": "DRAFT"}, token) == {d["uuid"]}
@@ -162,20 +155,6 @@ async def test_authors_are_shown_to_editors_only(client, redis, content_admin_au
 
 
 @pytest.mark.asyncio
-async def test_move_up_reorders(client, content_admin_auth):
-    """Moving an announcement up places it before its former predecessor."""
-    _, token = content_admin_auth
-    a = await _create(client, token, "alpha")
-    b = await _create(client, token, "beta")
-    body = await _post(client, MOVE, {"uuid": b["uuid"], "dir": "UP"}, token)
-    assert "errors" not in body, body
-
-    listed = await _post(client, LIST, {"filter": "ACTIVE"})
-    mine = [x for x in listed["data"]["announcements"] if x["uuid"] in {a["uuid"], b["uuid"]}]
-    assert [x["content"] for x in mine] == ["beta", "alpha"]
-
-
-@pytest.mark.asyncio
 async def test_all_filter_requires_admin_and_includes_inactive(client, content_admin_auth):
     """ALL is admin-only and surfaces deactivated announcements; ACTIVE hides them."""
     _, token = content_admin_auth
@@ -183,7 +162,6 @@ async def test_all_filter_requires_admin_and_includes_inactive(client, content_a
     deact = await _post(client, SET_ACTIVE, {"uuid": a["uuid"], "active": False}, token)
     assert "errors" not in deact, deact
     assert deact["data"]["setAnnouncementActive"]["active"] is False
-    assert deact["data"]["setAnnouncementActive"]["order"] is None
 
     public_all = await _post(client, LIST, {"filter": "ALL"})  # no auth
     assert public_all.get("errors")
@@ -240,19 +218,23 @@ async def _notified(ref_uuid):
 
 @pytest.mark.asyncio
 async def test_placement_controls_which_page_lists_it(client, content_admin_auth):
-    """Each page lists its own placement plus "all", and guests read public-page rows."""
+    """Each page lists the one live on it, guests read the public page's, and one on "all" takes both."""
     _, token = content_admin_auth
     admin_only = await _create_placed(client, token, "admin only", "admin_page")
     public_only = await _create_placed(client, token, "public only", "public_page")
-    both = (await _create(client, token, "both"))["uuid"]
-    mine = {admin_only, public_only, both}
+    mine = {admin_only, public_only}
 
-    assert await _listed(client, mine, LIST_DEFAULT) == {public_only, both}
-    assert await _listed(client, mine, LIST_PLACED, {"placement": "admin_page"}, token) == {admin_only, both}
+    assert await _listed(client, mine, LIST_DEFAULT) == {public_only}
+    assert await _listed(client, mine, LIST_PLACED, {"placement": "admin_page"}, token) == {admin_only}
     assert await _listed(client, mine, LIST_PLACED, {"placement": "all"}, token) == mine
 
     public_get = await _post(client, GET_ONE, {"uuid": public_only})
     assert public_get["data"]["announcement"]["uuid"] == public_only
+
+    both = (await _create(client, token, "both"))["uuid"]
+    mine.add(both)
+    assert await _listed(client, mine, LIST_DEFAULT) == {both}
+    assert await _listed(client, mine, LIST_PLACED, {"placement": "admin_page"}, token) == {both}
 
 
 @pytest.mark.asyncio

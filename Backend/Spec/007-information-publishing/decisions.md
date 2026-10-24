@@ -1,4 +1,4 @@
-# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309、ADR-335）
+# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309、ADR-335、ADR-363）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號從 259 起跳，避開 `Spec/018-ticket-disaster-fields/decisions.md` 已佔用但尚未合併的 ADR-244~258。
@@ -8,6 +8,7 @@ ADR-259~262 源自 PR #49 第一輪 review；ADR-273~274 源自第二輪。
 ADR-275 源自 PR #48 第二輪 review——決策本身與行前通知無關，但它改的是本 PR 的 migration `c3f0a1b2d4e6`，所以記在這裡。
 ADR-309 是公告（緊急公告）的顯示位置，接在 ADR-308（前台／後台用語，Spec 006）之後編號。
 ADR-335 是公告與行前通知的草稿，接在 repo 目前最大的 ADR-334 之後編號。
+ADR-363 是公告改成每頁一則、發布就取代；361、362 已分給 PR #94 與 #93。
 
 ---
 
@@ -231,6 +232,7 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 **為什麼共用一條排序**：各頁照全站順序過濾，相對順序自然一致，`move`、`setAnnouncementActive`、
 `deleteAnnouncement` 一行都不用改。分頁排序得多一個排序欄位，維持連號的邏輯也要跑兩份。管理清單
 （`filter: ALL, placement: all`）看得到每一則，管理員在那裡排序就是排全站。
+**已被 ADR-363 推翻**：每頁最多一則上線公告，排序拿掉了。
 
 **為什麼另開一個 capability**：任何人都能自己註冊並拿到 `user` 角色，所以只檢查登入擋不住外人，而協調會
 這類公告要留在工作人員之間。現有的兩個 key 都不合用：`announcement.view` 是公開的，`announcement.edit`
@@ -298,6 +300,7 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 **為什麼不開 `/admin/users/{uuid}`**：它要 `user.view`，只有平台管理員有；前端還得一則一則去查。
 
 **為什麼公告不做成一列一版**：排序（`display_order`）屬於那一列，改成多版就得在版本之間搬排序和上線狀態。
+（ADR-363 拿掉了排序，上線狀態仍是這個理由。）
 
 **Consequences**：
 ➕ 公開頁面拿不到草稿：前台的請求以 `user` 身分執行，`user` 沒有 `.edit`。
@@ -305,3 +308,68 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 ➖ 從較舊版本開的草稿一樣能發布並成為目前版本；要不要警告由前端決定。
 ➖ 已上線公告的修改沒有草稿，存下去就公開，所以只有 `.edit` 的人改不動已上線的公告。
 ➖ 目前只有 `super_admin` 持有 `.edit` 與 `.publish`，所以權限調整實際上沒有人因此得到或失去權限。
+
+---
+
+### ADR-363 每頁最多一則上線公告，發布就取代；拿掉排序
+
+**白話**：前台一則、管理平台一則；「兩邊都顯示」那則同時佔兩個位置。發一則新的，就把它要佔的位置上原本那則
+關掉。公告不再排序。
+
+**Context**：ADR-309 讓好幾則公告同時上線，共用一條排序（`display_order`、`moveAnnouncement`）。產品的決定
+相反：原型 EA-FEAT-001 的裁示 D-12 是「每個頻道最多一則，發布＝取代」，Carol 2026-10-21 在 Discord 再確認
+（「只能一則」「以最新取代舊的」，跑馬燈的概念），糖也確認。原型的阻斷表要求這條由資料層守住（B-6），而且
+取代要在同一個 transaction 裡完成（B-7）。
+
+**Decision**：
+
+```
+發布前                       發布                     發布後
+前台 A、後台 B          ─►  public_page 的 C   ─►   前台 C、後台 B
+前台 A、後台 B          ─►  all 的 C           ─►   前台 C、後台 C
+前台 C、後台 C（all）   ─►  admin_page 的 D    ─►   前台空、後台 D
+```
+
+- **位置**：`public_page` 佔前台，`admin_page` 佔管理平台，`all` 兩個都佔。三個值以外的 placement 照
+  ADR-309 當成 `admin_page`。
+- **發布**：`setAnnouncementActive(true)`（第一次發布或重新上線）在同一個 transaction 裡，先把位置重疊、
+  正在上線的公告下線（`updated_by` 記成這次的發布者），再讓這則上線。上表第三列就是 D-12 的轉移 3：
+  `all` 那則下線，前台跟著變空。
+- **改位置**：ADR-335 已把「改已上線公告」當成重新發布、要 `announcement.publish`。所以已上線的公告搬到
+  哪一頁，就取代那一頁上線中的公告。
+- **併發**：
+  - 上線、下線、修改、刪除都先拿 advisory lock（`announcements.live`），再鎖上線中的列，最後鎖目標列。
+    同時發布的兩個人會排隊，後發的取代先發的。修改把權限檢查放進鎖裡（`check_live`），所以別人同時把
+    草稿發布出去，這次修改仍會被當成改已上線的公告。
+  - 資料層防線是兩條 partial unique index，一頁一條：`uq_announcements_live_public_page`
+    （`active AND delete_at IS NULL AND placement IN ('public_page', 'all')`）和
+    `uq_announcements_live_admin_page`（`... AND placement <> 'public_page'`）。index 建在 `active` 上：
+    符合條件的列 `active` 都是 true，所以每條最多容得下一列。`all` 那則同時落在兩條裡，就這樣佔住兩個
+    位置。繞過 lock 直接寫 DB 也過不了。
+  - 先把要取代的列下線並 flush，再讓新的上線：SQLAlchemy 一次 flush 裡同一張表的 UPDATE 依主鍵排序，新的
+    那則可能先寫，就會撞到 index。
+- **拿掉排序**：刪掉 `display_order` 欄位、`moveAnnouncement`、`AnnouncementMoveDirection` 與
+  `AnnouncementType.order`。清單改成上線中的在前，其餘依建立時間新到舊。前端在同一個 PR 拿掉
+  `AdminMoveAnnouncement`、各 operation 選的 `order` 與 `useMoveAnnouncement`。
+- **migration `e4b7c2a19d63`**：上線中的公告，只要有一則比它晚發布、位置又重疊的上線公告，就下線。結果等於
+  依發布時間一則一則重新發布。接著建兩條 index、刪 `display_order`。downgrade 加回欄位，上線中的依發布時間
+  編 1..N；被取代的不會恢復。
+
+**為什麼用兩條 partial unique index，不用 exclusion constraint**：`all` 一則佔兩個位置，一條 unique index
+擋不住；拆成一頁一條，每條只管「這一頁最多一列」就擋得住。exclusion constraint 要先把 placement 轉成
+range 或陣列再比重疊，讀起來不直覺，也不會多守住什麼。
+
+**為什麼不先 deprecate 排序**：沒有畫面呼叫 `moveAnnouncement`。前端用到的只有一個沒人呼叫的 hook，以及幾個
+operation 選的 `order`，在同一個 repo、同一個 PR 就改得完。
+
+**Consequences**：
+➕ 「一頁一則」由 DB 擋，不只靠應用程式。
+➕ 兩人同時發布不會報錯，後發的取代先發的。
+➕ 公告條只要顯示 `announcements(placement:)` 回的那一則；`placement: all` 最多回兩則。
+◾ 通知照舊，上線就發；被取代的公告不另發通知。原型裁示 C-2（公告不進收件匣）另案處理。
+➖ 被取代和手動下線在資料上分不出來，都是 `active = false`、`updated_by` 是操作的人。原型 A-12 要的
+  「被新公告取代」事件類型不在這次範圍。
+➖ 後端先部署、管理平台後部署的那幾分鐘，舊的管理平台查 `order` 會被 GraphQL 拒絕，公告條暫時不見。
+➖ 前台的 GraphQL 快照（`Frontend/libs/data-access/src/graphql/schema.graphql`）不是從後端匯出的，仍列著
+  `moveAnnouncement` 與 `order`。前台目前沒有 operation 讀公告，要用之前先更新快照。
+◾ 不在範圍：50 字上限、到期、政府單位發布。
