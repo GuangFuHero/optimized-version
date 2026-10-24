@@ -111,7 +111,8 @@ function normalizeLayerPreferences(value: unknown): RescueMapLayerPreferences {
   const baseLayer =
     candidate.baseLayer &&
     candidate.baseLayer in BASE_LAYER_CONFIG &&
-    !BASE_LAYER_CONFIG[candidate.baseLayer].hidden
+    !BASE_LAYER_CONFIG[candidate.baseLayer].hidden &&
+    !BASE_LAYER_CONFIG[candidate.baseLayer].disabledReason
       ? candidate.baseLayer
       : undefined;
 
@@ -291,6 +292,10 @@ export function useRescueMapController({
 
   const setBaseLayer = useCallback(
     (layer: RescueMapBaseLayer) => {
+      if (BASE_LAYER_CONFIG[layer].disabledReason) {
+        return;
+      }
+
       commit({ ...stateRef.current, baseLayer: layer });
       updateLayerPreferences((current) => ({ ...current, baseLayer: layer }));
     },

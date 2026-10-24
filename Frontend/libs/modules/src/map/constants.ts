@@ -52,6 +52,7 @@ export const BASE_LAYER_CONFIG: Record<
     tileSourceType: 'road',
     tileSource: 'carto',
     icon: MapIcon,
+    disabledReason: '需要 API 金鑰，暫不可用',
   },
   osm: {
     label: 'OSM 標準街道圖',
@@ -79,14 +80,16 @@ export const BASE_LAYER_CONFIG: Record<
   },
   nasa_gibs: {
     label: '衛星影像（NASA GIBS）',
-    description: 'NASA MODIS 真實色彩衛星影像',
+    description: 'NASA HLS Sentinel-2 最新日期前一日的過境影像，可能有雲或空白',
     preview: TERRAIN_PREVIEW,
-    attribution: '&copy; NASA EOSDIS GIBS',
+    attribution:
+      '&copy; NASA EOSDIS GIBS, contains modified Copernicus Sentinel data',
     attributionApiPath: '/api/v1/map/attribution/satellite/nasa_gibs',
     url: '/api/v1/map/tile/satellite/nasa_gibs/{z}/{x}/{y}',
     tileSourceType: 'satellite',
     tileSource: 'nasa_gibs',
     icon: Satellite,
+    maxNativeZoom: 12,
   },
   nlsc: {
     label: '衛星影像（國土測繪中心）',
