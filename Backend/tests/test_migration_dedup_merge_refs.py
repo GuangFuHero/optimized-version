@@ -22,8 +22,8 @@ from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 
-# main's head when Spec 028 started (Spec 026's team admin grants).
-_BEFORE = "79a19cabc98a"
+# main's head this migration chains off (Spec 027 address normalization).
+_BEFORE = "7370daf4c8f7"
 
 _DB_NAME = f"{TEST_DB_URL.rsplit('/', 1)[-1]}_merge_refs"
 _DB_URL = TEST_DB_URL.rsplit("/", 1)[0] + "/" + _DB_NAME
