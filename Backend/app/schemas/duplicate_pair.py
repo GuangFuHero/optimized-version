@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # Mirrors of the CHECK domains in app/models/dedup.py, so the OpenAPI document lists them.
 PairStatus = Literal["dup_ignored", "suggested", "confirmed", "rejected"]
@@ -152,4 +152,93 @@ class DuplicatePairDetail(DuplicatePairResponse):
 class DuplicatePairDecision(BaseModel):
     """A reviewer's verdict. The optional note is checked by the service (at most 1000 characters)."""
 
+    note: str | None = None
+
+
+# --- resolve (Spec 028 §3) ----------------------------------------------------------------
+# Only the fields a request sets are changes: a field left out stays as it is, and a field sent
+# as null clears it where the column allows. The service reads `model_fields_set` for that.
+
+TriageAnswer = Literal["yes", "no", "unknown"]
+
+
+class _Strict(BaseModel):
+    """Unknown fields are refused, so a typo is a 422 rather than a change silently not made."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ResolveTicketValues(_Strict):
+    """The primary ticket's fields to set (Spec 028 §3.2)."""
+
+    title: str | None = None
+    description: str | None = None
+    priority: str | None = None
+    task_type: str | None = None
+    disaster_types: list[str] | None = None
+    person_trapped_reported: TriageAnswer | None = None
+    immediate_danger_reported: TriageAnswer | None = None
+    contact_name: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+
+
+class ResolveTaskValues(_Strict):
+    """A kept or moved need's fields to set."""
+
+    task_name: str | None = None
+    task_description: str | None = None
+    quantity: int | None = None
+
+
+class ResolvePropertyValues(_Strict):
+    """A kept item's fields to set."""
+
+    property_value: str | None = None
+    quantity: int | None = None
+    comment: str | None = None
+
+
+class ResolveProperty(_Strict):
+    """One item of a kept or moved need, or of a need it absorbs (ADR-379)."""
+
+    property: UUID
+    action: Literal["keep", "cancel"]
+    values: ResolvePropertyValues | None = None
+
+
+class ResolvePrimaryTask(_Strict):
+    """One need of the primary ticket: kept (absorbing needs of the other ticket) or cancelled."""
+
+    task: UUID
+    action: Literal["keep", "cancel"]
+    absorb: list[UUID] = Field(default_factory=list)
+    values: ResolveTaskValues | None = None
+    properties: list[ResolveProperty] | None = None
+
+
+class ResolveSecondaryTask(_Strict):
+    """One need of the other ticket not absorbed: moved to the primary ticket or cancelled."""
+
+    task: UUID
+    action: Literal["move", "cancel"]
+    values: ResolveTaskValues | None = None
+    properties: list[ResolveProperty] | None = None
+
+
+class ResolveVersions(_Strict):
+    """The `version` of each side's ticket as the reviewer read it (ADR-373)."""
+
+    low: str
+    high: str
+
+
+class ResolveRequest(_Strict):
+    """Resolve a card: keep `primary`, cancel the other ticket, say what happens to every need."""
+
+    primary: Literal["low", "high"]
+    expected_versions: ResolveVersions
+    ticket: ResolveTicketValues | None = None
+    primary_tasks: list[ResolvePrimaryTask]
+    secondary_tasks: list[ResolveSecondaryTask] = Field(default_factory=list)
     note: str | None = None
