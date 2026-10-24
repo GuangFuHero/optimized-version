@@ -306,14 +306,12 @@ function NoBriefing() {
 }
 
 /**
- * 志工行前資訊 (prototype `site-brief.jsx`, VB-FEAT-001): for someone who has not set out and knows
- * nothing of the place, most likely reading on a phone on the train — so one column, large type, to
- * be scrolled through, not a dashboard.
+ * 志工行前資訊: for someone who has not set out and knows nothing of the place, most likely reading
+ * on a phone on the train — so one column, large type, to be scrolled through, not a dashboard.
  *
- * There is only ever one briefing to read, the newest published (2026-09-07: no switching between
- * disaster types); the backend's list has the earlier versions after it, which this page leaves
- * alone. Not shown yet: its version number (AC-07) and 「這次更新」 beside the sections the last
- * publish changed (AC-12) — both need the backend to say so.
+ * The backend returns at most one live briefing, and none once an admin takes it down. Not shown
+ * yet: its version number and 「這次更新」 beside the sections the last publish changed, which the
+ * backend doesn't report.
  */
 export function SiteBriefing() {
   const [{ data, fetching, error }, reexecute] = useQuery({
