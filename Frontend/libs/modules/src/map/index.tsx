@@ -160,8 +160,7 @@ const MAP_STATIC_GLOBAL_STYLES = {
     fontWeight: 700,
   },
   // An area's label, 「責任區・大平村」 (rescue-map-canvas `createAreaLabel`; prototype `前台地圖 Site
-  // Map.html`, 2026-10-23). Its anchor is the area's middle, or its bottom edge when the label hangs
-  // below it, clear of the area.
+  // Map.html`, 2026-10-23). Centred on the point `placeAreaLabels` found room at (ZONE-LABEL-102).
   '.map-area-label-anchor': {
     background: 'none',
     border: 'none',
@@ -181,9 +180,6 @@ const MAP_STATIC_GLOBAL_STYLES = {
     fontWeight: 700,
     lineHeight: 1.3,
     whiteSpace: 'nowrap',
-  },
-  '.map-area-label[data-place="below"]': {
-    transform: 'translate(-50%, 4px)',
   },
   '.map-area-label--hazard': {
     borderColor: color.bg.warning.hover,

@@ -12,11 +12,14 @@ import { createPortal } from 'react-dom';
 
 import {
   areaKind,
-  areaLabelPlacement,
+  areaLabelOpensPopup,
+  areaLabelText,
   areaPopupLines,
   areaSignature,
   areaTitle,
   largestAreasFirst,
+  placeAreaLabels,
+  type ScreenBox,
 } from '../../areas';
 import { PUBLIC_ZONE_COLORS } from '../../constants';
 import {
@@ -105,6 +108,7 @@ interface AreaLabel {
   shape: L.Polygon;
   marker: L.Marker;
   element: HTMLElement;
+  hazard: boolean;
 }
 
 interface AreaHandle {
@@ -263,21 +267,26 @@ function createAreaPopupContent(lines: readonly string[]) {
 }
 
 /**
- * The label every area wears, its kind and name (prototype ZONE-STYLE-102). Under the pins, which
- * must stay tappable (prototype `zIndexOffset: -1000`). A tap on it, and only on it, opens the
- * area's popup (prototype ZONE-CLICK-101) — when the popup has more to tell than the label, the
- * teams or a note. Either way the tap stays off the map, as in the prototype.
+ * The label every area wears, its kind and name (prototype ZONE-STYLE-102), the name cut at 10
+ * characters (ZONE-NAME-101). Under the pins, which must stay tappable (prototype
+ * `zIndexOffset: -1000`). A tap on it, and only on it, opens the area's popup (prototype
+ * ZONE-CLICK-101) — when the popup has more to tell than the label: the teams, a note, or the whole
+ * name. Either way the tap stays off the map, as in the prototype.
  */
 function createAreaLabel(
   shape: L.Polygon,
   area: RescueMapArea | RescueMapPublicZone,
 ): AreaLabel {
+  const hazard = areaKind(area) === 'hazardous_zone';
   const element = document.createElement('div');
-  element.className =
-    areaKind(area) === 'hazardous_zone'
-      ? 'map-area-label map-area-label--hazard'
-      : 'map-area-label';
-  element.textContent = areaTitle(area);
+  element.className = hazard
+    ? 'map-area-label map-area-label--hazard'
+    : 'map-area-label';
+  element.textContent = areaLabelText(area);
+
+  if (element.textContent !== areaTitle(area)) {
+    element.title = areaTitle(area);
+  }
 
   const marker = L.marker(shape.getBounds().getCenter(), {
     icon: L.divIcon({
@@ -288,10 +297,9 @@ function createAreaLabel(
     keyboard: false,
     zIndexOffset: -1000,
   });
-  const lines = areaPopupLines(area);
 
-  if (lines.length > 1) {
-    marker.bindPopup(createAreaPopupContent(lines), {
+  if (areaLabelOpensPopup(area)) {
+    marker.bindPopup(createAreaPopupContent(areaPopupLines(area)), {
       className: 'map-area-popup',
       maxWidth: 260,
     });
@@ -299,39 +307,124 @@ function createAreaLabel(
     marker.on('click', L.DomEvent.stop);
   }
 
-  return { shape, marker, element };
+  return { shape, marker, element, hazard };
 }
 
 // How far a popup's tip reaches below where it is placed: Leaflet's own offset, less its tip.
 const POPUP_TIP_REACH = -3;
 
+// What an area's label keeps clear of: pins, clusters and cell counts.
+const AREA_LABEL_OBSTACLES =
+  '.map-marker-stack, .map-marker-cluster, .map-location-cell';
+
 /**
- * Puts a label where `areaLabelPlacement` says, for the zoom the map is at now, and its popup to
- * open just above it.
+ * Whether the map itself shows at each corner and the middle of `box`: not a button or a card
+ * floating over it (prototype `underUi`), one of the map's own controls, or the page past its edge.
+ * The topmost element at a point is taken, and one that lets taps through (`pointer-events: none`)
+ * is passed over, so only what would catch a tap counts.
  */
-function placeAreaLabel(map: L.Map, { shape, marker, element }: AreaLabel) {
-  const bounds = shape.getBounds();
-  const northWest = map.latLngToLayerPoint(bounds.getNorthWest());
-  const southEast = map.latLngToLayerPoint(bounds.getSouthEast());
-  const place = areaLabelPlacement(
-    { width: southEast.x - northWest.x, height: southEast.y - northWest.y },
-    { width: element.offsetWidth, height: element.offsetHeight },
-  );
+function isOverMap(
+  host: HTMLElement,
+  { left, top }: DOMRect,
+  box: ScreenBox,
+): boolean {
+  const middleX = (box.left + box.right) / 2;
+  const middleY = (box.top + box.bottom) / 2;
 
-  marker.setLatLng(
-    place === 'center'
-      ? bounds.getCenter()
-      : L.latLng(bounds.getSouth(), bounds.getCenter().lng),
-  );
-  element.dataset.place = place;
+  return [
+    [box.left, box.top],
+    [box.right, box.top],
+    [box.left, box.bottom],
+    [box.right, box.bottom],
+    [middleX, middleY],
+  ].every(([x, y]) => {
+    const element = document.elementFromPoint(left + x, top + y);
 
-  // The label's top, from the point it hangs on (`.map-area-label` in `map/index.tsx`).
-  const labelTop = place === 'center' ? -element.offsetHeight / 2 : 4;
-  const popup = marker.getPopup();
+    return (
+      element !== null &&
+      host.contains(element) &&
+      element.closest('.leaflet-control') === null
+    );
+  });
+}
 
-  if (popup) {
-    L.setOptions(popup, { offset: L.point(0, labelTop - POPUP_TIP_REACH) });
+/**
+ * Puts every area's label where `placeAreaLabels` finds room for it, its middle on that point, and
+ * its popup to open just above it. A label with no room is left out until the next time.
+ */
+function placeAreaLabelsOnMap(map: L.Map, labels: readonly AreaLabel[]) {
+  const host = map.getContainer();
+
+  // A hidden map has nothing to measure: the labels wait for the next zoom or redraw.
+  if (labels.length === 0 || !host.offsetWidth) {
+    return;
   }
+
+  labels.forEach(({ element }) => {
+    element.style.display = '';
+  });
+
+  // Every label is measured before any is moved, so the page is laid out once.
+  const sizes = labels.map(({ element }) => ({
+    width: element.offsetWidth,
+    height: element.offsetHeight,
+  }));
+  const hostRect = host.getBoundingClientRect();
+  const obstacles = Array.from(
+    host.querySelectorAll<HTMLElement>(AREA_LABEL_OBSTACLES),
+  )
+    .map((element) => element.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .map((rect) => ({
+      left: rect.left - hostRect.left,
+      top: rect.top - hostRect.top,
+      right: rect.right - hostRect.left,
+      bottom: rect.bottom - hostRect.top,
+    }));
+  const spots = placeAreaLabels(
+    labels.map(({ shape, hazard }, index) => {
+      const bounds = shape.getBounds();
+      const northWest = map.latLngToContainerPoint(bounds.getNorthWest());
+      const southEast = map.latLngToContainerPoint(bounds.getSouthEast());
+
+      return {
+        hazard,
+        area: {
+          left: northWest.x,
+          top: northWest.y,
+          right: southEast.x,
+          bottom: southEast.y,
+        },
+        label: sizes[index],
+      };
+    }),
+    {
+      width: host.clientWidth,
+      height: host.clientHeight,
+      obstacles,
+      isCovered: (box) => !isOverMap(host, hostRect, box),
+    },
+  );
+
+  labels.forEach(({ marker, element }, index) => {
+    const spot = spots[index];
+    element.dataset.place = spot.place;
+
+    if (!('x' in spot)) {
+      element.style.display = 'none';
+      return;
+    }
+
+    marker.setLatLng(map.containerPointToLatLng([spot.x, spot.y]));
+
+    const popup = marker.getPopup();
+
+    if (popup) {
+      L.setOptions(popup, {
+        offset: L.point(0, -sizes[index].height / 2 - POPUP_TIP_REACH),
+      });
+    }
+  });
 }
 
 /** Each part of the area, with its label. Returns the labels, to be placed. */
@@ -351,14 +444,13 @@ function renderArea<T extends RescueMapArea>(
   });
 }
 
+/** Draws what changed. The labels are placed afterwards, all together (`placeAreaLabelsOnMap`). */
 function syncAreaLayer<T extends RescueMapArea>({
-  map,
   overlayLayer,
   areas,
   handles,
   style,
 }: {
-  map: L.Map;
   overlayLayer: L.LayerGroup;
   areas: readonly T[];
   handles: Map<string, AreaHandle>;
@@ -401,11 +493,6 @@ function syncAreaLayer<T extends RescueMapArea>({
   if (drawn.length === 0) {
     return;
   }
-
-  // A label is measured once it is on the map.
-  drawn.forEach((handle) => {
-    handle.labels.forEach((label) => placeAreaLabel(map, label));
-  });
 
   // A newly drawn area lands on top; stack them again so a smaller one stays over a larger.
   largestAreasFirst(areas).forEach((area) => {
@@ -731,6 +818,8 @@ export function RescueMapCanvas({
   const markerHandlesRef = useRef<Map<string, MarkerHandle>>(new Map());
   const closureAreaHandlesRef = useRef<Map<string, AreaHandle>>(new Map());
   const publicZoneHandlesRef = useRef<Map<string, AreaHandle>>(new Map());
+  // Places the areas' labels again, once what is being drawn now is on the map.
+  const queueAreaLabelsRef = useRef<(() => void) | null>(null);
   const controllerRef = useRef(controller);
   const onMapClickRef = useRef(onMapClick);
   const onMarkerClickRef = useRef(onMarkerClick);
@@ -852,6 +941,7 @@ export function RescueMapCanvas({
         leaflet: L,
         onMarkerClickRef,
       });
+      queueAreaLabelsRef.current?.();
     });
 
     let viewportSyncTimer: number | undefined;
@@ -891,19 +981,41 @@ export function RescueMapCanvas({
     const fitCellLabels = () =>
       fitLocationCellLabels(map, cellLabelsRef.current);
 
-    // An area grows and shrinks on screen with the zoom: whether its label fits inside it changes.
-    const placeAreaLabels = () => {
-      [closureAreaHandles, publicZoneHandles].forEach((handles) => {
-        handles.forEach((handle) => {
-          handle.labels.forEach((label) => placeAreaLabel(map, label));
-        });
+    // An area's label finds room among the cell counts and pins, which move with the zoom, so it
+    // waits for them: until the zoom's handlers have run, the clusters' among them, which were added
+    // after these; or until the render that redrew them is done. Asked for many times, it is placed
+    // once.
+    let areaLabelsQueued = false;
+    const queueAreaLabels = () => {
+      if (areaLabelsQueued) {
+        return;
+      }
+
+      areaLabelsQueued = true;
+      queueMicrotask(() => {
+        areaLabelsQueued = false;
+
+        if (mapRef.current !== map) {
+          return;
+        }
+
+        placeAreaLabelsOnMap(
+          map,
+          [
+            ...closureAreaHandles.values(),
+            ...publicZoneHandles.values(),
+          ].flatMap((handle) => handle.labels),
+        );
       });
     };
+
+    queueAreaLabelsRef.current = queueAreaLabels;
 
     map.on('moveend', scheduleViewportSync);
     map.on('zoomend', scheduleViewportSync);
     map.on('zoomend', fitCellLabels);
-    map.on('zoomend', placeAreaLabels);
+    map.on('zoomend', queueAreaLabels);
+    map.on('resize', queueAreaLabels);
     map.on('click', handleMapClick);
     map.on('movestart', releaseDraftPoint);
     map.on('zoomstart', releaseDraftPoint);
@@ -932,7 +1044,8 @@ export function RescueMapCanvas({
       map.off('moveend', scheduleViewportSync);
       map.off('zoomend', scheduleViewportSync);
       map.off('zoomend', fitCellLabels);
-      map.off('zoomend', placeAreaLabels);
+      map.off('zoomend', queueAreaLabels);
+      map.off('resize', queueAreaLabels);
       map.off('click', handleMapClick);
       map.off('movestart', releaseDraftPoint);
       map.off('zoomstart', releaseDraftPoint);
@@ -946,6 +1059,7 @@ export function RescueMapCanvas({
       cellLayerRef.current = null;
       cellLayerSignatureRef.current = null;
       cellLabelsRef.current = [];
+      queueAreaLabelsRef.current = null;
       previewMarkerRef.current = null;
       draftMarkerRef.current = null;
       draftBubbleRef.current = null;
@@ -1085,6 +1199,7 @@ export function RescueMapCanvas({
       leaflet: L,
       onMarkerClickRef,
     });
+    queueAreaLabelsRef.current?.();
   }, [controller.markers]);
 
   useEffect(() => {
@@ -1113,40 +1228,39 @@ export function RescueMapCanvas({
       selectedId: controller.selectedMarkerId,
       onCellClickRef: onLocationCellClickRef,
     });
+    queueAreaLabelsRef.current?.();
   }, [controller.markers, controller.selectedMarkerId]);
 
   useEffect(() => {
-    const map = mapRef.current;
     const overlayLayer = overlayLayerRef.current;
 
-    if (!map || !overlayLayer) {
+    if (!overlayLayer) {
       return;
     }
 
     syncAreaLayer({
-      map,
       overlayLayer,
       areas: controller.closureAreas,
       handles: closureAreaHandlesRef.current,
       style: () => HAZARD_ZONE_STYLE,
     });
+    queueAreaLabelsRef.current?.();
   }, [controller.closureAreas]);
 
   useEffect(() => {
-    const map = mapRef.current;
     const overlayLayer = overlayLayerRef.current;
 
-    if (!map || !overlayLayer) {
+    if (!overlayLayer) {
       return;
     }
 
     syncAreaLayer({
-      map,
       overlayLayer,
       areas: controller.publicZones,
       handles: publicZoneHandlesRef.current,
       style: getPublicZoneStyle,
     });
+    queueAreaLabelsRef.current?.();
   }, [controller.publicZones]);
 
   useEffect(() => {
