@@ -24,7 +24,7 @@ from app.services.bulk_import import MAX_ROWS
 from tests.conftest import auth_headers_for
 
 BASE = "/api/v1/bulk"
-HEADERS = ("name", "type", "latitude", "longitude", "county", "city")
+HEADERS = ("name", "type", "latitude", "longitude", "address")
 
 
 # A bare `create_access_token(sub=...)` no longer works here: feature 010 wants an `act`
@@ -34,8 +34,11 @@ HEADERS = ("name", "type", "latitude", "longitude", "county", "city")
 
 def _row(name: str) -> dict:
     return {
-        "name": name, "type": "shelter", "latitude": "25.0", "longitude": "121.5",
-        "county": "花蓮縣", "city": "光復鄉",
+        "name": name,
+        "type": "shelter",
+        "latitude": "25.0",
+        "longitude": "121.5",
+        "address": "花蓮縣光復鄉",
     }
 
 
@@ -69,10 +72,8 @@ async def _user_with(db, redis, name: str, *perms) -> dict:
                 permission = Permission(key=perm.value)
                 db.add(permission)
                 await db.flush()
-            db.add(RolePermissionAssign(
-                role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
-                              team_uuid=None, role_kind="platform"))
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform"))
     uuid = str(user.uuid)
     headers = await auth_headers_for(redis, uuid, role)
     await db.commit()
@@ -80,14 +81,23 @@ async def _user_with(db, redis, name: str, *perms) -> dict:
 
 
 async def _importer(db_session, redis) -> dict:
-    db_session.add(StationPropertyConfig(
-        station_type="shelter", property_name="capacity_total",
-        data_type="number", enum_options=None,
-    ))
+    db_session.add(
+        StationPropertyConfig(
+            station_type="shelter",
+            property_name="capacity_total",
+            data_type="number",
+            enum_options=None,
+        )
+    )
     return await _user_with(
-        db_session, redis, "HttpImporter",
-        Perm.STATION_EXPORT, Perm.STATION_IMPORT, Perm.STATION_ADD,
-        Perm.STATION_EDIT, Perm.STATION_CONTRIBUTE,
+        db_session,
+        redis,
+        "HttpImporter",
+        Perm.STATION_EXPORT,
+        Perm.STATION_IMPORT,
+        Perm.STATION_ADD,
+        Perm.STATION_EDIT,
+        Perm.STATION_CONTRIBUTE,
     )
 
 
@@ -114,9 +124,7 @@ async def test_export_can_stream_xlsx(client, db_session, redis):
     """The XLSX variant streams a real spreadsheet container."""
     headers = await _importer(db_session, redis)
 
-    resp = await client.get(
-        f"{BASE}/stations/export?station_type=shelter&format=xlsx", headers=headers
-    )
+    resp = await client.get(f"{BASE}/stations/export?station_type=shelter&format=xlsx", headers=headers)
 
     assert resp.status_code == 200
     assert "spreadsheetml" in resp.headers["content-type"]
@@ -128,9 +136,7 @@ async def test_an_unsupported_export_format_is_a_400_not_a_500(client, db_sessio
     """Asking for a format we do not ship is a user mistake, not a server fault."""
     headers = await _importer(db_session, redis)
 
-    resp = await client.get(
-        f"{BASE}/stations/export?station_type=shelter&format=json", headers=headers
-    )
+    resp = await client.get(f"{BASE}/stations/export?station_type=shelter&format=json", headers=headers)
 
     assert resp.status_code == 400
     assert "csv" in resp.json()["detail"]
@@ -149,9 +155,14 @@ async def test_export_without_the_capability_is_403(client, db_session, redis):
 @pytest.mark.asyncio
 async def test_ticket_export_is_wired_up_too(client, db_session, redis):
     """Both entity types are reachable, with their own filename."""
-    db_session.add(TaskPropertyConfig(
-        task_type="rescue", property_name="people_count", data_type="number", enum_options=None,
-    ))  # ADR-214: the type has to be one the project knows about
+    db_session.add(
+        TaskPropertyConfig(
+            task_type="rescue",
+            property_name="people_count",
+            data_type="number",
+            enum_options=None,
+        )
+    )  # ADR-214: the type has to be one the project knows about
     headers = await _user_with(db_session, redis, "TicketExporter", Perm.TICKET_EXPORT)
 
     resp = await client.get(f"{BASE}/tickets/export?task_type=rescue", headers=headers)
@@ -168,9 +179,7 @@ async def test_an_unknown_station_type_is_a_400(client, db_session, redis):
     """The type is interpolated into a response header, so it is checked before it gets there."""
     headers = await _importer(db_session, redis)
 
-    resp = await client.get(
-        f'{BASE}/stations/export?station_type=x"; filename="evil.html', headers=headers
-    )
+    resp = await client.get(f'{BASE}/stations/export?station_type=x"; filename="evil.html', headers=headers)
 
     assert resp.status_code == 400
     assert "filename" not in resp.headers.get("content-disposition", "")
@@ -179,15 +188,17 @@ async def test_an_unknown_station_type_is_a_400(client, db_session, redis):
 @pytest.mark.asyncio
 async def test_a_cjk_type_downloads_instead_of_500ing(client, db_session, redis):
     """Starlette encodes headers as latin-1; a raw CJK name there is a 500, not a download."""
-    db_session.add(StationPropertyConfig(
-        station_type="避難所", property_name="capacity_total",
-        data_type="number", enum_options=None,
-    ))
+    db_session.add(
+        StationPropertyConfig(
+            station_type="避難所",
+            property_name="capacity_total",
+            data_type="number",
+            enum_options=None,
+        )
+    )
     headers = await _importer(db_session, redis)
 
-    resp = await client.get(
-        f"{BASE}/stations/export?station_type=避難所", headers=headers
-    )
+    resp = await client.get(f"{BASE}/stations/export?station_type=避難所", headers=headers)
 
     assert resp.status_code == 200
     disposition = resp.headers["content-disposition"]
@@ -205,7 +216,8 @@ async def test_preview_returns_the_report_and_writes_nothing(client, db_session,
 
     resp = await client.post(
         f"{BASE}/stations/import/preview?station_type=shelter",
-        headers=headers, files=_upload([_row("光復國小")]),
+        headers=headers,
+        files=_upload([_row("光復國小")]),
     )
 
     body = resp.json()
@@ -221,7 +233,8 @@ async def test_an_unreadable_file_is_a_400_not_a_500(client, db_session, redis):
 
     resp = await client.post(
         f"{BASE}/stations/import/preview?station_type=shelter",
-        headers=headers, files={"file": ("notes.txt", io.BytesIO(b"hello"), "text/plain")},
+        headers=headers,
+        files={"file": ("notes.txt", io.BytesIO(b"hello"), "text/plain")},
     )
 
     assert resp.status_code == 400
@@ -234,7 +247,8 @@ async def test_a_file_over_the_row_cap_is_a_400(client, db_session, redis):
 
     resp = await client.post(
         f"{BASE}/stations/import/preview?station_type=shelter",
-        headers=headers, files=_upload([_row(f"站 {n}") for n in range(MAX_ROWS + 1)]),
+        headers=headers,
+        files=_upload([_row(f"站 {n}") for n in range(MAX_ROWS + 1)]),
     )
 
     assert resp.status_code == 400
@@ -248,7 +262,8 @@ async def test_preview_without_the_import_capability_is_403(client, db_session, 
 
     resp = await client.post(
         f"{BASE}/stations/import/preview?station_type=shelter",
-        headers=headers, files=_upload([_row("光復國小")]),
+        headers=headers,
+        files=_upload([_row("光復國小")]),
     )
 
     assert resp.status_code == 403
@@ -264,7 +279,8 @@ async def test_commit_writes_and_reports(client, db_session, redis):
 
     resp = await client.post(
         f"{BASE}/stations/import/commit?station_type=shelter",
-        headers=headers, files=_upload([_row("光復國小")]),
+        headers=headers,
+        files=_upload([_row("光復國小")]),
     )
 
     body = resp.json()
@@ -282,7 +298,8 @@ async def test_the_error_report_comes_back_inline_and_decodes(client, db_session
 
     resp = await client.post(
         f"{BASE}/stations/import/commit?station_type=shelter",
-        headers=headers, files=_upload([bad]),
+        headers=headers,
+        files=_upload([bad]),
     )
 
     report = resp.json()["error_report"]
@@ -294,10 +311,18 @@ async def test_the_error_report_comes_back_inline_and_decodes(client, db_session
 async def test_a_confirmed_mapping_renames_the_file_s_headers(client, db_session, redis):
     """The second call carries the mapping the user approved in preview (ADR-114)."""
     headers = await _importer(db_session, redis)
-    raw = write_csv(("站名", "type", "latitude", "longitude", "county", "city"), [
-        {"站名": "光復國小", "type": "shelter", "latitude": "25.0",
-         "longitude": "121.5", "county": "花蓮縣", "city": "光復鄉"},
-    ])
+    raw = write_csv(
+        ("站名", "type", "latitude", "longitude", "address"),
+        [
+            {
+                "站名": "光復國小",
+                "type": "shelter",
+                "latitude": "25.0",
+                "longitude": "121.5",
+                "address": "花蓮縣光復鄉",
+            },
+        ],
+    )
 
     resp = await client.post(
         f"{BASE}/stations/import/commit?station_type=shelter",
@@ -316,7 +341,8 @@ async def test_a_malformed_mapping_is_a_400(client, db_session, redis):
 
     resp = await client.post(
         f"{BASE}/stations/import/commit?station_type=shelter",
-        headers=headers, files=_upload([_row("光復國小")]),
+        headers=headers,
+        files=_upload([_row("光復國小")]),
         data={"mapping": "not json"},
     )
 
@@ -331,7 +357,8 @@ async def test_a_mapping_that_is_not_an_object_is_a_400(client, db_session, redi
 
     resp = await client.post(
         f"{BASE}/stations/import/commit?station_type=shelter",
-        headers=headers, files=_upload([_row("光復國小")]),
+        headers=headers,
+        files=_upload([_row("光復國小")]),
         data={"mapping": json.dumps(["name"])},
     )
 
@@ -342,24 +369,33 @@ async def test_a_mapping_that_is_not_an_object_is_a_400(client, db_session, redi
 async def test_ticket_preview_and_commit_are_wired_up(client, db_session, redis):
     """Both ticket endpoints work end to end over HTTP."""
     auth = await _user_with(
-        db_session, redis, "TicketImporter",
-        Perm.TICKET_IMPORT, Perm.TICKET_ADD, Perm.TICKET_EDIT,
+        db_session,
+        redis,
+        "TicketImporter",
+        Perm.TICKET_IMPORT,
+        Perm.TICKET_ADD,
+        Perm.TICKET_EDIT,
     )
-    columns = ("title", "contact_name", "contact_phone", "latitude", "longitude",
-               "task_type", "task_name")
-    raw = write_csv(columns, [{
-        "title": "需要飲用水", "contact_name": "王小明", "contact_phone": "0912345678",
-        "latitude": "25.0", "longitude": "121.5", "task_type": "rescue", "task_name": "送水",
-    }])
+    columns = ("title", "contact_name", "contact_phone", "latitude", "longitude", "task_type", "task_name")
+    raw = write_csv(
+        columns,
+        [
+            {
+                "title": "需要飲用水",
+                "contact_name": "王小明",
+                "contact_phone": "0912345678",
+                "latitude": "25.0",
+                "longitude": "121.5",
+                "task_type": "rescue",
+                "task_name": "送水",
+            }
+        ],
+    )
     files = {"file": ("tickets.csv", io.BytesIO(raw), "text/csv")}
 
-    preview = await client.post(
-        f"{BASE}/tickets/import/preview?task_type=rescue", headers=auth, files=files
-    )
+    preview = await client.post(f"{BASE}/tickets/import/preview?task_type=rescue", headers=auth, files=files)
     files = {"file": ("tickets.csv", io.BytesIO(raw), "text/csv")}
-    commit = await client.post(
-        f"{BASE}/tickets/import/commit?task_type=rescue", headers=auth, files=files
-    )
+    commit = await client.post(f"{BASE}/tickets/import/commit?task_type=rescue", headers=auth, files=files)
 
     assert preview.json()["to_create"] == 1
     assert commit.json()["created"] == 1

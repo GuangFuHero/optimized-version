@@ -1,0 +1,174 @@
+"""Taiwanese address parsing: one address line split into its 縣市 … 號 parts.
+
+Pure functions that never raise on content: whatever is not recognized stays in `full_address`.
+"""
+
+import re
+import unicodedata
+from dataclasses import asdict, dataclass
+
+# The 22 直轄市/縣市 as TGOS writes them. A typed 台 is accepted and stored as 臺.
+COUNTIES: tuple[str, ...] = (
+    "臺北市",
+    "新北市",
+    "桃園市",
+    "臺中市",
+    "臺南市",
+    "高雄市",
+    "基隆市",
+    "新竹市",
+    "嘉義市",
+    "新竹縣",
+    "苗栗縣",
+    "彰化縣",
+    "南投縣",
+    "雲林縣",
+    "嘉義縣",
+    "屏東縣",
+    "宜蘭縣",
+    "花蓮縣",
+    "臺東縣",
+    "澎湖縣",
+    "金門縣",
+    "連江縣",
+)
+_COUNTY_SPELLINGS = {spelling: c for c in COUNTIES for spelling in (c, c.replace("臺", "台"))}
+
+# The longest line stored, and so the longest one split: splitting costs the square of the length.
+MAX_ADDRESS_LENGTH = 255
+
+_WHITESPACE_RE = re.compile(r"\s+")
+_POSTCODE_RE = re.compile(r"^\d{3}(?:\d{2,3})?")
+# 鄉/鎮/市 ends the name only when no 區 or road suffix follows, so 前鎮區 stays whole and 新市路 is a road.
+_TOWN_RE = re.compile(r"^(.{1,4}?(?:區|[鄉鎮市](?!區|路|街|大道)))")
+# A 村/里 ends the village only when no other 村/里 follows (嘉里村, 大里里) and no road suffix does
+# either, since 中里路 and 中里北路 are roads.
+_VILLAGE_RE = re.compile(r"^(.{1,5}?[村里])(?![村里])(?![東西南北中]?(?:路|街|大道))")
+_NEIGHBORHOOD_RE = re.compile(r"^((?:\d+|[一二三四五六七八九十]+)鄰)")
+# A hyphen inside a door number reads as 之, the way TGOS writes it: 1-1號 → 1之1號, 1-2巷 → 1之2巷.
+_DOOR_HYPHEN_RE = re.compile(r"(?<=\d)-(?=\d+[巷弄號])|(?<=號)-(?=\d)")
+
+# The door: 段 巷 弄 (衖 衕, kept only in the line) 號, each optional. 巷 and 弄 need leading digits, so a
+# road named like 松羅南巷 stays the road.
+_DOOR_RE = re.compile(
+    r"(?P<section>(?:\d+|[一二三四五六七八九十]+)段)?"
+    r"(?P<lane>\d+(?:之\d+)?巷)?"
+    r"(?P<alley>\d+(?:之\d+)?弄)?"
+    r"(?:\d+衖)?(?:\d+衕)?"
+    r"(?P<no>\d+(?:[-之]\d+)?號(?:[-之]\d+)?)?"
+)
+# What may follow the door: 棟/座, 樓/層 and 室, each optional and optionally bracketed.
+_UNIT_RE = re.compile(
+    r"[-之]?"
+    r"(?:\(?(?P<building>[0-9A-Za-z甲乙丙丁戊]+[棟座])\)?[-之]?)?"
+    r"(?:\(?(?P<floor>地下室|(?:地下)?(?:[Bb]?\d+|[一二三四五六七八九十]+)(?:樓|層|[Ff])(?:[-之][0-9A-Za-z]+(?![0-9A-Za-z]*室))?|[Bb]\d+)\)?)?"
+    r"(?:[-之]?\(?(?P<room>[0-9A-Za-z]{1,8})號?室\)?)?"
+    r"(?:\(?(?P<building_after>[0-9A-Za-z甲乙丙丁戊]+[棟座])\)?)?"
+)
+_TAIL_RE = re.compile(_DOOR_RE.pattern + "(?P<unit>" + _UNIT_RE.pattern + ")")
+_DOOR_PARTS = ("section", "lane", "alley", "no")
+_UNIT_PARTS = ("building_section", "floor", "room")
+
+
+@dataclass(frozen=True)
+class AddressParts:
+    """One parsed address. Every numbered part keeps its unit: 3鄰, 一段, 469巷, 1弄, 19號."""
+
+    full_address: str | None = None
+    county: str | None = None
+    town: str | None = None
+    village: str | None = None
+    neighborhood: str | None = None
+    road: str | None = None
+    section: str | None = None
+    lane: str | None = None
+    alley: str | None = None
+    no: str | None = None
+    building_section: str | None = None
+    floor: str | None = None
+    room: str | None = None
+
+    def as_dict(self) -> dict[str, str | None]:
+        """The parts as a dict whose keys are `secondary_locations` columns."""
+        return asdict(self)
+
+
+def fold(value: str | None) -> str | None:
+    """NFKC (full-width → ASCII) with all whitespace removed; None for blank input."""
+    if value is None:
+        return None
+    folded = _WHITESPACE_RE.sub("", unicodedata.normalize("NFKC", value))
+    return folded or None
+
+
+def _take(pattern: re.Pattern, text: str) -> tuple[str | None, str]:
+    """Match `pattern` at the start of `text`; return (match, rest) or (None, text)."""
+    m = pattern.match(text)
+    return (m.group(1), text[m.end() :]) if m else (None, text)
+
+
+def _split_tail(rest: str) -> tuple[int, dict[str, str | None], int | None]:
+    """Split `rest` where the door starts, returning (offset, parts, offset of a recognized unit or None).
+
+    The earliest offset wins, so the road stays short; text after a 號 that is not a unit stays in the line.
+    """
+    for i in range(len(rest)):
+        m = _TAIL_RE.fullmatch(rest, i)
+        if m:
+            units = {
+                "building_section": m.group("building") or m.group("building_after"),
+                "floor": m.group("floor"),
+                "room": m.group("room"),
+            }
+            parts = {k: m.group(k) for k in _DOOR_PARTS} | units
+            if any(parts.values()):
+                return i, parts, m.start("unit") if any(units.values()) else None
+        door = _DOOR_RE.match(rest, i)
+        if door.group("no"):
+            return i, {k: door.group(k) for k in _DOOR_PARTS} | dict.fromkeys(_UNIT_PARTS), None
+    return len(rest), dict.fromkeys((*_DOOR_PARTS, *_UNIT_PARTS)), None
+
+
+def parse_tw_address(text: str | None) -> AddressParts:
+    """Split an address line into its parts; whatever is not recognized stays in `full_address`.
+
+    A 棟/樓/室 tail comes back as `building_section`/`floor`/`room` and is cut from `full_address`, so
+    the line holds the door alone, as TGOS writes it.
+    """
+    line = fold(text)
+    if not line:
+        return AddressParts()
+    if len(line) > MAX_ADDRESS_LENGTH:
+        return AddressParts(full_address=line)
+    line = _DOOR_HYPHEN_RE.sub("之", line)
+    postcode = _POSTCODE_RE.match(line)
+    # Only a number in front of a county is a postcode; on its own it is the door, as in 100號.
+    if postcode and line[postcode.end() :].startswith(tuple(_COUNTY_SPELLINGS)):
+        line = line[postcode.end() :]
+
+    county = next((s for s in _COUNTY_SPELLINGS if line.startswith(s)), None)
+    rest = line[len(county) :] if county else line
+    town = village = neighborhood = None
+    if county:
+        town, rest = _take(_TOWN_RE, rest)
+    if town:
+        village, rest = _take(_VILLAGE_RE, rest)
+        neighborhood, rest = _take(_NEIGHBORHOOD_RE, rest)
+
+    offset, tail, unit_at = _split_tail(rest)
+    if unit_at is not None:
+        cut = len(line) - len(rest) + unit_at
+        line = line[:cut]
+    parts = {
+        "county": _COUNTY_SPELLINGS[county] if county else None,
+        "town": town,
+        "village": village,
+        "neighborhood": neighborhood,
+        **tail,
+    }
+    if not any(parts.values()):
+        # Nothing locating was found, so none of it is a road either: keep the text as typed.
+        return AddressParts(full_address=line)
+    if county:
+        line = parts["county"] + line[len(county) :]
+    return AddressParts(full_address=line or None, road=rest[:offset] or None, **parts)

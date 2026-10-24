@@ -100,11 +100,29 @@ class SecondaryLocationType:
         description="UUID of the parent station or ticket this location belongs to"
     )
     location_type: str = strawberry.field(description="Type of secondary location: 'address' or 'pole'")
-    county: str | None = None
-    city: str | None = None
-    lane: str | None = None
-    alley: str | None = None
-    no: str | None = None
+    full_address: str | None = strawberry.field(
+        default=None,
+        description=(
+            "The whole address line, without floor or room: official when TGOS confirmed it, "
+            "as typed otherwise"
+        ),
+    )
+    county: str | None = strawberry.field(default=None, description="縣市, e.g. '花蓮縣'")
+    town: str | None = strawberry.field(default=None, description="鄉鎮市區, e.g. '光復鄉'")
+    village: str | None = strawberry.field(default=None, description="村里, e.g. '大進村'")
+    neighborhood: str | None = strawberry.field(default=None, description="鄰, e.g. '3鄰'")
+    road: str | None = strawberry.field(default=None, description="路／街／大道, e.g. '糖廠街'")
+    section: str | None = strawberry.field(default=None, description="段, e.g. '一段'")
+    lane: str | None = strawberry.field(default=None, description="巷, e.g. '469巷'")
+    alley: str | None = strawberry.field(default=None, description="弄, e.g. '1弄'")
+    no: str | None = strawberry.field(default=None, description="號, e.g. '19號' or '19之1號'")
+    normalization_status: str | None = strawberry.field(
+        default=None,
+        description=(
+            "'verified' (TGOS confirmed the address near the pin), 'pin_mismatch' (confirmed, but "
+            "over 500 m from the pin) or 'unverified'; null when there is no address"
+        ),
+    )
     building_section: str | None = strawberry.field(
         default=None, description="樓棟／區域, e.g. 'A棟', '東翼'"
     )
@@ -144,11 +162,17 @@ class SecondaryLocationType:
             uuid=m.uuid,
             geometry_uuid=m.geometry_uuid,
             location_type=m.location_type,
+            full_address=m.full_address,
             county=m.county,
-            city=m.city,
+            town=m.town,
+            village=m.village,
+            neighborhood=m.neighborhood,
+            road=m.road,
+            section=m.section,
             lane=m.lane,
             alley=m.alley,
             no=m.no,
+            normalization_status=m.normalization_status,
             building_section=m.building_section,
             floor=m.floor,
             room=m.room,
@@ -170,11 +194,21 @@ class SecondaryLocationInput:
         default="address",
         description="Type of secondary location: 'address' (default) or 'pole'",
     )
-    county: str | None = None
-    city: str | None = None
-    lane: str | None = None
-    alley: str | None = None
-    no: str | None = None
+    full_address: str | None = strawberry.field(
+        default=None,
+        description=(
+            "The address line, ideally exactly as normalizeAddress or reverseGeocode returned it. "
+            "The backend splits it into county … no; a 樓/室 at its end fills floor and room when "
+            "those are empty"
+        ),
+    )
+    address_token: str | None = strawberry.field(
+        default=None,
+        description=(
+            "The addressToken from the same lookup. With it, and fullAddress unchanged, the address "
+            "is stored as verified; without it, as unverified"
+        ),
+    )
     building_section: str | None = strawberry.field(
         default=None, description="樓棟／區域, e.g. 'A棟'; leave empty if unknown"
     )
@@ -206,11 +240,8 @@ def secondary_location_to_dict(sl: SecondaryLocationInput) -> dict:
     """
     return {
         "location_type": sl.location_type,
-        "county": sl.county,
-        "city": sl.city,
-        "lane": sl.lane,
-        "alley": sl.alley,
-        "no": sl.no,
+        "full_address": sl.full_address,
+        "address_token": sl.address_token,
         "building_section": sl.building_section,
         "floor": sl.floor,
         "room": sl.room,

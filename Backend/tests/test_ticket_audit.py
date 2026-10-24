@@ -230,7 +230,7 @@ async def _add_address(db, actor, ticket_uuid, need_uuid):
         actor=actor,
         uuid=ticket_uuid,
         changes={},
-        secondary_location={"location_type": "address", "county": "花蓮縣", "no": "45"},
+        secondary_location={"location_type": "address", "full_address": "花蓮縣中山路45號"},
     )
 
 
@@ -398,7 +398,7 @@ async def test_saving_an_address_member_blank_is_no_change(db):
     ticket = await _ticket(db)
     ticket_uuid = str(ticket.uuid)
     operator = await _operator(db)
-    address = {"location_type": "address", "county": "花蓮縣"}
+    address = {"location_type": "address", "full_address": "花蓮縣"}
     await ticket_service.update_ticket(
         db, actor=operator, uuid=ticket_uuid, changes={}, secondary_location=address
     )
@@ -406,7 +406,11 @@ async def test_saving_an_address_member_blank_is_no_change(db):
     await db.refresh(operator)  # the test session expires everything on commit
 
     await ticket_service.update_ticket(
-        db, actor=operator, uuid=ticket_uuid, changes={}, secondary_location={**address, "lane": " "}
+        db,
+        actor=operator,
+        uuid=ticket_uuid,
+        changes={},
+        secondary_location={**address, "building_section": " "},
     )
 
     assert (await _state(db, ticket_uuid)).audit_status == "audited"

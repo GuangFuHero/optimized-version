@@ -20,10 +20,7 @@ function row(
       contactName: '王小姐',
       contactPhone: '0912-345-678',
       secondaryLocation: {
-        county: '花蓮縣',
-        city: '光復鄉',
-        lane: '佛祖街',
-        no: '89號',
+        fullAddress: '花蓮縣光復鄉佛祖街89號',
         floor: '1F',
       },
       ...overrides,

@@ -65,7 +65,7 @@ gcloud secrets versions access latest --secret=staging-backend-postgres-password
 | Data | Named volumes `backend_pgdata` / `backend_redisdata` — **survive all deploys** |
 | Published ports | Backend `:8000`; Postgres on **loopback only** (`127.0.0.1:5432`, for SSH-tunnel inspection); Redis internal-only |
 | GCP firewall | Only 22/SSH open. **8000 is NOT open** — access via SSH tunnel until a firewall rule (or Caddy/HTTPS) is added for the frontend |
-| External IP | Static `34.80.0.121` (reserved as `wanguard-prod-external-ip`). 簡訊王 only accepts API calls from this registered IP — releasing it breaks SMS (`statuscode=k`). Still connect via `gcloud compute ssh` |
+| External IP | Static `34.80.0.121` (reserved as `wanguard-prod-external-ip`). 簡訊王 and TGOS only accept API calls from this registered IP — releasing it breaks SMS (`statuscode=k`) and address lookups. Still connect via `gcloud compute ssh` |
 | Secrets | GCP Secret Manager: `staging-backend-{jwt-signing-key,postgres-password,smtp2go-api-key,kotsms-username,kotsms-password,google-client-secret,line-channel-secret}`, `staging-frontend-{nextauth-secret,google-client-secret,line-client-secret}`, `staging-cloudflared-tunnel-token`. The two `staging-frontend-*` OAuth secrets hold the same values as the `staging-backend-*` pair and are deleted once the frontend no longer uses NextAuth (see [Sign-in](#sign-in-cookie-session-and-oauth)) |
 | SMS | 簡訊王 (KotSMS), `SMS_PROVIDER=kotsms` written by `gen_env`. Messages are signed 島嶼守望, the 實名制 identity the account is approved for; a mismatch is dropped by the carrier while the API still answers `statuscode=1`. **Takes two deploys to switch on**: a running `deploy.sh` keeps the `gen_env` it parsed before checkout, so the first deploy that ships the KotSMS lines still writes the old `.env` (SMS stays on `console`); the next deploy writes them |
 | Backups | `gs://wanguard-250923-db-backups` |
@@ -321,6 +321,36 @@ Still on the humans (migration-writing discipline):
 Only rows with the fixed mock UUID prefixes (users `c…`, scenario-A stations `a…`, scenario-B `b…`,
 tickets `d…`, tasks `e…`, assignments `f…`): it deletes those and re-inserts them (idempotent).
 Real (non-prefixed) data is untouched. Without the flag, the seed step is skipped entirely.
+
+---
+
+## TGOS address keys (`.env.tgos`)
+
+The backend looks addresses up in two TGOS services, each with its own APPID and API KEY. These four
+values live **only** in `Backend/.env.tgos` on the VM: not in Secret Manager, GitHub, the repo or this
+doc. `deploy.sh` rewrites `.env` on every deploy but never touches `.env.tgos`, and compose hands it to
+the `backend` container alone.
+
+| Variable | Value | TGOS service |
+|---|---|---|
+| `TGOS_ADDR_APP_ID` / `TGOS_ADDR_API_KEY` | that service's APPID / API KEY | 全國門牌位置比對服務 |
+| `TGOS_GEO_APP_ID` / `TGOS_GEO_API_KEY` | that service's APPID / API KEY | 坐標回傳門牌服務 |
+
+One-time setup, then after any key change:
+
+```bash
+cd /opt/wanguard/Backend && umask 177 && nano .env.tgos   # the four KEY=value lines, values unquoted
+ls -l .env.tgos                                           # expect -rw-------
+./scripts/deploy.sh                                       # recreates the backend with them
+docker compose -f docker-compose.staging.yml exec backend python -c \
+  "from app.core.config import settings as s; print(all([s.TGOS_ADDR_APP_ID, s.TGOS_ADDR_API_KEY, s.TGOS_GEO_APP_ID, s.TGOS_GEO_API_KEY]))"
+```
+
+The last line prints `True` without showing any value. Without the file the deploy still succeeds (the
+preflight prints a warning) and every lookup answers `unavailable`; saving an address still works.
+
+TGOS accepts the keys from the registered IP above only. A new IP needs TGOS's IP change form, stamped
+with the organisation's seal (用印), and then new keys.
 
 ---
 
