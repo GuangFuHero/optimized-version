@@ -166,6 +166,9 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 8：Docker 從零完整驗證
 
+- ✅ 2026-10-24：`38ee6e232` 從零 build；容器內 2774 passed + 14 error（`test_seed_mock_scenarios` 的子程序少 `PYTHONPATH=/app`，加上後 14 passed），等於 2788；
+  真實 HTTP 流程 403／409（版本過期）／422（人數）／200／409×3 都符合預期，資料庫、接單、通知、降級防護都通過。報告見 `verification.md`。
+
 - [ ] 照 docker-verify-isolated-stack 的作法：`git archive` 該 commit、`--no-cache` build、全新 DB、migration、seed、容器內跑全套件。
 - [ ] 真 HTTP 走一遍：
   1. 使用者建 A（human 2、water 1）；另一位使用者建 B（human 5、water 5、food 3），照樣建立。
