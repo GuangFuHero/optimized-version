@@ -231,7 +231,7 @@ async def test_draft_stays_private_until_published_then_freezes(client, redis, b
     uuid = gen["data"]["generateBriefing"]["uuid"]
 
     assert _row(await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"}), uuid) is None
-    assert (await _post(client, GET_BRIEFING, {"uuid": uuid})).get("errors")
+    assert (await _post(client, GET_BRIEFING, {"uuid": uuid}))["data"]["briefing"] is None
     edited = await _post(client, UPDATE_CONTENT, {"uuid": uuid, "content": "v1 edited"}, editor_token)
     assert "errors" not in edited, edited
 
@@ -312,7 +312,9 @@ async def test_publish_replaces_take_down_empties_and_a_copy_reopens(
     down = await _post(client, TAKE_DOWN, {"uuid": v2}, admin)
     assert down["data"]["takeDownBriefing"]["status"] == "INACTIVE"
     assert _row(await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"}), v2) is None
-    assert (await _post(client, GET_BRIEFING, {"uuid": v2})).get("errors")
+    for caller in (None, user):
+        assert (await _post(client, GET_BRIEFING, {"uuid": v2}, caller))["data"]["briefing"] is None
+    assert (await _post(client, GET_BRIEFING, {"uuid": v2}, admin))["data"]["briefing"]["uuid"] == v2
     again = await _post(client, TAKE_DOWN, {"uuid": v2}, admin)
     assert "Only a published briefing can be taken down" in str(again.get("errors"))
     edited = await _post(client, UPDATE_CONTENT, {"uuid": v2, "content": "v2 edited"}, admin)
@@ -324,3 +326,5 @@ async def test_publish_replaces_take_down_empties_and_a_copy_reopens(
     assert draft["uuid"] != v2 and (draft["status"], draft["content"]) == ("DRAFT", "v2")
     rows = await _post(client, LIST_BY_STATUS, {"status": "ALL"}, admin)
     assert _row(rows, v1)["status"] == _row(rows, v2)["status"] == "INACTIVE"
+    from_draft = await _post(client, COPY, {"source": draft["uuid"]}, admin)
+    assert "Only a published or inactive briefing can be copied" in str(from_draft.get("errors"))

@@ -75,10 +75,10 @@ class BriefingRepository(GenericRepository[Briefing]):
         tags: list | None = None,
         state: str | None = None,
     ) -> Briefing:
-        """Create a draft briefing, seeded from a template, copied from another briefing, or empty.
+        """Create a draft briefing, seeded from a template, copied from a published or inactive one, or empty.
 
-        Omitted ``content``/``tags``/``state`` come from the seed, a copy keeps its template link too, and
-        a seed that is missing, soft-deleted or given alongside the other raises ValueError.
+        Omitted ``content``/``tags``/``state`` come from the seed and a copy keeps its template link; a seed
+        that is missing, soft-deleted, a draft, or given alongside the other raises ValueError.
         """
         if template_uuid is not None and source_uuid is not None:
             raise ValueError("Give a template or a source briefing, not both")
@@ -91,6 +91,8 @@ class BriefingRepository(GenericRepository[Briefing]):
             seed = await self.get_by_uuid_active(db, source_uuid)
             if seed is None:
                 raise ValueError("Briefing not found")
+            if seed.status == "draft":
+                raise ValueError("Only a published or inactive briefing can be copied")
             template_uuid = seed.template_uuid
 
         if content is None:

@@ -5,6 +5,8 @@ from uuid import UUID
 import strawberry
 
 from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope
+from app.core.security import resolve_scope
 from app.graphql.briefings.types import (
     BriefingState,
     BriefingStatusFilter,
@@ -16,6 +18,15 @@ from app.repositories.briefings_repository import (
     briefing_repository,
     briefing_template_repository,
 )
+
+
+async def _can_edit(info: strawberry.types.Info) -> bool:
+    """Whether the caller holds pre_departure.edit; never raises."""
+    user = info.context["user"]
+    if user is None:
+        return False
+    scope = await resolve_scope(user, Perm.PREDEP_EDIT, info.context["db"], cache=info.context["_rbac_cache"])
+    return scope != Scope.NONE
 
 
 @strawberry.type
@@ -75,9 +86,12 @@ class BriefingQuery:
 
     @strawberry.field
     async def briefing(self, info: strawberry.types.Info, uuid: UUID) -> BriefingType | None:
-        """Fetch a single non-deleted briefing by UUID; public while live, else pre_departure.edit."""
+        """Fetch a single non-deleted briefing by UUID; one that isn't live needs pre_departure.edit.
+
+        Without it the result is null rather than an error, so a hidden briefing looks like a missing one.
+        """
         await check_permission(info, Perm.PREDEP_VIEW)
         m = await briefing_repository.get_by_uuid_active(info.context["db"], uuid)
-        if m and m.status != "published":
-            await check_permission(info, Perm.PREDEP_EDIT)
-        return BriefingType.from_model(m) if m else None
+        if m is None or (m.status != "published" and not await _can_edit(info)):
+            return None
+        return BriefingType.from_model(m)

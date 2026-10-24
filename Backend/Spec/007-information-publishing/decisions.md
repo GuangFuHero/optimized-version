@@ -400,8 +400,8 @@ operation 選的 `order`，在同一個 repo、同一個 PR 就改得完。
 - **`status` 欄位**：`briefings.status` 是 `draft`／`published`／`inactive`（`String(20)` + CHECK，同
   `role_requests.status`）。`published_at` 留著記發布時間、清單也用它排序，另一條 CHECK
   `(status = 'draft') = (published_at IS NULL)` 讓兩者不會不一致。`inactive` 和公告同一個字：上線過、現在不在
-  前台。不另開 `taken_down_at`／`taken_down_by`：已發布的列唯讀，之後唯一的改動就是下架，所以 `inactive` 列的
-  `updated_at`／`updated_by` 就是誰、何時下架。
+  前台。不另開 `taken_down_at`／`taken_down_by`：已發布的列唯讀，之後唯一的改動就是不再上線，所以 `inactive` 列的
+  `updated_at`／`updated_by` 就是誰、何時讓它不再上線（手動下架，或發布了取代它的版本）。
 - **發布就取代**：`publishBriefing` 在同一個 transaction 裡，先把同一個 `state` 上線中的列改成 `inactive`
   （`updated_by` 記成發布者）並 flush，再讓這列上線。先拿 advisory lock（`briefings.live`），同時發布的兩個人會
   排隊，後發的取代先發的。資料層防線是 partial unique index `uq_briefings_live_per_state`
@@ -409,11 +409,15 @@ operation 選的 `order`，在同一個 repo、同一個 PR 就改得完。
 - **下架**：`takeDownBriefing(uuid)` 把上線中的列改成 `inactive`，權限與公告下線一樣要 `pre_departure.edit`。
   不是上線中的列會回 `Only a published briefing can be taken down`。
 - **再編輯**：`generateBriefing(input: {sourceBriefingUuid})` 把那一版的 `content`、`tags`、`state` 與
-  `templateUuid` 複製成新草稿，原本那列不動。輸入另外給的 `content`／`tags`／`state` 仍然覆蓋複製來的值；
-  `templateUuid` 和 `sourceBriefingUuid` 不能同時給。讀得到任何狀態的 briefing 只要 `pre_departure.edit`，所以
-  複製不像 template 另外要 `.publish`。
+  `templateUuid` 複製成新草稿，原本那列不動。來源只能是 `published` 或 `inactive`：草稿本來就能直接改，
+  拿來複製會回 `Only a published or inactive briefing can be copied`。輸入另外給的 `content`／`tags`／`state`
+  仍然覆蓋複製來的值；`templateUuid` 和 `sourceBriefingUuid` 不能同時給。讀得到任何狀態的 briefing 只要
+  `pre_departure.edit`，所以複製不像 template 另外要 `.publish`。
 - **前台**：`briefings(status: PUBLISHED)` 與 `briefing(uuid)` 只公開上線中的列；`inactive` 和草稿一樣要
-  `pre_departure.edit`。`status: ALL` 列出三種。
+  `pre_departure.edit`。`status: ALL` 列出三種。沒有 `.edit` 的人用 `briefing(uuid)` 讀草稿或 `inactive` 的列
+  會拿到 `null`，跟 UUID 不存在一樣，不再回權限錯誤：拿著舊連結的人看到的是「已經沒有了」，也看不出那列還在。
+- **錯誤訊息**：發布或修改非草稿的列，改成 `Only a draft can be published`／`Only a draft can be edited`，
+  取代原本的 `Briefing is already published`／`Published briefings are read-only`，`inactive` 的列讀起來才對。
 - **migration `da152a6a9d7c`**：已發布的列先全部標成 `inactive`，再把每個 `state` 最新、未軟刪的那列標回
   `published`，結果等於依發布時間一版一版重新發布；草稿維持 `draft`。downgrade 先軟刪 `inactive` 的列，因為
   舊 schema 會把每一列已發布的 briefing 都公開列出，被下架的內容會回到前台。

@@ -225,6 +225,8 @@ async def test_generate_from_a_source_briefing_copies_it_and_leaves_it_alone(db)
 
     with pytest.raises(ValueError, match="not both"):
         await briefings.generate_briefing(db, created_by=uid, template_uuid=tpl_uuid, source_uuid=src_uuid)
+    with pytest.raises(ValueError, match="Only a published or inactive briefing can be copied"):
+        await briefings.generate_briefing(db, created_by=uid, source_uuid=copy_uuid)
     await briefings.soft_delete(db, db_obj=await briefings.get_by_uuid_active(db, src_uuid))
     with pytest.raises(ValueError, match="Briefing not found"):
         await briefings.generate_briefing(db, created_by=uid, source_uuid=src_uuid)

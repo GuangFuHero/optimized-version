@@ -233,8 +233,9 @@ briefing_templates                    briefings
   `pre_departure.delete`. Deletes are soft (`delete_at`).
 - **BR-004**: `generateBriefing` copies the template's `content`, `tags` and `state` into a new
   draft briefing. A `templateUuid` that is unknown or soft-deleted raises `Briefing template not
-  found` rather than producing an empty notice. `sourceBriefingUuid` instead copies another
-  briefing's `content`, `tags`, `state` and `templateUuid`; the two can't be given together.
+  found` rather than producing an empty notice. `sourceBriefingUuid` instead copies a published or
+  inactive briefing's `content`, `tags`, `state` and `templateUuid`; a draft is edited directly,
+  so it can't be a source, and the two seeds can't be given together.
 - **BR-005**: `template_uuid` is nullable, so an ad-hoc briefing needs no template, and soft-
   deleting a template leaves the briefings generated from it readable.
 - **BR-006**: Each briefing row is one version, and `status` walks it `draft → published →
@@ -252,9 +253,10 @@ briefing_templates                    briefings
   down with no replacement. An inactive row stays read-only, so editing it means copying it into
   a new draft (BR-004). Deleting the live row leaves the state with nothing public.
 - **BR-007**: `briefings(status:)` defaults to `PUBLISHED`, which lists each state's live row and
-  is public; `DRAFT` and `ALL` (drafts, live and inactive rows) need `pre_departure.edit`, as does
-  reading a row that isn't live by UUID. Drafts list first (most recently edited first), then the
-  rest newest published first.
+  is public; `DRAFT` and `ALL` (drafts, live and inactive rows) need `pre_departure.edit`.
+  `briefing(uuid)` on a row that isn't live returns null without `pre_departure.edit`, the same as a
+  missing UUID, so it doesn't reveal that the row exists. Drafts list first (most recently edited
+  first), then the rest newest published first.
 - **BR-008**: `creator` / `updater` / `publisher` give `{ uuid, name }` (nickname only) to callers
   holding `pre_departure.edit`, and null to everyone else.
 
