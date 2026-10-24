@@ -39,8 +39,6 @@ type Story = StoryObj<typeof meta>;
 
 export const Primary: Story = {};
 
-export const Sectioned: Story = { args: { variant: 'sectioned' } };
-
 export const Danger: Story = {
   args: { title: '刪除整張單？', confirmLabel: '刪除', confirmTone: 'danger' },
 };

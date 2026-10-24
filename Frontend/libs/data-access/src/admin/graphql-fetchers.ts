@@ -675,6 +675,19 @@ export function usePublishBriefing() {
   });
 }
 
+export function useTakeDownBriefing() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminTakeDownBriefingMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminTakeDownBriefingDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
+  });
+}
+
 export function useDeleteBriefing() {
   const queryClient = useQueryClient();
   return useMutation({

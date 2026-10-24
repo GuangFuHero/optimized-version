@@ -1,7 +1,14 @@
 'use client';
 
 import { Box, CircularProgress, Stack, Tab, Typography } from '@mui/material';
-import { BookOpen, PencilLine, Plus, Send, ShieldAlert } from 'lucide-react';
+import {
+  BookOpen,
+  EyeOff,
+  PencilLine,
+  Plus,
+  Send,
+  ShieldAlert,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -35,7 +42,7 @@ import { BriefingHistory } from './briefing-history';
 import { BriefingPreview, BriefingStamp } from './briefing-preview';
 import { BriefingPublicationNotice } from './briefing-publication-notice';
 import { BriefingVersions } from './briefing-versions';
-import { PublishBriefingDialog } from './publish-briefing-dialog';
+import { TakeDownBriefingConfirm } from './take-down-briefing-confirm';
 import { TemplatePicker } from './template-picker';
 
 const { color, typography } = designTokens;
@@ -56,7 +63,7 @@ function BriefingsContent({
   const [editing, setEditing] = useState<Briefing | null>(null);
   const [pickingTemplate, setPickingTemplate] = useState(false);
   const [showDraft, setShowDraft] = useState(false);
-  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [confirm, setConfirm] = useState<'publish' | 'takeDown' | null>(null);
   const [tab, setTab] = useState<'content' | 'history' | 'versions'>('content');
   const templates = useBriefingTemplates(
     { state: BriefingState.Briefing },
@@ -67,33 +74,39 @@ function BriefingsContent({
     (item) => item.status === BriefingStatus.Draft,
   );
   const versions = briefings.filter(
-    (item) => item.status === BriefingStatus.Published,
+    (item) => item.status !== BriefingStatus.Draft,
   );
   const draft = drafts[0];
-  const published = versions[0];
+  const published = versions.find(
+    (item) => item.status === BriefingStatus.Published,
+  );
   const editor = drafts.find((item) => item.uuid === editing?.uuid);
   const pending = create.isPending || publish.isPending;
   const hasDraftChanges =
     draft && (!published || draft.content !== published.content);
-  const viewing = showDraft && hasDraftChanges ? draft : (published ?? draft);
+  const viewing =
+    showDraft && hasDraftChanges ? draft : (published ?? draft ?? versions[0]);
 
   function startDraft(template?: BriefingTemplate) {
     if (pending || query.isError) return;
+    const source = versions[0];
     create.mutate(
       {
-        input: {
-          content: published?.content ?? template?.content ?? '',
-          state: BriefingState.Briefing,
-          tags: published?.tags ?? template?.tags ?? [],
-          templateUuid: published ? null : (template?.uuid ?? null),
-        },
+        input: source
+          ? { sourceBriefingUuid: source.uuid }
+          : {
+              content: template?.content ?? '',
+              state: BriefingState.Briefing,
+              tags: template?.tags ?? [],
+              templateUuid: template?.uuid ?? null,
+            },
       },
       {
         onSuccess: ({ generateBriefing }) => {
           setPickingTemplate(false);
           setEditing(generateBriefing);
           create.reset();
-          if (!published) toast.success('草稿已建立，確認內容後再發布到前台。');
+          if (!source) toast.success('草稿已建立，確認內容後再發布到前台。');
         },
       },
     );
@@ -105,37 +118,6 @@ function BriefingsContent({
         aria-label="正在載入行前資訊"
         sx={{ alignSelf: 'center', my: 6 }}
       />
-    );
-  }
-
-  if (editing) {
-    return (
-      <Stack sx={{ gap: 2 }}>
-        <BriefingPublicationNotice
-          published={published}
-          versionCount={versions.length}
-          hasDraftChanges={Boolean(hasDraftChanges)}
-        />
-        <BriefingEditor
-          key={editing.uuid}
-          draft={editor ?? editing}
-          available={Boolean(editor)}
-          onRefresh={async () => {
-            const result = await query.refetch({ throwOnError: true });
-            return result.data?.briefings.find(
-              (item) => item.uuid === editing.uuid,
-            );
-          }}
-          published={published}
-          versionCount={versions.length}
-          canPublish={canPublish}
-          canDiscard={canDiscard}
-          onClose={() => {
-            setEditing(null);
-            setShowDraft(false);
-          }}
-        />
-      </Stack>
     );
   }
 
@@ -159,7 +141,7 @@ function BriefingsContent({
         versionCount={versions.length}
         hasDraftChanges={Boolean(hasDraftChanges)}
       />
-      {draft || published ? (
+      {viewing || editing ? (
         <Tabs
           value={tab}
           onChange={(_, value: typeof tab) => {
@@ -192,7 +174,35 @@ function BriefingsContent({
       {create.isError ? (
         <Callout tone="danger">無法建立草稿。{create.error.message}</Callout>
       ) : null}
-      {tab === 'history' && (draft || published) ? (
+      {editing ? (
+        <Box
+          role="tabpanel"
+          id="briefings-content-panel"
+          aria-labelledby="briefings-content-tab"
+          hidden={tab !== 'content'}
+        >
+          <BriefingEditor
+            key={editing.uuid}
+            draft={editor ?? editing}
+            available={Boolean(editor)}
+            onRefresh={async () => {
+              const result = await query.refetch({ throwOnError: true });
+              return result.data?.briefings.find(
+                (item) => item.uuid === editing.uuid,
+              );
+            }}
+            published={published}
+            versionCount={versions.length}
+            canPublish={canPublish}
+            canDiscard={canDiscard}
+            onClose={() => {
+              setEditing(null);
+              setShowDraft(false);
+            }}
+          />
+        </Box>
+      ) : null}
+      {tab === 'history' && (viewing || editing) ? (
         <Box
           role="tabpanel"
           id="briefings-history-panel"
@@ -200,7 +210,7 @@ function BriefingsContent({
         >
           <BriefingHistory briefings={briefings} versions={versions} />
         </Box>
-      ) : tab === 'versions' && (draft || published) ? (
+      ) : tab === 'versions' && (viewing || editing) ? (
         <Box
           role="tabpanel"
           id="briefings-versions-panel"
@@ -208,7 +218,7 @@ function BriefingsContent({
         >
           <BriefingVersions versions={versions} />
         </Box>
-      ) : viewing ? (
+      ) : editing ? null : viewing ? (
         <Stack
           role="tabpanel"
           id="briefings-content-panel"
@@ -225,7 +235,9 @@ function BriefingsContent({
               }
             >
               {!published
-                ? '草稿'
+                ? draft
+                  ? '草稿'
+                  : '已下架'
                 : hasDraftChanges
                   ? '對外中 · 有未發布的修改'
                   : '對外中'}
@@ -242,6 +254,8 @@ function BriefingsContent({
                   </time>{' '}
                   由 {published.publisher?.name ?? '發布者未提供'} 發布
                 </>
+              ) : versions.length ? (
+                '目前未對外（曾發布過，已下架）'
               ) : (
                 '從未對外'
               )}
@@ -264,14 +278,87 @@ function BriefingsContent({
                   disabled={pending || query.isError || !draft.content.trim()}
                   onClick={() => {
                     publish.reset();
-                    setConfirmPublish(true);
+                    setConfirm('publish');
                   }}
                 >
                   {published ? '發布修改' : '發布到前台'}
                 </Button>
               ) : null}
+              {published ? (
+                <Button
+                  variant="ghost"
+                  startIcon={<EyeOff size={16} />}
+                  disabled={pending || query.isError}
+                  onClick={() => setConfirm('takeDown')}
+                >
+                  從前台下架
+                </Button>
+              ) : null}
             </Stack>
           </Stack>
+          {draft && canPublish && confirm === 'publish' ? (
+            <Callout tone="danger">
+              <strong>確認發布？</strong>
+              <br />
+              發布後<strong>所有志工立刻看到這一份</strong>（含未登入的人）。
+              {published ? (
+                <>
+                  目前的第 {versions.length} 版會<strong>整份被取代</strong>。
+                </>
+              ) : (
+                '這會是第一次對外。'
+              )}
+              {published && !showDraft ? (
+                <>
+                  <br />
+                  ⚠️ 你現在看的是<strong>已發布的那一版</strong>
+                  。建議先按「看未發布的修改」確認要發出去的內容。
+                </>
+              ) : null}
+              {publish.error ? (
+                <>
+                  <br />
+                  發布失敗。{publish.error.message}
+                </>
+              ) : null}
+              <Stack direction="row" sx={{ gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                <Button
+                  size="sm"
+                  disabled={pending || query.isError || !draft.content.trim()}
+                  onClick={() =>
+                    publish.mutate(
+                      { uuid: draft.uuid },
+                      {
+                        onSuccess: () => {
+                          setConfirm(null);
+                          setShowDraft(false);
+                          toast.success(
+                            '已發布到前台，志工現在看到的是這份內容。',
+                          );
+                        },
+                      },
+                    )
+                  }
+                >
+                  {publish.isPending ? '發布中…' : '確認發布'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => setConfirm(null)}
+                >
+                  取消
+                </Button>
+              </Stack>
+            </Callout>
+          ) : null}
+          {published && confirm === 'takeDown' ? (
+            <TakeDownBriefingConfirm
+              briefing={published}
+              onClose={() => setConfirm(null)}
+            />
+          ) : null}
           {published && draft && hasDraftChanges ? (
             <Callout tone="info">
               有一份還沒發布的修改，志工目前看到的仍是已發布的內容。
@@ -294,9 +381,9 @@ function BriefingsContent({
             content={viewing.content}
             briefing={viewing}
             versionNumber={
-              viewing.status === BriefingStatus.Published
-                ? versions.length
-                : undefined
+              viewing.status === BriefingStatus.Draft
+                ? undefined
+                : versions.length - versions.indexOf(viewing)
             }
             readOnly
             tone={
@@ -307,11 +394,13 @@ function BriefingsContent({
                   : 'warning'
             }
             title={
-              viewing.status === BriefingStatus.Draft
-                ? published
-                  ? '未發布的修改（志工看不到）'
-                  : '這一份還沒對外，志工看不到'
-                : '志工現在在前台看到的內容'
+              viewing.status === BriefingStatus.Published
+                ? '志工現在在前台看到的內容'
+                : viewing.status === BriefingStatus.Inactive
+                  ? '已從前台下架，志工看不到'
+                  : published
+                    ? '未發布的修改（志工看不到）'
+                    : '這一份還沒對外，志工看不到'
             }
           />
         </Stack>
@@ -331,31 +420,6 @@ function BriefingsContent({
             }
           />
         </Card>
-      ) : null}
-      {draft && canPublish ? (
-        <PublishBriefingDialog
-          open={confirmPublish}
-          onClose={() => setConfirmPublish(false)}
-          onConfirm={() => {
-            if (pending || query.isError || !draft.content.trim()) return;
-            publish.mutate(
-              { uuid: draft.uuid },
-              {
-                onSuccess: () => {
-                  setConfirmPublish(false);
-                  setShowDraft(false);
-                  toast.success('已發布到前台，志工現在看到的是這份內容。');
-                },
-              },
-            );
-          }}
-          hasPublished={Boolean(published)}
-          nextVersion={versions.length + 1}
-          content={draft.content}
-          submitting={pending}
-          confirmDisabled={!draft.content.trim() || query.isError}
-          error={publish.error?.message}
-        />
       ) : null}
       {pickingTemplate ? (
         <TemplatePicker
