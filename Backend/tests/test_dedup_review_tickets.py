@@ -16,7 +16,9 @@ from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.dedup import DuplicatePair
 from app.models.geo import Station
+from app.models.photo import Photo
 from app.models.request import Tickets
+from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.services import dedup_review
 from tests.test_dedup_review_read import _actor, _count_queries
@@ -350,3 +352,71 @@ async def test_the_query_count_does_not_grow_with_needs_or_items(db):
     many = await _count_queries(db, lambda: dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid))
 
     assert many == few
+
+
+# --- photos and disaster answers (ADR-383, 384) -------------------------------------------
+
+
+async def _photo(db, ticket, owner, url="https://example.com/a.jpg", *, deleted=False) -> Photo:
+    photo = Photo(
+        ref_uuid=ticket.uuid,
+        ref_type="geometry",
+        url=url,
+        created_by=owner.uuid,
+        delete_at=T0 if deleted else None,
+    )
+    db.add(photo)
+    await db.flush()
+    return photo
+
+
+async def _answer(db, ticket, name: str, value: str) -> None:
+    db.add(TicketDisasterDetail(ticket_uuid=ticket.uuid, property_name=name, value=value))
+    await db.flush()
+
+
+async def test_the_detail_carries_each_tickets_photos_and_answers(db):
+    """The reviewer sees what would otherwise vanish with the other ticket."""
+    s = await _setup(db)
+    kept = await _photo(db, s["b"], s["owner"], "https://example.com/b.jpg")
+    await _photo(db, s["b"], s["owner"], "https://example.com/gone.jpg", deleted=True)
+    await _answer(db, s["b"], "utility_hazards", "gas")
+    await _answer(db, s["b"], "utility_hazards", "water")
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+
+    detail = await dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
+
+    b = _by_uuid(detail.tickets)[str(s["b"].uuid)]
+    assert [(p.uuid, p.url) for p in b.photos] == [(str(kept.uuid), "https://example.com/b.jpg")]
+    assert b.disaster_details == {"utility_hazards": ("gas", "water")}
+    a = _by_uuid(detail.tickets)[str(s["a"].uuid)]
+    assert (a.photos, a.disaster_details) == ((), {})
+
+
+@pytest.mark.parametrize("change", ["new_photo", "new_answer"])
+async def test_the_version_moves_with_photos_and_answers(db, change):
+    """A photo or an answer added meanwhile sends the reviewer back (ADR-373)."""
+    s = await _versioned(db)
+    before = await _versions(db, s)
+
+    a = await db.get(Tickets, s["ids"]["a"])
+    if change == "new_photo":
+        await _photo(db, a, s["owner"])
+    else:
+        await _answer(db, a, "power_outage", "yes")
+
+    assert (await _versions(db, s))[str(s["ids"]["a"])] != before[str(s["ids"]["a"])]
+
+
+async def test_a_soft_deleted_answer_is_left_out(db):
+    """As every other reader of ticket_disaster_details does."""
+    s = await _setup(db)
+    db.add(
+        TicketDisasterDetail(ticket_uuid=s["b"].uuid, property_name="power_outage", value="yes", delete_at=T0)
+    )
+    await _answer(db, s["b"], "utility_hazards", "gas")
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+
+    detail = await dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
+
+    assert _by_uuid(detail.tickets)[str(s["b"].uuid)].disaster_details == {"utility_hazards": ("gas",)}

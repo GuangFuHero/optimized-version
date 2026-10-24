@@ -15,14 +15,10 @@ The rules, each from decisions.md:
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.services.dedup_review_tickets import TicketForReview
-from app.services.ticket import (
-    QUANTITY_OPTIONAL_TASK_TYPES,
-    TASK_NAME_MAX_LENGTH,
-    TICKET_TITLE_MAX_LENGTH,
-)
+from app.services.ticket import TICKET_TITLE_MAX_LENGTH, _check_disaster_detail_size, _validate_need_size
 
 RESOLVABLE_KINDS = ("ticket", "ticket_task")
 
@@ -57,6 +53,9 @@ class ResolvePlan:
     property_moves: dict[str, str]
     canceled_properties: tuple[str, ...]
     dropped_assignments: tuple[tuple[str, str], ...] = field(default=())
+    moved_photos: tuple[str, ...] = ()
+    canceled_photos: tuple[str, ...] = ()
+    disaster_details: dict[str, list[str]] | None = None
 
 
 # The primary ticket's fields a resolve may set (Spec 028 §3.2): not its status, not its place.
@@ -73,6 +72,8 @@ TICKET_FIELDS = (
     "contact_email",
 )
 TASK_FIELDS = ("task_name", "task_description", "quantity")
+# tickets.priority is String(20), tickets.task_type String(50); the values are not checked (ADR-126).
+_COLUMN_LIMITS = {"priority": 20, "task_type": 50}
 PROPERTY_FIELDS = ("property_value", "quantity", "comment")
 
 
@@ -99,7 +100,13 @@ def build_plan(
         draft.primary_entry(entry)
     for entry in request.secondary_tasks:
         draft.secondary_entry(entry)
-    return draft.finish(_ticket_changes(request.ticket))
+    moved_photos, canceled_photos = _plan_photos(request.photos, primary, secondary)
+    return replace(
+        draft.finish(_ticket_changes(request.ticket)),
+        moved_photos=moved_photos,
+        canceled_photos=canceled_photos,
+        disaster_details=_disaster_details(request.disaster_details, secondary),
+    )
 
 
 class _Draft:
@@ -229,23 +236,59 @@ def _task_changes(entry, task) -> dict:
 
 
 def _check_size(task, changes: dict, people: int) -> None:
-    """The need's name and quantity after the changes, against its kind and its people (ADR-369)."""
+    """The need's name and quantity after the changes, against its kind and its people (ADR-369).
+
+    The kind's rules are create's own (`ticket._validate_need_size`); only the headcount is new.
+    """
     task_name = changes.get("task_name", task.task_name)
     quantity = changes.get("quantity", task.quantity)
     if not task_name or not task_name.strip():
         raise ResolveRefused(f"Need {task.uuid}: task_name is required")
-    if len(task_name) > TASK_NAME_MAX_LENGTH:
-        raise ResolveRefused(f"Need {task.uuid}: task_name must be at most {TASK_NAME_MAX_LENGTH} characters")
-    if quantity is None:
-        if task.task_type not in QUANTITY_OPTIONAL_TASK_TYPES:
-            raise ResolveRefused(f"Need {task.uuid}: quantity is required for a {task.task_type} need")
-        return
-    if quantity < 1:
-        raise ResolveRefused(f"Need {task.uuid}: quantity must be at least 1")
-    if people > quantity:
+    try:
+        _validate_need_size(task.task_type, task_name, quantity)
+    except ValueError as err:
+        raise ResolveRefused(f"Need {task.uuid}: {err}") from err
+    if quantity is not None and people > quantity:
         raise ResolveRefused(
             f"Need {task.uuid}: {people} people are on it, more than the quantity {quantity}"
         )
+
+
+def _plan_photos(listed, primary: TicketForReview, secondary: TicketForReview) -> tuple[tuple, tuple]:
+    """Every live photo of both tickets kept or cancelled; the other's kept ones move over (ADR-383)."""
+    owner = {photo.uuid: ticket.uuid for ticket in (primary, secondary) for photo in ticket.photos}
+    if not owner and listed is None:
+        return (), ()
+    named = [str(item.photo) for item in (listed or [])]
+    if len(named) != len(set(named)):
+        raise ResolveRefused("A photo is named more than once")
+    unknown = sorted(set(named) - set(owner))
+    if unknown:
+        raise ResolveRefused(f"Photos not on either ticket: {', '.join(unknown)}")
+    missing = sorted(set(owner) - set(named))
+    if missing:
+        raise ResolveRefused(f"Every photo must be named; missing: {', '.join(missing)}")
+    kept = {str(item.photo) for item in listed if item.action == "keep"}
+    moved = tuple(p for p in named if p in kept and owner[p] == secondary.uuid)
+    canceled = tuple(p for p in named if p not in kept)
+    return moved, canceled
+
+
+def _disaster_details(sent, secondary: TicketForReview) -> dict[str, list[str]] | None:
+    """The primary's full answers to set, or None to leave them (ADR-384).
+
+    The other ticket's answers would otherwise vanish with it, so when it has any the request
+    must say what the primary ends with.
+    """
+    if sent is None:
+        if secondary.disaster_details:
+            raise ResolveRefused("The other ticket has disaster_details: send the primary's full answers")
+        return None
+    try:
+        _check_disaster_detail_size(sent)
+    except ValueError as err:
+        raise ResolveRefused(str(err)) from err
+    return {name: list(values) for name, values in sent.items()}
 
 
 class _Items:
@@ -308,4 +351,8 @@ def _ticket_changes(values) -> dict:
     for required in ("priority", "contact_name"):
         if required in changes and not (changes[required] or "").strip():
             raise ResolveRefused(f"{required} is required")
+    for name, limit in _COLUMN_LIMITS.items():
+        # Past the column the database raises, and REST would answer 500 (ADR-380).
+        if changes.get(name) is not None and len(changes[name]) > limit:
+            raise ResolveRefused(f"{name} must be at most {limit} characters")
     return changes
