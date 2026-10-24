@@ -89,12 +89,12 @@ Next 的 proxy（middleware）在 render 前先看 `{p}_at` 裡 JWT 的 `exp`（
   （讓瀏覽器存起來）。refresh 被拒時，request 改寫成訪客的樣子。
 - matcher 排除 `/api/*`、`/_next/*` 和靜態檔。
 
-Server Component 要讀目前登入的人時，用 `currentUserFromBackendAsync(cookieHeader)`（`@rescue-frontend/modules/server`）：
+Server Component 要讀目前登入的人時，用 `currentUserFromBackendAsync(cookieHeader, realm)`（`@rescue-frontend/modules/server`，`realm` 是 `'site'` 或 `'admin'`）：
 回傳使用者，訪客回 `null`。access token 要 refresh 才能用時（middleware refresh 失敗，或 token 還沒過期但已
 `access_token_stale`：session 在簽發後切過身分，middleware 只看 `exp` 所以不會 refresh）回 `READ_IN_BROWSER`，
 頁面改在瀏覽器透過 proxy 讀，由 proxy refresh 並把新 cookie 交給瀏覽器。server 端不能自己 refresh：Server
 Component 不能設 cookie，瀏覽器留著已經輪替掉的 refresh token，過了 30 秒寬限（ADR-330）再拿去 refresh 會被當成
-重放，整個 session 被撤銷。其他錯誤（後端連不上）丟例外，不會把登入的人當成訪客。
+重放，整個 session 被撤銷。`'admin'` 的帳號沒有後台身份時回 `NO_BACK_OFFICE_IDENTITY`。其他錯誤（後端連不上）丟例外，不會把登入的人當成訪客。
 
 ## browser 的登入狀態（`useAuthSession`）
 
@@ -196,9 +196,9 @@ Google、LINE 登入完回到哪個 app。
 後台跟前台用同一組 cookie 和同一套 proxy（`createBackendRestHandler('admin')`、`createBackendGraphqlHandler('admin')`），
 差別只有：
 
-- 帶 `X-WG-Realm: admin`（ADR-329）：後端用在後台切換到的身份回答；登入後還是 `user` 時，改用第一個後台身份。沒有後台身份的帳號會拿到 403 `back_office_identity_required`，但不會被登出。後台的 portal layout 用 `X-WG-Realm: admin` 讀 `/users/me`，拿到這個 403 時不顯示後台外框，改顯示「還沒有後台管理權限」頁，附回到前台地圖的連結（`SITE_APP_URL`）和登出按鈕。
+- 帶 `X-WG-Realm: admin`（ADR-329）：後端用在後台切換到的身份回答；登入後還是 `user` 時，改用第一個後台身份。沒有後台身份的帳號會拿到 403 `back_office_identity_required`，但不會被登出。
 - `apps/admin/src/proxy.ts` 跟前台一樣在 render 前 refresh。
-- `(portal)` layout 只看有沒有 `{prefix}_at` cookie，沒有就導向 `/login?callbackUrl=/`。session 是否還有效交給後端判斷。
+- `(portal)` layout 用 `currentUserFromBackendAsync(cookieHeader, 'admin')` 讀 `/users/me`：訪客導向 `/login?callbackUrl=/`；回 `NO_BACK_OFFICE_IDENTITY` 時不顯示後台外框，改顯示「這個帳號還沒有管理權限」頁，附「回到公開地圖」連結（`SITE_APP_URL`）和登出按鈕。
 - 切換身份打 `POST /api/v1/auth/session/identity`，後端直接換掉 access cookie。`/auth/switch-identity` 只收 Bearer。
 - TanStack Query 收到 401 時（`password_incorrect`、`step_up_invalid` 除外）呼叫 `endExpiredSession()`，以訪客身份重新整理，
   layout 再導向登入頁。
