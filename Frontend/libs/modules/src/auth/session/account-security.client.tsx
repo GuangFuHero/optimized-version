@@ -34,6 +34,7 @@ import {
   resolveHashedCredentialAsync,
 } from '../login/credentials';
 import {
+  hasPassword,
   loginMethodsText,
   saltLookupIdentity,
   type AccountContact,
@@ -104,6 +105,7 @@ export function AccountSecurityClient({
   loginMethods,
 }: AccountSecurityClientProps) {
   const saltIdentity = saltLookupIdentity(contacts);
+  const signsInWithPassword = hasPassword(loginMethods);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
@@ -331,87 +333,90 @@ export function AccountSecurityClient({
         </Typography>
       </Box>
 
-      <SecuritySection
-        title="變更密碼"
-        description="會立即撤銷既有登入狀態，完成後需要重新登入。"
-      >
-        <Stack spacing={2}>
-          <TextField
-            label="目前密碼"
-            type="password"
-            value={oldPassword}
-            onChange={(event) => setOldPassword(event.target.value)}
-          />
-          <TextField
-            label="新密碼"
-            type="password"
-            placeholder={newPasswordText.placeholder}
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-          />
-          <TextField
-            label="再次輸入新密碼"
-            type="password"
-            value={newPasswordConfirm}
-            onChange={(event) => setNewPasswordConfirm(event.target.value)}
-          />
+      {/* One of the two, by whether the account has a password to change. */}
+      {signsInWithPassword ? (
+        <SecuritySection
+          title="變更密碼"
+          description="會立即撤銷既有登入狀態，完成後需要重新登入。"
+        >
+          <Stack spacing={2}>
+            <TextField
+              label="目前密碼"
+              type="password"
+              value={oldPassword}
+              onChange={(event) => setOldPassword(event.target.value)}
+            />
+            <TextField
+              label="新密碼"
+              type="password"
+              placeholder={newPasswordText.placeholder}
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+            />
+            <TextField
+              label="再次輸入新密碼"
+              type="password"
+              value={newPasswordConfirm}
+              onChange={(event) => setNewPasswordConfirm(event.target.value)}
+            />
 
-          {passwordError ? (
-            <Alert severity="error">{passwordError}</Alert>
-          ) : null}
-          {passwordSuccess ? (
-            <Alert severity="success">{passwordSuccess}</Alert>
-          ) : null}
+            {passwordError ? (
+              <Alert severity="error">{passwordError}</Alert>
+            ) : null}
+            {passwordSuccess ? (
+              <Alert severity="success">{passwordSuccess}</Alert>
+            ) : null}
 
-          <Button
-            variant="contained"
-            disabled={isChangingPassword}
-            onClick={() => {
-              void handleChangePasswordAsync();
-            }}
-          >
-            更新密碼
-          </Button>
-        </Stack>
-      </SecuritySection>
+            <Button
+              variant="contained"
+              disabled={isChangingPassword}
+              onClick={() => {
+                void handleChangePasswordAsync();
+              }}
+            >
+              更新密碼
+            </Button>
+          </Stack>
+        </SecuritySection>
+      ) : (
+        <SecuritySection
+          title="建立登入密碼"
+          description="你的帳號目前只用 Google 或 LINE 登入，可以在這裡建立登入密碼，之後也能用密碼登入。建立後需要重新登入。"
+        >
+          <Stack spacing={2}>
+            <TextField
+              label="新密碼"
+              type="password"
+              placeholder={newPasswordText.placeholder}
+              value={setPasswordValue}
+              onChange={(event) => setSetPasswordValue(event.target.value)}
+            />
+            <TextField
+              label="再次輸入新密碼"
+              type="password"
+              value={setPasswordConfirm}
+              onChange={(event) => setSetPasswordConfirm(event.target.value)}
+            />
 
-      <SecuritySection
-        title="建立登入密碼"
-        description="如果你的帳號原本只透過第三方登入，可以在這裡建立本地登入密碼。建立後需要重新登入。"
-      >
-        <Stack spacing={2}>
-          <TextField
-            label="新密碼"
-            type="password"
-            placeholder={newPasswordText.placeholder}
-            value={setPasswordValue}
-            onChange={(event) => setSetPasswordValue(event.target.value)}
-          />
-          <TextField
-            label="再次輸入新密碼"
-            type="password"
-            value={setPasswordConfirm}
-            onChange={(event) => setSetPasswordConfirm(event.target.value)}
-          />
+            {setPasswordErrorMessage ? (
+              <Alert severity="error">{setPasswordErrorMessage}</Alert>
+            ) : null}
+            {setPasswordSuccessMessage ? (
+              <Alert severity="success">{setPasswordSuccessMessage}</Alert>
+            ) : null}
 
-          {setPasswordErrorMessage ? (
-            <Alert severity="error">{setPasswordErrorMessage}</Alert>
-          ) : null}
-          {setPasswordSuccessMessage ? (
-            <Alert severity="success">{setPasswordSuccessMessage}</Alert>
-          ) : null}
-
-          <Button
-            variant="outlined"
-            disabled={isSettingPassword}
-            onClick={() => {
-              void handleSetPasswordAsync();
-            }}
-          >
-            建立密碼
-          </Button>
-        </Stack>
-      </SecuritySection>
+            <Button
+              variant="contained"
+              disabled={isSettingPassword}
+              onClick={() => {
+                void handleSetPasswordAsync();
+              }}
+            >
+              建立密碼
+            </Button>
+          </Stack>
+        </SecuritySection>
+      )}
 
       <SecuritySection
         title="新增聯絡方式"

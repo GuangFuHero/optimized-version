@@ -14,6 +14,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import { GuangFuBrandIcon } from '../../brand';
+import { SiteNotifyBell } from '../../notification';
 import { SitePortalSwitch, type SitePortalEntry } from '../../role-request';
 import { RequestHelpButton } from '../../ticket/help-request/request-help-button';
 import {
@@ -139,6 +140,9 @@ export function SiteTopNavBar({
         <RequestHelpButton />
         {/* The site's pages have no title to sit beside, so here. */}
         <PageHelpButton ringColor={palette.frame} />
+        {isAuthenticated ? (
+          <SiteNotifyBell size={36} ringColor={palette.frame} />
+        ) : null}
         {isAuthenticated ? (
           <SiteUserMenu userName={userName} onSignOut={onSignOut} />
         ) : (
