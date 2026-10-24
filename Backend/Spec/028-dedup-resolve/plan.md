@@ -99,6 +99,10 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 4：寫入（ADR-364、365、368、369、370、373、374）
 
+- ✅ 2026-10-24：`app/services/dedup_resolve.py`；`dedup_review` 公開 `lock_pair`／`checked_note`／`pair_detail`／`has_merged_event`，`revoke` 對處理過的卡 409；
+  `ticket._mark_need_deleted` 改名為公開的 `mark_need_deleted`。service 測試 25 個，全套件 **2766 passed**，覆蓋率 96%。
+  突變測試 8 條都會被抓到；第一輪「拿掉卡片鎖」「拿掉已處理檢查」沒被抓到，補了 reject 與 resolve 同時送出的並發測試、改比對訊息後才抓到。
+
 - [ ] `dedup_resolve.py`：
   ```python
   async def resolve(db, *, actor, pair_uuid, request) -> ResolveResult
