@@ -16,6 +16,7 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout
 from app.core.security import resolve_scope
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import (
     AddressLookupType,
@@ -38,6 +39,7 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services import address as address_service
+from app.services import station as station_service
 
 
 async def _reviewable_by(info: strawberry.types.Info) -> list:
@@ -176,6 +178,18 @@ class GeoQuery:
                 has_previous_page=skip > 0,
             ),
         )
+
+    @strawberry.field
+    async def assignable_station_teams(self, info: strawberry.types.Info) -> list[AssignedTeamType]:
+        """Every team a station can be assigned to (ADR-285).
+
+        Requires station.assign, and a gov team or platform identity — the same gate as
+        assignStationToTeam, so the picker exists exactly where the assignment would succeed.
+        """
+        teams = await station_service.list_assignable_teams(
+            info.context["db"], actor=require_authenticated(info)
+        )
+        return [AssignedTeamType.from_model(team) for team in teams]
 
     @strawberry.field
     async def station(self, info: strawberry.types.Info, uuid: UUID) -> StationType | None:

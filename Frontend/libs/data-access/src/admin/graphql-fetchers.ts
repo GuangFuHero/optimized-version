@@ -154,6 +154,30 @@ export function useStation(
   });
 }
 
+/** Under `teams`, so a team change refreshes the picker along with the team list. */
+export const assignableStationTeamsQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'teams', 'AssignableStationTeams'],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminAssignableStationTeamsDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData)
+        .then((data) => data.assignableStationTeams),
+  });
+
+/** Every team a station can be assigned to; the backend refuses callers who cannot assign. */
+export function useAssignableStationTeams(options: AdminQueryOptions = {}) {
+  return useQuery({
+    ...assignableStationTeamsQuery(),
+    enabled: options.enabled,
+  });
+}
+
 export const stationReviewQuery = (
   variables: documents.AdminStationReviewQueryVariables,
 ) =>

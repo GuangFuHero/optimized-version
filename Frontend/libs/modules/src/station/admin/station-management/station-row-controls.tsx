@@ -2,8 +2,8 @@
 
 import { Box, ButtonBase, Menu, MenuItem } from '@mui/material';
 import {
+  useAssignableStationTeams,
   useAssignStation,
-  useTeams,
   useUnassignStation,
   useUpdateStation,
 } from '@rescue-frontend/data-access/admin';
@@ -186,7 +186,7 @@ function QuickStatusMenu({ row }: { row: StationRow }) {
 }
 
 export function TeamAssignCell({ row }: { row: StationRow }) {
-  const teams = useTeams();
+  const teams = useAssignableStationTeams();
   const assign = useAssignStation();
   const unassign = useUnassignStation();
   const choose = (teamUuid: string | null, teamName: string) => {
@@ -220,19 +220,17 @@ export function TeamAssignCell({ row }: { row: StationRow }) {
             choose(null, '');
           }}
         />,
-        ...(teams.data ?? [])
-          .filter((team) => team.status === 'active')
-          .map((team) => (
-            <CellMenuItem
-              key={team.uuid}
-              label={team.name}
-              selected={team.uuid === row.teamUuid}
-              onClick={() => {
-                close();
-                choose(team.uuid, team.name);
-              }}
-            />
-          )),
+        ...(teams.data ?? []).map((team) => (
+          <CellMenuItem
+            key={team.uuid}
+            label={team.name}
+            selected={team.uuid === row.teamUuid}
+            onClick={() => {
+              close();
+              choose(team.uuid, team.name);
+            }}
+          />
+        )),
       ]}
     </CellMenu>
   );

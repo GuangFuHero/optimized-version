@@ -109,6 +109,32 @@ async def test_a_station_is_assigned_and_unassigned_through_graphql(client, redi
     assert await _team_of(station_uuid) is None
 
 
+ASSIGNABLE_TEAMS = "{ assignableStationTeams { uuid name type } }"
+
+
+@pytest.mark.asyncio
+async def test_a_gov_assigner_can_pick_a_team_that_is_not_its_own(client, redis):
+    """The picker offers other teams, which team.view=team would never list for a gov member."""
+    token = await _gov_assigner(redis)
+    _, ngo_uuid = await _station_and_team()
+
+    resp = await client.post("/graphql", json={"query": ASSIGNABLE_TEAMS}, headers=auth_header(token))
+
+    body = resp.json()
+    assert "errors" not in body, body
+    assert ngo_uuid in {team["uuid"] for team in body["data"]["assignableStationTeams"]}
+
+
+@pytest.mark.asyncio
+async def test_an_ngo_holding_station_assign_gets_no_team_list(client, redis):
+    """Refused where the assignment itself would be."""
+    token, _ = await _team_member(redis, "ngo", Perm.STATION_ASSIGN, "all")
+
+    resp = await client.post("/graphql", json={"query": ASSIGNABLE_TEAMS}, headers=auth_header(token))
+
+    assert "Only gov teams" in resp.json()["errors"][0]["message"]
+
+
 # --- reading the assignment (ADR-285 decision 11) ---
 
 STATION_TEAM = "query($uuid: UUID!) { station(uuid: $uuid) { assignedTeam { uuid name } } }"

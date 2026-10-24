@@ -226,7 +226,7 @@ export function StationManagementPage() {
                     : undefined
                 }
                 renderTeam={
-                  caps.canAssign && caps.canViewTeams
+                  caps.canAssign
                     ? (row) => <TeamAssignCell row={row} />
                     : undefined
                 }

@@ -192,6 +192,13 @@ query AdminStations(
     }
   }
 }
+query AdminAssignableStationTeams {
+  assignableStationTeams {
+    uuid
+    name
+    type
+  }
+}
 query AdminStation($uuid: UUID!) {
   station(uuid: $uuid) {
     ...AdminStationFields
