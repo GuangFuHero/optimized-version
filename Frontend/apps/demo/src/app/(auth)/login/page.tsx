@@ -27,7 +27,8 @@ export default function Index() {
   return (
     <Suspense fallback={null}>
       <AuthShell>
-        <LoginFormClient app="site" />
+        {/* With no page to go back to, the sign-in goes by who signed in (`signed-in/page.tsx`). */}
+        <LoginFormClient app="site" defaultCallbackUrl="/signed-in" />
 
         {/* <AuthFooterLinks items={FOOTER_LINKS} /> */}
       </AuthShell>
