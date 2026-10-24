@@ -3374,6 +3374,21 @@ export interface components {
       | 'rbac.assign'
       | 'rbac.edit';
     /**
+     * PhotoForReviewResponse
+     * @description One live photo on a ticket (Spec 028, ADR-383).
+     */
+    PhotoForReviewResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Url */
+      url: string;
+      /** Created At */
+      created_at: string | null;
+    };
+    /**
      * ProjectSettingsResponse
      * @description The deployment's single project settings row, or its unset shape before first write.
      */
@@ -3505,6 +3520,24 @@ export interface components {
       salt_frontend: string;
     };
     /**
+     * ResolvePhoto
+     * @description One photo of either ticket: kept on the primary, or cancelled (ADR-383).
+     *
+     *     A kept photo of the other ticket moves over to the primary.
+     */
+    ResolvePhoto: {
+      /**
+       * Photo
+       * Format: uuid
+       */
+      photo: string;
+      /**
+       * Action
+       * @enum {string}
+       */
+      action: 'keep' | 'cancel';
+    };
+    /**
      * ResolvePrimaryTask
      * @description One need of the primary ticket: kept (absorbing needs of the other ticket) or cancelled.
      */
@@ -3570,6 +3603,12 @@ export interface components {
       primary_tasks: components['schemas']['ResolvePrimaryTask'][];
       /** Secondary Tasks */
       secondary_tasks?: components['schemas']['ResolveSecondaryTask'][];
+      /** Photos */
+      photos?: components['schemas']['ResolvePhoto'][] | null;
+      /** Disaster Details */
+      disaster_details?: {
+        [key: string]: string[];
+      } | null;
       /** Note */
       note?: string | null;
     };
@@ -4067,6 +4106,12 @@ export interface components {
       created_at: string | null;
       /** Tasks */
       tasks: components['schemas']['TaskForReviewResponse'][];
+      /** Photos */
+      photos: components['schemas']['PhotoForReviewResponse'][];
+      /** Disaster Details */
+      disaster_details: {
+        [key: string]: string[];
+      };
     };
     /**
      * TicketYMetric
