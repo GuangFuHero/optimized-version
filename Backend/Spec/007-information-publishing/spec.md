@@ -195,7 +195,8 @@ Public education officers need to publish educational guides about disaster prep
 
 Everything above is the original 2025-11-29 draft and states intent. This section states what
 actually shipped, in PR #49, for the notice a volunteer reads before leaving for a deployment
-(README `FR-INFO-01`). Rationale for each rule is in `decisions.md` ADR-259~262, ADR-273 and ADR-335.
+(README `FR-INFO-01`). Rationale for each rule is in `decisions.md` ADR-259~262, ADR-273, ADR-335 and
+ADR-364.
 
 Two tables. A template is reusable boilerplate an admin authors once; a briefing is one
 generated notice. Both carry free-form `content`, a `tags` JSONB array, and a `state` naming
@@ -208,11 +209,14 @@ briefing_templates                    briefings
 ├── tags          JSONB '[]'          ├── content        Text
 ├── state         String(50)          ├── tags           JSONB '[]'
 ├── created_by    FK → users          ├── state          String(50)
-└── created_at/updated_at/delete_at   ├── created_by     FK → users
+└── created_at/updated_at/delete_at   ├── status         draft / published / inactive
+                                      ├── created_by     FK → users
                                       ├── updated_by     FK → users
-                                      ├── published_at   nullable; NULL = draft
+                                      ├── published_at   nullable; NULL exactly while a draft
                                       ├── published_by   FK → users (nullable)
                                       └── created_at/updated_at/delete_at
+
+                                      UNIQUE (state) WHERE status = 'published' AND delete_at IS NULL
 ```
 
 - **BR-001**: Briefings are readable without an account. `pre_departure.view` is in
@@ -225,31 +229,45 @@ briefing_templates                    briefings
   `pre_departure.edit` plus `pre_departure.publish` (the reply carries it); generating and editing a
   draft briefing require `pre_departure.edit` (plus `pre_departure.publish` when seeding from a
   template, since that copies its content); publishing one requires `pre_departure.publish`;
-  deleting either kind requires `pre_departure.delete`. Deletes are soft (`delete_at`).
+  taking a published one down requires `pre_departure.edit`; deleting either kind requires
+  `pre_departure.delete`. Deletes are soft (`delete_at`).
 - **BR-004**: `generateBriefing` copies the template's `content`, `tags` and `state` into a new
   draft briefing. A `templateUuid` that is unknown or soft-deleted raises `Briefing template not
-  found` rather than producing an empty notice.
+  found` rather than producing an empty notice. `sourceBriefingUuid` instead copies another
+  briefing's `content`, `tags`, `state` and `templateUuid`; the two can't be given together.
 - **BR-005**: `template_uuid` is nullable, so an ad-hoc briefing needs no template, and soft-
   deleting a template leaves the briefings generated from it readable.
-- **BR-006**: Each briefing row is one version. It is a draft until `publishBriefing` sets
-  `published_at`, and read-only after. A `state` may hold several drafts at once; its newest
-  published row is the current version, and older published rows stay public.
-- **BR-007**: `briefings(status:)` defaults to `PUBLISHED`, which is public; `DRAFT` and `ALL`
-  need `pre_departure.edit`, as does reading a draft by UUID. Drafts list first (most recently
-  edited first), then published rows newest first.
+- **BR-006**: Each briefing row is one version, and `status` walks it `draft → published →
+  inactive`. Only a draft is editable. A `state` may hold several drafts at once but at most one
+  published (live) row, which a partial unique index enforces:
+  ```
+  action                     v1         v2         v3         public site shows
+  publish v1                 published                        v1
+  publish v2                 inactive   published             v2
+  takeDownBriefing(v2)       inactive   inactive              (nothing)
+  copy v2 → v3               inactive   inactive   draft      (nothing)
+  publish v3                 inactive   inactive   published  v3
+  ```
+  Publishing takes down the state's live row in the same transaction; `takeDownBriefing` takes it
+  down with no replacement. An inactive row stays read-only, so editing it means copying it into
+  a new draft (BR-004). Deleting the live row leaves the state with nothing public.
+- **BR-007**: `briefings(status:)` defaults to `PUBLISHED`, which lists each state's live row and
+  is public; `DRAFT` and `ALL` (drafts, live and inactive rows) need `pre_departure.edit`, as does
+  reading a row that isn't live by UUID. Drafts list first (most recently edited first), then the
+  rest newest published first.
 - **BR-008**: `creator` / `updater` / `publisher` give `{ uuid, name }` (nickname only) to callers
   holding `pre_departure.edit`, and null to everyone else.
 
 GraphQL surface: `briefingTemplates` / `briefingTemplate` / `briefings` / `briefing` (the list
 queries filter by `state` and by tag; `briefings` also by `status`), plus
 `createBriefingTemplate`, `updateBriefingTemplate`, `deleteBriefingTemplate`,
-`generateBriefing`, `updateBriefing`, `publishBriefing`, `deleteBriefing`.
+`generateBriefing`, `updateBriefing`, `publishBriefing`, `takeDownBriefing`, `deleteBriefing`.
 
 **Deliberately not built** (ADR-274): the shape in Notion PRD VB-FEAT-001 — content keyed by
-disaster type with four fixed sections, exactly one notice public
-deployment-wide, and a retained snapshot per publish. That PRD is marked 年底範圍（not in this
-implementation round）at the top. Revisiting it means re-shaping both tables, so it belongs in
-its own feature, not in a revision of this one.
+disaster type with four fixed sections. That PRD is marked 年底範圍（not in this implementation
+round）at the top. Revisiting it means re-shaping both tables, so it belongs in its own feature,
+not in a revision of this one. Its other two rules are now built: one notice public at a time
+(per state, BR-006) and every published version kept (inactive rows, readable by editors).
 
 ## Success Criteria *(mandatory)*
 
