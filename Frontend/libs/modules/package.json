@@ -4,6 +4,7 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
+    "./briefing": "./src/briefing/index.ts",
     "./session": "./src/session/index.ts",
     "./server": "./src/server.ts",
     "./document": "./src/document-layout.tsx"
@@ -26,7 +27,6 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.577.0",
     "next": "~16.1.6",
-    "next-auth": "^4.24.14",
     "qrcode-generator": "^2.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

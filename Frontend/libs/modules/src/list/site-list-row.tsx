@@ -11,7 +11,7 @@ import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 import type { RescueMapMarkerItem } from '../map/types';
 import { SiteBadge } from '../shell/site/site-badge';
 import { getStationTypeIcon } from '../station/type-options';
-import { NeedLine } from '../ticket/needs';
+import { NeedLine, type TicketNeed } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
 import { getTicketStatusTone } from '../ticket/status';
 
@@ -19,6 +19,8 @@ const { color, radius, shadow, spacing, motion } = designTokens;
 
 interface SiteListRowProps {
   marker: RescueMapMarkerItem;
+  /** The ticket's needs to list (`listTickets`); every one of them when not given. */
+  needs?: readonly TicketNeed[];
   active: boolean;
   isAuthenticated?: boolean;
   onSelect: () => void;
@@ -37,6 +39,7 @@ const ACTION_ICON = { fontSize: 14 } as const;
  */
 export function SiteListRow({
   marker,
+  needs: listedNeeds,
   active,
   isAuthenticated = false,
   onSelect,
@@ -46,7 +49,8 @@ export function SiteListRow({
   const TypeIcon = isStation
     ? getStationTypeIcon(marker.stationMeta?.type)
     : AssignmentRoundedIcon;
-  const needs = marker.detailType === 'ticket' ? (marker.needs ?? []) : [];
+  const needs =
+    marker.detailType === 'ticket' ? (listedNeeds ?? marker.needs ?? []) : [];
 
   return (
     <Box

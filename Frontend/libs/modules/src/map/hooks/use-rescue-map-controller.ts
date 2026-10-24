@@ -78,6 +78,11 @@ interface RescueMapControllerOptions {
    * 不可見，關閉後視角移動不會重建 markers 陣列；列表頁維持開啟。
    */
   filterMarkersByBbox?: boolean;
+  /**
+   * 是否用搜尋詞過濾 marker。列表的任務維度會關閉：搜尋詞已經送給後端（`q`），後端比對的
+   * 描述、需求名稱這裡看不到，再過濾一次會把命中的單濾掉。
+   */
+  filterMarkersBySearch?: boolean;
 }
 
 const EMPTY_ROUTE_STATE: RescueMapRouteState = {};
@@ -166,6 +171,7 @@ export function useRescueMapController({
   closureAreas: sourceClosureAreas = [],
   filterMarkersByOverlayLayers = true,
   filterMarkersByBbox = true,
+  filterMarkersBySearch = true,
 }: RescueMapControllerOptions = {}): RescueMapControllerValue {
   // 受控（提供 onRouteStateChange）由外部網址驅動；
   // 非受控（後台）則退回內部狀態，維持既有行為。
@@ -419,14 +425,15 @@ export function useRescueMapController({
   // 只取用過濾真正需要的欄位；視角（position／bbox）提交不應重建 markers 陣列，
   // 否則地圖每次移動都會觸發下游 marker 圖層重新同步。
   const filterBbox = filterMarkersByBbox ? state.bbox : undefined;
+  const filterSearch = filterMarkersBySearch ? state.search : undefined;
   const markerFilterState = useMemo<RescueMapRouteState>(
     () => ({
       dataType: state.dataType,
       subDataTypes: state.subDataTypes,
-      search: state.search,
+      search: filterSearch,
       bbox: filterBbox,
     }),
-    [filterBbox, state.dataType, state.search, state.subDataTypes],
+    [filterBbox, filterSearch, state.dataType, state.subDataTypes],
   );
   const markers = useMemo(() => {
     return filterRescueMapMarkers(sourceMarkers, markerFilterState);

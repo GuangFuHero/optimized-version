@@ -4,7 +4,7 @@
  * what came of it, not a to-do list (prototype `useMyCreatedTickets`, `site-actions.jsx:596-607`).
  */
 
-import { formatTaiwanTime } from '../my-claims/my-claims';
+import { formatTaiwanTime } from '../../time';
 
 /** One row of `myTickets`, as `MyTickets` in `tickets.graphql` reads it. */
 export interface MyTicketRow {

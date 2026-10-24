@@ -65,6 +65,11 @@ const connectionPagination =
  * 新增欄位時，在 resolvers.Query 加上對應的 connectionPagination() 即可。
  */
 export const graphCache = cacheExchange({
+  // 沒有 `id` 的型別，用 `uuid` 當 key（否則 graphcache 會警告並把資料直接嵌在上層）。
+  keys: {
+    BriefingType: (data) =>
+      typeof data.uuid === 'string' ? data.uuid : null,
+  },
   resolvers: {
     Query: {
       // Geo domain

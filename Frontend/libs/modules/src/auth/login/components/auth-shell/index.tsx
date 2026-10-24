@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
+import { SITE_BANNER_HEIGHT } from '../../../../announcement';
 import { GuangFuBrandIcon } from '../../../../brand';
 import { authHeroTexture } from '../../assets/auth-hero-texture';
 import { getAuthColorScheme } from '../../theme/auth-theme';
@@ -47,7 +48,8 @@ export function AuthShell({ children }: AuthShellProps) {
   return (
     <Box
       sx={{
-        minHeight: '100dvh',
+        // Under the announcement banner, if one is up (`(auth)/layout.tsx`).
+        minHeight: `calc(100dvh - ${SITE_BANNER_HEIGHT})`,
         display: 'grid',
         gridTemplateColumns: {
           xs: 'minmax(0, 1fr)',

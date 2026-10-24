@@ -14,6 +14,7 @@ import {
   buildLocationCells,
   isCoarseTicket,
   locationCellBoundary,
+  locationCellLabelFit,
 } from '../../location-cells';
 import type {
   RescueMapClosureArea,
@@ -387,17 +388,24 @@ function syncMarkerLayer({
 }
 
 /**
- * 格子的填色：一般用深一階的橘（orange-600），裡面有急件就用 danger。
+ * 格子的顏色：淺填色（`syncLocationCellLayer` 的不透明度 0.28），邊線深一階，填色淺了格子的邊界
+ * 仍清楚。一般是橘（orange-400 填、orange-500 邊），裡面有急件就用紅（red-500 填、red-700 邊）。
  *
- * 設計 2026-09-18（`origin/sucrelindesign` site-map.jsx）量過的數字：白字壓在淺色底圖上，
- * orange-400 @0.72 只有 2.29:1，orange-600 @0.90 才到 4.90:1（WCAG AA）。字上不加描邊或
- * 陰影 —— 讀不清楚時要調的是這裡的不透明度（PUB-PS-126）。語意層沒有「更深的 primary」，
- * 所以直接取 primitive。
+ * 設計 2026-10-24（`origin/sucrelindesign` site-map.jsx、site.css）：淺底配深字
+ * （`.map-location-cell`），對比在各種底圖色上都 ≥ 7.6:1。取代 09-18 的 orange-600 @0.90 配白字 ——
+ * 那是為了撐白字，整片地圖看起來像淪陷。淺底不可以配白字或橘字；字上仍不加描邊或陰影，讀不清楚時
+ * 要調的是這裡（PUB-PS-126）。
  */
-function getLocationCellFill(cell: RescueMapLocationCell): string {
+function getLocationCellColours(cell: RescueMapLocationCell): {
+  fill: string;
+  edge: string;
+} {
   return cell.variant === 'urgent-ticket'
-    ? color.bg.danger.default
-    : primitives.color.orange[600];
+    ? { fill: color.bg.danger.default, edge: color.bg.danger.hover }
+    : {
+        fill: primitives.color.orange[400],
+        edge: primitives.color.orange[500],
+      };
 }
 
 function createLocationCellLabelIcon(
@@ -430,49 +438,136 @@ function getLocationCellLayerSignature(
     .join('|');
 }
 
+interface LocationCellLabel {
+  cell: RescueMapLocationCell;
+  corners: [number, number][];
+  marker: L.Marker;
+}
+
+const LOCATION_CELL_COUNT_ONLY_CLASS = 'map-location-cell--count-only';
+const LOCATION_CELL_SMALL_COUNT_CLASS = 'map-location-cell--small-count';
+
+/**
+ * CELL-LABEL-101：依每個格子此刻在畫面上的大小，決定「求助」藏不藏、數字要不要改小字
+ * （`locationCellLabelFit`）。格子寬度取平行兩邊之間（頂點到中心平均距離 × √3），H3 的格子怎麼
+ * 轉向，字都橫著放得下。字的寬度直接量 —— 字級在手機、平板不同（`displayTextSizeCss`）。
+ *
+ * 先把所有標籤恢復成整句再一起量，最後才一起改：只排版一次，不是每格一次。
+ */
+function fitLocationCellLabels(
+  map: L.Map,
+  labels: readonly LocationCellLabel[],
+) {
+  // 地圖被藏起來時量不到：先不動，等下一次縮放或資料刷新再量。
+  if (!map.getContainer().offsetWidth) {
+    return;
+  }
+
+  const elements = labels.map(({ marker }) =>
+    marker.getElement()?.querySelector<HTMLElement>('.map-location-cell'),
+  );
+
+  elements.forEach((element) =>
+    element?.classList.remove(
+      LOCATION_CELL_COUNT_ONLY_CLASS,
+      LOCATION_CELL_SMALL_COUNT_CLASS,
+    ),
+  );
+
+  const fits = labels.map(({ cell, corners }, index) => {
+    const count = elements[index]?.querySelector<HTMLElement>(
+      '.map-location-cell__count',
+    );
+    const unit = elements[index]?.querySelector<HTMLElement>(
+      '.map-location-cell__unit',
+    );
+
+    if (!count || !unit) {
+      return null;
+    }
+
+    const centre = map.latLngToLayerPoint(cell.position);
+    const radius =
+      corners.reduce(
+        (sum, corner) =>
+          sum + map.latLngToLayerPoint(corner).distanceTo(centre),
+        0,
+      ) / corners.length;
+
+    return locationCellLabelFit(radius * Math.sqrt(3), {
+      whole: unit.offsetLeft + unit.offsetWidth - count.offsetLeft,
+      count: count.offsetWidth,
+    });
+  });
+
+  elements.forEach((element, index) => {
+    const fit = fits[index];
+
+    element?.classList.toggle(
+      LOCATION_CELL_COUNT_ONLY_CLASS,
+      fit === 'count' || fit === 'small-count',
+    );
+    element?.classList.toggle(
+      LOCATION_CELL_SMALL_COUNT_CLASS,
+      fit === 'small-count',
+    );
+  });
+}
+
 /**
  * 訪客的概略區塊：六角形本身 ＋ 中央的數量。整層重畫 —— 格子數量少，而簽章相同時整個跳過，
  * 不會每次資料刷新都閃爍。選取狀態由六角形自己表達（線變粗、底色變深），數字不換色。
+ * 回傳各格的標籤，縮放時要重新量（`fitLocationCellLabels`）。
  */
 function syncLocationCellLayer({
+  map,
   cellLayer,
   cells,
   selectedId,
   onCellClickRef,
 }: {
+  map: L.Map;
   cellLayer: L.LayerGroup;
   cells: readonly RescueMapLocationCell[];
   selectedId: string | undefined;
   onCellClickRef: React.MutableRefObject<
     ((cell: RescueMapLocationCell) => void) | undefined
   >;
-}) {
+}): LocationCellLabel[] {
   cellLayer.clearLayers();
 
-  cells.forEach((cell) => {
+  const labels = cells.map((cell) => {
     const selected = cell.id === selectedId;
-    const fill = getLocationCellFill(cell);
+    const { fill, edge } = getLocationCellColours(cell);
+    const corners = locationCellBoundary(cell.cell);
     const onClick = () => onCellClickRef.current?.(cell);
 
-    L.polygon(locationCellBoundary(cell.cell), {
-      color: fill,
+    L.polygon(corners, {
+      color: edge,
       weight: selected ? 4 : 2,
       fillColor: fill,
-      fillOpacity: selected ? 0.96 : 0.9,
+      fillOpacity: selected ? 0.4 : 0.28,
       // A tap on a cell picks the cell, and is not also a tap on the map (which picks a point).
       bubblingMouseEvents: false,
     })
       .on('click', onClick)
       .addTo(cellLayer);
 
-    L.marker(cell.position, {
+    const marker = L.marker(cell.position, {
       icon: createLocationCellLabelIcon(cell, selected),
       title: `${cell.members.length} 筆求助（概略區塊）`,
       keyboard: true,
     })
       .on('click', onClick)
       .addTo(cellLayer);
+
+    return { cell, corners, marker };
   });
+
+  // A label is measured once it is on the map.
+  fitLocationCellLabels(map, labels);
+
+  return labels;
 }
 
 export function RescueMapCanvas({
@@ -503,6 +598,7 @@ export function RescueMapCanvas({
   const overlayLayerRef = useRef<L.LayerGroup | null>(null);
   const cellLayerRef = useRef<L.LayerGroup | null>(null);
   const cellLayerSignatureRef = useRef<string | null>(null);
+  const cellLabelsRef = useRef<LocationCellLabel[]>([]);
   const previewMarkerRef = useRef<L.Marker | null>(null);
   const draftMarkerRef = useRef<L.Marker | null>(null);
   const draftBubbleRef = useRef<L.Marker | null>(null);
@@ -667,8 +763,13 @@ export function RescueMapCanvas({
       }
     };
 
+    // A cell grows and shrinks on screen with the zoom: how much of its label fits changes.
+    const fitCellLabels = () =>
+      fitLocationCellLabels(map, cellLabelsRef.current);
+
     map.on('moveend', scheduleViewportSync);
     map.on('zoomend', scheduleViewportSync);
+    map.on('zoomend', fitCellLabels);
     map.on('click', handleMapClick);
     map.on('movestart', releaseDraftPoint);
     map.on('zoomstart', releaseDraftPoint);
@@ -696,6 +797,7 @@ export function RescueMapCanvas({
       resizeObserver.disconnect();
       map.off('moveend', scheduleViewportSync);
       map.off('zoomend', scheduleViewportSync);
+      map.off('zoomend', fitCellLabels);
       map.off('click', handleMapClick);
       map.off('movestart', releaseDraftPoint);
       map.off('zoomstart', releaseDraftPoint);
@@ -707,6 +809,7 @@ export function RescueMapCanvas({
       overlayLayerRef.current = null;
       cellLayerRef.current = null;
       cellLayerSignatureRef.current = null;
+      cellLabelsRef.current = [];
       previewMarkerRef.current = null;
       draftMarkerRef.current = null;
       draftBubbleRef.current = null;
@@ -849,9 +952,10 @@ export function RescueMapCanvas({
   }, [controller.markers]);
 
   useEffect(() => {
+    const map = mapRef.current;
     const cellLayer = cellLayerRef.current;
 
-    if (!cellLayer) {
+    if (!map || !cellLayer) {
       return;
     }
 
@@ -866,7 +970,8 @@ export function RescueMapCanvas({
     }
 
     cellLayerSignatureRef.current = signature;
-    syncLocationCellLayer({
+    cellLabelsRef.current = syncLocationCellLayer({
+      map,
       cellLayer,
       cells,
       selectedId: controller.selectedMarkerId,

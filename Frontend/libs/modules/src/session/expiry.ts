@@ -10,43 +10,6 @@
 export const SESSION_HEADER = 'x-wg-session';
 export const SESSION_EXPIRED = 'expired';
 
-export interface SessionExpiryInput {
-  /** The proxy had a session but could not refresh its access token, and sent the request as a guest. */
-  refreshFailed: boolean;
-  /** The request went to the backend with an access token. */
-  sentToken: boolean;
-  backendStatus: number;
-}
-
-/**
- * A revoked token answers 401 for every request, public ones included (backend
- * `tests/test_graphql/test_session_revocation.py`). A 403 is a signed-in caller who may not do
- * this, and a guest's 401 ends nothing they had.
- *
- * The back office's rule, for as long as it still signs in with next-auth and sends a bearer token.
- * The site's proxy no longer needs it: the backend names an ended session in the 401's `code`
- * (`session_expired`, `credentials_invalid`; ADR-328), see `backend-proxy.ts`.
- */
-export function isSessionExpired({
-  refreshFailed,
-  sentToken,
-  backendStatus,
-}: SessionExpiryInput): boolean {
-  return refreshFailed || (sentToken && backendStatus === 401);
-}
-
-/**
- * Whether `/auth/refresh` turned the refresh token away, from its HTTP status (none for a dropped
- * connection), so the session has ended. The backend refuses a revoked, replayed or identity-less
- * token with a 401 (backend `auth/session.py`). A rate limit (429) is checked before the token is
- * touched, and a server error or a dropped connection says nothing about the session: the same token
- * is tried again on the next request. Had it been rotated with the answer lost on the way, that try
- * is a replay, refused with a 401, and the session ends then.
- */
-export function isRefreshRefused(status: number | undefined): boolean {
-  return status !== undefined && status !== 429 && status < 500;
-}
-
 /**
  * The login page, set to come back here afterwards: path and query, which carry the page's state
  * (the open ticket, A's `claim=`, B's `help=`). Read from `window.location` in a handler, not
