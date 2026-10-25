@@ -12,9 +12,8 @@ import {
 import { designTokens } from '@rescue-frontend/ui';
 import { EyeOff } from 'lucide-react';
 
-import { OPERATIONAL_STATUS_OPTIONS } from '../../operational-status';
-import { STATION_TYPE_OPTIONS } from '../../type-options';
-import { AdminStationFormFields } from './admin-station-form-fields';
+import { OPERATIONAL_STATUS_OPTIONS } from '../operational-status';
+import { STATION_TYPE_OPTIONS } from '../type-options';
 import type {
   StationFormErrors,
   StationFormState,
@@ -40,19 +39,10 @@ export interface StationFormFieldsProps {
   isResolvingAddress?: boolean;
   /** Without `station.view_pii` the contact values are masked, so they can't be edited. */
   contactLocked?: boolean;
-  /** `admin` is `/stations`' prototype layout; the maps keep `default`. */
-  appearance?: 'default' | 'admin';
 }
 
+/** The form's fields as the maps' sheet lays them out; `StationForm` takes another layout as `Fields`. */
 export function StationFormFields({
-  appearance = 'default',
-  ...props
-}: StationFormFieldsProps) {
-  if (appearance === 'admin') return <AdminStationFormFields {...props} />;
-  return <DefaultStationFormFields {...props} />;
-}
-
-function DefaultStationFormFields({
   mode,
   form,
   errors,

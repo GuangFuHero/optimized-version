@@ -5,9 +5,8 @@ export {
   AdminStationDrawerTabs,
 } from './admin-station-drawer';
 export {
+  AdminStationFormDrawer,
   StationEditPanel,
-  StationFormDrawer,
-  type StationFormDrawerProps,
-  type StationFormTarget,
-  type StationFormDrawerFrame,
-} from './station-form-drawer';
+  type AdminStationFormDrawerProps,
+  type StationEditPanelProps,
+} from './admin-station-form';

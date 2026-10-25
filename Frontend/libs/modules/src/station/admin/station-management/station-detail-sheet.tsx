@@ -14,7 +14,7 @@ import {
   AdminStationDrawerLayout,
   AdminStationDrawerTabs,
   StationEditPanel,
-} from '../station-form';
+} from '../station-drawer';
 import type { StationCapabilities } from './hooks/use-station-capabilities';
 import {
   readOnlyCaption,

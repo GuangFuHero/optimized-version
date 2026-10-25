@@ -6,8 +6,8 @@ import type {
   UpdateStationInput,
 } from '@rescue-frontend/data-access/admin';
 
-import type { OperationalStatus } from '../../operational-status';
-import { stationPoint } from '../../station-point';
+import type { OperationalStatus } from '../operational-status';
+import { stationPoint } from '../station-point';
 
 export type StationLocationType = 'address' | 'pole';
 

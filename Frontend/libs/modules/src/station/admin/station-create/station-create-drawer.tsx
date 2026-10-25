@@ -5,7 +5,7 @@ import type { AdminStationFieldsFragment } from '@rescue-frontend/data-access/ad
 import type { RescueMapMarkerItem } from '../../../map/types';
 import { stationPoint } from '../../station-point';
 import { getStationTypeLabel } from '../../type-options';
-import { StationFormDrawer } from '../station-form';
+import { StationFormDrawer } from '../../form';
 
 interface StationCreateDrawerProps {
   open: boolean;

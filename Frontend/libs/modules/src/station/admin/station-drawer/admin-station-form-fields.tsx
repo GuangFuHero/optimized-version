@@ -14,8 +14,11 @@ import { EyeOff } from 'lucide-react';
 
 import { OPERATIONAL_STATUS_OPTIONS } from '../../operational-status';
 import { STATION_TYPE_OPTIONS, getStationTypeLabel } from '../../type-options';
-import type { StationFormState } from './station-form-model';
-import type { StationFormFieldsProps, TextKey } from './station-form-fields';
+import type {
+  StationFormFieldsProps,
+  StationFormState,
+  TextKey,
+} from '../../form';
 
 const { color, motion, radius, typography } = designTokens;
 

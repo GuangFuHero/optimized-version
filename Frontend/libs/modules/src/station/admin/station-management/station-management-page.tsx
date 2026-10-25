@@ -12,7 +12,8 @@ import { toast } from 'sonner';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
 import { AdminHeaderSlot } from '../../../shell/admin/header';
-import { StationFormDrawer, type StationFormTarget } from '../station-form';
+import type { StationFormTarget } from '../../form';
+import { AdminStationFormDrawer } from '../station-drawer';
 import { useStationRows } from './hooks/use-station-rows';
 import { useStationCapabilities } from './hooks/use-station-capabilities';
 import {
@@ -248,9 +249,8 @@ export function StationManagementPage() {
         onEditEnd={() => setFormTarget(null)}
         onDelete={(uuid, name) => setPendingDelete({ uuid, name })}
       />
-      <StationFormDrawer
+      <AdminStationFormDrawer
         target={formTarget?.mode === 'create' ? formTarget : null}
-        frame="admin-drawer"
         canViewPii={caps.canViewPii}
         onClose={() => setFormTarget(null)}
         onSaved={(station) => {
