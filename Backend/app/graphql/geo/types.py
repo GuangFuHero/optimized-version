@@ -325,6 +325,15 @@ class StationType:
         return await _holds_over_station(info, self, Perm.STATION_VIEW_HISTORY)
 
     @strawberry.field(
+        description="Whether the caller's station export would include this station, so a page "
+        "can count an export before running it"
+    )
+    async def viewer_can_export(self, info: strawberry.types.Info) -> bool:
+        """Resolve station.export against this station's scope, as the export's row filter would."""
+        return await _holds_over_station(info, self, Perm.STATION_EXPORT)
+
+
+    @strawberry.field(
         description="Whether the contact fields on this station come back unmasked for the caller"
     )
     async def viewer_can_view_pii(self, info: strawberry.types.Info) -> bool:

@@ -60,13 +60,10 @@ export function StationExportMenu() {
   const exportStations = useExportStations();
   // The page already loads the unfiltered list, so this reads the cache.
   const { rows } = useStationRows(EMPTY_FILTERS);
-  const identity = useCurrentUser().data?.active_identity;
-  const teamUuid = identity?.team_uuid ?? null;
-
-  const counts = useMemo(
-    () => countExportableByType(rows, teamUuid),
-    [rows, teamUuid],
-  );
+  const teamName = useCurrentUser().data?.active_identity?.team ?? null;
+  const counts = useMemo(() => countExportableByType(rows), [rows]);
+  // Name the team only when the export stops at it; a gov team's reaches every station.
+  const exportsEveryStation = rows.every((row) => row.canExport);
 
   const typeLabel = getStationTypeLabel(stationType);
   const count = counts.get(stationType) ?? 0;
@@ -222,8 +219,8 @@ export function StationExportMenu() {
               '& strong': { color: color.fg.neutral.subtle },
             }}
           >
-            {identity?.team
-              ? `匯出指派給「${identity.team}」的`
+            {teamName && !exportsEveryStation
+              ? `匯出指派給「${teamName}」的`
               : '匯出你權限範圍內的'}
             <strong>全部</strong>「{typeLabel}」站點，
             <strong>不套用列表上的篩選</strong>

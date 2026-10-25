@@ -66,6 +66,7 @@ fragment AdminStationFields on StationType {
   viewerCanDelete
   viewerCanViewHistory
   viewerCanViewPii
+  viewerCanExport
   secondaryLocation {
     county
     town

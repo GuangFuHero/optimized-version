@@ -99,21 +99,15 @@ describe('importFieldLabel', () => {
 
 describe('countExportableByType', () => {
   const rows = [
-    { type: 'shelter', teamUuid: 'mine' },
-    { type: 'shelter', teamUuid: 'other' },
-    { type: 'Shelter ', teamUuid: 'mine' },
-    { type: 'water', teamUuid: null },
+    { type: 'shelter', canExport: true },
+    { type: 'shelter', canExport: false },
+    { type: 'Shelter ', canExport: true },
+    { type: 'water', canExport: false },
   ] as StationRow[];
 
-  it("counts only the team's stations for an identity on a team", () => {
-    const counts = countExportableByType(rows, 'mine');
+  it('counts only the stations the export will include, per type', () => {
+    const counts = countExportableByType(rows);
     expect(counts.get('shelter')).toBe(2);
     expect(counts.get('water')).toBeUndefined();
-  });
-
-  it('counts every station for an identity without a team', () => {
-    const counts = countExportableByType(rows, null);
-    expect(counts.get('shelter')).toBe(3);
-    expect(counts.get('water')).toBe(1);
   });
 });

@@ -1392,6 +1392,11 @@ type StationType {
   viewerCanViewHistory: Boolean!
 
   """
+  Whether the caller's station export would include this station, so a page can count an export before running it
+  """
+  viewerCanExport: Boolean!
+
+  """
   Whether the contact fields on this station come back unmasked for the caller
   """
   viewerCanViewPii: Boolean!

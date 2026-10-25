@@ -320,7 +320,9 @@ async def test_station_contacts_follow_the_assignment(client, redis, team_type, 
 
 STATION_RIGHTS = """
 query($q: String!) {
-    stations(q: $q) { items { name viewerCanEdit viewerCanDelete viewerCanViewHistory viewerCanViewPii } }
+    stations(q: $q) {
+        items { name viewerCanEdit viewerCanDelete viewerCanViewHistory viewerCanViewPii viewerCanExport }
+    }
 }
 """
 
@@ -341,8 +343,9 @@ query($q: String!) {
         (Perm.STATION_DELETE, "viewerCanDelete"),
         (Perm.STATION_VIEW_HISTORY, "viewerCanViewHistory"),
         (Perm.STATION_VIEW_PII, "viewerCanViewPii"),
+        (Perm.STATION_EXPORT, "viewerCanExport"),
     ],
-    ids=["edit", "delete", "view-history", "view-pii"],
+    ids=["edit", "delete", "view-history", "view-pii", "export"],
 )
 async def test_station_rights_follow_the_assignment(client, redis, team_type, expected, perm, field):
     """A row the caller cannot act on says so, so the page offers no control that would 404."""

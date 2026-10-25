@@ -139,18 +139,16 @@ function taipeiParts(now: Date): Record<string, string> {
 }
 
 /**
- * Per-type counts of the stations an export will contain. An identity on a team exports only the
- * stations assigned to that team (`station.export` is team-scoped for team roles, while
- * `station.view` reaches every station); an identity with no team exports everything it sees.
- * `/users/me` doesn't carry the scope itself, so the team stands in for it.
+ * Per-type counts of the stations an export will contain: the rows the backend says the export
+ * includes. `station.export` reaches fewer stations than `station.view` for a team role, and
+ * a gov team's reaches all of them, so the viewer's team alone cannot say which.
  */
 export function countExportableByType(
   rows: readonly StationRow[],
-  activeTeamUuid: string | null,
 ): Map<string, number> {
   const byType = new Map<string, number>();
   for (const row of rows) {
-    if (activeTeamUuid && row.teamUuid !== activeTeamUuid) continue;
+    if (!row.canExport) continue;
     const type = row.type.trim().toLowerCase();
     byType.set(type, (byType.get(type) ?? 0) + 1);
   }

@@ -27,6 +27,8 @@ export interface StationRow {
   pendingFieldCount: number;
   /** The viewer may edit this station — the capability checked against this row's scope. */
   canEdit: boolean;
+  /** The viewer's station export would include this station. */
+  canExport: boolean;
   raw: AdminStationFieldsFragment;
 }
 
@@ -51,6 +53,7 @@ export function toStationRow(station: AdminStationFieldsFragment): StationRow {
     position: stationPoint(station.geometry),
     pendingFieldCount: station.pendingSuggestedFields.length,
     canEdit: station.viewerCanEdit,
+    canExport: station.viewerCanExport,
     raw: station,
   };
 }
