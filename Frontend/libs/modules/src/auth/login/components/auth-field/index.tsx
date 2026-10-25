@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Box,
   FormControl,
   FormHelperText,
   OutlinedInput,
@@ -10,9 +11,11 @@ import {
 import { useTheme } from '@mui/material/styles';
 import type { HTMLAttributes, HTMLInputTypeAttribute, ReactNode } from 'react';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { getAuthColorScheme } from '../../theme/auth-theme';
+
+const { color } = designTokens;
 
 export interface AuthFieldProps {
   label: string;
@@ -27,6 +30,12 @@ export interface AuthFieldProps {
   helperText?: ReactNode;
   disabled?: boolean;
   endAdornment?: ReactNode;
+  /**
+   * Marks the label with a red asterisk, as the design system's `TextInput` does, and says so to a
+   * screen reader. `aria-required`, not `required`: a native `required` would let the browser stop a
+   * form with its own message, in place of the field's.
+   */
+  required?: boolean;
 }
 
 export function AuthField({
@@ -41,6 +50,7 @@ export function AuthField({
   helperText,
   disabled,
   endAdornment,
+  required = false,
 }: AuthFieldProps) {
   const authPalette = getAuthColorScheme(useTheme());
   const autofillBackground = authPalette.fieldBackground;
@@ -58,6 +68,11 @@ export function AuthField({
         }}
       >
         {label}
+        {required ? (
+          <Box component="span" aria-hidden sx={{ color: color.fg.danger }}>
+            {' *'}
+          </Box>
+        ) : null}
       </Typography>
 
       <FormControl fullWidth error={Boolean(errorText)}>
@@ -67,7 +82,10 @@ export function AuthField({
           placeholder={placeholder}
           type={type}
           autoComplete={autoComplete}
-          inputProps={{ inputMode }}
+          inputProps={{
+            inputMode,
+            'aria-required': required || undefined,
+          }}
           disabled={disabled}
           endAdornment={endAdornment}
           notched={false}

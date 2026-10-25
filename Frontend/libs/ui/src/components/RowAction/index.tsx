@@ -31,7 +31,7 @@ const TONES = {
 } as const;
 
 export interface RowActionProps extends Omit<ButtonBaseProps, 'color'> {
-  /** Leading glyph. Rendered at the design system's 14px icon size by the caller. */
+  /** Leading glyph, drawn by the caller at `designTokens.iconSize.sm`. */
   icon?: ReactNode;
   label: ReactNode;
   tone?: RowActionTone;
