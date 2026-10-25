@@ -6,7 +6,11 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  Button as DesignSystemButton,
+  designTokens,
+  displayTextSize,
+} from '@rescue-frontend/ui';
 
 import { getAuthColorScheme } from '../../theme/auth-theme';
 import { AuthFormError } from '../../utils/auth-form-error';
@@ -250,6 +254,7 @@ export function LoginForm({
           render={({ field, fieldState }) => (
             <AuthField
               label={loginFormText.displayNameLabel}
+              required
               value={field.value ?? ''}
               onChange={field.onChange}
               placeholder={loginFormText.displayNamePlaceholder}
@@ -281,6 +286,7 @@ export function LoginForm({
         render={({ field, fieldState }) => (
           <AuthField
             label={identityFieldCopy.label}
+            required
             value={field.value ?? ''}
             onChange={field.onChange}
             placeholder={identityFieldCopy.placeholder}
@@ -311,6 +317,7 @@ export function LoginForm({
         render={({ field, fieldState }) => (
           <AuthPasswordField
             label={loginFormText.passwordLabel}
+            required
             value={field.value ?? ''}
             onChange={field.onChange}
             placeholder={
@@ -387,33 +394,20 @@ export function LoginForm({
             : loginFormText.registerSubmitLabel}
       </Button>
 
+      {/* The design system's outline, as the prototype's 註冊帳號 (site-auth.jsx:303), at the height
+          of the button above it. */}
       {secondaryActionLabel && onSecondaryAction ? (
-        <Button
+        <DesignSystemButton
+          variant="outline"
           type="button"
           onClick={() => {
             void runAction(onSecondaryAction);
           }}
           disabled={isSubmitting}
-          sx={{
-            width: '100%',
-            minHeight: 40,
-            borderRadius: '999px',
-            border: `1px solid ${authPalette.fieldBorder}`,
-            bgcolor: authPalette.fieldBackground,
-            color: authPalette.textPrimary,
-            px: 2,
-            py: '8px',
-            fontSize: displayTextSize[14],
-            lineHeight: 1.25,
-            fontWeight: 600,
-            letterSpacing: '0.7px',
-            '&:hover': {
-              bgcolor: '#EEF3F8',
-            },
-          }}
+          sx={{ width: '100%', height: 40, minHeight: 40 }}
         >
           {secondaryActionLabel}
-        </Button>
+        </DesignSystemButton>
       ) : null}
 
       {mode === 'login' && onSmsLoginAsync ? (
