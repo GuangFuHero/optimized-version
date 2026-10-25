@@ -20,22 +20,27 @@ from app.models.auth import User
 from app.models.ticket_task import TaskAssignment
 from app.services import dedup_resolve
 from app.services import ticket as ticket_service
-from tests.conftest import TEST_DB_URL
+from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 from tests.test_dedup_resolve import _example_one, _versions, _world
 from tests.test_dedup_review_read import _actor
 
 pytestmark = pytest.mark.asyncio
 
 
-async def _waiting_on_a_lock(engine, action_task) -> None:
-    """Return once some other connection is blocked on a row lock."""
-    for _ in range(200):
+async def _waiting_on_a_lock(engine, action_task, attempts: int = 200) -> None:
+    """Return once another connection to this test's database is blocked on a row lock."""
+    for _ in range(attempts):
         if action_task.done():
             raise AssertionError(f"the second action finished without waiting: {action_task.result()!r}")
         async with engine.connect() as conn:
             waiting = (
                 await conn.execute(
-                    text("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'")
+                    # Only this test's database: other test databases share the server, and a
+                    # wait in one of them would let the resolve go before the action queued.
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity "
+                        "WHERE wait_event_type = 'Lock' AND datname = current_database()"
+                    )
                 )
             ).scalar_one()
         if waiting:
@@ -184,3 +189,73 @@ async def test_editing_an_item_queued_behind_its_move_is_refused(db, monkeypatch
     outcome, ids = await _during_resolve(db, monkeypatch, action, Perm.TICKET_EDIT)
 
     assert isinstance(outcome, ValueError) and "merged into another ticket" in str(outcome), outcome
+
+
+async def test_an_edit_queued_behind_a_fold_is_refused(db, monkeypatch):
+    """b1 folds into a1 and stays on the cancelled B, soft-deleted; an edit must not land on it."""
+
+    async def action(session, actor, ids):
+        return await ticket_service.update_ticket_task(
+            session, actor=actor, uuid=ids["b1"], changes={"quantity": 9}
+        )
+
+    outcome, ids = await _during_resolve(db, monkeypatch, action, Perm.TICKET_EDIT)
+
+    assert isinstance(outcome, ValueError) and "not found" in str(outcome), outcome
+
+
+async def test_adding_an_item_queued_behind_a_fold_is_refused(db, monkeypatch):
+    """No item lands on a need the resolve folded away meanwhile."""
+
+    async def action(session, actor, ids):
+        return await ticket_service.create_task_property(
+            session,
+            actor=actor,
+            task_uuid=ids["b1"],
+            property_name="餐盒",
+            property_value="葷",
+            quantity=1,
+            comment=None,
+        )
+
+    outcome, ids = await _during_resolve(db, monkeypatch, action, Perm.TICKET_EDIT)
+
+    assert isinstance(outcome, ValueError) and "not found" in str(outcome), outcome
+
+
+async def test_the_lock_guard_ignores_waits_in_other_databases(db):
+    """Other test databases share the server: their lock waits must not release the resolve early."""
+    admin = create_async_engine(_ADMIN_DB_URL, isolation_level="AUTOCOMMIT")
+    name = f"{TEST_DB_URL.rsplit('/', 1)[-1]}_foreign_wait"
+    other_url = TEST_DB_URL.rsplit("/", 1)[0] + "/" + name
+    async with admin.connect() as conn:
+        await conn.exec_driver_sql(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await conn.exec_driver_sql(f'CREATE DATABASE "{name}"')
+    other = create_async_engine(other_url)
+    holder, waiter = await other.connect(), await other.connect()
+    own = create_async_engine(TEST_DB_URL)
+    try:
+        await holder.exec_driver_sql("CREATE TABLE t (id int primary key)")
+        await holder.exec_driver_sql("INSERT INTO t VALUES (1)")
+        await holder.commit()
+        await holder.exec_driver_sql("SELECT * FROM t WHERE id = 1 FOR UPDATE")
+        blocked = asyncio.create_task(waiter.exec_driver_sql("SELECT * FROM t WHERE id = 1 FOR UPDATE"))
+        await asyncio.sleep(0.5)  # the waiter is now blocked, in the other database
+        idle = asyncio.create_task(asyncio.sleep(30))  # an action that never waits on a lock here
+
+        try:
+            with pytest.raises(AssertionError, match="never waited"):
+                await _waiting_on_a_lock(own, idle, attempts=10)
+        finally:
+            idle.cancel()
+            await holder.rollback()  # let the other database's waiter through before closing it
+            await blocked
+            await waiter.rollback()
+    finally:
+        await holder.close()
+        await waiter.close()
+        await other.dispose()
+        await own.dispose()
+        async with admin.connect() as conn:
+            await conn.exec_driver_sql(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await admin.dispose()
