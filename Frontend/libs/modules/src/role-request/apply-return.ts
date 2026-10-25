@@ -6,16 +6,11 @@
  * is (`help-return.ts`).
  */
 
-/** What reading the way back needs of a query: `URLSearchParams`, or Next's read-only one. */
-export interface ApplyReturnQuery {
-  get(name: string): string | null;
-}
-
-/** Where the person was — `window.location` will do. */
-export interface ApplyReturnLocation {
-  pathname: string;
-  search: string;
-}
+import {
+  stripQueryKeys,
+  type ReturnLocation,
+  type ReturnQuery,
+} from '../route/return-query';
 
 const APPLY_KEY = 'apply';
 const STEP_UP_KEY = 'step_up';
@@ -27,7 +22,7 @@ export interface ApplyReturn {
   stepUp: 'ok' | { error: string } | null;
 }
 
-export function readApplyReturn(query: ApplyReturnQuery): ApplyReturn | null {
+export function readApplyReturn(query: ReturnQuery): ApplyReturn | null {
   if (query.get(APPLY_KEY) === null) {
     return null;
   }
@@ -41,21 +36,9 @@ export function readApplyReturn(query: ApplyReturnQuery): ApplyReturn | null {
   return { stepUp: query.get(STEP_UP_KEY) === 'ok' ? 'ok' : null };
 }
 
-/** The address without the way back — taken off once read, so a reload does not repeat it. */
+/** The address without the way back, so a reload does not repeat it. */
 export function stripApplyReturn(href: string): string {
-  const url = new URL(href, 'http://site.invalid');
-
-  // Rewriting the query re-spells what stays (`%20` as `+`): without the markers, hand the address
-  // back as it came, so nothing mistakes it for a changed one.
-  if (!RETURN_KEYS.some((key) => url.searchParams.has(key))) {
-    return href;
-  }
-
-  for (const key of RETURN_KEYS) {
-    url.searchParams.delete(key);
-  }
-
-  return `${url.pathname}${url.search}${url.hash}`;
+  return stripQueryKeys(href, RETURN_KEYS);
 }
 
 /**
@@ -63,7 +46,7 @@ export function stripApplyReturn(href: string): string {
  * not the router: the map rewrites its address in place. `return_to` keeps the rest of the address
  * — the map's view, the list's filters — so the person comes back to what they were looking at.
  */
-export function buildPhoneStepUpHref(location: ApplyReturnLocation): string {
+export function buildPhoneStepUpHref(location: ReturnLocation): string {
   const back = new URLSearchParams(location.search);
 
   for (const key of RETURN_KEYS) {

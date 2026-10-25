@@ -5,6 +5,7 @@ import {
   SITE_FALLBACK_DATA_TYPE,
   normalizeSiteSubDataTypes,
 } from './constants';
+import type { ReturnQuery } from './return-query';
 import type {
   RescueMapBaseLayer,
   RescueMapDataType,
@@ -12,10 +13,8 @@ import type {
   SiteRouteState,
 } from './types';
 
-/** 提供 `get(name)` 的查詢字串來源，相容 URLSearchParams 與 Next.js 的唯讀版本。 */
-export interface SiteQuerySource {
-  get(name: string): string | null;
-}
+/** 提供 `get(name)` 的查詢字串來源，相容 URLSearchParams 與 Next.js 的唯讀版本（同 `return-query.ts`）。 */
+export type SiteQuerySource = ReturnQuery;
 
 function decodeSegment(value: string | undefined): string | undefined {
   if (!value) {

@@ -15,6 +15,7 @@ export type {
   ButtonVariant,
 } from './components/Button';
 export { Callout } from './components/Callout';
+export { Card } from './components/card';
 export type { CalloutProps, CalloutTone } from './components/Callout';
 export { CountBadge } from './components/CountBadge';
 export type { CountBadgeProps, CountBadgeTone } from './components/CountBadge';
@@ -27,6 +28,10 @@ export type {
 } from './components/DataTable';
 export { Dialog } from './components/Dialog';
 export type { DialogProps } from './components/Dialog';
+export { Modal } from './components/Modal';
+export type { ModalProps } from './components/Modal';
+export { SelectionCard } from './components/SelectionCard';
+export type { SelectionCardProps } from './components/SelectionCard';
 export { EmptyState } from './components/EmptyState';
 export type { EmptyStateProps } from './components/EmptyState';
 export { ListPagination } from './components/ListPagination';
@@ -55,7 +60,9 @@ export type {
 } from './components/MapMarker';
 export { MetadataTable } from './components/MetadataTable';
 export { Markdown } from './components/Markdown';
-export type { MarkdownProps } from './components/Markdown';
+export type { MarkdownProps, MarkdownTask } from './components/Markdown';
+export { MarkdownEditor } from './components/MarkdownEditor';
+export type { MarkdownEditorProps } from './components/MarkdownEditor';
 export { localStorageKeys } from './constant/local-storage-keys';
 export type {
   MetadataRow,
@@ -66,6 +73,8 @@ export { RowAction } from './components/RowAction';
 export type { RowActionProps, RowActionTone } from './components/RowAction';
 export { SegmentedTabs } from './components/segmented-tabs';
 export type { SegmentedTabsProps } from './components/segmented-tabs';
+export { Tabs } from './components/tabs';
+export type { TabsProps } from './components/tabs';
 export { Sheet } from './components/Sheet';
 export type { SheetProps } from './components/Sheet';
 export { SidebarItem } from './components/SidebarItem';
