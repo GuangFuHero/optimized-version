@@ -53,6 +53,7 @@ describe('readSiteNotices', () => {
       ticket_deleted: 'called-off',
       dedup_task_merged: 'merged',
       dedup_task_canceled: 'called-off',
+      dedup_ticket_contact_changed: 'merged',
       dedup_ticket_merged: 'merged',
       dedup_ticket_updated: 'merged',
       role_request_approved: 'role-approved',
@@ -122,6 +123,7 @@ describe('readSiteNotices', () => {
     const dedup = [
       'dedup_task_merged',
       'dedup_task_canceled',
+      'dedup_ticket_contact_changed',
       'dedup_ticket_merged',
       'dedup_ticket_updated',
     ].map((type) =>
@@ -133,7 +135,7 @@ describe('readSiteNotices', () => {
         ticketUuid,
         needUuid,
       ]),
-    ).toEqual(Array(4).fill(['kept-ticket', null]));
+    ).toEqual(Array(5).fill(['kept-ticket', null]));
   });
 
   it('does not open the ticket a deletion names, which is gone', () => {
