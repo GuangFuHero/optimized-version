@@ -59,7 +59,9 @@ const filledInputSx = {
     px: '14px',
     '&::placeholder': { color: color.fg.neutral.muted, opacity: 1 },
   },
-  '& .MuiInputBase-inputMultiline': { px: 0 },
+  // The wrapper pads a textarea, so the textarea itself must not: `.MuiInputBase-input` alone
+  // would win and indent it twice.
+  '& .MuiInputBase-input.MuiInputBase-inputMultiline': { px: 0 },
   '& .MuiInputBase-multiline': { px: '14px', py: '12px' },
   '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
   '& .MuiFormHelperText-root': {
