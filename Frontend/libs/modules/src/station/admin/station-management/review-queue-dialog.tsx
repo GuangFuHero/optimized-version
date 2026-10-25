@@ -29,22 +29,29 @@ import {
   ArrowRight,
   Check,
   CheckCheck,
+  CircleCheck,
   GitPullRequestArrow,
   PencilLine,
+  RefreshCw,
+  TriangleAlert,
+  Users,
   X,
   Zap,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
 import { useStationRows } from './hooks/use-station-rows';
 import {
+  approvesConflict,
   buildDecisions,
   buildReviewFields,
   type FieldDecision,
   hasConflict,
   pendingFieldsLabel,
+  reviewValueLabel,
   type ReviewField,
+  suggestionVersions,
 } from './model/review';
 import { EMPTY_FILTERS } from './model/station-filters';
 import { formatTaiwanDateTime } from '../../../time';
@@ -78,31 +85,17 @@ export function ReviewQueueDialog({
   const [selected, setSelected] = useState<string | null>(null);
   const current =
     stations.find((s) => s.uuid === selected) ?? stations[0] ?? null;
-  const uuid = current?.uuid ?? '';
   // Per station, not the page capabilities: a `team`-scoped reviewer may review a station
-  // whose history or edit is still out of reach under other grants (WG-168).
-  const canViewHistory = current?.raw.viewerCanViewHistory ?? false;
+  // whose edit is still out of reach under other grants (WG-168).
   const canEdit = current?.canEdit ?? false;
+  const { review, history, historyPage, fields, canViewHistory } =
+    useQueuedStation(current);
 
-  // Loaded here, not in the detail pane, so the list can flag the selected station's conflict.
-  const review = useStationReview({ uuid });
-  // Conflicts come from the station's history; without it they are unknown, never "none".
-  const history = useStationHistory(
-    { path: { uuid }, query: { limit: HISTORY_PAGE } },
-    { enabled: canViewHistory && Boolean(uuid) },
-  );
-  const historyPage = useMemo(
-    () =>
-      history.isSuccess && history.data
-        ? { events: history.data.data, total: history.data.meta.total }
-        : null,
-    [history.isSuccess, history.data],
-  );
-  const fields = useMemo(
-    () => (review.data ? buildReviewFields(review.data, historyPage) : []),
-    [review.data, historyPage],
-  );
-  const currentConflict = hasConflict(fields);
+  /** Reads the station and its history again; the history's size then, or null if it failed. */
+  const resync = async () => {
+    const [, fresh] = await Promise.all([review.refetch(), history.refetch()]);
+    return fresh.isSuccess ? fresh.data.meta.total : null;
+  };
 
   return (
     <MuiDialog
@@ -190,39 +183,14 @@ export function ReviewQueueDialog({
               )}
             </Box>
           ) : (
-            stations.map((station) => {
-              const active = current?.uuid === station.uuid;
-              return (
-                <ButtonBase
-                  key={station.uuid}
-                  onClick={() => setSelected(station.uuid)}
-                  sx={{
-                    width: '100%',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '8px',
-                    p: '14px 18px',
-                    textAlign: 'left',
-                    borderBottom: `1px solid ${color.bg.neutral.sunken}`,
-                    borderLeft: `3px solid ${active ? color.bg.primary.default : 'transparent'}`,
-                    bgcolor: active ? color.bg.neutral.default : 'transparent',
-                  }}
-                >
-                  <Typography noWrap sx={typography.label[400]}>
-                    {station.name}
-                  </Typography>
-                  {active && currentConflict ? (
-                    <Badge tone="danger" variant="solid" size="sm">
-                      衝突
-                    </Badge>
-                  ) : (
-                    <Badge tone="warning" size="sm">
-                      {pendingFieldsLabel(station.pendingFieldCount)}
-                    </Badge>
-                  )}
-                </ButtonBase>
-              );
-            })
+            stations.map((station) => (
+              <QueueItem
+                key={station.uuid}
+                row={station}
+                active={current?.uuid === station.uuid}
+                onSelect={() => setSelected(station.uuid)}
+              />
+            ))
           )}
         </Box>
 
@@ -233,9 +201,12 @@ export function ReviewQueueDialog({
             name={review.data?.station?.name ?? current.name}
             loading={review.isPending}
             fields={fields}
+            versions={suggestionVersions(historyPage, fields)}
             enumFields={review.data?.suggestableFields}
             historyLoading={canViewHistory && history.isPending}
             historyUnavailable={!historyPage}
+            historyTotal={historyPage?.total ?? null}
+            onResync={resync}
             canEdit={canEdit}
             onEditStation={onEditStation}
           />
@@ -270,6 +241,103 @@ export function ReviewQueueDialog({
   );
 }
 
+type QueueRow = ReturnType<typeof useStationRows>['rows'][number];
+
+/**
+ * A queued station's suggestions, each with its conflict. The list and the detail pane both call
+ * it, so every station in the queue can show 衝突 and the selected one reads the same cache.
+ */
+function useQueuedStation(row: QueueRow | null) {
+  const uuid = row?.uuid ?? '';
+  const canViewHistory = row?.raw.viewerCanViewHistory ?? false;
+  const review = useStationReview({ uuid });
+  // Conflicts come from the station's history; without it they are unknown, never "none".
+  const history = useStationHistory(
+    { path: { uuid }, query: { limit: HISTORY_PAGE } },
+    { enabled: canViewHistory && Boolean(uuid) },
+  );
+  const historyPage = useMemo(
+    () =>
+      history.isSuccess && history.data
+        ? { events: history.data.data, total: history.data.meta.total }
+        : null,
+    [history.isSuccess, history.data],
+  );
+  const fields = useMemo(
+    () => (review.data ? buildReviewFields(review.data, historyPage) : []),
+    [review.data, historyPage],
+  );
+  return { review, history, historyPage, fields, canViewHistory };
+}
+
+/** A station in the queue: 衝突 once a field is known to conflict, else how much waits. */
+function QueueItem({
+  row,
+  active,
+  onSelect,
+}: {
+  row: QueueRow;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const { fields } = useQueuedStation(row);
+  const { firstSuggestedAt } = suggestionVersions(null, fields);
+
+  return (
+    <ButtonBase
+      onClick={onSelect}
+      sx={{
+        width: '100%',
+        display: 'block',
+        p: '14px 18px',
+        textAlign: 'left',
+        borderBottom: `1px solid ${color.bg.neutral.sunken}`,
+        borderLeft: `3px solid ${active ? color.bg.primary.default : 'transparent'}`,
+        bgcolor: active ? color.bg.neutral.default : 'transparent',
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+        }}
+      >
+        <Typography noWrap sx={typography.label[400]}>
+          {row.name}
+        </Typography>
+        {hasConflict(fields) ? (
+          <Badge tone="danger" variant="solid" size="sm">
+            衝突
+          </Badge>
+        ) : (
+          <Badge tone="warning" size="sm">
+            {pendingFieldsLabel(row.pendingFieldCount)}
+          </Badge>
+        )}
+      </Box>
+      {firstSuggestedAt ? (
+        <Typography
+          sx={{
+            ...typography.data[300],
+            color: color.fg.neutral.muted,
+            mt: '5px',
+          }}
+        >
+          最早 {formatTaiwanDateTime(firstSuggestedAt)}
+        </Typography>
+      ) : null}
+      <Box sx={{ mt: '7px' }}>
+        {/* Suggestions come from the site, so every one is crowd-sourced. */}
+        <Badge tone="primary" size="sm" icon={<Users size={13} />}>
+          群眾投稿
+        </Badge>
+      </Box>
+    </ButtonBase>
+  );
+}
+
 type SuggestableField = NonNullable<
   AdminStationReviewQuery['suggestableFields']
 >[number];
@@ -279,9 +347,12 @@ function StationReview({
   name,
   loading,
   fields,
+  versions,
   enumFields,
   historyLoading,
   historyUnavailable,
+  historyTotal,
+  onResync,
   canEdit,
   onEditStation,
 }: {
@@ -289,15 +360,21 @@ function StationReview({
   name: string;
   loading: boolean;
   fields: ReviewField[];
+  versions: ReturnType<typeof suggestionVersions>;
   enumFields: readonly SuggestableField[] | undefined;
   historyLoading: boolean;
   historyUnavailable: boolean;
+  historyTotal: number | null;
+  onResync: () => Promise<number | null>;
   canEdit: boolean;
   onEditStation: (uuid: string) => void;
 }) {
   const merge = useMergeStationSuggestions();
   const [decisions, setDecisions] = useState<Record<string, FieldDecision>>({});
   const [note, setNote] = useState('');
+  // The history's size when the reviewer last re-compared; a later edit grows it and locks again.
+  const [resyncedAt, setResyncedAt] = useState<number | null>(null);
+  const [resyncing, setResyncing] = useState(false);
 
   const enumOptions = useMemo(
     () =>
@@ -312,6 +389,22 @@ function StationReview({
   const payload = buildDecisions(fields, decisions);
   const approved = payload.filter((d) => d.approve).length;
   const rejected = payload.length - approved;
+
+  const conflict = hasConflict(fields);
+  const resynced = resyncedAt !== null && resyncedAt === historyTotal;
+  // The prototype's 阻擋盲目覆蓋: adopting a field edited since its suggestion waits for a re-compare.
+  const blocked = !resynced && approvesConflict(fields, decisions);
+
+  const resync = async () => {
+    setResyncing(true);
+    try {
+      const total = await onResync();
+      if (total === null) toast.error('無法重新讀取版本歷史，請稍後再試');
+      else setResyncedAt(total);
+    } finally {
+      setResyncing(false);
+    }
+  };
 
   const submit = () =>
     merge.mutate(
@@ -338,9 +431,7 @@ function StationReview({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <Box sx={{ flex: 1, overflow: 'auto', p: '24px' }}>
-        <Typography sx={{ ...typography.heading[600], mb: '16px' }}>
-          {name}
-        </Typography>
+        <ReviewHeader name={name} versions={versions} />
         {fields.length > 0 && historyUnavailable ? (
           <Box sx={{ mb: '16px' }}>
             <Callout tone="warning">
@@ -357,6 +448,43 @@ function StationReview({
             </Callout>
           </Box>
         ) : null}
+        {conflict && !resynced ? (
+          <ConflictBanner>
+            <Button
+              variant="outline"
+              size="sm"
+              startIcon={<RefreshCw size={15} />}
+              disabled={resyncing}
+              onClick={resync}
+              sx={{ mt: '10px' }}
+            >
+              {resyncing ? '比對中…' : '重新比對最新底稿'}
+            </Button>
+          </ConflictBanner>
+        ) : conflict ? (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              p: '11px 14px',
+              mb: '18px',
+              borderRadius: `${radius.md}px`,
+              bgcolor: color.bg.success.subtle,
+            }}
+          >
+            <CircleCheck
+              size={18}
+              color={color.bg.success.default}
+              style={{ flexShrink: 0 }}
+            />
+            <Typography
+              sx={{ ...typography.body[300], color: color.fg.success }}
+            >
+              已重新比對：下方「目前最新值」為核准基準，建議值將覆蓋於其上。
+            </Typography>
+          </Box>
+        ) : null}
         <Typography sx={typography.label[400]}>欄位級對比</Typography>
         <Typography
           sx={{
@@ -365,7 +493,7 @@ function StationReview({
             mb: '10px',
           }}
         >
-          目前值 → 採用的值。不決定的欄位會繼續留在佇列。
+          投稿時的值 → 建議改為。不決定的欄位會繼續留在佇列。
         </Typography>
         {fields.length === 0 ? (
           <Callout tone="info">這個站點已沒有待審的建議。</Callout>
@@ -396,6 +524,18 @@ function StationReview({
           borderTop: `1px solid ${color.border.default}`,
         }}
       >
+        {blocked ? (
+          // Its own line: beside the note and both buttons it pushes 送出審核 onto a second row.
+          <Typography
+            sx={{
+              ...typography.body[300],
+              color: color.fg.danger,
+              width: '100%',
+            }}
+          >
+            需先重新比對才能核准
+          </Typography>
+        ) : null}
         <Box sx={{ flex: 1, minWidth: 240 }}>
           <TextInput
             value={note}
@@ -415,7 +555,7 @@ function StationReview({
         ) : null}
         <Button
           startIcon={<Check size={18} />}
-          disabled={payload.length === 0 || merge.isPending}
+          disabled={payload.length === 0 || blocked || merge.isPending}
           onClick={submit}
         >
           送出審核（{payload.length} 欄）
@@ -437,6 +577,7 @@ function ReviewFieldCard({
   onChange: (next: FieldDecision) => void;
 }) {
   const [value, setValue] = useState(field.proposedValues[0] ?? '');
+  const label = (raw: string) => reviewValueLabel(field.fieldName, raw);
   const choice = decision ? (decision.approve ? 'approve' : 'reject') : 'later';
 
   const setChoice = (next: 'approve' | 'reject' | 'later', nextValue = value) =>
@@ -492,23 +633,30 @@ function ReviewFieldCard({
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'stretch', gap: '10px' }}>
-        <ValueBox
-          label="目前值"
-          value={field.currentValue}
-          conflict={Boolean(field.conflict)}
-        />
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            pt: '22px',
-            color: color.fg.neutral.muted,
-          }}
-        >
-          <ArrowRight size={18} />
-        </Box>
+        {field.conflict === null ? (
+          // Without the history there is no telling what the suggestion was made against.
+          <ValueBox label="目前值" value={label(field.currentValue)} />
+        ) : (
+          <ValueBox
+            label="投稿時的值"
+            value={
+              field.baseValue === null ? '（無法得知）' : label(field.baseValue)
+            }
+          />
+        )}
+        {field.conflict ? (
+          <>
+            <Arrow />
+            <ValueBox
+              label="目前最新值"
+              value={label(field.currentValue)}
+              conflict
+            />
+          </>
+        ) : null}
+        <Arrow />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <ColumnLabel>採用的值</ColumnLabel>
+          <ColumnLabel>建議改為</ColumnLabel>
           {options && options.length > 0 ? (
             <TextField
               select
@@ -517,7 +665,7 @@ function ReviewFieldCard({
               value={value}
               onChange={(e) => setFinal(e.target.value)}
               slotProps={{
-                htmlInput: { 'aria-label': `${field.label} 採用的值` },
+                htmlInput: { 'aria-label': `${field.label} 建議改為` },
               }}
               sx={{
                 '& .MuiOutlinedInput-root': {
@@ -529,7 +677,7 @@ function ReviewFieldCard({
             >
               {options.map((option) => (
                 <MenuItem key={option} value={option}>
-                  {option}
+                  {label(option)}
                 </MenuItem>
               ))}
             </TextField>
@@ -538,7 +686,7 @@ function ReviewFieldCard({
               fullWidth
               value={value}
               onChange={(e) => setFinal(e.target.value)}
-              inputProps={{ 'aria-label': `${field.label} 採用的值` }}
+              inputProps={{ 'aria-label': `${field.label} 建議改為` }}
               sx={{
                 ...ADOPTED,
                 border: `1px solid ${color.bg.success.default}`,
@@ -576,7 +724,7 @@ function ReviewFieldCard({
                 border: `1px solid ${proposed === value ? color.bg.primary.default : color.border.default}`,
               }}
             >
-              {proposed}
+              {label(proposed)}
             </ButtonBase>
           ))}
         </Box>
@@ -624,14 +772,106 @@ function ColumnLabel({ children }: { children: string }) {
   );
 }
 
+function Arrow() {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        pt: '22px',
+        color: color.fg.neutral.muted,
+      }}
+    >
+      <ArrowRight size={18} />
+    </Box>
+  );
+}
+
+/** The station, when its earliest suggestion came in, and the version then and now. */
+function ReviewHeader({
+  name,
+  versions,
+}: {
+  name: string;
+  versions: ReturnType<typeof suggestionVersions>;
+}) {
+  const { current, base, firstSuggestedAt } = versions;
+  const meta = [
+    firstSuggestedAt
+      ? `最早提交於 ${formatTaiwanDateTime(firstSuggestedAt)}`
+      : null,
+    base !== null ? `投稿時根據版本 v${base}` : null,
+  ].filter(Boolean);
+
+  return (
+    <Box
+      sx={{ display: 'flex', alignItems: 'center', gap: '12px', mb: '18px' }}
+    >
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={typography.heading[600]}>{name}</Typography>
+        {meta.length ? (
+          <Typography
+            sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+          >
+            {meta.join(' · ')}
+          </Typography>
+        ) : null}
+      </Box>
+      {current !== null ? (
+        <Badge tone={base === current ? 'success' : 'warning'} size="sm">
+          站點現為 v{current}
+        </Badge>
+      ) : null}
+    </Box>
+  );
+}
+
+/** The prototype's 阻擋盲目覆蓋 banner: a field was edited after it was suggested. */
+function ConflictBanner({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        gap: '12px',
+        p: '14px 16px',
+        mb: '18px',
+        borderRadius: `${radius.md}px`,
+        bgcolor: color.bg.danger.subtle,
+        border: `1px solid ${color.bg.danger.default}`,
+      }}
+    >
+      <TriangleAlert
+        size={20}
+        color={color.bg.danger.default}
+        style={{ flexShrink: 0, marginTop: 2 }}
+      />
+      <Box sx={{ flex: 1 }}>
+        <Typography sx={{ ...typography.label[400], color: color.fg.danger }}>
+          底稿已被變更，已阻擋盲目覆蓋
+        </Typography>
+        <Typography
+          sx={{
+            ...typography.body[300],
+            color: color.fg.neutral.subtle,
+            mt: '3px',
+          }}
+        >
+          此建議投稿後，站點同一欄位已被他人更新。請重新比對最新底稿後再決定。
+        </Typography>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
 function ValueBox({
   label,
   value,
-  conflict,
+  conflict = false,
 }: {
   label: string;
   value: string;
-  conflict: boolean;
+  conflict?: boolean;
 }) {
   return (
     <Box sx={{ flex: 1, minWidth: 0 }}>

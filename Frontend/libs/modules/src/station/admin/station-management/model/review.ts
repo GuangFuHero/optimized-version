@@ -4,6 +4,8 @@ import type {
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
+import { getOperationalStatusMeta } from '../../../operational-status';
+
 type HistoryEvent = components['schemas']['HistoryEventResponse'];
 
 export const SUGGESTION_FIELD_LABELS: Record<string, string> = {
@@ -21,7 +23,7 @@ export const SUGGESTION_FIELD_LABELS: Record<string, string> = {
 };
 
 /**
- * Suggestions store no base value, so a conflict means "this field changed after the first
+ * Suggestions store no base value, so a conflict starts as "this field changed after the first
  * suggestion on it". A history event names no row, but its raw audit rows (sent only with
  * `audit.view`) hold the whole row, uuid included, so a change is matched to the suggestion's own
  * resource when they are there. Without them a property field matches a change to that field on
@@ -33,16 +35,85 @@ export function hasChangedSince(
   fieldName: string,
   since: string | null,
 ): boolean {
-  if (!since) return false;
+  return changesSince(history, target, fieldName, since).length > 0;
+}
+
+/** The events that changed the field after `since`, newest first as the timeline sends them. */
+function changesSince(
+  history: readonly HistoryEvent[],
+  target: { type: string; uuid: string },
+  fieldName: string,
+  since: string | null,
+): HistoryEvent[] {
+  if (!since) return [];
   const from = Date.parse(since);
-  if (Number.isNaN(from)) return false;
-  return history.some(
+  if (Number.isNaN(from)) return [];
+  return history.filter(
     (event) =>
       event.entity === target.type &&
       Date.parse(event.at) > from &&
       event.changes.some((change) => change.field === fieldName) &&
       touchesRow(event, target.uuid),
   );
+}
+
+/**
+ * The field's value when it was first suggested: the `before` of the first change after it. Null
+ * when the change hides its values.
+ */
+function valueBefore(
+  events: readonly HistoryEvent[],
+  fieldName: string,
+): string | null {
+  const change = events
+    .at(-1)
+    ?.changes.find((candidate) => candidate.field === fieldName);
+  if (!change || change.changed || change.before === undefined) return null;
+  return change.before == null ? '' : String(change.before);
+}
+
+/** How many events precede `since`, as the version the station was at then. */
+function versionAt(page: HistoryPage, since: string): number | null {
+  if (!coversSince(page, since)) return null;
+  const from = Date.parse(since);
+  if (Number.isNaN(from)) return null;
+  const after = page.events.filter((event) => Date.parse(event.at) > from);
+  return page.total - after.length + 1;
+}
+
+/**
+ * The station's version now and when its earliest pending suggestion came in (the prototype's
+ * 「投稿時根據版本 v9」 and 「站點現為 v11」), counted as the drawer counts them: one per event, plus
+ * one. Suggestions are kept per field, not per submission, so the earliest stands for them all.
+ */
+export function suggestionVersions(
+  page: HistoryPage | null,
+  fields: readonly Pick<ReviewField, 'firstSuggestedAt'>[],
+): {
+  current: number | null;
+  base: number | null;
+  firstSuggestedAt: string | null;
+} {
+  const times = fields
+    .map((field) => field.firstSuggestedAt)
+    .filter(
+      (at): at is string => Boolean(at) && !Number.isNaN(Date.parse(at ?? '')),
+    )
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+  const firstSuggestedAt = times[0] ?? null;
+  if (!page) return { current: null, base: null, firstSuggestedAt };
+  return {
+    current: page.total + 1,
+    base: firstSuggestedAt ? versionAt(page, firstSuggestedAt) : null,
+    firstSuggestedAt,
+  };
+}
+
+/** A suggested or current value as the page shows it: an operational status by its label. */
+export function reviewValueLabel(fieldName: string, value: string): string {
+  return fieldName === 'operational_status' && value
+    ? getOperationalStatusMeta(value).label
+    : value;
 }
 
 /** A page of a station's history, newest first, and how many events it has in all. */
@@ -105,6 +176,12 @@ export interface ReviewField {
   firstSuggestedAt: string | null;
   /** null when the history could not be read (no view_history, still loading, or failed). */
   conflict: boolean | null;
+  /**
+   * The value when the field was first suggested (the prototype's 投稿時的值): the live value
+   * unless the field changed since, then the history's value from before that change. Null when
+   * the history cannot tell.
+   */
+  baseValue: string | null;
 }
 
 export function buildReviewFields(
@@ -127,6 +204,30 @@ export function buildReviewFields(
           ];
     const base = SUGGESTION_FIELD_LABELS[s.fieldName] ?? s.fieldName;
     const firstSuggestedAt = s.firstSuggestedAt ?? null;
+    const currentValue = source == null || source === '' ? '' : String(source);
+    const conflict = history
+      ? conflictIn(
+          history,
+          targetType,
+          s.targetUuid,
+          s.fieldName,
+          firstSuggestedAt,
+        )
+      : null;
+    const changes = history
+      ? changesSince(
+          history.events,
+          { type: targetType, uuid: s.targetUuid },
+          s.fieldName,
+          firstSuggestedAt,
+        )
+      : [];
+    const baseValue =
+      conflict === true
+        ? valueBefore(changes, s.fieldName)
+        : conflict === false
+          ? currentValue
+          : null;
     return {
       key: `${s.targetUuid}:${s.fieldName}`,
       targetType,
@@ -136,20 +237,16 @@ export function buildReviewFields(
         targetType === 'station_property' && property
           ? `${property.propertyName}・${base}`
           : base,
-      currentValue: source == null || source === '' ? '' : String(source),
+      currentValue,
       proposedValues: s.proposedValues,
       suggestionCount: s.suggestionCount,
       comments: s.comments,
       firstSuggestedAt,
-      conflict: history
-        ? conflictIn(
-            history,
-            targetType,
-            s.targetUuid,
-            s.fieldName,
-            firstSuggestedAt,
-          )
-        : null,
+      // Changed and changed back is no conflict (the prototype's `live !== old`); a change that
+      // hides its values stays one.
+      conflict:
+        conflict === true && baseValue === currentValue ? false : conflict,
+      baseValue,
     };
   });
 }
@@ -215,6 +312,19 @@ export function buildDecisions(
  */
 export function pendingFieldsLabel(stationFieldCount: number): string {
   return stationFieldCount > 0 ? `${stationFieldCount} 欄` : '資源待審';
+}
+
+/**
+ * Whether a field known to conflict is set to be adopted, which would overwrite a later edit
+ * blind; declining it or leaving it for later never does (the prototype's `blocked`).
+ */
+export function approvesConflict(
+  fields: readonly Pick<ReviewField, 'key' | 'conflict'>[],
+  decisions: Record<string, FieldDecision>,
+): boolean {
+  return fields.some(
+    (field) => field.conflict === true && decisions[field.key]?.approve,
+  );
 }
 
 /** Whether any field is known to conflict; an unknown conflict (no history) is not one. */

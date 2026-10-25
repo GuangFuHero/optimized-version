@@ -3,11 +3,14 @@ import type { components } from '@rescue-frontend/data-access/openapi';
 import { describe, expect, it } from 'vitest';
 
 import {
+  approvesConflict,
   buildDecisions,
   buildReviewFields,
   hasChangedSince,
   hasConflict,
   pendingFieldsLabel,
+  reviewValueLabel,
+  suggestionVersions,
 } from './review';
 
 const history = [
@@ -150,6 +153,82 @@ describe('buildReviewFields', () => {
     expect(fields.map((f) => f.conflict)).toEqual([null, null]);
   });
 
+  it('reads the value at suggestion time from the first change after it', () => {
+    // op_hour was 8-17 when suggested and changed to 24h later; quantity is unchanged since.
+    expect(
+      buildReviewFields(review, { events: history, total: history.length }).map(
+        (f) => f.baseValue,
+      ),
+    ).toEqual(['8-17', '3']);
+  });
+
+  it('takes the earliest of several changes after the suggestion', () => {
+    const events = [
+      {
+        event_type: 'UPDATED',
+        at: '2026-10-21T10:00:00Z',
+        entity: 'station',
+        changes: [{ field: 'op_hour', before: '24h', after: '9-18' }],
+      },
+      ...history,
+    ] as unknown as components['schemas']['HistoryEventResponse'][];
+    expect(
+      buildReviewFields(review, { events, total: events.length })[0]?.baseValue,
+    ).toBe('8-17');
+  });
+
+  it('calls a field changed and changed back no conflict, as the prototype does', () => {
+    // op_hour went 8-17 → 24h → 8-17 after the suggestion: adopting it overwrites nobody's edit.
+    const roundTrip = {
+      ...review,
+      station: { ...review.station, opHour: '8-17' },
+    } as unknown as AdminStationReviewQuery;
+    const events = [
+      {
+        event_type: 'UPDATED',
+        at: '2026-10-21T10:00:00Z',
+        entity: 'station',
+        changes: [{ field: 'op_hour', before: '24h', after: '8-17' }],
+      },
+      ...history,
+    ] as unknown as components['schemas']['HistoryEventResponse'][];
+    expect(
+      buildReviewFields(roundTrip, { events, total: events.length })[0],
+    ).toMatchObject({
+      conflict: false,
+      baseValue: '8-17',
+      currentValue: '8-17',
+    });
+  });
+
+  it('keeps a change that hides its values a conflict', () => {
+    const hidden = [
+      { ...history[0], changes: [{ field: 'op_hour', changed: true }] },
+    ] as unknown as components['schemas']['HistoryEventResponse'][];
+    expect(
+      buildReviewFields(review, { events: hidden, total: 1 })[0]?.conflict,
+    ).toBe(true);
+  });
+
+  it('leaves the value at suggestion time unknown when the change hides it', () => {
+    const hidden = [
+      {
+        ...history[0],
+        changes: [{ field: 'op_hour', changed: true }],
+      },
+    ] as unknown as components['schemas']['HistoryEventResponse'][];
+    expect(
+      buildReviewFields(review, { events: hidden, total: 1 })[0]?.baseValue,
+    ).toBeNull();
+  });
+
+  it('leaves the value at suggestion time unknown without history', () => {
+    expect(buildReviewFields(review, null).map((f) => f.baseValue)).toEqual([
+      null,
+      null,
+    ]);
+  });
+
   it('returns nothing for a missing station', () => {
     expect(
       buildReviewFields({ station: null } as never, {
@@ -213,5 +292,83 @@ describe('hasConflict', () => {
     expect(hasConflict([{ conflict: false }, { conflict: true }])).toBe(true);
     expect(hasConflict([{ conflict: false }, { conflict: null }])).toBe(false);
     expect(hasConflict([])).toBe(false);
+  });
+});
+
+describe('approvesConflict', () => {
+  const fields = [
+    { key: 'a', conflict: true },
+    { key: 'b', conflict: false },
+    { key: 'c', conflict: null },
+  ];
+
+  it('is true when a conflicting field is to be adopted', () => {
+    expect(approvesConflict(fields, { a: { approve: true, value: 'x' } })).toBe(
+      true,
+    );
+  });
+
+  it('lets a conflicting field be declined or left for later', () => {
+    expect(approvesConflict(fields, { a: { approve: false, value: '' } })).toBe(
+      false,
+    );
+    expect(approvesConflict(fields, { a: undefined })).toBe(false);
+  });
+
+  it('ignores adopting a field without a known conflict', () => {
+    expect(
+      approvesConflict(fields, {
+        b: { approve: true, value: 'x' },
+        c: { approve: true, value: 'y' },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('suggestionVersions', () => {
+  const fields = [
+    { firstSuggestedAt: '2026-10-21T00:00:00Z' },
+    { firstSuggestedAt: '2026-10-19T00:00:00Z' },
+  ];
+
+  it('counts the station version now and when the earliest suggestion came in', () => {
+    // Two events, one (10-20) after the earliest suggestion (10-19): v3 now, v2 then.
+    expect(
+      suggestionVersions({ events: history, total: history.length }, fields),
+    ).toEqual({
+      current: 3,
+      base: 2,
+      firstSuggestedAt: '2026-10-19T00:00:00Z',
+    });
+  });
+
+  it('leaves the base unknown when the page stops short of the suggestion', () => {
+    expect(
+      suggestionVersions({ events: history.slice(0, 1), total: 150 }, fields),
+    ).toEqual({
+      current: 151,
+      base: null,
+      firstSuggestedAt: '2026-10-19T00:00:00Z',
+    });
+  });
+
+  it('knows nothing without history', () => {
+    expect(suggestionVersions(null, fields)).toEqual({
+      current: null,
+      base: null,
+      firstSuggestedAt: '2026-10-19T00:00:00Z',
+    });
+  });
+});
+
+describe('reviewValueLabel', () => {
+  it('names an operational status the way the page does', () => {
+    expect(reviewValueLabel('operational_status', 'temporarily_closed')).toBe(
+      '暫時關閉',
+    );
+  });
+
+  it('shows any other value as it is', () => {
+    expect(reviewValueLabel('op_hour', '8-20')).toBe('8-20');
   });
 });
