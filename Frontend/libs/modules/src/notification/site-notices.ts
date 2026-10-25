@@ -60,6 +60,8 @@ const SITE_NOTICE_TYPES: Partial<
   dedup_task_merged: { kind: 'merged', opens: 'ticket' },
   // To the volunteer: their need was cancelled, and the ticket kept handles it now.
   dedup_task_canceled: { kind: 'called-off', opens: 'ticket' },
+  // To the volunteers already on the ticket kept: its contact changed, and they still go.
+  dedup_ticket_contact_changed: { kind: 'merged', opens: 'ticket' },
   // To the requester whose ticket was folded in, and to the one whose ticket took it in.
   dedup_ticket_merged: { kind: 'merged', opens: 'ticket' },
   dedup_ticket_updated: { kind: 'merged', opens: 'ticket' },
