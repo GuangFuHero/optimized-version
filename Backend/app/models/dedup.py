@@ -30,7 +30,9 @@ from app.models.base import Base, TimestampMixin, UUIDPKMixin
 ENTITY_KINDS = ("ticket", "station", "ticket_task")
 PAIR_METHODS = ("fast_rule", "slow_vector", "slow_hybrid", "manual")
 PAIR_SOURCE_LAYERS = ("fast", "slow", "manual", "system")
-PAIR_STATUSES = ("dup_ignored", "suggested", "confirmed", "rejected")
+# The verdicts say what was decided (ADR-391): "confirmed"/"rejected" read like approved/refused
+# elsewhere, and backwards here. The audit event types below keep "confirmed"/"rejected".
+PAIR_STATUSES = ("dup_ignored", "suggested", "confirmed_duplicate", "not_duplicate")
 PAIR_HINT_OUTCOMES = ("ignored_hint", "accepted_hint")
 AUDIT_EVENT_TYPES = (
     "suggested",

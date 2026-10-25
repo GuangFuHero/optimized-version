@@ -28,7 +28,8 @@ from tests.test_dedup_review_read import _actor, _pair, _two_tasks
 pytestmark = pytest.mark.asyncio
 
 DECISIONS = {"confirm": dedup_review.confirm, "reject": dedup_review.reject}
-VERDICTS = {"confirm": "confirmed", "reject": "rejected"}
+# The card's status and the event type of each verdict (ADR-391: only the status was renamed).
+VERDICTS = {"confirm": ("confirmed_duplicate", "confirmed"), "reject": ("not_duplicate", "rejected")}
 
 
 async def _events(db, pair_uuid) -> list[DedupAuditEvent]:
@@ -52,12 +53,12 @@ async def test_a_pending_card_is_decided_and_the_event_recorded(db, decision, pe
 
     item = await DECISIONS[decision](db, actor=actor, pair_uuid=pair_uuid, note="  同一戶人家  ")
 
-    verdict = VERDICTS[decision]
+    verdict, event_type = VERDICTS[decision]
     assert (item.pair.status, item.pair.reviewed_by) == (verdict, reviewer_uuid)
     assert item.pair.reviewed_at is not None
     assert item.low.uuid == str(item.pair.low_uuid)  # the response carries both sides
     (event,) = await _events(db, pair_uuid)
-    assert (event.event_type, event.actor_uuid, event.source_layer) == (verdict, reviewer_uuid, "manual")
+    assert (event.event_type, event.actor_uuid, event.source_layer) == (event_type, reviewer_uuid, "manual")
     assert (event.before_state, event.after_state) == ({"status": pending}, {"status": verdict})
     assert event.decision_reason == "同一戶人家"
     assert event.entity_kind == "ticket_task"
@@ -89,7 +90,7 @@ async def test_a_note_over_the_limit_is_refused_and_nothing_changes(db):
     assert await _events(db, pair_uuid) == []
 
 
-@pytest.mark.parametrize("decided", ["confirmed", "rejected"])
+@pytest.mark.parametrize("decided", ["confirmed_duplicate", "not_duplicate"])
 @pytest.mark.parametrize("decision", ["confirm", "reject"])
 async def test_a_decided_card_cannot_be_decided_again(db, decided, decision):
     """ADR-343: to change a verdict, revoke it first, so the history stays whole."""
@@ -191,6 +192,6 @@ async def test_two_reviewers_deciding_at_once_leave_one_verdict(db):
     refused = [o for o in outcomes if isinstance(o, DuplicatePairConflictError)]
     assert len(refused) == 1, f"expected exactly one refusal, got {outcomes}"
     (event,) = await _events(db, pair_uuid)
-    verdict = event.event_type
+    status = {event_type: status for status, event_type in VERDICTS.values()}[event.event_type]
     db.expire_all()
-    assert (await db.get(DuplicatePair, pair_uuid)).status == verdict
+    assert (await db.get(DuplicatePair, pair_uuid)).status == status
