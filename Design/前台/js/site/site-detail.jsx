@@ -269,19 +269,12 @@
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-4) var(--space-6) var(--space-6)' }}>
           {tab === 'info' ? (
             <div style={rowGap}>
-              <InfoRow label="位置說明" value={st.description || marker.subtitle} icon="MapPin" />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
-                <ResourceTile icon="Package" label="站點類型" value={marker.label} />
-                <ResourceTile icon="Clock" label="服務時間" value={(st.opHour && st.opHour.trim()) || '未提供'} />
-                {/* 「可信度」tile 已移除 —— 信任制度 v0.1.0 不做，credibility_score 留空不讀。
-                    「站點等級」也拿掉 —— `level` 是什麼還在問後端的清單裡，
-                    對前台讀者顯示一個我們自己都不確定語意的數字沒有意義。 */}
-              </div>
-              {/* 🔒 2026-10-25 物資狀況放在服務時間正下方：先知道能不能去，接著想知道「去了有沒有我要的／要帶什麼過去」。
-                  欄位：stations.supply_status（自由文字，站點缺什麼）＋ supply_status_updated_at。
-                  🔄 10-25 改名「目前缺少」、沒填整塊不顯示（見 SupplyStatusBlock）。
-                  更新時間一定要顯示：缺的東西變很快，三天前的「缺水」今天可能已經滿了。 */}
+              {/* 🔄 2026-10-25 拿掉「服務時間」「站點類型」兩格：都重複了。
+                  服務時間 → 上方那條（「現在開放／休息中」的說明）已經寫了，而且那條才回答「現在能不能去」；
+                  站點類型 → 標題下方與左上圖示已經是類型。
+                  「目前缺少」因此成為詳情分頁第一塊，讀的順序仍是「能不能去（上方）→ 去了缺什麼」。 */}
               <SupplyStatusBlock text={st.supplyStatus} updatedAt={st.supplyStatusUpdatedAt} />
+              <InfoRow label="位置說明" value={st.description || marker.subtitle} icon="MapPin" />
               {/* 🔄 2026-10-25 拿掉「官方站點／一般站點 · 人工驗證」卡：
                   「官方」上面已有標籤；驗證狀態後端**沒有任何寫入路徑**（建站、編輯、審核、匯入都不會設），
                   正式版永遠是空的。等有驗證流程再放回來。 */}
