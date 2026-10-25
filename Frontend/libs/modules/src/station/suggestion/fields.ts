@@ -104,15 +104,15 @@ export const STATION_SUGGESTION_FIELDS: readonly StationSuggestionField[] = [
     choices: STATION_TYPE_OPTIONS,
     read: (station) => station.type ?? '',
   },
-  // 目前缺少, not 物資狀況 (designer, 2026-10-26): the backend's field is what the station is short
-  // of, and 物資 reads oddly for a toilet or a shower.
+  // 目前缺少, not 物資狀況: the backend's field is what the station is short of, and 物資 reads oddly
+  // for a toilet or a shower.
   {
     name: 'supply_status',
     label: '目前缺少',
     kind: 'text',
     placeholder: '例：沐浴乳、毛巾；嬰兒尿布 M、L',
     helper: '只寫現在缺的東西。都補齊了就清空。',
-    // The backend stores a blank as none at merge (ADR-333), and the detail then drops the block.
+    // The backend stores a blank as none at merge, and the detail then drops the block.
     clearable: true,
     read: (station) => station.supplyStatus ?? '',
   },
@@ -180,8 +180,8 @@ export function startSuggestion(
 
 /**
  * Why the form cannot be sent yet, or null when it can. Nothing to review in a value left as it is,
- * nor in a blank one, but for a field that clears: 目前缺少 is emptied once nothing is short
- * (designer, 2026-10-26), and the backend takes the blank.
+ * nor in a blank one, but for a field that clears: 目前缺少 is emptied once nothing is short, and
+ * the backend takes the blank.
  */
 export function suggestionProblem(
   station: StationSuggestionSnapshot,

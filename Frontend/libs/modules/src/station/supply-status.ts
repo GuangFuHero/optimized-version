@@ -5,6 +5,8 @@
  * morning or last week.
  */
 
+import type { StationType } from '@rescue-frontend/data-access';
+
 import { timeAgo } from '../time';
 
 export interface SupplyStatusLine {
@@ -50,8 +52,8 @@ function describeUpdated(
 
 /** Null when the station has no line: nothing is said rather than 「未提供」 under every station. */
 export function describeSupplyStatus(
-  supplyStatus: string | null | undefined,
-  updatedAt: string | null | undefined,
+  supplyStatus: StationType['supplyStatus'],
+  updatedAt: StationType['supplyStatusUpdatedAt'],
   now: Date = new Date(),
   { relativeWithin = WEEK }: SupplyStatusOptions = {},
 ): SupplyStatusLine | null {

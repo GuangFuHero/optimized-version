@@ -1,21 +1,19 @@
 /**
- * A station's detail as the site shows it, read from a map marker (prototype `site-detail.jsx`
- * `StationDetail`, after the 2026-10-25 visual alignment item 6 and the designer's answers of
- * 2026-10-26). The back office's map opens the same marker in `station/admin/station-detail`, which
- * stays as it is; this is the site's own.
+ * A station's detail as the site shows it, read from a map marker. The back office's map opens the
+ * same marker in `station/admin/station-detail`, which stays as it is; this is the site's own.
  */
 
-import type { BadgeTone } from '@rescue-frontend/ui';
+import type { StationType } from '@rescue-frontend/data-access';
+import type { BadgeProps } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../map/types';
 import { resolveStationAvailability } from '../availability';
 import { describeSupplyStatus, type SupplyStatusLine } from '../supply-status';
 
-export interface SiteStationChip {
+export interface SiteStationChip
+  extends Required<Pick<BadgeProps, 'tone' | 'variant'>> {
   label: string;
-  tone: BadgeTone;
-  variant: 'solid' | 'subtle';
-  /** 官方 carries the shield, as in the prototype. */
+  /** 官方 carries a shield. */
   official?: true;
 }
 
@@ -31,23 +29,38 @@ export interface SiteStationDetail {
   coordinates: string;
 }
 
-type StationMeta = NonNullable<RescueMapMarkerItem['stationMeta']>;
+/** What the detail reads of a station, as the backend gives it; a marker may carry any of it. */
+type SiteStationSource = Partial<
+  Pick<
+    StationType,
+    | 'description'
+    | 'isOfficial'
+    | 'isTemporary'
+    | 'opHour'
+    | 'operationalStatus'
+    | 'supplyStatus'
+    | 'supplyStatusUpdatedAt'
+  >
+>;
 
-// Within a day the line reads 「3 小時前更新」, older 「10/24 更新」 (designer, 2026-10-26): how fresh a
-// line is matters while it is fresh; past a day, a date is quicker to read than a count of days.
+// Within a day the line reads 「3 小時前更新」, older 「10/24 更新」: how fresh a line is matters while
+// it is fresh; past a day, a date is quicker to read than a count of days.
 const SUPPLY_RELATIVE_WITHIN = 24 * 60 * 60_000;
 
-function describeChips(station: StationMeta, now: Date): SiteStationChip[] {
+function describeChips(
+  station: SiteStationSource,
+  now: Date,
+): SiteStationChip[] {
   const availability = resolveStationAvailability(station, now);
-  // No verification chip (designer, 2026-10-26): nothing in the backend sets a station's
-  // verification yet — not creating, editing, reviewing nor importing one — so it would say the same
-  // of every station. Back with a verification flow.
+  // No verification chip: nothing in the backend sets a station's verification yet — not creating,
+  // editing, reviewing nor importing one — so it would say the same of every station. Back with a
+  // verification flow.
   const chips: SiteStationChip[] = [
     { label: availability.headline, tone: availability.tone, variant: 'solid' },
   ];
 
-  // 官方 and 臨時站點 only when they hold: a chip on every ordinary station would drown the list
-  // (prototype site-detail.jsx:211-215). Not `source`, which the site stopped showing (2026-08-21).
+  // 官方 and 臨時站點 only when they hold: a chip on every ordinary station would drown the list. Not
+  // `source`: every station is created in the back office, so where one came from tells nothing.
   if (station.isOfficial) {
     chips.push({
       label: '官方',
@@ -68,7 +81,7 @@ export function describeSiteStation(
   marker: RescueMapMarkerItem,
   now: Date = new Date(),
 ): SiteStationDetail {
-  const station = marker.stationMeta ?? {};
+  const station: SiteStationSource = marker.stationMeta ?? {};
   const [latitude, longitude] = marker.position;
 
   return {
@@ -82,11 +95,11 @@ export function describeSiteStation(
       now,
       { relativeWithin: SUPPLY_RELATIVE_WITHIN },
     ),
-    // The description only, as the prototype's 位置說明. Never the station's `comment`, the back
-    // office's internal note (backend ADR-332), nor the subtitle, which falls back to the hours.
+    // The description only. Never the station's `comment`, the back office's internal note, nor the
+    // subtitle, which falls back to the hours.
     locationNote: station.description?.trim() || '未提供位置說明',
-    // No 站點類型 or 服務時間 tiles (designer, 2026-10-26): the hours line above already gives the
-    // hours, and is the one that says whether one can go now; the type sits under the title.
+    // No 站點類型 or 服務時間 tiles: the hours line above already gives the hours, and is the one that
+    // says whether one can go now; the type sits under the title.
     coordinates: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
   };
 }

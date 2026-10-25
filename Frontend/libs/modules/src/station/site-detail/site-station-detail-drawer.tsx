@@ -84,12 +84,12 @@ function InfoRow({
 }
 
 /**
- * 前台的站點詳情（原型 `site-detail.jsx` 的 `StationDetail`，前台視覺對齊第 6 項＋第四區）。
+ * 前台的站點詳情。
  *
- * 順序照原型：標題下的類型 → 營業、官方、臨時標籤 → 服務時間 → 目前缺少 → 位置說明 → 座標；字級全用前台的
- * `displayTextSize`。驗證標籤、「官方站點／一般站點」卡、類型／服務時間兩格照糖 10-26 拿掉：後端還沒有寫入
- * 驗證狀態的地方，兩格則跟標題下的類型、上方的服務時間重複。後台互助地圖開同一個站點，仍走
- * `station/admin/station-detail`。
+ * 順序：標題下的類型 → 營業、官方、臨時標籤 → 服務時間 → 目前缺少 → 位置說明 → 座標，先回答現在能不能去，
+ * 再講去了缺什麼、在哪裡；字級全用前台的 `displayTextSize`。沒有驗證標籤和「官方站點／一般站點」卡：後端還沒有
+ * 寫入驗證狀態的地方，每個站點都會寫一樣的話。也沒有類型／服務時間兩格：跟標題下的類型、上方的服務時間重複。
+ * 後台互助地圖開同一個站點，仍走 `station/admin/station-detail`。
  */
 export function SiteStationDetailDrawer({
   marker,
@@ -130,7 +130,7 @@ export function SiteStationDetailDrawer({
         <CloseIcon />
       </IconButton>
 
-      {/* 右邊留 56px 給關閉鈕，長標題才不會跑到 X 底下（原型 panelHead）。 */}
+      {/* 右邊留 56px 給關閉鈕，長標題才不會跑到 X 底下。 */}
       <Stack
         direction="row"
         sx={{
@@ -197,7 +197,7 @@ export function SiteStationDetailDrawer({
             key={chip.label}
             tone={chip.tone}
             variant={chip.variant}
-            icon={chip.official ? <ShieldCheck size={12} /> : undefined}
+            icon={chip.official ? <ShieldCheck size="1em" /> : undefined}
             sx={{ fontWeight: 700 }}
           >
             {chip.label}
@@ -205,7 +205,7 @@ export function SiteStationDetailDrawer({
         ))}
       </Stack>
 
-      {/* 「現在能不能去」是這一頁最重要的一句話，所以放在最上面、獨立一塊（原型 :221-229）。 */}
+      {/* 「現在能不能去」是這一頁最重要的一句話，所以緊接在標籤下、獨立一塊。 */}
       <Stack
         direction="row"
         sx={{
@@ -243,8 +243,8 @@ export function SiteStationDetailDrawer({
           pb: `${spacing[6]}px`,
         }}
       >
-        {/* 目前缺少（ADR-333 的 supply_status）是詳情第一塊：知道能不能去之後，最想知道的是缺什麼（糖 10-26）。
-            框起來的卡照原型 `SupplyStatusBlock`；沒填整塊不顯示：衛浴、廁所這類站點沒填是常態。 */}
+        {/* 目前缺少（`supply_status`）是詳情第一塊：知道能不能去之後，最想知道的是缺什麼。
+            沒填整塊不顯示：衛浴、廁所這類站點沒填是常態。 */}
         {detail.supply ? (
           <Box
             sx={{

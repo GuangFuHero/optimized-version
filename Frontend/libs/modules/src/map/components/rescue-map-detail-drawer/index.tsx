@@ -47,8 +47,8 @@ export type RescueMapTicketDetailOverrides = Partial<
 };
 
 /**
- * Which station detail to draw. The site's follows the prototype on the site's text scale
- * (visual alignment item 6, 2026-10-25); the back office's map keeps its own, so it is the default.
+ * Which station detail to draw. The site has its own, on the site's text scale; the back office's
+ * map keeps the one it has, so that is the default.
  */
 export type RescueMapStationLayout = 'admin' | 'site';
 

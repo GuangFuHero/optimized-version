@@ -85,13 +85,13 @@ describe('describeSiteStation', () => {
     ).toEqual(['現在開放']);
   });
 
-  it('lays out the body in the prototype order: hours, place, where, with no tiles repeating them', () => {
+  it('lays out the body as hours, place, where, with no tiles repeating them', () => {
     const detail = describeSiteStation(station(), at(10));
 
     expect(detail.hoursLine).toBe('服務時間 06:00-22:00');
     expect(detail.locationNote).toBe('校門口設 6 座取水口，可接軟管');
     expect(detail.coordinates).toBe('23.669400, 121.421200');
-    // The hours line already says the hours, and the type sits under the title (designer, 2026-10-26).
+    // The hours line already says the hours, and the type sits under the title.
     expect(detail).not.toHaveProperty('tiles');
   });
 
@@ -125,7 +125,7 @@ describe('describeSiteStation', () => {
       text: '飲用水、嬰兒尿布',
       updated: '3 小時前更新',
     });
-    // A day old or more, the date (designer, 2026-10-26).
+    // A day old or more, the date.
     expect(short(new Date(Date.UTC(2026, 9, 23, 0)))?.updated).toBe(
       '10/23 更新',
     );
