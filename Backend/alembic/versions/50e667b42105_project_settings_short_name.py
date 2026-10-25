@@ -1,7 +1,7 @@
 """project_settings.short_name: the disaster's short name for the public site's top bar (ADR-392)
 
 Revision ID: 50e667b42105
-Revises: da152a6a9d7c
+Revises: a8d3e6b1c207
 Create Date: 2026-10-25
 
 Nullable with no backfill: a deployment without one keeps showing its full name, as before.
@@ -15,7 +15,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "50e667b42105"
-down_revision: str | Sequence[str] | None = "da152a6a9d7c"
+down_revision: str | Sequence[str] | None = "a8d3e6b1c207"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

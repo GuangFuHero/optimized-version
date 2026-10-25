@@ -282,6 +282,17 @@ export const semanticSpacing = {
   24: primitives.scale[96],
 } as const;
 
+/**
+ * Icon sizes, px. Ours, not Figma's: the export has no icon token. `sm` is the glyph beside a pill's
+ * label — every `RowAction`, and the buttons that stand in a row with one — so an action draws its
+ * icon at one size wherever it appears.
+ *
+ * Plain numbers, not `displayTextSize` steps: an icon does not ride the text scale (see there).
+ */
+export const semanticIconSize = {
+  sm: 14,
+} as const;
+
 /* ────────────────────────────────────────────────────────────────────────────
  * Typography
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -550,6 +561,7 @@ export const designTokens = {
   focusRing: semanticFocusRing,
   radius: semanticRadius,
   spacing: semanticSpacing,
+  iconSize: semanticIconSize,
   typography: semanticTypography,
   typographyMobile: semanticTypographyMobile,
   /** The public site's text scale. Not the same ladder as `typographyMobile` — see its docstring. */
