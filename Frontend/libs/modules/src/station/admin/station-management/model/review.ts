@@ -2,7 +2,9 @@ import type {
   AdminStationReviewQuery,
   SuggestionDecisionInput,
 } from '@rescue-frontend/data-access/admin';
-import type { TimelineItem } from '@rescue-frontend/ui';
+import type { components } from '@rescue-frontend/data-access/openapi';
+
+type HistoryEvent = components['schemas']['HistoryEventResponse'];
 
 export const SUGGESTION_FIELD_LABELS: Record<string, string> = {
   name: '站點名稱',
@@ -26,7 +28,7 @@ export const SUGGESTION_FIELD_LABELS: Record<string, string> = {
  * any of the station's properties — it may warn when it need not, never the other way round.
  */
 export function hasChangedSince(
-  history: readonly TimelineItem[],
+  history: readonly HistoryEvent[],
   target: { type: string; uuid: string },
   fieldName: string,
   since: string | null,
@@ -44,7 +46,7 @@ export function hasChangedSince(
 }
 
 /** Whether the event wrote this row; true when the event carries no raw rows to tell by. */
-function touchesRow(event: TimelineItem, uuid: string): boolean {
+function touchesRow(event: HistoryEvent, uuid: string): boolean {
   if (!event.raw?.length) return true;
   return event.raw.some((row) =>
     [row['old_values'], row['new_values']].some(
@@ -90,7 +92,7 @@ export interface ReviewField {
 
 export function buildReviewFields(
   review: AdminStationReviewQuery,
-  history: readonly TimelineItem[] | null,
+  history: readonly HistoryEvent[] | null,
 ): ReviewField[] {
   const station = review.station;
   if (!station) return [];

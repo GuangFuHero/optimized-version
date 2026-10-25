@@ -16,11 +16,7 @@ type StationImportField =
   | 'visibility'
   | 'latitude'
   | 'longitude'
-  | 'county'
-  | 'city'
-  | 'lane'
-  | 'alley'
-  | 'no'
+  | 'address'
   | 'floor'
   | 'room';
 
@@ -43,11 +39,7 @@ export const STATION_IMPORT_FIELDS: readonly {
   { value: 'visibility', label: '公開範圍' },
   { value: 'latitude', label: '緯度', required: true },
   { value: 'longitude', label: '經度', required: true },
-  { value: 'county', label: '縣市' },
-  { value: 'city', label: '鄉鎮市區' },
-  { value: 'lane', label: '路街' },
-  { value: 'alley', label: '巷弄' },
-  { value: 'no', label: '號' },
+  { value: 'address', label: '地址' },
   { value: 'floor', label: '樓' },
   { value: 'room', label: '室' },
 ];
@@ -63,8 +55,7 @@ export function stationImportTemplate(stationType: string): string {
     visibility: 'public',
     latitude: '23.6634',
     longitude: '121.4211',
-    county: '花蓮縣',
-    city: '光復鄉',
+    address: '花蓮縣光復鄉中正路一段31號',
   };
   const headers = STATION_IMPORT_FIELDS.map((f) => f.value);
   const row = headers.map((h) => csvCell(example[h] ?? ''));

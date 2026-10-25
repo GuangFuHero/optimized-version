@@ -2,7 +2,12 @@
 
 import { Box, Typography } from '@mui/material';
 import { useStationHistory } from '@rescue-frontend/data-access/admin';
-import { Button, designTokens, Timeline } from '@rescue-frontend/ui';
+import {
+  backendEventsToTimelineItems,
+  Button,
+  designTokens,
+  Timeline,
+} from '@rescue-frontend/ui';
 import { History } from 'lucide-react';
 import { useState } from 'react';
 
@@ -49,7 +54,7 @@ export function StationHistoryPanel({ uuid }: { uuid: string }) {
         </Typography>
       </Box>
       <Timeline
-        items={events}
+        items={backendEventsToTimelineItems(events)}
         emptyText={history.isPending ? '載入中…' : '尚無變更紀錄'}
       />
       {canLoadMore ? (

@@ -14,7 +14,7 @@ export interface StationRow {
   typeLabel: string;
   operationalStatus: OperationalStatus;
   county: string;
-  city: string;
+  town: string;
   area: string;
   teamUuid: string | null;
   teamName: string | null;
@@ -34,7 +34,7 @@ export interface StationRow {
 
 export function toStationRow(station: AdminStationFieldsFragment): StationRow {
   const county = station.secondaryLocation?.county?.trim() ?? '';
-  const city = station.secondaryLocation?.city?.trim() ?? '';
+  const town = station.secondaryLocation?.town?.trim() ?? '';
   return {
     uuid: station.uuid,
     name: station.name?.trim() || UNNAMED_STATION,
@@ -43,8 +43,8 @@ export function toStationRow(station: AdminStationFieldsFragment): StationRow {
     // The schema types it as a plain string; the backend only stores these three values.
     operationalStatus: station.operationalStatus as OperationalStatus,
     county,
-    city,
-    area: `${county}${city}`,
+    town,
+    area: `${county}${town}`,
     teamUuid: station.assignedTeam?.uuid ?? null,
     teamName: station.assignedTeam?.name ?? null,
     isOfficial: station.source === 'official',

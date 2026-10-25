@@ -54,15 +54,7 @@ export function countRatings(
 export function formatStationAddress(station: DetailStation): string {
   const location = station.secondaryLocation;
   if (!location) return '';
-  return [
-    location.county,
-    location.city,
-    location.lane,
-    location.alley,
-    location.no,
-    location.floor,
-    location.room,
-  ]
+  return [location.fullAddress, location.floor, location.room]
     .map((part) => part?.trim())
     .filter(Boolean)
     .join('');
@@ -70,7 +62,7 @@ export function formatStationAddress(station: DetailStation): string {
 
 function formatDistrict(station: DetailStation): string {
   const location = station.secondaryLocation;
-  return [location?.county, location?.city]
+  return [location?.county, location?.town]
     .map((part) => part?.trim())
     .filter(Boolean)
     .join('');

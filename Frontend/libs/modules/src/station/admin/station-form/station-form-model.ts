@@ -1,4 +1,5 @@
 import type {
+  AdminReverseGeocodeQuery,
   AdminStationQuery,
   CreateStationInput,
   SecondaryLocationInput,
@@ -7,7 +8,6 @@ import type {
 
 import type { OperationalStatus } from '../../operational-status';
 import { stationPoint } from '../../station-point';
-import type { reverseGeocodeResponse } from '../../../map/reverse-geocode';
 
 export type StationLocationType = 'address' | 'pole';
 
@@ -24,11 +24,13 @@ export interface StationFormState {
   latitude: string;
   longitude: string;
   locationType: StationLocationType;
-  county: string;
-  city: string;
-  lane: string;
-  alley: string;
-  no: string;
+  /** The one address line the backend splits into its parts (縣市 … 號). */
+  fullAddress: string;
+  /**
+   * The TGOS lookup's token for `fullAddress`, or ''. Sent with the unchanged line, it saves the
+   * address as verified; editing the line drops it, and the address is saved unverified.
+   */
+  addressToken: string;
   floor: string;
   room: string;
   poleId: string;
@@ -39,7 +41,7 @@ export interface StationFormState {
 export type StationFormErrors = Partial<Record<keyof StationFormState, string>>;
 
 type Station = NonNullable<AdminStationQuery['station']>;
-type ReverseGeocode = ReturnType<(typeof reverseGeocodeResponse)['parse']>;
+type AddressLookup = AdminReverseGeocodeQuery['reverseGeocode'];
 
 const TEXT_FIELDS = [
   'name',
@@ -52,15 +54,7 @@ const TEXT_FIELDS = [
   'contactEmail',
 ] as const;
 
-const ADDRESS_FIELDS = [
-  'county',
-  'city',
-  'lane',
-  'alley',
-  'no',
-  'floor',
-  'room',
-] as const;
+const ADDRESS_FIELDS = ['fullAddress', 'floor', 'room'] as const;
 
 const POLE_FIELDS = ['poleId', 'poleType', 'poleNote'] as const;
 
@@ -80,11 +74,8 @@ export function emptyStationForm(
     latitude: position ? String(position[0]) : '',
     longitude: position ? String(position[1]) : '',
     locationType: 'address',
-    county: '',
-    city: '',
-    lane: '',
-    alley: '',
-    no: '',
+    fullAddress: '',
+    addressToken: '',
     floor: '',
     room: '',
     poleId: '',
@@ -111,11 +102,8 @@ export function stationToForm(station: Station): StationFormState {
     latitude: lat == null ? '' : String(lat),
     longitude: lng == null ? '' : String(lng),
     locationType: location?.poleId ? 'pole' : 'address',
-    county: read(location?.county),
-    city: read(location?.city),
-    lane: read(location?.lane),
-    alley: read(location?.alley),
-    no: read(location?.no),
+    fullAddress: read(location?.fullAddress),
+    addressToken: '',
     floor: read(location?.floor),
     room: read(location?.room),
     poleId: read(location?.poleId),
@@ -124,16 +112,34 @@ export function stationToForm(station: Station): StationFormState {
   };
 }
 
-/** The address parts a reverse geocode found, kept only where the form is still blank. */
+/** One field typed into the form. A new address line no longer matches the lookup's token. */
+export function updateStationForm<K extends keyof StationFormState>(
+  form: StationFormState,
+  key: K,
+  value: StationFormState[K],
+): StationFormState {
+  const next = { ...form, [key]: value };
+  if (key === 'fullAddress') next.addressToken = '';
+  return next;
+}
+
+/**
+ * What a lookup found, filled in only where the form is still blank: the line with its token, and
+ * a 樓 or 室 the lookup split off. A typed line is never replaced.
+ */
 export function applyReverseGeocode(
   form: StationFormState,
-  geocode: ReverseGeocode,
+  lookup: AddressLookup,
 ): StationFormState {
-  const next = { ...form };
-  for (const key of ADDRESS_FIELDS) {
-    if (!next[key].trim()) next[key] = geocode[key];
-  }
-  return next;
+  if (lookup.status !== 'found' || !lookup.fullAddress) return form;
+  if (form.fullAddress.trim()) return form;
+  return {
+    ...form,
+    fullAddress: lookup.fullAddress,
+    addressToken: lookup.addressToken ?? '',
+    floor: form.floor.trim() ? form.floor : (lookup.floor ?? form.floor),
+    room: form.room.trim() ? form.room : (lookup.room ?? form.room),
+  };
 }
 
 function validCoordinate(value: string, max: number): boolean {
@@ -184,7 +190,12 @@ function secondaryLocation(
     ...(form.locationType === 'pole' ? filledFields(form, POLE_FIELDS) : {}),
   };
   if (Object.keys(parts).length === 0) return undefined;
-  return { locationType: form.locationType, ...parts };
+  const token = parts.fullAddress ? form.addressToken : '';
+  return {
+    locationType: form.locationType,
+    ...parts,
+    ...(token ? { addressToken: token } : {}),
+  };
 }
 
 /** Every station created from the admin portal is official (decided 2026-10-15). */

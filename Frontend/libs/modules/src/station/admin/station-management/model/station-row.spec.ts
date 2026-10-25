@@ -37,7 +37,7 @@ const base = {
   secondaryLocation: {
     __typename: 'SecondaryLocationType',
     county: '花蓮縣',
-    city: '光復鄉',
+    town: '光復鄉',
   },
 } as unknown as AdminStationFieldsFragment;
 

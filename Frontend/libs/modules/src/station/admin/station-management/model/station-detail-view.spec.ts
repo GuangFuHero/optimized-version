@@ -21,11 +21,9 @@ const station = {
   contactPhone: '0912345678',
   contactEmail: null,
   secondaryLocation: {
+    fullAddress: '花蓮縣光復鄉中正路12號',
     county: '花蓮縣',
-    city: '光復鄉',
-    lane: '中正路',
-    alley: null,
-    no: '12號',
+    town: '光復鄉',
     floor: null,
     room: null,
   },

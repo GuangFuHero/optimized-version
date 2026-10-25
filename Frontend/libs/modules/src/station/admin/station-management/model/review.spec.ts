@@ -1,5 +1,5 @@
 import type { AdminStationReviewQuery } from '@rescue-frontend/data-access/admin';
-import type { TimelineItem } from '@rescue-frontend/ui';
+import type { components } from '@rescue-frontend/data-access/openapi';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -23,7 +23,7 @@ const history = [
     entity: 'station_property',
     changes: [{ field: 'quantity', before: 1, after: 2 }],
   },
-] as unknown as TimelineItem[];
+] as unknown as components['schemas']['HistoryEventResponse'][];
 
 describe('hasChangedSince', () => {
   const station = { type: 'station', uuid: 's1' };
@@ -59,7 +59,7 @@ describe('hasChangedSince', () => {
             },
           ],
         },
-      ] as unknown as TimelineItem[];
+      ] as unknown as components['schemas']['HistoryEventResponse'][];
     const since = '2026-10-17T00:00:00Z';
     expect(hasChangedSince(withRaw('p1'), property, 'quantity', since)).toBe(
       true,

@@ -154,6 +154,38 @@ export function useStation(
   });
 }
 
+/**
+ * The nearest 門牌 to a map pin, from the backend's TGOS lookup. Its `addressToken`, sent back with
+ * the unchanged `fullAddress`, saves the address as verified. Never stale: a pin's 門牌 doesn't move.
+ */
+export const reverseGeocodeQuery = (
+  variables: documents.AdminReverseGeocodeQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'address', 'reverseGeocode', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminReverseGeocodeDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+    staleTime: Infinity,
+  });
+
+export function useReverseGeocode(
+  position: readonly [number, number] | null | undefined,
+) {
+  const [lat, lng] = position ?? [];
+  return useQuery({
+    ...reverseGeocodeQuery({ lat: lat ?? 0, lng: lng ?? 0 }),
+    enabled: lat != null && lng != null,
+    // The address is only a head start: a failed lookup leaves the form blank, no toast.
+    retry: false,
+    meta: { quietErrors: true },
+  });
+}
+
 /** Under `teams`, so a team change refreshes the picker along with the team list. */
 export const assignableStationTeamsQuery = () =>
   queryOptions({

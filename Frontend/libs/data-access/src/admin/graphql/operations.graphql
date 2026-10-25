@@ -245,6 +245,15 @@ query AdminStation($uuid: UUID!) {
     }
   }
 }
+query AdminReverseGeocode($lat: Float!, $lng: Float!) {
+  reverseGeocode(lat: $lat, lng: $lng) {
+    status
+    fullAddress
+    floor
+    room
+    addressToken
+  }
+}
 query AdminStationReview($uuid: UUID!) {
   station(uuid: $uuid) {
     ...AdminStationFields

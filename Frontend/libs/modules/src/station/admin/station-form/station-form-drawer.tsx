@@ -5,6 +5,7 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Box, Typography } from '@mui/material';
 import {
   useCreateStation,
+  useReverseGeocode,
   useStation,
   useUpdateStation,
   type AdminStationFieldsFragment,
@@ -28,11 +29,11 @@ import {
   emptyStationForm,
   formPosition,
   stationToForm,
+  updateStationForm,
   validateStationForm,
   type StationFormErrors,
   type StationFormState,
 } from './station-form-model';
-import { useReverseGeocode } from './use-reverse-geocode';
 
 const { color, radius, typography } = designTokens;
 
@@ -245,15 +246,21 @@ function StationFormSheet(props: StationFormSheetProps) {
     }));
   }, [pinLat, pinLng]);
 
-  const isResolvingAddress = useReverseGeocode(position, (geocode) =>
-    setForm((current) => applyReverseGeocode(current, geocode)),
-  );
+  // Once per pin: the query caches each position, so a lookup is never repeated.
+  const lookup = useReverseGeocode(position);
+  const lookupResult = lookup.data?.reverseGeocode;
+  useEffect(() => {
+    if (lookupResult) {
+      setForm((current) => applyReverseGeocode(current, lookupResult));
+    }
+  }, [lookupResult]);
+  const isResolvingAddress = lookup.isFetching;
 
   const change = <K extends keyof StationFormState>(
     key: K,
     value: StationFormState[K],
   ) => {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => updateStationForm(current, key, value));
     setErrors((current) => ({ ...current, [key]: undefined }));
   };
 

@@ -127,25 +127,7 @@ export function AdminStationFormFields({
             })
           }
         </Labeled>
-        {mode === 'create' ? (
-          <Labeled label="行政區">
-            {(id) => (
-              <Columns gap="8px">
-                {field('county', {
-                  id,
-                  placeholder: '縣市',
-                  ariaLabel: '縣市',
-                })}
-                {field('city', {
-                  placeholder: '鄉鎮市區',
-                  ariaLabel: '鄉鎮市區',
-                })}
-              </Columns>
-            )}
-          </Labeled>
-        ) : (
-          <OperationalStatusField field={field} />
-        )}
+        <OperationalStatusField field={field} />
       </Columns>
 
       {mode === 'create' ? (
@@ -182,12 +164,9 @@ export function AdminStationFormFields({
         )}
       </Labeled>
 
-      <Columns>
-        {mode === 'create' ? <OperationalStatusField field={field} /> : null}
-        <Labeled label="開放時間">
-          {(id) => field('opHour', { id, placeholder: '24 小時開放' })}
-        </Labeled>
-      </Columns>
+      <Labeled label="開放時間">
+        {(id) => field('opHour', { id, placeholder: '24 小時開放' })}
+      </Labeled>
 
       <Labeled label="物資狀況">
         {(id) =>
@@ -270,8 +249,8 @@ function OperationalStatusField({ field }: { field: Field }) {
 }
 
 /**
- * The prototype's one 地址 input, kept as the structured parts the backend stores: road, lane,
- * number, floor and room, plus the pole fields when the station sits at a utility pole.
+ * The prototype's one 地址 input: the line the backend splits into its parts (縣市 … 號), then floor
+ * and room, plus the pole fields when the station sits at a utility pole.
  */
 function AddressFields({
   field,
@@ -284,23 +263,11 @@ function AddressFields({
     <Labeled label="地址">
       {(id) => (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: {
-                mobile: '1fr 1fr',
-                tablet: '2fr 1fr 1fr',
-              },
-              gap: '8px',
-              '& > :first-of-type': {
-                gridColumn: { mobile: '1 / -1', tablet: 'auto' },
-              },
-            }}
-          >
-            {field('lane', { id, placeholder: '路名', ariaLabel: '路名' })}
-            {field('alley', { placeholder: '巷弄', ariaLabel: '巷弄' })}
-            {field('no', { placeholder: '門牌', ariaLabel: '門牌' })}
-          </Box>
+          {field('fullAddress', {
+            id,
+            placeholder: '例：花蓮縣光復鄉中正路一段31號',
+            ariaLabel: '地址',
+          })}
           <Columns count={3} gap="8px">
             {field('floor', { placeholder: '樓層', ariaLabel: '樓層' })}
             {field('room', { placeholder: '房號', ariaLabel: '房號' })}

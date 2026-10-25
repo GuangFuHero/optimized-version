@@ -75,6 +75,24 @@ describe('stationImportTemplate', () => {
 });
 
 describe('STATION_IMPORT_FIELDS', () => {
+  it("offers exactly the backend's writable station columns (STATION_COLUMNS)", () => {
+    expect(STATION_IMPORT_FIELDS.map((f) => f.value)).toEqual([
+      'name',
+      'type',
+      'description',
+      'op_hour',
+      'level',
+      'comment',
+      'source',
+      'visibility',
+      'latitude',
+      'longitude',
+      'address',
+      'floor',
+      'room',
+    ]);
+  });
+
   it('flags the fields a new station needs instead of marking the label', () => {
     expect(
       STATION_IMPORT_FIELDS.filter((f) => f.required).map((f) => f.value),

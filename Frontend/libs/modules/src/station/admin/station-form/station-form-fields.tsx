@@ -174,16 +174,10 @@ function AddressFields({
           </MenuItem>,
         ],
       })}
+      {text('fullAddress', '地址', {
+        placeholder: '例：花蓮縣光復鄉中正路一段31號',
+      })}
       <Columns count={2}>
-        {text('county', '縣市')}
-        {text('city', '鄉鎮市區')}
-      </Columns>
-      <Columns count={2}>
-        {text('lane', '路名')}
-        {text('alley', '巷弄')}
-      </Columns>
-      <Columns count={3}>
-        {text('no', '門牌')}
         {text('floor', '樓層')}
         {text('room', '房號')}
       </Columns>

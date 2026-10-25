@@ -599,7 +599,7 @@ function StationCard({
   onSelect: () => void;
   onOpen: () => void;
 }) {
-  // No street address in the admin station fields yet; county and city are all there is.
+  // No street address in the admin station fields yet; county and town are all there is.
   const secondLine = [row.typeLabel, row.area].filter(Boolean).join(' · ');
   return (
     <Box

@@ -7,6 +7,7 @@ import {
   emptyStationForm,
   formPosition,
   stationToForm,
+  updateStationForm,
   validateStationForm,
 } from './station-form-model';
 
@@ -76,20 +77,56 @@ describe('station form address', () => {
     name: '光復加水站',
     type: 'water',
   };
+  const found = {
+    status: 'found',
+    fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+    floor: null,
+    room: null,
+    addressToken: 'token-1',
+  };
 
-  it('creates the station with its address as the secondary location', () => {
+  it('creates the station with its address line as the secondary location', () => {
     const input = buildCreateInput({
       ...filled,
-      county: ' 花蓮縣 ',
-      city: '光復鄉',
-      lane: '中正路',
+      fullAddress: ' 花蓮縣光復鄉中正路一段31號 ',
+      floor: '2F',
     });
     expect(input.secondaryLocation).toEqual({
       locationType: 'address',
-      county: '花蓮縣',
-      city: '光復鄉',
-      lane: '中正路',
+      fullAddress: '花蓮縣光復鄉中正路一段31號',
+      floor: '2F',
     });
+  });
+
+  it('sends the lookup token with the line it confirmed, so the backend stores it verified', () => {
+    const form = applyReverseGeocode(filled, found);
+    expect(buildCreateInput(form).secondaryLocation).toEqual({
+      locationType: 'address',
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+      addressToken: 'token-1',
+    });
+  });
+
+  it('drops the token once the line is edited, so the backend stores it unverified', () => {
+    const form = updateStationForm(
+      applyReverseGeocode(filled, found),
+      'fullAddress',
+      '花蓮縣光復鄉糖廠街21號',
+    );
+    expect(form.addressToken).toBe('');
+    expect(buildCreateInput(form).secondaryLocation).toEqual({
+      locationType: 'address',
+      fullAddress: '花蓮縣光復鄉糖廠街21號',
+    });
+  });
+
+  it('keeps the token while other fields change', () => {
+    const form = updateStationForm(
+      applyReverseGeocode(filled, found),
+      'name',
+      '新名字',
+    );
+    expect(form.addressToken).toBe('token-1');
   });
 
   it('sends the pole fields only for a pole location', () => {
@@ -105,21 +142,17 @@ describe('station form address', () => {
   });
 
   it('never sends the address on update, which the backend cannot change', () => {
-    expect(buildUpdateInput({ ...filled, county: '台東縣' }, filled)).toEqual(
-      {},
-    );
+    expect(
+      buildUpdateInput({ ...filled, fullAddress: '台東縣池上鄉' }, filled),
+    ).toEqual({});
   });
 
-  it('reads the address back from a station', () => {
+  it('reads the address line back from a station', () => {
     const form = stationToForm({
       ...stationFixture,
       secondaryLocation: {
-        county: '花蓮縣',
-        city: '光復鄉',
-        lane: null,
-        alley: null,
-        no: '12',
-        floor: null,
+        fullAddress: '花蓮縣光復鄉中正路12號',
+        floor: '3F',
         room: null,
         poleId: null,
         poleType: null,
@@ -127,34 +160,41 @@ describe('station form address', () => {
       },
     });
     expect(form).toMatchObject({
-      county: '花蓮縣',
-      city: '光復鄉',
-      no: '12',
-      lane: '',
+      fullAddress: '花蓮縣光復鄉中正路12號',
+      floor: '3F',
+      room: '',
+      addressToken: '',
       locationType: 'address',
     });
   });
 
-  it('fills only the blank address parts from a reverse geocode', () => {
-    const next = applyReverseGeocode(
-      { ...filled, county: '花蓮縣' },
-      {
-        address: '台東縣池上鄉中山路 3 號',
-        county: '台東縣',
-        city: '池上鄉',
-        lane: '中山路',
-        alley: '',
-        no: '3',
-        floor: '',
-        room: '',
-      },
-    );
-    expect(next).toMatchObject({
-      county: '花蓮縣',
-      city: '池上鄉',
-      lane: '中山路',
-      no: '3',
+  it('fills the line and its token from a lookup only while the line is blank', () => {
+    expect(applyReverseGeocode(filled, found)).toMatchObject({
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+      addressToken: 'token-1',
     });
+    const typed = { ...filled, fullAddress: '我打的地址' };
+    expect(applyReverseGeocode(typed, found)).toEqual(typed);
+  });
+
+  it('fills a 樓 or 室 the lookup split off, unless one is already typed', () => {
+    const next = applyReverseGeocode(
+      { ...filled, floor: '1F' },
+      { ...found, floor: '5樓', room: '502室' },
+    );
+    expect(next).toMatchObject({ floor: '1F', room: '502室' });
+  });
+
+  it('ignores a lookup that found nothing', () => {
+    expect(
+      applyReverseGeocode(filled, {
+        status: 'not_found',
+        fullAddress: null,
+        floor: null,
+        room: null,
+        addressToken: null,
+      }),
+    ).toEqual(filled);
   });
 });
 

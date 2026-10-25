@@ -15,7 +15,7 @@ export const UNASSIGNED_TEAM = '__none__';
 export interface StationFilters {
   type: string | null;
   status: OperationalStatus | null;
-  /** A 行政區 as StationRow.area spells it (county + city). */
+  /** A 行政區 as StationRow.area spells it (county + town). */
   area: string | null;
   /** A team uuid, or UNASSIGNED_TEAM. */
   team: string | null;
