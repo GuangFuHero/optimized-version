@@ -1,7 +1,7 @@
 """tickets.replaced_by_uuid, ticket_tasks.merged_into_uuid: where a dedup-merged record went (ADR-371)
 
 Revision ID: c3f1a9d27b54
-Revises: 7370daf4c8f7
+Revises: da152a6a9d7c
 Create Date: 2026-10-24 12:00:00.000000
 
 Spec 028 lets a reviewer resolve a duplicate pair: the other ticket is cancelled and points at the
@@ -19,7 +19,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c3f1a9d27b54"
-down_revision: str | Sequence[str] | None = "7370daf4c8f7"
+down_revision: str | Sequence[str] | None = "da152a6a9d7c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
