@@ -23,14 +23,10 @@ class StationPropertyConfigType:
     property_name: str = strawberry.field(
         description="The property key this config defines, e.g. 'water', 'food_ration'"
     )
-    data_type: FieldDataType = strawberry.field(
-        description="Which control the form renders for this field"
-    )
+    data_type: FieldDataType = strawberry.field(description="Which control the form renders for this field")
     enum_options: list[str] | None = strawberry.field(
         default=None,
-        description=(
-            "Allowed values for single_select / multi_select, e.g. ['available', 'depleted']"
-        ),
+        description=("Allowed values for single_select / multi_select, e.g. ['available', 'depleted']"),
     )
     unit: str | None = strawberry.field(
         default=None, description="Unit suffix for a number field, e.g. 'cm'; null otherwise"
@@ -52,12 +48,17 @@ class StationPropertyConfigType:
     def from_model(cls, m) -> "StationPropertyConfigType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, station_type=m.station_type,
-            property_name=m.property_name, data_type=FieldDataType(m.data_type),
-            enum_options=m.enum_options, unit=m.unit,
+            uuid=m.uuid,
+            station_type=m.station_type,
+            property_name=m.property_name,
+            data_type=FieldDataType(m.data_type),
+            enum_options=m.enum_options,
+            unit=m.unit,
             disaster_types=list(m.disaster_types or []),
-            label=m.label, display_label=m.label or m.property_name,
-            sort_order=m.sort_order, is_active=m.is_active,
+            label=m.label,
+            display_label=m.label or m.property_name,
+            sort_order=m.sort_order,
+            is_active=m.is_active,
         )
 
 
@@ -68,9 +69,7 @@ class TaskPropertyConfigType:
     uuid: UUID
     task_type: str = strawberry.field(description="The task type this config applies to")
     property_name: str = strawberry.field(description="The property key this config defines")
-    data_type: FieldDataType = strawberry.field(
-        description="Which control the form renders for this field"
-    )
+    data_type: FieldDataType = strawberry.field(description="Which control the form renders for this field")
     enum_options: list[str] | None = strawberry.field(
         default=None, description="Allowed values for single_select / multi_select"
     )
@@ -94,12 +93,17 @@ class TaskPropertyConfigType:
     def from_model(cls, m) -> "TaskPropertyConfigType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, task_type=m.task_type,
-            property_name=m.property_name, data_type=FieldDataType(m.data_type),
-            enum_options=m.enum_options, unit=m.unit,
+            uuid=m.uuid,
+            task_type=m.task_type,
+            property_name=m.property_name,
+            data_type=FieldDataType(m.data_type),
+            enum_options=m.enum_options,
+            unit=m.unit,
             disaster_types=list(m.disaster_types or []),
-            label=m.label, display_label=m.label or m.property_name,
-            sort_order=m.sort_order, is_active=m.is_active,
+            label=m.label,
+            display_label=m.label or m.property_name,
+            sort_order=m.sort_order,
+            is_active=m.is_active,
         )
 
 
@@ -171,9 +175,7 @@ class TicketPropertyConfigType:
     property_name: str = strawberry.field(
         description="The immutable field key, e.g. 'water_depth_cm', 'access_blocked'"
     )
-    data_type: FieldDataType = strawberry.field(
-        description="Which control the form renders for this field"
-    )
+    data_type: FieldDataType = strawberry.field(description="Which control the form renders for this field")
     enum_options: list[str] | None = strawberry.field(
         default=None, description="Allowed values for single_select / multi_select"
     )
@@ -203,10 +205,15 @@ class TicketPropertyConfigType:
     def from_model(cls, m) -> "TicketPropertyConfigType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, property_name=m.property_name, data_type=FieldDataType(m.data_type),
-            enum_options=m.enum_options, unit=m.unit,
+            uuid=m.uuid,
+            property_name=m.property_name,
+            data_type=FieldDataType(m.data_type),
+            enum_options=m.enum_options,
+            unit=m.unit,
             disaster_types=list(m.disaster_types or []),
-            label=m.label, display_label=m.label or m.property_name, hint=m.hint,
+            label=m.label,
+            display_label=m.label or m.property_name,
+            hint=m.hint,
             is_active=m.is_active,
         )
 
@@ -298,16 +305,31 @@ class DisasterTypeType:
         return cls(uuid=m.uuid, key=m.key, label=m.label, is_active=m.is_active)
 
 
+@strawberry.type(description="The disaster this deployment responds to, as the public site names it")
+class CurrentDisasterType:
+    """The public face of the settings row: its name only (ADR-392)."""
+
+    name: str = strawberry.field(description="Full name, e.g. 花蓮馬太鞍溪堰塞湖專案")
+    short_name: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Short name for tight spots such as the site's top bar, e.g. 花蓮馬太鞍溪; null when unset, "
+            "so use name"
+        ),
+    )
+
+    @classmethod
+    def from_model(cls, m) -> "CurrentDisasterType":
+        """Build from the ProjectSettings row."""
+        return cls(name=m.name, short_name=m.short_name)
+
+
 @strawberry.input
 class UpsertDisasterTypeInput:
     """Input for adding a disaster type or editing an existing one."""
 
-    key: str = strawberry.field(
-        description="The code to create or update; normalized (trimmed, lower-cased)"
-    )
-    label: str | None = strawberry.field(
-        default=None, description="Display name. Required when creating"
-    )
+    key: str = strawberry.field(description="The code to create or update; normalized (trimmed, lower-cased)")
+    label: str | None = strawberry.field(default=None, description="Display name. Required when creating")
     is_active: bool | None = strawberry.field(
         default=None, description="Set false to retire the type; there is no delete"
     )

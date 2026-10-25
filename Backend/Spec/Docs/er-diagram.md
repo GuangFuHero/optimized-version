@@ -428,6 +428,7 @@ users |o--o{ briefings : "published"
 project_settings {
     uuid uuid PK
     string name "disaster name, e.g. 花蓮 0816"
+    string short_name "nullable, String(30); for the site's top bar, falls back to name (ADR-392)"
     string_array disaster_types "default '{}' — e.g. {landslide,flood}; drives which config rows apply"
     timestamp started_at "nullable"
     timestamp created_at

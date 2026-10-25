@@ -9709,6 +9709,17 @@
             ],
             "title": "Name"
           },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
           "disaster_types": {
             "items": {
               "type": "string"
@@ -9754,6 +9765,18 @@
               }
             ],
             "title": "Name"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
           },
           "disaster_types": {
             "anyOf": [
