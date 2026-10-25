@@ -52,6 +52,8 @@ import { formatAbsoluteTime } from './station-cells';
 const { color, radius, typography } = designTokens;
 
 const PENDING_FILTERS = { ...EMPTY_FILTERS, pending: true };
+// The timeline's largest page (backend `MAX_PAGE`); a conflict past it reads as unknown.
+const HISTORY_PAGE = 200;
 
 /** The adopted value reads as the incoming change. */
 const ADOPTED = {
@@ -86,13 +88,19 @@ export function ReviewQueueDialog({
   const review = useStationReview({ uuid });
   // Conflicts come from the station's history; without it they are unknown, never "none".
   const history = useStationHistory(
-    { path: { uuid }, query: { limit: 100 } },
+    { path: { uuid }, query: { limit: HISTORY_PAGE } },
     { enabled: canViewHistory && Boolean(uuid) },
   );
-  const historyEvents = history.isSuccess ? (history.data?.data ?? []) : null;
+  const historyPage = useMemo(
+    () =>
+      history.isSuccess && history.data
+        ? { events: history.data.data, total: history.data.meta.total }
+        : null,
+    [history.isSuccess, history.data],
+  );
   const fields = useMemo(
-    () => (review.data ? buildReviewFields(review.data, historyEvents) : []),
-    [review.data, historyEvents],
+    () => (review.data ? buildReviewFields(review.data, historyPage) : []),
+    [review.data, historyPage],
   );
   const currentConflict = hasConflict(fields);
 
@@ -227,7 +235,7 @@ export function ReviewQueueDialog({
             fields={fields}
             enumFields={review.data?.suggestableFields}
             historyLoading={canViewHistory && history.isPending}
-            historyUnavailable={!historyEvents}
+            historyUnavailable={!historyPage}
             canEdit={canEdit}
             onEditStation={onEditStation}
           />
@@ -339,6 +347,13 @@ function StationReview({
               {historyLoading
                 ? '正在讀取版本歷史，衝突檢查完成前請先確認目前值。'
                 : '無法讀取這個站點的版本歷史，無法檢查建議提出後欄位是否被改過。'}
+            </Callout>
+          </Box>
+        ) : fields.some((field) => field.conflict === null) ? (
+          // The newest page of history did not reach back to some suggestion.
+          <Box sx={{ mb: '16px' }}>
+            <Callout tone="warning">
+              這個站點的版本歷史較長，部分欄位無法確認建議提出後是否被改過，請先確認目前值。
             </Callout>
           </Box>
         ) : null}

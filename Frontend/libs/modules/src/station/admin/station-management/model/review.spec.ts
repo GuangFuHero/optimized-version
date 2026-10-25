@@ -108,7 +108,9 @@ describe('buildReviewFields', () => {
   } as unknown as AdminStationReviewQuery;
 
   it('pairs each suggestion with the live value and its conflict flag', () => {
-    expect(buildReviewFields(review, history)).toEqual([
+    expect(
+      buildReviewFields(review, { events: history, total: history.length }),
+    ).toEqual([
       expect.objectContaining({
         key: 's1:op_hour',
         label: '開放時間',
@@ -125,13 +127,36 @@ describe('buildReviewFields', () => {
     ]);
   });
 
+  it('marks no conflict unknown when the page stops short of the suggestion', () => {
+    // Only the op_hour change (10-20) was read, newer than the suggestions (10-19), and more are left.
+    const page = { events: history.slice(0, 1), total: 150 };
+    expect(buildReviewFields(review, page).map((f) => f.conflict)).toEqual([
+      true,
+      null,
+    ]);
+  });
+
+  it('marks no conflict known when the page reaches past the suggestion', () => {
+    // The oldest event read (10-18) is older than the suggestions (10-19), so nothing newer is missing.
+    expect(
+      buildReviewFields(review, { events: history, total: 150 }).map(
+        (f) => f.conflict,
+      ),
+    ).toEqual([true, false]);
+  });
+
   it('marks conflicts unknown when history could not be read', () => {
     const fields = buildReviewFields(review, null);
     expect(fields.map((f) => f.conflict)).toEqual([null, null]);
   });
 
   it('returns nothing for a missing station', () => {
-    expect(buildReviewFields({ station: null } as never, history)).toEqual([]);
+    expect(
+      buildReviewFields({ station: null } as never, {
+        events: history,
+        total: history.length,
+      }),
+    ).toEqual([]);
   });
 });
 

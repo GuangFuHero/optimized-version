@@ -45,6 +45,23 @@ export function hasChangedSince(
   );
 }
 
+/** A page of a station's history, newest first, and how many events it has in all. */
+export interface HistoryPage {
+  events: readonly HistoryEvent[];
+  total: number;
+}
+
+/**
+ * Whether the page holds every event since `since`: it is the whole history, or its oldest event
+ * is no newer than `since`. A missing `since` needs nothing, as `hasChangedSince` reads it as none.
+ */
+export function coversSince(page: HistoryPage, since: string | null): boolean {
+  if (page.events.length >= page.total || !since) return true;
+  const from = Date.parse(since);
+  if (Number.isNaN(from)) return true;
+  return page.events.some((event) => Date.parse(event.at) <= from);
+}
+
 /** Whether the event wrote this row; true when the event carries no raw rows to tell by. */
 function touchesRow(event: HistoryEvent, uuid: string): boolean {
   if (!event.raw?.length) return true;
@@ -92,7 +109,7 @@ export interface ReviewField {
 
 export function buildReviewFields(
   review: AdminStationReviewQuery,
-  history: readonly HistoryEvent[] | null,
+  history: HistoryPage | null,
 ): ReviewField[] {
   const station = review.station;
   if (!station) return [];
@@ -125,15 +142,29 @@ export function buildReviewFields(
       comments: s.comments,
       firstSuggestedAt,
       conflict: history
-        ? hasChangedSince(
+        ? conflictIn(
             history,
-            { type: targetType, uuid: s.targetUuid },
+            targetType,
+            s.targetUuid,
             s.fieldName,
             firstSuggestedAt,
           )
         : null,
     };
   });
+}
+
+/** A change found is a conflict; none found is "no conflict" only when the page reaches back far enough. */
+function conflictIn(
+  page: HistoryPage,
+  type: string,
+  uuid: string,
+  fieldName: string,
+  since: string | null,
+): boolean | null {
+  if (hasChangedSince(page.events, { type, uuid }, fieldName, since))
+    return true;
+  return coversSince(page, since) ? false : null;
 }
 
 export type FieldDecision = { approve: boolean; value: string } | undefined;
