@@ -1,3 +1,5 @@
+import { timeAgo } from '../../../../time';
+
 export type FreshnessLevel = 'fresh' | 'stale' | 'expired' | 'unknown';
 
 /** Untouched for a day reads as stale, for three days as expired. Never shown in danger red. */
@@ -19,12 +21,5 @@ export function getFreshness(
       : minutes >= STALE_MINUTES
         ? 'stale'
         : 'fresh';
-  return { level, relative: formatRelative(minutes), minutes };
-}
-
-function formatRelative(minutes: number): string {
-  if (minutes < 1) return '剛剛';
-  if (minutes < 60) return `${minutes} 分前`;
-  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} 小時前`;
-  return `${Math.floor(minutes / (24 * 60))} 天前`;
+  return { level, relative: timeAgo(updatedAt, now) ?? '—', minutes };
 }

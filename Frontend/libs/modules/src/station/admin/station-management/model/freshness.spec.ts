@@ -9,7 +9,7 @@ const ago = (minutes: number) =>
 describe('getFreshness', () => {
   it.each([
     [0, 'fresh', '剛剛'],
-    [5, 'fresh', '5 分前'],
+    [5, 'fresh', '5 分鐘前'],
     [90, 'fresh', '1 小時前'],
     [24 * 60, 'stale', '1 天前'],
     [72 * 60, 'expired', '3 天前'],
