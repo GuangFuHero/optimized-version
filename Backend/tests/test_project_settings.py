@@ -242,14 +242,14 @@ async def test_the_short_name_is_set_trimmed_and_cleared(client, db_session, red
     read = await client.get(SETTINGS_URL, headers=headers)
     blanked = await client.patch(SETTINGS_URL, headers=headers, json={"short_name": "  "})
     await client.patch(SETTINGS_URL, headers=headers, json={"short_name": "花蓮馬太鞍溪"})
-    nulled = await client.patch(SETTINGS_URL, headers=headers, json={"short_name": None})
     untouched = await client.patch(SETTINGS_URL, headers=headers, json={"disaster_types": ["flood"]})
+    nulled = await client.patch(SETTINGS_URL, headers=headers, json={"short_name": None})
 
     assert set_.status_code == 200, set_.text
     assert (set_.json()["short_name"], read.json()["short_name"]) == ("花蓮馬太鞍溪", "花蓮馬太鞍溪")
     assert blanked.json()["short_name"] is None
+    assert untouched.json()["short_name"] == "花蓮馬太鞍溪"
     assert nulled.json()["short_name"] is None
-    assert untouched.json()["short_name"] is None
 
 
 async def test_a_short_name_past_30_characters_is_refused(client, db_session, redis):
@@ -261,6 +261,19 @@ async def test_a_short_name_past_30_characters_is_refused(client, db_session, re
 
     assert resp.status_code == 422, resp.text
     assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 0
+
+
+async def test_spaces_around_a_30_character_short_name_do_not_count(client, db_session, redis):
+    """It is trimmed before the length check, so padding neither pushes it over nor gets stored."""
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
+    headers = await _auth_header(redis, admin_uuid, role_uuid)
+
+    resp = await client.patch(
+        SETTINGS_URL, headers=headers, json={"name": "花蓮", "short_name": "  " + "長" * 30 + " "}
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["short_name"] == "長" * 30
 
 
 async def test_reads_are_refused_without_project_view(client, db_session, redis):
