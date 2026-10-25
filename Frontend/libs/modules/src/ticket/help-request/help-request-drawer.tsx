@@ -31,6 +31,8 @@ import {
   applyPinLookup,
   applyTypedLookup,
   restorePinAddress,
+  restoreTypedLine,
+  shortDoor,
   type AddressCheck,
   type AddressNote,
   type FoundDoor,
@@ -249,6 +251,9 @@ function FieldNote({
   );
 }
 
+// Floor and room under the address on a phone, beside it wider.
+const UNIT_ROW_GAP = { mobile: 1.5, tablet: 0 };
+
 const sameCheck = (a: AddressCheck | null, b: AddressCheck | null) =>
   a?.address === b?.address && a?.lat === b?.lat && a?.lng === b?.lng;
 
@@ -286,30 +291,60 @@ function noteLook(kind: AddressNote['kind'], error: boolean) {
   }
 }
 
+function NoteOffer({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      size="small"
+      variant="outlined"
+      onClick={onClick}
+      // Not out of the address field: leaving it would check the line about to be replaced.
+      onMouseDown={(event) => event.preventDefault()}
+      sx={{
+        py: 0.25,
+        fontSize: displayTextSize[12],
+        lineHeight: 1.5,
+        textAlign: 'left',
+      }}
+    >
+      {children}
+    </Button>
+  );
+}
+
 /**
- * What the lookups made of the address, under the field (designer's 新增地點, `tk-building.jsx:
- * 229-244`, 271-279): the 門牌 filled in and how far it is, a typed one checked, or none found, with
- * 改回查到的 while the line is something else. Said as it changes, since it arrives on its own.
+ * What the lookups made of the address, right under the field (designer, `site-actions.jsx:
+ * 1808-1827`, 2026-10-25): the 門牌 filled in and how far it is, a typed one checked, or none found,
+ * with 用大頭針的地址 or 改回你打的 where there is something to go back to. Said as it changes, since
+ * it arrives on its own.
  */
 function AddressLookupNote({
   note,
   error,
-  onRestore,
+  onPinDoor,
+  onTypedLine,
 }: {
   note: AddressNote | null;
   /** The address is still blank after a try to send, and this is what asks for it. */
   error: boolean;
-  onRestore: (door: FoundDoor) => void;
+  onPinDoor: (door: FoundDoor) => void;
+  onTypedLine: (line: string) => void;
 }) {
   const look = note ? noteLook(note.kind, error) : null;
+  const { pinDoor, typedLine } = note ?? {};
 
   return (
-    // Under all three fields, closer to them than the next row is.
-    <Box aria-live="polite" sx={{ gridColumn: '1 / -1', mt: -0.75 }}>
+    <Box aria-live="polite" sx={{ gridArea: 'note' }}>
       {note && look ? (
         <Stack
           direction="row"
           sx={{
+            mt: 0.75,
             alignItems: 'flex-start',
             flexWrap: 'wrap',
             columnGap: 0.75,
@@ -317,40 +352,31 @@ function AddressLookupNote({
             color: look.color,
           }}
         >
-          {note.text ? (
-            <>
-              <Box sx={{ display: 'flex', height: 18, alignItems: 'center' }}>
-                {look.icon}
-              </Box>
-              <Typography
-                sx={{
-                  flex: 1,
-                  minWidth: 0,
-                  color: 'inherit',
-                  fontSize: displayTextSize[12],
-                  lineHeight: 1.5,
-                }}
-              >
-                {note.text}
-              </Typography>
-            </>
+          <Box sx={{ display: 'flex', height: 18, alignItems: 'center' }}>
+            {look.icon}
+          </Box>
+          {/* Room for a few words before an offer beside it goes to a line of its own. */}
+          <Typography
+            sx={{
+              flex: '1 1 160px',
+              minWidth: 0,
+              color: 'inherit',
+              fontSize: displayTextSize[12],
+              lineHeight: 1.5,
+            }}
+          >
+            {note.text}
+          </Typography>
+          {typedLine ? (
+            <NoteOffer onClick={() => onTypedLine(typedLine)}>
+              改回你打的：{typedLine}
+            </NoteOffer>
           ) : null}
-          {note.restore ? (
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => note.restore && onRestore(note.restore)}
-              // Not out of the address field: leaving it would check the line about to be replaced.
-              onMouseDown={(event) => event.preventDefault()}
-              sx={{
-                py: 0.25,
-                fontSize: displayTextSize[12],
-                lineHeight: 1.5,
-                textAlign: 'left',
-              }}
-            >
-              改回查到的：{note.restore.fullAddress}
-            </Button>
+          {/* The road and number only: the whole line is in the field once it is used. */}
+          {pinDoor ? (
+            <NoteOffer onClick={() => onPinDoor(pinDoor)}>
+              用大頭針的地址：{shortDoor(pinDoor.fullAddress)}
+            </NoteOffer>
           ) : null}
         </Stack>
       ) : null}
@@ -385,6 +411,8 @@ function HelpRequestFormDrawer({
   const formRef = useRef<HTMLDivElement | null>(null);
   // The typed line last checked, once the address field was left.
   const [check, setCheck] = useState<AddressCheck | null>(null);
+  // A line taken back with 改回你打的 over the check's answer: not checked again (designer, 2026-10-25).
+  const [kept, setKept] = useState<string | null>(null);
   const pinLookup = usePinAddressLookup(form.landmark);
   const typedLookup = useTypedAddressLookup(check);
 
@@ -425,11 +453,22 @@ function HelpRequestFormDrawer({
   // 「這附近查不到門牌，請自己填地址」 already asks for it: not a 必填 beside it too.
   const addressAsked = note?.kind === 'no_door';
 
-  /** Checked once the field is left, never per keystroke (backend guide §1); a line once. */
+  /**
+   * Checked once the field is left, never per keystroke (backend guide §1); a line once. Left with
+   * nothing to check, the last check stays: it still names 改回你打的's line.
+   */
   const checkAddress = () => {
-    const next = addressToCheck(form, form.landmark);
+    const next = addressToCheck(form, form.landmark, kept);
 
-    setCheck((current) => (sameCheck(current, next) ? current : next));
+    if (next) {
+      setCheck((current) => (sameCheck(current, next) ? current : next));
+    }
+  };
+
+  const takeTypedLine = (line: string) => {
+    setKept(line);
+    setCheck(null);
+    setForm((current) => restoreTypedLine(current, line));
   };
 
   const set =
@@ -484,6 +523,7 @@ function HelpRequestFormDrawer({
   const startOver = () => {
     setForm(emptyHelpRequestForm(seed));
     setCheck(null);
+    setKept(null);
     setRestored(false);
     setTouched(false);
     setRound((current) => current + 1);
@@ -597,16 +637,25 @@ function HelpRequestFormDrawer({
             )}
           </Stack>
 
-          {/* Floor and room are a few characters each, so they share the address's line. */}
+          {/* On a phone the address has a row of its own, floor and room side by side under it: the
+              official line a lookup puts in is long, and beside two narrow fields it would be cut off,
+              hiding what the typed words became. Wider, the three share a row. The note is right
+              under the address either way (designer, 2026-10-25); wider, across the whole row, since
+              the drawer leaves the address alone too narrow to hold it. */}
           <Box
             data-field="address"
             sx={{
               display: 'grid',
               gridTemplateColumns: {
-                mobile: 'minmax(0, 1fr) 80px 80px',
+                mobile: 'minmax(0, 1fr) minmax(0, 1fr)',
                 tablet: 'minmax(0, 1fr) 110px 110px',
               },
-              gap: 1.5,
+              gridTemplateAreas: {
+                mobile: '"address address" "note note" "floor room"',
+                tablet: '"address floor room" "note note note"',
+              },
+              // Spaced by the fields and the note, so an empty note leaves no gap.
+              columnGap: 1.5,
               alignItems: 'start',
             }}
           >
@@ -624,6 +673,7 @@ function HelpRequestFormDrawer({
                 isMissing('address') && !addressAsked ? '必填' : undefined
               }
               slotProps={{ htmlInput: { maxLength: MAX_LENGTH.address } }}
+              sx={{ gridArea: 'address' }}
             />
             {/* With the unit typed in: the address is shown as typed, with no 樓 or 室 added. */}
             <TextField
@@ -633,6 +683,7 @@ function HelpRequestFormDrawer({
               onChange={(event) => set('floor')(event.target.value)}
               placeholder="3樓"
               slotProps={{ htmlInput: { maxLength: MAX_LENGTH.floor } }}
+              sx={{ gridArea: 'floor', mt: UNIT_ROW_GAP }}
             />
             <TextField
               label="戶／室"
@@ -641,13 +692,15 @@ function HelpRequestFormDrawer({
               onChange={(event) => set('room')(event.target.value)}
               placeholder="302室"
               slotProps={{ htmlInput: { maxLength: MAX_LENGTH.room } }}
+              sx={{ gridArea: 'room', mt: UNIT_ROW_GAP }}
             />
             <AddressLookupNote
               note={note}
               error={isMissing('address') && addressAsked}
-              onRestore={(door) =>
+              onPinDoor={(door) =>
                 setForm((current) => restorePinAddress(current, door))
               }
+              onTypedLine={takeTypedLine}
             />
           </Box>
 

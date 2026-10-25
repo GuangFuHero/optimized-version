@@ -2,9 +2,10 @@
  * An address line filled in from TGOS (backend #96, `Backend/Spec/027-address-normalization/
  * frontend-guide.md`): the nearest 門牌 to the pin once it is placed, or the typed line checked once
  * the field is left, with the token that has the line saved as verified. The rules are the designer's
- * 新增地點 (`Design/後台/js/admin/ticket/tk-building.jsx:130-155`, 2026-10-25), so every form that
- * fills an address from the map behaves alike. Nothing here stops a form from sending: a line with no
- * lookup behind it is saved as unverified.
+ * 新增地點 (`Design/後台/js/admin/ticket/tk-building.jsx:130-155`, 2026-10-25) and 請求協助
+ * (`Design/前台/js/site/site-actions.jsx:1738-1827`, 2026-10-25), so every form that fills an address
+ * from the map behaves alike. Nothing here stops a form from sending: a line with no lookup behind it
+ * is saved as unverified.
  */
 
 /** The `full_address` column's width (backend `models/secondary_location.py`). */
@@ -240,12 +241,38 @@ export function applyTypedLookup<T extends AddressFields>(
     : { ...filled, floor, room };
 }
 
-/** 改回查到的: the pin's 門牌 back over whatever is in the line, with its token. */
+/** 用大頭針的地址: the pin's 門牌 over whatever is in the line, with its token. */
 export function restorePinAddress<T extends AddressFields>(
   fields: T,
   at: FoundDoor,
 ): T {
   return fill(fields, at.fullAddress, at, 'pin');
+}
+
+/**
+ * 改回你打的: the line as it was typed, in place of the official one a check put there. A 樓 or 室
+ * split off to its field stays there, as the designer's does.
+ */
+export function restoreTypedLine<T extends AddressFields>(
+  fields: T,
+  line: string,
+): T {
+  return { ...fields, address: line, addressFilled: null };
+}
+
+/**
+ * A 門牌 as a button names it (designer, `site-actions.jsx:1708-1712`): the road and number, without
+ * the 縣市, 鄉鎮市區, 村里 and 鄰; the whole line is in the field once it is used. A 村 or 里 goes only
+ * before its 鄰, so 萬里路 keeps its 萬里.
+ */
+export function shortDoor(fullAddress: string): string {
+  return (
+    fullAddress
+      .replace(/^.*?[縣市](?=.)/, '')
+      .replace(/^.*?[鄉鎮市區](?=.)/, '')
+      .replace(/^[^\d路街道巷弄]{1,4}[村里](?=\d+鄰)/, '')
+      .replace(/^\d+鄰/, '') || fullAddress
+  );
 }
 
 /** The token goes only with the line it was issued for; changed and changed back, it goes again. */
@@ -257,18 +284,21 @@ export function addressTokenFor(fields: AddressFields): string | null {
 
 /**
  * What to check once the address field is left (the guide's 「on blur」, never per keystroke): the
- * typed line with the pin. Null for a blank line, one too long to save, and a lookup's own line.
+ * typed line with the pin. Null for a blank line, one too long to save, a lookup's own line, and the
+ * line `kept` — taken back with 改回你打的 over the check's answer, so not checked again.
  */
 export function addressToCheck(
   fields: AddressFields,
   pin: LatLng | null,
+  kept: string | null = null,
 ): AddressCheck | null {
   const address = fields.address.trim();
 
   if (
     !address ||
     address.length > ADDRESS_MAX_LENGTH ||
-    isFilledByLookup(fields)
+    isFilledByLookup(fields) ||
+    address === kept
   ) {
     return null;
   }
@@ -308,15 +338,16 @@ export interface AddressNote {
     | 'ambiguous'
     | 'edited'
     | 'no_door';
-  /** Null when the offer to put the pin's 門牌 back is all there is to say. */
-  text: string | null;
-  /** 改回查到的: the pin's 門牌, offered while the line is something else. */
-  restore: FoundDoor | null;
+  text: string;
+  /** 用大頭針的地址: the pin's 門牌, offered beside a line that differs from it. */
+  pinDoor: FoundDoor | null;
+  /** 改回你打的: the line as typed, offered while the check's official one stands in its place. */
+  typedLine: string | null;
 }
 
-// The designer's words (`tk-building.jsx:229-244`), less 「會存成『未確認門牌』」: a resident is
-// filling this in, not an admin (asked of the designer, 2026-10-25). The checked line's are the
-// backend guide's (§3).
+// The designer's words (`site-actions.jsx:1808-1827`), with no 「會存成『未確認門牌』」: that is the
+// back office's word, and a resident is filling this in (designer, 2026-10-25). The checked line's are
+// the backend guide's (§3).
 const NOTE_TEXT = {
   looking: '正在找最近的門牌…',
   filled: (metres: number) =>
@@ -327,7 +358,8 @@ const NOTE_TEXT = {
   checking: '正在確認門牌…',
   not_found: '查無此門牌，仍可送出',
   ambiguous: '符合的門牌不只一個，請加上鄉鎮市區',
-  edited: '你改過地址',
+  // Not 「你改過地址」: whoever typed the address before putting the pin down changed nothing.
+  edited: '跟大頭針的地址不一樣',
   no_door: `這附近 ${PIN_TOLERANCE_M} 公尺內查不到門牌，請自己填地址`,
 } as const;
 
@@ -344,13 +376,12 @@ export function addressNote(input: {
 }): AddressNote | null {
   const { fields, pin, pinLookup, check } = input;
   const line = fields.address.trim();
-  const pinDoor = pinLookup?.status === 'found' ? pinLookup.door : null;
-  const restore = pinDoor && pinDoor.fullAddress !== line ? pinDoor : null;
-  const say = (kind: AddressNote['kind'], text: string | null) => ({
-    kind,
-    text,
-    restore,
-  });
+  // One thing said at a time, with at most one offer.
+  const say = (
+    kind: AddressNote['kind'],
+    text: string,
+    offer: Partial<Pick<AddressNote, 'pinDoor' | 'typedLine'>> = {},
+  ): AddressNote => ({ kind, text, pinDoor: null, typedLine: null, ...offer });
   const filled = fields.addressFilled;
 
   if (filled && isFilledByLookup(fields)) {
@@ -359,12 +390,20 @@ export function addressNote(input: {
     }
 
     const metres = pin ? Math.round(distanceM(pin, filled)) : null;
+    // What was typed before the check put this line in its place.
+    const typedLine =
+      filled.from === 'typed' &&
+      check?.lookup.status === 'found' &&
+      check.lookup.door.token === filled.token &&
+      check.address !== line
+        ? check.address
+        : null;
 
     if (metres !== null && metres > PIN_TOLERANCE_M) {
-      return say('mismatch', NOTE_TEXT.mismatch(metres));
+      return say('mismatch', NOTE_TEXT.mismatch(metres), { typedLine });
     }
     if (filled.from === 'typed') {
-      return say('confirmed', NOTE_TEXT.confirmed);
+      return say('confirmed', NOTE_TEXT.confirmed, { typedLine });
     }
 
     return metres === null ? null : say('filled', NOTE_TEXT.filled(metres));
@@ -386,11 +425,17 @@ export function addressNote(input: {
   switch (pinLookup?.status) {
     case 'looking':
       return say('looking', NOTE_TEXT.looking);
-    case 'found':
-      // Typed out exactly as found is still typed, with no token, but there is nothing to offer.
-      return restore ? say('edited', line ? NOTE_TEXT.edited : null) : null;
+    case 'found': {
+      const pinDoor = pinLookup.door;
+
+      // Nothing to compare a blank line with; one typed out exactly as found has nothing to offer.
+      return line && line !== pinDoor.fullAddress
+        ? say('edited', NOTE_TEXT.edited, { pinDoor })
+        : null;
+    }
     case 'not_found':
-      return say('no_door', NOTE_TEXT.no_door);
+      // Once something is typed, it has been asked for and given.
+      return line ? null : say('no_door', NOTE_TEXT.no_door);
     default:
       return null;
   }
