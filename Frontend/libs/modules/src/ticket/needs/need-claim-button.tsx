@@ -57,14 +57,15 @@ const SIZES = {
     fontSize: displayTextSize[13],
     iconSize: 15,
   },
+  // The pill and type of the `RowAction` beside it (分享), at the row's 36px.
   footer: {
     flex: 1,
-    gap: 1,
-    minHeight: undefined,
-    px: 1,
-    py: '9px',
-    borderRadius: 0,
-    fontSize: displayTextSize[12],
+    gap: 0.75,
+    minHeight: 36,
+    px: 1.75,
+    py: 0,
+    borderRadius: `${radius.full}px`,
+    fontSize: displayTextSize[14],
     iconSize: 14,
   },
 } as const;
@@ -91,7 +92,7 @@ interface NeedClaimButtonProps {
   onSignIn?: () => void;
   /**
    * `row` sits beside a need; `footer` is the drawer's one main action, shaped like the footer's
-   * other buttons (`TicketDetailFooterButton`) so the row of them reads as one set.
+   * other buttons (`TicketDetailFooterButton`, a `RowAction`) so the row of them reads as one set.
    */
   placement?: 'row' | 'footer';
 }

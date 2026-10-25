@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { displayTextSize, Icons } from '@rescue-frontend/ui';
+import { displayTextSize, Icons, RowAction } from '@rescue-frontend/ui';
 
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 
@@ -21,8 +21,6 @@ const ticketDetailPalette = {
   tabInactiveText: '#564337',
   badgeIconSurface: '#E3791E',
   badgeAccent: '#954900',
-  neutralActionText: '#151C22',
-  danger: '#BA1A1A',
 } as const;
 
 const CloseIcon = Icons.close;
@@ -696,6 +694,10 @@ export function TicketDetailDetailsPane({
   );
 }
 
+/**
+ * A `RowAction`, the pill a list row's 分享 is, so the public site's 分享 takes one shape in the list and
+ * in the drawer, and matches the claim button beside it (visual alignment item 1, 2026-10-25).
+ */
 function TicketDetailFooterButton({
   item,
   fullWidth,
@@ -703,58 +705,28 @@ function TicketDetailFooterButton({
   item: TicketDetailFooterActionItem;
   fullWidth?: boolean;
 }) {
-  const isDanger = item.intent === 'danger';
-
   return (
-    <ButtonBase
-      disableRipple
+    <RowAction
+      tone={item.intent === 'danger' ? 'danger' : 'default'}
       aria-label={item.ariaLabel ?? item.label}
       disabled={item.disabled}
       onClick={item.onClick}
+      icon={
+        <TicketDetailIconSlot
+          icon={item.icon}
+          width={14}
+          height={14}
+          color="currentColor"
+        />
+      }
+      label={item.label}
       sx={{
         flex: fullWidth ? '0 0 auto' : 1,
         width: fullWidth ? '100%' : 'auto',
         minWidth: 0,
-        display: 'flex',
-        alignItems: 'center',
         justifyContent: 'center',
-        gap: 1,
-        px: 1,
-        py: '9px',
-        bgcolor: isDanger ? 'transparent' : ticketDetailPalette.surface,
-        border: `1px solid ${isDanger ? ticketDetailPalette.danger : ticketDetailPalette.frameBorder}`,
-        color: item.disabled
-          ? '#7D8790'
-          : isDanger
-            ? ticketDetailPalette.danger
-            : ticketDetailPalette.neutralActionText,
       }}
-    >
-      <TicketDetailIconSlot
-        icon={item.icon}
-        width={14}
-        height={14}
-        color={
-          item.disabled
-            ? '#7D8790'
-            : isDanger
-              ? ticketDetailPalette.danger
-              : ticketDetailPalette.neutralActionText
-        }
-      />
-      <Typography
-        sx={{
-          color: 'inherit',
-          fontSize: displayTextSize[12],
-          lineHeight: '16px',
-          fontWeight: 600,
-          letterSpacing: '0.6px',
-          textAlign: 'center',
-        }}
-      >
-        {item.label}
-      </Typography>
-    </ButtonBase>
+    />
   );
 }
 
