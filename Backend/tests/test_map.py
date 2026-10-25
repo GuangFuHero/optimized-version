@@ -318,8 +318,8 @@ def _gibs_client(domains_response):
 
 
 @pytest.mark.asyncio
-async def test_fetch_tile_nasa_gibs_uses_day_before_newest_date(fake_redis):
-    """NASA GIBS tiles use the day before the newest listed date, asked for once and part of the cache key."""
+async def test_fetch_tile_nasa_gibs_uses_second_newest_date(fake_redis):
+    """NASA GIBS tiles use the second-newest listed date, asked for once, in the cache key, kept for a day."""
     domains = MagicMock()
     domains.text = (
         "<Domains><DimensionDomain><Domain>2026-01-12/2026-02-28/P1D,2026-03-02/2026-10-22/P1D</Domain>"
@@ -335,21 +335,33 @@ async def test_fetch_tile_nasa_gibs_uses_day_before_newest_date(fake_redis):
     assert sum(url.endswith("all.xml") for url in requested) == 1
     assert "/default/2026-10-21/GoogleMapsCompatible_Level12/10/2/1.png" in requested[1]
     assert await fake_redis.get("tile:nasa_gibs:date") == b"2026-10-21"
-    cached = await fake_redis.hgetall("tile:nasa_gibs:satellite:date=2026-10-21:10:1:2")
+    key = "tile:nasa_gibs:satellite:date=2026-10-21:10:1:2"
+    cached = await fake_redis.hgetall(key)
     assert cached[b"data"] == b"HLS_TILE"
+    assert 0 < await fake_redis.ttl(key) <= 86400
 
 
 @pytest.mark.asyncio
-async def test_resolve_tile_date_single_date_domain(fake_redis):
-    """A domain that ends in a lone date, not a range, still yields the day before it."""
+@pytest.mark.parametrize(
+    ("domain", "expected"),
+    [
+        # A lone newest date right after a gap: 2026-10-21 isn't listed, so use the range before it.
+        ("2026-03-02/2026-10-20/P1D,2026-10-22", "2026-10-20"),
+        ("2026-03-02/2026-10-20/P1D,2026-10-22/2026-10-22/P1D", "2026-10-20"),
+        ("2026-10-18,2026-10-22", "2026-10-18"),
+        ("2026-10-22", "2026-10-22"),
+    ],
+)
+async def test_resolve_tile_date_picks_a_listed_date(fake_redis, domain, expected):
+    """The tile date is always one GIBS lists, even when the newest date follows a gap."""
     domains = MagicMock()
-    domains.text = "<Domains><Domain>2026-03-02/2026-10-20/P1D,2026-10-22</Domain></Domains>"
+    domains.text = f"<Domains><Domain>{domain}</Domain></Domains>"
     client, _ = _gibs_client(domains)
 
     with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=client):
         tile_date = await resolve_tile_date(fake_redis, "nasa_gibs", "https://example.test/all.xml")
 
-    assert tile_date == "2026-10-21"
+    assert tile_date == expected
 
 
 @pytest.mark.asyncio
@@ -364,6 +376,19 @@ async def test_fetch_tile_nasa_gibs_unreadable_dates_returns_blank(fake_redis):
 
     assert (data, ct) == (BLANK_TILE, "image/png")
     assert len(requested) == 1
+    assert await fake_redis.keys("tile:*") == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_tile_nasa_gibs_past_max_zoom_returns_blank(fake_redis):
+    """NASA GIBS stops at z12, so z13 returns a blank tile without asking GIBS for anything."""
+    client, requested = _gibs_client(MagicMock())
+
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=client):
+        data, ct = await fetch_tile(fake_redis, "nasa_gibs", "satellite", 13, 1, 2, {})
+
+    assert (data, ct) == (BLANK_TILE, "image/png")
+    assert requested == []
 
 
 # ===== Integration tests for endpoints =====

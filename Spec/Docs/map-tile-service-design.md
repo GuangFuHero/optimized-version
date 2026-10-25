@@ -70,7 +70,7 @@ Static config mapping `(type, source)` to upstream URL template:
 
 > Note: `nlsc` requires a `Referer` header — set this in `tile_proxy.py` per-source config, not in the route handler.  
 > Note: `sinica` ToS is unconfirmed — confirm before production use.  
-> Note: `nasa_gibs` is HLS Sentinel-2 (30 m, native max z12). `{date}` is the day before the newest date in GIBS's `.../GoogleMapsCompatible_Level12/all/all.xml`, cached in Redis (`tile:nasa_gibs:date`) for an hour and included in the tile cache key. Each day is one satellite pass, so it can be cloudy and is blank outside the swath.  
+> Note: `nasa_gibs` is HLS Sentinel-2 (30 m, native max z12). `{date}` is the second-newest date listed in GIBS's `.../GoogleMapsCompatible_Level12/all/all.xml` (the newest is often still empty, and the list has gaps that GIBS answers with 404), cached in Redis (`tile:nasa_gibs:date`) for an hour and included in the tile cache key. Each day is one satellite pass, so it can be cloudy and is blank outside the swath. Its tiles are cached for 1 day instead of 7, since the date moves daily and older copies are never read again, and requests past z12 return the blank tile without asking GIBS.  
 > Note: `carto` now needs an API key (`?key=`); without one every tile is an "API KEY REQUIRED" image, so the frontend marks it unavailable.  
 > Note: `{layer}` in the `sinica` URL template is substituted from the `?layer=` query param at request time.
 
@@ -106,7 +106,7 @@ Sorting params before building the key ensures `layer=EARTH,style=default` and `
 ### Cache Miss
 1. Look up upstream URL template, substitute `{z}`, `{x}`, `{y}` (and `{layer}` for sinica)
 2. Fetch upstream with `httpx` (async), timeout 10s, include any required headers
-3. On success: store in Redis hash, set TTL 604800s (7 days), return tile
+3. On success: store in Redis hash, set the source's TTL (604800s, or 86400s for `nasa_gibs`), return tile
 4. On error (timeout, 4xx, 5xx): return **blank tile** (1×1 transparent PNG)
 
 ### Redis Down
@@ -124,12 +124,12 @@ Each tile is stored as a Redis hash using the unified key format:
 
 ```
 HSET tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}  data <bytes>  ct "image/jpeg"
-EXPIRE tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}  604800
+EXPIRE tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}  604800   # 86400 for nasa_gibs
 ```
 
 `{sorted_params}` is `_` when no query params are provided.
 
-TTL: **7 days (604800 seconds)**  
+TTL: **7 days (604800 seconds)**; `nasa_gibs` **1 day (86400 seconds)**  
 Eviction policy: `allkeys-lru` (least-recently-used tiles evicted when memory cap reached)
 
 ---
