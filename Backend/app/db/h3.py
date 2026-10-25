@@ -40,8 +40,15 @@ _ANCHOR_ZOOM = 13
 # edge of a hexagon is also its circumradius, so it bounds how far a point sits from its own
 # cell centre — which is what coarse_margin_degrees() needs.
 _AVG_EDGE_M = (
-    1281256.011, 483056.8391, 182512.9565, 68979.22179, 26071.75968,
-    9854.09099, 3724.532667, 1406.475763, 531.4140101,
+    1281256.011,
+    483056.8391,
+    182512.9565,
+    68979.22179,
+    26071.75968,
+    9854.09099,
+    3724.532667,
+    1406.475763,
+    531.4140101,
 )
 # H3 cells are not regular: at one resolution the largest is about twice the area of the
 # smallest, so a single cell's circumradius can exceed the average edge. Twice the average

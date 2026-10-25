@@ -1128,7 +1128,7 @@ export type QueryTicketArgs = {
 
 export type QueryTicketCellsArgs = {
   bounds: BoundsInput;
-  statuses?: InputMaybe<Array<Scalars['String']['input']>>;
+  statuses?: InputMaybe<Array<TicketStatus>>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
@@ -1156,6 +1156,7 @@ export type QueryTicketsArgs = {
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   status?: InputMaybe<Scalars['String']['input']>;
+  statuses?: InputMaybe<Array<TicketStatus>>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
@@ -1648,7 +1649,7 @@ export type TicketCellType = {
   /** H3 index (hex), the same value TicketType.locationCell carries for these tickets */
   cell: Scalars['String']['output'];
   ticketCount: Scalars['Int']['output'];
-  /** Of those, how many are urgent: priority 'high' or 'critical', and not 'in_progress' — the rule the site colours a ticket urgent by */
+  /** Of those, how many are urgent: a priority other than 'low' or 'medium' (trimmed, any case), and not 'in_progress' — the rule the site colours a ticket urgent by */
   urgentCount: Scalars['Int']['output'];
 };
 
@@ -1703,6 +1704,14 @@ export type TicketPropertyConfigType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export const TicketStatus = {
+  Cancelled: 'cancelled',
+  Completed: 'completed',
+  InProgress: 'in_progress',
+  Pending: 'pending',
+} as const;
+
+export type TicketStatus = (typeof TicketStatus)[keyof typeof TicketStatus];
 export type TicketTaskCreated = {
   __typename?: 'TicketTaskCreated';
   task: TicketTaskType;

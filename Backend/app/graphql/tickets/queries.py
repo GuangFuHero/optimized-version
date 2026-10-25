@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
-from app.core.search import normalize_query, search_timeout
+from app.core.search import normalize_query, search_timeout, statement_ceiling
 from app.core.security import resolve_scope
 from app.db.h3 import COARSE_MAX_H3_RESOLUTION, cell_resolution, coarse_resolution, h3_is_valid_cell
 from app.graphql.context import check_permission, require_authenticated
@@ -28,6 +28,7 @@ from app.graphql.tickets.types import (
     TaskPropertyType,
     TicketCellType,
     TicketConnection,
+    TicketStatus,
     TicketTaskType,
     TicketType,
     ticket_detail_visible,
@@ -47,6 +48,10 @@ _ZOOM_DESCRIPTION = (
     "Map zoom the result is for. Only affects a caller without ticket.view_detail: sets how "
     "coarse the H3 cell standing in for each point is — coarser as the map zooms out, never "
     "finer than resolution 8 whatever is sent"
+)
+_STATUSES_DESCRIPTION = (
+    "Only tickets in one of these statuses, as the map's filter ticks several; an empty list matches "
+    "none, and leaving it out matches every status"
 )
 
 # The most rows one `tickets` page may ask for: the site's map asks for 200 at a time
@@ -135,6 +140,9 @@ class RequestQuery:
                 )
             ),
         ] = None,
+        statuses: Annotated[
+            list[TicketStatus] | None, strawberry.argument(description=_STATUSES_DESCRIPTION)
+        ] = None,
     ) -> TicketConnection:
         """List tickets with optional bbox, status, priority, need-type, audit and keyword filters, paginated.
 
@@ -171,15 +179,18 @@ class RequestQuery:
 
         `locationCell` lists the tickets a `ticketCells` row counts (ADR-387). A cell finer than
         COARSE_MAX_H3_RESOLUTION is refused: matching on one would place a point the cell is
-        there to withhold. So is one naming no real cell, which h3-pg would raise on.
+        there to withhold. So is one naming no real cell, which h3-pg would raise on. A valid one
+        is rewritten as h3-pg prints it, so a zero-padded or upper-case spelling still matches.
+        `statuses` filters as it does on `ticketCells`, so a cell's list matches its count.
         """
         if limit > TICKET_LIST_MAX_LIMIT:
             raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
         db = info.context["db"]
         resolution = coarse_resolution(zoom)
         if location_cell is not None:
-            location_cell = location_cell.lower()
             resolution = cell_resolution(location_cell)
+            if resolution is not None:
+                location_cell = f"{int(location_cell, 16):x}"
             if (
                 resolution is None
                 or resolution > COARSE_MAX_H3_RESOLUTION
@@ -194,6 +205,7 @@ class RequestQuery:
             *_list_filters(need_type, open_needs_only, audit_status),
         ]
         detail_filters = await _detail_filters(info)
+        status_values = None if statuses is None else [s.value for s in statuses]
         # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
@@ -203,6 +215,7 @@ class RequestQuery:
                 db,
                 bounds=bounds,
                 status=status,
+                statuses=status_values,
                 priority=priority,
                 q=q,
                 extra_filters=extra_filters,
@@ -214,6 +227,7 @@ class RequestQuery:
                 db,
                 bounds=bounds,
                 status=status,
+                statuses=status_values,
                 priority=priority,
                 q=q,
                 skip=skip,
@@ -239,13 +253,7 @@ class RequestQuery:
         bounds: BoundsInput,
         zoom: Annotated[float | None, strawberry.argument(description=_ZOOM_DESCRIPTION)] = None,
         statuses: Annotated[
-            list[str] | None,
-            strawberry.argument(
-                description=(
-                    "Only tickets in one of these statuses, e.g. ['pending', 'completed']; every status "
-                    "if none is given"
-                )
-            ),
+            list[TicketStatus] | None, strawberry.argument(description=_STATUSES_DESCRIPTION)
         ] = None,
     ) -> list[TicketCellType]:
         """Ticket counts per H3 cell, for the tickets this caller is shown as a cell (ADR-387).
@@ -255,16 +263,22 @@ class RequestQuery:
         as `tickets(bounds:, zoom:)` matches it — by the cell centre, at the resolution `zoom` gives
         (ADR-282) — so it says nothing a page of `tickets` does not. A ticket the caller sees exactly
         is a pin, not a cell, so a caller holding ticket.view_detail on every ticket gets none.
+
+        Anonymous and called on every pan, so the count runs under keyword search's statement
+        ceiling: past it the caller is asked to zoom in rather than holding a connection.
         """
+        db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
-        rows = await ticket_repository.count_by_cell(
-            info.context["db"],
-            bounds=bounds,
-            statuses=statuses,
-            extra_filters=scope_filter(scope, actor=info.context["user"], model=Tickets),
-            detail_filters=await _detail_filters(info),
-            coarse_resolution=coarse_resolution(zoom),
-        )
+        detail_filters = await _detail_filters(info)
+        async with statement_ceiling(db, refusal="這個範圍的單太多，計算逾時已中止，請放大地圖再試"):
+            rows = await ticket_repository.count_by_cell(
+                db,
+                bounds=bounds,
+                statuses=None if statuses is None else [s.value for s in statuses],
+                extra_filters=scope_filter(scope, actor=info.context["user"], model=Tickets),
+                detail_filters=detail_filters,
+                coarse_resolution=coarse_resolution(zoom),
+            )
         return [
             TicketCellType(cell=cell, ticket_count=count, urgent_count=urgent) for cell, count, urgent in rows
         ]

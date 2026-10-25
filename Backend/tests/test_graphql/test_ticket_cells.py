@@ -12,9 +12,11 @@ from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 from sqlalchemy import select, text
 
+from app.core import search
 from app.models.auth import User
 from app.models.geo import HazardousZone
 from app.models.request import Tickets
+from app.repositories.tickets_repository import ticket_repository
 from tests.test_graphql.conftest import auth_header
 from tests.test_graphql.conftest import test_db as db_ctx
 from tests.test_graphql.test_ticket_detail_boundary import _box, _cell, _centre, _query, _signed_in
@@ -31,13 +33,15 @@ BESIDE = Point(120.5973, 22.4748)
 EAST = Point(120.6307, 22.4729)
 
 CELLS = """
-query ($bounds: BoundsInput!, $zoom: Float, $statuses: [String!]) {
+query ($bounds: BoundsInput!, $zoom: Float, $statuses: [TicketStatus!]) {
   ticketCells(bounds: $bounds, zoom: $zoom, statuses: $statuses) { cell ticketCount urgentCount }
 }
 """
 TICKETS = """
-query ($bounds: BoundsInput, $zoom: Float, $locationCell: String, $skip: Int) {
-  tickets(bounds: $bounds, zoom: $zoom, locationCell: $locationCell, skip: $skip, limit: 200) {
+query ($bounds: BoundsInput, $zoom: Float, $locationCell: String, $statuses: [TicketStatus!], $skip: Int) {
+  tickets(
+    bounds: $bounds, zoom: $zoom, locationCell: $locationCell, statuses: $statuses, skip: $skip, limit: 200
+  ) {
     items { uuid locationCell }
     pageInfo { totalCount hasNextPage }
   }
@@ -123,18 +127,24 @@ async def test_a_guest_gets_each_cells_count(client):
     assert await _cells(client, {}) == {here: (2, 0), east: (1, 0)}
 
 
-async def test_the_counts_agree_with_paging_through_tickets(client):
-    """Built from the conditions `tickets` uses, so counting its rows by cell gives the same numbers."""
+@pytest.mark.parametrize("statuses", [None, ["pending", "completed"], []])
+async def test_the_counts_agree_with_paging_through_tickets(client, statuses):
+    """Built from the conditions `tickets` uses, so counting its rows by cell gives the same numbers.
+
+    `statuses` too: with two ticked, a cell's count and the list it opens are the same rows.
+    """
     for point in (HERE, BESIDE, EAST, EAST):
         await _ticket(point)
     await _ticket(HERE, status="completed")
+    await _ticket(EAST, status="in_progress")
 
-    variables = {"bounds": AREA, "zoom": 12.0}
+    variables = {"bounds": AREA, "zoom": 12.0, "statuses": statuses}
     counted: dict[str, int] = {}
     for item in (await _query(client, TICKETS, variables))["tickets"]["items"]:
         counted[item["locationCell"]] = counted.get(item["locationCell"], 0) + 1
 
-    assert {cell: n for cell, (n, _) in (await _cells(client, {"zoom": 12.0})).items()} == counted
+    cells = await _cells(client, {"zoom": 12.0, "statuses": statuses})
+    assert {cell: n for cell, (n, _) in cells.items()} == counted
 
 
 async def test_a_cell_is_matched_by_its_centre_not_the_points_in_it(client):
@@ -165,23 +175,56 @@ async def test_zoom_coarsens_the_cells_but_never_refines_them(client):
 
 
 async def test_statuses_narrow_the_count_to_those_given(client):
-    """Several statuses at once, as the map's filter can tick them; none given counts every status."""
+    """Several statuses at once, as the map's filter can tick them; left out counts every status.
+
+    An empty list counts nothing: unticking every status on the map shows no cells, not all of them.
+    """
     for status in ("pending", "in_progress", "completed"):
         await _ticket(HERE, status=status)
     here = await _cell(HERE)
 
     assert await _cells(client, {"statuses": ["pending", "completed"]}) == {here: (2, 0)}
     assert await _cells(client, {}) == {here: (3, 0)}
+    assert await _cells(client, {"statuses": []}) == {}
 
 
-async def test_urgent_is_high_or_critical_and_not_in_progress(client):
-    """The site's own rule for the red cell (markers.ts), counted so the cell can say how many."""
+async def test_a_misspelled_status_is_refused(client):
+    """An enum, so `in-progress` is turned away by GraphQL rather than silently counting nothing."""
+    body = await _post(client, CELLS, {"bounds": AREA, "statuses": ["in-progress"]})
+
+    assert "errors" in body, body
+
+
+async def test_urgent_is_any_priority_but_low_or_medium_and_not_in_progress(client):
+    """The site's own rule for the red cell (markers.ts), so a cell turns red on the same tickets.
+
+    Priority is not validated on write, so the site trims and lowercases it and treats anything but
+    `low` and `medium` as urgent; the count does the same.
+    """
     await _ticket(HERE, priority="critical")
     await _ticket(HERE, priority="high", status="completed")
+    await _ticket(HERE, priority="High")
+    await _ticket(HERE, priority="urgent")
     await _ticket(HERE, priority="high", status="in_progress")
     await _ticket(HERE, priority="medium")
+    await _ticket(HERE, priority=" Low ")
 
-    assert await _cells(client, {}) == {await _cell(HERE): (4, 2)}
+    assert await _cells(client, {}) == {await _cell(HERE): (7, 4)}
+
+
+async def test_counting_runs_under_the_search_ceiling(client, monkeypatch):
+    """Anonymous and on every pan, so one slow count is cancelled rather than holding a connection."""
+    monkeypatch.setattr(search, "SEARCH_STATEMENT_TIMEOUT_MS", 100)
+
+    async def slow_count(db, **_):
+        await db.execute(text("SELECT pg_sleep(3)"))
+        return []
+
+    monkeypatch.setattr(ticket_repository, "count_by_cell", slow_count)
+
+    body = await _post(client, CELLS, {"bounds": AREA})
+
+    assert any("請放大地圖" in e["message"] for e in body["errors"]), body
 
 
 async def test_a_caller_who_sees_every_point_gets_no_cells(client, redis):
@@ -259,6 +302,16 @@ async def test_a_coarser_cell_lists_every_ticket_inside_it(client):
 
     assert expected <= {item["uuid"] for item in page["items"]}
     assert {item["locationCell"] for item in page["items"]} == {coarse}
+
+
+@pytest.mark.parametrize("spelling", [lambda cell: "0" + cell, str.upper])
+async def test_a_cell_lists_the_same_tickets_however_it_is_spelt(client, spelling):
+    """Rewritten in canonical form once checked, as h3-pg prints it, so the text match still holds."""
+    uuid = await _ticket(HERE)
+
+    page = (await _query(client, TICKETS, {"locationCell": spelling(await _cell(HERE))}))["tickets"]
+
+    assert [item["uuid"] for item in page["items"]] == [uuid]
 
 
 async def test_a_cell_finds_a_ticket_at_its_far_corner(client):

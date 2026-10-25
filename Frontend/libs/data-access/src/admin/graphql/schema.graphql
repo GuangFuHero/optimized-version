@@ -896,6 +896,11 @@ type Query {
     Only the tickets this caller is shown as this H3 cell — a `locationCell` value, as the guest map draws it. The cell's resolution, 8 or coarser, then sets how coarse every row is, in place of `zoom`. A ticket the caller sees exactly is in no cell
     """
     locationCell: String = null
+
+    """
+    Only tickets in one of these statuses, as the map's filter ticks several; an empty list matches none, and leaving it out matches every status
+    """
+    statuses: [TicketStatus!] = null
   ): TicketConnection!
   ticketCells(
     bounds: BoundsInput!
@@ -906,9 +911,9 @@ type Query {
     zoom: Float = null
 
     """
-    Only tickets in one of these statuses, e.g. ['pending', 'completed']; every status if none is given
+    Only tickets in one of these statuses, as the map's filter ticks several; an empty list matches none, and leaving it out matches every status
     """
-    statuses: [String!] = null
+    statuses: [TicketStatus!] = null
   ): [TicketCellType!]!
   ticket(
     uuid: UUID!
@@ -1580,7 +1585,7 @@ type TicketCellType {
   ticketCount: Int!
 
   """
-  Of those, how many are urgent: priority 'high' or 'critical', and not 'in_progress' — the rule the site colours a ticket urgent by
+  Of those, how many are urgent: a priority other than 'low' or 'medium' (trimmed, any case), and not 'in_progress' — the rule the site colours a ticket urgent by
   """
   urgentCount: Int!
 }
@@ -1648,6 +1653,13 @@ type TicketPropertyConfigType {
 
   """Whether the field is in use"""
   isActive: Boolean!
+}
+
+enum TicketStatus {
+  pending
+  in_progress
+  completed
+  cancelled
 }
 
 type TicketTaskCreated {

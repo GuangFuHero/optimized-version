@@ -729,13 +729,20 @@ floor 是 RF、nF、Bn     → 往下驗 room
   - 條件只用 `_active_conditions`，再加「呼叫者看到的是格子」（`NOT seen`）。所以數字跟用同樣的參數一頁一頁翻
     `tickets`、按 `locationCell` 數的一樣：`bounds` 用格子中心比（ADR-282），`zoom` 決定 resolution、最細 8。
   - 看得到精確點的單是圖釘，不算進格子。`view_detail` 是 `all` 的人回空清單，不跑 SQL。
-  - `statuses` 收清單：地圖可以同時勾好幾個狀態，`tickets` 的 `status` 只收一個。
-  - `urgentCount`：priority 是 high／critical、而且不是 `in_progress`，照前端現在的規則
-    （`markers.ts` 的 `resolveTicketVariant`）。給數字不給 true／false，前端判斷 `> 0`。
+  - `statuses` 收 `TicketStatus` enum 的清單（pending／in_progress／completed／cancelled）：地圖可以同時勾好幾個
+    狀態，拼錯的值 GraphQL 直接擋。沒傳是全部；傳空清單是一張都不算（把狀態全取消勾選，地圖就是空的）。
+    `tickets` 也收同一個 `statuses`，一格的清單跟它的筆數用同一份條件；原本的 `status` 留著給現有的呼叫端。
+  - `urgentCount`：照前端現在的規則（`markers.ts` 的 `resolveTicketVariant`）：priority 去掉前後空白、轉小寫後
+    不是 low／medium，而且不是 `in_progress`，就算急件。priority 寫入時不驗證，`High`、`urgent` 在地圖上是紅的，
+    格子也要算進去。給數字不給 true／false，前端判斷 `> 0`。
+  - 跟 keyword search 共用同一個 statement ceiling（3 秒，`app/core/search.py` 的 `statement_ceiling`）：
+    匿名、每次移動地圖都會呼叫，超過就回「請放大地圖再試」，不佔著連線。不擋框的大小：地圖拉遠時訪客也要看到
+    筆數，花多少時間看的是框裡有幾張單，不是框有多大。
 - `tickets(locationCell:)` 只回「呼叫者看到的是這一格」的單，每列的 `geometry`／`locationCell` 用這一格的
   resolution，`zoom` 不管。比 resolution 8 細、或不是 H3 cell 的字串，回錯誤。格式對、但不存在的格子
   （例如 base cell 超過 121）也回同一個錯誤：先問 h3-pg 的 `h3_is_valid_cell`，因為 `h3_cell_to_geometry`
-  遇到這種會直接報錯，整個查詢就失敗。
+  遇到這種會直接報錯，整個查詢就失敗。驗過以後改寫成 h3-pg 輸出的標準寫法（小寫、不補零），比對的是文字，
+  不改寫的話補零或大寫的寫法會什麼都查不到。
   - 先用 `base_geometries` 的 geography 索引粗篩（離格子中心 `2 × 平均邊長` 內），再用 h3 決定每一列，
     跟 ADR-282 的 `bounds` 粗篩同一個道理。
 
@@ -746,4 +753,6 @@ floor 是 RF、nF、Bn     → 往下驗 room
 前 5 次用的是帶參數的 custom plan，把格子中心那個條件估成 1 列，選了對 `tickets` 整張掃的 nested loop；
 之後 Postgres 換成 generic plan 就正常。既有的 `tickets(bounds)` 訪客列表是同一個現象（同樣前 5 次約 3 秒），
 不是這條造成的，另案處理。`tickets(locationCell:)` 走 geography 索引，1～100 ms。
-◾ 「有急件就整格紅」這條規則本身在等糖、Carol；規則改了，改 `URGENT_PRIORITIES` 和那個條件就好。
+前 5 次接近 3 秒的 ceiling，量級到 1 萬張在畫面裡時，前幾次可能回「請放大地圖」，修計畫的問題時一起看。
+◾ 「有急件就整格紅」這條規則本身在等糖、Carol；規則改了，改 `CALM_PRIORITIES` 和那個條件就好。寫入時驗證
+priority 另議：會改到每一個寫入路徑，已經存進去的資料也不會跟著變。

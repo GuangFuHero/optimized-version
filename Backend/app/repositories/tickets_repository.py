@@ -18,9 +18,10 @@ from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 
-# A ticket the site colours urgent, unless it is in progress (`map/site/markers.ts`
-# resolveTicketVariant): the guest map turns a cell red when it holds one (ADR-387).
-URGENT_PRIORITIES = ("high", "critical")
+# The site colours a ticket urgent unless its priority, trimmed and lowercased, is one of these, or
+# it is in progress (`map/site/markers.ts` resolveTicketVariant); priority is not validated on
+# write, so anything else counts. The guest map turns a cell red when it holds one (ADR-387).
+CALM_PRIORITIES = ("low", "medium")
 # A bare `geography` cast, which the `::geography` index on base_geometries matches (see
 # app/dedup_engine/candidates.py); geoalchemy2's default renders `geography(GEOMETRY,-1)`, which it doesn't.
 _GEOGRAPHY = Geography(geometry_type=None)
@@ -80,6 +81,7 @@ class TicketRepository(GenericRepository[Tickets]):
         *,
         bounds=None,
         status: str | None = None,
+        statuses: list[str] | None = None,
         priority: str | None = None,
         q: str | None = None,
         extra_filters=(),
@@ -105,6 +107,9 @@ class TicketRepository(GenericRepository[Tickets]):
         `coarse_only` keeps just the rows the caller is shown as a cell rather than a point —
         what the guest map draws as cells (ADR-387). `location_cell` keeps those of one cell,
         which must be at `coarse_resolution`: the rows the guest map's cell holds.
+
+        `statuses` keeps the rows in any of them, as the map's filter ticks several; an empty
+        list keeps none, so unticking every status shows nothing. With `status` too, both apply.
         """
         conditions = [self.model.delete_at.is_(None), *extra_filters]
         # NULL-safe: `created_by = :me` is NULL on a row with no author, and NOT NULL is
@@ -142,15 +147,13 @@ class TicketRepository(GenericRepository[Tickets]):
                 dx, dy = coarse_margin_degrees(
                     coarse_resolution, max(abs(bounds.min_lat), abs(bounds.max_lat))
                 )
-                conditions.append(
-                    func.ST_Intersects(self.model.geometry, func.ST_Expand(envelope, dx, dy))
-                )
-                coarse = func.ST_Intersects(
-                    h3_centroid(self.model.geometry, coarse_resolution), envelope
-                )
+                conditions.append(func.ST_Intersects(self.model.geometry, func.ST_Expand(envelope, dx, dy)))
+                coarse = func.ST_Intersects(h3_centroid(self.model.geometry, coarse_resolution), envelope)
                 conditions.append(or_(and_(seen, exact), and_(not_(seen), coarse)))
         if status:
             conditions.append(self.model.status == status)
+        if statuses is not None:
+            conditions.append(self.model.status.in_(statuses) if statuses else false())
         if priority:
             conditions.append(self.model.priority == priority)
         term = normalize_query(q)
@@ -196,6 +199,7 @@ class TicketRepository(GenericRepository[Tickets]):
         *,
         bounds=None,
         status: str | None = None,
+        statuses: list[str] | None = None,
         priority: str | None = None,
         q: str | None = None,
         skip: int = 0,
@@ -207,19 +211,28 @@ class TicketRepository(GenericRepository[Tickets]):
     ) -> list[Tickets]:
         """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope.
 
-        `detail_filters` / `coarse_resolution` / `location_cell`: see _active_conditions
-        (ADR-281/282/387).
+        `statuses` / `detail_filters` / `coarse_resolution` / `location_cell`: see
+        _active_conditions (ADR-281/282/387).
         """
         term = normalize_query(q)
         conditions = self._active_conditions(
-            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters,
-            detail_filters=detail_filters, coarse_resolution=coarse_resolution, location_cell=location_cell,
+            bounds=bounds,
+            status=status,
+            statuses=statuses,
+            priority=priority,
+            q=q,
+            extra_filters=extra_filters,
+            detail_filters=detail_filters,
+            coarse_resolution=coarse_resolution,
+            location_cell=location_cell,
         )
         async with search_timeout(db, term):
             result = await db.execute(
-                select(self.model).where(*conditions)
+                select(self.model)
+                .where(*conditions)
                 .order_by(*self._order_by(term, public_only=bool(detail_filters)))
-                .offset(skip).limit(limit)
+                .offset(skip)
+                .limit(limit)
             )
         return result.scalars().all()
 
@@ -229,6 +242,7 @@ class TicketRepository(GenericRepository[Tickets]):
         *,
         bounds=None,
         status: str | None = None,
+        statuses: list[str] | None = None,
         priority: str | None = None,
         q: str | None = None,
         extra_filters=(),
@@ -238,8 +252,15 @@ class TicketRepository(GenericRepository[Tickets]):
     ) -> int:
         """Count active tickets — MUST use the same conditions as list_active()."""
         conditions = self._active_conditions(
-            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters,
-            detail_filters=detail_filters, coarse_resolution=coarse_resolution, location_cell=location_cell,
+            bounds=bounds,
+            status=status,
+            statuses=statuses,
+            priority=priority,
+            q=q,
+            extra_filters=extra_filters,
+            detail_filters=detail_filters,
+            coarse_resolution=coarse_resolution,
+            location_cell=location_cell,
         )
         async with search_timeout(db, normalize_query(q)):
             return await db.scalar(
@@ -261,22 +282,28 @@ class TicketRepository(GenericRepository[Tickets]):
         Returns `(cell, tickets, urgent ones)` rows ordered by cell. Built from `_active_conditions`
         and nothing else, so the counts are what paging through list_active() with the same
         arguments and grouping by `locationCell` would give. A caller who sees every exact point has
-        no cells, so it costs no query. `statuses` takes several at once, as the map's filter does;
-        none or empty counts every status.
+        no cells, so it costs no query. `statuses`: see _active_conditions.
         """
         if not detail_filters:
             return []
-        if statuses:
-            extra_filters = [*extra_filters, self.model.status.in_(statuses)]
         conditions = self._active_conditions(
-            bounds=bounds, extra_filters=extra_filters, detail_filters=detail_filters,
-            coarse_resolution=coarse_resolution, coarse_only=True,
+            bounds=bounds,
+            statuses=statuses,
+            extra_filters=extra_filters,
+            detail_filters=detail_filters,
+            coarse_resolution=coarse_resolution,
+            coarse_only=True,
         )
         cell = h3_cell_text(self.model.geometry, coarse_resolution)
-        urgent = and_(self.model.priority.in_(URGENT_PRIORITIES), self.model.status != "in_progress")
+        urgent = and_(
+            func.lower(func.btrim(self.model.priority)).not_in(CALM_PRIORITIES),
+            self.model.status != "in_progress",
+        )
         rows = await db.execute(
             select(cell, func.count(), func.count().filter(urgent))
-            .where(*conditions).group_by(cell).order_by(cell)
+            .where(*conditions)
+            .group_by(cell)
+            .order_by(cell)
         )
         return [(cell, count, urgent_count) for cell, count, urgent_count in rows]
 
@@ -341,8 +368,7 @@ class TicketTaskRepository(GenericRepository[TicketTask]):
         # It is a no-op when `term` is None, so the plain list path is unchanged.
         async with search_timeout(db, term):
             result = await db.execute(
-                query.order_by(self.model.created_at.desc(), self.model.uuid.desc())
-                .offset(skip).limit(limit)
+                query.order_by(self.model.created_at.desc(), self.model.uuid.desc()).offset(skip).limit(limit)
             )
         return result.scalars().all()
 
