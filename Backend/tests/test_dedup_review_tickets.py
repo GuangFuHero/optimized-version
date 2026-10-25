@@ -1,4 +1,4 @@
-"""The two whole tickets behind a pair card (Spec 028 §2, ADR-373/373): the service layer.
+"""The two whole tickets behind a pair card (Spec 028 §2, ADR-373/374): the service layer.
 
 `dedup_review.get_pair` carries them; the REST shape is checked in test_dedup_review_tickets_api.py.
 """
@@ -354,7 +354,7 @@ async def test_the_query_count_does_not_grow_with_needs_or_items(db):
     assert many == few
 
 
-# --- photos and disaster answers (ADR-384, 384) -------------------------------------------
+# --- photos and disaster answers (ADR-384, 385) -------------------------------------------
 
 
 async def _photo(db, ticket, owner, url="https://example.com/a.jpg", *, deleted=False) -> Photo:

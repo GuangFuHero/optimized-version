@@ -1,4 +1,4 @@
-"""POST /admin/duplicate-pairs/{uuid}/resolve is wired to the service (Spec 028 §3, ADR-365/365).
+"""POST /admin/duplicate-pairs/{uuid}/resolve is wired to the service (Spec 028 §3, ADR-365/366).
 
 Wiring only: what a resolve writes is observed at the service (tests/test_dedup_resolve.py).
 Roles come straight from `scripts/seed_rbac.py`, so who may resolve is what production grants.

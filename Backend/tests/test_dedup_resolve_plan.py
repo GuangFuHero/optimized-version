@@ -421,7 +421,7 @@ def test_an_unknown_field_is_refused_by_the_schema():
         _request(ticket={"titel": "錯字"})
 
 
-# --- code review round (ADR-381, 383, 384) ------------------------------------------------
+# --- code review round (ADR-381, 384, 385) ------------------------------------------------
 
 
 @pytest.mark.parametrize(("field", "limit"), [("priority", 20), ("task_type", 50)])

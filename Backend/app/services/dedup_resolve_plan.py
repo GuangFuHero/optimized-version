@@ -6,12 +6,12 @@ Nothing here reads or writes the database; `dedup_resolve.resolve` loads the inp
 and writes the plan. The vocabulary check on `disaster_types` needs the database and is left to it.
 
 The rules, each from decisions.md:
-- one primary ticket; the other is always cancelled (ADR-367, 370);
+- one primary ticket; the other is always cancelled (ADR-367, 371);
 - every live need of both tickets is named exactly once — kept, cancelled, absorbed or moved — and
-  so is every live item of a kept or moved need (ADR-368, 379);
+  so is every live item of a kept or moved need (ADR-368, 380);
 - a need only absorbs needs of the other ticket of its own kind (ADR-370);
 - no need ends with more people than its quantity, a person on two merged needs counting once
-  (ADR-369, 369).
+  (ADR-369, 370).
 """
 
 from collections.abc import Mapping, Sequence

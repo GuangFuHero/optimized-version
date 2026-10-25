@@ -1,4 +1,4 @@
-"""The two whole tickets behind a duplicate pair card, for the AI 重複審核 page (Spec 028 §2, ADR-373/373).
+"""The two whole tickets behind a duplicate pair card, for the AI 重複審核 page (Spec 028 §2, ADR-373/374).
 
 A fast-layer card compares one need with another (`ticket_task`), but a resolve acts on whole
 tickets, so the reviewer has to see both tickets in full first: their fields, contacts, every live
@@ -104,7 +104,7 @@ def ticket_version(ticket: TicketForReview) -> str:
     Made from the content itself, not from `updated_at`: a ticket's `updated_at` lives on
     `base_geometries`, which an edit to the ticket's own columns does not touch. Every field the
     reviewer can compare or edit goes in — the ticket's, each live need's and item's, its photos
-    and disaster-field answers (ADR-384, 384) — with needs, items and photos sorted by uuid.
+    and disaster-field answers (ADR-384, 385) — with needs, items and photos sorted by uuid.
     What a claim moves stays out: the headcount is checked under the locks when resolving, and a
     claim need not send the reviewer back.
     """

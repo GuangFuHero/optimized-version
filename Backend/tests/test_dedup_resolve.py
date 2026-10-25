@@ -601,7 +601,7 @@ async def test_a_reject_and_a_resolve_at_once_leave_one_decision(db):
     assert (pair.status, b.status) in {("confirmed", "cancelled"), ("rejected", "pending")}
 
 
-# --- code review round: photos, answers (ADR-384, 384) ------------------------------------
+# --- code review round: photos, answers (ADR-384, 385) ------------------------------------
 
 
 async def _photos_and_answers(db, ids):

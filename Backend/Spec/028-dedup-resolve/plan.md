@@ -51,7 +51,7 @@ commit 前看 `git diff --cached --stat`）。
   - FK：指向不存在的單 → 寫入失敗。
   - `test_migrations_match_models` 照常通過（migration 與 model 欄位一致）。
 
-## Task 2：讀取兩張完整的單（ADR-373、373）
+## Task 2：讀取兩張完整的單（ADR-373、374）
 
 - ✅ 2026-10-24：`app/services/dedup_review_tickets.py`；全套件 **2707 passed**（+20），覆蓋率 96%；之後補一個測試（兩邊都已取消），單檔 18 passed。
   **改了設計**：`version` 改成內容雜湊，不用 `updated_at`。實測只改單的 `title`，`base_geometries.updated_at` 不變（ADR-374 已更新）。
@@ -76,7 +76,7 @@ commit 前看 `git diff --cached --stat`）。
   - 查詢數固定（不隨需求數成長）。
   - API：super_admin、data_auditor 看得到聯絡人；沒有 `ai_duplicate.view` 403。
 
-## Task 3：處理計畫 — 純函式（ADR-367、367、369、370、376、379）
+## Task 3：處理計畫 — 純函式（ADR-367、368、370、371、377、380）
 
 - ✅ 2026-10-24：`app/services/dedup_resolve_plan.py`、`ResolveRequest`（`app/schemas/duplicate_pair.py`，未知欄位 422）；純函式測試 33 個；
   突變測試 9 條（類型、人數、漏列需求／細項、重複志工、重複列、主要單方向、細項搬移、全部取消）都會被抓到。全套件 **2741 passed**，覆蓋率 96%。
@@ -97,7 +97,7 @@ commit 前看 `git diff --cached --stat`）。
   - 接單人數 = 新數量 → 通過；大於 → 422。
   - rescue 可以沒有數量；其他類型沒有數量 → 422。
 
-## Task 4：寫入（ADR-365、365、368、369、370、373、374）
+## Task 4：寫入（ADR-365、366、369、370、371、374、375）
 
 - ✅ 2026-10-24：`app/services/dedup_resolve.py`；`dedup_review` 公開 `lock_pair`／`checked_note`／`pair_detail`／`has_merged_event`，`revoke` 對處理過的卡 409；
   `ticket._mark_need_deleted` 改名為公開的 `mark_need_deleted`。service 測試 25 個，全套件 **2766 passed**，覆蓋率 96%。
@@ -183,7 +183,7 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 9：code review 修正（ADR-381～385）
 
-依 `SPEC028_CODE_REVIEW.md`，使用者同意修 1、2、3、4、6、8、9，並決定 B 的照片與災害欄位答案由審核員選（ADR-384、384）。
+依 `SPEC028_CODE_REVIEW.md`，使用者同意修 1、2、3、4、6、8、9，並決定 B 的照片與災害欄位答案由審核員選（ADR-384、385）。
 
 - [x] 1. rebase 到 main `2e95aec0d`，migration 改接 `7370daf4c8f7`（`ec0e6633d`）
 - [x] 2. `priority`／`task_type` 長度 → 422（ADR-381）
@@ -210,7 +210,9 @@ jujuyuzu 2026-10-25 的 review。
 - [x] 聯絡人有改時通知主要單原本的志工（ADR-389）
 - [x] 取消通知文字分兩種、兩張單同一人只收一則（ADR-390）
 - [x] `er-diagram.md` 補欄位與通知類型；Spec 025 註記範圍
-- [ ] 全套件；Docker 從零重做；回覆 review
+- [x] 全套件 **2929 passed**；Docker 從零重做（`6d3eb7fed`，容器內 2929 passed，流程全部符合預期，見 `verification.md`）
+- [x] 補修移號漏掉的清單寫法（`ADR-372、383、384` 這種，只有第一個被移到），共 20 行
+- [ ] 回覆 review
 
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 

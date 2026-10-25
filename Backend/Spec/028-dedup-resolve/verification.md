@@ -1,15 +1,17 @@
 # Verification: 028-dedup-resolve（Task 8 Docker 從零驗證）
 
 **日期**：2026-10-24
-**驗證的程式**：`feat/dedup-resolve` @ `55cb19729`（code review 修正之後；用 `git archive` 匯出這個 commit 再 build，未追蹤的檔案不會進 image）
-**結論**：全部通過。容器內全套件 **2912 passed、0 error**。
+**驗證的程式**：`feat/dedup-resolve` @ `6d3eb7fed`（PR #113 review 修正之後，rebase 到 main `832282894`；用 `git archive` 匯出這個 commit 再 build，未追蹤的檔案不會進 image）
+**結論**：全部通過。容器內全套件 **2929 passed、0 error**。
 
 > **第一次驗證**跑在 `38ee6e232`（code review 前），流程同樣全部通過；容器內 2774 passed 加 14 個 error，
 > 原因是腳本跑全套件時沒帶 `-e PYTHONPATH=/app`，`test_seed_mock_scenarios` 的子程序找不到 `app`，帶上後 14 passed。
-> 之後 code review 改了照片、災害欄位答案、通知等（ADR-381～385），並 rebase 到 main `2e95aec0d`，所以用 `55cb19729` 從零重做；以下都是重做的結果。
+> **第二次**跑在 `55cb19729`（code review 修正之後，ADR-381～385），結果也全部通過（2912 passed）。
+> **第三次**（本報告）跑在 `6d3eb7fed`，是 PR #113 review 之後。這次的變更有：migration 改接 #110 的 `da152a6a9d7c`、ADR 整批往後移一號、
+> 既有流程在鎖住之後確認需求沒被搬走（ADR-388）、聯絡人通知與通知文字（ADR-389、390）。以下都是第三次的結果。
 > 重做的第一次嘗試，db 容器在初始化時退出：腳本的 `CREATE EXTENSION` 和 image 自己的 postgis 初始化撞在一起。腳本改成等初始化完成再建，與程式無關。
 
-腳本：session scratchpad `t8/docker_verify.sh <commit>`（真實流程 `t8/phase1.py`、`t8/phase2.py`），完整輸出在 `t8/docker_verify_55cb19729.log`。
+腳本：session scratchpad `t8/docker_verify.sh <commit>`（真實流程 `t8/phase1.py`、`t8/phase2.py`），完整輸出在 `t8/docker_verify_6d3eb7fed.log`。
 
 ## 1. 環境
 
@@ -34,30 +36,30 @@ app/services/dedup_review_tickets.py
 ## 2. 空資料庫 → migration → seed
 
 ```
-Running upgrade e4b7c2a19d63 -> 7370daf4c8f7, secondary_locations: split the address into its official parts
-Running upgrade 7370daf4c8f7 -> c3f1a9d27b54, tickets.replaced_by_uuid, ticket_tasks.merged_into_uuid: ...
+Running upgrade 7370daf4c8f7 -> da152a6a9d7c, briefings: a status column, and at most one live version per state
+Running upgrade da152a6a9d7c -> c3f1a9d27b54, tickets.replaced_by_uuid, ticket_tasks.merged_into_uuid: ...
 c3f1a9d27b54 (head)
 
 ticket_tasks.merged_into_uuid
 tickets.replaced_by_uuid
 ```
 
-本分支的 migration 接在 main 的 head `7370daf4c8f7`（#96）之後，只有一個 head。
+本分支的 migration 接在 main 的 head `da152a6a9d7c`（#110）之後，只有一個 head。
 
 ## 3. 容器內全套件
 
 ```
 app/api/v1/endpoints/duplicate_pairs.py     67   2   97%
-app/services/dedup_resolve.py              175   2   99%
-app/services/dedup_resolve_notices.py       47   0  100%
+app/services/dedup_resolve.py              180   2   99%
+app/services/dedup_resolve_notices.py       64   0  100%
 app/services/dedup_resolve_plan.py         216   1   99%
 app/services/dedup_review.py               170   0  100%
 app/services/dedup_review_tickets.py       118   2   98%
-TOTAL                                    13474 487   96%
-2912 passed, 120 warnings in 553.40s
+TOTAL                                    13559 484   96%
+2929 passed, 120 warnings in 544.13s
 ```
 
-和本機（2912 passed、96%）一致。
+和本機（2929 passed、96%）一致。
 
 ## 4. 真實 HTTP 流程
 
@@ -76,7 +78,7 @@ TOTAL                                    13474 487   96%
 
 | 步驟 | 結果 | 預期 |
 |---|---|---|
-| data_auditor 讀卡片 detail | 200。兩張完整的單：A（飲用水 1／0 人、清淤 2／2 人，1 張照片，`power_outage: no`）、B（清淤 5／2 人、飲用水 5／1 人、便當 3／1 人，2 張照片，`utility_hazards: gas`） | ✓ ADR-373、383、384 |
+| data_auditor 讀卡片 detail | 200。兩張完整的單：A（飲用水 1／0 人、清淤 2／2 人，1 張照片，`power_outage: no`）、B（清淤 5／2 人、飲用水 5／1 人、便當 3／1 人，2 張照片，`utility_hazards: gas`） | ✓ ADR-373、384、385 |
 | B 有答案，request 沒帶 `disaster_details` | **422** `The other ticket has disaster_details: send the primary's full answers` | ✓ ADR-385 |
 | `priority` 填 25 字 | **422** `priority must be at most 20 characters` | ✓ ADR-381（修正前是 500） |
 | 一般民眾 resolve | **403** `Permission Denied.` | ✓ ADR-366 |
@@ -168,17 +170,21 @@ A 的答案被整份取代（`power_outage` 從 no 變 yes，多了 `utility_haz
 ------------+----------------------+--------------------------------------------------------------------+--------------+--------------------------
  資料檢核員 | dedup_review_pending | 疑似重複待審核：3 筆                                               | dedup_review |
  超級管理員 | dedup_review_pending | 疑似重複待審核：3 筆                                               | dedup_review |
- 志工三     | dedup_task_canceled  | 你承接的需求已取消                                                 | ticket       | 民生街 12 號淹水（合併）
- 志工三     | dedup_task_merged    | 你承接的需求已合併到「民生街 12 號淹水（合併）」                   | ticket       | 民生街 12 號淹水（合併）
- 志工四     | dedup_task_merged    | 你承接的需求已合併到「民生街 12 號淹水（合併）」                   | ticket       | 民生街 12 號淹水（合併）
- B 的通報者 | dedup_ticket_merged  | 你的求助「民生街 12 號一樓淹水」已併入「民生街 12 號淹水（合併）」 | ticket       | 民生街 12 號淹水（合併）
- A 的通報者 | dedup_ticket_updated | 你的求助「民生街 12 號淹水（合併）」已因重複審核更新               | ticket       | 民生街 12 號淹水（合併）
+ 志工三     | dedup_task_canceled          | 你承接的需求已取消                                                 | ticket       | 民生街 12 號淹水（合併）
+ 志工三     | dedup_task_merged            | 你承接的需求已合併到「民生街 12 號淹水（合併）」                   | ticket       | 民生街 12 號淹水（合併）
+ 志工四     | dedup_task_merged            | 你承接的需求已合併到「民生街 12 號淹水（合併）」                   | ticket       | 民生街 12 號淹水（合併）
+ 志工一     | dedup_ticket_contact_changed | 「民生街 12 號淹水（合併）」的聯絡人已更新                         | ticket       | 民生街 12 號淹水（合併）
+ 志工二     | dedup_ticket_contact_changed | 「民生街 12 號淹水（合併）」的聯絡人已更新                         | ticket       | 民生街 12 號淹水（合併）
+ B 的通報者 | dedup_ticket_merged          | 你的求助「民生街 12 號一樓淹水」已併入「民生街 12 號淹水（合併）」 | ticket       | 民生街 12 號淹水（合併）
+ A 的通報者 | dedup_ticket_updated         | 你的求助「民生街 12 號淹水（合併）」已因重複審核更新               | ticket       | 民生街 12 號淹水（合併）
 ```
 
 - 通知用的是處理後的新標題「（合併）」（ADR-382）。
 - 每則點開都是主要單（ADR-379）。
 - 志工四的需求是整項搬過來的，也收到「已合併」。
-- 志工一、志工二本來就在 A 清淤上，沒有收到。審核員本人沒有收到。
+- 志工一、志工二本來就在 A 清淤上，沒有收到「已合併」。A 的電話改了，所以他們收到 `dedup_ticket_contact_changed`（ADR-389）。
+  志工三、四是搬過來的，已經從「已合併」得知，不重複通知。
+- 審核員本人沒有收到。
 
 **事件與卡片**
 
@@ -210,7 +216,7 @@ A 的答案被整份取代（`power_outage` 從 no 變 yes，多了 `utility_haz
 ## 6. 降級防護
 
 ```
-alembic downgrade 7370daf4c8f7  → exit 1
+alembic downgrade da152a6a9d7c  → exit 1
 row(s) of tickets still have replaced_by_uuid set
 current: c3f1a9d27b54 (head)
 ```

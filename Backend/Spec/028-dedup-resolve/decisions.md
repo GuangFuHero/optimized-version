@@ -162,7 +162,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 **決定**：
 - `version` 是一個不透明字串：審核員比對的**內容本身**的雜湊（sha256），包含單的欄位、每一項還在的需求、每一個還在的細項，需求與細項依 uuid 排序。
-  2026-10-24 code review 後加入照片與災害欄位答案（ADR-384、384）。
+  2026-10-24 code review 後加入照片與災害欄位答案（ADR-384、385）。
   細項也要算：request 必須列出每一個細項（ADR-380），審核員沒看到的新細項要擋下。
 - 不用 `updated_at`。2026-10-24 Task 2 實測：單繼承 `BaseGeometry`，`updated_at` 在 `base_geometries` 上；
   只改單自己的欄位（例如 `title`），ORM 不會更新 `base_geometries`，`updated_at` 不變。用時間戳會漏掉這種修改。

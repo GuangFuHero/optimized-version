@@ -127,7 +127,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 
 清單 API（`GET /admin/duplicate-pairs`）**不加**這個欄位，避免一頁 200 張卡都載入完整的單。
 
-## 3. 處理：`POST /admin/duplicate-pairs/{uuid}/resolve`（ADR-365、366）
+## 3. 處理：`POST /admin/duplicate-pairs/{uuid}/resolve`（ADR-365、367）
 
 ### 3.1 Request
 
@@ -207,7 +207,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `move` | 整項搬到主要單：`ticket_uuid` 改成主要單，uuid、接單紀錄都不變。可帶 `values` |
 | `cancel` | 取消 |
 
-### 3.3.1 照片與災害欄位答案（ADR-384、384）
+### 3.3.1 照片與災害欄位答案（ADR-384、385）
 
 ```json
 "photos": [
@@ -256,7 +256,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 4. 記錄處理前的完整內容（§5）。
 5. 改主要單的欄位。
 6. 處理每一項需求與細項；搬接單紀錄（ADR-369）；重算需求狀態（ADR-370）。
-7. 照片改掛或軟刪除；帶了 `disaster_details` 就取代主要單的答案（ADR-384、384）。
+7. 照片改掛或軟刪除；帶了 `disaster_details` 就取代主要單的答案（ADR-384、385）。
 8. 另一張單取消＋軟刪除，`replaced_by_uuid` = 主要單（ADR-371）。
 8. 主要單 `recompute_ticket_status`、`void_stale_verdict`。
 9. 配對卡 → `confirmed`，記 `reviewed_by`、`reviewed_at`。
