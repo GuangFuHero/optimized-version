@@ -20,6 +20,7 @@ import type { StationDetailActionProps } from '../station/station-detail';
 import { rescueMapMarkerStyles } from './components/map-marker';
 import {
   RescueMapDetailDrawer,
+  type RescueMapStationLayout,
   type RescueMapTicketDetailOverrides,
 } from './components/rescue-map-detail-drawer';
 import { RescueMapLayerPanel } from './components/rescue-map-layer-panel';
@@ -167,6 +168,8 @@ interface MapProps {
   stationDetailSecondaryAction?: (
     marker: RescueMapMarkerItem,
   ) => StationDetailActionProps | undefined;
+  /** 站點詳情的版面：前台傳 `'site'`；後台不傳，維持後台的版面。 */
+  stationLayout?: RescueMapStationLayout;
   /** 是否顯示比例尺。 */
   showScale?: boolean;
   /** 點擊地圖空白處時回傳經緯度。 */
@@ -199,6 +202,7 @@ export const Map = memo(function Map({
   renderControls,
   ticketDetailOverrides,
   stationDetailSecondaryAction,
+  stationLayout,
   showScale = false,
   onMapClick,
   previewMarker,
@@ -401,6 +405,7 @@ export const Map = memo(function Map({
                   ? stationDetailSecondaryAction?.(displayMarker)
                   : undefined
               }
+              stationLayout={stationLayout}
             />
           </Box>
         </Box>
@@ -443,6 +448,7 @@ export const Map = memo(function Map({
               ? stationDetailSecondaryAction?.(displayMarker)
               : undefined
           }
+          stationLayout={stationLayout}
         />
       </Drawer>
     </>
