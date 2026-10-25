@@ -1,7 +1,8 @@
 /**
  * A station's detail as the site shows it, read from a map marker (prototype `site-detail.jsx`
- * `StationDetail`, after the 2026-10-25 visual alignment item 6). The back office's map opens the
- * same marker in `station/admin/station-detail`, which stays as it is; this is the site's own.
+ * `StationDetail`, after the 2026-10-25 visual alignment item 6 and the designer's answers of
+ * 2026-10-26). The back office's map opens the same marker in `station/admin/station-detail`, which
+ * stays as it is; this is the site's own.
  */
 
 import type { BadgeTone } from '@rescue-frontend/ui';
@@ -24,53 +25,26 @@ export interface SiteStationDetail {
   chips: SiteStationChip[];
   /** 「現在能不能去」 in a line: the hours, and whether this hour is one of them. */
   hoursLine: string;
+  /** 目前缺少: what the station is short of. Null when it says nothing, and the block goes. */
   supply: SupplyStatusLine | null;
   locationNote: string;
   tiles: { type: string; hours: string };
-  operator: { official: boolean; name: string; verification: string };
   coordinates: string;
 }
 
 type StationMeta = NonNullable<RescueMapMarkerItem['stationMeta']>;
 
-// The prototype's `formatStationStatus`: only a public station checked by a person reads as running
-// and verified; the rest say how far they got.
-function verificationChip(station: StationMeta): SiteStationChip {
-  if (
-    station.visibility === 'public' &&
-    station.verificationStatus === 'human_verified'
-  ) {
-    return {
-      label: station.isTemporary ? '臨時 · 已人工驗證' : '啟用 · 已人工驗證',
-      tone: 'success',
-      variant: 'subtle',
-    };
-  }
-
-  if (station.verificationStatus === 'ai_verified') {
-    return { label: 'AI 驗證', tone: 'warning', variant: 'subtle' };
-  }
-
-  return {
-    label: station.visibility === 'public' ? '公開' : '未驗證',
-    tone: 'neutral',
-    variant: 'subtle',
-  };
-}
-
-function formatVerification(status: string | null | undefined): string {
-  if (status === 'human_verified') {
-    return '人工驗證';
-  }
-
-  return status === 'ai_verified' ? 'AI 驗證' : '未驗證';
-}
+// Within a day the line reads 「3 小時前更新」, older 「10/24 更新」 (designer, 2026-10-26): how fresh a
+// line is matters while it is fresh; past a day, a date is quicker to read than a count of days.
+const SUPPLY_RELATIVE_WITHIN = 24 * 60 * 60_000;
 
 function describeChips(station: StationMeta, now: Date): SiteStationChip[] {
   const availability = resolveStationAvailability(station, now);
+  // No verification chip (designer, 2026-10-26): nothing in the backend sets a station's
+  // verification yet — not creating, editing, reviewing nor importing one — so it would say the same
+  // of every station. Back with a verification flow.
   const chips: SiteStationChip[] = [
     { label: availability.headline, tone: availability.tone, variant: 'solid' },
-    verificationChip(station),
   ];
 
   // 官方 and 臨時站點 only when they hold: a chip on every ordinary station would drown the list
@@ -107,6 +81,7 @@ export function describeSiteStation(
       station.supplyStatus,
       station.supplyStatusUpdatedAt,
       now,
+      { relativeWithin: SUPPLY_RELATIVE_WITHIN },
     ),
     // The description only, as the prototype's 位置說明. Never the station's `comment`, the back
     // office's internal note (backend ADR-332), nor the subtitle, which falls back to the hours.
@@ -114,12 +89,6 @@ export function describeSiteStation(
     tiles: {
       type: marker.label,
       hours: readOpHour(station.opHour) ?? '未提供',
-    },
-    // 2026-08-21: whether the station is official tells the reader something; its `source` does not.
-    operator: {
-      official: Boolean(station.isOfficial),
-      name: station.isOfficial ? '官方站點' : '一般站點',
-      verification: formatVerification(station.verificationStatus),
     },
     coordinates: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
   };

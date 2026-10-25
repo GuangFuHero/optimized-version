@@ -1,7 +1,8 @@
 /**
- * 物資狀況 as a station's detail shows it: what the station is short of, and how long ago that last
- * changed — 「飲用水見底（3 小時前更新）」 (backend ADR-333). A line about water running out is worth
- * little without knowing whether it was written this morning or last week.
+ * What a station is short of as its detail shows it, and how long ago that last changed —
+ * 「飲用水見底（3 小時前更新）」 (backend ADR-333; the site calls it 目前缺少, the back office 物資狀況).
+ * A line about water running out is worth little without knowing whether it was written this
+ * morning or last week.
  */
 
 import { timeAgo } from '../time';
@@ -14,14 +15,26 @@ export interface SupplyStatusLine {
 
 const WEEK = 7 * 24 * 60 * 60_000;
 
-// Past a week a count of days reads as vague as a date, and less exact: the date, on Taiwan's clock.
+export interface SupplyStatusOptions {
+  /**
+   * How long the time reads as 「N … 前」; older, it is the date. A week by default: past it a count
+   * of days reads as vague as a date, and less exact.
+   */
+  relativeWithin?: number;
+}
+
+// The date, on Taiwan's clock.
 const UPDATED_ON = new Intl.DateTimeFormat('zh-TW', {
   timeZone: 'Asia/Taipei',
   month: 'numeric',
   day: 'numeric',
 });
 
-function describeUpdated(updatedAt: string, now: Date): string | null {
+function describeUpdated(
+  updatedAt: string,
+  now: Date,
+  relativeWithin: number,
+): string | null {
   const ago = timeAgo(updatedAt, now);
 
   if (!ago) {
@@ -30,7 +43,7 @@ function describeUpdated(updatedAt: string, now: Date): string | null {
 
   const at = new Date(updatedAt);
 
-  return now.getTime() - at.getTime() < WEEK
+  return now.getTime() - at.getTime() < relativeWithin
     ? `${ago}更新`
     : `${UPDATED_ON.format(at)} 更新`;
 }
@@ -40,6 +53,7 @@ export function describeSupplyStatus(
   supplyStatus: string | null | undefined,
   updatedAt: string | null | undefined,
   now: Date = new Date(),
+  { relativeWithin = WEEK }: SupplyStatusOptions = {},
 ): SupplyStatusLine | null {
   const text = supplyStatus?.trim();
 
@@ -47,5 +61,8 @@ export function describeSupplyStatus(
     return null;
   }
 
-  return { text, updated: updatedAt ? describeUpdated(updatedAt, now) : null };
+  return {
+    text,
+    updated: updatedAt ? describeUpdated(updatedAt, now, relativeWithin) : null,
+  };
 }

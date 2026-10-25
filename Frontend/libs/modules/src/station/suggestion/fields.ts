@@ -45,6 +45,8 @@ export interface StationSuggestionField {
   choices?: readonly StationSuggestionChoice[];
   placeholder?: string;
   helper?: string;
+  /** May be sent blank, to clear a value the station has (目前缺少 once nothing is short). */
+  clearable?: true;
   read: (station: StationSuggestionSnapshot) => string;
 }
 
@@ -102,12 +104,16 @@ export const STATION_SUGGESTION_FIELDS: readonly StationSuggestionField[] = [
     choices: STATION_TYPE_OPTIONS,
     read: (station) => station.type ?? '',
   },
+  // 目前缺少, not 物資狀況 (designer, 2026-10-26): the backend's field is what the station is short
+  // of, and 物資 reads oddly for a toilet or a shower.
   {
     name: 'supply_status',
-    label: '物資狀況',
+    label: '目前缺少',
     kind: 'text',
-    placeholder: '例：飲用水見底、尿布尚有存量',
-    helper: '缺什麼比有什麼更能驅動行動，優先寫缺的。',
+    placeholder: '例：飲用水、嬰兒尿布',
+    helper: '只寫現在缺的東西。都補齊了就清空。',
+    // The backend stores a blank as none at merge (ADR-333), and the detail then drops the block.
+    clearable: true,
     read: (station) => station.supplyStatus ?? '',
   },
 ];
@@ -137,6 +143,22 @@ export function describeSuggestionValue(
   );
 }
 
+/**
+ * 你的建議 as the form shows it: a blank that clears a value says so, any other blank is still to
+ * be filled in.
+ */
+export function describeSuggestedValue(
+  field: StationSuggestionField,
+  current: string,
+  value: string,
+): string {
+  if (value.trim()) {
+    return describeSuggestionValue(field, value);
+  }
+
+  return field.clearable && current.trim() ? '清空（都補齊了）' : '尚未填寫';
+}
+
 export interface StationSuggestionForm {
   field: StationSuggestionFieldName;
   value: string;
@@ -158,8 +180,8 @@ export function startSuggestion(
 
 /**
  * Why the form cannot be sent yet, or null when it can. Nothing to review in a value left as it is,
- * nor in a blank one: a station that is no longer short of anything says so (「目前不缺」), and
- * clearing the line is the back office's to do.
+ * nor in a blank one, but for a field that clears: 目前缺少 is emptied once nothing is short
+ * (designer, 2026-10-26), and the backend takes the blank.
  */
 export function suggestionProblem(
   station: StationSuggestionSnapshot,
@@ -168,7 +190,7 @@ export function suggestionProblem(
   const field = stationSuggestionField(form.field);
   const value = form.value.trim();
 
-  if (!value) {
+  if (!value && !(field.clearable && field.read(station).trim())) {
     return field.kind === 'choice'
       ? `請選擇${field.label}`
       : `請填寫${field.label}`;

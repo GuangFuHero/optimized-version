@@ -6,12 +6,7 @@ import { Clock, Crosshair, MapPin, Package, ShieldCheck } from 'lucide-react';
 
 import { Box, IconButton, Stack, Typography } from '@mui/material';
 
-import {
-  Avatar,
-  designTokens,
-  displayTextSize,
-  Icons,
-} from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../map/types';
 import { SiteBadge } from '../../shell/site/site-badge';
@@ -133,8 +128,9 @@ function Tile({
 /**
  * 前台的站點詳情（原型 `site-detail.jsx` 的 `StationDetail`，前台視覺對齊第 6 項＋第四區）。
  *
- * 順序照原型：標題下的類型 → 狀態、驗證、官方標籤 → 服務時間 → 位置說明 → 類型／服務時間兩格 → 官方站點卡
- * → 座標；字級全用前台的 `displayTextSize`。後台互助地圖開同一個站點，仍走 `station/admin/station-detail`。
+ * 順序照原型：標題下的類型 → 營業、官方、臨時標籤 → 服務時間 → 目前缺少 → 位置說明 → 類型／服務時間兩格 →
+ * 座標；字級全用前台的 `displayTextSize`。驗證標籤和「官方站點／一般站點」卡照糖 10-26 拿掉：後端還沒有寫入
+ * 驗證狀態的地方。後台互助地圖開同一個站點，仍走 `station/admin/station-detail`。
  */
 export function SiteStationDetailDrawer({
   marker,
@@ -288,11 +284,32 @@ export function SiteStationDetailDrawer({
           pb: `${spacing[6]}px`,
         }}
       >
-        {/* 原型沒有物資狀況（ADR-333）。暫放服務時間正下方：知道能不能去之後，最想知道的是缺什麼。
-            uiux 10-25 已問糖＋Carol，回了再調。 */}
+        {/* 目前缺少（ADR-333 的 supply_status）放服務時間正下方：知道能不能去之後，最想知道的是缺什麼（糖 10-26）。
+            沒填整塊不顯示：衛浴、廁所這類站點沒填是常態。 */}
         {detail.supply ? (
           <Box>
-            <SectionLabel>物資狀況</SectionLabel>
+            <Stack
+              direction="row"
+              sx={{
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                gap: `${spacing[2]}px`,
+              }}
+            >
+              <SectionLabel>目前缺少</SectionLabel>
+              {detail.supply.updated ? (
+                <Typography
+                  sx={{
+                    flexShrink: 0,
+                    fontSize: displayTextSize[11],
+                    lineHeight: 1.4,
+                    color: color.fg.neutral.muted,
+                  }}
+                >
+                  {detail.supply.updated}
+                </Typography>
+              ) : null}
+            </Stack>
             <Typography
               sx={{
                 fontSize: displayTextSize[14],
@@ -304,18 +321,6 @@ export function SiteStationDetailDrawer({
             >
               {detail.supply.text}
             </Typography>
-            {detail.supply.updated ? (
-              <Typography
-                sx={{
-                  mt: 0.5,
-                  fontSize: displayTextSize[12],
-                  lineHeight: 1.5,
-                  color: color.fg.neutral.subtle,
-                }}
-              >
-                {detail.supply.updated}
-              </Typography>
-            ) : null}
           </Box>
         ) : null}
 
@@ -341,44 +346,6 @@ export function SiteStationDetailDrawer({
             value={detail.tiles.hours}
           />
         </Box>
-
-        <Stack
-          direction="row"
-          sx={{
-            alignItems: 'center',
-            gap: `${spacing[3]}px`,
-            p: `${spacing[3]}px`,
-            borderRadius: `${radius.md}px`,
-            border: `1px solid ${color.border.default}`,
-          }}
-        >
-          <Avatar
-            name={detail.operator.official ? '官方' : '一般'}
-            size={36}
-            tone={detail.operator.official ? 'primary' : 'neutral'}
-          />
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              sx={{
-                fontSize: displayTextSize[13],
-                fontWeight: 700,
-                lineHeight: 1.3,
-                color: color.fg.neutral.default,
-              }}
-            >
-              {detail.operator.name}
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: displayTextSize[12],
-                lineHeight: 1.5,
-                color: color.fg.neutral.subtle,
-              }}
-            >
-              {detail.operator.verification}
-            </Typography>
-          </Box>
-        </Stack>
 
         <InfoRow label="座標" icon={<Crosshair size={16} />}>
           {detail.coordinates}
