@@ -3811,8 +3811,8 @@
                     "enum": [
                       "dup_ignored",
                       "suggested",
-                      "confirmed",
-                      "rejected"
+                      "confirmed_duplicate",
+                      "not_duplicate"
                     ],
                     "type": "string"
                   }
@@ -8384,8 +8384,8 @@
             "enum": [
               "dup_ignored",
               "suggested",
-              "confirmed",
-              "rejected"
+              "confirmed_duplicate",
+              "not_duplicate"
             ],
             "title": "Status"
           },
@@ -8579,8 +8579,8 @@
             "enum": [
               "dup_ignored",
               "suggested",
-              "confirmed",
-              "rejected"
+              "confirmed_duplicate",
+              "not_duplicate"
             ],
             "title": "Status"
           },

@@ -2719,7 +2719,11 @@ export interface components {
        * Status
        * @enum {string}
        */
-      status: 'dup_ignored' | 'suggested' | 'confirmed' | 'rejected';
+      status:
+        | 'dup_ignored'
+        | 'suggested'
+        | 'confirmed_duplicate'
+        | 'not_duplicate';
       /** Similarity */
       similarity: number | null;
       /** Evidence */
@@ -2783,7 +2787,11 @@ export interface components {
        * Status
        * @enum {string}
        */
-      status: 'dup_ignored' | 'suggested' | 'confirmed' | 'rejected';
+      status:
+        | 'dup_ignored'
+        | 'suggested'
+        | 'confirmed_duplicate'
+        | 'not_duplicate';
       /** Similarity */
       similarity: number | null;
       /** Evidence */
@@ -6494,7 +6502,12 @@ export interface operations {
     parameters: {
       query?: {
         status?:
-          | ('dup_ignored' | 'suggested' | 'confirmed' | 'rejected')[]
+          | (
+              | 'dup_ignored'
+              | 'suggested'
+              | 'confirmed_duplicate'
+              | 'not_duplicate'
+            )[]
           | null;
         entity_kind?: ('ticket' | 'station' | 'ticket_task')[] | null;
         source_layer?: ('fast' | 'slow' | 'manual' | 'system')[] | null;
