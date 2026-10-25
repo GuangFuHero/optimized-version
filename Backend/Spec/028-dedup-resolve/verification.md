@@ -1,17 +1,19 @@
 # Verification: 028-dedup-resolve（Task 8 Docker 從零驗證）
 
 **日期**：2026-10-24
-**驗證的程式**：`feat/dedup-resolve` @ `dff0b43a4`（配對卡狀態改名 ADR-391 之後；用 `git archive` 匯出這個 commit 再 build，未追蹤的檔案不會進 image）
-**結論**：全部通過。容器內全套件 **2932 passed、0 error**。
+**驗證的程式**：`feat/dedup-resolve` @ `b8ade9d52`（PR #113 approve 時的兩個建議修完之後；用 `git archive` 匯出這個 commit 再 build，未追蹤的檔案不會進 image）
+**結論**：全部通過。容器內全套件 **2935 passed、0 error**。
 
 > **第一次驗證**跑在 `38ee6e232`（code review 前），流程同樣全部通過；容器內 2774 passed 加 14 個 error，
 > 原因是腳本跑全套件時沒帶 `-e PYTHONPATH=/app`，`test_seed_mock_scenarios` 的子程序找不到 `app`，帶上後 14 passed。
 > **第二次**跑在 `55cb19729`（code review 修正之後，ADR-381～385），結果也全部通過（2912 passed）。
 > **第三次**跑在 `6d3eb7fed`，是 PR #113 review 之後（migration 改接 #110 的 `da152a6a9d7c`、ADR 整批往後移一號、ADR-388～390），也全部通過（2929 passed）。
-> **第四次**（本報告）跑在 `dff0b43a4`：Chi 在 PR #113 提議、使用者同意的配對卡狀態改名（ADR-391，migration `a8d3e6b1c207`）。以下都是第四次的結果。
+> **第四次**跑在 `dff0b43a4`：Chi 在 PR #113 提議、使用者同意的配對卡狀態改名（ADR-391，migration `a8d3e6b1c207`），也全部通過（2932 passed）。
+> **第五次**（本報告）跑在 `b8ade9d52`：jujuyuzu approve 時的兩個建議（ADR-388 補充：被併掉的需求也擋、測試的等鎖守門只看自己的資料庫）。
+> 真實流程、資料庫狀態、通知、降級防護都和第四次相同；以下數字是第五次的。
 > 重做的第一次嘗試，db 容器在初始化時退出：腳本的 `CREATE EXTENSION` 和 image 自己的 postgis 初始化撞在一起。腳本改成等初始化完成再建，與程式無關。
 
-腳本：session scratchpad `t8/docker_verify.sh <commit>`（真實流程 `t8/phase1.py`、`t8/phase2.py`），完整輸出在 `t8/docker_verify_dff0b43a4.log`。
+腳本：session scratchpad `t8/docker_verify.sh <commit>`（真實流程 `t8/phase1.py`、`t8/phase2.py`），完整輸出在 `t8/docker_verify_b8ade9d52.log`。
 
 ## 1. 環境
 
@@ -56,11 +58,11 @@ app/services/dedup_resolve_notices.py       64   0  100%
 app/services/dedup_resolve_plan.py         216   1   99%
 app/services/dedup_review.py               173   0  100%
 app/services/dedup_review_tickets.py       118   2   98%
-TOTAL                                    13562 479   96%
-2932 passed, 120 warnings in 575.11s
+TOTAL                                    13562 478   96%
+2935 passed, 120 warnings in 466.07s
 ```
 
-和本機（2932 passed、96%）一致。
+和本機（2935 passed、96%）一致。
 
 ## 4. 真實 HTTP 流程
 
