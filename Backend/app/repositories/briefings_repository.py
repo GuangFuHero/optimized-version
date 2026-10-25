@@ -1,8 +1,9 @@
 """Repositories for briefing templates and generated briefings."""
 
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
@@ -48,17 +49,13 @@ class BriefingRepository(GenericRepository[Briefing]):
         state: str | None = None,
         tag: str | None = None,
     ) -> list[Briefing]:
-        """List non-deleted briefings whose ``status`` is "published", "draft" or either ("all").
+        """List non-deleted briefings by ``status`` ("published", "draft" or "all"), optionally state and tag.
 
-        Drafts come first, most recently edited first, then published rows newest first, so the
-        first published row per ``state`` is the current version. Optionally filter by ``state``
-        (equality) and ``tag`` (JSONB array containment).
+        Drafts come first, most recently edited first, then the rest newest published first.
         """
         query = select(self.model).where(self.model.delete_at.is_(None))
-        if status == "published":
-            query = query.where(self.model.published_at.is_not(None))
-        elif status == "draft":
-            query = query.where(self.model.published_at.is_(None))
+        if status != "all":
+            query = query.where(self.model.status == status)
         if state is not None:
             query = query.where(self.model.state == state)
         if tag is not None:
@@ -73,30 +70,37 @@ class BriefingRepository(GenericRepository[Briefing]):
         *,
         created_by: str,
         template_uuid: Any | None = None,
+        source_uuid: Any | None = None,
         content: str | None = None,
         tags: list | None = None,
         state: str | None = None,
     ) -> Briefing:
-        """Create a draft briefing, optionally seeded from a template.
+        """Create a draft briefing, seeded from a template, copied from a published or inactive one, or empty.
 
-        When ``content``/``tags``/``state`` are omitted they are copied from the template;
-        omitting ``template_uuid`` too yields an ad-hoc briefing with empty content. Raises
-        ValueError if ``template_uuid`` names a template that is missing or soft-deleted —
-        otherwise the caller silently gets an empty briefing, or an FK violation surfacing
-        as "Unexpected error."
+        Omitted ``content``/``tags``/``state`` come from the seed and a copy keeps its template link; a seed
+        that is missing, soft-deleted, a draft, or given alongside the other raises ValueError.
         """
-        template: BriefingTemplate | None = None
+        if template_uuid is not None and source_uuid is not None:
+            raise ValueError("Give a template or a source briefing, not both")
+        seed: BriefingTemplate | Briefing | None = None
         if template_uuid is not None:
-            template = await briefing_template_repository.get_by_uuid_active(db, template_uuid)
-            if template is None:
+            seed = await briefing_template_repository.get_by_uuid_active(db, template_uuid)
+            if seed is None:
                 raise ValueError("Briefing template not found")
+        if source_uuid is not None:
+            seed = await self.get_by_uuid_active(db, source_uuid)
+            if seed is None:
+                raise ValueError("Briefing not found")
+            if seed.status == "draft":
+                raise ValueError("Only a published or inactive briefing can be copied")
+            template_uuid = seed.template_uuid
 
         if content is None:
-            content = template.content if template else ""
+            content = seed.content if seed else ""
         if tags is None:
-            tags = list(template.tags) if template else []
+            tags = list(seed.tags) if seed else []
         if state is None:
-            state = template.state if template else "briefing"
+            state = seed.state if seed else "briefing"
 
         obj = self.model(
             template_uuid=template_uuid,
@@ -110,6 +114,38 @@ class BriefingRepository(GenericRepository[Briefing]):
         await db.commit()
         await db.refresh(obj)
         return obj
+
+    async def publish(self, db: AsyncSession, *, uuid: Any, actor_uuid: str) -> Briefing:
+        """Publish a draft as its state's live version, taking down the one live before it.
+
+        Raises ValueError unless it is a draft; the lock makes concurrent publishes take turns.
+        """
+        await db.execute(text("SELECT pg_advisory_xact_lock(hashtext('briefings.live'))"))
+        target = await self.get_by_uuid_active(db, uuid, for_update=True)
+        if target is None:
+            raise ValueError("Briefing not found")
+        if target.status != "draft":
+            raise ValueError("Only a draft can be published")
+        live = await db.execute(
+            select(self.model)
+            .where(
+                self.model.state == target.state,
+                self.model.status == "published",
+                self.model.delete_at.is_(None),
+            )
+            .with_for_update()
+        )
+        for row in live.scalars():
+            row.status = "inactive"
+            row.updated_by = actor_uuid
+        # Written before the target goes live, or the unique index sees two live rows at once.
+        await db.flush()
+        target.status = "published"
+        target.published_at = datetime.now(UTC)
+        target.published_by = target.updated_by = actor_uuid
+        await db.commit()
+        await db.refresh(target)
+        return target
 
 
 briefing_template_repository = BriefingTemplateRepository()

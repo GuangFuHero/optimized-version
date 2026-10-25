@@ -201,6 +201,7 @@ export const BriefingState = {
 export type BriefingState = (typeof BriefingState)[keyof typeof BriefingState];
 export const BriefingStatus = {
   Draft: 'DRAFT',
+  Inactive: 'INACTIVE',
   Published: 'PUBLISHED',
 } as const;
 
@@ -556,11 +557,13 @@ export const FieldDataType = {
 
 export type FieldDataType = (typeof FieldDataType)[keyof typeof FieldDataType];
 export type GenerateBriefingInput = {
-  /** Override content; defaults to the template's content */
+  /** Override content; defaults to the template's or source briefing's */
   content?: InputMaybe<Scalars['String']['input']>;
-  /** Override phase; defaults to the template's state */
+  /** Briefing to copy, template link included, so a published one is edited as a new draft */
+  sourceBriefingUuid?: InputMaybe<Scalars['UUID']['input']>;
+  /** Override phase; defaults to the template's or source briefing's */
   state?: InputMaybe<BriefingState>;
-  /** Override tags; defaults to the template's tags */
+  /** Override tags; defaults to the template's or source briefing's */
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
   /** Source template UUID; null for an ad-hoc briefing */
   templateUuid?: InputMaybe<Scalars['UUID']['input']>;
@@ -640,6 +643,7 @@ export type Mutation = {
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
   stopRecruiting: TicketTaskType;
   submitRoleRequest: RoleRequestType;
+  takeDownBriefing: BriefingType;
   unassignStation: StationType;
   unassignTaskActor: Scalars['Boolean']['output'];
   updateAnnouncement: AnnouncementType;
@@ -816,6 +820,10 @@ export type MutationStopRecruitingArgs = {
 
 export type MutationSubmitRoleRequestArgs = {
   input: SubmitRoleRequestInput;
+};
+
+export type MutationTakeDownBriefingArgs = {
+  uuid: Scalars['UUID']['input'];
 };
 
 export type MutationUnassignStationArgs = {

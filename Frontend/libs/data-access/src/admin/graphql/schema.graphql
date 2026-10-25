@@ -186,6 +186,7 @@ enum BriefingState {
 enum BriefingStatus {
   DRAFT
   PUBLISHED
+  INACTIVE
 }
 
 enum BriefingStatusFilter {
@@ -661,13 +662,18 @@ input GenerateBriefingInput {
   """Source template UUID; null for an ad-hoc briefing"""
   templateUuid: UUID = null
 
-  """Override content; defaults to the template's content"""
+  """
+  Briefing to copy, template link included, so a published one is edited as a new draft
+  """
+  sourceBriefingUuid: UUID = null
+
+  """Override content; defaults to the template's or source briefing's"""
   content: String = null
 
-  """Override tags; defaults to the template's tags"""
+  """Override tags; defaults to the template's or source briefing's"""
   tags: [String!] = null
 
-  """Override phase; defaults to the template's state"""
+  """Override phase; defaults to the template's or source briefing's"""
   state: BriefingState = null
 }
 
@@ -773,6 +779,7 @@ type Mutation {
   generateBriefing(input: GenerateBriefingInput!): BriefingType!
   updateBriefing(uuid: UUID!, input: UpdateBriefingInput!): BriefingType!
   publishBriefing(uuid: UUID!): BriefingType!
+  takeDownBriefing(uuid: UUID!): BriefingType!
   deleteBriefing(uuid: UUID!): Boolean!
   createStationSuggestion(input: CreateStationSuggestionInput!): StationSuggestionType!
   mergeStationSuggestions(stationUuid: UUID!, decisions: [SuggestionDecisionInput!]!, reviewNote: String = null): StationSuggestionMergeType!
