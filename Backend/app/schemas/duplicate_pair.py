@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 # Mirrors of the CHECK domains in app/models/dedup.py, so the OpenAPI document lists them.
-PairStatus = Literal["dup_ignored", "suggested", "confirmed", "rejected"]
+PairStatus = Literal["dup_ignored", "suggested", "confirmed_duplicate", "not_duplicate"]
 EntityKind = Literal["ticket", "station", "ticket_task"]
 SourceLayer = Literal["fast", "slow", "manual", "system"]
 PairSort = Literal["created_at", "-created_at", "similarity", "-similarity"]

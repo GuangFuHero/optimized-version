@@ -108,7 +108,7 @@ commit 前看 `git diff --cached --stat`）。
   async def resolve(db, *, actor, pair_uuid, request) -> ResolveResult
   ```
   照 spec §3.5 的順序：鎖卡 → 依 uuid 鎖兩張單 → 依 uuid 鎖需求 → 重讀快照、比 `version`（409）→ `build_plan` →
-  寫入 → 卡改 `confirmed` → `merged` 事件 → commit。只檢查 `ai_duplicate.review`。
+  寫入 → 卡改 `confirmed_duplicate`（ADR-391 前叫 `confirmed`）→ `merged` 事件 → commit。只檢查 `ai_duplicate.review`。
   - 需求的取消用 `_mark_need_deleted` 的同一套規則；整張單取消照 `delete_ticket` 的欄位（`status`、`delete_at`），加上 `replaced_by_uuid`。
     不呼叫這兩個函式本身：它們會檢查 `ticket.delete`、自己 commit、自己發通知。
   - 接單紀錄搬移：`UPDATE task_assignments SET task_uuid = A`；重複的志工刪 B 那筆。

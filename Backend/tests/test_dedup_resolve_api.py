@@ -35,7 +35,7 @@ async def test_the_seeded_reviewers_resolve(client, db_session, redis, role_name
 
     assert response.status_code == 200, response.text
     card = response.json()
-    assert card["status"] == "confirmed"
+    assert card["status"] == "confirmed_duplicate"
     assert card["events"][-1]["event_type"] == "merged"
     tickets = card["tickets"]
     kept, gone = ("low", "high") if ids["a_is_low"] else ("high", "low")

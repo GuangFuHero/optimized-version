@@ -130,7 +130,7 @@ async def test_a_failing_notice_does_not_undo_the_resolve(db, monkeypatch, caplo
     with caplog.at_level(logging.ERROR):
         result = await _resolve(db, reviewer, ids, request)
 
-    assert result.detail.item.pair.status == "confirmed"
+    assert result.detail.item.pair.status == "confirmed_duplicate"
     assert (await db.get(Tickets, ids["b"], populate_existing=True)).status == "cancelled"
     assert "dedup resolve notices failed" in caplog.text
 
@@ -148,7 +148,7 @@ async def test_a_failing_notice_still_answers_through_rest(client, db_session, r
     response = await client.post(f"{URL}/{ids['pair']}/resolve", json=body, headers=headers)
 
     assert response.status_code == 200, response.text
-    assert response.json()["status"] == "confirmed"
+    assert response.json()["status"] == "confirmed_duplicate"
 
 
 async def test_the_notices_name_the_primary_as_renamed(db):

@@ -4,7 +4,7 @@
 this one action is all they can do to the tickets and every use of it is recorded. In one
 transaction: lock the card, both tickets and their needs; check nothing the reviewer compared has
 changed (ADR-374); plan (`dedup_resolve_plan.build_plan`); write the tickets, needs, items and
-claims; mark the card confirmed; record a `merged` event holding everything as it was (ADR-375).
+claims; mark the card `confirmed_duplicate`; record a `merged` event holding everything as it was (ADR-375).
 There is no undo (ADR-376): the event is what a person restores from.
 
 The paired entities are touched here and only here; confirm and reject still change the card
@@ -31,6 +31,7 @@ from app.services.authz import require_scope
 from app.services.dedup_resolve_notices import send_resolve_notices
 from app.services.dedup_resolve_plan import RESOLVABLE_KINDS, ResolvePlan, ResolveRefused, build_plan
 from app.services.dedup_review import (
+    CONFIRMED_DUPLICATE,
     PENDING_STATUSES,
     DuplicatePairConflictError,
     PairDetail,
@@ -45,7 +46,7 @@ from app.services.ticket import mark_need_deleted
 from app.services.ticket_audit import void_stale_verdict
 from app.services.ticket_status import OPEN_NEED_STATUSES, recompute_ticket_status
 
-RESOLVABLE_STATUSES = (*PENDING_STATUSES, "confirmed")
+RESOLVABLE_STATUSES = (*PENDING_STATUSES, CONFIRMED_DUPLICATE)
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,7 @@ async def resolve(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, reques
     await _write(db, plan, ticket_changes, tasks, now)
 
     before_status = pair.status
-    pair.status = "confirmed"
+    pair.status = CONFIRMED_DUPLICATE
     pair.reviewed_by = reviewer
     pair.reviewed_at = now
     after = (await tickets_for_review(db, (plan.primary_uuid,)))[plan.primary_uuid]
@@ -311,7 +312,7 @@ def _merged_event(
                 "tickets": {"low": _with_people(low, claimants), "high": _with_people(high, claimants)},
             }
         ),
-        after_state=_jsonable({"pair_status": "confirmed", "ticket": asdict(after)}),
+        after_state=_jsonable({"pair_status": CONFIRMED_DUPLICATE, "ticket": asdict(after)}),
         affected_refs=_jsonable(
             {
                 "request": request.model_dump(mode="json"),

@@ -987,7 +987,7 @@ duplicate_pairs {
     text method "fast_rule / slow_vector / slow_hybrid / manual"
     text engine_version "nullable only when method = manual, e.g. fast-v4"
     text source_layer "fast / slow / manual / system"
-    text status "dup_ignored / suggested / confirmed / rejected"
+    text status "dup_ignored / suggested / confirmed_duplicate / not_duplicate (renamed from confirmed / rejected, ADR-391; event types keep the old names)"
     jsonb reason "nullable"
     text hint_outcome "nullable, ignored_hint / accepted_hint"
     boolean rescan_needed "default false"

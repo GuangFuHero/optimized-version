@@ -19,8 +19,8 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 而且資料檢核員沒有改單、刪單的權限（Notion §10d）。
 
 **決定**：
-- 新增 `POST /admin/duplicate-pairs/{uuid}/resolve`。改單、處理需求、把卡改成 `confirmed`、寫事件，都在同一筆交易。
-- 卡是待審（`dup_ignored`、`suggested`）或 `confirmed` 且還沒處理過，都可以處理。
+- 新增 `POST /admin/duplicate-pairs/{uuid}/resolve`。改單、處理需求、把卡改成 `confirmed_duplicate`（ADR-391 前叫 `confirmed`）、寫事件，都在同一筆交易。
+- 卡是待審（`dup_ignored`、`suggested`）或 `confirmed_duplicate` 且還沒處理過，都可以處理。
   已經用 025 的 confirm 判定過的卡，不必先撤銷。
 - `confirm`、`reject` 照舊只改配對卡。**ADR-341 對 confirm／reject 仍然有效**，對 resolve 不適用。
 
@@ -381,3 +381,28 @@ ADR-388～390（386、387 已被 `018-ticket-disaster-fields` 用掉）。review
   **主要單自己**被取消的需求，那件事沒有移到別處，改成「「主要單」和另一張重複的單合併時，你承接的這筆需求取消了」。
   同一個人兩種都有時只收前一種。
 - 兩張單是同一個人開的：只發 `dedup_ticket_merged`（它已經說明合併了），不再另發 `dedup_ticket_updated`。修正 ADR-383。
+
+---
+
+## ADR-391：配對卡的已審狀態改名為 `confirmed_duplicate`／`not_duplicate`；事件類型不改
+
+**Date**: 2026-10-25　**Status**: Accepted（使用者拍板；Chi 在 PR #113 提議，和 POPO 在 Discord 談過，直接在這張改）
+
+**背景**：配對卡的已審狀態叫 `confirmed`／`rejected`。系統裡另外幾套審核也用類似的詞：資料檢核 `audited`（PR #84）、
+站點修改建議 `approved`／`rejected`、申請管理權限 `approved`／`rejected`。容易混淆的有兩點：
+
+- `confirmed`、`audited`、`approved` 都只說「審過了」，看不出審的是什麼。團隊裡已經有人問 audited 跟 confirmed 差在哪。
+- **方向相反**：其他地方的 `rejected` 是「被拒絕」，對那筆資料是壞結果；配對卡的 `rejected` 是「不是重複」，對兩張單是好結果。
+  `confirmed` 則是「確認重複」，其中一張會被合併掉。配對卡審的是兩筆之間的關係，不是一筆資料過不過。
+
+**決定**：
+- `duplicate_pairs.status`：`confirmed` → `confirmed_duplicate`，`rejected` → `not_duplicate`。`dup_ignored`、`suggested` 不變。
+- migration `a8d3e6b1c207`（接 `c3f1a9d27b54`）：把既有的值改成新名稱、重建 `ck_duplicate_pairs_status`；降級把值改回舊名稱、恢復舊 CHECK。
+- **事件類型（`dedup_audit_events.event_type`）不改**，仍是 `confirmed`／`rejected`。事件記的是「審核員做了什麼」（確認、駁回），不會被讀反；
+  事件表和舊事件都不動。既有事件的 `before_state`／`after_state` 裡記的狀態值也不改寫：那是當時的紀錄。
+- 原本同一組常數 `VERDICTS` 拆成兩組：`VERDICT_STATUSES`（卡的狀態）和 `VERDICT_EVENTS`（判定事件），用 `VERDICT_EVENT` 對應（`dedup_review.py`）。
+  撤銷時用事件類型找最新一筆判定事件，用卡的狀態判斷能不能撤銷。
+- API 路徑 `/confirm`、`/reject` 不改，那是動作。清單的 `status` 篩選、回應的 `status` 用新名稱。前端只有自動產生的合約檔用到，一併重產。
+- 不動 `app/dedup_engine/` 與 `tools/dedup_eval/`：評估工具的 `confirmed` 是它自己資料集的標籤，不是配對卡狀態。
+
+**為什麼不用 `is_duplicate`**：`is_duplicate` 已經是 `ticket_tasks`、`stations` 上的欄位名（慢層用），同名容易混。

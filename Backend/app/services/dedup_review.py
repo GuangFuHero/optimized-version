@@ -35,7 +35,12 @@ DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 DEFAULT_SORT = "-created_at"
 NOTE_MAX_LENGTH = 1000
-VERDICTS = ("confirmed", "rejected")
+# A verdict is two names (ADR-391): the card's status says what was decided; the audit event says
+# what the reviewer did, and keeps the names it had before the rename.
+CONFIRMED_DUPLICATE, NOT_DUPLICATE = "confirmed_duplicate", "not_duplicate"
+VERDICT_STATUSES = (CONFIRMED_DUPLICATE, NOT_DUPLICATE)
+VERDICT_EVENT = {CONFIRMED_DUPLICATE: "confirmed", NOT_DUPLICATE: "rejected"}
+VERDICT_EVENTS = tuple(VERDICT_EVENT.values())
 
 _SORTS = {
     "created_at": (DuplicatePair.created_at.asc(),),
@@ -222,12 +227,12 @@ def _summary(row: dict | None, entity_uuid) -> EntitySummary:
 
 async def confirm(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, note: str | None) -> PairItem:
     """Mark a pending card a duplicate. Only the card changes (ADR-341)."""
-    return await _decide(db, actor=actor, pair_uuid=pair_uuid, verdict="confirmed", note=note)
+    return await _decide(db, actor=actor, pair_uuid=pair_uuid, verdict=CONFIRMED_DUPLICATE, note=note)
 
 
 async def reject(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, note: str | None) -> PairItem:
     """Mark a pending card not a duplicate. Only the card changes (ADR-341)."""
-    return await _decide(db, actor=actor, pair_uuid=pair_uuid, verdict="rejected", note=note)
+    return await _decide(db, actor=actor, pair_uuid=pair_uuid, verdict=NOT_DUPLICATE, note=note)
 
 
 async def _decide(
@@ -247,7 +252,7 @@ async def _decide(
     db.add(
         DedupAuditEvent(
             entity_kind=pair.entity_kind,
-            event_type=verdict,
+            event_type=VERDICT_EVENT[verdict],
             pair_uuid=pair.uuid,
             duplicate_group_uuid=pair.duplicate_group_uuid,
             actor_uuid=reviewer_uuid,
@@ -272,7 +277,7 @@ async def revoke(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID) -> Pair
     await require_scope(actor, Perm.AI_DUP_REVIEW, db)
     actor_uuid = actor.uuid  # read before the commit expires `actor`
     pair = await lock_pair(db, pair_uuid)
-    if pair.status not in VERDICTS:
+    if pair.status not in VERDICT_STATUSES:
         raise DuplicatePairConflictError(f"Duplicate pair is {pair.status}: there is no verdict to revoke")
     if await has_merged_event(db, pair):
         # ADR-376: a resolve changed the tickets; undoing the verdict alone would leave them changed.
@@ -310,7 +315,7 @@ async def _status_before_latest_verdict(db: AsyncSession, pair: DuplicatePair) -
     """What the newest confirmed/rejected event says the card was before it."""
     event = await db.scalar(
         select(DedupAuditEvent)
-        .where(DedupAuditEvent.pair_uuid == pair.uuid, DedupAuditEvent.event_type.in_(VERDICTS))
+        .where(DedupAuditEvent.pair_uuid == pair.uuid, DedupAuditEvent.event_type.in_(VERDICT_EVENTS))
         .order_by(DedupAuditEvent.created_at.desc(), DedupAuditEvent.uuid.desc())
         .limit(1)
     )

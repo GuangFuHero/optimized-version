@@ -7,7 +7,7 @@
 **Base**: `main` @ `a272dfdd4`，分支 `feat/dedup-resolve`
 **Notion**: DEDUP-007（審核動作與後端）、DEDUP-008（AI 重複審核頁，前端 Ethan）、DEDUP-009（通知，Dennis）、
 「dedup 10/23 update — 討論頁」§12
-**Decisions**: `decisions.md`（ADR-365～385、388～390；381～385 是 code review 那一輪，388～390 是 PR #113 review 那一輪）
+**Decisions**: `decisions.md`（ADR-365～385、388～391；381～385 是 code review 那一輪，388～391 是 PR #113 review 那一輪）
 **前一份**：Spec 025（PR #92，判定＋撤銷）。本 Spec 是 ADR-336 拆出去的「後半段」。
 
 ## 概述
@@ -232,7 +232,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 |---|---|
 | 沒有 `ai_duplicate.review` | 403 |
 | 卡不存在 | 404 |
-| 卡不是待審也不是 `confirmed`；或已經處理過 | 409 |
+| 卡不是待審也不是 `confirmed_duplicate`；或已經處理過 | 409 |
 | 卡是 `station` | 422（ADR-377） |
 | 卡的兩邊是同一張單的需求 | 422 |
 | 任一張單已取消或刪除 | 409 |
@@ -259,7 +259,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 7. 照片改掛或軟刪除；帶了 `disaster_details` 就取代主要單的答案（ADR-384、385）。
 8. 另一張單取消＋軟刪除，`replaced_by_uuid` = 主要單（ADR-371）。
 8. 主要單 `recompute_ticket_status`、`void_stale_verdict`。
-9. 配對卡 → `confirmed`，記 `reviewed_by`、`reviewed_at`。
+9. 配對卡 → `confirmed_duplicate`，記 `reviewed_by`、`reviewed_at`。
 10. 寫 `merged` 事件。
 11. commit。
 12. commit 之後發通知（§6）。通知失敗只記 log，不影響已完成的處理。

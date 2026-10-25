@@ -121,6 +121,11 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
 
 ---
 
+> 2026-10-25：配對卡的已審狀態改名為 `confirmed_duplicate`／`not_duplicate`（Spec 028 ADR-391）。本檔與 ADR-339、343 寫的
+> `confirmed`／`rejected` 指的是改名前的狀態值；**事件類型仍是 `confirmed`／`rejected`**，沒有改。
+
+---
+
 ## ADR-343：判定只能從「待審」出發，要改判先撤銷
 
 **Date**: 2026-10-20　**Status**: Accepted（慣例，未另外拍板）

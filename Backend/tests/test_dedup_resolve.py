@@ -309,7 +309,7 @@ async def test_the_card_is_confirmed_with_a_merged_event(db):
     await _resolve(db, reviewer, ids)
 
     pair = await _row(db, DuplicatePair, ids["pair"])
-    assert (pair.status, str(pair.reviewed_by)) == ("confirmed", reviewer_uuid)
+    assert (pair.status, str(pair.reviewed_by)) == ("confirmed_duplicate", reviewer_uuid)
     (event,) = (await db.scalars(select(DedupAuditEvent).where(DedupAuditEvent.event_type == "merged"))).all()
     assert (str(event.primary_uuid), str(event.duplicate_uuid)) == (ids["a"], ids["b"])
     assert (event.reversible, event.decision_reason, event.source_layer) == (
@@ -598,7 +598,7 @@ async def test_a_reject_and_a_resolve_at_once_leave_one_decision(db):
     db.expire_all()
     pair = await db.get(DuplicatePair, pair_uuid)
     b = await _row(db, Tickets, ids["b"])
-    assert (pair.status, b.status) in {("confirmed", "cancelled"), ("rejected", "pending")}
+    assert (pair.status, b.status) in {("confirmed_duplicate", "cancelled"), ("not_duplicate", "pending")}
 
 
 # --- code review round: photos, answers (ADR-384, 385) ------------------------------------
