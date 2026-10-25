@@ -1661,7 +1661,7 @@ export interface paths {
      *     **type** — `satellite` or `road`
      *
      *     **source** — one of:
-     *     - satellite: `nasa_gibs` (image/jpeg), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)
+     *     - satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)
      *     - road: `osm` (image/png), `carto` (image/png)
      *
      *     **z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)

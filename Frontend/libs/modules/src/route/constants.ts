@@ -16,7 +16,6 @@ export const SITE_FALLBACK_DATA_TYPE: RescueMapDataType = 'station';
 export const SITE_BASE_LAYERS: readonly RescueMapBaseLayer[] = [
   'osm-direct',
   'osm',
-  'carto',
   'nasa_gibs',
   'eox',
   'nlsc',
