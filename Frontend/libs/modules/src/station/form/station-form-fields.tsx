@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 import {
   Box,
@@ -12,37 +12,58 @@ import {
 import { designTokens } from '@rescue-frontend/ui';
 import { EyeOff } from 'lucide-react';
 
-import { OPERATIONAL_STATUS_OPTIONS } from '../operational-status';
-import { STATION_TYPE_OPTIONS } from '../type-options';
+import { OPERATIONAL_STATUS_OPTIONS } from '../../operational-status';
+import { STATION_TYPE_OPTIONS, getStationTypeLabel } from '../../type-options';
 import type {
-  StationFormErrors,
+  StationFormFieldsProps,
   StationFormState,
-  StationLocationType,
-} from './station-form-model';
+  TextKey,
+} from '../../form';
 
-const { color, typography } = designTokens;
+const { color, motion, radius, typography } = designTokens;
 
-export type TextKey = {
-  [K in keyof StationFormState]: StationFormState[K] extends string ? K : never;
-}[keyof StationFormState];
+/** The prototype's filled input: 46px, neutral subtle fill, a hairline that thickens on focus. */
+const filledInputSx = {
+  '& .MuiInputBase-root': {
+    minHeight: 46,
+    borderRadius: `${radius.md}px`,
+    bgcolor: color.bg.neutral.subtle,
+    color: color.fg.neutral.default,
+    ...typography.body[400],
+    transition: `box-shadow ${motion.transition.fast}`,
+    boxShadow: `inset 0 0 0 1px ${color.border.subtle}`,
+    '&.Mui-focused': {
+      boxShadow: `inset 0 0 0 1.5px ${color.brand.secondary.default}`,
+    },
+    '&.Mui-error': {
+      boxShadow: `inset 0 0 0 1.5px ${color.bg.danger.default}`,
+    },
+    '&.Mui-disabled': { bgcolor: color.bg.disable },
+  },
+  '& .MuiInputBase-input': {
+    px: '14px',
+    '&::placeholder': { color: color.fg.neutral.muted, opacity: 1 },
+  },
+  '& .MuiInputBase-inputMultiline': { px: 0 },
+  '& .MuiInputBase-multiline': { px: '14px', py: '12px' },
+  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+  '& .MuiFormHelperText-root': {
+    mx: 0,
+    mt: '4px',
+    ...typography.body[300],
+  },
+} as const;
 
-export interface StationFormFieldsProps {
-  mode: 'create' | 'edit';
-  form: StationFormState;
-  errors: StationFormErrors;
-  onChange: <K extends keyof StationFormState>(
-    key: K,
-    value: StationFormState[K],
-  ) => void;
-  /** The coordinate fields lost focus: the place to move a map pin to the typed position. */
-  onCoordinatesBlur?: () => void;
-  isResolvingAddress?: boolean;
-  /** Without `station.view_pii` the contact values are masked, so they can't be edited. */
-  contactLocked?: boolean;
-}
+type FieldProps = Omit<TextFieldProps, 'label'> & {
+  /** Read by assistive tech only: for the parts of a group that shares one visible label. */
+  ariaLabel?: string;
+};
 
-/** The form's fields as the maps' sheet lays them out; `StationForm` takes another layout as `Fields`. */
-export function StationFormFields({
+/**
+ * `/stations`' create and edit fields, laid out like the prototype drawer: labels above filled
+ * inputs, two columns, no section headings. The maps keep `StationFormFields`' default layout.
+ */
+export function AdminStationFormFields({
   mode,
   form,
   errors,
@@ -51,160 +72,293 @@ export function StationFormFields({
   isResolvingAddress = false,
   contactLocked = false,
 }: StationFormFieldsProps) {
-  const text = (key: TextKey, label: string, props?: TextFieldProps) => (
+  const field = (key: TextKey, { ariaLabel, ...props }: FieldProps = {}) => (
     <TextField
-      size="small"
       fullWidth
-      label={label}
+      hiddenLabel
       value={form[key]}
-      onChange={(event) => onChange(key, event.target.value)}
+      onChange={(event) =>
+        onChange(key, event.target.value as StationFormState[typeof key])
+      }
       error={Boolean(errors[key])}
       helperText={errors[key]}
+      sx={filledInputSx}
       {...props}
+      slotProps={{
+        ...props.slotProps,
+        htmlInput: {
+          ...(ariaLabel ? { 'aria-label': ariaLabel } : {}),
+          ...(props.slotProps?.htmlInput as object | undefined),
+        },
+      }}
     />
   );
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <Section title="站點資訊">
-        {text('name', '站點名稱', {
-          required: true,
-          placeholder: '例：光復國中收容所',
-        })}
-        {text('type', '類型', {
-          required: true,
-          select: true,
-          children: STATION_TYPE_OPTIONS.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          )),
-        })}
-        {text('operationalStatus', '營運狀態', {
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <Labeled label="站點名稱" required>
+        {(id) => field('name', { id, placeholder: '例：光復國中收容所' })}
+      </Labeled>
+
+      <Columns>
+        <Labeled label="類型" required>
+          {(id) =>
+            field('type', {
+              id,
+              select: true,
+              slotProps: {
+                select: {
+                  displayEmpty: true,
+                  renderValue: (value) =>
+                    value ? (
+                      getStationTypeLabel(String(value))
+                    ) : (
+                      <Box
+                        component="span"
+                        sx={{ color: color.fg.neutral.muted }}
+                      >
+                        選擇類型
+                      </Box>
+                    ),
+                },
+              },
+              children: STATION_TYPE_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              )),
+            })
+          }
+        </Labeled>
+        <OperationalStatusField field={field} />
+      </Columns>
+
+      {mode === 'create' ? (
+        <AddressFields field={field} locationType={form.locationType} />
+      ) : null}
+
+      <Labeled
+        label="座標"
+        required
+        hint={
+          mode === 'create'
+            ? isResolvingAddress
+              ? '正在根據座標解析地址…'
+              : null
+            : '地址建立後無法在此修改。'
+        }
+      >
+        {(id) => (
+          <Columns gap="8px">
+            {field('latitude', {
+              id,
+              placeholder: '緯度',
+              ariaLabel: '緯度',
+              inputMode: 'decimal',
+              onBlur: onCoordinatesBlur,
+            })}
+            {field('longitude', {
+              placeholder: '經度',
+              ariaLabel: '經度',
+              inputMode: 'decimal',
+              onBlur: onCoordinatesBlur,
+            })}
+          </Columns>
+        )}
+      </Labeled>
+
+      <Labeled label="開放時間">
+        {(id) => field('opHour', { id, placeholder: '24 小時開放' })}
+      </Labeled>
+
+      <Labeled label="物資狀況">
+        {(id) =>
+          field('supplyStatus', {
+            id,
+            placeholder: '例：飲用水見底、尿布尚有存量',
+          })
+        }
+      </Labeled>
+      <Labeled label="說明">
+        {(id) => field('description', { id, multiline: true, minRows: 2 })}
+      </Labeled>
+
+      <Columns>
+        <Labeled label="聯絡人">
+          {(id) =>
+            field('contactName', {
+              id,
+              placeholder: '—',
+              disabled: contactLocked,
+            })
+          }
+        </Labeled>
+        <Labeled
+          label="聯絡電話（不公開）"
+          hint={
+            <Box
+              component="span"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+            >
+              <EyeOff size={12} style={{ flexShrink: 0 }} />
+              {contactLocked
+                ? '無個資權限，無法修改聯絡資訊'
+                : '僅後台可見，公開 API 不會回傳'}
+            </Box>
+          }
+        >
+          {(id) =>
+            field('contactPhone', {
+              id,
+              placeholder: '—',
+              disabled: contactLocked,
+              inputMode: 'tel',
+            })
+          }
+        </Labeled>
+      </Columns>
+      <Labeled label="聯絡 Email（不公開）">
+        {(id) =>
+          field('contactEmail', {
+            id,
+            placeholder: '—',
+            disabled: contactLocked,
+            inputMode: 'email',
+          })
+        }
+      </Labeled>
+    </Box>
+  );
+}
+
+type Field = (key: TextKey, props?: FieldProps) => ReactNode;
+
+function OperationalStatusField({ field }: { field: Field }) {
+  return (
+    <Labeled label="營運狀態">
+      {(id) =>
+        field('operationalStatus', {
+          id,
           select: true,
           children: OPERATIONAL_STATUS_OPTIONS.map((option) => (
             <MenuItem key={option.value} value={option.value}>
               {option.label}
             </MenuItem>
           )),
-        })}
-        {text('opHour', '開放時間', { placeholder: '例：08:00-20:00' })}
-        {text('supplyStatus', '物資狀況', {
-          placeholder: '例：飲用水見底、尿布尚有存量',
-        })}
-        {text('description', '說明', { multiline: true, minRows: 2 })}
-      </Section>
-
-      <Section title="位置">
-        <Columns count={2}>
-          {text('latitude', '緯度', {
-            required: true,
-            inputMode: 'decimal',
-            onBlur: onCoordinatesBlur,
-          })}
-          {text('longitude', '經度', {
-            required: true,
-            inputMode: 'decimal',
-            onBlur: onCoordinatesBlur,
-          })}
-        </Columns>
-        {mode === 'create' ? (
-          <AddressFields text={text} locationType={form.locationType} />
-        ) : (
-          <Hint>地址建立後無法在此修改。</Hint>
-        )}
-        {isResolvingAddress ? <Hint>正在根據座標解析地址…</Hint> : null}
-      </Section>
-
-      <Section
-        title="聯絡資訊"
-        description={
-          <Box
-            component="span"
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          >
-            <EyeOff size={14} />
-            {contactLocked
-              ? '無個資權限，無法修改聯絡資訊'
-              : '僅後台可見，公開 API 不會回傳'}
-          </Box>
-        }
-      >
-        {text('contactName', '聯絡人', { disabled: contactLocked })}
-        {text('contactPhone', '聯絡電話', {
-          disabled: contactLocked,
-          inputMode: 'tel',
-        })}
-        {text('contactEmail', '聯絡 Email', {
-          disabled: contactLocked,
-          inputMode: 'email',
-        })}
-      </Section>
-    </Box>
+        })
+      }
+    </Labeled>
   );
 }
 
+/**
+ * The prototype's one 地址 input: the line the backend splits into its parts (縣市 … 號), then floor
+ * and room, plus the pole fields when the station sits at a utility pole.
+ */
 function AddressFields({
-  text,
+  field,
   locationType,
 }: {
-  text: (key: TextKey, label: string, props?: TextFieldProps) => ReactNode;
-  locationType: StationLocationType;
+  field: Field;
+  locationType: StationFormState['locationType'];
 }) {
   return (
-    <>
-      {text('locationType', '位置類型', {
-        select: true,
-        children: [
-          <MenuItem key="address" value="address">
-            一般地址
-          </MenuItem>,
-          <MenuItem key="pole" value="pole">
-            桿位
-          </MenuItem>,
-        ],
-      })}
-      {text('fullAddress', '地址', {
-        placeholder: '例：花蓮縣光復鄉中正路一段31號',
-      })}
-      <Columns count={2}>
-        {text('floor', '樓層')}
-        {text('room', '房號')}
-      </Columns>
-      {locationType === 'pole' ? (
-        <>
-          <Columns count={2}>
-            {text('poleId', '桿號')}
-            {text('poleType', '桿位類型')}
+    <Labeled label="地址">
+      {(id) => (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {field('fullAddress', {
+            id,
+            placeholder: '例：花蓮縣光復鄉中正路一段31號',
+            ariaLabel: '地址',
+          })}
+          <Columns count={3} gap="8px">
+            {field('floor', { placeholder: '樓層', ariaLabel: '樓層' })}
+            {field('room', { placeholder: '房號', ariaLabel: '房號' })}
+            {field('locationType', {
+              select: true,
+              ariaLabel: '位置類型',
+              children: [
+                <MenuItem key="address" value="address">
+                  一般地址
+                </MenuItem>,
+                <MenuItem key="pole" value="pole">
+                  桿位
+                </MenuItem>,
+              ],
+            })}
           </Columns>
-          {text('poleNote', '桿位備註')}
-        </>
-      ) : null}
-    </>
+          {locationType === 'pole' ? (
+            <>
+              <Columns gap="8px">
+                {field('poleId', { placeholder: '桿號', ariaLabel: '桿號' })}
+                {field('poleType', {
+                  placeholder: '桿位類型',
+                  ariaLabel: '桿位類型',
+                })}
+              </Columns>
+              {field('poleNote', {
+                placeholder: '桿位備註',
+                ariaLabel: '桿位備註',
+              })}
+            </>
+          ) : null}
+        </Box>
+      )}
+    </Labeled>
   );
 }
 
-function Section({
-  title,
-  description,
+/** A label above its control, the prototype's `L`; `hint` sits under the control. */
+function Labeled({
+  label,
+  required = false,
+  hint,
   children,
 }: {
-  title: string;
-  description?: ReactNode;
-  children: ReactNode;
+  label: string;
+  required?: boolean;
+  hint?: ReactNode;
+  children: (id: string) => ReactNode;
 }) {
+  const id = useId();
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <Box>
-        <Typography sx={typography.label[500]}>{title}</Typography>
-        {description ? <Hint>{description}</Hint> : null}
-      </Box>
-      {children}
+    <Box
+      sx={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}
+    >
+      <Typography
+        component="label"
+        htmlFor={id}
+        sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+      >
+        {label}
+        {required ? (
+          <Box component="span" aria-hidden sx={{ color: color.fg.danger }}>
+            {' *'}
+          </Box>
+        ) : null}
+      </Typography>
+      {children(id)}
+      {hint ? (
+        <Typography
+          component="div"
+          sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+        >
+          {hint}
+        </Typography>
+      ) : null}
     </Box>
   );
 }
 
-function Columns({ count, children }: { count: number; children: ReactNode }) {
+function Columns({
+  count = 2,
+  gap = '14px',
+  children,
+}: {
+  count?: number;
+  gap?: string;
+  children: ReactNode;
+}) {
   return (
     <Box
       sx={{
@@ -213,18 +367,11 @@ function Columns({ count, children }: { count: number; children: ReactNode }) {
           mobile: '1fr',
           tablet: `repeat(${count}, minmax(0, 1fr))`,
         },
-        gap: '12px',
+        gap,
+        alignItems: 'start',
       }}
     >
       {children}
     </Box>
-  );
-}
-
-function Hint({ children }: { children: ReactNode }) {
-  return (
-    <Typography sx={{ ...typography.body[300], color: color.fg.neutral.muted }}>
-      {children}
-    </Typography>
   );
 }
