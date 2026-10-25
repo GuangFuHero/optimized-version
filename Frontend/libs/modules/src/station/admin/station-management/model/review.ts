@@ -138,7 +138,16 @@ export function buildReviewFields(
 
 export type FieldDecision = { approve: boolean; value: string } | undefined;
 
-/** The merge decisions to send: only decided fields, and an approval needs a value. */
+// The integer and enum fields (backend `SUGGESTABLE_FIELDS`); a text field can be approved blank,
+// which clears it.
+const NEEDS_VALUE = new Set([
+  'level',
+  'visibility',
+  'operational_status',
+  'quantity',
+]);
+
+/** The merge decisions to send: only decided fields, and a number or choice needs a value. */
 export function buildDecisions(
   fields: readonly Pick<ReviewField, 'key' | 'targetUuid' | 'fieldName'>[],
   decisions: Record<string, FieldDecision>,
@@ -156,7 +165,7 @@ export function buildDecisions(
       ];
     }
     const value = decision.value.trim();
-    return value
+    return value || !NEEDS_VALUE.has(field.fieldName)
       ? [
           {
             targetUuid: field.targetUuid,

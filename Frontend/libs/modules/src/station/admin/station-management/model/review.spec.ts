@@ -141,7 +141,7 @@ describe('buildDecisions', () => {
     return { key, targetUuid, fieldName };
   };
 
-  it('sends only decided fields and drops approvals without a value', () => {
+  it('sends only decided fields and drops a blank number or choice', () => {
     expect(
       buildDecisions(
         [field('s1:name'), field('s1:op_hour'), field('p1:quantity')],
@@ -154,6 +154,23 @@ describe('buildDecisions', () => {
     ).toEqual([
       { targetUuid: 's1', fieldName: 'name', approve: true, value: '新站名' },
       { targetUuid: 's1', fieldName: 'op_hour', approve: false },
+    ]);
+  });
+
+  it('approves a blank text field, which clears it', () => {
+    expect(
+      buildDecisions([field('s1:supply_status'), field('p1:comment')], {
+        's1:supply_status': { approve: true, value: '' },
+        'p1:comment': { approve: true, value: '  ' },
+      }),
+    ).toEqual([
+      {
+        targetUuid: 's1',
+        fieldName: 'supply_status',
+        approve: true,
+        value: '',
+      },
+      { targetUuid: 'p1', fieldName: 'comment', approve: true, value: '' },
     ]);
   });
 });
