@@ -16,8 +16,12 @@ import {
   type LatLng,
 } from '../address-lookup';
 
-// Inside the drawer: a lookup must not suspend the form around it.
-const ADDRESS_LOOKUP_CONTEXT = { suspense: false } as const;
+// Inside the drawer: a lookup must not suspend the form around it. Sent as a POST, not the GET urql
+// sends queries as: the pin and the typed line are someone's home, and a URL is kept in access logs.
+const ADDRESS_LOOKUP_CONTEXT = {
+  suspense: false,
+  preferGetMethod: false,
+} as const;
 
 /**
  * The nearest 門牌 to the pin, asked once for each place it is put down: the small map reports a
