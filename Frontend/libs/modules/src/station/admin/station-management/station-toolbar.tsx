@@ -20,7 +20,8 @@ import {
   SlidersHorizontal,
   Upload,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useDebounceCallback } from 'usehooks-ts';
 
 import type { StationCapabilities } from './hooks/use-station-capabilities';
 import { ToolbarButton } from './toolbar-button';
@@ -61,24 +62,27 @@ export function StationToolbar({
   exportControl,
 }: StationToolbarProps) {
   const [draft, setDraft] = useState(query);
-  const latestQuery = useRef(query);
+  // The last query this box sent, to tell the URL changing elsewhere from its own update landing.
+  const [sent, setSent] = useState(query);
+  const sendQuery = useDebounceCallback((value: string) => {
+    setSent(value);
+    onQueryChange(value);
+  }, 300);
 
-  // The URL is the source of truth; follow it when it changes from elsewhere (e.g. 清除).
-  useEffect(() => {
-    if (query !== latestQuery.current) {
-      latestQuery.current = query;
-      setDraft(query);
-    }
-  }, [query]);
+  // The URL is the source of truth; follow it when it changes from elsewhere (e.g. 清除, back).
+  if (query !== sent) {
+    setSent(query);
+    setDraft(query);
+  }
 
-  useEffect(() => {
-    if (draft === latestQuery.current) return;
-    const timer = setTimeout(() => {
-      latestQuery.current = draft;
-      onQueryChange(draft);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [draft, onQueryChange]);
+  const changeDraft = (value: string) => {
+    setDraft(value);
+    sendQuery(value);
+  };
+  const clear = () => {
+    sendQuery.cancel();
+    onClear();
+  };
 
   const trimmed = draft.trim();
   const showClear = activeFilterCount > 0 || trimmed.length > 0;
@@ -117,7 +121,7 @@ export function StationToolbar({
       >
         <TextInput
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => changeDraft(event.target.value)}
           placeholder="搜尋站名／地址…"
           leadingIcon={<Search size={16} />}
           helperText={trimmed.length === 1 ? '至少輸入 2 個字' : undefined}
@@ -127,7 +131,7 @@ export function StationToolbar({
 
       {showClear ? (
         <ButtonBase
-          onClick={onClear}
+          onClick={clear}
           sx={{
             ...typography.label[300],
             color: color.fg.neutral.subtle,
