@@ -107,6 +107,12 @@
     return parts.join("、") + "（共 " + segs.length + " 層）";
   }
 
+  /* 按鈕上只放「路＋號」：拿掉縣市、鄉鎮、村里、鄰。完整的正式寫法按下去後就在地址欄裡。 */
+  function shortDoor(full) {
+    return String(full || '').replace(/^.*?[縣市](?=.)/, '').replace(/^.*?[鄉鎮市區](?=.)/, '')
+      .replace(/^[^\d路街道巷弄]{1,4}[村里](?=\d+鄰)/, '').replace(/^\d+鄰/, '') || full;   // 村里只在後面接「N鄰」時拿掉（避免「萬里路」被切）
+  }
+
   function BuildingSetupModal({ onClose, startNew }) {
     const tk = useTK();
     const canManage = tk.can && tk.can.activate;
@@ -235,7 +241,9 @@
           t: "已帶入最近的門牌（距離大頭針 " + lookup.distanceM + " 公尺）。不對的話可以直接改" };
       if (found)
         return { icon: "PenLine", c: "var(--color-fg-neutral-muted)",
-          t: "你改過地址，會存成「未確認門牌」", action: "改回查到的：" + lookup.fullAddress };
+          /* 🔄 10-25：「改回查到的」→「用大頭針的地址」（理由見前台 site-actions.jsx A4）。
+             後台保留「未確認門牌」—— 那是後台看得到的分類。 */
+          t: "跟大頭針的地址不一樣，會存成「未確認門牌」", action: "用大頭針的地址：" + shortDoor(lookup.fullAddress) };
       if (lookup && lookup.status === "not_found")
         return { icon: "Info",
           c: touched && !address.trim() ? "var(--color-fg-danger)" : "var(--color-fg-neutral-muted)",

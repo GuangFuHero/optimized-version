@@ -1705,6 +1705,12 @@
    *    從地圖點某個點位進來 → 地標＝**那個點**，不覆寫
    *    從頂欄「請求協助」按鈕進來 → 沒有 seed，維持自動定位＝**現在位置**
    *    任何時候按 LocationPicker 的「用目前定位」→ 明確要現在位置，才覆寫 */
+  /* 按鈕上只放「路＋號」：拿掉縣市、鄉鎮、村里、鄰。完整的正式寫法按下去後就在地址欄裡。 */
+  function shortDoor(full) {
+    return String(full || '').replace(/^.*?[縣市](?=.)/, '').replace(/^.*?[鄉鎮市區](?=.)/, '')
+      .replace(/^[^\d路街道巷弄]{1,4}[村里](?=\d+鄰)/, '').replace(/^\d+鄰/, '') || full;   // 村里只在後面接「N鄰」時拿掉（避免「萬里路」被切）
+  }
+
   function SiteTicketCreateDrawer({ isAuthenticated, viewerId, seedLandmark, seedCell, onClose, onSubmit, onSignIn }) {
     const isMobile = useIsMobile();
     const [title, setTitle] = useState('');
@@ -1728,6 +1734,97 @@
     const [needs, setNeeds] = useState([emptyNeed()]);
     const [touched, setTouched] = useState(false);
     const open = true;
+
+    /* ── 地址接門牌查詢（2026-10-25，對應光復超人 PR #126；原型用 js/shared/wg-geocode.js 假查）──
+     *  規則（同後台「新增地點」BM-11〜15，與 PR #126 一致）：
+     *   A1 放下／拖完大頭針 → 反查一次；查到就帶入。地址欄還是「上次帶入的那一行」或空的才換，人打的不蓋
+     *   A2 新的點查不到門牌 → 清掉上一個點自動帶的地址（它指的是別處）；人打的不清
+     *   A3 TGOS 不通（unavailable）→ **什麼都不動、不說話**（PR #126：草稿重開時不洗掉他看過的地址）
+     *   A4 地址跟大頭針的門牌不同 → 「跟大頭針的地址不一樣」＋「用大頭針的地址：糖廠街19號」
+     *      🔄 10-25 Sucre：「改回查到的」不直觀 —— 對他來說那是**大頭針擺的位置**，不是系統查到什麼。
+     *      而且先打地址、後放大頭針時，那個門牌從沒在欄位裡出現過，「改回」不成立 → 用「用」。
+     *      按鈕只寫路＋號（shortDoor），完整寫法按下去後在地址欄裡。
+     *      （其實是大頭針 500 公尺內最近的門牌，不一定正好是那個點；提示已寫距離，所以不再多講。）
+     *  🆕 Q8（10-25 試做，待 Sucre 用過再定）：
+     *   B1 離開地址欄 → 查一次；查到就**換成正式寫法**，號後面的樓／室拆到旁邊（旁邊空的才填）
+     *   B2 換掉他打的字時給退路：「改回你打的：…」。改回之後不會再自動查同一行
+     *   B3 查無此門牌 → 「查無此門牌，仍可送出」；多筆 → 「符合的門牌不只一個，請加上鄉鎮市區」
+     *   B4 地址跟大頭針差超過 500 公尺 → 「地址和大頭針相距 N 公尺，請確認哪一個不對」
+     *  🔒 Q7：前台不提「未確認門牌」（那是後台的分類）。
+     *  🔒 所有查詢都不擋送出。 */
+    const G = window.WGGeocode;
+    const [pinLookup, setPinLookup] = useState(null);       // 最近一次反查結果（loading 時 {status:'loading'}）
+    const [typedLookup, setTypedLookup] = useState(null);   // 最近一次「打完地址」查詢結果
+    const [typedBefore, setTypedBefore] = useState('');     // B2：被換掉之前他打的那一行
+    const pinFilledRef = React.useRef('');                  // A1：上次從大頭針帶入的那一行
+    const checkedRef = React.useRef('');                    // B1：已經查過（或改回）的那一行，不再查
+    const addrRef = React.useRef(address); addrRef.current = address;
+    const reqRef = React.useRef(0);
+
+    React.useEffect(() => {
+      if (!G || !landmark) return;
+      const id = ++reqRef.current;
+      setPinLookup({ status: 'loading' });
+      G.reverseGeocode(landmark.lat, landmark.lng).then((r) => {
+        if (id !== reqRef.current) return;                  // 舊點的答案晚到：丟掉
+        const cur = addrRef.current;
+        const untouched = !cur.trim() || cur === pinFilledRef.current;
+        if (r.status === 'found') {
+          setPinLookup(r);
+          if (untouched) { setAddress(r.fullAddress); pinFilledRef.current = r.fullAddress; checkedRef.current = r.fullAddress; setTypedLookup(null); }
+        } else if (r.status === 'not_found') {
+          setPinLookup(r);
+          if (cur && cur === pinFilledRef.current) { setAddress(''); pinFilledRef.current = ''; }   // A2
+        } else {
+          setPinLookup(null);                               // A3：不通就當沒問過
+        }
+      });
+    }, [landmark && landmark.lat, landmark && landmark.lng]);
+
+    const checkTyped = () => {
+      const line = address.trim();
+      if (!G || !line || line === checkedRef.current || line.length > 255) return;
+      checkedRef.current = line;
+      setTypedLookup({ status: 'loading', line });
+      G.normalizeAddress(line, landmark && landmark.lat, landmark && landmark.lng).then((r) => {
+        if (addrRef.current.trim() !== line) return;        // 查的時候他又改了：這個答案不算
+        if (r.status === 'found') {
+          setTypedBefore(line);
+          setAddress(r.fullAddress); checkedRef.current = r.fullAddress;
+          if (r.floor && !floor.trim()) setFloor(r.floor);
+          if (r.room && !room.trim()) setRoom(r.room);
+          setTypedLookup(Object.assign({ line }, r));
+        } else if (r.status === 'unavailable') {
+          setTypedLookup(null);
+        } else {
+          setTypedLookup(Object.assign({ line }, r));
+        }
+      });
+    };
+    const undoTyped = () => { setAddress(typedBefore); checkedRef.current = typedBefore; setTypedLookup(null); };
+    const usePinDoor = () => { setAddress(pinLookup.fullAddress); pinFilledRef.current = pinLookup.fullAddress; checkedRef.current = pinLookup.fullAddress; setTypedLookup(null); };
+
+    /* 地址下面那一行（一次只講一件事；優先序由上而下） */
+    const addressNote = (() => {
+      const a = address.trim();
+      const muted = 'var(--color-fg-neutral-muted)';
+      if (typedLookup && typedLookup.status === 'loading' && a === typedLookup.line) return { icon: 'LoaderCircle', c: muted, t: '正在確認門牌…' };
+      if (typedLookup && typedLookup.status === 'found' && a === typedLookup.fullAddress) {
+        if (typedLookup.distanceM != null && typedLookup.distanceM > G.RADIUS_M)
+          return { icon: 'TriangleAlert', c: 'var(--color-fg-warning, #B45309)', t: '地址和大頭針相距 ' + typedLookup.distanceM + ' 公尺，請確認哪一個不對', undo: typedBefore };
+        return { icon: 'BadgeCheck', c: 'var(--color-fg-success)', t: '已對到門牌，換成正式寫法。不對的話可以直接改', undo: typedBefore };
+      }
+      if (typedLookup && typedLookup.status === 'not_found' && a === typedLookup.line) return { icon: 'Info', c: muted, t: '查無此門牌，仍可送出' };
+      if (typedLookup && typedLookup.status === 'ambiguous' && a === typedLookup.line) return { icon: 'Info', c: muted, t: '符合的門牌不只一個，請加上鄉鎮市區' };
+      if (pinLookup && pinLookup.status === 'loading') return { icon: 'LoaderCircle', c: muted, t: '正在找最近的門牌…' };
+      if (pinLookup && pinLookup.status === 'found') {
+        if (a === pinLookup.fullAddress) return { icon: 'BadgeCheck', c: 'var(--color-fg-success)', t: '已帶入最近的門牌（距離大頭針 ' + pinLookup.distanceM + ' 公尺）。不對的話可以直接改' };
+        if (a) return { icon: 'PenLine', c: muted, t: '跟大頭針的地址不一樣', back: pinLookup.fullAddress };
+      }
+      if (pinLookup && pinLookup.status === 'not_found' && !a)
+        return { icon: 'Info', c: touched ? 'var(--color-fg-danger)' : muted, t: '這附近 500 公尺內查不到門牌，請自己填地址' };
+      return null;
+    })();
 
     if (!isAuthenticated) {
       return (
@@ -1778,6 +1875,13 @@
     const buildPayload = () => ({
         title: title.trim(),
         address: address.trim(),
+        /* 後端 addressToken 只認「同一行字」：改過就不帶（照後端算 unverified）。 */
+        addressToken: (() => {
+          const a = address.trim();
+          if (typedLookup && typedLookup.status === 'found' && a === typedLookup.fullAddress) return typedLookup.addressToken;
+          if (pinLookup && pinLookup.status === 'found' && a === pinLookup.fullAddress) return pinLookup.addressToken;
+          return null;
+        })(),
         floor: floor.trim() || null,
         /* 戶室與建築。三者都可為 null —— 不知道自己在幾樓幾戶的人（鄰居代報、
            不確定門牌的）仍然要能送出，那張單會落到矩陣旁的「未定位」。
@@ -1924,11 +2028,39 @@
                 </div>
               </div>
             ) : (
-            <div data-field="address" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0,1fr) 80px 80px' : 'minmax(0,1fr) 110px 110px', gap: 'var(--space-3)' }}>
-              <Field label="地址" required error={touched && !address.trim() ? '必填' : undefined}>
-                <Input value={address} onChange={(e) => setAddress(e.target.value)}
-                  invalid={touched && !address.trim()} placeholder="花蓮縣光復鄉中山路100號" />
-              </Field>
+            /* 🆕 Q9（10-25 試做）：手機上地址自己一列，樓層＋戶／室在下一列。
+               查到門牌後會換成很長的正式寫法（「花蓮縣光復鄉大進村3鄰糖廠街19號」），
+               擠在 80px 兩欄旁邊會被截掉，他就看不到我們把他的字換成了什麼。
+               桌機維持同一列。提示一律緊貼在地址正下方。 */
+            <div data-field="address" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr) 110px 110px', gap: 'var(--space-3)' }}>
+              <div style={{ gridColumn: isMobile ? '1 / -1' : 'auto', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                <Field label="地址" required error={touched && !address.trim() && !(addressNote && addressNote.t.indexOf('查不到門牌') !== -1) ? '必填' : undefined}>
+                  <Input value={address} onChange={(e) => setAddress(e.target.value)} onBlur={checkTyped} maxLength={255}
+                    invalid={touched && !address.trim()} placeholder={landmark ? '例：花蓮縣光復鄉中山路100號' : '放好大頭針後會自動帶入'} />
+                </Field>
+                {addressNote && (
+                  <div data-address-note style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexWrap: 'wrap',
+                    font: '400 var(--fs-11)/1.5 var(--font-body)', color: addressNote.c }}>
+                    <WGIcon n={addressNote.icon} s={14} c={addressNote.c} />
+                    <span style={{ flex: '1 1 160px', minWidth: 0 }}>{addressNote.t}</span>
+                    {/* onMouseDown + preventDefault：按鈕不搶走地址欄的焦點，不然會先觸發一次「離開欄位就查」。 */}
+                    {addressNote.undo ? (
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={undoTyped}
+                        style={{ border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)', borderRadius: 999,
+                          padding: '2px 10px', font: '500 var(--fs-11)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)', cursor: 'pointer', maxWidth: '100%', textAlign: 'left' }}>
+                        改回你打的：{addressNote.undo}
+                      </button>
+                    ) : null}
+                    {addressNote.back ? (
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={usePinDoor}
+                        style={{ border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)', borderRadius: 999,
+                          padding: '2px 10px', font: '500 var(--fs-11)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)', cursor: 'pointer', maxWidth: '100%', textAlign: 'left' }}>
+                        用大頭針的地址：{shortDoor(addressNote.back)}
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+              </div>
               <Field label="樓層">
                 <Input value={floor} onChange={(e) => setFloor(e.target.value)} placeholder="3" />
               </Field>
