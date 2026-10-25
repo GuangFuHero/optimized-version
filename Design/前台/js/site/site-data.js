@@ -83,7 +83,10 @@
     { uuid: 'st-0001', propertyName: '光復國小供水站', name: '光復國小供水站', type: 'water',
       geometry: pt(121.4212, 23.6694), description: '校門口設 6 座取水口，可接軟管', opHour: '06:00–22:00',
       visibility: 'public', verificationStatus: 'human_verified',
-      confidenceScore: 0.96, isOfficial: true, isTemporary: false, priorityScore: 92 },
+      confidenceScore: 0.96, isOfficial: true, isTemporary: false, priorityScore: 92,
+      /* 🚨 2026-10-25 我編的示範內容。欄位對齊 ERD stations.supply_status（自由文字，站點缺什麼，ADR-333）
+         與 supply_status_updated_at（值真的變了才更新） */
+      supplyStatus: '20 公升水桶、紙杯', supplyStatusUpdatedAt: ts('2026-10-25T01:20:00Z') },
     { uuid: 'st-0002', propertyName: '光復商工避難收容所', name: '光復商工避難收容所', type: 'shelter',
       geometry: pt(121.4194, 23.6631), description: '體育館可容納 320 人，備睡墊與毯', opHour: '24 小時',
       visibility: 'public', verificationStatus: 'human_verified',
@@ -91,7 +94,8 @@
     { uuid: 'st-0003', propertyName: '大進村行動衛浴', name: '大進村行動衛浴', type: 'shower',
       geometry: pt(121.4058, 23.6784), description: '男女各 4 間，熱水由發電機供應', opHour: '07:00–21:00',
       visibility: 'public', verificationStatus: 'human_verified',
-      confidenceScore: 0.88, isTemporary: true, priorityScore: 74 },
+      confidenceScore: 0.88, isTemporary: true, priorityScore: 74,
+      supplyStatus: '沐浴乳、毛巾', supplyStatusUpdatedAt: ts('2026-10-24T09:05:00Z') },   // 🚨 我編的
     { uuid: 'st-0004', propertyName: '中正路臨時廁所群', name: '中正路臨時廁所群', type: 'toilet',
       geometry: pt(121.4231, 23.6668), description: '流動廁所 12 座，每日清運兩次', opHour: '24 小時',
       visibility: 'public', verificationStatus: 'ai_verified',
@@ -427,6 +431,8 @@
         isDuplicate: station.isDuplicate, isTemporary: station.isTemporary,
         isOfficial: station.isOfficial, priorityScore: station.priorityScore,
         createdAt: station.createdAt, updatedAt: station.updatedAt,
+        /* stations.supply_status／supply_status_updated_at（ERD main，ADR-333）：公開的自由文字，寫站點缺什麼 */
+        supplyStatus: station.supplyStatus || null, supplyStatusUpdatedAt: station.supplyStatusUpdatedAt || null,
       },
     };
   }

@@ -42,9 +42,11 @@
     { value: 'station_type', label: '站點類型', kind: 'enum',
       options: () => (R.STATION_TYPE_OPTIONS || []).map((o) => ({ value: o.value, label: o.label })),
       read: (st) => st.type || '' },
-    { value: 'supplies', label: '物資狀況', kind: 'text',
-      read: () => '',
-      placeholder: '例：飲用水見底、尿布尚有存量', helper: '缺什麼比有什麼更能驅動行動，優先寫缺的。' },
+    /* 🔄 2026-10-25「物資狀況」改名「目前缺少」：後端 stations.supply_status 的定義就是「站點缺什麼」（ADR-333），
+       而且衛浴、廁所這類站點講「物資」很奇怪。詳情頁同名。現值要讀出來，送出的才是「改成什麼」 */
+    { value: 'supplies', label: '目前缺少', kind: 'text',
+      read: (st) => st.supplyStatus || '',
+      placeholder: '例：沐浴乳、毛巾；嬰兒尿布 M、L', helper: '只寫現在缺的東西。都補齊了就清空。' },
   ];
   const getStationField = (v) => STATION_FIELD_OPTIONS.find((o) => o.value === v) || STATION_FIELD_OPTIONS[0];
   const resolveFieldOptions = (field) => (typeof field.options === 'function' ? field.options() : field.options) || [];

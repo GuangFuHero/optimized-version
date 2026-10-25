@@ -16,7 +16,10 @@
   function formatStationStatus(marker) {
     const st = marker.stationMeta || {};
     if (st.visibility === 'public' && st.verificationStatus === 'human_verified') {
-      return { label: st.isTemporary ? '臨時 · 已人工驗證' : '啟用 · 已人工驗證', tone: 'success' };
+      /* 🔄 2026-10-25：原本寫「臨時 · 已人工驗證」／「啟用 · 已人工驗證」。
+         「臨時」跟旁邊的「臨時站點」標籤重複，「啟用」跟最前面的營運狀態（開設中…）重複。
+         🔒 這顆只回答**資料可不可信**；會不會撤掉由「臨時站點」那顆講，現在能不能去由營運狀態講。 */
+      return { label: '已人工驗證', tone: 'success' };
     }
     if (st.verificationStatus === 'ai_verified') return { label: 'AI 驗證', tone: 'warning' };
     return { label: st.visibility === 'public' ? '公開' : '未驗證', tone: 'neutral' };
@@ -36,6 +39,38 @@
         <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start' }}>
           {icon ? <span style={{ color: 'var(--color-fg-neutral-muted)', marginTop: 2 }}><WGIcon n={icon} s={16} /></span> : null}
           <div style={sectionValue}>{value}</div>
+        </div>
+      </div>
+    );
+  }
+
+  /* 物資狀況（2026-10-25）。24 小時內講相對時間，超過講日期（同 site-building 的 timeAgo 原則） */
+  function supplyUpdatedLabel(iso) {
+    const t = Date.parse(iso || '');
+    if (!isFinite(t)) return null;
+    const d = Date.now() - t;
+    if (d < 60e3) return '剛剛更新';
+    if (d < 3600e3) return Math.floor(d / 60e3) + ' 分鐘前更新';
+    if (d < 86400e3) return Math.floor(d / 3600e3) + ' 小時前更新';
+    const dt = new Date(t);
+    return (dt.getMonth() + 1) + '/' + dt.getDate() + ' 更新';
+  }
+  /* 🔄 2026-10-25 Sucre：沒填就**整塊不顯示**（衛浴、廁所這類站點沒填是常態，每站掛一句「還沒有填寫」是雜訊）；
+     標題「物資狀況」改「目前缺少」（後端欄位的定義就是站點缺什麼；衛浴講物資很奇怪）。 */
+  function SupplyStatusBlock({ text, updatedAt }) {
+    const has = Boolean(text && text.trim());
+    if (!has) return null;
+    const when = supplyUpdatedLabel(updatedAt);
+    return (
+      <div style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
+          <span style={{ color: 'var(--color-fg-neutral-muted)' }}><WGIcon n="PackageSearch" s={16} /></span>
+          <span style={{ font: '700 var(--fs-12)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>目前缺少</span>
+          {when ? <span style={{ marginLeft: 'auto', font: '400 var(--fs-12)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-muted)' }}>{when}</span> : null}
+        </div>
+        <div style={{ font: '400 var(--fs-14)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)', whiteSpace: 'pre-wrap' }}>
+          {text.trim()}
         </div>
       </div>
     );
@@ -241,17 +276,14 @@
                     「站點等級」也拿掉 —— `level` 是什麼還在問後端的清單裡，
                     對前台讀者顯示一個我們自己都不確定語意的數字沒有意義。 */}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-3)',
-                borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-default)' }}>
-                <Avatar name={st.isOfficial ? '官方' : '一般'} size={36} tone={st.isOfficial ? 'primary' : 'neutral'} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ font: '700 var(--fs-13)/1.3 var(--font-latin)', color: 'var(--color-fg-neutral-default)' }}>{st.isOfficial ? '官方站點' : '一般站點'}</div>
-                  <div style={{ font: '400 var(--fs-12)/1.5 var(--font-data)', color: 'var(--color-fg-neutral-subtle)' }}>
-                    {/* `source` 已於 2026-08-21 從前台移除，只留驗證狀態 */}
-                    {st.verificationStatus === 'human_verified' ? '人工驗證' : st.verificationStatus === 'ai_verified' ? 'AI 驗證' : '未驗證'}
-                  </div>
-                </div>
-              </div>
+              {/* 🔒 2026-10-25 物資狀況放在服務時間正下方：先知道能不能去，接著想知道「去了有沒有我要的／要帶什麼過去」。
+                  欄位：stations.supply_status（自由文字，站點缺什麼）＋ supply_status_updated_at。
+                  🔄 10-25 改名「目前缺少」、沒填整塊不顯示（見 SupplyStatusBlock）。
+                  更新時間一定要顯示：缺的東西變很快，三天前的「缺水」今天可能已經滿了。 */}
+              <SupplyStatusBlock text={st.supplyStatus} updatedAt={st.supplyStatusUpdatedAt} />
+              {/* 🔄 2026-10-25 拿掉「官方站點／一般站點 · 人工驗證」卡：
+                  「官方」上面已有標籤；驗證狀態後端**沒有任何寫入路徑**（建站、編輯、審核、匯入都不會設），
+                  正式版永遠是空的。等有驗證流程再放回來。 */}
               <InfoRow label="座標" value={marker.position[0].toFixed(6) + ', ' + marker.position[1].toFixed(6)} icon="Crosshair" />
             </div>
           ) : <StationReportHistoryPanel reports={reports} />}
