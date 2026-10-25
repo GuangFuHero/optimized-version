@@ -285,12 +285,15 @@ export const semanticSpacing = {
 /**
  * Icon sizes, px. Ours, not Figma's: the export has no icon token. `sm` is the glyph beside a pill's
  * label — every `RowAction`, and the buttons that stand in a row with one — so an action draws its
- * icon at one size wherever it appears.
+ * icon at one size wherever it appears. `md` and `lg` sit beside the label of a page's main action,
+ * in a 48px and a 52px pill: 請求協助 in the map's bar, and floating on every other page.
  *
  * Plain numbers, not `displayTextSize` steps: an icon does not ride the text scale (see there).
  */
 export const semanticIconSize = {
   sm: 14,
+  md: 18,
+  lg: 20,
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────────

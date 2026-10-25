@@ -57,7 +57,7 @@ function RequestHelpPill({
 export function MobileRequestHelpFab() {
   return (
     <RequestHelpPill
-      iconSize={20}
+      iconSize={designTokens.iconSize.lg}
       sx={{
         position: 'fixed',
         right: 16,
@@ -87,7 +87,7 @@ export function MapRequestHelpBar() {
       }}
     >
       <RequestHelpPill
-        iconSize={18}
+        iconSize={designTokens.iconSize.md}
         sx={{
           flex: 1,
           justifyContent: 'center',
