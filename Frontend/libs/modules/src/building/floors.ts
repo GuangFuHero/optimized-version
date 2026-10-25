@@ -55,6 +55,109 @@ export function orderFloors<T extends Pick<BuildingFloor, 'label'>>(
   ];
 }
 
+// The roof as a reporter may write it, after `normalizeFloor` (prototype `site-data.js:867-868`).
+const ROOF_WORDS = /^(頂樓?|屋頂|頂樓平台|R|RF)$/;
+const BELOW_PREFIX = /^(B|地下|負|-)/;
+const CJK_DIGITS: Readonly<Record<string, number>> = {
+  零: 0,
+  〇: 0,
+  '○': 0,
+  一: 1,
+  二: 2,
+  兩: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
+};
+
+/** Half-width, no spaces, upper case: '３ｆ ' and '3F' are the same floor. */
+function normalizeFloor(text: string): string {
+  return text.normalize('NFKC').replace(/\s+/g, '').toUpperCase();
+}
+
+/** 一 to 九十九 as a floor is written out: 三, 十二, 二十三. Null for anything else. */
+function cjkNumber(text: string): number | null {
+  const ten = text.indexOf('十');
+
+  if (ten === -1) {
+    let value = 0;
+
+    for (const digit of text) {
+      const n = CJK_DIGITS[digit];
+
+      if (n === undefined) {
+        return null;
+      }
+
+      value = value * 10 + n;
+    }
+
+    return value;
+  }
+
+  const tens = ten === 0 ? 1 : CJK_DIGITS[text[0]];
+  const ones = ten === text.length - 1 ? 0 : CJK_DIGITS[text[ten + 1]];
+
+  return tens === undefined || ones === undefined ? null : tens * 10 + ones;
+}
+
+/**
+ * The floor a written one counts as, below ground negative (prototype `parseFloorToken`,
+ * `site-data.js:802-818`): 3, 3樓 and 第三層 are 3; B1, 地下一樓 and -1 are −1. Null without one.
+ */
+function writtenFloorNumber(text: string): number | null {
+  const below = BELOW_PREFIX.test(text);
+  const rest = text.replace(BELOW_PREFIX, '').replace(/^第/, '');
+  const digits = /^\d+/.exec(rest)?.[0];
+  const cjk = /^[零〇○一二三四五六七八九十兩]+/.exec(rest)?.[0];
+  const n = digits ? Number(digits) : cjk ? cjkNumber(cjk) : null;
+
+  if (n === null || n <= 0) {
+    return null;
+  }
+
+  return below ? -n : n;
+}
+
+/**
+ * The building's floor a ticket's floor names, as a reporter wrote it (prototype `segmentOfMarker`,
+ * `site-data.js:859-875`, 2026-10-25): the label itself in any width or case; the roof as 頂樓, 屋頂,
+ * 頂樓平台 or R; and a floor by its number — 3樓 or 三樓 for 3F, 地下一樓 for B1. A number names only a
+ * floor's own label (nF, Bn), never one of another form: 第一節車廂 is not 1F. Null when the building
+ * has no such floor. The backend takes only the building's labels when a ticket is filed, but an edit
+ * takes any text.
+ */
+export function floorLabelOf(
+  written: string | null | undefined,
+  labels: readonly string[],
+): string | null {
+  const text = normalizeFloor(written ?? '');
+
+  if (!text) {
+    return null;
+  }
+
+  const literal = labels.find((label) => normalizeFloor(label) === text);
+
+  if (literal) {
+    return literal;
+  }
+  if (ROOF_WORDS.test(text)) {
+    return labels.includes(ROOF) ? ROOF : null;
+  }
+
+  const number = writtenFloorNumber(text);
+
+  return number === null
+    ? null
+    : (labels.find((label) => label !== ROOF && floorRank(label) === number) ??
+        null);
+}
+
 /** The name a floor's box carries: its label, the roof's spelled out. */
 export function floorName(label: string): string {
   return label === ROOF ? '頂樓' : label;
@@ -86,10 +189,11 @@ export function groupByFloor<T>(
     tickets: [] as T[],
   }));
   const byLabel = new Map(groups.map((group) => [group.floor.label, group]));
+  const labels = [...byLabel.keys()];
   const unplaced: T[] = [];
 
   for (const ticket of tickets) {
-    const label = floorOf(ticket)?.trim();
+    const label = floorLabelOf(floorOf(ticket), labels);
     const group = label ? byLabel.get(label) : undefined;
 
     if (group) {
