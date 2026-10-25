@@ -47,7 +47,7 @@ import {
   type ReviewField,
 } from './model/review';
 import { EMPTY_FILTERS } from './model/station-filters';
-import { formatAbsoluteTime } from './station-cells';
+import { formatTaiwanDateTime } from '../../../time';
 
 const { color, radius, typography } = designTokens;
 
@@ -487,7 +487,7 @@ function ReviewFieldCard({
           }}
         >
           {field.suggestionCount} 人建議 · 最早{' '}
-          {formatAbsoluteTime(field.firstSuggestedAt)}
+          {formatTaiwanDateTime(field.firstSuggestedAt) ?? '—'}
         </Typography>
       </Box>
 

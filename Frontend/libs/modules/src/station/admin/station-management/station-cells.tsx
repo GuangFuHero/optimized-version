@@ -6,23 +6,9 @@ import { Clock } from 'lucide-react';
 
 import { getFreshness } from './model/freshness';
 import { getOperationalStatusMeta } from '../../operational-status';
+import { formatTaiwanDateTime } from '../../../time';
 
 const { color, radius, typography } = designTokens;
-
-const absoluteTime = new Intl.DateTimeFormat('zh-TW', {
-  timeZone: 'Asia/Taipei',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
-export function formatAbsoluteTime(value: string | null | undefined): string {
-  if (!value) return '—';
-  const time = Date.parse(value);
-  return Number.isNaN(time) ? '—' : absoluteTime.format(time);
-}
 
 export function StatusBadge({ status }: { status: string | null | undefined }) {
   const meta = getOperationalStatusMeta(status);
@@ -38,7 +24,7 @@ export function FreshnessCell({
   now: Date;
 }) {
   const { level, relative } = getFreshness(updatedAt, now);
-  const absolute = formatAbsoluteTime(updatedAt);
+  const absolute = formatTaiwanDateTime(updatedAt) ?? '—';
 
   if (level === 'expired') {
     return (

@@ -1,6 +1,7 @@
 import type { components } from '@rescue-frontend/data-access/openapi';
 
 import type { StationRow } from './station-row';
+import { taiwanDateParts } from '../../../../time';
 
 type BulkPreview = components['schemas']['BulkPreviewResponse'];
 type ErrorReport = components['schemas']['ErrorReportResponse'];
@@ -113,22 +114,6 @@ export function downloadBase64(report: ErrorReport) {
   downloadBlob(new Blob([bytes], { type: report.media_type }), report.filename);
 }
 
-function taipeiParts(now: Date): Record<string, string> {
-  return Object.fromEntries(
-    new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Taipei',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-      .formatToParts(now)
-      .map((p) => [p.type, p.value]),
-  );
-}
-
 /**
  * Per-type counts of the stations an export will contain: the rows the backend says the export
  * includes. `station.export` reaches fewer stations than `station.view` for a team role, and
@@ -151,6 +136,6 @@ export function exportFilename(
   format: 'csv' | 'xlsx',
   now: Date,
 ): string {
-  const parts = taipeiParts(now);
+  const parts = taiwanDateParts(now);
   return `資源站點_${typeLabel}_${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}.${format}`;
 }
