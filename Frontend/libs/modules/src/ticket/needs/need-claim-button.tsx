@@ -9,7 +9,7 @@ import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import type { NeedClaim, NeedClaimKind } from './need-claim';
 
-const { color, radius, typography, motion } = designTokens;
+const { color, radius, typography, motion, iconSize } = designTokens;
 
 /**
  * Fill, border and label per look. `claimed` is not greyed out like the rest that cannot be pressed:
@@ -66,7 +66,7 @@ const SIZES = {
     py: 0,
     borderRadius: `${radius.full}px`,
     fontSize: displayTextSize[14],
-    iconSize: 14,
+    iconSize: iconSize.sm,
   },
 } as const;
 

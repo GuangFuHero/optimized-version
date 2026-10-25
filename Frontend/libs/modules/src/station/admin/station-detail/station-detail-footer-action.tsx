@@ -2,11 +2,13 @@
 
 import { Box } from '@mui/material';
 
-import { RowAction } from '@rescue-frontend/ui';
+import { designTokens, RowAction } from '@rescue-frontend/ui';
 
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
 import type { StationDetailActionProps } from './types';
+
+const { iconSize } = designTokens;
 
 export interface StationDetailFooterActionProps {
   actions?: readonly (StationDetailActionProps | undefined)[];
@@ -55,8 +57,8 @@ export function StationDetailFooterAction({
               icon={
                 <StationDetailIconSlot
                   icon={action.icon}
-                  width={14}
-                  height={14}
+                  width={iconSize.sm}
+                  height={iconSize.sm}
                   color="currentColor"
                 />
               }
@@ -78,8 +80,8 @@ export function StationDetailFooterAction({
               icon={
                 <StationDetailIconSlot
                   icon={action.icon}
-                  width={14}
-                  height={14}
+                  width={iconSize.sm}
+                  height={iconSize.sm}
                   color="currentColor"
                 />
               }

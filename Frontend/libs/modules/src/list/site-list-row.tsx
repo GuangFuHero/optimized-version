@@ -16,7 +16,7 @@ import { NeedLine, type TicketNeed } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
 import { getTicketStatusTone } from '../ticket/status';
 
-const { color, radius, shadow, spacing, motion } = designTokens;
+const { color, radius, shadow, spacing, motion, iconSize } = designTokens;
 
 interface SiteListRowProps {
   marker: RescueMapMarkerItem;
@@ -29,7 +29,7 @@ interface SiteListRowProps {
 }
 
 const ICON_SIZE = 18;
-const ACTION_ICON = { fontSize: 14 } as const;
+const ACTION_ICON = { fontSize: iconSize.sm } as const;
 
 /**
  * 列表單列：顯示標題、分類標籤與摘要，選取時切換選中樣式。

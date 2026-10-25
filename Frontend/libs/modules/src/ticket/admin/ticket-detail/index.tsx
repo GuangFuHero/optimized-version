@@ -4,7 +4,12 @@ import type { ReactNode } from 'react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { displayTextSize, Icons, RowAction } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  Icons,
+  RowAction,
+} from '@rescue-frontend/ui';
 
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 
@@ -714,8 +719,8 @@ function TicketDetailFooterButton({
       icon={
         <TicketDetailIconSlot
           icon={item.icon}
-          width={14}
-          height={14}
+          width={designTokens.iconSize.sm}
+          height={designTokens.iconSize.sm}
           color="currentColor"
         />
       }
