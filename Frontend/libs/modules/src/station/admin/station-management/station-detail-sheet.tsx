@@ -2,19 +2,24 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { Box, Typography } from '@mui/material';
+import { Box, Tab, Typography } from '@mui/material';
 import { useCurrentUser, useStation } from '@rescue-frontend/data-access/admin';
-import { Badge, Button, designTokens } from '@rescue-frontend/ui';
+import {
+  Badge,
+  Button,
+  designTokens,
+  SheetFrame,
+  SheetLayout,
+  Tabs,
+} from '@rescue-frontend/ui';
 import { EyeOff, PencilLine, ShieldCheck, Trash2 } from 'lucide-react';
 
-import { getOperationalStatusMeta } from '../../operational-status';
 import {
-  AdminStationDrawer,
-  AdminStationDrawerCaption,
-  AdminStationDrawerLayout,
-  AdminStationDrawerTabs,
-  StationEditPanel,
-} from '../station-drawer';
+  STATION_SHEET_WIDTH,
+  StationForm,
+  StationFormLayout,
+} from '../../form';
+import { getOperationalStatusMeta } from '../../operational-status';
 import type { StationCapabilities } from './hooks/use-station-capabilities';
 import {
   readOnlyCaption,
@@ -68,14 +73,23 @@ export function StationDetailSheet({
 
   let content: ReactNode;
   if (uuid && editing) {
+    // 取消, a save, or a submit with nothing changed: back to the details.
     content = (
-      <StationEditPanel
-        uuid={uuid}
+      <StationForm
+        target={{ mode: 'edit', uuid }}
         canViewPii={caps.canViewPii}
-        onCancel={onEditEnd}
-        onCloseDrawer={onClose}
+        onClose={onEditEnd}
         onSaved={onEditEnd}
-      />
+      >
+        {(view) => (
+          <StationFormLayout
+            view={view}
+            onClose={() => {
+              if (!view.submitting) onClose();
+            }}
+          />
+        )}
+      </StationForm>
     );
   } else if (station) {
     content = (
@@ -85,33 +99,34 @@ export function StationDetailSheet({
         now={now}
         activeTab={station.viewerCanViewHistory ? activeTab : 'info'}
         onTabChange={setActiveTab}
-        onClose={onClose}
         onEdit={() => onEdit(station.uuid)}
         onDelete={() => onDelete(station.uuid, station.name ?? '')}
       />
     );
   } else {
     content = (
-      <AdminStationDrawerLayout
+      <SheetLayout
         title={query.isPending ? '載入中…' : '找不到站點'}
-        onClose={onClose}
         closeLabel="關閉站點詳情"
       >
         {query.isPending ? null : (
           <Muted>找不到這個站點，可能已刪除或不在你的權限範圍。</Muted>
         )}
-      </AdminStationDrawerLayout>
+      </SheetLayout>
     );
   }
 
+  // One frame for every view, so switching to the edit form swaps the content in place.
   return (
-    <AdminStationDrawer
+    <SheetFrame
       open={Boolean(uuid)}
       onClose={onClose}
+      width={STATION_SHEET_WIDTH}
+      variant="admin"
       ariaLabel="站點詳情"
     >
       {content}
-    </AdminStationDrawer>
+    </SheetFrame>
   );
 }
 
@@ -121,7 +136,6 @@ function StationDetailContent({
   now,
   activeTab,
   onTabChange,
-  onClose,
   onEdit,
   onDelete,
 }: {
@@ -130,7 +144,6 @@ function StationDetailContent({
   now: Date;
   activeTab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
-  onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -142,10 +155,9 @@ function StationDetailContent({
   const teamName = useCurrentUser().data?.active_identity?.team ?? null;
 
   return (
-    <AdminStationDrawerLayout
+    <SheetLayout
       eyebrow={view.typeLabel}
       title={view.title}
-      onClose={onClose}
       closeLabel="關閉站點詳情"
       headerContent={
         <>
@@ -155,7 +167,6 @@ function StationDetailContent({
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: '8px',
-              mt: '12px',
             }}
           >
             <Badge tone={status.tone} variant="solid">
@@ -176,18 +187,18 @@ function StationDetailContent({
             ) : null}
           </Box>
           {station.viewerCanViewHistory ? (
-            <AdminStationDrawerTabs<DetailTab>
-              ariaLabel="站點詳情分頁"
-              tabs={[
-                { value: 'info', label: '基本資料' },
-                {
-                  value: 'history',
-                  label: version ? `版本歷史 (v${version})` : '版本歷史',
-                },
-              ]}
+            <Tabs
+              aria-label="站點詳情分頁"
               value={activeTab}
-              onChange={onTabChange}
-            />
+              onChange={(_, tab: DetailTab) => onTabChange(tab)}
+              sx={{ mt: '14px' }}
+            >
+              <Tab value="info" label="基本資料" />
+              <Tab
+                value="history"
+                label={version ? `版本歷史 (v${version})` : '版本歷史'}
+              />
+            </Tabs>
           ) : null}
         </>
       }
@@ -216,9 +227,9 @@ function StationDetailContent({
               編輯站點
             </Button>
           ) : (
-            <AdminStationDrawerCaption>
+            <Muted>
               {readOnlyCaption({ canEditStations: caps.canEdit, teamName })}
-            </AdminStationDrawerCaption>
+            </Muted>
           )}
         </>
       }
@@ -228,7 +239,7 @@ function StationDetailContent({
       ) : (
         <StationInfo station={station} view={view} now={now} />
       )}
-    </AdminStationDrawerLayout>
+    </SheetLayout>
   );
 }
 

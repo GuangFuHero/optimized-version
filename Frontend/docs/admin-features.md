@@ -55,8 +55,8 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `page.tsx` 掛載 `StationManagementPage`（`libs/modules/src/station/admin/station-management/`），接真實 API
 - 狀態統計（`/analytics/stations/data` 各營運狀態數量，點選即篩選該狀態；ticket 寫的 `/analytics/stations/value` 只回一個總數，沒有各狀態拆分）、篩選（類型、營運狀態、行政區、指派 Team、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換
 - 列表會分頁讀完權限範圍內所有站點（上限 5,000），官方認定、更新時間篩選與排序（開設中優先、最近更新優先）在前端做
-- 站點抽屜是 `/stations` 自己的 `StationDetailSheet`（`station-drawer` 的 `AdminStationDrawerLayout`／`AdminStationDrawerTabs`，編輯在同一個抽屜裡切換），不用地圖的 `StationDetailDrawer`：基本資料、照片、資源、群眾評分（各資源好／普通／差的筆數，只查 `rating`，不讀 `userUuid`）、聯絡資訊（無 `station.view_pii` 時顯示遮罩值且不可改）、版本歷史；`/stations?station=<uuid>` 直接開啟，給通知連結用
-- 新增／編輯用 `station/form` 的 `StationForm`，與 `/map` 的新增共用同一份表單；`/stations` 以 `station-drawer` 的 `AdminStationFormDrawer`／`StationEditPanel` 套上自己的抽屜與欄位版面，地圖用共用 `Sheet` 的 `StationFormDrawer`；地址只在新增時送出（`UpdateStationInput` 不能改 `secondaryLocation`）
+- 站點抽屜是 `/stations` 自己的 `StationDetailSheet`（libs/ui 的 `SheetFrame` 加 `variant="admin"`，詳情與編輯是同一個 frame 裡切換的 `SheetLayout`，不會疊第二層），不用地圖的 `StationDetailDrawer`：基本資料、照片、資源、群眾評分（各資源好／普通／差的筆數，只查 `rating`，不讀 `userUuid`）、聯絡資訊（無 `station.view_pii` 時顯示遮罩值且不可改）、版本歷史；`/stations?station=<uuid>` 直接開啟，給通知連結用
+- 新增／編輯用 `station/form` 的 `StationForm`，與兩張 `/map` 的新增共用同一份表單與同一套欄位版面（設計稿 `station-drawer.jsx`）；新增都用 `StationFormDrawer`，`/stations` 傳 `variant="admin"`，編輯則把 `StationFormLayout` 放進站點抽屜；地址只在新增時送出（`UpdateStationInput` 不能改 `secondaryLocation`）
 - 刪除站點、列表上直接改營運狀態與指派 Team；後台新增的站點一律 `source: "official"`
 - 前台修改建議審查：依欄位決定採用／不採用（可改寫入值），一次送出附一則審核備註（`mergeStationSuggestions` 只收一個 `reviewNote`；ticket 寫「每一則附備註」，為了保持一次送出不可分割，維持一則）
 - 批次匯入（試算 → 欄位對應 → 確認，失敗列可下載）與匯出（單一類型，CSV／Excel）

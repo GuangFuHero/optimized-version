@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  useEffect,
-  useId,
-  useState,
-  type ComponentType,
-  type ReactNode,
-} from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 
 import { Box, Typography } from '@mui/material';
 import {
@@ -21,10 +15,7 @@ import { toast } from 'sonner';
 
 import { useAuthSession } from '../../session/auth-session';
 import { getStationTypeLabel } from '../type-options';
-import {
-  StationFormFields,
-  type StationFormFieldsProps,
-} from './station-form-fields';
+import { StationFormFields } from './station-form-fields';
 import {
   applyReverseGeocode,
   buildCreateInput,
@@ -73,8 +64,6 @@ export interface StationFormProps {
   onSaved?: (station: AdminStationFieldsFragment) => void;
   /** The typed coordinates changed: a map can move its pin to follow them. */
   onLocationChange?: (position: [number, number]) => void;
-  /** The field layout; the frame picks it to match its look. */
-  Fields?: ComponentType<StationFormFieldsProps>;
   children: (view: StationFormView) => ReactNode;
 }
 
@@ -158,15 +147,7 @@ type LoadedStationFormProps = FormProps & {
   );
 
 function LoadedStationForm(props: LoadedStationFormProps) {
-  const {
-    mode,
-    initial,
-    onClose,
-    onSaved,
-    onLocationChange,
-    Fields = StationFormFields,
-    children,
-  } = props;
+  const { mode, initial, onClose, onSaved, onLocationChange, children } = props;
   const formId = useId();
   const [form, setForm] = useState(initial);
   const [errors, setErrors] = useState<StationFormErrors>({});
@@ -287,7 +268,7 @@ function LoadedStationForm(props: LoadedStationFormProps) {
           </Box>
         </Callout>
       ) : null}
-      <Fields
+      <StationFormFields
         mode={mode}
         form={form}
         errors={errors}

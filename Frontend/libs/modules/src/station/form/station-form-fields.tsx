@@ -12,15 +12,30 @@ import {
 import { designTokens } from '@rescue-frontend/ui';
 import { EyeOff } from 'lucide-react';
 
-import { OPERATIONAL_STATUS_OPTIONS } from '../../operational-status';
-import { STATION_TYPE_OPTIONS, getStationTypeLabel } from '../../type-options';
-import type {
-  StationFormFieldsProps,
-  StationFormState,
-  TextKey,
-} from '../../form';
+import { OPERATIONAL_STATUS_OPTIONS } from '../operational-status';
+import { STATION_TYPE_OPTIONS, getStationTypeLabel } from '../type-options';
+import type { StationFormErrors, StationFormState } from './station-form-model';
 
 const { color, motion, radius, typography } = designTokens;
+
+export type TextKey = {
+  [K in keyof StationFormState]: StationFormState[K] extends string ? K : never;
+}[keyof StationFormState];
+
+export interface StationFormFieldsProps {
+  mode: 'create' | 'edit';
+  form: StationFormState;
+  errors: StationFormErrors;
+  onChange: <K extends keyof StationFormState>(
+    key: K,
+    value: StationFormState[K],
+  ) => void;
+  /** The coordinate fields lost focus: the place to move a map pin to the typed position. */
+  onCoordinatesBlur?: () => void;
+  isResolvingAddress?: boolean;
+  /** Without `station.view_pii` the contact values are masked, so they can't be edited. */
+  contactLocked?: boolean;
+}
 
 /** The prototype's filled input: 46px, neutral subtle fill, a hairline that thickens on focus. */
 const filledInputSx = {
@@ -60,10 +75,10 @@ type FieldProps = Omit<TextFieldProps, 'label'> & {
 };
 
 /**
- * `/stations`' create and edit fields, laid out like the prototype drawer: labels above filled
- * inputs, two columns, no section headings. The maps keep `StationFormFields`' default layout.
+ * The station form's fields, laid out like the prototype drawer (`station-drawer.jsx`): labels
+ * above filled inputs, two columns, no section headings.
  */
-export function AdminStationFormFields({
+export function StationFormFields({
   mode,
   form,
   errors,
