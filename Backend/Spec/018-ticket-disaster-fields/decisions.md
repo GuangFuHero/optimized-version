@@ -1,4 +1,4 @@
-# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310）
+# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-387）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/016-resource-history/decisions.md`（ADR-243 為目前全 repo 最大值）。
@@ -671,6 +671,7 @@ DB image 改為 `Backend/docker/postgres-h3/Dockerfile`（`postgis/postgis:16-3.
 但不會超出那一格。接受：保證的下限仍是一個 resolution 8 格子。
 ➖ 同一格的單會疊在同一點，前端需要把「概略位置」畫成區域並分群（前端 PR 另開）。
 原型的 `GUEST_GRID_DIAMETER_M = 550` 把 550 當直徑，只是示意，不可沿用。
+（2026-10-25：每格的筆數改由後端算，見 ADR-387。）
 ➖ 換 DB image：staging 部署時 db container 會以同一個 `pgdata` volume 重建，停機數秒。
 `CREATE EXTENSION h3` 需要 superuser（staging 是）。
 ◾ 取 cell 前先套 `ST_PointOnSurface`：`base_geometries` 同時放 ticket 的點與封閉區域的多邊形，
@@ -712,3 +713,37 @@ floor 是 RF、nF、Bn     → 往下驗 room
 ➖ 管理員在通報者填表時縮減樓層或刪掉區域，送出會被拒，通報者要重選。機率低，接受。
 ➖ 夾層（1.5F、M）不在標籤內：通報者選相鄰樓層，在 `victimSpace` 補充。
 ◾ `updateTicket` 不重驗樓層與區域；建物改配置或搬點，既有的單保留自己的那份副本。
+
+### ADR-387 格子的筆數由後端算（`ticketCells`），一格的單用 `tickets(locationCell:)` 列
+
+**白話**：訪客地圖上每一格寫的數字，改由後端一次算好；點開一格，列的就是那一格真正的單，可以翻頁。
+
+**Context**：訪客地圖把單畫成格子（ADR-281／283），格子裡的數字是前端拿畫面裡的前 200 張
+（`use-site-map-live-data.ts`，`tickets(limit: 200)`）按 `locationCell` 數出來的。畫面裡超過 200 張，
+格子就少算，畫面上也看不出來；點開一格，列的也只是那 200 張裡剛好落在這格的。糖 10-24 要筆數由後端直接給。
+
+**Decision**：
+
+- `ticketCells(bounds!, zoom, statuses)` 回每一格的 `{ cell, ticketCount, urgentCount }`，照 `cell` 排序，
+  沒有單的格子不回。在 Postgres 裡一句 `GROUP BY` 算完。
+  - 條件只用 `_active_conditions`，再加「呼叫者看到的是格子」（`NOT seen`）。所以數字跟用同樣的參數一頁一頁翻
+    `tickets`、按 `locationCell` 數的一樣：`bounds` 用格子中心比（ADR-282），`zoom` 決定 resolution、最細 8。
+  - 看得到精確點的單是圖釘，不算進格子。`view_detail` 是 `all` 的人回空清單，不跑 SQL。
+  - `statuses` 收清單：地圖可以同時勾好幾個狀態，`tickets` 的 `status` 只收一個。
+  - `urgentCount`：priority 是 high／critical、而且不是 `in_progress`，照前端現在的規則
+    （`markers.ts` 的 `resolveTicketVariant`）。給數字不給 true／false，前端判斷 `> 0`。
+- `tickets(locationCell:)` 只回「呼叫者看到的是這一格」的單，每列的 `geometry`／`locationCell` 用這一格的
+  resolution，`zoom` 不管。比 resolution 8 細、或不是 H3 cell 的字串，回錯誤。格式對、但不存在的格子
+  （例如 base cell 超過 121）也回同一個錯誤：先問 h3-pg 的 `h3_is_valid_cell`，因為 `h3_cell_to_geometry`
+  遇到這種會直接報錯，整個查詢就失敗。
+  - 先用 `base_geometries` 的 geography 索引粗篩（離格子中心 `2 × 平均邊長` 內），再用 h3 決定每一列，
+    跟 ADR-282 的 `bounds` 粗篩同一個道理。
+
+➕ 給的東西都是 `tickets` 翻頁本來就拿得到的：同樣的列、同樣的比對方式，只是在資料庫裡數好。
+➕ 擋細格子：不擋的話，訪客送一個 resolution 15 的格子，就能把單的位置縮到幾公尺內。
+➖ 不做快取：地圖每移動一次就重算。
+◾ 量測（`login_test`，畫面裡 1 萬張、畫面外 1 萬張）：同一句 SQL 前 5 次約 2～3 秒，第 6 次起約 50 ms。
+前 5 次用的是帶參數的 custom plan，把格子中心那個條件估成 1 列，選了對 `tickets` 整張掃的 nested loop；
+之後 Postgres 換成 generic plan 就正常。既有的 `tickets(bounds)` 訪客列表是同一個現象（同樣前 5 次約 3 秒），
+不是這條造成的，另案處理。`tickets(locationCell:)` 走 geography 索引，1～100 ms。
+◾ 「有急件就整格紅」這條規則本身在等糖、Carol；規則改了，改 `URGENT_PRIORITIES` 和那個條件就好。

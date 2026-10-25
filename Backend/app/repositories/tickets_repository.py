@@ -1,14 +1,29 @@
 """Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
-from sqlalchemy import and_, delete, exists, false, func, not_, or_, select
+from geoalchemy2 import Geography
+from sqlalchemy import and_, cast, delete, exists, false, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
-from app.db.h3 import COARSE_MAX_H3_RESOLUTION, coarse_margin_degrees, h3_centroid
+from app.db.h3 import (
+    COARSE_MAX_H3_RESOLUTION,
+    cell_reach_metres,
+    coarse_margin_degrees,
+    h3_cell_centre,
+    h3_cell_text,
+    h3_centroid,
+)
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
+
+# A ticket the site colours urgent, unless it is in progress (`map/site/markers.ts`
+# resolveTicketVariant): the guest map turns a cell red when it holds one (ADR-387).
+URGENT_PRIORITIES = ("high", "critical")
+# A bare `geography` cast, which the `::geography` index on base_geometries matches (see
+# app/dedup_engine/candidates.py); geoalchemy2's default renders `geography(GEOMETRY,-1)`, which it doesn't.
+_GEOGRAPHY = Geography(geometry_type=None)
 
 
 class TicketRepository(GenericRepository[Tickets]):
@@ -70,6 +85,8 @@ class TicketRepository(GenericRepository[Tickets]):
         extra_filters=(),
         detail_filters,
         coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
+        coarse_only: bool = False,
+        location_cell: str | None = None,
     ) -> list:
         """The single source of truth for "which tickets match this request".
 
@@ -84,11 +101,29 @@ class TicketRepository(GenericRepository[Tickets]):
         Each row is then matched on what that caller can see of it (ADR-282) — otherwise a
         box shrunk around a ticket, or a keyword taken from its description, would give
         back what the fields withhold.
+
+        `coarse_only` keeps just the rows the caller is shown as a cell rather than a point —
+        what the guest map draws as cells (ADR-387). `location_cell` keeps those of one cell,
+        which must be at `coarse_resolution`: the rows the guest map's cell holds.
         """
         conditions = [self.model.delete_at.is_(None), *extra_filters]
         # NULL-safe: `created_by = :me` is NULL on a row with no author, and NOT NULL is
         # still NULL — such a row would match neither branch below and silently vanish.
         seen = func.coalesce(and_(*detail_filters), false()) if detail_filters else None
+        if coarse_only or location_cell is not None:
+            conditions.append(false() if seen is None else not_(seen))
+        if location_cell is not None:
+            # The cell is an expression no index can serve, so a pre-filter comes first, as for
+            # `bounds`: a point in the cell lies within reach of its centre, which the geography
+            # index on `base_geometries` answers. The cell test below still decides every row.
+            conditions.append(
+                func.ST_DWithin(
+                    cast(self.model.geometry, _GEOGRAPHY),
+                    cast(h3_cell_centre(location_cell), _GEOGRAPHY),
+                    cell_reach_metres(coarse_resolution),
+                )
+            )
+            conditions.append(h3_cell_text(self.model.geometry, coarse_resolution) == location_cell)
         if bounds:
             envelope = func.ST_MakeEnvelope(
                 bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
@@ -168,15 +203,17 @@ class TicketRepository(GenericRepository[Tickets]):
         extra_filters=(),
         detail_filters,
         coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
+        location_cell: str | None = None,
     ) -> list[Tickets]:
         """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope.
 
-        `detail_filters` / `coarse_resolution`: see _active_conditions (ADR-281/282).
+        `detail_filters` / `coarse_resolution` / `location_cell`: see _active_conditions
+        (ADR-281/282/387).
         """
         term = normalize_query(q)
         conditions = self._active_conditions(
             bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters,
-            detail_filters=detail_filters, coarse_resolution=coarse_resolution,
+            detail_filters=detail_filters, coarse_resolution=coarse_resolution, location_cell=location_cell,
         )
         async with search_timeout(db, term):
             result = await db.execute(
@@ -197,16 +234,51 @@ class TicketRepository(GenericRepository[Tickets]):
         extra_filters=(),
         detail_filters,
         coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
+        location_cell: str | None = None,
     ) -> int:
         """Count active tickets — MUST use the same conditions as list_active()."""
         conditions = self._active_conditions(
             bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters,
-            detail_filters=detail_filters, coarse_resolution=coarse_resolution,
+            detail_filters=detail_filters, coarse_resolution=coarse_resolution, location_cell=location_cell,
         )
         async with search_timeout(db, normalize_query(q)):
             return await db.scalar(
                 select(func.count()).select_from(select(self.model).where(*conditions).subquery())
             )
+
+    async def count_by_cell(
+        self,
+        db: AsyncSession,
+        *,
+        bounds,
+        statuses: list[str] | None = None,
+        extra_filters=(),
+        detail_filters,
+        coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
+    ) -> list[tuple[str, int, int]]:
+        """Count, per H3 cell, the active tickets the caller is shown as that cell (ADR-387).
+
+        Returns `(cell, tickets, urgent ones)` rows ordered by cell. Built from `_active_conditions`
+        and nothing else, so the counts are what paging through list_active() with the same
+        arguments and grouping by `locationCell` would give. A caller who sees every exact point has
+        no cells, so it costs no query. `statuses` takes several at once, as the map's filter does;
+        none or empty counts every status.
+        """
+        if not detail_filters:
+            return []
+        if statuses:
+            extra_filters = [*extra_filters, self.model.status.in_(statuses)]
+        conditions = self._active_conditions(
+            bounds=bounds, extra_filters=extra_filters, detail_filters=detail_filters,
+            coarse_resolution=coarse_resolution, coarse_only=True,
+        )
+        cell = h3_cell_text(self.model.geometry, coarse_resolution)
+        urgent = and_(self.model.priority.in_(URGENT_PRIORITIES), self.model.status != "in_progress")
+        rows = await db.execute(
+            select(cell, func.count(), func.count().filter(urgent))
+            .where(*conditions).group_by(cell).order_by(cell)
+        )
+        return [(cell, count, urgent_count) for cell, count, urgent_count in rows]
 
 
 class TicketTaskRepository(GenericRepository[TicketTask]):

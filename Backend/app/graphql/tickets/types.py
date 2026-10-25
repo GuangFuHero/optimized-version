@@ -1081,6 +1081,22 @@ class TicketConnection:
     page_info: PageInfo
 
 
+@strawberry.type(description="How many tickets one H3 cell holds, of those its caller is shown as the cell")
+class TicketCellType:
+    """A row of `ticketCells`: one cell on the guest map and the number to write in it (ADR-387)."""
+
+    cell: str = strawberry.field(
+        description="H3 index (hex), the same value TicketType.locationCell carries for these tickets"
+    )
+    ticket_count: int
+    urgent_count: int = strawberry.field(
+        description=(
+            "Of those, how many are urgent: priority 'high' or 'critical', and not 'in_progress' — the "
+            "rule the site colours a ticket urgent by"
+        )
+    )
+
+
 @strawberry.input
 class CreateTicketTaskDraft:
     """A task sent with a new ticket."""

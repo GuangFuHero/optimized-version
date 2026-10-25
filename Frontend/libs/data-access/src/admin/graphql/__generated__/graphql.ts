@@ -990,6 +990,7 @@ export type Query = {
   teamZone?: Maybe<TeamZoneType>;
   teamZones: TeamZoneConnection;
   ticket?: Maybe<TicketType>;
+  ticketCells: Array<TicketCellType>;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
@@ -1125,6 +1126,12 @@ export type QueryTicketArgs = {
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
+export type QueryTicketCellsArgs = {
+  bounds: BoundsInput;
+  statuses?: InputMaybe<Array<Scalars['String']['input']>>;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+};
+
 export type QueryTicketPropertyConfigsArgs = {
   disasterTypes: Array<Scalars['String']['input']>;
   includeInactive?: Scalars['Boolean']['input'];
@@ -1142,6 +1149,7 @@ export type QueryTicketsArgs = {
   auditStatus?: InputMaybe<AuditStatus>;
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
+  locationCell?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
   priority?: InputMaybe<Scalars['String']['input']>;
@@ -1632,6 +1640,16 @@ export type TicketAuditEntryType = {
   note?: Maybe<Scalars['String']['output']>;
   /** The audit status it moved to */
   status: Scalars['String']['output'];
+};
+
+/** How many tickets one H3 cell holds, of those its caller is shown as the cell */
+export type TicketCellType = {
+  __typename?: 'TicketCellType';
+  /** H3 index (hex), the same value TicketType.locationCell carries for these tickets */
+  cell: Scalars['String']['output'];
+  ticketCount: Scalars['Int']['output'];
+  /** Of those, how many are urgent: priority 'high' or 'critical', and not 'in_progress' — the rule the site colours a ticket urgent by */
+  urgentCount: Scalars['Int']['output'];
 };
 
 export type TicketConnection = {

@@ -891,7 +891,25 @@ type Query {
 
     """Only tickets at this audit status"""
     auditStatus: AuditStatus = null
+
+    """
+    Only the tickets this caller is shown as this H3 cell — a `locationCell` value, as the guest map draws it. The cell's resolution, 8 or coarser, then sets how coarse every row is, in place of `zoom`. A ticket the caller sees exactly is in no cell
+    """
+    locationCell: String = null
   ): TicketConnection!
+  ticketCells(
+    bounds: BoundsInput!
+
+    """
+    Map zoom the result is for. Only affects a caller without ticket.view_detail: sets how coarse the H3 cell standing in for each point is — coarser as the map zooms out, never finer than resolution 8 whatever is sent
+    """
+    zoom: Float = null
+
+    """
+    Only tickets in one of these statuses, e.g. ['pending', 'completed']; every status if none is given
+    """
+    statuses: [String!] = null
+  ): [TicketCellType!]!
   ticket(
     uuid: UUID!
 
@@ -1549,6 +1567,22 @@ type TicketAuditEntryType {
   """Who moved it; null for the scan"""
   actorUuid: String
   actorName: String
+}
+
+"""
+How many tickets one H3 cell holds, of those its caller is shown as the cell
+"""
+type TicketCellType {
+  """
+  H3 index (hex), the same value TicketType.locationCell carries for these tickets
+  """
+  cell: String!
+  ticketCount: Int!
+
+  """
+  Of those, how many are urgent: priority 'high' or 'critical', and not 'in_progress' — the rule the site colours a ticket urgent by
+  """
+  urgentCount: Int!
 }
 
 type TicketConnection {

@@ -17,7 +17,7 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout
 from app.core.security import resolve_scope
-from app.db.h3 import coarse_resolution
+from app.db.h3 import COARSE_MAX_H3_RESOLUTION, cell_resolution, coarse_resolution, h3_is_valid_cell
 from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import BoundsInput
 from app.graphql.shared import PageInfo
@@ -26,6 +26,7 @@ from app.graphql.tickets.types import (
     MyTaskAssignmentType,
     TaskAssignmentType,
     TaskPropertyType,
+    TicketCellType,
     TicketConnection,
     TicketTaskType,
     TicketType,
@@ -124,6 +125,16 @@ class RequestQuery:
         audit_status: Annotated[
             AuditStatus | None, strawberry.argument(description="Only tickets at this audit status")
         ] = None,
+        location_cell: Annotated[
+            str | None,
+            strawberry.argument(
+                description=(
+                    "Only the tickets this caller is shown as this H3 cell — a `locationCell` value, as "
+                    "the guest map draws it. The cell's resolution, 8 or coarser, then sets how coarse "
+                    "every row is, in place of `zoom`. A ticket the caller sees exactly is in no cell"
+                )
+            ),
+        ] = None,
     ) -> TicketConnection:
         """List tickets with optional bbox, status, priority, need-type, audit and keyword filters, paginated.
 
@@ -157,17 +168,32 @@ class RequestQuery:
         At most TICKET_LIST_MAX_LIMIT rows a page. A row reads whom to call as `ticket` does —
         to the requester, the coordinators and whoever claimed one of its needs (ADR-286 point 1)
         — and its triage answers take ticket.view_history besides ticket.view_pii (point 6).
+
+        `locationCell` lists the tickets a `ticketCells` row counts (ADR-387). A cell finer than
+        COARSE_MAX_H3_RESOLUTION is refused: matching on one would place a point the cell is
+        there to withhold. So is one naming no real cell, which h3-pg would raise on.
         """
         if limit > TICKET_LIST_MAX_LIMIT:
             raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
         db = info.context["db"]
+        resolution = coarse_resolution(zoom)
+        if location_cell is not None:
+            location_cell = location_cell.lower()
+            resolution = cell_resolution(location_cell)
+            if (
+                resolution is None
+                or resolution > COARSE_MAX_H3_RESOLUTION
+                or not await db.scalar(select(h3_is_valid_cell(location_cell)))
+            ):
+                raise ValueError(
+                    f"locationCell must be an H3 cell of resolution {COARSE_MAX_H3_RESOLUTION} or coarser"
+                )
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = [
             *scope_filter(scope, actor=info.context["user"], model=Tickets),
             *_list_filters(need_type, open_needs_only, audit_status),
         ]
         detail_filters = await _detail_filters(info)
-        resolution = coarse_resolution(zoom)
         # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
@@ -182,6 +208,7 @@ class RequestQuery:
                 extra_filters=extra_filters,
                 detail_filters=detail_filters,
                 coarse_resolution=resolution,
+                location_cell=location_cell,
             )
             items = await ticket_repository.list_active(
                 db,
@@ -194,6 +221,7 @@ class RequestQuery:
                 extra_filters=extra_filters,
                 detail_filters=detail_filters,
                 coarse_resolution=resolution,
+                location_cell=location_cell,
             )
         return TicketConnection(
             items=[TicketType.from_model(m, coarse_resolution=resolution, listed=True) for m in items],
@@ -203,6 +231,43 @@ class RequestQuery:
                 has_previous_page=skip > 0,
             ),
         )
+
+    @strawberry.field
+    async def ticket_cells(
+        self,
+        info: strawberry.types.Info,
+        bounds: BoundsInput,
+        zoom: Annotated[float | None, strawberry.argument(description=_ZOOM_DESCRIPTION)] = None,
+        statuses: Annotated[
+            list[str] | None,
+            strawberry.argument(
+                description=(
+                    "Only tickets in one of these statuses, e.g. ['pending', 'completed']; every status "
+                    "if none is given"
+                )
+            ),
+        ] = None,
+    ) -> list[TicketCellType]:
+        """Ticket counts per H3 cell, for the tickets this caller is shown as a cell (ADR-387).
+
+        The guest map draws such tickets as their cells with a count in each, and a page of
+        `tickets` holds only so many; this counts them all in Postgres instead. Each row is matched
+        as `tickets(bounds:, zoom:)` matches it — by the cell centre, at the resolution `zoom` gives
+        (ADR-282) — so it says nothing a page of `tickets` does not. A ticket the caller sees exactly
+        is a pin, not a cell, so a caller holding ticket.view_detail on every ticket gets none.
+        """
+        scope = await check_permission(info, Perm.TICKET_VIEW)
+        rows = await ticket_repository.count_by_cell(
+            info.context["db"],
+            bounds=bounds,
+            statuses=statuses,
+            extra_filters=scope_filter(scope, actor=info.context["user"], model=Tickets),
+            detail_filters=await _detail_filters(info),
+            coarse_resolution=coarse_resolution(zoom),
+        )
+        return [
+            TicketCellType(cell=cell, ticket_count=count, urgent_count=urgent) for cell, count, urgent in rows
+        ]
 
     @strawberry.field
     async def ticket(
