@@ -3,11 +3,14 @@
 import pytest
 from sqlalchemy import delete, select
 
+from app.core.permissions import Perm
 from app.models.geo import BuildingMapTicketMap
 from app.models.secondary_location import SecondaryLocation
 from tests.test_graphql.conftest import auth_header
 from tests.test_graphql.conftest import test_db as open_db
 from tests.test_graphql.test_area import _make_team_user
+from tests.test_graphql.test_loaders import _SelectCounter
+from tests.test_graphql.test_ticket_detail_boundary import _actor
 
 pytestmark = pytest.mark.asyncio
 
@@ -47,6 +50,16 @@ mutation ($input: CreateTicketInput!) {
 }
 """
 BUILDING_TICKETS = "query ($uuid: UUID!) { buildingMapTickets(buildingMapUuid: $uuid) { uuid } }"
+BUILDING_TICKETS_PAGE = """
+query ($uuid: UUID!, $limit: Int!) { buildingMapTickets(buildingMapUuid: $uuid, limit: $limit) { uuid } }
+"""
+TICKET_BUILDING = "query ($uuid: UUID!) { ticket(uuid: $uuid) { buildingMapUuid } }"
+TICKETS_BUILDING = "query { tickets(limit: 200) { items { uuid buildingMapUuid } } }"
+CREATE_TICKET_BUILDING = """
+mutation ($input: CreateTicketInput!) {
+  createTicket(input: $input) { ... on TicketCreated { ticket { buildingMapUuid } } }
+}
+"""
 
 
 async def _gql(client, query, variables, token=None):
@@ -81,6 +94,12 @@ def _ticket_input(building_uuid, **location):
         "buildingMapUuid": building_uuid,
         "secondaryLocation": location,
     }
+
+
+async def _file_in_building(client, token, building_uuid, **location) -> str:
+    body = await _gql(client, CREATE_TICKET, {"input": _ticket_input(building_uuid, **location)}, token)
+    assert "errors" not in body, body
+    return body["data"]["createTicket"]["ticket"]["uuid"]
 
 
 async def test_building_floors_are_listed_roof_first_with_other_on_floors_with_areas(
@@ -373,4 +392,120 @@ async def test_building_map_tickets_are_hidden_from_anonymous_callers(
     body = await _gql(client, BUILDING_TICKETS, {"uuid": building["uuid"]}, token)
     assert body["data"]["buildingMapTickets"] == [{"uuid": ticket_uuid}]
     body = await _gql(client, BUILDING_TICKETS, {"uuid": building["uuid"]})
+    assert body["data"]["buildingMapTickets"] == []
+
+
+async def test_a_ticket_names_the_building_it_was_filed_under(client, coordinator_auth, login_user_auth):
+    """Signed in, `ticket` and every row of `tickets` carry the building, which the map groups by."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    ticket_uuid = await _file_in_building(client, token, building["uuid"], floor="3F")
+
+    body = await _gql(client, TICKET_BUILDING, {"uuid": ticket_uuid}, token)
+    assert body["data"]["ticket"]["buildingMapUuid"] == building["uuid"]
+    body = await _gql(client, TICKETS_BUILDING, {}, token)
+    assert {"uuid": ticket_uuid, "buildingMapUuid": building["uuid"]} in body["data"]["tickets"]["items"]
+
+
+async def test_a_guest_is_not_told_the_building(client, coordinator_auth, login_user_auth):
+    """Naming the building names the place, so it follows the exact point: null to a guest (ADR-281)."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    ticket_uuid = await _file_in_building(client, token, building["uuid"], floor="3F")
+
+    body = await _gql(client, TICKET_BUILDING, {"uuid": ticket_uuid})
+    assert body["data"]["ticket"]["buildingMapUuid"] is None
+    body = await _gql(client, TICKETS_BUILDING, {})
+    assert {"uuid": ticket_uuid, "buildingMapUuid": None} in body["data"]["tickets"]["items"]
+
+
+async def test_a_deleted_building_is_no_longer_named(client, coordinator_auth, login_user_auth):
+    """Deleting a building leaves its tickets standing on their own, so none points at a missing one."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    ticket_uuid = await _file_in_building(client, token, building["uuid"], floor="3F")
+    await _gql(client, DELETE_BUILDING, {"uuid": building["uuid"]}, admin_token)
+
+    body = await _gql(client, TICKET_BUILDING, {"uuid": ticket_uuid}, token)
+    assert body["data"]["ticket"]["buildingMapUuid"] is None
+
+
+async def test_narrowing_view_detail_to_own_names_only_the_callers_own_buildings(
+    client, redis, coordinator_auth, login_user_auth
+):
+    """Decided per ticket like the exact point: `own` names the building of the caller's tickets only."""
+    _, admin_token = coordinator_auth
+    _, their_token = login_user_auth
+    _, token = await _actor(
+        redis,
+        [
+            (Perm.TICKET_VIEW, "all"),
+            (Perm.TICKET_VIEW_DETAIL, "own"),
+            (Perm.TICKET_VIEW_PII, "own"),
+            (Perm.TICKET_ADD, "all"),
+        ],
+    )
+    building = await _create_building(client, admin_token)
+    mine = await _file_in_building(client, token, building["uuid"], floor="3F")
+    theirs = await _file_in_building(client, their_token, building["uuid"], floor="2F", room="咖啡廳")
+
+    items = (await _gql(client, TICKETS_BUILDING, {}, token))["data"]["tickets"]["items"]
+    assert {"uuid": mine, "buildingMapUuid": building["uuid"]} in items
+    assert {"uuid": theirs, "buildingMapUuid": None} in items
+
+
+async def test_a_page_of_tickets_looks_their_buildings_up_once(client, coordinator_auth, login_user_auth):
+    """One batched lookup for the whole page, and none at all for a guest, who is told no building."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    for floor in ("1F", "2F", "3F"):
+        await _file_in_building(client, token, building["uuid"], floor=floor, room="其他")
+
+    with _SelectCounter("building_map_ticket_map") as signed_in:
+        body = await _gql(client, TICKETS_BUILDING, {}, token)
+    with _SelectCounter("building_map_ticket_map") as guest:
+        await _gql(client, TICKETS_BUILDING, {})
+
+    named = [item for item in body["data"]["tickets"]["items"] if item["buildingMapUuid"] == building["uuid"]]
+    assert len(named) == 3
+    assert (signed_in.count, guest.count) == (1, 0)
+
+
+async def test_filing_under_a_building_answers_with_it(client, coordinator_auth, login_user_auth):
+    """The createTicket reply names the building, as a read does, so the site can open it straight away."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+
+    body = await _gql(
+        client, CREATE_TICKET_BUILDING, {"input": _ticket_input(building["uuid"], floor="3F")}, token
+    )
+    assert body["data"]["createTicket"]["ticket"]["buildingMapUuid"] == building["uuid"]
+
+
+async def test_building_map_tickets_take_at_most_a_tickets_page(client, coordinator_auth, login_user_auth):
+    """The same ceiling as `tickets`, so one request cannot read a whole tower at once."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+
+    body = await _gql(client, BUILDING_TICKETS_PAGE, {"uuid": building["uuid"], "limit": 201}, token)
+    assert any("limit must be at most 200" in e["message"] for e in body["errors"]), body
+    body = await _gql(client, BUILDING_TICKETS_PAGE, {"uuid": building["uuid"], "limit": 200}, token)
+    assert body["data"]["buildingMapTickets"] == []
+
+
+async def test_a_deleted_building_lists_no_tickets(client, coordinator_auth, login_user_auth):
+    """Its tickets are untied from it, as `buildingMapUuid` says, so the building lists none of them."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    await _file_in_building(client, token, building["uuid"], floor="3F")
+    await _gql(client, DELETE_BUILDING, {"uuid": building["uuid"]}, admin_token)
+
+    body = await _gql(client, BUILDING_TICKETS, {"uuid": building["uuid"]}, token)
     assert body["data"]["buildingMapTickets"] == []
