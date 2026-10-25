@@ -21,10 +21,11 @@ class BriefingState(Enum):
 
 @strawberry.enum
 class BriefingStatus(Enum):
-    """Whether a briefing is still a draft."""
+    """Where a briefing is in its lifecycle; only a draft is editable."""
 
     DRAFT = "draft"
-    PUBLISHED = "published"  # read-only
+    PUBLISHED = "published"  # live: public, at most one per state
+    INACTIVE = "inactive"  # replaced or taken down after publishing; editors only
 
 
 @strawberry.enum
@@ -33,7 +34,7 @@ class BriefingStatusFilter(Enum):
 
     PUBLISHED = "published"  # public
     DRAFT = "draft"  # pre_departure.edit
-    ALL = "all"  # pre_departure.edit
+    ALL = "all"  # pre_departure.edit; drafts, published and inactive
 
 
 @strawberry.type
@@ -119,7 +120,7 @@ class BriefingType:
             tags=list(m.tags or []),
             state=m.state,
             _created_by=m.created_by,
-            status=BriefingStatus.DRAFT if m.published_at is None else BriefingStatus.PUBLISHED,
+            status=BriefingStatus(m.status),
             published_at=m.published_at,
             created_at=m.created_at,
             updated_at=m.updated_at,
@@ -150,19 +151,23 @@ class UpdateBriefingTemplateInput:
 
 @strawberry.input
 class GenerateBriefingInput:
-    """Input for generating a draft briefing, optionally seeded from a template."""
+    """Input for generating a draft briefing, seeded from a template or another briefing, or ad-hoc."""
 
     template_uuid: UUID | None = strawberry.field(
         default=None, description="Source template UUID; null for an ad-hoc briefing"
     )
+    source_briefing_uuid: UUID | None = strawberry.field(
+        default=None,
+        description="Briefing to copy, template link included, so a published one is edited as a new draft",
+    )
     content: str | None = strawberry.field(
-        default=None, description="Override content; defaults to the template's content"
+        default=None, description="Override content; defaults to the template's or source briefing's"
     )
     tags: list[str] | None = strawberry.field(
-        default=None, description="Override tags; defaults to the template's tags"
+        default=None, description="Override tags; defaults to the template's or source briefing's"
     )
     state: BriefingState | None = strawberry.field(
-        default=None, description="Override phase; defaults to the template's state"
+        default=None, description="Override phase; defaults to the template's or source briefing's"
     )
 
 

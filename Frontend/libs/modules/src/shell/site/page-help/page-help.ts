@@ -4,7 +4,7 @@
  * gets no ？ at all.
  */
 
-export type SitePageHelpKey = 'site:map' | 'site:list';
+export type SitePageHelpKey = 'site:map' | 'site:list' | 'site:briefing';
 
 export interface PageHelp {
   title: string;
@@ -20,7 +20,7 @@ export interface PageHelp {
  * The designer's drafts (`wg-help.jsx:101-115`), read against the site as it is and approved by the
  * team on 2026-10-01: 在這裡新增 and 「＋」 came after the drafts, and a guest is kept from a
  * ticket's address and photos as well as its point (backend ADR-281), on the list too.
- * 回報站點資訊有誤 is left out: the site has no way to send a station correction yet (#57).
+ * 回報站點資訊有誤 is the station detail's 修改建議.
  */
 export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
   'site:map': {
@@ -29,7 +29,7 @@ export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
     can: [
       '切換「站點」與「任務」，點圖示看詳細資訊',
       '需要幫忙時，按「請求協助」；也可以先點地圖上的位置，再按「在這裡新增」',
-      '登入後可以承接任務',
+      '登入後可以承接任務，或回報站點資訊有誤',
       '登入後也可以按地圖上的「＋」新增站點',
     ],
     note: '沒有登入時，任務的位置會用格子顯示，也看不到地址與照片，保護求助者的隱私。',
@@ -37,18 +37,35 @@ export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
   'site:list': {
     title: '列表',
     what: '用清單的方式看資源站點與求助任務，適合搜尋與比較。',
-    can: ['搜尋、篩選站點或任務', '點一筆看詳細資訊', '登入後可以承接任務'],
+    can: [
+      '搜尋、篩選站點或任務',
+      '點一筆看詳細資訊',
+      '登入後可以承接任務，或回報站點資訊有誤',
+    ],
     note: '沒有登入時，看不到任務的地址與照片，保護求助者的隱私。',
+  },
+  // The designer's draft as it stands (`wg-help.jsx:141-145`), not yet read by the team.
+  'site:briefing': {
+    title: '志工行前資訊',
+    what: '出發當志工之前，先看這一頁。',
+    can: [
+      '了解怎麼參與、交通方式與注意事項',
+      '勾選打包清單（只存在這台裝置）',
+      '列印帶在身上',
+    ],
   },
 };
 
-/** The page an address is on, if it has words of its own: 行前資訊 and the account pages do not. */
+/** The page an address is on, if it has words of its own: the account pages do not. */
 export function pageHelpKey(pathname: string): SitePageHelpKey | null {
   if (/^\/map(\/|$)/.test(pathname)) {
     return 'site:map';
   }
+  if (/^\/list(\/|$)/.test(pathname)) {
+    return 'site:list';
+  }
 
-  return /^\/list(\/|$)/.test(pathname) ? 'site:list' : null;
+  return pathname === '/briefing' ? 'site:briefing' : null;
 }
 
 /** The parts of `Storage` the marks use: `localStorage` on the site, a stand-in in tests. */

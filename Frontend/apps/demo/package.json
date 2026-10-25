@@ -10,8 +10,7 @@
     "@rescue-frontend/data-access": "workspace:*",
     "@rescue-frontend/modules": "workspace:*",
     "@rescue-frontend/ui": "workspace:*",
-    "next": "~16.1.6",
-    "next-auth": "^4.24.14",
+    "next": "~16.4.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

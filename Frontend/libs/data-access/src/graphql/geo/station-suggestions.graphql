@@ -1,0 +1,25 @@
+# 修改建議: one field of a station, its value now → the suggested one, for a reviewer to take or leave.
+
+# Read at each opening rather than taken from the map: what the form shows as 目前 is the station as
+# it is now. `pendingSuggestedFields` is public and names fields only — never what was suggested.
+query GetStationForSuggestion($uuid: UUID!) {
+  station(uuid: $uuid) {
+    uuid
+    name
+    type
+    description
+    opHour
+    operationalStatus
+    supplyStatus
+    pendingSuggestedFields
+  }
+}
+
+mutation CreateStationSuggestion($input: CreateStationSuggestionInput!) {
+  createStationSuggestion(input: $input) {
+    uuid
+    fieldName
+    newValue
+    status
+  }
+}

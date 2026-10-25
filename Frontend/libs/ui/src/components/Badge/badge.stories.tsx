@@ -64,7 +64,7 @@ export const WithIcon: Story = {
         管理平台
       </Badge>
       <Badge tone="neutral" icon={<Globe />}>
-        公開頁面
+        公開地圖
       </Badge>
       <Badge tone="warning" size="lg" icon={<Clock />}>
         逾時 3 小時

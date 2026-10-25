@@ -2,7 +2,7 @@
 
 > 範圍以 `apps/demo` 與 `libs/modules/src` 的 runtime code 為主。
 >
-> 最後更新：2026-06-14
+> 最後更新：2026-10-21
 
 ## 使用方式
 
@@ -25,11 +25,6 @@
 
 - 位置：`libs/modules/src/auth/login/components/auth-brand-header/index.tsx`
 - 現況：`brandHeaderText.subtitle` 還在，但對應 JSX 仍被註解。
-
-### 1.4 `SiteUserMenu` 的帳號安全入口仍未開啟
-
-- 位置：`libs/modules/src/shell/site/user-menu.tsx`
-- 現況：`useRouter()` 與導向 `/account/security` 的 menu item 仍被註解；但 `/account/security` 頁面本身已存在且可用。
 
 ## 已處理
 

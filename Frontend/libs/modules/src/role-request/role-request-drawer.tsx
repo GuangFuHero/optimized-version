@@ -10,7 +10,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useEffect, useId, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useMutation } from 'urql';
 
 import {
@@ -19,11 +20,15 @@ import {
 } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
+import { getCurrentUserAsync } from '../auth/api/client';
+import { useAuthSession } from '../session/auth-session';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
+import { readApplicantAccount } from './applicant';
+import { ApplicantSection } from './applicant-section';
+import { buildPhoneStepUpHref, type ApplyReturn } from './apply-return';
 import { roleRequestDrawerView } from './drawer-view';
-import { roleRequestErrorMessage } from './error';
+import { isTeamListRefusal, roleRequestErrorMessage } from './error';
 import {
-  CONTACT_MAX_LENGTH,
   REASON_MAX_LENGTH,
   ROLE_REQUEST_OPTIONS,
   roleRequestFormProblems,
@@ -32,6 +37,11 @@ import {
   type RoleRequestFormValues,
 } from './form';
 import { RoleRequestCard } from './role-request-card';
+import { findTeamNamed, NEW_TEAM, reviewerText, teamTypeForRole } from './team';
+import { TeamPicker } from './team-picker';
+import { useApplyDraft } from './use-apply-draft';
+import { usePhoneVerification } from './use-phone-verification';
+import { useRoleRequestTeams } from './use-role-request-teams';
 import { useWithdrawRoleRequest } from './use-withdraw-role-request';
 
 const { color, radius } = designTokens;
@@ -39,8 +49,18 @@ const { color, radius } = designTokens;
 const TITLE = '申請管理權限';
 const EMPTY_FORM: RoleRequestFormValues = {
   role: null,
+  team: null,
+  newTeamName: '',
   reason: '',
-  contact: '',
+  name: '',
+};
+
+// Until `/users/me` answers: nothing verified, nothing to prove with.
+const NO_ACCOUNT = {
+  nickname: '',
+  verifiedPhone: null,
+  hasPassword: false,
+  saltIdentifier: null,
 };
 
 interface RoleRequestDrawerProps {
@@ -52,6 +72,9 @@ interface RoleRequestDrawerProps {
    * or the form again.
    */
   onSubmitted: () => void;
+  /** Back from proving the person at LINE: the form comes back as it was, and carries on. */
+  applyReturn?: ApplyReturn | null;
+  onApplyReturnHandled?: () => void;
 }
 
 /**
@@ -65,8 +88,12 @@ export function RoleRequestDrawer({
   onClose,
   myRoleRequests,
   onSubmitted,
+  applyReturn = null,
+  onApplyReturnHandled,
 }: RoleRequestDrawerProps) {
   const [values, setValues] = useState<RoleRequestFormValues>(EMPTY_FORM);
+  // The name starts from the nickname until the person types one of their own.
+  const [nameEdited, setNameEdited] = useState(false);
   const [touched, setTouched] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [{ fetching: submitting }, submitRoleRequest] = useMutation(
@@ -75,16 +102,103 @@ export function RoleRequestDrawer({
   const withdraw = useWithdrawRoleRequest(onSubmitted);
   const resetWithdraw = withdraw.reset;
   const roleLabelId = useId();
+  const userId = useAuthSession().user?.uuid ?? null;
+  // The account as the form needs it, while the drawer is open: the session itself holds only the
+  // uuid and the nickname. Read again once a phone is verified, which makes it the account's.
+  const applicant = useQuery({
+    queryKey: ['users', 'me'],
+    queryFn: getCurrentUserAsync,
+    select: readApplicantAccount,
+    enabled: open,
+  });
+  const account = applicant.data ?? NO_ACCOUNT;
+  const { keep: keepDraft, take: takeDraft } = useApplyDraft(userId);
+  const teamType = teamTypeForRole(values.role);
+  const teamList = useRoleRequestTeams(teamType, open);
 
-  // Each opening starts from an empty form, as the prototype does.
+  /**
+   * Only LINE can prove it is them (ADR-361): the form is kept in this tab and the page goes to LINE.
+   * `/users/me` first, through the session's own fetch: a session refreshed or ended there, rather
+   * than in the navigation, which would show its error as a page of JSON.
+   */
+  const goProveAtLine = async (phone: string) => {
+    keepDraft({ ...values, phone });
+
+    try {
+      await getCurrentUserAsync();
+    } catch {
+      // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
+    }
+
+    window.location.assign(buildPhoneStepUpHref(window.location));
+  };
+
+  const verification = usePhoneVerification({
+    account,
+    onVerified: () => void applicant.refetch(),
+    onReauth: (phone) => void goProveAtLine(phone),
+  });
+  const resetVerification = verification.reset;
+  const resumeVerification = verification.resume;
+
+  // Each opening starts from an empty form, as the prototype does — unless it is the way back
+  // from LINE, which brings the form back below. Only as it opens: the way back being handled
+  // while it is open must not empty what it brought back.
+  const wasOpen = useRef(false);
+
   useEffect(() => {
-    if (open) {
+    const opening = open && !wasOpen.current;
+    wasOpen.current = open;
+
+    if (opening && !applyReturn) {
       setValues(EMPTY_FORM);
+      setNameEdited(false);
       setTouched(false);
       setSubmitError(null);
       resetWithdraw();
+      resetVerification();
     }
-  }, [open, resetWithdraw]);
+  }, [applyReturn, open, resetVerification, resetWithdraw]);
+
+  useEffect(() => {
+    if (!open || !applyReturn || !userId) {
+      return;
+    }
+
+    const draft = takeDraft();
+
+    setTouched(false);
+    setSubmitError(null);
+
+    if (draft) {
+      setValues({
+        role: draft.role,
+        team: draft.team,
+        newTeamName: draft.newTeamName,
+        reason: draft.reason,
+        name: draft.name,
+      });
+      setNameEdited(true);
+      resumeVerification(draft.phone, applyReturn.stepUp);
+    }
+
+    onApplyReturnHandled?.();
+  }, [
+    applyReturn,
+    onApplyReturnHandled,
+    open,
+    resumeVerification,
+    takeDraft,
+    userId,
+  ]);
+
+  const nickname = applicant.data?.nickname;
+
+  useEffect(() => {
+    if (open && nickname && !nameEdited) {
+      setValues((current) => ({ ...current, name: nickname }));
+    }
+  }, [nameEdited, nickname, open]);
 
   if (!myRoleRequests) {
     return null;
@@ -190,10 +304,28 @@ export function RoleRequestDrawer({
     );
   }
 
-  const errors = validateRoleRequestForm(values);
-  const problems = roleRequestFormProblems(errors);
-  const set = (field: keyof RoleRequestFormValues) => (value: string) =>
+  const errors = validateRoleRequestForm(values, {
+    phoneVerified:
+      Boolean(account.verifiedPhone) || verification.stage.kind === 'verified',
+    teams: teamList.teams,
+  });
+  const problems = roleRequestFormProblems(errors, values.role);
+  const set = (field: 'name' | 'reason' | 'newTeamName') => (value: string) =>
     setValues((current) => ({ ...current, [field]: value }));
+  // A new name already on the list is said at once, not only after 送出申請 (prototype).
+  const nameTaken = Boolean(
+    values.team === NEW_TEAM &&
+      teamList.teams &&
+      findTeamNamed(teamList.teams, values.newTeamName),
+  );
+
+  // Another identity picks from another list: the team picked for the last one is dropped.
+  const pickRole = (role: RoleRequestFormValues['role']) =>
+    setValues((current) =>
+      current.role === role
+        ? current
+        : { ...current, role, team: null, newTeamName: '' },
+    );
 
   const submit = async () => {
     setTouched(true);
@@ -209,6 +341,10 @@ export function RoleRequestDrawer({
 
     if (result.error) {
       setSubmitError(roleRequestErrorMessage(result.error));
+
+      if (isTeamListRefusal(result.error)) {
+        teamList.reload();
+      }
     }
 
     // Either way the list may have moved on (a pending one from another tab, say): read it again.
@@ -219,7 +355,7 @@ export function RoleRequestDrawer({
     <SiteActionDrawer
       open={open}
       title={TITLE}
-      subtitle="有管理權限的人可以派工、審核資料、管理站點。送出後由超級管理員審核。"
+      subtitle={`有管理權限的人可以派工、審核資料、管理站點。${reviewerText(values.role, values.team, teamList.teams)}`}
       onClose={onClose}
       footer={
         <>
@@ -282,25 +418,45 @@ export function RoleRequestDrawer({
                 label={option.label}
                 hint={option.hint}
                 checked={values.role === option.value}
-                onSelect={() =>
-                  setValues((current) => ({ ...current, role: option.value }))
-                }
+                onSelect={() => pickRole(option.value)}
               />
             ))}
           </Stack>
-          {/* Written on purpose: someone who cannot find their option thinks they missed it. */}
-          <Typography
-            sx={{
-              mt: 1,
-              color: color.fg.neutral.muted,
-              fontSize: displayTextSize[12],
-              lineHeight: 1.6,
-            }}
-          >
-            要加入某個救災團隊（NGO
-            或政府單位）請向該團隊索取邀請碼，不從這裡申請。
-          </Typography>
         </Box>
+
+        {values.role && teamType ? (
+          <TeamPicker
+            key={values.role}
+            role={values.role}
+            teams={teamList.teams}
+            failed={teamList.failed}
+            onReload={teamList.reload}
+            team={values.team}
+            onPick={(team) => setValues((current) => ({ ...current, team }))}
+            newTeamName={values.newTeamName}
+            onNewTeamName={set('newTeamName')}
+            teamError={touched ? (errors.team ?? null) : null}
+            newTeamNameError={
+              touched || nameTaken ? (errors.newTeamName ?? null) : null
+            }
+          />
+        ) : null}
+
+        {applicant.data ? (
+          <ApplicantSection
+            account={applicant.data}
+            name={values.name}
+            onNameChange={(name) => {
+              setNameEdited(true);
+              set('name')(name);
+            }}
+            nameError={touched ? (errors.name ?? null) : null}
+            phoneError={touched ? (errors.phone ?? null) : null}
+            verification={verification}
+          />
+        ) : applicant.isError ? (
+          <Alert severity="error">讀不到你的帳號資料，請關閉後再試一次。</Alert>
+        ) : null}
 
         <TextField
           label="申請理由"
@@ -316,21 +472,6 @@ export function RoleRequestDrawer({
             touched && errors.reason
               ? errors.reason
               : `寫清楚你的單位、職務，以及為什麼需要管理權限（最多 ${REASON_MAX_LENGTH} 字）`
-          }
-        />
-
-        <TextField
-          label="可聯絡到你的方式（選填）"
-          fullWidth
-          size="small"
-          value={values.contact}
-          onChange={(event) => set('contact')(event.target.value)}
-          placeholder="公務電話、分機或 Email"
-          error={touched && Boolean(errors.contact)}
-          helperText={
-            touched && errors.contact
-              ? errors.contact
-              : `審核者可能需要向你確認身分（最多 ${CONTACT_MAX_LENGTH} 字）`
           }
         />
 

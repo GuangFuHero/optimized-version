@@ -11,7 +11,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import { useState } from 'react';
-import { signOut } from 'next-auth/react';
+import { toast } from 'sonner';
 import {
   useCurrentUser,
   useSwitchIdentity,
@@ -26,6 +26,10 @@ import {
   ROLE_DISPLAY_NAMES,
   TEAM_TYPE_DISPLAY_NAMES,
 } from '../../constants/roles';
+import {
+  SIGN_OUT_FAILED_MESSAGE,
+  signOutHereAsync,
+} from '../../auth/session/sign-out';
 import { useAuthSession } from '../../session/auth-session';
 import { ProfileSheet } from './profile-sheet';
 
@@ -55,10 +59,13 @@ export function AccountMenu() {
   const identity = user?.active_identity;
   const identities = user?.identities ?? [];
   const switchIdentity = useSwitchIdentity();
-  const { data: teams } = useTeams({ enabled: Boolean(identity?.team_uuid) });
-  const teamType = teams?.find(
-    (team) => team.uuid === identity?.team_uuid,
-  )?.type;
+  const canViewTeams = Boolean(
+    identity?.team_uuid && user?.capabilities.includes('team.view'),
+  );
+  const { data: teams } = useTeams({ enabled: canViewTeams });
+  const teamType = canViewTeams
+    ? teams?.find((team) => team.uuid === identity?.team_uuid)?.type
+    : undefined;
   const platformRole = identity?.team_uuid
     ? teamType && TEAM_TYPE_DISPLAY_NAMES.get(teamType)
     : identity && '平台身分';
@@ -309,7 +316,11 @@ export function AccountMenu() {
         <MenuItem
           onClick={() => {
             setAnchorEl(null);
-            void signOut({ callbackUrl: '/login?callbackUrl=/' });
+            void signOutHereAsync().then((outcome) => {
+              if (outcome === 'still-signed-in') {
+                toast.error(SIGN_OUT_FAILED_MESSAGE);
+              }
+            });
           }}
           sx={{ ...itemSx, height: 38 }}
         >

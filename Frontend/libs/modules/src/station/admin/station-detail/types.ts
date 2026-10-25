@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import type { SupplyStatusLine } from '../../supply-status';
+
 export type StationDetailTabId = 'info' | 'history' | 'pendingCorrections';
 
 export type StationStatusTone = 'active' | 'warning' | 'inactive';
@@ -88,6 +90,8 @@ export interface StationDetailDrawerProps {
   onTabChange?: (tabId: StationDetailTabId) => void;
   contactCard?: StationContactCardProps;
   resources?: readonly StationResourceItem[];
+  /** 物資狀況 and when it last changed; nothing is shown without one. */
+  supplyStatus?: SupplyStatusLine | null;
   tabPanels?: StationDetailTabPanels;
   footerAction?: StationDetailActionProps;
   closeAction?: StationDetailCloseActionProps;

@@ -219,24 +219,54 @@ query AdminStation($uuid: UUID!) {
     }
   }
 }
-query AdminAnnouncements($filter: AnnouncementFilter = ALL) {
-  announcements(filter: $filter, placement: admin_page) {
+query AdminAnnouncements(
+  $filter: AnnouncementFilter = ALL
+  $placement: AnnouncementPlacement = admin_page
+) {
+  announcements(filter: $filter, placement: $placement) {
     uuid
     content
     active
+    placement
+    publishedAt
+    publisher {
+      uuid
+      name
+    }
     createdAt
     updatedAt
   }
 }
-query AdminBriefings($state: BriefingState, $tag: String) {
-  briefings(state: $state, tag: $tag) {
+fragment AdminBriefingFields on BriefingType {
+  uuid
+  templateUuid
+  content
+  tags
+  state
+  status
+  publishedAt
+  createdAt
+  updatedAt
+  creator {
     uuid
-    templateUuid
-    content
-    tags
-    state
-    createdAt
-    updatedAt
+    name
+  }
+  updater {
+    uuid
+    name
+  }
+  publisher {
+    uuid
+    name
+  }
+}
+query AdminBriefings(
+  $state: BriefingState
+  $tag: String
+  $status: BriefingStatusFilter! = PUBLISHED
+) {
+  briefings(state: $state, tag: $tag, status: $status) {
+    ...AdminBriefingFields
   }
 }
 query AdminBriefingTemplates($state: BriefingState, $tag: String) {
@@ -519,19 +549,22 @@ mutation AdminSetAnnouncementActive($uuid: UUID!, $active: Boolean!) {
 }
 mutation AdminGenerateBriefing($input: GenerateBriefingInput!) {
   generateBriefing(input: $input) {
-    uuid
-    templateUuid
-    content
-    tags
-    state
+    ...AdminBriefingFields
   }
 }
 mutation AdminUpdateBriefing($uuid: UUID!, $input: UpdateBriefingInput!) {
   updateBriefing(uuid: $uuid, input: $input) {
-    uuid
-    content
-    tags
-    state
+    ...AdminBriefingFields
+  }
+}
+mutation AdminPublishBriefing($uuid: UUID!) {
+  publishBriefing(uuid: $uuid) {
+    ...AdminBriefingFields
+  }
+}
+mutation AdminTakeDownBriefing($uuid: UUID!) {
+  takeDownBriefing(uuid: $uuid) {
+    ...AdminBriefingFields
   }
 }
 mutation AdminDeleteBriefing($uuid: UUID!) {

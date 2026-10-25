@@ -2,8 +2,10 @@
 
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
-import { IconButton, Stack, Typography } from '@mui/material';
+import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
+import { Box, IconButton, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Suspense } from 'react';
 
 import {
@@ -17,10 +19,11 @@ import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import { BACK_OFFICE_HREF, type SitePortalEntry } from '../../role-request';
 import { openHelpRequest } from '../../ticket/help-request/open-help-request';
+import { BRIEFING_HREF } from '../../briefing/href';
 import { PageHelpIcon } from './page-help';
 
 import { GuangFuBrandIcon } from '../../brand';
-import { useSiteRouteState } from '../../route';
+import { isSiteModulePath, useSiteRouteState } from '../../route';
 import { SITE_MODULES } from '../../route/constants';
 import { SITE_MODULE_META } from '../../route/module-meta';
 import { createSiteHref } from '../../route/serialize';
@@ -40,22 +43,54 @@ interface SiteSidebarProps {
 }
 
 export function SiteSidebar(props: SiteSidebarProps) {
+  const pathname = usePathname();
+
   return (
-    <Suspense fallback={<SiteSidebarNav {...props} module="map" state={{}} />}>
-      <RoutedSiteSidebarNav {...props} />
+    <Suspense
+      fallback={
+        <SiteSidebarNav
+          {...props}
+          module="map"
+          state={{}}
+          pathname={pathname}
+        />
+      }
+    >
+      <RoutedSiteSidebarNav {...props} pathname={pathname} />
     </Suspense>
   );
 }
 
-function RoutedSiteSidebarNav(props: SiteSidebarProps) {
+function RoutedSiteSidebarNav(props: SiteSidebarProps & { pathname: string }) {
   const { module, state } = useSiteRouteState();
 
   return <SiteSidebarNav {...props} module={module} state={state} />;
 }
 
+/** The small grey heading over a group of entries; gone when the sidebar is folded to its icons. */
+function SidebarGroupLabel({ children }: { children: string }) {
+  return (
+    <Typography
+      sx={{
+        px: '8px',
+        pb: '4px',
+        fontFamily: typography.label[300].fontFamily,
+        fontSize: displayTextSize[11],
+        fontWeight: 700,
+        lineHeight: 1.4,
+        letterSpacing: '0.08em',
+        color: color.fg.neutral.muted,
+      }}
+    >
+      {children}
+    </Typography>
+  );
+}
+
 function SiteSidebarNav({
   module,
   state,
+  pathname,
   collapsed = false,
   isAuthenticated = false,
   onSignIn,
@@ -63,7 +98,13 @@ function SiteSidebarNav({
   portalEntry,
   onApplyRoleRequest,
   pageHelp,
-}: SiteSidebarProps & { module: SiteModule; state: SiteRouteState }) {
+}: SiteSidebarProps & {
+  module: SiteModule;
+  state: SiteRouteState;
+  pathname: string;
+}) {
+  const onModulePage = isSiteModulePath(pathname);
+
   return (
     <Stack
       component="nav"
@@ -109,22 +150,7 @@ function SiteSidebarNav({
         </Stack>
       ) : null}
 
-      {collapsed ? null : (
-        <Typography
-          sx={{
-            px: '8px',
-            pb: '4px',
-            fontFamily: typography.label[300].fontFamily,
-            fontSize: displayTextSize[11],
-            fontWeight: 700,
-            lineHeight: 1.4,
-            letterSpacing: '0.08em',
-            color: color.fg.neutral.muted,
-          }}
-        >
-          檢視模式
-        </Typography>
-      )}
+      {collapsed ? null : <SidebarGroupLabel>檢視模式</SidebarGroupLabel>}
 
       {SITE_MODULES.map((target) => {
         const { label, Icon } = SITE_MODULE_META[target];
@@ -136,11 +162,34 @@ function SiteSidebarNav({
             href={createSiteHref(target, state)}
             icon={<Icon />}
             label={label}
-            active={target === module}
+            active={onModulePage && target === module}
             collapsed={collapsed}
           />
         );
       })}
+
+      {/* A section of its own, not a third 檢視模式: the map and the list are two views of the same
+          things, the briefing is something else to read (prototype `site-shell.jsx:617-628`). */}
+      <Box
+        sx={{
+          height: '1px',
+          flexShrink: 0,
+          alignSelf: 'stretch',
+          mx: '8px',
+          my: '8px',
+          bgcolor: color.border.default,
+        }}
+      />
+      {collapsed ? null : <SidebarGroupLabel>出發前</SidebarGroupLabel>}
+      <SidebarItem
+        LinkComponent={Link}
+        href={BRIEFING_HREF}
+        icon={<MenuBookRoundedIcon />}
+        label="行前資訊"
+        active={pathname === BRIEFING_HREF}
+        collapsed={collapsed}
+        onClick={() => onClose?.()}
+      />
 
       <Stack sx={{ mt: 'auto', gap: '8px' }}>
         <SidebarItem

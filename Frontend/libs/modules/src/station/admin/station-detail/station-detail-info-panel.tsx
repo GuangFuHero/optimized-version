@@ -4,6 +4,7 @@ import { Box, Stack, Typography } from '@mui/material';
 
 import { displayTextSize } from '@rescue-frontend/ui';
 
+import type { SupplyStatusLine } from '../../supply-status';
 import { useStationDetailColorScheme } from './constants';
 import { StationContactCard } from './station-contact-card';
 import { StationDetailSectionHeading } from './station-detail-primitives';
@@ -19,12 +20,14 @@ export interface StationDetailInfoPanelProps {
   stationSummary?: StationSummaryProps;
   contactCard?: StationContactCardProps;
   resources?: readonly StationResourceItem[];
+  supplyStatus?: SupplyStatusLine | null;
 }
 
 export function StationDetailInfoPanel({
   stationSummary,
   contactCard,
   resources,
+  supplyStatus,
 }: StationDetailInfoPanelProps) {
   const stationDetailPalette = useStationDetailColorScheme();
 
@@ -38,6 +41,46 @@ export function StationDetailInfoPanel({
           statusDetail={stationSummary.statusDetail}
           badges={stationSummary.badges}
         />
+      ) : null}
+
+      {/* Right under whether it is open: what it is short of is the next thing someone going asks. */}
+      {supplyStatus ? (
+        <Stack spacing={1} sx={{ width: '100%' }}>
+          <StationDetailSectionHeading label="物資狀況" />
+          <Box
+            sx={{
+              px: 2.5,
+              py: 2,
+              borderRadius: '32px',
+              bgcolor: stationDetailPalette.cardSurface,
+              border: `1px solid ${stationDetailPalette.cardBorder}`,
+            }}
+          >
+            <Typography
+              sx={{
+                color: stationDetailPalette.heading,
+                fontSize: displayTextSize[14],
+                lineHeight: '20px',
+                whiteSpace: 'pre-line',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {supplyStatus.text}
+            </Typography>
+            {supplyStatus.updated ? (
+              <Typography
+                sx={{
+                  mt: 0.5,
+                  color: stationDetailPalette.bodyText,
+                  fontSize: displayTextSize[12],
+                  lineHeight: '16px',
+                }}
+              >
+                {supplyStatus.updated}
+              </Typography>
+            ) : null}
+          </Box>
+        </Stack>
       ) : null}
 
       {contactCard ? (

@@ -4,8 +4,7 @@
 一般 email + 密碼登入不需要這些值，可以跳過整份文件。
 
 Google / LINE 登入由後端自己完成，所以 secret 只放在 `Backend/.env`，前端不需要任何 Google / LINE 的設定。
-本機只有前台（`http://localhost:3000`）能用 Google / LINE 登入。管理平台（`http://localhost:3001`）還沒改用後端登入，
-在那之前請用 email + 密碼登入管理平台。
+管理平台（`http://localhost:3001`）的 Google / LINE 登入也會回到前台的 callback（`http://localhost:3000`），所以要同時開著前台。
 
 > LINE 登入在本機直接用 `http://localhost:3000` 就可以，不需要 https。
 > `http://localhost:3000/api/v1/auth/oauth/line/callback` 已經登記在 LINE channel 上，channel 也已經 publish，

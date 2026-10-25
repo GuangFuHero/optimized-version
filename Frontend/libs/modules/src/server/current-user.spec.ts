@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { currentUserFromBackendAsync, READ_IN_BROWSER } from './current-user';
+import {
+  currentUserFromBackendAsync,
+  NO_BACK_OFFICE_IDENTITY,
+  READ_IN_BROWSER,
+} from './current-user';
 
 /** What the page's server side sent to the backend, as the fake backend received it. */
 interface BackendCall {
@@ -56,7 +60,7 @@ describe('currentUserFromBackendAsync', () => {
   it('reads the signed-in account, its contacts and how it signs in', async () => {
     fakeBackend(() => Response.json(ACCOUNT));
 
-    const user = await currentUserFromBackendAsync('wgdev_at=access-1');
+    const user = await currentUserFromBackendAsync('wgdev_at=access-1', 'site');
 
     expect(user).toEqual(ACCOUNT);
   });
@@ -69,7 +73,7 @@ describe('currentUserFromBackendAsync', () => {
       ),
     );
 
-    expect(await currentUserFromBackendAsync(null)).toBeNull();
+    expect(await currentUserFromBackendAsync(null, 'site')).toBeNull();
   });
 
   it("sends the backend this environment's access cookie, nothing else", async () => {
@@ -79,6 +83,7 @@ describe('currentUserFromBackendAsync', () => {
 
     await currentUserFromBackendAsync(
       'theme=dark; wg_at=production-access; wgstg_at=access-3; wgstg_rt=refresh-3',
+      'site',
     );
 
     expect(calls[0].headers.get('cookie')).toBe('wgstg_at=access-3');
@@ -87,9 +92,33 @@ describe('currentUserFromBackendAsync', () => {
   it('asks as the site, whatever identity the back office switched to (ADR-289)', async () => {
     const calls = fakeBackend(() => Response.json(ACCOUNT));
 
-    await currentUserFromBackendAsync('wgdev_at=access-5');
+    await currentUserFromBackendAsync('wgdev_at=access-5', 'site');
 
     expect(calls[0].headers.get('x-wg-realm')).toBe('site');
+  });
+
+  it('asks the back office as the admin realm (ADR-329)', async () => {
+    const calls = fakeBackend(() => Response.json(ACCOUNT));
+
+    await currentUserFromBackendAsync('wgdev_at=access-7', 'admin');
+
+    expect(calls[0].headers.get('x-wg-realm')).toBe('admin');
+  });
+
+  it('reads an account without a back-office identity as such, not as a guest', async () => {
+    fakeBackend(() =>
+      Response.json(
+        {
+          detail: 'This account has no back-office identity',
+          code: 'back_office_identity_required',
+        },
+        { status: 403 },
+      ),
+    );
+
+    expect(
+      await currentUserFromBackendAsync('wgdev_at=access-8', 'admin'),
+    ).toBe(NO_BACK_OFFICE_IDENTITY);
   });
 
   it('does not read a backend that cannot answer as a guest, which would send them to sign in', async () => {
@@ -98,7 +127,7 @@ describe('currentUserFromBackendAsync', () => {
     );
 
     await expect(
-      currentUserFromBackendAsync('wgdev_at=access-4'),
+      currentUserFromBackendAsync('wgdev_at=access-4', 'site'),
     ).rejects.toThrow();
   });
 
@@ -118,6 +147,7 @@ describe('currentUserFromBackendAsync', () => {
       expect(
         await currentUserFromBackendAsync(
           'wgdev_at=access-6; wgdev_rt=refresh-6',
+          'site',
         ),
       ).toBe(READ_IN_BROWSER);
     },

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
@@ -18,6 +19,8 @@ import type {
   StationDetailTabId,
   StationStatusTone,
 } from '../../../station/station-detail';
+import { openStationSuggestion } from '../../../station/suggestion/open-station-suggestion';
+import { describeSupplyStatus } from '../../../station/supply-status';
 import { TicketDetailDrawer } from '../../../ticket';
 import { formatTicketTypeLabel } from '../../../ticket/status';
 import type { TicketDetailDrawerProps } from '../../../ticket/ticket-detail';
@@ -179,6 +182,7 @@ function createStationSummary({
       statusDetail: availability.detail,
       badges: createStationBadges(marker),
     },
+    // No 修改建議（N） tab, nor 歷史記錄: nothing public lists a station's suggestions or history yet.
     tabs: [
       {
         id: 'info' as const,
@@ -186,11 +190,12 @@ function createStationSummary({
         icon: <DetailsIcon />,
       },
     ],
-    // 歷史記錄、待處理、建議修改尚無對應後端資料，暫時隱藏。
-    // editAction: {
-    //   label: '編輯站點',
-    //   icon: <EditRoundedIcon />,
-    // },
+    // For a guest too, who is told in the drawer to sign in (PUB-FEAT-001 Q7: the way in always shows).
+    editAction: {
+      label: '修改建議',
+      icon: <EditRoundedIcon />,
+      onClick: () => openStationSuggestion(marker.id),
+    },
     secondaryAction: stationSecondaryAction,
     // 2026-08-21 決議：前台不顯示 `source`。站點一律由後台建立，來源不具區別力；
     // 有區別力的是「是不是官方造冊」。這張卡也不再列 visibility —— 讀者只會看到
@@ -202,6 +207,10 @@ function createStationSummary({
       methods: [],
     },
     resources: createStationResources(marker),
+    supplyStatus: describeSupplyStatus(
+      marker.stationMeta?.supplyStatus,
+      marker.stationMeta?.supplyStatusUpdatedAt,
+    ),
   };
 }
 

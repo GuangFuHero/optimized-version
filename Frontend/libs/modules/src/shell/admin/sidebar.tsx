@@ -10,10 +10,13 @@ import {
 
 import { Box, Divider, IconButton, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
-import { signOut } from 'next-auth/react';
 import { Fragment } from 'react';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
-import { useProjectSettings } from '@rescue-frontend/data-access/admin';
+import { toast } from 'sonner';
+import {
+  useCapability,
+  useProjectSettings,
+} from '@rescue-frontend/data-access/admin';
 
 import {
   Badge,
@@ -22,8 +25,12 @@ import {
   SidebarItem,
 } from '@rescue-frontend/ui';
 
+import {
+  SIGN_OUT_FAILED_MESSAGE,
+  signOutHereAsync,
+} from '../../auth/session/sign-out';
 import { GuangFuBrandIcon } from '../../brand';
-import { ADMIN_NAV_SECTIONS, type AdminNavItem } from './nav';
+import { useAdminNavSections, type AdminNavItem } from './nav';
 
 const { color, radius, typography, motion } = designTokens;
 
@@ -38,6 +45,7 @@ export function AdminSidebar({
   onToggle,
   activeId,
 }: AdminSidebarProps) {
+  const sections = useAdminNavSections();
   const renderItem = (item: AdminNavItem) => (
     <SidebarItem
       key={item.id}
@@ -81,8 +89,9 @@ export function AdminSidebar({
           alignItems: collapsed ? 'center' : 'stretch',
         }}
       >
-        {ADMIN_NAV_SECTIONS.filter((section) => !section.footer).map(
-          (section, index) => (
+        {sections
+          .filter((section) => !section.footer)
+          .map((section, index) => (
             <Fragment key={section.label ?? index}>
               {section.label ? (
                 <Box
@@ -109,8 +118,7 @@ export function AdminSidebar({
               ) : null}
               {section.items.map(renderItem)}
             </Fragment>
-          ),
-        )}
+          ))}
       </Stack>
 
       <Stack
@@ -121,14 +129,20 @@ export function AdminSidebar({
           borderTop: `1px solid ${color.border.default}`,
         }}
       >
-        {ADMIN_NAV_SECTIONS.filter((section) => section.footer).flatMap(
-          (section) => section.items.map(renderItem),
-        )}
+        {sections
+          .filter((section) => section.footer)
+          .flatMap((section) => section.items.map(renderItem))}
         <SidebarItem
           icon={<LogOut />}
           label="登出"
           collapsed={collapsed}
-          onClick={() => signOut({ callbackUrl: '/login?callbackUrl=/' })}
+          onClick={() => {
+            void signOutHereAsync().then((outcome) => {
+              if (outcome === 'still-signed-in') {
+                toast.error(SIGN_OUT_FAILED_MESSAGE);
+              }
+            });
+          }}
         />
       </Stack>
     </Box>
@@ -139,10 +153,22 @@ function EventHeader({
   collapsed,
   onToggle,
 }: Pick<AdminSidebarProps, 'collapsed' | 'onToggle'>) {
-  const { data: settings, isPending, isError } = useProjectSettings();
+  const { data: canViewProject = false } = useCapability('project.view');
+  const {
+    data: projectSettings,
+    isPending,
+    isError,
+  } = useProjectSettings({ enabled: canViewProject });
+  const settings = canViewProject ? projectSettings : undefined;
   const name =
     settings?.name ??
-    (isPending ? '載入中…' : isError ? '無法載入專案' : '尚未設定專案');
+    (!canViewProject
+      ? '管理平台'
+      : isPending
+        ? '載入中…'
+        : isError
+          ? '無法載入專案'
+          : '尚未設定專案');
   const elapsedDays = settings?.started_at
     ? differenceInCalendarDays(new Date(), parseISO(settings.started_at))
     : -1;

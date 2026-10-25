@@ -17,12 +17,13 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `/audit`
 - `/settings`
 
-`/` 導向 `/dashboard`。Portal layout 要求 NextAuth session；未登入時導向 `/login?callbackUrl=/`。Backend 負責各 API 的 permission checks。兩個 app 共用 document layout、基本 providers 和 server proxy handlers；各 app 保留自己的 query cache。
+`/` 導向 `/dashboard`。Portal layout 要求登入 cookie；未登入時導向 `/login?callbackUrl=/`。Backend 負責各 API 的 permission checks。兩個 app 共用 document layout、基本 providers 和 server proxy handlers；各 app 保留自己的 query cache。
 
 ## 已存在的 Admin Modules
 
 `libs/modules/src` 內目前已有：
 
+- `admin/announcement`
 - `admin/field-configuration`
 - `admin/invite-side-sheet`
 - `admin/user/user-list`
@@ -63,9 +64,19 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 已有 page 檔案
 - 對應的 reusable modules 位於 `admin/user/user-list`
 
+### `/announcements`
+
+- 對應的 module 位於 `admin/announcement`
+- 列出所有啟用中的公告，可發布（建立草稿後啟用）與關閉公告
+- 每個頁面最多顯示一則公告；發布會取代目標頁面的公告。前後台共用的公告被取代或關閉時，兩邊同時停止顯示
+- 發布前列出將被取代的公告
+- 歷史紀錄使用共用 Timeline，從 announcements 排除未發布草稿，依最近發布時間排序，顯示目前文字、最近發布者與發布時間，以及顯示中／已下架狀態。後端尚未提供關閉與取代事件，也不保留先前文字或發布紀錄
+
 ## 目前缺口
 
-部分列表與管理頁仍使用 demo 資料或 placeholder。`@rescue-frontend/data-access/admin` 已提供 TanStack Query hooks，REST 使用 generated OpenAPI types，GraphQL 使用 urql 與 The Guild typed documents。後續頁面可直接串接這些 hooks，共用 query client callback 會顯示 error toast。
+部分列表與管理頁仍使用 demo 資料或 placeholder。`@rescue-frontend/data-access/admin` 已提供 TanStack Query hooks，REST 使用 generated OpenAPI types，GraphQL 使用 urql 與 The Guild typed documents。後續頁面可直接串接這些 hooks；一般錯誤由共用 query client callback 顯示 error toast。
+
+頁面與 shell 的 optional reads 必須用對應的 capability 控制 query 的 `enabled`，取得權限前保持 `false`，失去權限時隱藏 cached data。任一 active admin query 的 permission 403 都會讓 `AdminShell` 在目前 URL 顯示整頁 403；mutation failures 仍走原本的 error handling。
 
 ## 建議閱讀順序
 

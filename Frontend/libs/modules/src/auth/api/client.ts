@@ -22,12 +22,6 @@ export function registerAsync(
     .then(() => undefined);
 }
 
-export function verifyAsync(payload: components['schemas']['VerifyRequest']) {
-  return authApiClient
-    .POST('/api/v1/auth/verify', { body: payload })
-    .then(responseData);
-}
-
 /** Signs this browser in: the backend sets the `{p}_at` and `{p}_rt` cookies on its answer. */
 export function signInAsync(
   payload: components['schemas']['SessionSignInRequest'],

@@ -11,7 +11,7 @@ export default function RegisterPage() {
   return (
     <Suspense fallback={null}>
       <AuthShell>
-        <RegisterFormClient />
+        <RegisterFormClient defaultCallbackUrl="/" />
       </AuthShell>
     </Suspense>
   );

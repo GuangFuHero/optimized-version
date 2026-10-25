@@ -7,6 +7,7 @@ export {
   SITE_MODULES,
   SITE_SUB_DATA_TYPE_OPTIONS,
 } from './constants';
+export { isSiteModulePath } from './module-path';
 export { parseSiteRouteState } from './parse';
 export type { SiteQuerySource } from './parse';
 export { createSiteHref } from './serialize';
