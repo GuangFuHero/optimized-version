@@ -10,6 +10,7 @@ import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { SiteBadge } from '../shell/site/site-badge';
+import { resolveStationAvailability } from '../station/availability';
 import { getStationTypeIcon } from '../station/type-options';
 import { NeedLine, type TicketNeed } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
@@ -34,8 +35,9 @@ const ACTION_ICON = { fontSize: 14 } as const;
  * 列表單列：顯示標題、分類標籤與摘要，選取時切換選中樣式。
  *
  * Mirrors `SiteListRow` in `Design/前台/js/site/site-list.jsx`: a 36px type glyph leads the row, the
- * title carries an "官方" chip for verified stations, and the status badge on the right is solid for
- * tickets (the thing that needs action) and subtle for stations (ambient information).
+ * title carries an "官方" chip for verified stations, and the badge on the right gives a ticket its
+ * status and a station whether it can be gone to now — the detail drawer's own reading of its status
+ * and hours (prototype site-list.jsx:271-273). The glyph already says the station's type.
  */
 export function SiteListRow({
   marker,
@@ -51,6 +53,12 @@ export function SiteListRow({
     : AssignmentRoundedIcon;
   const needs =
     marker.detailType === 'ticket' ? (listedNeeds ?? marker.needs ?? []) : [];
+  const availability = isStation
+    ? resolveStationAvailability({
+        operationalStatus: marker.stationMeta?.operationalStatus,
+        opHour: marker.stationMeta?.opHour,
+      })
+    : null;
 
   return (
     <Box
@@ -91,7 +99,11 @@ export function SiteListRow({
               color: isStation ? color.fg.onSecondary : color.fg.onPrimary,
             }}
           >
-            <TypeIcon sx={{ fontSize: ICON_SIZE }} />
+            {/* Named for a screen reader: the badge on the right no longer says the type. */}
+            <TypeIcon
+              titleAccess={isStation ? marker.label : undefined}
+              sx={{ fontSize: ICON_SIZE }}
+            />
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -141,13 +153,12 @@ export function SiteListRow({
               </Stack>
               <SiteBadge
                 tone={
-                  isStation
-                    ? 'secondary'
-                    : getTicketStatusTone(marker.ticketMeta?.status)
+                  availability?.tone ??
+                  getTicketStatusTone(marker.ticketMeta?.status)
                 }
-                variant={isStation ? 'subtle' : 'solid'}
+                variant="solid"
               >
-                {marker.label}
+                {availability?.headline ?? marker.label}
               </SiteBadge>
             </Stack>
 
