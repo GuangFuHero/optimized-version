@@ -1,4 +1,4 @@
-"""Resolving a duplicate pair card (Spec 028 §3.5, ADR-364–375): the service, on a real database.
+"""Resolving a duplicate pair card (Spec 028 §3.5, ADR-365–375): the service, on a real database.
 
 What a request means is tested without a database in test_dedup_resolve_plan.py; this checks that
 the plan lands — tickets, needs, items, claims, the card and its event — and the guards around it.
@@ -222,7 +222,7 @@ async def test_example_one_folds_b_into_a(db):
 
 
 async def test_the_people_on_a_folded_need_move_and_count_once(db):
-    """v2 was on a1 and b1: one assignment on a1 remains. v3 moves over. v4 moves with b3 (ADR-368)."""
+    """v2 was on a1 and b1: one assignment on a1 remains. v3 moves over. v4 moves with b3 (ADR-369)."""
     reviewer, ids = await _world(db)
 
     await _resolve(db, reviewer, ids)
@@ -302,7 +302,7 @@ async def test_an_unknown_disaster_type_is_refused(db):
 
 
 async def test_the_card_is_confirmed_with_a_merged_event(db):
-    """The card is confirmed by the reviewer; the event holds both tickets as they were (ADR-374)."""
+    """The card is confirmed by the reviewer; the event holds both tickets as they were (ADR-375)."""
     reviewer, ids = await _world(db)
     reviewer_uuid = str(reviewer.uuid)
 
@@ -326,7 +326,7 @@ async def test_the_card_is_confirmed_with_a_merged_event(db):
     assert event.after_state["ticket"]["uuid"] == ids["a"]
 
 
-# --- need status (ADR-369) ----------------------------------------------------------------
+# --- need status (ADR-370) ----------------------------------------------------------------
 
 
 async def test_a_need_full_after_the_merge_is_fulfilled(db):
@@ -391,7 +391,7 @@ async def test_an_audited_primary_goes_back_to_no_audit(db):
 
 
 async def test_a_changed_ticket_is_refused_with_a_conflict(db):
-    """ADR-373: the reviewer compared an older A."""
+    """ADR-374: the reviewer compared an older A."""
     reviewer, ids = await _world(db)
     versions = await _versions(db, reviewer, ids)
     await db.execute(update(TicketTask).where(TicketTask.uuid == ids["a2"]).values(quantity=4))
@@ -411,7 +411,7 @@ async def test_a_resolved_card_cannot_be_resolved_again(db):
 
 
 async def test_a_resolved_card_cannot_be_revoked(db):
-    """ADR-375: no undo; the merged event is what a person restores from."""
+    """ADR-376: no undo; the merged event is what a person restores from."""
     reviewer, ids = await _world(db)
     await _resolve(db, reviewer, ids)
 
@@ -432,7 +432,7 @@ async def test_a_rejected_card_cannot_be_resolved(db):
 
 
 async def test_a_confirmed_card_can_still_be_resolved(db):
-    """ADR-364: a card confirmed through Spec 025 needs no revoke first."""
+    """ADR-365: a card confirmed through Spec 025 needs no revoke first."""
     reviewer, ids = await _world(db)
     request = _example_one(ids, await _versions(db, reviewer, ids))
     await db.refresh(reviewer)
@@ -444,7 +444,7 @@ async def test_a_confirmed_card_can_still_be_resolved(db):
 
 
 async def test_a_card_whose_ticket_was_cancelled_is_refused(db):
-    """A side cancelled meanwhile leaves no ticket to fold (ADR-377)."""
+    """A side cancelled meanwhile leaves no ticket to fold (ADR-378)."""
     reviewer, ids = await _world(db)
     request = _example_one(ids, await _versions(db, reviewer, ids))
     b = await _row(db, Tickets, ids["b"])
@@ -456,7 +456,7 @@ async def test_a_card_whose_ticket_was_cancelled_is_refused(db):
 
 
 async def test_more_people_than_the_quantity_is_refused(db):
-    """ADR-369: 3 people on a1 after the merge, quantity 2."""
+    """ADR-370: 3 people on a1 after the merge, quantity 2."""
     reviewer, ids = await _world(db)
     request = _example_one(ids, await _versions(db, reviewer, ids))
     request.primary_tasks[0].values.quantity = 2
@@ -466,7 +466,7 @@ async def test_more_people_than_the_quantity_is_refused(db):
 
 
 async def test_review_alone_is_enough(db):
-    """ADR-365: the reviewer holds no ticket.edit or ticket.delete, and still resolves."""
+    """ADR-366: the reviewer holds no ticket.edit or ticket.delete, and still resolves."""
     reviewer, ids = await _world(db)
 
     await _resolve(db, reviewer, ids)
@@ -601,7 +601,7 @@ async def test_a_reject_and_a_resolve_at_once_leave_one_decision(db):
     assert (pair.status, b.status) in {("confirmed", "cancelled"), ("rejected", "pending")}
 
 
-# --- code review round: photos, answers (ADR-383, 384) ------------------------------------
+# --- code review round: photos, answers (ADR-384, 384) ------------------------------------
 
 
 async def _photos_and_answers(db, ids):
@@ -668,7 +668,7 @@ async def test_photos_and_answers_land_on_the_primary(db):
 
 
 async def test_the_other_tickets_answers_must_be_decided(db):
-    """ADR-384 through the service: B has answers, the request says nothing, the resolve is refused."""
+    """ADR-385 through the service: B has answers, the request says nothing, the resolve is refused."""
     reviewer, ids = await _world(db)
     photos = await _photos_and_answers(db, ids)
     request = _example_one(

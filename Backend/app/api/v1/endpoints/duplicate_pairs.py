@@ -181,7 +181,7 @@ async def resolve_duplicate_pair(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-364).
+    """Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-365).
 
     409 when the card is already resolved or decided, a ticket is gone, or either ticket changed
     since the reviewer read it (send back the detail's `version`s); 422 when the request cannot be

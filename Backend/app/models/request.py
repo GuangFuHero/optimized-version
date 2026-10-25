@@ -69,7 +69,7 @@ class Tickets(BaseGeometry):
     immediate_danger_reported: Mapped[str | None] = mapped_column(
         String(20), nullable=True, comment="立即生命危險：yes/no/unknown"
     )
-    # Set when a dedup resolve cancels this ticket into another (Spec 028, ADR-371). A record
+    # Set when a dedup resolve cancels this ticket into another (Spec 028, ADR-372). A record
     # only: nobody is redirected through it, the notices point at the kept ticket.
     replaced_by_uuid: Mapped[str | None] = mapped_column(
         ForeignKey("tickets.uuid"), nullable=True, comment="重複審核合併後取代此單的單"

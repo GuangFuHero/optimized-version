@@ -1,6 +1,6 @@
 # Plan: 028-dedup-resolve
 
-**Spec**: `spec.md`　**Decisions**: `decisions.md`（ADR-364～379）
+**Spec**: `spec.md`　**Decisions**: `decisions.md`（ADR-365～380）
 **Branch**: `feat/dedup-resolve`（從 `origin/main` @ `a272dfdd4` 開，未設 upstream）
 
 每個 Task：先寫會失敗的測試（RED）→ 實作（GREEN）→ 全套件不比基準差 → 單獨 commit（只 `git add` 本 Task 的檔案，
@@ -36,7 +36,7 @@ commit 前看 `git diff --cached --stat`）。
 - [ ] 起專屬的 test DB（h3 image）與 redis，先查 port 沒被佔用。
 - [ ] 全套件跑一次（`COVERAGE_CORE=sysmon`、`pytest -n 4`），記下 passed 數與覆蓋率。
 
-## Task 1：兩個新欄位（ADR-371）
+## Task 1：兩個新欄位（ADR-372）
 
 - ✅ 2026-10-24：migration `c3f1a9d27b54`（接 `79a19cabc98a`）；全套件 **2687 passed**（基準 +4），覆蓋率 96%。
   第一次全套件抓到 plan 漏掉的兩處（3 failed）：`history_fields.py` 要把兩個欄位分類（列為 `_FK` 排除，時間軸顯示的是刪除事件）；
@@ -44,17 +44,17 @@ commit 前看 `git diff --cached --stat`）。
 
 - [ ] migration：`tickets.replaced_by_uuid`（FK `tickets.uuid`，nullable）、`ticket_tasks.merged_into_uuid`（FK `ticket_tasks.uuid`，nullable）。
   downgrade 在有值時失敗，不默默丟掉紀錄（同 025 `a5e641c99923` 的作法）。
-- [ ] model 加欄位。GraphQL 不加（ADR-371）。
+- [ ] model 加欄位。GraphQL 不加（ADR-372）。
 - [ ] migration 接 main 的 head `79a19cabc98a`。#96（`7370daf4c8f7`）、#98（`e4b7c2a19d63`）也接同一個 parent，開 PR 前依合併順序改 `down_revision`。
 - [ ] 測試：
   - migration upgrade／downgrade；有值時 downgrade 失敗。
   - FK：指向不存在的單 → 寫入失敗。
   - `test_migrations_match_models` 照常通過（migration 與 model 欄位一致）。
 
-## Task 2：讀取兩張完整的單（ADR-372、373）
+## Task 2：讀取兩張完整的單（ADR-373、373）
 
 - ✅ 2026-10-24：`app/services/dedup_review_tickets.py`；全套件 **2707 passed**（+20），覆蓋率 96%；之後補一個測試（兩邊都已取消），單檔 18 passed。
-  **改了設計**：`version` 改成內容雜湊，不用 `updated_at`。實測只改單的 `title`，`base_geometries.updated_at` 不變（ADR-373 已更新）。
+  **改了設計**：`version` 改成內容雜湊，不用 `updated_at`。實測只改單的 `title`，`base_geometries.updated_at` 不變（ADR-374 已更新）。
   plan 原寫的 `ticket_version(ticket, tasks, properties)` 改成 `ticket_version(TicketForReview)`。
 
 - [ ] `dedup_review_tickets.py`：
@@ -63,7 +63,7 @@ commit 前看 `git diff --cached --stat`）。
   class TicketForReview: ...          # spec §2 的欄位，含 tasks[].properties、claim_count
 
   async def tickets_for_pair(db, pair) -> tuple[TicketForReview | None, TicketForReview | None]
-  def ticket_version(ticket, tasks, properties) -> str   # sha256，見 ADR-373
+  def ticket_version(ticket, tasks, properties) -> str   # sha256，見 ADR-374
   ```
   - `ticket_task` 卡 → 取兩項需求所屬的單；`ticket` 卡 → 那兩張單；`station` 卡 → `(None, None)`。
   - 已取消或軟刪除的單 → `None`。
@@ -72,11 +72,11 @@ commit 前看 `git diff --cached --stat`）。
 - [ ] 測試：
   - `ticket_task` 卡回兩張單；`ticket` 卡；`station` 卡 `tickets` 為 `null`；一邊已刪除 → 那邊 `null`。
   - 已刪除的需求、細項不出現；`claim_count` 正確。
-  - `version`：改單的欄位、改需求、加需求、改細項、加細項都會變；接單不會變（ADR-373）。
+  - `version`：改單的欄位、改需求、加需求、改細項、加細項都會變；接單不會變（ADR-374）。
   - 查詢數固定（不隨需求數成長）。
   - API：super_admin、data_auditor 看得到聯絡人；沒有 `ai_duplicate.view` 403。
 
-## Task 3：處理計畫 — 純函式（ADR-366、367、369、370、376、379）
+## Task 3：處理計畫 — 純函式（ADR-367、367、369、370、376、379）
 
 - ✅ 2026-10-24：`app/services/dedup_resolve_plan.py`、`ResolveRequest`（`app/schemas/duplicate_pair.py`，未知欄位 422）；純函式測試 33 個；
   突變測試 9 條（類型、人數、漏列需求／細項、重複志工、重複列、主要單方向、細項搬移、全部取消）都會被抓到。全套件 **2741 passed**，覆蓋率 96%。
@@ -93,11 +93,11 @@ commit 前看 `git diff --cached --stat`）。
 - [ ] 測試（純函式，不用資料庫）：
   - 例一（B 全部併入）、例二（部分併入＋搬移＋取消）產生的計畫正確。
   - §3.4 的每一個 422 各一個測試。
-  - 同一位志工兩邊都有接單 → 人數算一個（ADR-368）。
+  - 同一位志工兩邊都有接單 → 人數算一個（ADR-369）。
   - 接單人數 = 新數量 → 通過；大於 → 422。
   - rescue 可以沒有數量；其他類型沒有數量 → 422。
 
-## Task 4：寫入（ADR-364、365、368、369、370、373、374）
+## Task 4：寫入（ADR-365、365、368、369、370、373、374）
 
 - ✅ 2026-10-24：`app/services/dedup_resolve.py`；`dedup_review` 公開 `lock_pair`／`checked_note`／`pair_detail`／`has_merged_event`，`revoke` 對處理過的卡 409；
   `ticket._mark_need_deleted` 改名為公開的 `mark_need_deleted`。service 測試 25 個，全套件 **2766 passed**，覆蓋率 96%。
@@ -112,23 +112,23 @@ commit 前看 `git diff --cached --stat`）。
   - 需求的取消用 `_mark_need_deleted` 的同一套規則；整張單取消照 `delete_ticket` 的欄位（`status`、`delete_at`），加上 `replaced_by_uuid`。
     不呼叫這兩個函式本身：它們會檢查 `ticket.delete`、自己 commit、自己發通知。
   - 接單紀錄搬移：`UPDATE task_assignments SET task_uuid = A`；重複的志工刪 B 那筆。
-  - 需求狀態依 ADR-369 重算；主要單 `recompute_ticket_status`、`void_stale_verdict`。
+  - 需求狀態依 ADR-370 重算；主要單 `recompute_ticket_status`、`void_stale_verdict`。
   - 細項：`keep` 改值、改掛 `task_uuid`；`cancel` 軟刪除。
-- [ ] `dedup_review.revoke`：卡有 `merged` 事件 → 409（ADR-375）。
+- [ ] `dedup_review.revoke`：卡有 `merged` 事件 → 409（ADR-376）。
 - [ ] 測試（service，真資料庫）：
   - 例一、例二寫完後，A、B、需求、細項、接單紀錄、配對卡、事件逐欄比對。
   - 志工搬移後，A 的需求滿額 → `fulfilled`；併入後還有空位、原本滿額 → 回 `pending`；停止招募的維持。
   - 主要單原本 `audited` → `no_audit`。
   - 409：版本對不上；卡已處理過；任一張單已取消；卡已被 reject。
-  - 已 confirm 的卡（025 流程）可以處理（ADR-364）。
+  - 已 confirm 的卡（025 流程）可以處理（ADR-365）。
   - 處理過的卡 `revoke` → 409。
   - 中途失敗（例如在寫事件前丟例外）→ 全部回滾，A、B 不變。
   - 兩個審核員同時處理同一張卡 → 一個成功，另一個 409（兩個 session 並發）。
-  - 只有 `ai_duplicate.review`、沒有 `ticket.edit`／`ticket.delete` 的身分可以處理（ADR-365）。
+  - 只有 `ai_duplicate.review`、沒有 `ticket.edit`／`ticket.delete` 的身分可以處理（ADR-366）。
   - `audit_logs` 有記到每一列的變更。
   - 突變測試：拿掉版本檢查、拿掉 `FOR UPDATE`、拿掉人數檢查，各自要有測試會失敗。
 
-## Task 5：REST 端點（ADR-364）
+## Task 5：REST 端點（ADR-365）
 
 - ✅ 2026-10-24：`POST /admin/duplicate-pairs/{uuid}/resolve`；API 測試 13 個（seed 的 super_admin／data_auditor 200，user／team admin／member 403，格式錯 422×4，計畫拒絕 422，版本過期 409，404，處理後撤銷 409）。全套件 **2779 passed**，覆蓋率 96%。
 
@@ -139,7 +139,7 @@ commit 前看 `git diff --cached --stat`）。
   - request 格式錯（缺 `primary`、未知 `action`）422。
   - 回傳的 `tickets`：被取消的那一邊 `null`；`events` 最後一筆是 `merged`。
 
-## Task 6：通知（ADR-378）
+## Task 6：通知（ADR-379）
 
 - ✅ 2026-10-24：`app/services/dedup_resolve_notices.py`（覆蓋率 100%）；通知測試 9 個（含通知失敗時 REST 仍回 200）。全套件 **2788 passed**，覆蓋率 96%。
   補了 spec §6 漏的收件人：整項 `move` 過去的需求上的志工也收 `dedup_task_merged`。
@@ -158,11 +158,11 @@ commit 前看 `git diff --cached --stat`）。
 ## Task 7：合約檔與文件
 
 - ✅ 2026-10-24：`pnpm schemas:generate` 只動到 REST 合約（`openapi.json`、`openapi.d.ts`，GraphQL 沒變），已單獨 commit `68bd0e523`；spec 狀態、025 ADR-336 註記已更新。
-  重掃所有遠端分支與本機 worktree：其他地方 ADR 最大號仍是 363，沒有人用 364～379，也沒有 Spec 028。
+  重掃所有遠端分支與本機 worktree：其他地方 ADR 最大號仍是 363，沒有人用 365～380，也沒有 Spec 028。
 
 - [ ] `cd Frontend && pnpm schemas:generate`，commit 產生的合約檔（Frontend CI 會 `git diff`）。
 - [ ] spec 的狀態更新；`Spec/025` ADR-336 加指向 028 的註記（ADR-341 已加）。
-- [ ] 重掃所有遠端分支的 ADR 號與 Spec 資料夾號，確認 364～379、028 沒有撞號。
+- [ ] 重掃所有遠端分支的 ADR 號與 Spec 資料夾號，確認 365～380、028 沒有撞號。
 
 ## Task 8：Docker 從零完整驗證
 
@@ -181,16 +181,16 @@ commit 前看 `git diff --cached --stat`）。
 
 ---
 
-## Task 9：code review 修正（ADR-380～384）
+## Task 9：code review 修正（ADR-381～385）
 
-依 `SPEC028_CODE_REVIEW.md`，使用者同意修 1、2、3、4、6、8、9，並決定 B 的照片與災害欄位答案由審核員選（ADR-383、384）。
+依 `SPEC028_CODE_REVIEW.md`，使用者同意修 1、2、3、4、6、8、9，並決定 B 的照片與災害欄位答案由審核員選（ADR-384、384）。
 
 - [x] 1. rebase 到 main `2e95aec0d`，migration 改接 `7370daf4c8f7`（`ec0e6633d`）
-- [x] 2. `priority`／`task_type` 長度 → 422（ADR-380）
-- [x] 3. 通知用處理後的標題（ADR-381）
-- [x] 4. 主要單沒變不通知它的開單者（ADR-382）
-- [x] 5. 照片：detail 回傳、`version`、request 逐張 keep／cancel（ADR-383）
-- [x] 6. 災害欄位答案：detail 回傳、`version`、request 完整一份（ADR-384）
+- [x] 2. `priority`／`task_type` 長度 → 422（ADR-381）
+- [x] 3. 通知用處理後的標題（ADR-382）
+- [x] 4. 主要單沒變不通知它的開單者（ADR-383）
+- [x] 5. 照片：detail 回傳、`version`、request 逐張 keep／cancel（ADR-384）
+- [x] 6. 災害欄位答案：detail 回傳、`version`、request 完整一份（ADR-385）
 - [x] 7. `_check_size` 改呼叫 `_validate_need_size`
 - [x] 8. 重複接單一次 DELETE
 - [x] 9. 主要單判斷、同一張單檢查各留一處

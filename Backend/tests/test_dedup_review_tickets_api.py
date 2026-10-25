@@ -1,4 +1,4 @@
-"""The detail endpoint carries the card's two whole tickets (Spec 028 §2, ADR-372).
+"""The detail endpoint carries the card's two whole tickets (Spec 028 §2, ADR-373).
 
 Wiring only: what goes into a ticket and its version is observed at the service
 (tests/test_dedup_review_tickets.py). Everyone but the two seeded reviewers is already refused the
@@ -32,7 +32,7 @@ async def test_the_detail_carries_both_tickets_with_contacts(client, db_session,
 
 
 async def test_the_listing_has_no_tickets(client, db_session, redis):
-    """Only the detail loads whole tickets (ADR-372)."""
+    """Only the detail loads whole tickets (ADR-373)."""
     await _card(db_session)
     headers = await _headers(db_session, redis, "super_admin")
 

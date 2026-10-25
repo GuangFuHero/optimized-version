@@ -1,4 +1,4 @@
-"""The two whole tickets behind a pair card (Spec 028 §2, ADR-372/373): the service layer.
+"""The two whole tickets behind a pair card (Spec 028 §2, ADR-373/373): the service layer.
 
 `dedup_review.get_pair` carries them; the REST shape is checked in test_dedup_review_tickets_api.py.
 """
@@ -194,7 +194,7 @@ async def test_a_ticket_card_carries_its_two_tickets(db):
 
 
 async def test_a_station_card_has_no_tickets(db):
-    """Stations are not resolved (ADR-376), so their cards carry none."""
+    """Stations are not resolved (ADR-377), so their cards carry none."""
     owner = User(name="站長")
     db.add(owner)
     await db.flush()
@@ -250,7 +250,7 @@ async def test_both_sides_cancelled_gives_two_nones(db):
 
 
 async def test_the_listing_stays_without_tickets(db):
-    """ADR-372: only the detail loads whole tickets; a page of 200 cards does not."""
+    """ADR-373: only the detail loads whole tickets; a page of 200 cards does not."""
     await _setup(db)
     actor = await _actor(db, Perm.AI_DUP_VIEW)
 
@@ -259,7 +259,7 @@ async def test_the_listing_stays_without_tickets(db):
     assert not hasattr(page.items[0], "tickets")
 
 
-# --- version (ADR-373) ------------------------------------------------------------------
+# --- version (ADR-374) ------------------------------------------------------------------
 
 
 async def _versions(db, s) -> dict[str, str]:
@@ -314,7 +314,7 @@ async def test_the_version_moves_when_what_the_reviewer_compared_changes(db, cha
 
 
 async def test_a_claim_does_not_move_the_version(db):
-    """A claim, and the fill it causes, are checked under the locks when resolving (ADR-373)."""
+    """A claim, and the fill it causes, are checked under the locks when resolving (ADR-374)."""
     s = await _versioned(db)
     before = await _versions(db, s)
 
@@ -354,7 +354,7 @@ async def test_the_query_count_does_not_grow_with_needs_or_items(db):
     assert many == few
 
 
-# --- photos and disaster answers (ADR-383, 384) -------------------------------------------
+# --- photos and disaster answers (ADR-384, 384) -------------------------------------------
 
 
 async def _photo(db, ticket, owner, url="https://example.com/a.jpg", *, deleted=False) -> Photo:
@@ -395,7 +395,7 @@ async def test_the_detail_carries_each_tickets_photos_and_answers(db):
 
 @pytest.mark.parametrize("change", ["new_photo", "new_answer"])
 async def test_the_version_moves_with_photos_and_answers(db, change):
-    """A photo or an answer added meanwhile sends the reviewer back (ADR-373)."""
+    """A photo or an answer added meanwhile sends the reviewer back (ADR-374)."""
     s = await _versioned(db)
     before = await _versions(db, s)
 

@@ -223,7 +223,7 @@ def test_only_the_ticket_fields_sent_are_changes():
 
 
 def test_a_person_on_both_merged_needs_counts_once():
-    """Someone on a1 and b1 is one of the 7, and their b1 assignment is dropped (ADR-368)."""
+    """Someone on a1 and b1 is one of the 7, and their b1 assignment is dropped (ADR-369)."""
     claimants = {_u("a1"): {"p1", "p2"}, _u("b1"): {"p2", "p3", "p4", "p5", "p6", "p7"}}
 
     plan = _plan(claimants=claimants)
@@ -260,17 +260,17 @@ def _refused(request=None, **kwargs) -> str:
 
 
 def test_a_station_card_is_refused():
-    """Stations are not resolved (ADR-376)."""
+    """Stations are not resolved (ADR-377)."""
     assert "ticket and need cards" in _refused(kind="station")
 
 
 def test_two_needs_of_one_ticket_are_refused():
-    """Two needs of one ticket leave no second ticket to merge (ADR-376)."""
+    """Two needs of one ticket leave no second ticket to merge (ADR-377)."""
     assert "same ticket" in _refused(high=LOW)
 
 
 def test_a_need_left_out_is_refused():
-    """ADR-367: every need of both tickets is named."""
+    """ADR-368: every need of both tickets is named."""
     request = _request(secondary_tasks=[])
     assert _u("b3") in _refused(request)
 
@@ -301,7 +301,7 @@ def test_absorbing_a_need_of_the_primary_ticket_is_refused():
 
 
 def test_absorbing_another_kind_of_need_is_refused():
-    """ADR-369: water cannot fold into people."""
+    """ADR-370: water cannot fold into people."""
     request = _request()
     request.primary_tasks[0].absorb.append(request.secondary_tasks[0].task)
     request.secondary_tasks = []
@@ -326,7 +326,7 @@ def test_a_cancelled_need_takes_no_values():
 
 
 def test_more_people_than_the_quantity_is_refused():
-    """ADR-369: 8 people on a need of 7."""
+    """ADR-370: 8 people on a need of 7."""
     claimants = {_u("a1"): {"p1", "p2", "p3"}, _u("b1"): {"p4", "p5", "p6", "p7", "p8"}}
     assert "more than the quantity" in _refused(claimants=claimants)
 
@@ -356,7 +356,7 @@ def test_a_blank_need_name_is_refused():
 
 
 def test_an_item_left_out_is_refused():
-    """ADR-379: the absorbed need's item must be named too."""
+    """ADR-380: the absorbed need's item must be named too."""
     request = _request()
     request.primary_tasks[0].properties = request.primary_tasks[0].properties[:1]
     assert "every item must be named" in _refused(request)
@@ -377,7 +377,7 @@ def test_an_item_named_twice_is_refused():
 
 
 def test_a_kept_need_without_its_item_list_is_refused():
-    """A kept need with items must list them (ADR-379)."""
+    """A kept need with items must list them (ADR-380)."""
     request = _request()
     request.primary_tasks[0].properties = None
     assert "every item must be named" in _refused(request)
@@ -391,7 +391,7 @@ def test_a_cancelled_item_takes_no_values():
 
 
 def test_cancelling_every_need_is_refused():
-    """The primary ticket keeps at least one need (ADR-370)."""
+    """The primary ticket keeps at least one need (ADR-371)."""
     request = _request(
         primary_tasks=[{"task": _u("a1"), "action": "cancel"}, {"task": _u("a2"), "action": "cancel"}],
         secondary_tasks=[{"task": t, "action": "cancel"} for t in (_u("b1"), _u("b2"), _u("b3"))],
@@ -421,12 +421,12 @@ def test_an_unknown_field_is_refused_by_the_schema():
         _request(ticket={"titel": "錯字"})
 
 
-# --- code review round (ADR-380, 383, 384) ------------------------------------------------
+# --- code review round (ADR-381, 383, 384) ------------------------------------------------
 
 
 @pytest.mark.parametrize(("field", "limit"), [("priority", 20), ("task_type", 50)])
 def test_ticket_fields_longer_than_their_column_are_refused(field, limit):
-    """ADR-380: past the column the database would raise, and REST would answer 500."""
+    """ADR-381: past the column the database would raise, and REST would answer 500."""
     assert f"at most {limit}" in _refused(_request(ticket={field: "x" * (limit + 1)}))
     assert _plan(_request(ticket={field: "x" * limit})).ticket_changes == {field: "x" * limit}
 
@@ -441,7 +441,7 @@ PH = {key: f"00000000-0000-0000-0000-0000000001{n:02d}" for n, key in enumerate(
 
 
 def test_photos_of_the_other_ticket_kept_move_and_the_rest_are_cancelled():
-    """ADR-383: B's kept photo hangs under A; a cancelled one is soft-deleted; A's kept one stays."""
+    """ADR-384: B's kept photo hangs under A; a cancelled one is soft-deleted; A's kept one stays."""
     low, high = _with_photos(LOW, PH["pA"]), _with_photos(HIGH, PH["pB"], PH["pB2"])
     request = _request(
         photos=[
@@ -481,7 +481,7 @@ def test_photos_of_the_other_ticket_kept_move_and_the_rest_are_cancelled():
     ids=["one left out", "list missing", "named twice", "a stranger's photo"],
 )
 def test_photos_follow_the_need_rules(photos, expected):
-    """ADR-383: every photo of both tickets is named once."""
+    """ADR-384: every photo of both tickets is named once."""
     low, high = _with_photos(LOW, PH["pA"]), _with_photos(HIGH, PH["pB"])
     request = _request(photos=photos) if photos is not None else _request()
 
@@ -496,7 +496,7 @@ def test_no_photos_needs_no_list():
 
 
 def test_the_disaster_answers_sent_replace_the_primarys():
-    """ADR-384: the request gives the primary's full answers."""
+    """ADR-385: the request gives the primary's full answers."""
     high = replace(HIGH, disaster_details={"power_outage": ("yes",)})
 
     plan = _plan(_request(disaster_details={"power_outage": ["yes"], "utility_hazards": ["gas"]}), high=high)
@@ -505,7 +505,7 @@ def test_the_disaster_answers_sent_replace_the_primarys():
 
 
 def test_the_other_tickets_answers_cannot_be_left_unsaid():
-    """ADR-384: B has answers, so the request must say what A ends with."""
+    """ADR-385: B has answers, so the request must say what A ends with."""
     high = replace(HIGH, disaster_details={"power_outage": ("yes",)})
 
     assert "disaster_details" in _refused(high=high)

@@ -4253,7 +4253,7 @@
           "AI 重複審核"
         ],
         "summary": "Resolve Duplicate Pair",
-        "description": "Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-364).\n\n409 when the card is already resolved or decided, a ticket is gone, or either ticket changed\nsince the reviewer read it (send back the detail's `version`s); 422 when the request cannot be\ncarried out as sent.",
+        "description": "Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-365).\n\n409 when the card is already resolved or decided, a ticket is gone, or either ticket changed\nsince the reviewer read it (send back the detail's `version`s); 422 when the request cannot be\ncarried out as sent.",
         "operationId": "resolve_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__resolve_post",
         "security": [
           {
@@ -8534,7 +8534,7 @@
           "tickets"
         ],
         "title": "DuplicatePairDetail",
-        "description": "One card with every event recorded on it, oldest first, and its two whole tickets.\n\n`tickets` is null for a station card, which is not resolved (Spec 028, ADR-376)."
+        "description": "One card with every event recorded on it, oldest first, and its two whole tickets.\n\n`tickets` is null for a station card, which is not resolved (Spec 028, ADR-377)."
       },
       "DuplicatePairPage": {
         "properties": {
@@ -9801,7 +9801,7 @@
           "created_at"
         ],
         "title": "PhotoForReviewResponse",
-        "description": "One live photo on a ticket (Spec 028, ADR-383)."
+        "description": "One live photo on a ticket (Spec 028, ADR-384)."
       },
       "ProjectSettingsResponse": {
         "properties": {
@@ -10145,7 +10145,7 @@
           "action"
         ],
         "title": "ResolvePhoto",
-        "description": "One photo of either ticket: kept on the primary, or cancelled (ADR-383).\n\nA kept photo of the other ticket moves over to the primary."
+        "description": "One photo of either ticket: kept on the primary, or cancelled (ADR-384).\n\nA kept photo of the other ticket moves over to the primary."
       },
       "ResolvePrimaryTask": {
         "properties": {
@@ -10237,7 +10237,7 @@
           "action"
         ],
         "title": "ResolveProperty",
-        "description": "One item of a kept or moved need, or of a need it absorbs (ADR-379)."
+        "description": "One item of a kept or moved need, or of a need it absorbs (ADR-380)."
       },
       "ResolvePropertyValues": {
         "properties": {
@@ -10609,7 +10609,7 @@
           "high"
         ],
         "title": "ResolveVersions",
-        "description": "The `version` of each side's ticket as the reviewer read it (ADR-373)."
+        "description": "The `version` of each side's ticket as the reviewer read it (ADR-374)."
       },
       "RoleGrants": {
         "properties": {
@@ -11646,7 +11646,7 @@
           "disaster_details"
         ],
         "title": "TicketForReviewResponse",
-        "description": "A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-372).\n\nSend `version` back unchanged when resolving: it says what the reviewer saw (ADR-373)."
+        "description": "A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).\n\nSend `version` back unchanged when resolving: it says what the reviewer saw (ADR-374)."
       },
       "TicketYMetric": {
         "type": "string",

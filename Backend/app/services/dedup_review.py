@@ -98,7 +98,7 @@ class PairDetail:
     """One card, its sides, every event recorded on it (oldest first) and its two whole tickets.
 
     `tickets` is (low, high), None on a side whose ticket is cancelled or deleted, and None as a
-    whole for a station card (Spec 028 §2, ADR-372).
+    whole for a station card (Spec 028 §2, ADR-373).
     """
 
     item: PairItem
@@ -275,7 +275,7 @@ async def revoke(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID) -> Pair
     if pair.status not in VERDICTS:
         raise DuplicatePairConflictError(f"Duplicate pair is {pair.status}: there is no verdict to revoke")
     if await has_merged_event(db, pair):
-        # ADR-375: a resolve changed the tickets; undoing the verdict alone would leave them changed.
+        # ADR-376: a resolve changed the tickets; undoing the verdict alone would leave them changed.
         raise DuplicatePairConflictError("Duplicate pair was resolved; a resolution cannot be revoked")
     if pair.reviewed_by != actor_uuid:
         try:

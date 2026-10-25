@@ -1306,7 +1306,7 @@ export interface paths {
     put?: never;
     /**
      * Resolve Duplicate Pair
-     * @description Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-364).
+     * @description Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-365).
      *
      *     409 when the card is already resolved or decided, a ticket is gone, or either ticket changed
      *     since the reviewer read it (send back the detail's `version`s); 422 when the request cannot be
@@ -2702,7 +2702,7 @@ export interface components {
      * DuplicatePairDetail
      * @description One card with every event recorded on it, oldest first, and its two whole tickets.
      *
-     *     `tickets` is null for a station card, which is not resolved (Spec 028, ADR-376).
+     *     `tickets` is null for a station card, which is not resolved (Spec 028, ADR-377).
      */
     DuplicatePairDetail: {
       /**
@@ -3375,7 +3375,7 @@ export interface components {
       | 'rbac.edit';
     /**
      * PhotoForReviewResponse
-     * @description One live photo on a ticket (Spec 028, ADR-383).
+     * @description One live photo on a ticket (Spec 028, ADR-384).
      */
     PhotoForReviewResponse: {
       /**
@@ -3521,7 +3521,7 @@ export interface components {
     };
     /**
      * ResolvePhoto
-     * @description One photo of either ticket: kept on the primary, or cancelled (ADR-383).
+     * @description One photo of either ticket: kept on the primary, or cancelled (ADR-384).
      *
      *     A kept photo of the other ticket moves over to the primary.
      */
@@ -3560,7 +3560,7 @@ export interface components {
     };
     /**
      * ResolveProperty
-     * @description One item of a kept or moved need, or of a need it absorbs (ADR-379).
+     * @description One item of a kept or moved need, or of a need it absorbs (ADR-380).
      */
     ResolveProperty: {
       /**
@@ -3671,7 +3671,7 @@ export interface components {
     };
     /**
      * ResolveVersions
-     * @description The `version` of each side's ticket as the reviewer read it (ADR-373).
+     * @description The `version` of each side's ticket as the reviewer read it (ADR-374).
      */
     ResolveVersions: {
       /** Low */
@@ -4060,9 +4060,9 @@ export interface components {
     };
     /**
      * TicketForReviewResponse
-     * @description A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-372).
+     * @description A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).
      *
-     *     Send `version` back unchanged when resolving: it says what the reviewer saw (ADR-373).
+     *     Send `version` back unchanged when resolving: it says what the reviewer saw (ADR-374).
      */
     TicketForReviewResponse: {
       /**

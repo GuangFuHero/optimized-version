@@ -6,7 +6,7 @@
 
 > **第一次驗證**跑在 `38ee6e232`（code review 前），流程同樣全部通過；容器內 2774 passed 加 14 個 error，
 > 原因是腳本跑全套件時沒帶 `-e PYTHONPATH=/app`，`test_seed_mock_scenarios` 的子程序找不到 `app`，帶上後 14 passed。
-> 之後 code review 改了照片、災害欄位答案、通知等（ADR-380～384），並 rebase 到 main `2e95aec0d`，所以用 `55cb19729` 從零重做；以下都是重做的結果。
+> 之後 code review 改了照片、災害欄位答案、通知等（ADR-381～385），並 rebase 到 main `2e95aec0d`，所以用 `55cb19729` 從零重做；以下都是重做的結果。
 > 重做的第一次嘗試，db 容器在初始化時退出：腳本的 `CREATE EXTENSION` 和 image 自己的 postgis 初始化撞在一起。腳本改成等初始化完成再建，與程式無關。
 
 腳本：session scratchpad `t8/docker_verify.sh <commit>`（真實流程 `t8/phase1.py`、`t8/phase2.py`），完整輸出在 `t8/docker_verify_55cb19729.log`。
@@ -76,16 +76,16 @@ TOTAL                                    13474 487   96%
 
 | 步驟 | 結果 | 預期 |
 |---|---|---|
-| data_auditor 讀卡片 detail | 200。兩張完整的單：A（飲用水 1／0 人、清淤 2／2 人，1 張照片，`power_outage: no`）、B（清淤 5／2 人、飲用水 5／1 人、便當 3／1 人，2 張照片，`utility_hazards: gas`） | ✓ ADR-372、383、384 |
-| B 有答案，request 沒帶 `disaster_details` | **422** `The other ticket has disaster_details: send the primary's full answers` | ✓ ADR-384 |
-| `priority` 填 25 字 | **422** `priority must be at most 20 characters` | ✓ ADR-380（修正前是 500） |
-| 一般民眾 resolve | **403** `Permission Denied.` | ✓ ADR-365 |
-| A 的通報者在審核期間改了 A 的標題，審核員用舊的 version 送出 | **409** `A ticket changed since it was compared; read it again` | ✓ ADR-373 |
-| 重讀 detail，數量填 2，但清淤合併後有 3 人 | **422** `Need 5c7690c5…: 3 people are on it, more than the quantity 2` | ✓ ADR-369 |
+| data_auditor 讀卡片 detail | 200。兩張完整的單：A（飲用水 1／0 人、清淤 2／2 人，1 張照片，`power_outage: no`）、B（清淤 5／2 人、飲用水 5／1 人、便當 3／1 人，2 張照片，`utility_hazards: gas`） | ✓ ADR-373、383、384 |
+| B 有答案，request 沒帶 `disaster_details` | **422** `The other ticket has disaster_details: send the primary's full answers` | ✓ ADR-385 |
+| `priority` 填 25 字 | **422** `priority must be at most 20 characters` | ✓ ADR-381（修正前是 500） |
+| 一般民眾 resolve | **403** `Permission Denied.` | ✓ ADR-366 |
+| A 的通報者在審核期間改了 A 的標題，審核員用舊的 version 送出 | **409** `A ticket changed since it was compared; read it again` | ✓ ADR-374 |
+| 重讀 detail，數量填 2，但清淤合併後有 3 人 | **422** `Need 5c7690c5…: 3 people are on it, more than the quantity 2` | ✓ ADR-370 |
 | 正確送出：B 清淤併入 A（7）、B 便當搬到 A、B 飲用水取消、A 電話改 0911222333、**A 改名「民生街 12 號淹水（合併）」**、照片 pA／pB 保留 pB2 取消、答案給完整一份 | **200**。卡片 `confirmed`，事件 `ignored_by_submitter` → `merged`；回傳的 `tickets.high`（B）為 null | ✓ |
 | 同一張卡再 resolve | **409** `Duplicate pair is confirmed and cannot be resolved` | ✓ |
-| super_admin revoke 這張卡 | **409** `Duplicate pair was resolved; a resolution cannot be revoked` | ✓ ADR-375 |
-| 另一張卡（A 飲用水 ↔ B 飲用水） | **409** `A ticket on this card has been cancelled` | ✓ ADR-377 |
+| super_admin revoke 這張卡 | **409** `Duplicate pair was resolved; a resolution cannot be revoked` | ✓ ADR-376 |
+| 另一張卡（A 飲用水 ↔ B 飲用水） | **409** `A ticket on this card has been cancelled` | ✓ ADR-378 |
 | 另一張卡（A 飲用水 ↔ 已搬到 A 的便當） | **409** `A ticket changed since it was compared` | ✓ 見 §7 |
 
 處理後的主要單（回應）：
@@ -135,10 +135,10 @@ disaster_details {'power_outage': ['yes'], 'utility_hazards': ['gas', 'water']}
  志工四    | 便當             | 民生街 12 號淹水（合併）
 ```
 
-- 志工二兩邊都接了清淤，合併後只剩 A 那一筆（ADR-368）。
+- 志工二兩邊都接了清淤，合併後只剩 A 那一筆（ADR-369）。
 - 志工三從 B 清淤搬到 A 清淤；他在 B 飲用水上的紀錄留在已取消的需求上，和 `delete_ticket_task` 的做法一致。
 
-**照片**（ADR-383）
+**照片**（ADR-384）
 
 ```
              url             |        on_ticket         | deleted
@@ -148,7 +148,7 @@ disaster_details {'power_outage': ['yes'], 'utility_hazards': ['gas', 'water']}
  https://example.com/pB.jpg  | 民生街 12 號淹水（合併） | f
 ```
 
-**災害欄位答案**（ADR-384）
+**災害欄位答案**（ADR-385）
 
 ```
           title           |  property_name  | value
@@ -175,8 +175,8 @@ A 的答案被整份取代（`power_outage` 從 no 變 yes，多了 `utility_haz
  A 的通報者 | dedup_ticket_updated | 你的求助「民生街 12 號淹水（合併）」已因重複審核更新               | ticket       | 民生街 12 號淹水（合併）
 ```
 
-- 通知用的是處理後的新標題「（合併）」（ADR-381）。
-- 每則點開都是主要單（ADR-378）。
+- 通知用的是處理後的新標題「（合併）」（ADR-382）。
+- 每則點開都是主要單（ADR-379）。
 - 志工四的需求是整項搬過來的，也收到「已合併」。
 - 志工一、志工二本來就在 A 清淤上，沒有收到。審核員本人沒有收到。
 
@@ -224,12 +224,12 @@ current: c3f1a9d27b54 (head)
 B 便當原本和 A 飲用水有一張待審卡。B 便當搬到 A 之後，這張卡的兩邊都在 A 上。
 
 - 腳本送的是另一張卡的 `version`，所以先被版本檢查擋下，回 409。
-- 前端照正常流程重讀這張卡再送出時，會拿到 422「兩邊是同一張單」（ADR-376）。code review 第 9 條把這個檢查留在處理計畫裡，所以它排在版本檢查之後。
-- 卡片留在佇列裡，兩邊都沒有 `deleted`，審核員可以用 reject 或 confirm 結案（ADR-377）。
+- 前端照正常流程重讀這張卡再送出時，會拿到 422「兩邊是同一張單」（ADR-377）。code review 第 9 條把這個檢查留在處理計畫裡，所以它排在版本檢查之後。
+- 卡片留在佇列裡，兩邊都沒有 `deleted`，審核員可以用 reject 或 confirm 結案（ADR-378）。
 
 前端要知道會出現這種卡片。
 
 ## 8. 與 plan 的差異
 
-- plan 寫的「B 在前台查得到 `replacedByUuid`」已在 ADR-371 改成不做。導向主要單靠通知，§5 已驗證每則通知都指向主要單。
+- plan 寫的「B 在前台查得到 `replacedByUuid`」已在 ADR-372 改成不做。導向主要單靠通知，§5 已驗證每則通知都指向主要單。
 - 照片用 ORM 寫入，理由見 §4.1 第 5 點。

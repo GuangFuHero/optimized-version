@@ -1,12 +1,16 @@
 # Decisions: 028-dedup-resolve
 
-ADR 全域連號，本 Spec 從 **ADR-364** 開始（2026-10-24 掃描所有遠端分支與本機 worktree，最大號 363，
+ADR 全域連號，本 Spec 從 **ADR-365** 開始（2026-10-24 掃描所有遠端分支與本機 worktree，最大號 363，
 在 `Spec/007-information-publishing`）。Spec 027 已被 `027-address-normalization` 佔用，本 Spec 用 028。
+
+> **2026-10-25 整批往後移一號**：原本是 ADR-364～384。#110（行前通知下架，Spec 007）合併時也用了 ADR-364，
+> 本 Spec 改成 ADR-365～385（PR #113 review）。程式、測試、Spec 025 的註記都跟著改了。
+> 386、387 已被其他分支用掉（`018-ticket-disaster-fields`），PR #113 review 那一輪的新決定從 ADR-388 起。
 commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-364：新增處理 API，判定與單的變更在同一筆交易；部分取代 ADR-341
+## ADR-365：新增處理 API，判定與單的變更在同一筆交易；部分取代 ADR-341
 
 **Date**: 2026-10-24　**Status**: Accepted（Carol 與工程師 10/23 定案，Notion §12b 第 4 項）
 
@@ -22,7 +26,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-365：resolve 只檢查 `ai_duplicate.review`
+## ADR-366：resolve 只檢查 `ai_duplicate.review`
 
 **Date**: 2026-10-24　**Status**: Accepted（Notion §12b 第 5 項）
 
@@ -33,7 +37,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-366：選一張主要單，結果由前端輸入；不建立新單 C
+## ADR-367：選一張主要單，結果由前端輸入；不建立新單 C
 
 **Date**: 2026-10-24　**Status**: Accepted（使用者拍板）
 
@@ -46,7 +50,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 - 只有一種處理：`primary` 指定主要單，`ticket` 帶主要單要改的欄位，`primary_tasks`、`secondary_tasks` 說明每一項需求怎麼處理。
 - 「擇一」= 主要單不改、另一張整張取消；「擇一並編輯」= 帶 `ticket`。兩者都是這一種處理的特例，不另設動作。
 - **不建立新單 C**。結果都留在主要單上，沿用它的 uuid 和開單者（`created_by`）。
-- 不記錄每個欄位的值來自 A、B 還是審核員輸入。值是審核員決定的，處理前兩張單的完整內容和送出的 request 都在事件裡，需要時可以比對（ADR-374）。
+- 不記錄每個欄位的值來自 A、B 還是審核員輸入。值是審核員決定的，處理前兩張單的完整內容和送出的 request 都在事件裡，需要時可以比對（ADR-375）。
 - 主要單可改的欄位包含聯絡人（`contact_name`、`contact_phone`、`contact_email`）。`updateTicket` 沒開放這三欄，但合併時要能留下正確的聯絡人（Notion §12c 第 6 項）。
 - 位置、地址這一版不能改。改位置會牽動快層的比對與地圖，等有需要再加。（慣例，未另外拍板）
 
@@ -54,7 +58,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-367：每一項需求都要明確列出
+## ADR-368：每一項需求都要明確列出
 
 **Date**: 2026-10-24　**Status**: Accepted（慣例，未另外拍板）
 
@@ -63,12 +67,12 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 - 另一張單每一項還在的需求，要不是被某項 `absorb`，就要列在 `secondary_tasks`（`move` 或 `cancel`）。
 - 漏列、重複列、列了不屬於這兩張單的需求，回 422。
 
-**理由**：前端選了什麼就寫什麼，後端不替審核員猜。版本檢查（ADR-373）擋住了「審核員沒看到的新需求」，
+**理由**：前端選了什麼就寫什麼，後端不替審核員猜。版本檢查（ADR-374）擋住了「審核員沒看到的新需求」，
 所以完整清單一定能列得出來。
 
 ---
 
-## ADR-368：併入的需求，接單紀錄搬到併入的那一項
+## ADR-369：併入的需求，接單紀錄搬到併入的那一項
 
 **Date**: 2026-10-24　**Status**: Accepted（使用者拍板）
 
@@ -80,13 +84,13 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 - 同一位志工兩邊都有接單（`uq_assignment_task_actor`）：留 A 的那筆，刪掉 B 的那筆，人數算一個。刪掉的記在事件的 `dropped_assignments`。
 - `move` 的需求整項搬家，接單紀錄本來就跟著需求，不用改。
 - 被 `cancel` 的需求，接單紀錄照 `delete_ticket_task` 的做法處理。
-- 志工要收到通知：需求已經併到 A，聯絡人改成 A 的聯絡人（ADR-378）。
+- 志工要收到通知：需求已經併到 A，聯絡人改成 A 的聯絡人（ADR-379）。
 
 **取代**：DEDUP-007 10/01「Their assignments are released, not moved automatically」。
 
 ---
 
-## ADR-369：數量不得少於接單人數；需求狀態依人數重算；只能併同類型
+## ADR-370：數量不得少於接單人數；需求狀態依人數重算；只能併同類型
 
 **Date**: 2026-10-24　**Status**: Accepted（第一點使用者拍板，其他為慣例，未另外拍板）
 
@@ -105,7 +109,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-370：被合併的單一定整張取消；部分合併 = 只選一部分進主要單
+## ADR-371：被合併的單一定整張取消；部分合併 = 只選一部分進主要單
 
 **Date**: 2026-10-24　**Status**: Accepted（使用者拍板，同日改過一次）
 
@@ -122,20 +126,20 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-371：新增 `tickets.replaced_by_uuid`、`ticket_tasks.merged_into_uuid`
+## ADR-372：新增 `tickets.replaced_by_uuid`、`ticket_tasks.merged_into_uuid`
 
 **Date**: 2026-10-24　**Status**: Accepted（Notion §12b 第 6 項；欄位形式為慣例，未另外拍板）
 
 **背景**：Notion §10e 第 2 項：刪掉 B 之後，B 上看不出是因為和 A 重複，只有配對卡知道。
 
 **決定**：兩張表各加一個 nullable FK，只做紀錄。
-- **GraphQL 不回傳**（使用者 10/24）。導向主要單靠通知：四種通知的 `ref_uuid` 都是主要單（ADR-378）。
+- **GraphQL 不回傳**（使用者 10/24）。導向主要單靠通知：四種通知的 `ref_uuid` 都是主要單（ADR-379）。
   被搬走的志工，接單紀錄已在主要單上，「我承接的」直接列出主要單；GraphQL 的 `ticket(uuid)` 本來就不回已軟刪除的單。
 既有的 `ticket_tasks.is_duplicate`、`dedup_group_id` 不用：它們是給慢層群組的，意思不同。
 
 ---
 
-## ADR-372：detail API 回傳兩張完整的單；清單 API 不回
+## ADR-373：detail API 回傳兩張完整的單；清單 API 不回
 
 **Date**: 2026-10-24　**Status**: Accepted（Notion §12b 第 3 項；形狀為慣例，未另外拍板）
 
@@ -149,7 +153,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-373：版本檢查用 detail 回傳的 `version`，對不上回 409
+## ADR-374：版本檢查用 detail 回傳的 `version`，對不上回 409
 
 **Date**: 2026-10-24　**Status**: Accepted（Notion §12c 第 1 項；做法為慣例，未另外拍板）
 
@@ -158,17 +162,17 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 **決定**：
 - `version` 是一個不透明字串：審核員比對的**內容本身**的雜湊（sha256），包含單的欄位、每一項還在的需求、每一個還在的細項，需求與細項依 uuid 排序。
-  2026-10-24 code review 後加入照片與災害欄位答案（ADR-383、384）。
-  細項也要算：request 必須列出每一個細項（ADR-379），審核員沒看到的新細項要擋下。
+  2026-10-24 code review 後加入照片與災害欄位答案（ADR-384、384）。
+  細項也要算：request 必須列出每一個細項（ADR-380），審核員沒看到的新細項要擋下。
 - 不用 `updated_at`。2026-10-24 Task 2 實測：單繼承 `BaseGeometry`，`updated_at` 在 `base_geometries` 上；
   只改單自己的欄位（例如 `title`），ORM 不會更新 `base_geometries`，`updated_at` 不變。用時間戳會漏掉這種修改。
 - 排除接單會動到的欄位：需求的 `claim_count`、`status`（滿額），單的 `status`、`audit_status`。
 - resolve 鎖住兩張單和需求之後重算，和 `expected_versions` 不同就回 409。前端重新載入、請審核員再比對一次。
-- 接單人數不算進 `version`：人數的檢查在鎖住之後做（ADR-369），接單不必讓審核員重新比對。
+- 接單人數不算進 `version`：人數的檢查在鎖住之後做（ADR-370），接單不必讓審核員重新比對。
 
 ---
 
-## ADR-374：`merged` 事件記錄處理前後的完整內容與原始 request
+## ADR-375：`merged` 事件記錄處理前後的完整內容與原始 request
 
 **Date**: 2026-10-24　**Status**: Accepted（Notion §12b 第 6 項；內容為慣例，未另外拍板）
 
@@ -180,7 +184,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-375：這一版不能撤銷處理結果
+## ADR-376：這一版不能撤銷處理結果
 
 **Date**: 2026-10-24　**Status**: Accepted（使用者拍板）
 
@@ -192,7 +196,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-376：只處理任務單的卡；站點卡、同一張單的兩項需求回 422
+## ADR-377：只處理任務單的卡；站點卡、同一張單的兩項需求回 422
 
 **Date**: 2026-10-24　**Status**: Accepted（慣例，未另外拍板）
 
@@ -203,7 +207,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-377：其他含被取消單的待審卡不動
+## ADR-378：其他含被取消單的待審卡不動
 
 **Date**: 2026-10-24　**Status**: Accepted（慣例，未另外拍板）
 
@@ -217,7 +221,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-378：通知和 resolve 同一張 PR
+## ADR-379：通知和 resolve 同一張 PR
 
 **Date**: 2026-10-24　**Status**: Accepted（使用者拍板；通知類型與內容為慣例，未另外拍板）
 
@@ -235,7 +239,7 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 ---
 
-## ADR-379：需求下的細項也由前端逐項選
+## ADR-380：需求下的細項也由前端逐項選
 
 **Date**: 2026-10-24　**Status**: Accepted（使用者拍板）
 
@@ -245,18 +249,18 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 - 漏列、重複列、列了不屬於它的細項，回 422。
 - `cancel` 的需求不帶 `properties`。
 
-**理由**：和需求同一套規則（ADR-367），前端選什麼就寫什麼。自動全搬會出現兩個同名品項，不搬會讓 B 的品項不見。
+**理由**：和需求同一套規則（ADR-368），前端選什麼就寫什麼。自動全搬會出現兩個同名品項，不搬會讓 B 的品項不見。
 
 ---
 
 # Code review 那一輪（2026-10-24，`SPEC028_CODE_REVIEW.md`）
 
-ADR-380～384。審查共 10 條，修 1、2、3、4、6、8、9；7（`_settle` 抽成共用）超出範圍不修；10 在 Postgres 上重現不出來。
+ADR-381～385。審查共 10 條，修 1、2、3、4、6、8、9；7（`_settle` 抽成共用）超出範圍不修；10 在 Postgres 上重現不出來。
 第 1 條（migration parent）是程序問題，不另寫 ADR：rebase 到 main `2e95aec0d`，`down_revision` 改成 `7370daf4c8f7`（commit `ec0e6633d`）。
 
 ---
 
-## ADR-380：主要單的 `priority`、`task_type` 檢查長度
+## ADR-381：主要單的 `priority`、`task_type` 檢查長度
 
 **Date**: 2026-10-24　**Status**: Accepted（code review 第 2 條；使用者同意修）
 
@@ -266,7 +270,7 @@ ADR-380～384。審查共 10 條，修 1、2、3、4、6、8、9；7（`_settle`
 
 ---
 
-## ADR-381：通知用處理後的標題
+## ADR-382：通知用處理後的標題
 
 **Date**: 2026-10-24　**Status**: Accepted（code review 第 3 條；使用者同意修）
 
@@ -276,7 +280,7 @@ ADR-380～384。審查共 10 條，修 1、2、3、4、6、8、9；7（`_settle`
 
 ---
 
-## ADR-382：主要單沒有變動時，不通知主要單的開單者
+## ADR-383：主要單沒有變動時，不通知主要單的開單者
 
 **Date**: 2026-10-24　**Status**: Accepted（code review 第 4 條；使用者同意修）
 
@@ -286,7 +290,7 @@ ADR-380～384。審查共 10 條，修 1、2、3、4、6、8、9；7（`_settle`
 
 ---
 
-## ADR-383：照片由審核員逐張選
+## ADR-384：照片由審核員逐張選
 
 **Date**: 2026-10-24　**Status**: Accepted（使用者拍板）
 
@@ -294,14 +298,14 @@ ADR-380～384。審查共 10 條，修 1、2、3、4、6、8、9；7（`_settle`
 
 **決定**：
 - detail 回傳兩張單還在的照片（`ref_type = "geometry"`、`ref_uuid` = 單）。照片算進 `version`。
-- request 的 `photos` 列出兩張單**每一張**照片，`keep` 或 `cancel`，比照需求的規則（ADR-367）：漏列、重複、不屬於這兩張單，回 422。
+- request 的 `photos` 列出兩張單**每一張**照片，`keep` 或 `cancel`，比照需求的規則（ADR-368）：漏列、重複、不屬於這兩張單，回 422。
 - `keep` 的另一張單照片改掛到主要單；`cancel` 軟刪除。
 - 兩張單都沒有照片時，`photos` 可以省略。
 - 不檢查照片張數上限：建單的上限（`HELP_REQUEST_PHOTO_MAX`）只管民眾一次送出的數量。合併後超過，是兩邊的照片加起來，由審核員決定要留幾張。（慣例，未另外拍板）
 
 ---
 
-## ADR-384：災害欄位答案由審核員給出完整的一份
+## ADR-385：災害欄位答案由審核員給出完整的一份
 
 **Date**: 2026-10-24　**Status**: Accepted（使用者拍板）
 
@@ -311,6 +315,6 @@ ADR-380～384。審查共 10 條，修 1、2、3、4、6、8、9；7（`_settle`
 - detail 回傳兩張單的答案 `{property_name: [values]}`，算進 `version`。
 - request 的 `disaster_details` 是主要單處理後**完整的**答案，整份取代，做法同 `setTicketDisasterDetails`（不驗欄位是否存在於設定，ADR-092；驗大小，ADR-267）。值由前端輸入，可以從兩邊挑，也可以改。
 - 另一張單有答案時 `disaster_details` 必填，避免沒看到就丟掉；只有主要單有答案時可省略，省略就不動。
-- 地址仍不在這一版（ADR-366）。地址牽動位置，和快層比對、地圖相關，另開票。
+- 地址仍不在這一版（ADR-367）。地址牽動位置，和快層比對、地圖相關，另開票。
 
 **為什麼不逐筆列出**：同一個欄位兩邊常常都有答案（例如兩邊都答了是否斷電），逐筆 keep／cancel 會留下互相矛盾的答案。給出完整的一份，和民眾送出表單的方式一致。

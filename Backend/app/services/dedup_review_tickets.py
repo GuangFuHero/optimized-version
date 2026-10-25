@@ -1,4 +1,4 @@
-"""The two whole tickets behind a duplicate pair card, for the AI 重複審核 page (Spec 028 §2, ADR-372/373).
+"""The two whole tickets behind a duplicate pair card, for the AI 重複審核 page (Spec 028 §2, ADR-373/373).
 
 A fast-layer card compares one need with another (`ticket_task`), but a resolve acts on whole
 tickets, so the reviewer has to see both tickets in full first: their fields, contacts, every live
@@ -39,7 +39,7 @@ class PropertyForReview:
 
 @dataclass(frozen=True)
 class PhotoForReview:
-    """One live photo on a ticket (ADR-383)."""
+    """One live photo on a ticket (ADR-384)."""
 
     uuid: str
     url: str
@@ -66,7 +66,7 @@ class TicketForReview:
     """A whole live ticket as the reviewer compares it.
 
     Contacts are unmasked: the reviewer holds ai_duplicate.view, and picking the right contact is
-    part of the decision (ADR-372).
+    part of the decision (ADR-373).
     """
 
     uuid: str
@@ -92,19 +92,19 @@ class TicketForReview:
     disaster_details: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
-# What a claim moves, which must not move the version (ADR-373): a need's headcount and the status
+# What a claim moves, which must not move the version (ADR-374): a need's headcount and the status
 # a claim fills, and the ticket status (and audit status) worked out from them.
 _TICKET_SKIPPED = {"version", "status", "audit_status", "tasks", "photos"}
 _TASK_SKIPPED = {"claim_count", "status", "properties"}
 
 
 def ticket_version(ticket: TicketForReview) -> str:
-    """An opaque digest of what the reviewer compared (ADR-373).
+    """An opaque digest of what the reviewer compared (ADR-374).
 
     Made from the content itself, not from `updated_at`: a ticket's `updated_at` lives on
     `base_geometries`, which an edit to the ticket's own columns does not touch. Every field the
     reviewer can compare or edit goes in — the ticket's, each live need's and item's, its photos
-    and disaster-field answers (ADR-383, 384) — with needs, items and photos sorted by uuid.
+    and disaster-field answers (ADR-384, 384) — with needs, items and photos sorted by uuid.
     What a claim moves stays out: the headcount is checked under the locks when resolving, and a
     claim need not send the reviewer back.
     """

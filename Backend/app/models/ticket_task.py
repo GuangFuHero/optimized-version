@@ -39,7 +39,7 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     progress_note: Mapped[str | None] = mapped_column(String)
     is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False)
     dedup_group_id: Mapped[str | None] = mapped_column(String)
-    # Set when a dedup resolve folds this need into another (Spec 028, ADR-371); its people
+    # Set when a dedup resolve folds this need into another (Spec 028, ADR-372); its people
     # moved there. Not `is_duplicate` / `dedup_group_id`, which belong to the slow layer's groups.
     merged_into_uuid: Mapped[str | None] = mapped_column(
         ForeignKey("ticket_tasks.uuid"), nullable=True, comment="重複審核時併入的需求"

@@ -1,11 +1,11 @@
-"""Resolve a duplicate pair card: keep one ticket, fold the other into it (Spec 028 §3.5, ADR-364).
+"""Resolve a duplicate pair card: keep one ticket, fold the other into it (Spec 028 §3.5, ADR-365).
 
-`ai_duplicate.review` only (ADR-365): the reviewer needs no ticket.edit or ticket.delete, since
+`ai_duplicate.review` only (ADR-366): the reviewer needs no ticket.edit or ticket.delete, since
 this one action is all they can do to the tickets and every use of it is recorded. In one
 transaction: lock the card, both tickets and their needs; check nothing the reviewer compared has
-changed (ADR-373); plan (`dedup_resolve_plan.build_plan`); write the tickets, needs, items and
-claims; mark the card confirmed; record a `merged` event holding everything as it was (ADR-374).
-There is no undo (ADR-375): the event is what a person restores from.
+changed (ADR-374); plan (`dedup_resolve_plan.build_plan`); write the tickets, needs, items and
+claims; mark the card confirmed; record a `merged` event holding everything as it was (ADR-375).
+There is no undo (ADR-376): the event is what a person restores from.
 
 The paired entities are touched here and only here; confirm and reject still change the card
 alone (ADR-341).
@@ -126,7 +126,7 @@ async def _locked_snapshot(db: AsyncSession, pair: DuplicatePair, request):
     """Lock both tickets and their live needs, read them fresh, check them against what was seen.
 
     Ticket rows first, then needs, each in uuid order (ADR-291). What the reviewer saw is the
-    request's `expected_versions` (ADR-373).
+    request's `expected_versions` (ADR-374).
     """
     low_uuid, high_uuid = await ticket_uuids_for_pair(db, pair)
     if not low_uuid or not high_uuid:
@@ -190,7 +190,7 @@ async def _write_needs(
 ) -> None:
     """Fold, move, change and cancel needs; move the people on folded needs; settle each kept need."""
     if plan.dropped_assignments:
-        # Someone already on the need it folds into keeps that place; this one goes (ADR-368).
+        # Someone already on the need it folds into keeps that place; this one goes (ADR-369).
         await db.execute(
             delete(TaskAssignment).where(
                 tuple_(TaskAssignment.task_uuid, TaskAssignment.actor_uuid).in_(plan.dropped_assignments)
@@ -217,7 +217,7 @@ async def _write_needs(
 
 
 def _settle(task: TicketTask, headcount: int, now: datetime) -> None:
-    """A kept need's status after its quantity and people changed (ADR-369).
+    """A kept need's status after its quantity and people changed (ADR-370).
 
     Stopped by hand stays stopped. Full is fulfilled; a need that was full and now has room is
     open again. Anything else stays as it is.
@@ -249,8 +249,8 @@ async def _write_items(db: AsyncSession, plan: ResolvePlan, now: datetime) -> No
 async def _write_photos_and_answers(db: AsyncSession, plan: ResolvePlan, now: datetime) -> None:
     """Move the other ticket's kept photos over, soft-delete cancelled ones, replace the answers.
 
-    Photos: ADR-383. The primary's disaster answers are replaced whole when the request gives
-    them (ADR-384), as setTicketDisasterDetails does.
+    Photos: ADR-384. The primary's disaster answers are replaced whole when the request gives
+    them (ADR-385), as setTicketDisasterDetails does.
     """
     if plan.moved_photos:
         await db.execute(
@@ -331,7 +331,7 @@ def _merged_event(
 def _outcome(plan, primary, secondary, claimants, tasks) -> ResolveOutcome:
     dropped = set(plan.dropped_assignments)
     # Whoever now answers to the primary ticket's contact: the people on a folded need who moved
-    # over, and the people on a need moved over whole (ADR-378).
+    # over, and the people on a need moved over whole (ADR-379).
     moved = {
         absorbed: tuple(sorted(p for p in claimants.get(absorbed, set()) if (absorbed, p) not in dropped))
         for absorbed in plan.absorbed

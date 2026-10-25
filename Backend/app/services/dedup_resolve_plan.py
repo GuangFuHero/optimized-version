@@ -6,12 +6,12 @@ Nothing here reads or writes the database; `dedup_resolve.resolve` loads the inp
 and writes the plan. The vocabulary check on `disaster_types` needs the database and is left to it.
 
 The rules, each from decisions.md:
-- one primary ticket; the other is always cancelled (ADR-366, 370);
+- one primary ticket; the other is always cancelled (ADR-367, 370);
 - every live need of both tickets is named exactly once — kept, cancelled, absorbed or moved — and
-  so is every live item of a kept or moved need (ADR-367, 379);
-- a need only absorbs needs of the other ticket of its own kind (ADR-369);
+  so is every live item of a kept or moved need (ADR-368, 379);
+- a need only absorbs needs of the other ticket of its own kind (ADR-370);
 - no need ends with more people than its quantity, a person on two merged needs counting once
-  (ADR-368, 369).
+  (ADR-369, 369).
 """
 
 from collections.abc import Mapping, Sequence
@@ -215,7 +215,7 @@ def _no_payload(entry, uuid: str) -> None:
 def _headcount(uuid: str, sources, claimants) -> tuple[int, list[tuple[str, str]]]:
     """People on the kept need once its absorbed needs move over; someone on two counts once.
 
-    The second assignment of such a person, the one on an absorbed need, is dropped (ADR-368).
+    The second assignment of such a person, the one on an absorbed need, is dropped (ADR-369).
     """
     seen = set(claimants.get(uuid, set()))
     dropped = []
@@ -236,7 +236,7 @@ def _task_changes(entry, task) -> dict:
 
 
 def _check_size(task, changes: dict, people: int) -> None:
-    """The need's name and quantity after the changes, against its kind and its people (ADR-369).
+    """The need's name and quantity after the changes, against its kind and its people (ADR-370).
 
     The kind's rules are create's own (`ticket._validate_need_size`); only the headcount is new.
     """
@@ -255,7 +255,7 @@ def _check_size(task, changes: dict, people: int) -> None:
 
 
 def _plan_photos(listed, primary: TicketForReview, secondary: TicketForReview) -> tuple[tuple, tuple]:
-    """Every live photo of both tickets kept or cancelled; the other's kept ones move over (ADR-383)."""
+    """Every live photo of both tickets kept or cancelled; the other's kept ones move over (ADR-384)."""
     owner = {photo.uuid: ticket.uuid for ticket in (primary, secondary) for photo in ticket.photos}
     if not owner and listed is None:
         return (), ()
@@ -275,7 +275,7 @@ def _plan_photos(listed, primary: TicketForReview, secondary: TicketForReview) -
 
 
 def _disaster_details(sent, secondary: TicketForReview) -> dict[str, list[str]] | None:
-    """The primary's full answers to set, or None to leave them (ADR-384).
+    """The primary's full answers to set, or None to leave them (ADR-385).
 
     The other ticket's answers would otherwise vanish with it, so when it has any the request
     must say what the primary ends with.
@@ -292,7 +292,7 @@ def _disaster_details(sent, secondary: TicketForReview) -> dict[str, list[str]] 
 
 
 class _Items:
-    """What happens to every live item of the kept and moved needs (ADR-379)."""
+    """What happens to every live item of the kept and moved needs (ADR-380)."""
 
     def __init__(self) -> None:
         self.changes: dict[str, dict] = {}
@@ -352,7 +352,7 @@ def _ticket_changes(values) -> dict:
         if required in changes and not (changes[required] or "").strip():
             raise ResolveRefused(f"{required} is required")
     for name, limit in _COLUMN_LIMITS.items():
-        # Past the column the database raises, and REST would answer 500 (ADR-380).
+        # Past the column the database raises, and REST would answer 500 (ADR-381).
         if changes.get(name) is not None and len(changes[name]) > limit:
             raise ResolveRefused(f"{name} must be at most {limit} characters")
     return changes

@@ -1,4 +1,4 @@
-"""tickets.replaced_by_uuid, ticket_tasks.merged_into_uuid: where a dedup-merged record went (ADR-371)
+"""tickets.replaced_by_uuid, ticket_tasks.merged_into_uuid: where a dedup-merged record went (ADR-372)
 
 Revision ID: c3f1a9d27b54
 Revises: da152a6a9d7c

@@ -1,4 +1,4 @@
-"""POST /admin/duplicate-pairs/{uuid}/resolve is wired to the service (Spec 028 §3, ADR-364/365).
+"""POST /admin/duplicate-pairs/{uuid}/resolve is wired to the service (Spec 028 §3, ADR-365/365).
 
 Wiring only: what a resolve writes is observed at the service (tests/test_dedup_resolve.py).
 Roles come straight from `scripts/seed_rbac.py`, so who may resolve is what production grants.
@@ -26,7 +26,7 @@ async def _setup(db_session):
 
 @pytest.mark.parametrize("role_name", ["super_admin", "data_auditor"])
 async def test_the_seeded_reviewers_resolve(client, db_session, redis, role_name):
-    """ADR-365: both roles holding ai_duplicate.review resolve; the answer is the card as it now stands."""
+    """ADR-366: both roles holding ai_duplicate.review resolve; the answer is the card as it now stands."""
     ids = await _setup(db_session)
     headers = await _headers(db_session, redis, role_name)
     body = _example_one(ids, await _seen(client, headers, ids)).model_dump(mode="json", exclude_unset=True)
@@ -80,7 +80,7 @@ async def test_a_malformed_request_is_unprocessable(client, db_session, redis, b
 
 
 async def test_a_request_the_plan_refuses_is_unprocessable(client, db_session, redis):
-    """ADR-369: 3 people on a need of 2 is the reviewer's to fix, not a conflict."""
+    """ADR-370: 3 people on a need of 2 is the reviewer's to fix, not a conflict."""
     ids = await _setup(db_session)
     headers = await _headers(db_session, redis, "data_auditor")
     body = _example_one(ids, await _seen(client, headers, ids)).model_dump(mode="json", exclude_unset=True)
@@ -93,7 +93,7 @@ async def test_a_request_the_plan_refuses_is_unprocessable(client, db_session, r
 
 
 async def test_a_stale_version_is_a_conflict(client, db_session, redis):
-    """ADR-373: the page reloads and the reviewer compares again."""
+    """ADR-374: the page reloads and the reviewer compares again."""
     ids = await _setup(db_session)
     headers = await _headers(db_session, redis, "data_auditor")
     body = _example_one(ids, {"low": "stale", "high": "stale"}).model_dump(mode="json", exclude_unset=True)
@@ -117,7 +117,7 @@ async def test_a_missing_card_is_not_found(client, db_session, redis):
 
 
 async def test_a_resolved_card_cannot_be_revoked(client, db_session, redis):
-    """ADR-375 through REST: the revoke answers 409."""
+    """ADR-376 through REST: the revoke answers 409."""
     ids = await _setup(db_session)
     headers = await _headers(db_session, redis, "super_admin")
     body = _example_one(ids, await _seen(client, headers, ids)).model_dump(mode="json", exclude_unset=True)

@@ -1,4 +1,4 @@
-"""The notices a dedup resolve sends once it has committed (Spec 028 §6, ADR-378).
+"""The notices a dedup resolve sends once it has committed (Spec 028 §6, ADR-379).
 
 Four kinds, each pointing at the primary ticket (`ref_type = "ticket"`), which is how everyone gets
 there: the cancelled ticket is not shown any more. No phone or email in them — the notice stays in
@@ -108,7 +108,7 @@ def _secondary_body(outcome) -> str:
 
 
 def _primary_changed(outcome) -> bool:
-    """Whether anything on the primary ticket changed (ADR-382).
+    """Whether anything on the primary ticket changed (ADR-383).
 
     The other ticket's cancelled needs are not the primary's: picking A as it is, with every need
     of B cancelled, leaves A untouched and its owner is not told otherwise.

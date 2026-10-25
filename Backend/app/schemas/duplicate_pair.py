@@ -104,7 +104,7 @@ class TaskForReviewResponse(BaseModel):
 
 
 class PhotoForReviewResponse(BaseModel):
-    """One live photo on a ticket (Spec 028, ADR-383)."""
+    """One live photo on a ticket (Spec 028, ADR-384)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -114,9 +114,9 @@ class PhotoForReviewResponse(BaseModel):
 
 
 class TicketForReviewResponse(BaseModel):
-    """A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-372).
+    """A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).
 
-    Send `version` back unchanged when resolving: it says what the reviewer saw (ADR-373).
+    Send `version` back unchanged when resolving: it says what the reviewer saw (ADR-374).
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -154,7 +154,7 @@ class TicketsForReviewResponse(BaseModel):
 class DuplicatePairDetail(DuplicatePairResponse):
     """One card with every event recorded on it, oldest first, and its two whole tickets.
 
-    `tickets` is null for a station card, which is not resolved (Spec 028, ADR-376).
+    `tickets` is null for a station card, which is not resolved (Spec 028, ADR-377).
     """
 
     events: list[DedupEventResponse]
@@ -212,7 +212,7 @@ class ResolvePropertyValues(_Strict):
 
 
 class ResolveProperty(_Strict):
-    """One item of a kept or moved need, or of a need it absorbs (ADR-379)."""
+    """One item of a kept or moved need, or of a need it absorbs (ADR-380)."""
 
     property: UUID
     action: Literal["keep", "cancel"]
@@ -239,7 +239,7 @@ class ResolveSecondaryTask(_Strict):
 
 
 class ResolvePhoto(_Strict):
-    """One photo of either ticket: kept on the primary, or cancelled (ADR-383).
+    """One photo of either ticket: kept on the primary, or cancelled (ADR-384).
 
     A kept photo of the other ticket moves over to the primary.
     """
@@ -249,7 +249,7 @@ class ResolvePhoto(_Strict):
 
 
 class ResolveVersions(_Strict):
-    """The `version` of each side's ticket as the reviewer read it (ADR-373)."""
+    """The `version` of each side's ticket as the reviewer read it (ADR-374)."""
 
     low: str
     high: str

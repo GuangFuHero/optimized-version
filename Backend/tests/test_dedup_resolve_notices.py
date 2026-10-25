@@ -1,4 +1,4 @@
-"""The notices a resolve sends after it commits (Spec 028 §6, ADR-378).
+"""The notices a resolve sends after it commits (Spec 028 §6, ADR-379).
 
 Built on the world of test_dedup_resolve.py: v1 and v2 on a1, v2 and v3 on b1, v4 on b3.
 """
@@ -152,7 +152,7 @@ async def test_a_failing_notice_still_answers_through_rest(client, db_session, r
 
 
 async def test_the_notices_name_the_primary_as_renamed(db):
-    """ADR-381: renamed in the same resolve, the notices use the new title."""
+    """ADR-382: renamed in the same resolve, the notices use the new title."""
     reviewer, ids = await _world(db)
     request = _example_one(ids, await _versions(db, reviewer, ids), ticket={"title": "民生街 12 號（合併）"})
 
@@ -164,7 +164,7 @@ async def test_the_notices_name_the_primary_as_renamed(db):
 
 
 async def test_picking_the_primary_as_it_is_does_not_tell_its_owner(db):
-    """ADR-382: A untouched, every need of B cancelled — A's owner hears nothing."""
+    """ADR-383: A untouched, every need of B cancelled — A's owner hears nothing."""
     reviewer, ids = await _world(db)
     request = _example_one(
         ids,

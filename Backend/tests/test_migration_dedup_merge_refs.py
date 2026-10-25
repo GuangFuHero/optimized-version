@@ -1,4 +1,4 @@
-"""Spec 028 (ADR-371): the columns that say where a merged ticket and a merged need went.
+"""Spec 028 (ADR-372): the columns that say where a merged ticket and a merged need went.
 
 `tickets.replaced_by_uuid` points a ticket cancelled by a dedup resolve at the ticket that replaced
 it; `ticket_tasks.merged_into_uuid` points a need folded into another at that need. Both are plain

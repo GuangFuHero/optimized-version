@@ -7,7 +7,7 @@
 **Base**: `main` @ `a272dfdd4`，分支 `feat/dedup-resolve`
 **Notion**: DEDUP-007（審核動作與後端）、DEDUP-008（AI 重複審核頁，前端 Ethan）、DEDUP-009（通知，Dennis）、
 「dedup 10/23 update — 討論頁」§12
-**Decisions**: `decisions.md`（ADR-364～384；380～384 是 code review 那一輪）
+**Decisions**: `decisions.md`（ADR-365～385；381～385 是 code review 那一輪）
 **前一份**：Spec 025（PR #92，判定＋撤銷）。本 Spec 是 ADR-336 拆出去的「後半段」。
 
 ## 概述
@@ -20,7 +20,7 @@ Spec 025 讓審核員可以判定「確認重複／不是重複」，但判定�
 1. 審核員選一張**主要單**（例如 A）。
 2. 主要單的欄位，前端送來最後要的值。
 3. 兩張單的每一項需求，前端說要怎麼處理：留著（可改值）、併進主要單的某一項、搬到主要單、取消。
-4. 另一張單（B）**一定整張取消**。B 上要留的東西，一律併進或搬到主要單；沒選的跟著 B 取消（ADR-370）。
+4. 另一張單（B）**一定整張取消**。B 上要留的東西，一律併進或搬到主要單；沒選的跟著 B 取消（ADR-371）。
 5. 後端在**一筆交易**裡寫完，留下一筆 `merged` 事件。
 
 ```
@@ -77,16 +77,16 @@ B ticket                        B ticket：已取消，replaced_by = A
 
 ## 非目標
 
-- **不能撤銷**處理結果（ADR-375）。
-- **不建立新單 C**（ADR-366）。
-- **不處理站點**：站點卡呼叫 resolve 回 422（ADR-376）。站點是否整個排除在 AI 重複審核外，另案決定（Notion §8 第 1 項）。
+- **不能撤銷**處理結果（ADR-376）。
+- **不建立新單 C**（ADR-367）。
+- **不處理站點**：站點卡呼叫 resolve 回 422（ADR-377）。站點是否整個排除在 AI 重複審核外，另案決定（Notion §8 第 1 項）。
 - **不改送單時的提示**：回傳「哪些欄位疑似重複」（Notion §12b 第 1 項）另開票。
 - **不改演算法**，不改 `app/dedup_engine/`。
 - **不處理前端**：交接說明寫在 plan。
 
 ---
 
-## 1. 權限（ADR-365）
+## 1. 權限（ADR-366）
 
 | 動作 | 權限 |
 |---|---|
@@ -95,7 +95,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 
 處理時**不檢查** `ticket.edit`、`ticket.delete`。資料檢核員不必另外拿一般的改單、刪單權限。
 
-## 2. 讀取：`GET /admin/duplicate-pairs/{uuid}` 加上兩張完整的單（ADR-372）
+## 2. 讀取：`GET /admin/duplicate-pairs/{uuid}` 加上兩張完整的單（ADR-373）
 
 既有回應不變，多一個欄位 `tickets`：
 
@@ -114,7 +114,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 
 | 欄位 | 說明 |
 |---|---|
-| `uuid`、`version` | `version` 用在處理時的版本檢查（ADR-373） |
+| `uuid`、`version` | `version` 用在處理時的版本檢查（ADR-374） |
 | `title`、`description`、`priority`、`task_type`、`disaster_types`、`person_trapped_reported`、`immediate_danger_reported` | 單的欄位 |
 | `contact_name`、`contact_phone`、`contact_email` | 聯絡人。需要 `ai_duplicate.view`，審核員要能比對 |
 | `longitude`、`latitude` | 單的點 |
@@ -122,12 +122,12 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `created_by`、`created_at` | 開單者 |
 | `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`recruiting_stopped`、`properties` |
 | `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`property_value`、`quantity`、`status`、`comment` |
-| `photos` | 還在的照片：`uuid`、`url`、`created_at`（ADR-383） |
-| `disaster_details` | 災害欄位答案：`{property_name: [value, …]}`（ADR-384） |
+| `photos` | 還在的照片：`uuid`、`url`、`created_at`（ADR-384） |
+| `disaster_details` | 災害欄位答案：`{property_name: [value, …]}`（ADR-385） |
 
 清單 API（`GET /admin/duplicate-pairs`）**不加**這個欄位，避免一頁 200 張卡都載入完整的單。
 
-## 3. 處理：`POST /admin/duplicate-pairs/{uuid}/resolve`（ADR-364、366）
+## 3. 處理：`POST /admin/duplicate-pairs/{uuid}/resolve`（ADR-365、366）
 
 ### 3.1 Request
 
@@ -154,12 +154,12 @@ B ticket                        B ticket：已取消，replaced_by = A
 | 欄位 | 必填 | 說明 |
 |---|---|---|
 | `primary` | ✓ | `low` 或 `high`，指卡片的哪一邊。卡是 `ticket_task` 時，指那一邊需求所屬的單 |
-| `expected_versions` | ✓ | 審核員看到的兩張單的 `version`（ADR-373） |
+| `expected_versions` | ✓ | 審核員看到的兩張單的 `version`（ADR-374） |
 | `ticket` | | 主要單要改的欄位。只帶要改的。可改的欄位見 §3.2 |
-| `primary_tasks` | ✓ | 主要單**每一項**還在的需求（ADR-367） |
+| `primary_tasks` | ✓ | 主要單**每一項**還在的需求（ADR-368） |
 | `secondary_tasks` | ✓ | 另一張單**每一項**還在、而且沒被 `absorb` 的需求 |
-| `photos` | 兩張單有照片時 ✓ | 兩張單**每一張**還在的照片：`keep` 或 `cancel`（ADR-383） |
-| `disaster_details` | 另一張單有災害欄位答案時 ✓ | 主要單處理後**完整的**災害欄位答案，整份取代（ADR-384） |
+| `photos` | 兩張單有照片時 ✓ | 兩張單**每一張**還在的照片：`keep` 或 `cancel`（ADR-384） |
+| `disaster_details` | 另一張單有災害欄位答案時 ✓ | 主要單處理後**完整的**災害欄位答案，整份取代（ADR-385） |
 | `note` | | 審核員備註，上限 1000 字 |
 
 ### 3.2 主要單可改的欄位
@@ -168,11 +168,11 @@ B ticket                        B ticket：已取消，replaced_by = A
 `immediate_danger_reported`、`contact_name`、`contact_phone`、`contact_email`。
 
 - 驗證和建單時相同：長度、`disaster_types` 的合法值（`validate_disaster_types`，`keep` = 主要單現有的）。
-- `priority` 最多 20 字、`task_type` 最多 50 字（欄位長度），超過回 422（ADR-380）。`priority` 的合法值不驗，同 `updateTicket`（ADR-126）。
+- `priority` 最多 20 字、`task_type` 最多 50 字（欄位長度），超過回 422（ADR-381）。`priority` 的合法值不驗，同 `updateTicket`（ADR-126）。
 - `status` 不能改，照需求推算。
-- 位置、地址不在這一版（ADR-366）。
+- 位置、地址不在這一版（ADR-367）。
 
-### 3.3 需求的處理（ADR-367～369）
+### 3.3 需求的處理（ADR-368～370）
 
 **主要單的需求**（`primary_tasks`）：
 
@@ -183,7 +183,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 
 `values` 可改：`task_name`、`task_description`、`quantity`。
 
-**細項**（`task_properties`，ADR-379）：`keep` 和 `move` 的項目要帶 `properties`，列出處理後這一項的**每一個**細項：
+**細項**（`task_properties`，ADR-380）：`keep` 和 `move` 的項目要帶 `properties`，列出處理後這一項的**每一個**細項：
 
 ```json
 { "task": "<A.task1>", "action": "keep", "absorb": ["<B.task1>"], "values": { "quantity": 7 },
@@ -203,11 +203,11 @@ B ticket                        B ticket：已取消，replaced_by = A
 
 | 處理 | 結果 |
 |---|---|
-| 被 `absorb` | 取消，`merged_into_uuid` = 併入的那一項。接單紀錄搬過去（ADR-368） |
+| 被 `absorb` | 取消，`merged_into_uuid` = 併入的那一項。接單紀錄搬過去（ADR-369） |
 | `move` | 整項搬到主要單：`ticket_uuid` 改成主要單，uuid、接單紀錄都不變。可帶 `values` |
 | `cancel` | 取消 |
 
-### 3.3.1 照片與災害欄位答案（ADR-383、384）
+### 3.3.1 照片與災害欄位答案（ADR-384、384）
 
 ```json
 "photos": [
@@ -224,7 +224,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 - **災害欄位答案**：主要單處理後的完整答案，整份取代（同 `setTicketDisasterDetails`）。值由前端輸入，可以從 A、B 挑，也可以改。
   - 另一張單有答案時必填，不能漏，否則 422。只有主要單有答案時可省略，省略就不動。
   - 大小限制同 `setTicketDisasterDetails`（ADR-267）。
-- 地址仍不在這一版（ADR-366），留在已取消的另一張單上。
+- 地址仍不在這一版（ADR-367），留在已取消的另一張單上。
 
 ### 3.4 檢查（全部通過才寫入）
 
@@ -233,19 +233,19 @@ B ticket                        B ticket：已取消，replaced_by = A
 | 沒有 `ai_duplicate.review` | 403 |
 | 卡不存在 | 404 |
 | 卡不是待審也不是 `confirmed`；或已經處理過 | 409 |
-| 卡是 `station` | 422（ADR-376） |
+| 卡是 `station` | 422（ADR-377） |
 | 卡的兩邊是同一張單的需求 | 422 |
 | 任一張單已取消或刪除 | 409 |
-| `expected_versions` 對不上 | 409，請重新比對（ADR-373） |
+| `expected_versions` 對不上 | 409，請重新比對（ADR-374） |
 | 有需求沒列到、列了兩次、或列了不屬於這兩張單的需求 | 422 |
-| `absorb` 的需求類型（`task_type`）和併入的那一項不同 | 422（ADR-369） |
-| 處理後某項需求的接單人數大於 `quantity` | 422（ADR-369） |
+| `absorb` 的需求類型（`task_type`）和併入的那一項不同 | 422（ADR-370） |
+| 處理後某項需求的接單人數大於 `quantity` | 422（ADR-370） |
 | `quantity` 不合 `_validate_need_size`（rescue 以外必填、至少 1） | 422 |
-| `keep`／`move` 的項目漏列、重複列細項，或列了不屬於它的細項 | 422（ADR-379） |
+| `keep`／`move` 的項目漏列、重複列細項，或列了不屬於它的細項 | 422（ADR-380） |
 | 主要單處理後沒有任何需求 | 422 |
-| `priority` 超過 20 字、`task_type` 超過 50 字 | 422（ADR-380） |
-| 照片漏列、重複列，或列了不屬於這兩張單的照片 | 422（ADR-383） |
-| 另一張單有災害欄位答案，但 request 沒帶 `disaster_details` | 422（ADR-384） |
+| `priority` 超過 20 字、`task_type` 超過 50 字 | 422（ADR-381） |
+| 照片漏列、重複列，或列了不屬於這兩張單的照片 | 422（ADR-384） |
+| 另一張單有災害欄位答案，但 request 沒帶 `disaster_details` | 422（ADR-385） |
 | `disaster_details` 超過大小限制 | 422（ADR-267） |
 
 ### 3.5 寫入順序（一筆交易）
@@ -255,9 +255,9 @@ B ticket                        B ticket：已取消，replaced_by = A
 3. 檢查版本、檢查 request（§3.4）。
 4. 記錄處理前的完整內容（§5）。
 5. 改主要單的欄位。
-6. 處理每一項需求與細項；搬接單紀錄（ADR-368）；重算需求狀態（ADR-369）。
-7. 照片改掛或軟刪除；帶了 `disaster_details` 就取代主要單的答案（ADR-383、384）。
-8. 另一張單取消＋軟刪除，`replaced_by_uuid` = 主要單（ADR-370）。
+6. 處理每一項需求與細項；搬接單紀錄（ADR-369）；重算需求狀態（ADR-370）。
+7. 照片改掛或軟刪除；帶了 `disaster_details` 就取代主要單的答案（ADR-384、384）。
+8. 另一張單取消＋軟刪除，`replaced_by_uuid` = 主要單（ADR-371）。
 8. 主要單 `recompute_ticket_status`、`void_stale_verdict`。
 9. 配對卡 → `confirmed`，記 `reviewed_by`、`reviewed_at`。
 10. 寫 `merged` 事件。
@@ -275,11 +275,11 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `tickets` | 新增 `replaced_by_uuid`（FK `tickets.uuid`，nullable） | 整張被取消時指向主要單 |
 | `ticket_tasks` | 新增 `merged_into_uuid`（FK `ticket_tasks.uuid`，nullable） | 被併入時指向併入的那一項 |
 
-這兩個欄位只做紀錄，GraphQL 不回傳（ADR-371）。導向主要單靠通知：每則通知的 `ref_uuid` 都是主要單（§6）。
+這兩個欄位只做紀錄，GraphQL 不回傳（ADR-372）。導向主要單靠通知：每則通知的 `ref_uuid` 都是主要單（§6）。
 
 不新增事件類型，`merged` 已經在 CHECK 裡。
 
-## 5. `merged` 事件（ADR-374）
+## 5. `merged` 事件（ADR-375）
 
 | 欄位 | 內容 |
 |---|---|
@@ -292,9 +292,9 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `before_state` | `{pair_status, tickets: {low: …, high: …}}`：兩張單處理前的完整內容（同 `TicketForReview`，含需求與每一項的接單人 uuid） |
 | `after_state` | `{pair_status: "confirmed", tickets: {…}}`：處理後的內容 |
 | `affected_refs` | `{request: <原始 request>, absorbed: {<B.task>: <A.task>}, moved: […], canceled_tasks: […], moved_assignments: […], dropped_assignments: […], moved_properties: […], canceled_properties: […], moved_photos: […], canceled_photos: […]}` |
-| `reversible` | `false`（ADR-375） |
+| `reversible` | `false`（ADR-376） |
 
-## 6. 通知（ADR-378）
+## 6. 通知（ADR-379）
 
 commit 之後發送，照 `dedup_review.notify_new_cards` 的寫法：失敗只記 log，不回滾處理。
 所有通知 `ref_type = "ticket"`、`ref_uuid` = 主要單，點開就到主要單。
@@ -313,10 +313,10 @@ commit 之後發送，照 `dedup_review.notify_new_cards` 的寫法：失敗只�
 
 ## 7. 邊界情況
 
-- 同一位志工在 A.task1 和 B.task1 都有接單：併入後只留一筆（A 的），人數算一個（ADR-368）。
+- 同一位志工在 A.task1 和 B.task1 都有接單：併入後只留一筆（A 的），人數算一個（ADR-369）。
 - 主要單原本已經檢核過（`audited`）：內容一改就退回 `no_audit`（既有規則）。
-- 主要單原本某項需求已滿，併入後數量加大：需求重新開放（ADR-369）。
+- 主要單原本某項需求已滿，併入後數量加大：需求重新開放（ADR-370）。
 - 需求已被開單者手動停止招募（`recruiting_stopped_at`）：維持停止，數量仍不得少於人數。
-- 另一張單還在其他待審卡裡：那些卡不動，摘要顯示 `deleted: true`；對那些卡 resolve 回 409（ADR-377）。
+- 另一張單還在其他待審卡裡：那些卡不動，摘要顯示 `deleted: true`；對那些卡 resolve 回 409（ADR-378）。
 - 兩個審核員同時處理同一張卡：一個成功，另一個 409。
-- 處理過的卡再 `revoke`：409（ADR-375）。
+- 處理過的卡再 `revoke`：409（ADR-376）。
