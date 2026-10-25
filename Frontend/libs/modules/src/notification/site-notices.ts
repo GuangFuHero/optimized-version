@@ -7,6 +7,10 @@
  * dulls both).
  */
 
+import type {
+  MyTaskAssignmentsQuery,
+  MyTicketsQuery,
+} from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
 import { formatTaiwanTime } from '../time';
@@ -64,13 +68,10 @@ const SITE_NOTICE_TYPES: Partial<
   role_request_rejected: { kind: 'role-rejected' },
 };
 
-/** A notice as the drawer shows it. */
-export interface SiteNotice {
-  uuid: string;
+/** A notice as the drawer shows it: four of the row's fields as they come, the rest the site's own. */
+export interface SiteNotice
+  extends Pick<NotificationRow, 'uuid' | 'title' | 'body' | 'read'> {
   kind: SiteNoticeKind;
-  title: string;
-  body: string;
-  read: boolean;
   /** 「10/21 14:05」, or null for a notice with no time on it. */
   at: string | null;
   /** The need whose ticket a click opens, found on the viewer's lists (`ticketOfNeed`). */
@@ -110,13 +111,23 @@ export function readSiteNotices(
   });
 }
 
-/** What 我的任務 reads (`MyTickets`, `MyTaskAssignments`), as far as finding a need's ticket goes. */
+type FiledTicket = MyTicketsQuery['myTickets'][number];
+type Claim = MyTaskAssignmentsQuery['myTaskAssignments'][number];
+
+/**
+ * What 我的任務 reads (`MyTickets`, `MyTaskAssignments`), as far as finding a need's ticket goes:
+ * only the uuids, so a caller need not have the rest of either query.
+ */
 export interface ViewerNeedLists {
-  requests: ReadonlyArray<{
-    uuid: string;
-    tasks: ReadonlyArray<{ uuid: string }>;
+  requests: ReadonlyArray<
+    Pick<FiledTicket, 'uuid'> & {
+      tasks: ReadonlyArray<Pick<FiledTicket['tasks'][number], 'uuid'>>;
+    }
+  >;
+  claims: ReadonlyArray<{
+    task: Pick<Claim['task'], 'uuid'>;
+    ticket: Pick<Claim['ticket'], 'uuid'>;
   }>;
-  claims: ReadonlyArray<{ task: { uuid: string }; ticket: { uuid: string } }>;
 }
 
 /**
