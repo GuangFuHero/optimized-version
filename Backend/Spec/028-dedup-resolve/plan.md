@@ -212,7 +212,8 @@ jujuyuzu 2026-10-25 的 review。
 - [x] `er-diagram.md` 補欄位與通知類型；Spec 025 註記範圍
 - [x] 全套件 **2929 passed**；Docker 從零重做（`6d3eb7fed`，容器內 2929 passed，流程全部符合預期，見 `verification.md`）
 - [x] 補修移號漏掉的清單寫法（`ADR-372、383、384` 這種，只有第一個被移到），共 20 行
-- [ ] 回覆 review
+- [x] 配對卡狀態改名 `confirmed_duplicate`／`not_duplicate`（ADR-391，Chi 提議；migration `a8d3e6b1c207`），全套件 **2932 passed**，Docker 第四次從零驗證通過（`dff0b43a4`）
+- [ ] 回覆 review 與 Chi 的留言
 
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
