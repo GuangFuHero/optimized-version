@@ -12,7 +12,13 @@
   }
 
   // value: {lat,lng} | null
-  function LocationPicker({ value, onChange, invalid, height = 236 }) {
+  /* 🆕 2026-10-25 `autoLocate`：新增地點（tk-building.jsx）時後台人員多半**不在那棟樓前面**，
+     開表單就抓 GPS 會把大頭針放在辦公室。預設 true，建單照舊。
+     `emptyHint`：還沒放大頭針時膠囊上的字。 */
+  /* `pickZoom`：點地圖放大頭針時，若目前比這個還遠就拉近到這一級（新增地點用 17，
+     縮得很遠時一點下去誤差幾百公尺，拉近才能對準那一棟）。不給就不動，建單照舊。 */
+  function LocationPicker({ value, onChange, invalid, height = 236, autoLocate = true, emptyHint, pickZoom }) {
+    const pickZoomRef = React.useRef(pickZoom); pickZoomRef.current = pickZoom;
     const elRef = React.useRef(null);
     const mapRef = React.useRef(null);
     const markRef = React.useRef(null);
@@ -41,10 +47,14 @@
       const map = L.map(elRef.current, { center: value ? [value.lat, value.lng] : FALLBACK, zoom: value ? 17 : 14, zoomControl: false, attributionControl: false });
       L.control.zoom({ position: "topright" }).addTo(map);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-      map.on("click", (e) => cbRef.current({ lat: e.latlng.lat, lng: e.latlng.lng, source: "manual" }));
+      map.on("click", (e) => {
+        cbRef.current({ lat: e.latlng.lat, lng: e.latlng.lng, source: "manual" });
+        const z = pickZoomRef.current;
+        if (z && map.getZoom() < z) map.setView(e.latlng, z);
+      });
       mapRef.current = map;
       setTimeout(() => map.invalidateSize(), 80);
-      if (!value) locate(); // 建新單：自動抓一次定位
+      if (!value && autoLocate) locate(); // 建新單：自動抓一次定位
       return () => { map.remove(); mapRef.current = null; markRef.current = null; };
     }, []);
 
@@ -85,7 +95,7 @@
           {(status === "locating" || !value) ? (
             <div style={hintPill}>
               <Icon n={status === "locating" ? "LoaderCircle" : "MapPin"} s={13} c="var(--color-fg-neutral-muted)" />
-              {status === "locating" ? "正在取得目前定位…" : "點地圖任一處放置大頭針"}
+              {status === "locating" ? "正在取得目前定位…" : (emptyHint || "點地圖任一處放置大頭針")}
             </div>
           ) : (
             <div style={hintPill}>

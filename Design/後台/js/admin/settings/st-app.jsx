@@ -291,7 +291,7 @@
           </div>
         </Row>
 
-        <Row label="現場分區" help="把一個地點再切成樓層、車廂或自訂區域。">
+        <Row label="已新增的地點" help="把一棟建築依樓層分開；每棟都會自動加上頂樓 RF。">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-st="buildings">
             {buildings.length ? buildings.map((b) => (
               <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)" }}>
@@ -301,9 +301,9 @@
                   <div style={{ font: "var(--font-body-300)", ...muted }}>{segs(b).length} 個分區：{segs(b).slice(0, 4).join("、")}{segs(b).length > 4 ? "…" : ""}</div>
                 </div>
               </div>
-            )) : <span style={{ font: "var(--font-body-400)", ...muted }}>還沒有任何地點開啟分區。</span>}
+            )) : <span style={{ font: "var(--font-body-400)", ...muted }}>還沒有新增任何地點。</span>}
             <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ font: "var(--font-body-300)", ...muted }}>開新地點要在地圖上選位置，所以在任務管理頁做。</span>
+              <span style={{ font: "var(--font-body-300)", ...muted }}>新增地點在任務管理頁做（工具列「新增地點」）。</span>
               <button type="button" className="tk-chipbtn" onClick={() => window.wgNavigate("ticket", "settings")}>
                 前往任務管理 <Icon n="ArrowRight" s={12} c="currentColor" />
               </button>

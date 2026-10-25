@@ -548,7 +548,7 @@
    * 送交審核，通過才公開更新）。任務單不是 —— 民眾建立就直接進線上，
    * 志工看得到、可以承接。
    *
-   * 後台對任務單唯一的「審核」是 AI 標記的**疑似重複**（動作是合併／不是重複，
+   * 後台對任務單唯一的「審核」是系統標記的**疑似重複**（動作是合併／不是重複，
    * 見 08-21 決議第六節），那是去重，不是放行閘門。
    *
    * ticket 的 `status: 'pending'` 意思是**待處理／待承接**，不是待審核 ——
@@ -864,6 +864,8 @@
     const segs = window.WGBridge ? window.WGBridge.buildingSegments(building) : [];
     const rn = normSeg(raw);
     for (const name of segs) if (normSeg(name) === rn) return name;
+    /* 2026-10-25：通報的人寫「頂樓」「屋頂」也要落到 RF（後端 ADR-310 每棟都有 RF）。 */
+    if (/^(頂樓?|屋頂|頂樓平台|r|rf)$/i.test(raw) && segs.indexOf('RF') !== -1) return 'RF';
     const n = parseFloorToken(raw);
     if (n == null) return null;
     for (const name of segs) {

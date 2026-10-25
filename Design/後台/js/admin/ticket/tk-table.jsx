@@ -254,8 +254,13 @@
               事件層設定），但**入口要在工作的地方**：會用到現場分區的人，正在看的
               是這張任務清單，不是事件設定頁。 */}
           {window.BuildingSetupModal && (
-            <Button variant="outline" startIcon={<Icon n="Building2" s={17} />}
-              onClick={() => tk.setModal("building")}>現場分區</Button>
+            /* 2026-10-25：只有能新增的人（tk.can.activate ＝ 超管／政府；後端 BM-3 要政府隊）看到「新增地點」，
+               其他人看到唯讀的「已新增的地點」。原本所有人都會直接進新增表單。 */
+            tk.can && tk.can.activate
+              ? <Button variant="outline" startIcon={<Icon n="MapPinPlus" s={17} />}
+                  onClick={() => tk.setModal("buildingNew")}>新增地點</Button>
+              : <Button variant="outline" startIcon={<Icon n="Building2" s={17} />}
+                  onClick={() => tk.setModal("building")}>已新增的地點</Button>
           )}
           {onNew && <Button variant="primary" startIcon={<Icon n="Plus" s={17} />} onClick={onNew}>新增任務</Button>}
         </div>

@@ -246,7 +246,7 @@
         </window.WGPage>
         {modal === "addType" && <window.AddDisasterModal onClose={() => setModal(null)} />}
         {modal === "disasterSettings" && <window.DisasterSettingsModal onClose={() => setModal(null)} />}
-        {modal === "building" && window.BuildingSetupModal && <window.BuildingSetupModal onClose={() => setModal(null)} />}
+        {(modal === "building" || modal === "buildingNew") && window.BuildingSetupModal && <window.BuildingSetupModal startNew={modal === "buildingNew"} onClose={() => setModal(null)} />}
         {assignTicket && <window.AssignTeamModal ticket={tickets.find((x) => x.id === assignTicket.id) || assignTicket} onClose={() => setAssignTicket(null)} />}
         {confirm && <ConfirmDialog {...confirm} onClose={() => setConfirm(null)} />}
         {removeDT && <window.DisasterRemoveDialog dtKey={removeDT} onClose={() => setRemoveDT(null)} />}

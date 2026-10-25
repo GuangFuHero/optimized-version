@@ -12,7 +12,7 @@
     const [confirm, setConfirm] = React.useState(null);
 
     if (tk.groupSuggestions.length === 0) {
-      return <Card padding="0"><EmptyState icon="Building2" title="目前沒有群組建議" caption="AI 偵測同地址、半徑內的多筆 Ticket 時會出現在此，供確認合併為建築錨點。" /></Card>;
+      return <Card padding="0"><EmptyState icon="Building2" title="目前沒有群組建議" caption="系統偵測到同地址、半徑內的多筆 Ticket 時會出現在此，供確認合併為建築錨點。" /></Card>;
     }
 
     return (
@@ -30,7 +30,7 @@
                     <span className="wg-h600" style={{ fontSize: 17 }}>{g.address}</span>
                     <Badge tone="info">{Math.round(g.confidence * 100)}% 信心</Badge>
                   </div>
-                  <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>AI 偵測 {g.candidates.length} 筆任務，最大間距約 {g.distanceM}m，地址主部相同</span>
+                  <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>系統偵測到 {g.candidates.length} 筆任務，最大間距約 {g.distanceM}m，地址主部相同</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>候選半徑</span>
@@ -76,7 +76,7 @@
     if (tk.duplicates.length === 0) return <Card padding="0"><EmptyState icon="Copy" title="沒有疑似重複任務" /></Card>;
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <Alert tone="warning" title="AI 標記疑似重複">兩筆描述同一件事 → 合併保留其一；若實為不同事件請保留兩者。</Alert>
+        <Alert tone="warning" title="系統標記疑似重複">兩筆描述同一件事 → 合併保留其一；若實為不同事件請保留兩者。</Alert>
         {tk.duplicates.map((d) => (
           <Card key={d.id} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

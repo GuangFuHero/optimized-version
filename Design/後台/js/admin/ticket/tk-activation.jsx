@@ -129,8 +129,8 @@
           {/* 現場分區（2026-09-12）。放在事件設定裡，因為它是**平台層的情境設定**，
               不是單張 Ticket 的欄位 —— 與「當前災害類型」同一個層級。
               TODO：能開這個開關的角色尚未裁示，目前沿用 canManage。 */}
-          <Section title="現場分區"
-            action={canManage && <button className="tk-chipbtn" onClick={() => tk.setModal("building")} style={{ marginLeft: "auto" }}><Icon n="Plus" s={13} c="currentColor" />開啟新的地址</button>}>
+          <Section title="已新增的地點"
+            action={canManage && <button className="tk-chipbtn" onClick={() => tk.setModal("buildingNew")} style={{ marginLeft: "auto" }}><Icon n="Plus" s={13} c="currentColor" />新增地點</button>}>
             {window.BuildingSetupList ? <window.BuildingSetupList canManage={canManage} /> : null}
           </Section>
 

@@ -572,11 +572,23 @@
 
   /** 這一棟的分區名稱清單（由上而下的顯示順序）。
    *  沒存過 `segments` 的舊資料 → 用樓層數產生，行為與改版前一致。 */
+  /* 🔒 2026-10-25 RF：後端 ADR-310「頂樓（RF）每棟都有 —— 淹水時人會往頂樓跑」。
+     樓層標籤由樓層數推算（building_map.py floor_labels），管理員不填、也拿不掉。
+     原型的排序照 09-12 裁示「小數字在上」：B2、B1、1F…nF，**RF 排最後**。
+     （後端回傳的是 RF 在最前，那只是 API 的順序，畫面可以自己排。）
+     判斷「這是樓層式的分區」＝每一項都長得像 B1／1F；改成自訂名稱的舊資料不補 RF。 */
+  var FLOOR_SEG = /^(B\d+|\d+F|RF)$/i;
+  function withRoof(list) {
+    if (!list.length) return list;
+    for (var i = 0; i < list.length; i++) if (!FLOOR_SEG.test(list[i])) return list;
+    for (var j = 0; j < list.length; j++) if (/^RF$/i.test(list[j])) return list;
+    return list.concat(['RF']);
+  }
   function buildingSegments(b) {
-    if (b && Array.isArray(b.segments) && b.segments.length) return b.segments.slice();
-    return buildingFloors(b || {}).map(function (f) {
+    if (b && Array.isArray(b.segments) && b.segments.length) return withRoof(b.segments.slice());
+    return withRoof(buildingFloors(b || {}).map(function (f) {
       return f < 0 ? ('B' + (-f)) : (String(f) + 'F');
-    });
+    }));
   }
 
   function createBuilding(input) {
@@ -603,6 +615,9 @@
         : null,
       lat: (typeof input.lat === 'number') ? input.lat : null,
       lng: (typeof input.lng === 'number') ? input.lng : null,
+      /* 🆕 2026-10-25 對應後端 secondary_locations.normalization_status：
+         verified（照門牌查詢結果存）／unverified（手打或改過）。null ＝ 舊資料 */
+      addressStatus: input.addressStatus || null,
       /* TODO(2026-09-12)：哪個後台角色能開這個開關**尚未裁示**。
          現在誰按誰就是 createdBy，沒有任何權限檢查。 */
       createdBy: input.userId || null,

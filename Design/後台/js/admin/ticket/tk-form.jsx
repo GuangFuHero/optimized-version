@@ -154,7 +154,7 @@
                 <Input value={vals.address} onChange={(e) => set("address")(e.target.value)} placeholder="花蓮縣光復鄉中山路100號" invalid={touched && !vals.address.trim()} />
               </Field>
               <Field label="樓層（選填）">
-                <Input value={vals.floor} onChange={(e) => set("floor")(e.target.value)} placeholder="如 6F / 透天" />
+                <Input value={vals.floor} onChange={(e) => set("floor")(e.target.value)} placeholder="如 6F / RF（頂樓）/ 透天" />
               </Field>
             </div>
             <Field label="地標" required helper={landmark ? undefined : "點地圖任一處或拖曳大頭針調整；救援端以此座標導航"} error={touched && !landmark ? "請在地圖上標記地標位置" : undefined}>

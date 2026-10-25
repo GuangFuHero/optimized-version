@@ -1537,7 +1537,7 @@
    * 🔴 後端沒有任何東西可以接：ERD 27 張表 grep
    *    `suggest`/`correction`/`proposal`/`revision` 全部零筆。
    *    `ticket_tasks` 上的 `is_duplicate`/`dedup_group_id`/`confidence_score`
-   *    是**後台事後**的 AI 去重，不是建單當下的比對。所以這整段是前端自己算的。
+   *    是**後台事後**的去重，不是建單當下的比對。所以這整段是前端自己算的。
    *
    * 🚨 **50 這個數字是我取的，不是規格值。** 取捨：
    *    手機 GPS 誤差本來就有 10〜30 公尺，山區與樹下更差 —— 低於 30 公尺會被
