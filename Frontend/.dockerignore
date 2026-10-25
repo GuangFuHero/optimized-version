@@ -1,8 +1,9 @@
-.env.local
 .next
 .nx
 .vercel
 apps/demo/.next
 apps/admin/.next
+**/.env*
+!**/.env.example
 dist
 node_modules

@@ -175,7 +175,7 @@ main() {
         docker builder prune -f --filter "until=$BUILD_CACHE_MAX_AGE" | tail -n 1)"
     local docker_root free_gb
     docker_root=$(docker info --format '{{.DockerRootDir}}')
-    free_gb=$(df -BG --output=avail "$docker_root" | tail -n 1 | tr -dc '0-9')
+    free_gb=$(( $(df -BM --output=avail "$docker_root" | tail -n 1 | tr -dc '0-9') / 1024 ))
     log "disk: ${free_gb}G free under $docker_root"
     (( free_gb >= MIN_FREE_GB )) || die "under ${MIN_FREE_GB}G free: clear space first (Backend/DEPLOY.md)"
 
