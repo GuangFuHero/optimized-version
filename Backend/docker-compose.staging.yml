@@ -91,8 +91,15 @@ services:
     networks:
       - app-network
 
+  # The site. Built from the same Dockerfile as `admin`, with APP=demo.
   frontend:
-    build: ../Frontend
+    build:
+      context: ../Frontend
+      args:
+        APP: demo
+        # `next build` bakes it into the site's /admin/* redirect (Frontend/Dockerfile), so it is a build
+        # arg, not runtime env. Interpolated from .env, which gen_env fills from deploy-config.staging.env.
+        ADMIN_APP_URL: ${ADMIN_APP_URL:?set ADMIN_APP_URL in scripts/deploy-config.staging.env}
     image: disaster-frontend:latest
     restart: unless-stopped
     # .env.frontend only — backend DB/JWT secrets are NOT exposed to this public-facing container.
@@ -106,9 +113,29 @@ services:
     networks:
       - app-network
 
+  # The back office (管理平台). It signs in through the backend's cookies, as the site does, and holds no
+  # secret, so it reads the committed non-secret config as it is: not a generated file, and not
+  # .env.frontend, which carries the tunnel token.
+  admin:
+    build:
+      context: ../Frontend
+      args:
+        APP: admin
+    image: disaster-admin:latest
+    restart: unless-stopped
+    env_file:
+      - scripts/deploy-config.staging.env
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
   # Cloudflare Tunnel: outbound-only connection to Cloudflare's edge — no inbound ports on
-  # the VM, free HTTPS. Public hostname staging.wan-guard.com -> http://frontend:3000 is set in
-  # the Zero Trust dashboard. TUNNEL_TOKEN comes from .env.frontend (gen_env → Secret Manager).
+  # the VM, free HTTPS. Public hostnames staging.wan-guard.com -> http://frontend:3000 and
+  # admin-staging.wan-guard.com -> http://admin:3000 are set in the Zero Trust dashboard.
+  # TUNNEL_TOKEN comes from .env.frontend (gen_env → Secret Manager).
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped

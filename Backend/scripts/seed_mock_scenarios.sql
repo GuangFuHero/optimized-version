@@ -15,6 +15,8 @@
 --   avol04@mock.test  角色申請審核中(政府單位人員);撤回後要重跑 seed 才回得來
 --   avol05@mock.test  角色申請未通過,卡片上有審核回覆(社福團體人員)
 --   agov01@mock.test  光復鄉公所的團隊管理員:右上角有「前往後台」
+--   asuper01@mock.test  平台的超級管理員(super_admin),不屬於哪個情境:測管理平台用
+--   aaudit01@mock.test  平台的資料稽核員(data_auditor),不屬於哪個情境:測去重審核用
 --   (不用登入)        行前資訊 /briefing:一份已發布的,裝備可以勾;另有一個土石流範本給後台用
 --
 -- 規則(第 11 節會檢查,不符就整個回滾):
@@ -30,7 +32,7 @@
 --   地圖區域、建築地圖、照片、申請、邀請連結、站點建議與合併紀錄、去重紀錄會一起清掉,所以可以重跑。
 --   真人留下的資料不刪,只放掉指向 mock 帳號(或要刪的 mock 資料)的欄位。
 --
--- 登入:全部 37 人,密碼 Mock1234!(salt_frontend=mockdata12345678;
+-- 登入:全部 39 人,密碼 Mock1234!(salt_frontend=mockdata12345678;
 --   前端送出的 password=PBKDF2-HMAC-SHA256('Mock1234!', salt_frontend, 100000)
 --   =8c0aefb55114ef12e444543df20424fd9adff2bccfc861a6456386411f6a274c,直接打 API 時用這個值)
 -- 先要有 schema 到 alembic head,並跑過 scripts/seed_rbac.py(角色由它建立)。
@@ -180,7 +182,7 @@ DELETE FROM user_contacts WHERE user_uuid IN (SELECT uuid FROM mock_users);
 DELETE FROM users WHERE uuid IN (SELECT uuid FROM mock_users);
 DELETE FROM teams WHERE uuid::text LIKE '10000000-%';
 
--- 1. USERS — 37 人(A:志工20+NGO4+官方3;B:志工4+NGO5+官方1)
+-- 1. USERS — 39 人(A:志工20+NGO4+官方3;B:志工4+NGO5+官方1;平台管理帳號 2)
 INSERT INTO users (uuid, name, credibility_score, created_at, updated_at) VALUES
  ('c0000000-0000-4000-8000-000000000001', '志工-陳冠宇', 55, '2024-07-23 08:00+08', '2024-07-23 08:00+08'),
  ('c0000000-0000-4000-8000-000000000002', '志工-林雅婷', 38, '2024-07-23 08:00+08', '2024-07-23 08:00+08'),
@@ -218,7 +220,9 @@ INSERT INTO users (uuid, name, credibility_score, created_at, updated_at) VALUES
  ('c0000000-0000-4000-8000-000000000034', '宜蘭縣社福聯盟', 85, '2025-10-01 09:00+08', '2025-10-01 09:00+08'),
  ('c0000000-0000-4000-8000-000000000035', '佛光山蘭陽別院', 87, '2025-10-01 09:00+08', '2025-10-01 09:00+08'),
  ('c0000000-0000-4000-8000-000000000036', '善牧基金會-宜蘭', 82, '2025-10-01 09:00+08', '2025-10-01 09:00+08'),
- ('c0000000-0000-4000-8000-000000000037', '冬山鄉公所-民政課', 85, '2025-10-01 09:00+08', '2025-10-01 09:00+08');
+ ('c0000000-0000-4000-8000-000000000037', '冬山鄉公所-民政課', 85, '2025-10-01 09:00+08', '2025-10-01 09:00+08'),
+ ('c0000000-0000-4000-8000-000000000038', '測試-超級管理員', 50, now(), now()),
+ ('c0000000-0000-4000-8000-000000000039', '測試-資料稽核員', 50, now(), now());
 
 -- 1b. 登入憑證(email+密碼 Mock1234!+user 平台角色)
 INSERT INTO user_contacts (uuid, user_uuid, type, value, verified, verified_at, created_at) VALUES
@@ -258,7 +262,9 @@ INSERT INTO user_contacts (uuid, user_uuid, type, value, verified, verified_at, 
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000034', 'email', 'bngo03@mock.test', true, now(), now()),
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000035', 'email', 'bngo04@mock.test', true, now(), now()),
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000036', 'email', 'bngo05@mock.test', true, now(), now()),
- (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000037', 'email', 'bgov01@mock.test', true, now(), now());
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000037', 'email', 'bgov01@mock.test', true, now(), now()),
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000038', 'email', 'asuper01@mock.test', true, now(), now()),
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000039', 'email', 'aaudit01@mock.test', true, now(), now());
 INSERT INTO user_identities (uuid, user_uuid, provider, provider_subject, password_hash, created_at)
 -- The password is hashed twice. The login form derives
 --   pbkdf2_hmac('sha256', 'Mock1234!', salt_frontend, 100000)
@@ -322,6 +328,14 @@ FROM (VALUES
  ('c0000000-0000-4000-8000-000000000037','10000000-0000-4000-8000-000000000013')
 ) AS m(user_uuid, team_uuid)
 CROSS JOIN (SELECT uuid FROM roles WHERE name='admin' AND kind='team') r;
+
+-- 1e. 2 個平台管理帳號:除了 1b 給的 user,再拿一個平台角色。原本是在 staging 上手動加的,用的也是 c… 前綴,
+-- 所以每次 SEED_MOCK 都被第 0 節刪掉;寫在這裡才會跟著重建。角色找不到時 role_uuid 是 NULL,會直接報錯。
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid) VALUES
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000038',
+  (SELECT uuid FROM roles WHERE name='super_admin' AND kind='platform'), 'platform', NULL),
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000039',
+  (SELECT uuid FROM roles WHERE name='data_auditor' AND kind='platform'), 'platform', NULL);
 
 -- 2. STATIONS — base_geometries + stations + EAV + 投票
 INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_at, updated_at) VALUES
@@ -911,8 +925,7 @@ BEGIN
 END $$;
 
 -- 9. 角色申請(功能 019):一筆審核中、一筆未通過附回覆,讓抽屜的兩種卡片一登入就看得到。
---    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。審核人填資料庫裡現有的 super admin,
---    沒有就留空(前台卡片只顯示回覆)。
+--    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。審核人是 1e 的 asuper01。
 INSERT INTO role_requests (uuid, requested_role, reason, contact, status, created_by, created_at, updated_at) VALUES
  ('60000000-0000-4000-8000-000000000001','government',
   '我是光復鄉公所約聘的災防人員，負責整理各村回報的災情和物資需求。希望有後台權限，幫忙更新站點資料、合併重複的任務單。',
@@ -921,9 +934,7 @@ INSERT INTO role_requests (uuid, requested_role, reason, contact, status, create
 INSERT INTO role_requests (uuid, requested_role, reason, contact, status, review_note, reviewed_by, closed_at, created_by, created_at, updated_at)
 SELECT '60000000-0000-4000-8000-000000000002','ngo',
        '我是光復鄉社區關懷協會的志工幹部，想在後台協助管理收容點的物資需求，並把志工排班和任務單對起來。',
-       NULL,'rejected','請附上單位證明後再申請。',
-       (SELECT ura.user_uuid FROM user_role_assign ura JOIN roles r ON r.uuid = ura.role_uuid
-         WHERE r.name = 'super_admin' AND r.kind = 'platform' ORDER BY ura.user_uuid LIMIT 1),
+       NULL,'rejected','請附上單位證明後再申請。','c0000000-0000-4000-8000-000000000038',
        now() - interval '2 days','c0000000-0000-4000-8000-000000000005',
        now() - interval '3 days', now() - interval '2 days';
 

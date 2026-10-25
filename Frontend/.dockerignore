@@ -3,5 +3,6 @@
 .nx
 .vercel
 apps/demo/.next
+apps/admin/.next
 dist
 node_modules

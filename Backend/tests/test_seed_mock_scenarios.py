@@ -165,6 +165,28 @@ async def test_every_key_into_a_cleared_table_is_cleared_first(seeded):
 
 
 @pytest.mark.asyncio(loop_scope="module")
+async def test_the_back_office_test_accounts_hold_their_platform_roles(seeded):
+    """asuper01 and aaudit01 sign in with the mock password as super_admin and data_auditor.
+
+    They were first added on staging by hand, under the mock uuid prefix, so the next SEED_MOCK run
+    deleted them along with every other mock account.
+    """
+    rows = await _fetch(
+        _CASE_DSN,
+        "SELECT c.value, r.name FROM user_contacts c"
+        " JOIN user_identities i ON i.user_uuid = c.user_uuid AND i.provider = 'password'"
+        " JOIN user_role_assign a ON a.user_uuid = c.user_uuid"
+        " JOIN roles r ON r.uuid = a.role_uuid AND r.kind = 'platform' AND r.name <> 'user'"
+        " WHERE c.value IN ('asuper01@mock.test', 'aaudit01@mock.test') AND c.verified"
+        " ORDER BY c.value",
+    )
+    assert [tuple(row) for row in rows] == [
+        ("aaudit01@mock.test", "data_auditor"),
+        ("asuper01@mock.test", "super_admin"),
+    ]
+
+
+@pytest.mark.asyncio(loop_scope="module")
 async def test_seed_runs_again_untouched(seeded):
     """The plain rerun SEED_MOCK does on every staging deploy."""
     await _execute(_CASE_DSN, SEED_SQL)
