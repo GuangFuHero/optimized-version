@@ -129,6 +129,8 @@ export interface HelpRequestForm {
   room: string;
   /** What a TGOS lookup put in `address`, whose token goes with it while it is unchanged. */
   addressFilled: FilledAddress | null;
+  /** A line taken back with 改回你打的: kept in a draft too, so not checked again once reopened. */
+  addressKept: string | null;
   /** Whom to ask for at the place — often not the person filing. */
   contactName: string;
   /** A phone number or a LINE ID, as typed. */
@@ -149,6 +151,7 @@ export function emptyHelpRequestForm(
     floor: '',
     room: '',
     addressFilled: null,
+    addressKept: null,
     contactName: '',
     contactPhone: '',
     needs: [emptyNeed()],

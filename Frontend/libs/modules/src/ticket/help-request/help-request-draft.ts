@@ -19,7 +19,7 @@ export type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 /**
  * Raised when the form's shape changes, so a draft of the old shape is read as none. Not for a field
- * added that a draft can do without: `addressFilled` is read as none instead.
+ * added that a draft can do without: `addressFilled` and `addressKept` are read as none instead.
  */
 const DRAFT_VERSION = 1;
 
@@ -106,8 +106,8 @@ function isNeedDraft(value: unknown): value is NeedDraft {
 }
 
 /**
- * The drawer reads every field without a check, and always has a last need row. `addressFilled` is
- * left to `readHelpRequestDraft`: without one the address is still the person's.
+ * The drawer reads every field without a check, and always has a last need row. `addressFilled` and
+ * `addressKept` are left to `readHelpRequestDraft`: without them the address is still the person's.
  */
 function isHelpRequestForm(value: unknown): value is HelpRequestForm {
   return (
@@ -144,11 +144,15 @@ export function readHelpRequestDraft(
       return null;
     }
 
-    const { addressFilled } = saved.form as { addressFilled?: unknown };
+    const { addressFilled, addressKept } = saved.form as {
+      addressFilled?: unknown;
+      addressKept?: unknown;
+    };
 
     return {
       ...saved.form,
       addressFilled: isFilledAddress(addressFilled) ? addressFilled : null,
+      addressKept: typeof addressKept === 'string' ? addressKept : null,
     };
   } catch {
     return null;

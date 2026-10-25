@@ -1,12 +1,17 @@
 /**
- * An address line filled in from TGOS (backend #96, `Backend/Spec/027-address-normalization/
- * frontend-guide.md`): the nearest 門牌 to the pin once it is placed, or the typed line checked once
- * the field is left, with the token that has the line saved as verified. The rules are the designer's
- * 新增地點 (`Design/後台/js/admin/ticket/tk-building.jsx:130-155`, 2026-10-25) and 請求協助
- * (`Design/前台/js/site/site-actions.jsx:1738-1827`, 2026-10-25), so every form that fills an address
- * from the map behaves alike. Nothing here stops a form from sending: a line with no lookup behind it
- * is saved as unverified.
+ * An address line filled in from TGOS (the backend's `reverseGeocode` and `normalizeAddress`,
+ * `Backend/Spec/027-address-normalization/frontend-guide.md`): the nearest 門牌 to the pin once it is
+ * placed, or the typed line checked once the field is left, with the token that has the line saved as
+ * verified. The rules are the designer's 新增地點 (`Design/後台/js/admin/ticket/tk-building.jsx:
+ * 130-155`, 2026-10-25) and 請求協助 (`Design/前台/js/site/site-actions.jsx:1738-1827`, 2026-10-25),
+ * so every form that fills an address from the map behaves alike. Nothing here stops a form from
+ * sending: a line with no lookup behind it is saved as unverified.
  */
+
+import type {
+  AddressLookupType,
+  NormalizeAddressQueryVariables,
+} from '@rescue-frontend/data-access';
 
 /** The `full_address` column's width (backend `models/secondary_location.py`). */
 export const ADDRESS_MAX_LENGTH = 255;
@@ -50,26 +55,25 @@ export interface AddressFields {
   floor: string;
   room: string;
   addressFilled: FilledAddress | null;
+  /** A line taken back with 改回你打的 over a check's answer, so not checked again. */
+  addressKept: string | null;
 }
 
 /** `reverseGeocode` and `normalizeAddress` alike, as much of `AddressLookupType` as is read here. */
-export interface AddressLookupAnswer {
-  status: string;
-  fullAddress?: string | null;
-  addressToken?: string | null;
-  lat?: number | null;
-  lng?: number | null;
-  buildingSection?: string | null;
-  floor?: string | null;
-  room?: string | null;
-}
+export type AddressLookupAnswer = Pick<
+  AddressLookupType,
+  | 'status'
+  | 'fullAddress'
+  | 'addressToken'
+  | 'lat'
+  | 'lng'
+  | 'buildingSection'
+  | 'floor'
+  | 'room'
+>;
 
 /** The variables of `NormalizeAddress`: a typed line, with the pin if there is one. */
-export interface AddressCheck {
-  address: string;
-  lat?: number;
-  lng?: number;
-}
+export type AddressCheck = NormalizeAddressQueryVariables;
 
 const round6 = (value: number) => Math.round(value * 1e6) / 1e6;
 
@@ -126,6 +130,7 @@ export function readAddressLookup(result: {
     case 'not_found':
     case 'ambiguous':
       return { status: answer.status };
+    // The schema's `status` is a plain string: anything else is taken as no answer.
     default:
       return { status: 'unavailable' };
   }
@@ -250,14 +255,15 @@ export function restorePinAddress<T extends AddressFields>(
 }
 
 /**
- * 改回你打的: the line as it was typed, in place of the official one a check put there. A 樓 or 室
- * split off to its field stays there, as the designer's does.
+ * 改回你打的: the line as it was typed, in place of the official one a check put there, and kept from
+ * another check (designer, 2026-10-25). A 樓 or 室 split off to its field stays there, as the
+ * designer's does.
  */
 export function restoreTypedLine<T extends AddressFields>(
   fields: T,
   line: string,
 ): T {
-  return { ...fields, address: line, addressFilled: null };
+  return { ...fields, address: line, addressFilled: null, addressKept: line };
 }
 
 /**
@@ -285,12 +291,11 @@ export function addressTokenFor(fields: AddressFields): string | null {
 /**
  * What to check once the address field is left (the guide's 「on blur」, never per keystroke): the
  * typed line with the pin. Null for a blank line, one too long to save, a lookup's own line, and the
- * line `kept` — taken back with 改回你打的 over the check's answer, so not checked again.
+ * one taken back with 改回你打的.
  */
 export function addressToCheck(
   fields: AddressFields,
   pin: LatLng | null,
-  kept: string | null = null,
 ): AddressCheck | null {
   const address = fields.address.trim();
 
@@ -298,7 +303,7 @@ export function addressToCheck(
     !address ||
     address.length > ADDRESS_MAX_LENGTH ||
     isFilledByLookup(fields) ||
-    address === kept
+    address === fields.addressKept
   ) {
     return null;
   }

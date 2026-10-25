@@ -118,9 +118,9 @@ query GetClosureArea($uuid: UUID!) {
   }
 }
 
-# The nearest 門牌 to a pin, and a typed line checked, against TGOS (backend #96). Signed-in callers
-# only, 30 lookups a minute between the two. Fields written out rather than shared in a fragment, which
-# would be masked. How a form uses them: modules `ticket/address-lookup.ts`.
+# The nearest 門牌 to a pin, and a typed line checked, against TGOS. Signed-in callers only, 30 lookups a
+# minute between the two. Fields written out rather than shared in a fragment, which would be masked.
+# How a form uses them: modules `ticket/address-lookup.ts`.
 query ReverseGeocode($lat: Float!, $lng: Float!) {
   reverseGeocode(lat: $lat, lng: $lng) {
     status

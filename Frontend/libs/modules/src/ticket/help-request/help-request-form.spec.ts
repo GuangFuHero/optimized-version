@@ -21,6 +21,7 @@ function filledForm(overrides: Partial<HelpRequestForm> = {}): HelpRequestForm {
     floor: '',
     room: '',
     addressFilled: null,
+    addressKept: null,
     contactName: '王小姐',
     contactPhone: '',
     needs: [{ need: 'cleanup', name: '', quantity: '2' }],

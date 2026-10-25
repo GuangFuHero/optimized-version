@@ -18,15 +18,18 @@ import {
 
 // Inside the drawer: a lookup must not suspend the form around it. Sent as a POST, not the GET urql
 // sends queries as: the pin and the typed line are someone's home, and a URL is kept in access logs.
+// Never answered from the cache: an `unavailable` kept there would come back for a reopened draft
+// that asks again, and a token lasts a day. A lookup is only made on a pin drop or a blur.
 const ADDRESS_LOOKUP_CONTEXT = {
   suspense: false,
   preferGetMethod: false,
+  requestPolicy: 'network-only',
 } as const;
 
 /**
  * The nearest 門牌 to the pin, asked once for each place it is put down: the small map reports a
- * tap or the end of a drag, never the drag itself, so there is nothing to debounce. The same spot is
- * asked once a page (graphcache). Null with no pin.
+ * tap or the end of a drag, never the drag itself, so there is nothing to debounce. A spot asked
+ * before is asked again, not answered from the cache. Null with no pin.
  */
 export function usePinAddressLookup(pin: LatLng | null): AddressLookup | null {
   const point = lookupPoint(pin);

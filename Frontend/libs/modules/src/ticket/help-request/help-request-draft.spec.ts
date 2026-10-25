@@ -158,11 +158,25 @@ describe('help request draft', () => {
     );
   });
 
+  it('keeps a line taken back with 改回你打的, so it is not checked again once reopened', () => {
+    const storage = memoryStorage();
+    const form = {
+      ...filledForm(),
+      address: '糖廠街19號',
+      addressKept: '糖廠街19號',
+    };
+
+    writeHelpRequestDraft(storage, 'user-1', form);
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(form);
+  });
+
   it('reads a draft kept before addresses were looked up as one with none', () => {
     const storage = memoryStorage();
     const older: Partial<HelpRequestForm> = filledForm();
 
     delete older.addressFilled;
+    delete older.addressKept;
 
     storage.setItem(
       helpRequestDraftKey('user-1'),
@@ -182,6 +196,7 @@ describe('help request draft', () => {
         form: {
           ...filledForm(),
           addressFilled: { ...looked('pin'), token: 3 },
+          addressKept: 3,
         },
       }),
     );

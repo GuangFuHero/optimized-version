@@ -51,6 +51,7 @@ function fields(overrides: Partial<AddressFields> = {}): AddressFields {
     floor: '',
     room: '',
     addressFilled: null,
+    addressKept: null,
     ...overrides,
   };
 }
@@ -304,7 +305,9 @@ describe('restoreTypedLine', () => {
     );
     const restored = restoreTypedLine(checked, typed);
 
-    expect(restored).toEqual(fields({ address: typed, floor: '3樓' }));
+    expect(restored).toEqual(
+      fields({ address: typed, floor: '3樓', addressKept: typed }),
+    );
     expect(addressTokenFor(restored)).toBeNull();
   });
 });
@@ -365,11 +368,15 @@ describe('addressToCheck', () => {
   });
 
   it('does not check again a line taken back with 改回你打的', () => {
-    const kept = fields({ address: '糖廠街19號' });
+    const typed = '糖廠街19號';
+    const kept = restoreTypedLine(
+      applyTypedLookup(fields({ address: typed }), typed, found()),
+      typed,
+    );
 
-    expect(addressToCheck(kept, PIN, '糖廠街19號')).toBeNull();
+    expect(addressToCheck(kept, PIN)).toBeNull();
     expect(
-      addressToCheck({ ...kept, address: '糖廠街21號' }, PIN, '糖廠街19號'),
+      addressToCheck({ ...kept, address: '糖廠街21號' }, PIN),
     ).toMatchObject({ address: '糖廠街21號' });
   });
 });

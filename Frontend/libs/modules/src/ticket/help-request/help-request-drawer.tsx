@@ -17,7 +17,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FocusEvent,
+  type ReactNode,
+  type Ref,
+} from 'react';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
@@ -303,7 +311,8 @@ function NoteOffer({
       size="small"
       variant="outlined"
       onClick={onClick}
-      // Not out of the address field: leaving it would check the line about to be replaced.
+      // A click or a tap leaves the focus in the address field: leaving it would check the line
+      // about to be replaced. A Tab here is not leaving it either (`leaveAddress`).
       onMouseDown={(event) => event.preventDefault()}
       sx={{
         py: 0.25,
@@ -324,14 +333,22 @@ function NoteOffer({
  * it arrives on its own.
  */
 function AddressLookupNote({
+  ref,
+  textId,
   note,
   error,
+  onBlur,
   onPinDoor,
   onTypedLine,
 }: {
+  ref: Ref<HTMLDivElement>;
+  /** On the note's words, which describe the address field. */
+  textId: string;
   note: AddressNote | null;
   /** The address is still blank after a try to send, and this is what asks for it. */
   error: boolean;
+  /** Focus leaving one of the buttons. */
+  onBlur: (event: FocusEvent) => void;
   onPinDoor: (door: FoundDoor) => void;
   onTypedLine: (line: string) => void;
 }) {
@@ -339,7 +356,7 @@ function AddressLookupNote({
   const { pinDoor, typedLine } = note ?? {};
 
   return (
-    <Box aria-live="polite" sx={{ gridArea: 'note' }}>
+    <Box ref={ref} aria-live="polite" onBlur={onBlur} sx={{ gridArea: 'note' }}>
       {note && look ? (
         <Stack
           direction="row"
@@ -357,6 +374,7 @@ function AddressLookupNote({
           </Box>
           {/* Room for a few words before an offer beside it goes to a line of its own. */}
           <Typography
+            id={textId}
             sx={{
               flex: '1 1 160px',
               minWidth: 0,
@@ -402,6 +420,8 @@ function HelpRequestFormDrawer({
     () => draft ?? emptyHelpRequestForm(seed),
   );
   const notesLabelId = useId();
+  const addressId = useId();
+  const addressNoteId = useId();
   const [restored, setRestored] = useState(draft !== null);
   // 清空重填 remounts the fields too: the small map looks for the device again, and what was typed
   // into the photo box goes.
@@ -409,10 +429,10 @@ function HelpRequestFormDrawer({
   // Marked red only after a first try to send, not while it is still being filled in.
   const [touched, setTouched] = useState(false);
   const formRef = useRef<HTMLDivElement | null>(null);
+  const addressRef = useRef<HTMLInputElement | null>(null);
+  const addressNoteRef = useRef<HTMLDivElement | null>(null);
   // The typed line last checked, once the address field was left.
   const [check, setCheck] = useState<AddressCheck | null>(null);
-  // A line taken back with 改回你打的 over the check's answer: not checked again (designer, 2026-10-25).
-  const [kept, setKept] = useState<string | null>(null);
   const pinLookup = usePinAddressLookup(form.landmark);
   const typedLookup = useTypedAddressLookup(check);
 
@@ -452,21 +472,73 @@ function HelpRequestFormDrawer({
   });
   // 「這附近查不到門牌，請自己填地址」 already asks for it: not a 必填 beside it too.
   const addressAsked = note?.kind === 'no_door';
+  const addressHelper =
+    isMissing('address') && !addressAsked ? '必填' : undefined;
+  // The note too, which is all that asks for the address when no door is near the pin. One of our
+  // own takes the place of MUI's, which points at its helper text, `${id}-helper-text`.
+  const addressDescribedBy =
+    [
+      addressHelper ? `${addressId}-helper-text` : null,
+      note ? addressNoteId : null,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined;
 
   /**
-   * Checked once the field is left, never per keystroke (backend guide §1); a line once. Left with
-   * nothing to check, the last check stays: it still names 改回你打的's line.
+   * Checked once the field is left, never per keystroke (backend guide §1); a line once. Its answer
+   * is applied again if it came while the line was being changed and the line has been changed back.
+   * Left with nothing to check, the last check stays: it still names 改回你打的's line.
    */
   const checkAddress = () => {
-    const next = addressToCheck(form, form.landmark, kept);
+    const next = addressToCheck(form, form.landmark);
 
-    if (next) {
-      setCheck((current) => (sameCheck(current, next) ? current : next));
+    if (!next) {
+      return;
+    }
+
+    if (sameCheck(check, next)) {
+      setForm((current) =>
+        applyTypedLookup(current, next.address, typedLookup),
+      );
+    } else {
+      setCheck(next);
     }
   };
 
+  /**
+   * Out of the address field and the note's buttons both. A Tab from the field to 用大頭針的地址, or
+   * back, is not leaving it: a check then would swap the note out, and the focused button with it.
+   */
+  const leaveAddress = (event: FocusEvent) => {
+    const to = event.relatedTarget;
+
+    if (
+      to instanceof Node &&
+      [addressRef.current, addressNoteRef.current].some((box) =>
+        box?.contains(to),
+      )
+    ) {
+      return;
+    }
+
+    checkAddress();
+  };
+
+  // Pressed from the keyboard, a button goes with the note it was in: the focus back to the field,
+  // not lost to the page. A click or a tap never took it from the field.
+  const backToAddress = () => {
+    if (addressNoteRef.current?.contains(document.activeElement)) {
+      addressRef.current?.focus();
+    }
+  };
+
+  const takePinDoor = (door: FoundDoor) => {
+    backToAddress();
+    setForm((current) => restorePinAddress(current, door));
+  };
+
   const takeTypedLine = (line: string) => {
-    setKept(line);
+    backToAddress();
     setCheck(null);
     setForm((current) => restoreTypedLine(current, line));
   };
@@ -523,7 +595,6 @@ function HelpRequestFormDrawer({
   const startOver = () => {
     setForm(emptyHelpRequestForm(seed));
     setCheck(null);
-    setKept(null);
     setRestored(false);
     setTouched(false);
     setRound((current) => current + 1);
@@ -641,7 +712,8 @@ function HelpRequestFormDrawer({
               official line a lookup puts in is long, and beside two narrow fields it would be cut off,
               hiding what the typed words became. Wider, the three share a row. The note is right
               under the address either way (designer, 2026-10-25); wider, across the whole row, since
-              the drawer leaves the address alone too narrow to hold it. */}
+              the drawer leaves the address alone too narrow to hold it. Next to the address in the
+              page too, so a Tab from it goes to the note's button before the floor. */}
           <Box
             data-field="address"
             sx={{
@@ -661,19 +733,33 @@ function HelpRequestFormDrawer({
           >
             {/* Filled in from the pin, or typed: the line goes as it stands, checked once left. */}
             <TextField
+              id={addressId}
+              inputRef={addressRef}
               label="地址"
               required
               size="small"
               value={form.address}
               onChange={(event) => set('address')(event.target.value)}
-              onBlur={checkAddress}
+              onBlur={leaveAddress}
               placeholder="花蓮縣光復鄉中山路100號"
               error={isMissing('address')}
-              helperText={
-                isMissing('address') && !addressAsked ? '必填' : undefined
-              }
-              slotProps={{ htmlInput: { maxLength: MAX_LENGTH.address } }}
+              helperText={addressHelper}
+              slotProps={{
+                htmlInput: {
+                  maxLength: MAX_LENGTH.address,
+                  'aria-describedby': addressDescribedBy,
+                },
+              }}
               sx={{ gridArea: 'address' }}
+            />
+            <AddressLookupNote
+              ref={addressNoteRef}
+              textId={addressNoteId}
+              note={note}
+              error={isMissing('address') && addressAsked}
+              onBlur={leaveAddress}
+              onPinDoor={takePinDoor}
+              onTypedLine={takeTypedLine}
             />
             {/* With the unit typed in: the address is shown as typed, with no 樓 or 室 added. */}
             <TextField
@@ -693,14 +779,6 @@ function HelpRequestFormDrawer({
               placeholder="302室"
               slotProps={{ htmlInput: { maxLength: MAX_LENGTH.room } }}
               sx={{ gridArea: 'room', mt: UNIT_ROW_GAP }}
-            />
-            <AddressLookupNote
-              note={note}
-              error={isMissing('address') && addressAsked}
-              onPinDoor={(door) =>
-                setForm((current) => restorePinAddress(current, door))
-              }
-              onTypedLine={takeTypedLine}
             />
           </Box>
 
