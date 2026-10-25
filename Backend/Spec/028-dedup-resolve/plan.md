@@ -200,6 +200,18 @@ commit 前看 `git diff --cached --stat`）。
   第一次全套件抓到一個隨機失敗：災害欄位答案在同一交易寫入時 `created_at` 相同，依 uuid 排序會亂序（也會讓 version 亂跳），
   且漏了 `delete_at` 過濾。改成和 `tickets_repository.list_by_ticket`、GraphQL loader 一樣依 `(property_name, value)` 排序並排除軟刪除。
 
+## Task 10：PR #113 review（ADR-388～390）
+
+jujuyuzu 2026-10-25 的 review。
+
+- [x] migration 改接 #110 的 `da152a6a9d7c`（`6a292f356`）
+- [x] ADR 整批往後移一號，364～384 → 365～385（`7449a7cae`）
+- [x] 既有的接單、取消接單、編輯，在鎖住之後確認需求沒被搬走（ADR-388），並發測試 5 個
+- [x] 聯絡人有改時通知主要單原本的志工（ADR-389）
+- [x] 取消通知文字分兩種、兩張單同一人只收一則（ADR-390）
+- [x] `er-diagram.md` 補欄位與通知類型；Spec 025 註記範圍
+- [ ] 全套件；Docker 從零重做；回覆 review
+
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
 | 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |

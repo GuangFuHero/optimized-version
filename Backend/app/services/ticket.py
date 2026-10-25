@@ -873,6 +873,7 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     # The ticket before the need, the order every writer keeps: voiding the verdict locks it.
     await lock_ticket(db, str(task.ticket_uuid))
+    task = await _need_still_on(db, task.uuid, task.ticket_uuid)
 
     for field, value in changes.items():
         if hasattr(task, field):
@@ -955,6 +956,7 @@ async def _add_task_property(
     ticket_uuid = str(task.ticket_uuid)
     # The ticket before the need, the order every writer keeps: the new row holds the need too.
     await lock_ticket(db, ticket_uuid)
+    await _need_still_on(db, task.uuid, ticket_uuid)
     prop = await task_property_repository.add(
         db,
         obj_in={
@@ -985,6 +987,11 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     ticket_uuid = str(task.ticket_uuid)
     await lock_ticket(db, ticket_uuid)  # the ticket before the need, as in _add_task_property
+    await _need_still_on(db, task.uuid, ticket_uuid)
+    on_task = await db.scalar(select(TaskProperty.task_uuid).where(TaskProperty.uuid == prop.uuid))
+    if str(on_task) != str(task.uuid):
+        # The item itself moved to the need its need folded into (ADR-388).
+        raise ValueError(MOVED_DURING_DEDUP)
     for field, value in changes.items():
         if hasattr(prop, field):
             setattr(prop, field, value)
@@ -1181,6 +1188,27 @@ async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> T
     return task
 
 
+# A dedup resolve (Spec 028) moves needs to the ticket it keeps, and claims and items to the need
+# they fold into. A writer that read where a row lived before taking the ticket's lock may have
+# queued behind that resolve; it re-reads under the lock and stops rather than act on the
+# cancelled ticket or check its scope against the wrong one (ADR-388).
+MOVED_DURING_DEDUP = (
+    "This need was merged into another ticket while you were working on it; reload and try again"
+)
+
+
+async def _need_still_on(db: AsyncSession, task_uuid, ticket_uuid) -> TicketTask:
+    """The need, read again under its ticket's lock; refused if a dedup resolve moved it meanwhile."""
+    task = await db.scalar(
+        select(TicketTask).where(TicketTask.uuid == task_uuid).execution_options(populate_existing=True)
+    )
+    if task is None:
+        raise ValueError("Ticket task not found")
+    if str(task.ticket_uuid) != str(ticket_uuid):
+        raise ValueError(MOVED_DURING_DEDUP)
+    return task
+
+
 async def _lock_ticket_and_task(
     db: AsyncSession, *, task_uuid: str, live_only: bool = True
 ) -> tuple[Tickets, TicketTask]:
@@ -1188,8 +1216,9 @@ async def _lock_ticket_and_task(
 
     A ticket's status is worked out from all of its needs (recompute_ticket_status), so whatever
     changes a need holds its ticket as well, and taking the two in one fixed order makes writers
-    on the same ticket queue instead of deadlocking. The need's ticket is read unlocked first: a
-    need never moves to another ticket.
+    on the same ticket queue instead of deadlocking. The need's ticket is read unlocked first; only
+    a dedup resolve moves a need to another ticket, and one that did so while this waited for the
+    ticket's lock is refused (ADR-388).
 
     A deleted need, or a need of a deleted ticket, is not found — checked under the locks, so a
     deletion cannot slip in between. `live_only=False` locks it anyway, for a release: giving a
@@ -1210,6 +1239,8 @@ async def _lock_ticket_and_task(
         .with_for_update()
         .execution_options(populate_existing=True)
     )
+    if task is not None and str(task.ticket_uuid) != str(ticket_uuid):
+        raise ValueError(MOVED_DURING_DEDUP)
     if task is None or (live_only and (ticket.delete_at is not None or task.delete_at is not None)):
         raise ValueError("Ticket task not found")
     return ticket, task
@@ -1325,6 +1356,10 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
         actor, Perm.TICKET_ASSIGN, db, resource=await _assignment_scope_target(db, assignment)
     )
     ticket, task = await _lock_ticket_and_task(db, task_uuid=str(assignment.task_uuid), live_only=False)
+    on_task = await db.scalar(select(TaskAssignment.task_uuid).where(TaskAssignment.uuid == uuid))
+    if on_task is not None and str(on_task) != str(task.uuid):
+        # Its need was folded into another by a dedup resolve while this waited (ADR-388).
+        raise ValueError(MOVED_DURING_DEDUP)
     if task.recruiting_stopped_at is not None:
         raise ValueError("Recruiting has stopped for this task")
     removed = await db.scalar(

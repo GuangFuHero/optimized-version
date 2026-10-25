@@ -344,8 +344,9 @@ users ||--o{ announcements : "last published"
 %%   task_full, task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
 %%   station_assigned, station_unassigned, station_suggestion_created, dedup_review_pending,
 %%   dedup_task_merged, dedup_task_canceled, dedup_ticket_merged, dedup_ticket_updated,
+%%   dedup_ticket_contact_changed,
 %%   role_request_submitted, role_request_approved, role_request_rejected
-%% (The four dedup_* after dedup_review_pending are sent once a reviewer resolves a pair card, Spec 028 ADR-379.)
+%% (The five dedup_* after dedup_review_pending are sent once a reviewer resolves a pair card, Spec 028 ADR-379, 389.)
 %% (ticket_task_status_update is gone: a need's status is no longer edited by hand, ADR-293.)
 %% (dedup_flag_ticket / dedup_flag_station are gone: nothing could set is_duplicate, so they never
 %%  fired. dedup_review_pending replaces them, one per submission that leaves pair cards, ADR-345.)
@@ -770,6 +771,7 @@ tickets {
     string_array disaster_types "default '{}', references disaster_types.key by string; stored sorted+deduped (ADR-246)"
     string person_trapped_reported "nullable, String(20), yes/no/unknown — reporter's answer, NOT a medical judgement"
     string immediate_danger_reported "nullable, String(20), yes/no/unknown — NOT a triage grade"
+    uuid replaced_by_uuid FK "nullable FK to tickets: the ticket a dedup resolve cancelled this one into (Spec 028, ADR-372)"
     string search_text "GENERATED ALWAYS AS title + left(description, 500), STORED"
 }
 %% INDEX: ix_tickets_search_text_trgm USING gin (search_text gin_trgm_ops)
@@ -841,6 +843,7 @@ ticket_tasks {
     string progress_note "nullable"
     boolean is_duplicate
     string dedup_group_id "nullable"
+    uuid merged_into_uuid FK "nullable FK to ticket_tasks: the need a dedup resolve folded this one into (Spec 028, ADR-372)"
     uuid created_by FK
     timestamp completed_at "nullable, set when status enters 'fulfilled' and cleared when it leaves"
     timestamp canceled_at "nullable, set when status enters 'canceled' and cleared when it leaves"

@@ -7,7 +7,7 @@
 **Base**: `main` @ `a272dfdd4`，分支 `feat/dedup-resolve`
 **Notion**: DEDUP-007（審核動作與後端）、DEDUP-008（AI 重複審核頁，前端 Ethan）、DEDUP-009（通知，Dennis）、
 「dedup 10/23 update — 討論頁」§12
-**Decisions**: `decisions.md`（ADR-365～385；381～385 是 code review 那一輪）
+**Decisions**: `decisions.md`（ADR-365～385、388～390；381～385 是 code review 那一輪，388～390 是 PR #113 review 那一輪）
 **前一份**：Spec 025（PR #92，判定＋撤銷）。本 Spec 是 ADR-336 拆出去的「後半段」。
 
 ## 概述
@@ -303,9 +303,10 @@ commit 之後發送，照 `dedup_review.notify_new_cards` 的寫法：失敗只�
 | 類型 | 對象 | 什麼時候 | 內容 |
 |---|---|---|---|
 | `dedup_task_merged` | 搬過去的志工 | 需求被 `absorb`，或整項 `move` 到主要單（兩者的聯絡人都改成主要單的；同一人在兩邊都已接的，不另通知） | 「你承接的需求已合併到「<主要單標題>」」，聯絡人改成主要單的聯絡人 |
-| `dedup_task_canceled` | 被取消需求上的志工 | 需求被 `cancel`（不是併入） | 「你承接的需求已取消」，附主要單 |
+| `dedup_task_canceled` | 被取消需求上的志工 | 需求被 `cancel`（不是併入） | 「你承接的需求已取消」。另一張單的需求附「改由主要單處理」；主要單自己的需求不附（ADR-390） |
 | `dedup_ticket_merged` | 另一張單的開單者 | 每次處理 | 「你的單已併入「<主要單標題>」」，列出哪些需求併入或搬到主要單、哪些取消 |
-| `dedup_ticket_updated` | 主要單的開單者 | 主要單的欄位、需求或細項有變 | 「你的單已因重複審核更新」 |
+| `dedup_ticket_updated` | 主要單的開單者 | 主要單的欄位、需求或細項有變；兩張單同一人開的不發，收 `dedup_ticket_merged` 就好（ADR-390） | 「你的單已因重複審核更新」 |
+| `dedup_ticket_contact_changed` | 主要單原本需求上的志工（沒有搬過來的） | 主要單的聯絡人姓名、電話或 Email 有改（ADR-389） | 「「<主要單標題>」的聯絡人已更新」 |
 
 - 一個人同時符合多種，每種各收一則；同一種只收一則（一個志工搬了兩項需求，只收一則）。
 - 審核員本人不收。

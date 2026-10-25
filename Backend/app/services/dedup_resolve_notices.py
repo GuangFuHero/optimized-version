@@ -35,36 +35,87 @@ async def send_resolve_notices(db: AsyncSession, *, outcome, actor: User, actor_
 
 
 def _notices(outcome) -> list[dict]:
-    plan = outcome.plan
-    primary, title = plan.primary_uuid, outcome.primary_title
-    notices = []
+    """Every notice the resolve sends, in a fixed order; each points at the primary ticket."""
+    notices = [
+        *_moved(outcome),
+        *_canceled(outcome),
+        *_contact_changed(outcome),
+        *_owners(outcome),
+    ]
+    return [{**notice, "ref_uuid": outcome.plan.primary_uuid} for notice in notices]
+
+
+def _moved(outcome) -> list[dict]:
     moved = sorted({person for people in outcome.moved_people.values() for person in people})
-    if moved:
-        notices.append(
-            {
-                "event_type": "dedup_task_merged",
-                "title": f"你承接的需求已合併到「{title}」",
-                "body": (
-                    "這筆需求和另一張重複的單合併了，聯絡人改成這張單的聯絡人，請到單上查看。"
-                    "你的承接照常有效。"
-                ),
-                "priority": "high",
-                "ref_uuid": primary,
-                "explicit_recipients": moved,
-            }
-        )
-    canceled = sorted({person for people in outcome.canceled_people.values() for person in people})
-    if canceled:
+    if not moved:
+        return []
+    return [
+        {
+            "event_type": "dedup_task_merged",
+            "title": f"你承接的需求已合併到「{outcome.primary_title}」",
+            "body": (
+                "這筆需求和另一張重複的單合併了，聯絡人改成這張單的聯絡人，請到單上查看。你的承接照常有效。"
+            ),
+            "priority": "high",
+            "explicit_recipients": moved,
+        }
+    ]
+
+
+def _canceled(outcome) -> list[dict]:
+    """People on a cancelled need, told in one of two ways (ADR-390).
+
+    The other ticket's needs went to the primary; the primary's own just stopped, so only the
+    people on the first are told where the matter went.
+    """
+    other, own = set(), set()
+    for task, people in outcome.canceled_people.items():
+        (other if task in outcome.secondary_task_uuids else own).update(people)
+    own -= other  # one notice of a kind per person; the other ticket's wording also covers theirs
+    title = outcome.primary_title
+    notices = []
+    if other:
         notices.append(
             {
                 "event_type": "dedup_task_canceled",
                 "title": "你承接的需求已取消",
                 "body": f"重複審核後，你承接的需求已取消，不用前往了。這件事改由「{title}」處理。",
                 "priority": "high",
-                "ref_uuid": primary,
-                "explicit_recipients": canceled,
+                "explicit_recipients": sorted(other),
             }
         )
+    if own:
+        notices.append(
+            {
+                "event_type": "dedup_task_canceled",
+                "title": "你承接的需求已取消",
+                "body": f"「{title}」和另一張重複的單合併時，你承接的這筆需求取消了，不用前往了。",
+                "priority": "high",
+                "explicit_recipients": sorted(own),
+            }
+        )
+    return notices
+
+
+def _contact_changed(outcome) -> list[dict]:
+    """The primary's own volunteers, when the resolve changed its contact (ADR-389)."""
+    if not outcome.contact_changed or not outcome.staying_people:
+        return []
+    return [
+        {
+            "event_type": "dedup_ticket_contact_changed",
+            "title": f"「{outcome.primary_title}」的聯絡人已更新",
+            "body": "這張單和另一張重複的單合併後，聯絡人有更新，請到單上查看。你的承接照常有效。",
+            "priority": "high",
+            "explicit_recipients": list(outcome.staying_people),
+        }
+    ]
+
+
+def _owners(outcome) -> list[dict]:
+    """Both tickets' owners; someone who filed both hears once, by the merged notice (ADR-390)."""
+    title = outcome.primary_title
+    notices = []
     if outcome.secondary_owner:
         notices.append(
             {
@@ -72,18 +123,20 @@ def _notices(outcome) -> list[dict]:
                 "title": f"你的求助「{outcome.secondary_title}」已併入「{title}」",
                 "body": _secondary_body(outcome),
                 "priority": "medium",
-                "ref_uuid": primary,
                 "explicit_recipients": [outcome.secondary_owner],
             }
         )
-    if outcome.primary_owner and _primary_changed(outcome):
+    if (
+        outcome.primary_owner
+        and outcome.primary_owner != outcome.secondary_owner
+        and _primary_changed(outcome)
+    ):
         notices.append(
             {
                 "event_type": "dedup_ticket_updated",
                 "title": f"你的求助「{title}」已因重複審核更新",
                 "body": "另一張重複的單併入了你的單，內容或需求有調整，請到單上確認。",
                 "priority": "medium",
-                "ref_uuid": primary,
                 "explicit_recipients": [outcome.primary_owner],
             }
         )

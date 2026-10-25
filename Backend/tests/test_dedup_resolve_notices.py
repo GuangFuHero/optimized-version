@@ -181,3 +181,81 @@ async def test_picking_the_primary_as_it_is_does_not_tell_its_owner(db):
     sent = await _sent(db)
     assert "dedup_ticket_updated" not in sent
     assert sent["dedup_ticket_merged"] == {ids["owner_b"]}
+
+
+# --- PR #113 review (ADR-389, 390) ---------------------------------------------------------
+
+
+async def test_a_new_contact_is_told_to_the_people_already_on_the_primary(db):
+    """ADR-389: v1 and v2 were on A all along; the contact changed, so they hear it too.
+
+    v3 and v4 moved over and already heard it in `dedup_task_merged`.
+    """
+    reviewer, ids = await _world(db)
+    request = _example_one(ids, await _versions(db, reviewer, ids), ticket={"contact_phone": "0987654321"})
+
+    await _resolve(db, reviewer, ids, request)
+
+    assert (await _sent(db))["dedup_ticket_contact_changed"] == {ids["v1"], ids["v2"]}
+
+
+async def test_no_contact_change_no_contact_notice(db):
+    """Sending the same contact again is no change."""
+    reviewer, ids = await _world(db)
+    request = _example_one(
+        ids, await _versions(db, reviewer, ids), ticket={"contact_phone": "0912345678", "title": "新標題"}
+    )
+
+    await _resolve(db, reviewer, ids, request)
+
+    assert "dedup_ticket_contact_changed" not in await _sent(db)
+
+
+async def test_a_cancelled_need_of_the_primary_is_not_said_to_move_elsewhere(db):
+    """ADR-390: the people on A's own cancelled need are not told 「改由 A 處理」 — it was A's."""
+    reviewer, ids = await _world(db)
+    db.add(TaskAssignment(task_uuid=ids["a2"], actor_uuid=ids["v4"]))
+    db.add(TaskAssignment(task_uuid=ids["b2"], actor_uuid=ids["v1"]))
+    await db.flush()
+    request = _example_one(ids, await _versions(db, reviewer, ids))
+    request.primary_tasks[1] = type(request.primary_tasks[1]).model_validate(
+        {"task": ids["a2"], "action": "cancel"}
+    )
+    request.secondary_tasks.append(type(request.secondary_tasks[0])(task=ids["b2"], action="cancel"))
+
+    await _resolve(db, reviewer, ids, request)
+
+    canceled = {str(n.recipient_uuid): n.body for n in await _all(db) if n.type == "dedup_task_canceled"}
+    assert "改由" not in canceled[ids["v4"]]
+    assert "改由" in canceled[ids["v1"]]
+
+
+async def test_one_owner_of_both_tickets_hears_once(db):
+    """ADR-390: the merged notice already tells them; no second `dedup_ticket_updated`."""
+    reviewer, ids = await _world(db)
+    b = await db.get(Tickets, ids["b"])
+    b.created_by = ids["owner_a"]  # on base_geometries, so not through a bulk update of Tickets
+    await db.flush()
+
+    await _resolve(db, reviewer, ids)
+
+    sent = await _sent(db)
+    assert sent["dedup_ticket_merged"] == {ids["owner_a"]}
+    assert "dedup_ticket_updated" not in sent
+
+
+async def test_someone_who_moved_over_is_not_told_the_contact_twice(db):
+    """v3 is on A's 飲用水 and moves over from B's 清淤.
+
+    `dedup_task_merged` already tells v3 the contact changed.
+    """
+    reviewer, ids = await _world(db)
+    db.add(TaskAssignment(task_uuid=ids["a2"], actor_uuid=ids["v3"]))
+    await db.flush()
+    request = _example_one(ids, await _versions(db, reviewer, ids), ticket={"contact_phone": "0987654321"})
+
+    await _resolve(db, reviewer, ids, request)
+
+    sent = await _sent(db)
+    assert ids["v3"] in sent["dedup_task_merged"]
+    assert sent["dedup_ticket_contact_changed"] == {ids["v1"], ids["v2"]}

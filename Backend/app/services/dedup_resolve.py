@@ -61,6 +61,8 @@ class ResolveOutcome:
     canceled_people: dict[str, tuple[str, ...]]
     task_names: dict[str, str]
     secondary_task_uuids: frozenset[str]
+    contact_changed: bool = False
+    staying_people: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -102,7 +104,7 @@ async def resolve(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, reques
     pair.reviewed_at = now
     after = (await tickets_for_review(db, (plan.primary_uuid,)))[plan.primary_uuid]
     db.add(_merged_event(pair, plan, request, reviewer, note, before_status, (low, high), claimants, after))
-    outcome = _outcome(plan, after, secondary, claimants, tasks)
+    outcome = _outcome(plan, primary, after, secondary, claimants, tasks)
     await db.commit()
 
     await send_resolve_notices(db, outcome=outcome, actor=actor, actor_uuid=reviewer)
@@ -328,7 +330,11 @@ def _merged_event(
     )
 
 
-def _outcome(plan, primary, secondary, claimants, tasks) -> ResolveOutcome:
+_CONTACT_FIELDS = ("contact_name", "contact_phone", "contact_email")
+
+
+def _outcome(plan, before, after, secondary, claimants, tasks) -> ResolveOutcome:
+    """`before` is the primary as the reviewer saw it, `after` as the resolve left it (ADR-382)."""
     dropped = set(plan.dropped_assignments)
     # Whoever now answers to the primary ticket's contact: the people on a folded need who moved
     # over, and the people on a need moved over whole (ADR-379).
@@ -338,14 +344,22 @@ def _outcome(plan, primary, secondary, claimants, tasks) -> ResolveOutcome:
     }
     moved |= {k.uuid: tuple(sorted(claimants.get(k.uuid, set()))) for k in plan.kept_tasks if k.moved}
     canceled = {task: tuple(sorted(claimants.get(task, set()))) for task in plan.canceled_tasks}
+    # The people on the primary's own kept needs, who did not move and so heard nothing of the
+    # contact in `dedup_task_merged` (ADR-389).
+    arrived = {person for people in moved.values() for person in people}
+    staying = {
+        person for k in plan.kept_tasks if not k.moved for person in claimants.get(k.uuid, set())
+    } - arrived
     return ResolveOutcome(
         plan=plan,
-        primary_title=primary.title,
-        primary_owner=primary.created_by,
+        primary_title=after.title,
+        primary_owner=after.created_by,
         secondary_title=secondary.title,
         secondary_owner=secondary.created_by,
         moved_people=moved,
         canceled_people=canceled,
         task_names={uuid: task.task_name for uuid, task in tasks.items()},
         secondary_task_uuids=frozenset(task.uuid for task in secondary.tasks),
+        contact_changed=any(getattr(before, f) != getattr(after, f) for f in _CONTACT_FIELDS),
+        staying_people=tuple(sorted(staying)),
     )
