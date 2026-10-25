@@ -219,7 +219,6 @@
     const [tab, setTab] = useState('info');
     useEffect(() => { setTab('info'); }, [marker.id]);
     const st = marker.stationMeta || {};
-    const status = formatStationStatus(marker);
     const avail = R.resolveStationAvailability(st);
     const pendingCount = (reports || []).length;
     const tabs = [{ value: 'info', label: '詳情' }, { value: 'corrections', label: '修改建議' + (pendingCount ? '（' + pendingCount + '）' : '') }];
@@ -242,7 +241,9 @@
 
         <div style={{ padding: '0 var(--space-6)', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           <Badge tone={avail.tone} variant="solid">{avail.headline}</Badge>
-          <Badge tone={status.tone} variant="subtle">{status.label}</Badge>
+          {/* 🔄 2026-10-25 驗證標籤（已人工驗證／公開／AI 驗證）先不顯示（Sucre 回工程師第 2 題）：
+              後端**沒有任何寫入驗證狀態的路徑**（建站、編輯、審核、匯入都不會設），正式版每站都只會掛「公開」，
+              等於沒有資訊；而且目前沒有 AI。等有驗證流程再放回來 —— formatStationStatus() 留著。 */}
           {/* 官方認定（2026-08-21 決議）：前台不再顯示 `source`。
               站點一律由後台建立，來源不具區別力；有區別力的是「是不是官方造冊」。
               非官方一律不顯示任何 chip —— 標籤太多會把列表淹掉。 */}
