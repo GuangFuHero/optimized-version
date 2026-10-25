@@ -122,8 +122,8 @@ app route 保留：
 - `NeedClaimProvider`
 - `StationCreateDrawer`
 - `PlaceHereAction`
-- `MapRequestHelpButton`
+- `MapRequestHelpBar`
 
 也就是說，前台地圖不只是讀取資料，還承接了分享、承接需求、新增站點與請求協助等互動。
 
-請求協助的抽屜（`HelpRequestHost`）掛在網站外框，地圖上的 `PlaceHereAction`、`MapRequestHelpButton` 只負責打開它。
+請求協助的抽屜（`HelpRequestHost`）掛在網站外框，地圖上的 `PlaceHereAction`、`MapRequestHelpBar` 只負責打開它。
