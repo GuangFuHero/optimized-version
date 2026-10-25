@@ -38,6 +38,7 @@ describe('STATION_SUGGESTION_FIELDS', () => {
   it('names the supply line for what it holds, 目前缺少, and says to clear it once nothing is short', () => {
     expect(stationSuggestionField('supply_status')).toMatchObject({
       label: '目前缺少',
+      placeholder: '例：沐浴乳、毛巾；嬰兒尿布 M、L',
       helper: '只寫現在缺的東西。都補齊了就清空。',
     });
   });

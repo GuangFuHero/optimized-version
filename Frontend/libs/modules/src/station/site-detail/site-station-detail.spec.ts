@@ -85,13 +85,14 @@ describe('describeSiteStation', () => {
     ).toEqual(['現在開放']);
   });
 
-  it('lays out the body in the prototype order: hours, place, kind and hours, where', () => {
+  it('lays out the body in the prototype order: hours, place, where, with no tiles repeating them', () => {
     const detail = describeSiteStation(station(), at(10));
 
     expect(detail.hoursLine).toBe('服務時間 06:00-22:00');
     expect(detail.locationNote).toBe('校門口設 6 座取水口，可接軟管');
-    expect(detail.tiles).toEqual({ type: '加水', hours: '06:00-22:00' });
     expect(detail.coordinates).toBe('23.669400, 121.421200');
+    // The hours line already says the hours, and the type sits under the title (designer, 2026-10-26).
+    expect(detail).not.toHaveProperty('tiles');
   });
 
   it('says what is missing rather than leaving a gap, and never falls back to the internal comment', () => {
@@ -108,7 +109,6 @@ describe('describeSiteStation', () => {
 
     expect(detail.hoursLine).toBe('服務時間未提供');
     expect(detail.locationNote).toBe('未提供位置說明');
-    expect(detail.tiles.hours).toBe('未提供');
   });
 
   it('carries what the station is short of, with when it was last said, and nothing when it says nothing', () => {

@@ -8,7 +8,7 @@
 import type { BadgeTone } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../map/types';
-import { readOpHour, resolveStationAvailability } from '../availability';
+import { resolveStationAvailability } from '../availability';
 import { describeSupplyStatus, type SupplyStatusLine } from '../supply-status';
 
 export interface SiteStationChip {
@@ -28,7 +28,6 @@ export interface SiteStationDetail {
   /** 目前缺少: what the station is short of. Null when it says nothing, and the block goes. */
   supply: SupplyStatusLine | null;
   locationNote: string;
-  tiles: { type: string; hours: string };
   coordinates: string;
 }
 
@@ -86,10 +85,8 @@ export function describeSiteStation(
     // The description only, as the prototype's 位置說明. Never the station's `comment`, the back
     // office's internal note (backend ADR-332), nor the subtitle, which falls back to the hours.
     locationNote: station.description?.trim() || '未提供位置說明',
-    tiles: {
-      type: marker.label,
-      hours: readOpHour(station.opHour) ?? '未提供',
-    },
+    // No 站點類型 or 服務時間 tiles (designer, 2026-10-26): the hours line above already gives the
+    // hours, and is the one that says whether one can go now; the type sits under the title.
     coordinates: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
   };
 }

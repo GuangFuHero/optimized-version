@@ -110,7 +110,7 @@ export const STATION_SUGGESTION_FIELDS: readonly StationSuggestionField[] = [
     name: 'supply_status',
     label: '目前缺少',
     kind: 'text',
-    placeholder: '例：飲用水、嬰兒尿布',
+    placeholder: '例：沐浴乳、毛巾；嬰兒尿布 M、L',
     helper: '只寫現在缺的東西。都補齊了就清空。',
     // The backend stores a blank as none at merge (ADR-333), and the detail then drops the block.
     clearable: true,
