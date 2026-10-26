@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 from geoalchemy2.shape import from_shape
+from plotly.offline import get_plotlyjs_version
 from shapely.geometry import Point
 
 from app.api.v1.endpoints.analytics import _in_catalog_unit
@@ -32,6 +33,9 @@ STATIONS_DATA_URL = "/api/v1/analytics/stations/data"
 TICKETS_VALUE_URL = "/api/v1/analytics/tickets/value"
 STATIONS_VALUE_URL = "/api/v1/analytics/stations/value"
 CATALOG_URL = "/api/v1/analytics/catalog"
+# The plotly.js the admin dashboard draws figures with: `plotly.js-dist-min` in
+# Frontend/libs/modules/package.json.
+FRONTEND_PLOTLYJS_VERSION = "4.1.1"
 
 
 async def _user_with_perms(db, redis, *perms: Perm, scope: str = "all") -> dict:
@@ -482,6 +486,15 @@ async def test_free_text_categories_render_as_literal_text(client, db_session, r
     }
     data = (await client.get(STATIONS_DATA_URL, params=params, headers=headers)).json()
     assert set(data["x_values"]) == {*types[:-1], "未分類"}
+
+
+def test_bundled_plotlyjs_matches_the_frontend():
+    """The figure JSON is written for the plotly.js inside the Python plotly package."""
+    assert get_plotlyjs_version() == FRONTEND_PLOTLYJS_VERSION, (
+        f"plotly bundles plotly.js {get_plotlyjs_version()} but the frontend loads "
+        f"{FRONTEND_PLOTLYJS_VERSION}. Move the plotly pin in pyproject.toml and the frontend's "
+        "plotly.js-dist-min together, then update FRONTEND_PLOTLYJS_VERSION."
+    )
 
 
 @pytest.mark.asyncio
