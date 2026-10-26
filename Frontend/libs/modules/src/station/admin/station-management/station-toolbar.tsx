@@ -20,10 +20,11 @@ import {
   SlidersHorizontal,
   Upload,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
 
 import type { StationCapabilities } from './hooks/use-station-capabilities';
+import { followUrl, initialSearchBox } from './model/search-box';
 import { ToolbarButton } from './toolbar-button';
 
 const { color, radius, shadow, typography } = designTokens;
@@ -61,30 +62,29 @@ export function StationToolbar({
   onImport,
   exportControl,
 }: StationToolbarProps) {
-  const [draft, setDraft] = useState(query);
-  // The last query this box sent, to tell the URL changing elsewhere from its own update landing.
-  const [sent, setSent] = useState(query);
+  const [box, setBox] = useState(() => initialSearchBox(query));
+  // An IME (注音, 倉頡) is mid-word: its keystrokes are not a query yet.
+  const composing = useRef(false);
   const sendQuery = useDebounceCallback((value: string) => {
-    setSent(value);
+    setBox((current) => ({ ...current, sent: value.trim() }));
     onQueryChange(value);
   }, 300);
 
-  // The URL is the source of truth; follow it when it changes from elsewhere (e.g. 清除, back).
-  if (query !== sent) {
-    setSent(query);
-    setDraft(query);
-  }
+  const followed = followUrl(box, query);
+  if (followed !== box) setBox(followed);
 
   const changeDraft = (value: string) => {
-    setDraft(value);
-    sendQuery(value);
+    setBox((current) => ({ ...current, draft: value }));
+    if (!composing.current) sendQuery(value);
   };
   const clear = () => {
     sendQuery.cancel();
+    // A query still waiting on the debounce never reached the URL, so the URL can't clear it.
+    setBox(initialSearchBox(''));
     onClear();
   };
 
-  const trimmed = draft.trim();
+  const trimmed = followed.draft.trim();
   const showClear = activeFilterCount > 0 || trimmed.length > 0;
 
   return (
@@ -120,12 +120,21 @@ export function StationToolbar({
         }}
       >
         <TextInput
-          value={draft}
+          value={followed.draft}
           onChange={(event) => changeDraft(event.target.value)}
           placeholder="搜尋站名／地址…"
           leadingIcon={<Search size={16} />}
           helperText={trimmed.length === 1 ? '至少輸入 2 個字' : undefined}
-          inputProps={{ 'aria-label': '搜尋站點' }}
+          inputProps={{
+            'aria-label': '搜尋站點',
+            onCompositionStart: () => {
+              composing.current = true;
+            },
+            onCompositionEnd: (event) => {
+              composing.current = false;
+              sendQuery(event.currentTarget.value);
+            },
+          }}
         />
       </Box>
 
