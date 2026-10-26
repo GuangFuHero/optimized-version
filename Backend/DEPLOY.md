@@ -1,7 +1,8 @@
 # Staging Deployment Guide (deploy.sh)
 
-One-command deploy of the backend to the GCP staging VM: backup → migrate → seed → restart →
-readiness check, with automatic rollback on failure. First validated on the real VM on 2026-06-12.
+One-command deploy of the backend and the two Next apps (the site and the back office) to the GCP staging VM:
+backup → migrate → seed → restart → readiness check, with automatic rollback of the backend on failure. First
+validated on the real VM on 2026-06-12.
 
 ---
 
@@ -19,10 +20,18 @@ cd /opt/wanguard/Backend && ./scripts/deploy.sh
 
 # Additionally (re)build the mock scenario data (demo environments only)
 SEED_MOCK=true ./scripts/deploy.sh
+
+# Rebuild only the back office; the site keeps the image it runs. NEXT_APPS="" rebuilds neither Next app.
+NEXT_APPS=admin ./scripts/deploy.sh
 ```
 
 Success looks like `[1/9] preflight` → … → `DEPLOY OK — <sha> in <N>s`, followed by a rollback hint.
-A cold build takes ~5 minutes; cached rebuilds take well under a minute.
+A full deploy took 851 s on 2026-10-22, before the back office was added; most of it is the image builds.
+
+`NEXT_APPS` names the Next apps to rebuild: `frontend` (the site) and `admin` (the back office). Unset, it
+rebuilds both: everything runs the commit you deploy. Leave an app out only when the commit changes nothing
+under `Frontend/` that it uses (its `apps/<app>/`, the `libs/` it imports, the lockfile, the Dockerfile).
+When unsure, rebuild both.
 
 ## Accessing the backend from your machine (SSH tunnel)
 
@@ -59,17 +68,18 @@ gcloud secrets versions access latest --secret=staging-backend-postgres-password
 
 | Item | Value |
 |------|-------|
-| GCP project / VM | `wanguard-250923` / `wanguard-test-01` (asia-east1-a) |
+| GCP project / VM | `wanguard-250923` / `wanguard-test-01` (asia-east1-a), e2-medium: 2 vCPU, 4 GB RAM |
 | Repo path on VM | `/opt/wanguard` |
 | Compose file | `docker-compose.staging.yml`, compose project name pinned to `backend` |
 | Data | Named volumes `backend_pgdata` / `backend_redisdata` — **survive all deploys** |
 | Published ports | Backend `:8000`; Postgres on **loopback only** (`127.0.0.1:5432`, for SSH-tunnel inspection); Redis internal-only |
 | GCP firewall | Only 22/SSH open. **8000 is NOT open** — access via SSH tunnel until a firewall rule (or Caddy/HTTPS) is added for the frontend |
 | External IP | Static `34.80.0.121` (reserved as `wanguard-prod-external-ip`). 簡訊王 and TGOS only accept API calls from this registered IP — releasing it breaks SMS (`statuscode=k`) and address lookups. Still connect via `gcloud compute ssh` |
-| Secrets | GCP Secret Manager: `staging-backend-{jwt-signing-key,postgres-password,smtp2go-api-key,kotsms-username,kotsms-password,google-client-secret,line-channel-secret}`, `staging-frontend-{nextauth-secret,google-client-secret,line-client-secret}`, `staging-cloudflared-tunnel-token`. The two `staging-frontend-*` OAuth secrets hold the same values as the `staging-backend-*` pair and are deleted once the frontend no longer uses NextAuth (see [Sign-in](#sign-in-cookie-session-and-oauth)) |
+| Secrets | GCP Secret Manager: `staging-backend-{jwt-signing-key,postgres-password,smtp2go-api-key,kotsms-username,kotsms-password,google-client-secret,line-channel-secret}`, `staging-cloudflared-tunnel-token`. The Next apps hold no secret. `staging-frontend-{nextauth-secret,google-client-secret,line-client-secret}` are read by nothing once the back office has deployed (see [Deploying the back office](#deploying-the-back-office)) |
 | SMS | 簡訊王 (KotSMS), `SMS_PROVIDER=kotsms` written by `gen_env`. Messages are signed 島嶼守望, the 實名制 identity the account is approved for; a mismatch is dropped by the carrier while the API still answers `statuscode=1`. **Takes two deploys to switch on**: a running `deploy.sh` keeps the `gen_env` it parsed before checkout, so the first deploy that ships the KotSMS lines still writes the old `.env` (SMS stays on `console`); the next deploy writes them |
 | Backups | `gs://wanguard-250923-db-backups` |
-| Swap | 2 GB `/swapfile`, `vm.swappiness=10` — prevents the OOM killer hitting Postgres during image builds |
+| Swap | 2 GB `/swapfile`, `vm.swappiness=10` — prevents the OOM killer hitting Postgres during image builds. With the stack idle, about 1 GB of it was in use on 2026-10-23, so the two Next apps build one at a time |
+| Disk | Before each deploy, `deploy.sh` prunes build cache older than 7 days and stops if less than 5 GB is then free under Docker's root. 22 GB was free on 2026-10-23 |
 
 ---
 
@@ -77,19 +87,22 @@ gcloud secrets versions access latest --secret=staging-backend-postgres-password
 
 ```
 1. preflight    docker daemon up; gcloud/gsutil/curl installed; GCS bucket configured;
-                active gcloud identity; git working tree clean
+                active gcloud identity; git working tree clean; NEXT_APPS names only frontend/admin;
+                prune build cache older than 7 days, then stop if under 5 GB is free
 2. baseline     record current HEAD; tag the RUNNING container's image as disaster-backend:prev
                 (this is the image rollback target — taken from reality, not from tags)
 3. checkout     git fetch + checkout of the target ref (default origin/main)
 4. .env         generated from Secret Manager + scripts/deploy-config.staging.env (mode 0600);
                 regenerated on EVERY deploy — never edit .env by hand on the VM
-5. build        docker compose build backend
+5. build        docker compose build db backend, then each Next app in NEXT_APPS (default: frontend,
+                admin) one at a time
 6. infra up     start db + redis, wait until healthy
 7. backup       pg_dump | gzip | upload to GCS — if the backup fails, migration is NOT attempted
 8. migrate+seed alembic upgrade head → seed_rbac.py (idempotent) → mock seed (only if SEED_MOCK=true)
-9. restart+gate start the new backend + frontend + tunnel + retention → curl /readyz,
+9. restart+gate start the new backend + frontend + admin + tunnel + retention → curl /readyz,
                 retried 12 × 5s (60s budget) — only a passing readiness check counts as a
-                successful deploy (the retention loop is not part of the readiness gate)
+                successful deploy (the Next apps and the retention loop are not part of the
+                readiness gate); then a warn-only curl of both public hostnames
 ```
 
 Design rules baked into the script:
@@ -103,6 +116,13 @@ Design rules baked into the script:
 - Concurrency: a flock on `/var/lock/disaster-deploy.lock` makes a second concurrent deploy fail
   immediately with "another deploy is already in progress". The lock is released when the process
   exits (including crashes) — there are no stale-lock cleanup steps to run.
+- One `Frontend/Dockerfile` builds either Next app, picked by the `APP` build arg (`demo` is the site,
+  `admin` the back office). The `pnpm install` layer comes before `APP`, so the second app's build reuses
+  the first one's install. The two builds never run at once: on 4 GB they could wake the OOM killer.
+- The Next apps are not part of the rollback. A Next app that fails to start still ends in `DEPLOY OK`, and
+  the warn-only check at the end says which host did not answer. To roll one back, deploy the previous ref.
+- The prune at preflight removes build cache only. Images stay, `disaster-backend:prev` (the rollback
+  target) included.
 
 ---
 
@@ -115,9 +135,12 @@ through the Next app's proxy (`/api/v1/*`), so the provider calls back to the si
 
 ### Settings
 
-Staging's values are in `scripts/deploy-config.staging.env`, which `gen_env` appends to both `.env` and
-`.env.frontend`: the frontend reads `AUTH_COOKIE_PREFIX` too. The OAuth secrets are written to the backend's
-`.env` only. Production does not exist yet; its column is the plan.
+Staging's values are in `scripts/deploy-config.staging.env`. `gen_env` appends it to `.env` (the backend) and
+`.env.frontend` (the site), and the back office's container reads it as it is. Both Next apps read
+`AUTH_COOKIE_PREFIX`, `SITE_APP_URL` and `ADMIN_APP_URL` too. The back office reads `SITE_APP_URL` at request
+time for the link back to the site's map on the page it shows an account with no back-office identity;
+without it that page has no way back. The OAuth secrets are written to the backend's `.env` only. Production
+does not exist yet; its column is the plan.
 
 | Setting | Production | Staging | Local |
 |---------|------------|---------|-------|
@@ -149,10 +172,9 @@ Staging's values are in `scripts/deploy-config.staging.env`, which `gen_env` app
 | Hostname | Service |
 |----------|---------|
 | `staging.wan-guard.com` (was `demo.wan-guard.com`) | `http://frontend:3000` |
-| `admin-staging.wan-guard.com` | the back office app |
+| `admin-staging.wan-guard.com` | `http://admin:3000` |
 
-`docker-compose.staging.yml` does not run the back office yet: `Frontend/Dockerfile` builds only the site
-(`demo`). The back-office hostname has nothing to point at until a service for it is added.
+Both are public hostnames of the staging tunnel, set in the Cloudflare Zero Trust dashboard.
 
 `APP_BASE_URL`, the base of the links in emails and SMS, moved to `https://staging.wan-guard.com` too.
 
@@ -171,8 +193,9 @@ redirect URI mismatch:
 
 The LINE channel is published (2026-10-20), so any LINE account can sign in, not only the channel's testers.
 
-Production adds the same paths on `https://wan-guard.com`. The old NextAuth callback URLs can be removed once
-the frontend no longer uses NextAuth.
+Production adds the same paths on `https://wan-guard.com`. The back office signs in through the same
+callbacks on the site's host, so it registers nothing of its own. Neither app uses NextAuth any more, so the
+old NextAuth callback URLs (`…/api/auth/callback/google`, `…/api/auth/callback/line`) can be removed.
 
 ### Deploying the change that moved sign-in to the backend
 
@@ -204,6 +227,54 @@ a `main` that holds the change before steps 1 and 2 below are done.
 5. No migration and no seed change. Redis gains `oauth_state:*` keys, which expire after 10 minutes.
 6. To roll back, deploy the previous ref. Sessions started under the new sign-in stop working, and everyone
    signs in again.
+
+### Deploying the back office
+
+The back office (`Frontend/apps/admin`, 管理平台) runs as the `admin` service at `admin-staging.wan-guard.com`.
+It is built from the same `Frontend/Dockerfile` as the site, with `APP=admin`. It signs in through the
+backend's cookies like the site, so it holds no secret and reads `scripts/deploy-config.staging.env` as it
+is, not a generated file.
+
+The site's 前往管理平台 opens `/admin` on the site, which redirects `/admin/*` to `ADMIN_APP_URL`. Next works
+that redirect out at build time (`Frontend/apps/demo/next.config.js`), so `docker-compose.staging.yml`
+passes `ADMIN_APP_URL` to the site's build as a build arg. Setting it on the running container changes
+nothing.
+
+The first deploy:
+
+1. Merge it only after the back office has moved off NextAuth: the `admin` container gets no NextAuth secret.
+2. **Run `deploy.sh` twice in a row.** The first run is still the old script (see above): it neither builds
+   nor starts `admin`, but it does rebuild the site, whose `/admin` then already points at
+   `admin-staging.wan-guard.com`. The second run builds and starts `admin`. Run them back to back, both
+   without `SEED_MOCK`: nothing in this change needs the mock data rebuilt. The first run applies one
+   migration, `facf37b5c79d` (ADR-393): three "who did it" columns may now be NULL, which only the mock seed's
+   cleanup writes (see "What does SEED_MOCK touch?" below). The backup step runs before it.
+   The second run ends with `WARN: https://admin-staging.wan-guard.com not reachable yet`. That is expected:
+   the hostname is added in step 4. Until then the site's 前往管理平台 also ends on Cloudflare's error page.
+3. Give the two back-office test accounts, `asuper01@mock.test` (super_admin) and `aaudit01@mock.test`
+   (data_auditor), a password of their own, as in
+   [The back-office test accounts' password](#the-back-office-test-accounts-password). Do it before the next
+   step. Both were added by hand with the mock password, which is published in the seed header, and a deploy
+   without `SEED_MOCK` leaves them as they are.
+4. In the Cloudflare Zero Trust dashboard, add the staging tunnel's public hostname
+   `admin-staging.wan-guard.com` → `http://admin:3000`.
+5. After the second run, delete the secrets nothing reads any more. The first run still needs them: its old
+   `gen_env` reads them.
+
+   ```bash
+   for s in staging-frontend-nextauth-secret staging-frontend-google-client-secret \
+            staging-frontend-line-client-secret; do
+     gcloud secrets delete $s
+   done
+   ```
+6. Sign in at `admin-staging.wan-guard.com` twice. `asuper01@mock.test`, with the password from step 3, gets the
+   dashboard. A volunteer, such as `avol01@mock.test`, has no back-office identity and gets 這個帳號還沒有管理權限,
+   with a 回到公開地圖 button that opens `https://staging.wan-guard.com/map`. No button means the container has
+   no `SITE_APP_URL`.
+7. To roll back, deploy the previous ref. A ref from before this change defines no `admin` service:
+   `deploy.sh` skips it, and the site's `/admin` goes back to its placeholder page. The `admin` container
+   that is already running is left alone, because that ref's compose file no longer knows it. Stop it by
+   name if it should go: `docker stop backend-admin-1`.
 
 ---
 
@@ -285,11 +356,12 @@ and verify), then replay the dump.
 
 | Failing step | Behaviour | Live service |
 |--------------|-----------|--------------|
-| preflight | stops immediately, nothing touched | old version keeps running ✅ |
+| preflight | stops immediately; nothing touched but build cache older than 7 days | old version keeps running ✅ |
 | checkout / secrets / build | stops; worktree auto-restored to the pre-deploy SHA | old version keeps running ✅ |
 | DB backup | stops, migration NOT attempted | old version keeps running ✅ |
 | migrate / seed | stops; new version never started; backup path printed | old version keeps running ⚠️ schema may have advanced — see below |
 | readiness check (new version) | **automatic rollback**: previous image retagged + restarted in seconds, worktree restored | rolled back to old version ✅ |
+| a Next app does not start | not detected by the script: `DEPLOY OK`, and the closing check warns that its host did not answer | that app is down until fixed or rolled back ⚠️ |
 | rollback itself fails | diagnostic commands printed, manual intervention | 🔴 extremely rare |
 
 A failed migration is transactional in Postgres: the failing migration rolls back entirely and the
@@ -318,9 +390,35 @@ Still on the humans (migration-writing discipline):
   future-work item).
 
 **"What does SEED_MOCK touch?"**
-Only rows with the fixed mock UUID prefixes (users `c…`, scenario-A stations `a…`, scenario-B `b…`,
-tickets `d…`, tasks `e…`, assignments `f…`): it deletes those and re-inserts them (idempotent).
-Real (non-prefixed) data is untouched. Without the flag, the seed step is skipped entirely.
+The rows with the fixed mock UUID prefixes (users `c…`, scenario-A stations `a…`, scenario-B `b…`, tickets
+`d…`, tasks `e…`, assignments `f…`), and what testers made with the mock accounts: it deletes those and
+re-inserts the seed (idempotent). The two back-office test accounts are kept, with the password set on the VM;
+their roles are handed out again and what they did is cleared like any mock account's. A password of theirs
+that is still the published mock one is dropped, so they sign in only once one is set on the VM.
+Real data stays: rows a real person made are kept, and where a mock account reviewed, published or audited
+them, that reference is set to NULL. Without the flag, the seed step is skipped entirely.
+
+### The back-office test accounts' password
+
+`asuper01@mock.test` (super_admin) and `aaudit01@mock.test` (data_auditor) sign in to a public back office
+with the widest rights there are, so they get no password from the seed: the mock password is in its header.
+Their `@mock.test` addresses receive no mail, so forgot-password cannot reach them either. Set each one on the
+VM:
+
+```bash
+cd /opt/wanguard/Backend
+sudo docker compose -f docker-compose.staging.yml run --rm -e PYTHONPATH=/app backend \
+  python scripts/set_password.py asuper01@mock.test
+```
+
+It asks for the password twice, without echoing it, and signs the account out everywhere. The password needs
+at least 8 characters, as on the login page. Keep it out of the repo and out of public channels; the
+person who looks after staging hands it to testers.
+
+`SEED_MOCK=true` keeps both accounts and a password set this way, so this is done once. It drops one that is
+still the published mock password, which the hand-added staging copies carried: that hash has the seed's
+fixed salt, `mockdata12345678`, while this script and the login page always use a random one. Only a
+database rebuilt from empty needs the password set again; until then the two accounts cannot sign in.
 
 ---
 
@@ -363,8 +461,7 @@ printf '%s' '<new-value>' | gcloud secrets versions add staging-backend-smtp2go-
 # (a KotSMS password change in the 簡訊王 console takes effect at once, so every SMS fails from then
 #  until the deploy that carries the new secret version — add the version and deploy right away)
 # (a Google or LINE client secret reissued in its console: add the new version to
-#  staging-backend-google-client-secret or staging-backend-line-channel-secret, and to its
-#  staging-frontend-* twin while that still exists, then deploy)
+#  staging-backend-google-client-secret or staging-backend-line-channel-secret, then deploy)
 
 # DB password: the postgres volume is already initialized, so changing the secret alone does NOT
 # change the actual DB password. Do both, in this order:
@@ -394,7 +491,7 @@ printf '%s' '<google-secret>' | gcloud secrets create staging-backend-google-cli
 printf '%s' '<line-secret>' | gcloud secrets create staging-backend-line-channel-secret --data-file=-
 
 # Grant the VM's service account read access (least privilege: one binding per secret). The
-# staging-frontend-* and staging-cloudflared-tunnel-token secrets need the same binding.
+# staging-cloudflared-tunnel-token secret needs the same binding.
 for s in staging-backend-postgres-password staging-backend-jwt-signing-key \
          staging-backend-smtp2go-api-key staging-backend-kotsms-username staging-backend-kotsms-password \
          staging-backend-google-client-secret staging-backend-line-channel-secret; do
@@ -451,7 +548,16 @@ rollback becomes available from the second deploy onward.
 
 **Build is slow / VM feels frozen during build**
 Cold builds compile native deps; the 2 GB swap absorbs the memory spike (Postgres may slow down for
-a minute but won't be OOM-killed). Cached rebuilds are fast.
+a minute but won't be OOM-killed). Cached rebuilds are fast. The two Next apps build one at a time for the
+same reason. A build the OOM killer stopped ends in `exit code: 137`. If that happens, the VM needs a larger
+swap file or a larger machine type (e2-standard-2 has 8 GB, at about twice the price).
+
+**`under 5G free: clear space first`**
+Preflight had already pruned build cache older than 7 days and still found under 5 GB free, so it stopped
+before touching anything. See what holds the space with `docker system df`. Then, in this order:
+`docker builder prune -f` drops all build cache (the next deploy reinstalls and rebuilds everything, a few
+minutes slower), and `docker image ls` shows images to remove: keep every `disaster-*:latest` and
+`disaster-backend:prev`, the rollback target.
 
 ---
 

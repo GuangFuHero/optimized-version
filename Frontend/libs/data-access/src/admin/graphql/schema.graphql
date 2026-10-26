@@ -1217,7 +1217,11 @@ type StationSuggestionMergeType {
   """'applied' or 'revoked'"""
   status: String!
   reviewNote: String
-  reviewedBy: String!
+
+  """
+  UUID of the reviewer; null once their account is gone, as a mock one is after a SEED_MOCK run (ADR-393)
+  """
+  reviewedBy: String
   revokedBy: String
   revokedAt: DateTime
   createdAt: DateTime

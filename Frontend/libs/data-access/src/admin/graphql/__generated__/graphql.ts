@@ -1383,7 +1383,8 @@ export type StationSuggestionMergeType = {
   changes: Array<SuggestionChangeType>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   reviewNote?: Maybe<Scalars['String']['output']>;
-  reviewedBy: Scalars['String']['output'];
+  /** UUID of the reviewer; null once their account is gone, as a mock one is after a SEED_MOCK run (ADR-393) */
+  reviewedBy?: Maybe<Scalars['String']['output']>;
   revokedAt?: Maybe<Scalars['DateTime']['output']>;
   revokedBy?: Maybe<Scalars['String']['output']>;
   stationUuid: Scalars['String']['output'];

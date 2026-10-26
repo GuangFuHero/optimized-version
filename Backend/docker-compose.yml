@@ -63,19 +63,12 @@ services:
   frontend:
     build:
       context: ../Frontend
+    # The site holds no sign-in secret: the backend signs browsers in (Frontend/docs/authentication.md).
     environment:
-      NEXTAUTH_URL: ${NEXTAUTH_URL}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      AUTH_SECRET: ${AUTH_SECRET}
-
       API_BASE_URL: http://backend:8000/api
       GRAPHQL_URL: http://backend:8000/graphql
 
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      LINE_CLIENT_ID: ${LINE_CLIENT_ID}
-      LINE_CLIENT_SECRET: ${LINE_CLIENT_SECRET}
     depends_on:
       - backend
     ports:
