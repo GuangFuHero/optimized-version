@@ -14,6 +14,7 @@ rejected (e.g. requesting `x=date` on a pie-only metric, or `chart_type=pie` tog
 with `x=date` on a metric that allows both individually but not combined).
 """
 
+import html
 import json
 from functools import partial
 
@@ -391,7 +392,11 @@ def render_chart(
     """
     style = style or ChartStyle()
     resolved_x, resolved_chart_type = resolve(domain, y, x, chart_type)
-    fig = _render_pivoted(*chart_series(domain, y, data), resolved_chart_type, style)
+    x_values, series = chart_series(domain, y, data)
+    # Plotly.js renders a small HTML subset in labels, and categories include free-text station types.
+    # Escaping only the figure keeps /data raw, and our own labels hold none of these characters.
+    x_values = [html.escape(v, quote=False) if isinstance(v, str) else v for v in x_values]
+    fig = _render_pivoted(x_values, series, resolved_chart_type, style)
 
     fig.update_layout(**_layout_for(style, resolved_chart_type))
     fig.update_layout(**_METRIC_LAYOUT.get(y, {}))

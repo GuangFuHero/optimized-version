@@ -449,6 +449,42 @@ async def test_category_axis_shows_display_names(client, db_session, redis):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("chart_type", "key"), [("bar", "x"), ("pie", "labels")])
+async def test_free_text_categories_render_as_literal_text(client, db_session, redis, chart_type, key):
+    """Plotly.js renders tags in labels, so a station type can't smuggle a link onto the dashboard.
+
+    /data is not a figure, so it keeps the raw type.
+    """
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.STATION_VIEW)
+    types = ['<a href="https://example.com">點此回報</a>', "<b>粗體</b>", "R&D", "物資站", None]
+    for station_type in types:
+        db_session.add(
+            Station(
+                geometry=from_shape(Point(121.5, 25.0), srid=4326),
+                created_by=user_uuid,
+                level=1,
+                source="user",
+                visibility="public",
+                type=station_type,
+            )
+        )
+    await db_session.commit()
+
+    params = {"y": "station_count", "x": "category", "chart_type": chart_type}
+    res = await client.get(STATIONS_URL, params=params, headers=headers)
+    assert res.status_code == 200
+    assert set(res.json()["data"][0][key]) == {
+        '&lt;a href="https://example.com"&gt;點此回報&lt;/a&gt;',
+        "&lt;b&gt;粗體&lt;/b&gt;",
+        "R&amp;D",
+        "物資站",
+        "未分類",
+    }
+    data = (await client.get(STATIONS_DATA_URL, params=params, headers=headers)).json()
+    assert set(data["x_values"]) == {*types[:-1], "未分類"}
+
+
+@pytest.mark.asyncio
 async def test_value_requires_authentication(client):
     """Same rule as the chart endpoints — a KPI number is not public data."""
     res = await client.get(TICKETS_VALUE_URL, params={"y": "total_tickets"})
