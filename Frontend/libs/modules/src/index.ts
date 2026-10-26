@@ -65,6 +65,12 @@ export type {
 } from './map/types';
 
 export {
+  useAdminMapLiveMarkers,
+  type AdminMapLiveMarkers,
+} from './map/admin';
+
+export {
+  createSiteMapViewportStore,
   dedupeMarkersById,
   SiteMapControls,
   SiteMapRouteProvider,
@@ -75,6 +81,7 @@ export {
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
+  type SiteMapViewportStore,
 } from './map/site';
 
 export {

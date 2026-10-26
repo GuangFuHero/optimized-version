@@ -3,18 +3,37 @@
 import { ClipboardList, X, MapPin } from 'lucide-react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { useCapability } from '@rescue-frontend/data-access/admin';
 import {
+  createSiteMapViewportStore,
+  dedupeMarkersById,
   Map,
-  readRescueMapMarkers,
   StationCreateDrawer,
   TicketCreateDrawer,
+  useAdminMapLiveMarkers,
   type RescueMapMarkerItem,
+  type RescueMapRouteState,
 } from '@rescue-frontend/modules';
 
 type CreateMode = 'idle' | 'station' | 'ticket';
+
+// Everything but where the map looks: the view goes to its own store, so panning does not
+// re-render this page.
+function haveSameNonViewportState(
+  current: RescueMapRouteState,
+  next: RescueMapRouteState,
+): boolean {
+  return (
+    current.baseLayer === next.baseLayer &&
+    current.dataType === next.dataType &&
+    current.search === next.search &&
+    current.selectedMarkerId === next.selectedMarkerId &&
+    (current.subDataTypes ?? []).join(',') ===
+      (next.subDataTypes ?? []).join(',')
+  );
+}
 
 function formatCoordinate(value: number) {
   return value.toFixed(6);
@@ -168,8 +187,17 @@ function AdminMapCreateControls({
 export function AdminMapPageClient() {
   const canCreateStation = useCapability('station.add').data ?? false;
   const canCreateTicket = useCapability('ticket.add').data ?? false;
-  const [markers, setMarkers] = useState<readonly RescueMapMarkerItem[]>(() =>
-    readRescueMapMarkers(),
+  const [viewportStore] = useState(() => createSiteMapViewportStore({}));
+  const [routeState, setRouteState] = useState<RescueMapRouteState>({});
+  const liveMarkers = useAdminMapLiveMarkers(viewportStore);
+  // One made here stays on the map until the view fetches it too; from then on the fetched one,
+  // being fresher, is the one shown.
+  const [createdMarkers, setCreatedMarkers] = useState<
+    readonly RescueMapMarkerItem[]
+  >([]);
+  const markers = useMemo(
+    () => dedupeMarkersById([...liveMarkers.markers, ...createdMarkers]),
+    [createdMarkers, liveMarkers.markers],
   );
   const [createMode, setCreateMode] = useState<CreateMode>('idle');
   const [pendingPosition, setPendingPosition] = useState<
@@ -182,6 +210,18 @@ export function AdminMapPageClient() {
     () => pendingPosition,
     [pendingPosition],
   );
+  const handleRouteStateChange = useCallback(
+    (next: RescueMapRouteState) => {
+      const { position, bbox, ...rest } = next;
+
+      viewportStore.setState({ position, bbox });
+      setRouteState((current) =>
+        haveSameNonViewportState(current, rest) ? current : rest,
+      );
+    },
+    [viewportStore],
+  );
+
   const handleMapClick = (position: [number, number]) => {
     if (createMode === 'idle') {
       return;
@@ -209,6 +249,9 @@ export function AdminMapPageClient() {
       <Box sx={{ width: '100%', height: '100%', minHeight: '100dvh' }}>
         <Map
           markers={markers}
+          routeState={routeState}
+          onRouteStateChange={handleRouteStateChange}
+          viewportStore={viewportStore}
           showScale
           onMapClick={handleMapClick}
           renderControls={() =>
@@ -234,7 +277,7 @@ export function AdminMapPageClient() {
         }}
         initialPosition={currentInitialPosition}
         onCreatedMarker={(marker) => {
-          setMarkers((current) => [marker, ...current]);
+          setCreatedMarkers((current) => [marker, ...current]);
         }}
       />
 
@@ -246,7 +289,7 @@ export function AdminMapPageClient() {
         }}
         initialPosition={currentInitialPosition}
         onCreatedMarker={(marker) => {
-          setMarkers((current) => [marker, ...current]);
+          setCreatedMarkers((current) => [marker, ...current]);
         }}
       />
     </>
