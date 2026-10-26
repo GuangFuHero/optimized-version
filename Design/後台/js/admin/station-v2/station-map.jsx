@@ -103,6 +103,7 @@
     const [zoom, setZoom] = React.useState(13);
     const cardRef = React.useRef(null);
     const zoomCtlRef = React.useRef(null);
+    const fitKeyRef = React.useRef(null);   // MAP-VIEW-104：篩選結果真的變了才重新框住
 
     const byId = React.useMemo(() => Object.fromEntries(stations.map((s) => [s.id, s])), [stations]);
     const shown = stations.find((s) => s.id === card) || null;
@@ -112,7 +113,8 @@
       const L = window.L;
       if (!L || !elRef.current || mapRef.current) return;
       // 🔒 MAP-VIEW-101：打開時停在事件設定的地圖預設位置（沒設定＝全台）；有站點時下面會框住它們
-      const mv = window.WGBridge && window.WGBridge.readMapView ? window.WGBridge.readMapView() : { center: CENTER, zoom: 13 };
+      const mv = window.WGBridge && window.WGBridge.readMapView ? window.WGBridge.readMapView("station") : { center: CENTER, zoom: 13 };
+      fitKeyRef.current = mv.isLast ? "__restored__" : null;   // MAP-VIEW-104：停在上次的位置時，第一次不框資料
       const map = L.map(elRef.current, { center: mv.center, zoom: mv.zoom, zoomControl: false, attributionControl: true });
       const zc = L.control.zoom({ position: "topright" });
       zc.addTo(map);
@@ -126,6 +128,7 @@
         map.on("click", (e) => onAddStationAt({ lat: +e.latlng.lat.toFixed(5), lng: +e.latlng.lng.toFixed(5) }));
       }
       mapRef.current = map;
+      if (window.WGBridge && window.WGBridge.watchMapLast) window.WGBridge.watchMapLast("station", map);
       setTimeout(() => map.invalidateSize(), 60);
       return () => { map.remove(); mapRef.current = null; };
     }, []); // eslint-disable-line
@@ -185,6 +188,11 @@
       const L = window.L, map = mapRef.current;
       if (!L || !map || card) return;
       const pts = stations.filter((s) => s.lat != null).map((s) => [s.lat, s.lng]);
+      const fitKey = stations.filter((s) => s.lat != null).map((s) => s.id).sort().join(",");
+      const restored = fitKeyRef.current === "__restored__";
+      const changed = fitKeyRef.current !== fitKey;
+      fitKeyRef.current = fitKey;
+      if (restored || !changed) return;
       if (pts.length === 1) map.setView(pts[0], 15);
       else if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [48, 48] });
     }, [stations]); // eslint-disable-line

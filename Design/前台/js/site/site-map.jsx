@@ -424,6 +424,8 @@
       const isPhone = window.matchMedia('(max-width: 767px)').matches;
       L.control.scale({ imperial: false, position: isPhone ? 'bottomleft' : 'bottomright' }).addTo(map);
       if (isPhone && map.attributionControl) map.attributionControl.setPosition('bottomleft');
+      /* MAP-VIEW-104：記住這次看的位置，下次打開停在這裡 */
+      if (window.WGBridge && window.WGBridge.watchMapLast) window.WGBridge.watchMapLast('site', map);
       hexLayerRef.current = L.layerGroup().addTo(map);   // 六邊形要在圖釘底下
       markerLayerRef.current = L.layerGroup().addTo(map);
       overlayLayerRef.current = L.layerGroup().addTo(map);

@@ -81,6 +81,8 @@
     const [card, setCard] = React.useState(null);
     const cardRef = React.useRef(null);
     const zoomRef = React.useRef(null);
+    /* MAP-VIEW-104：只有「篩選結果真的變了」才重新框住；不要每次重繪都把地圖拉回去 */
+    const fitKeyRef = React.useRef(null);
     React.useEffect(() => { setCard(selectedId); }, [selectedId]);
     const shown = rows.find((t) => t.id === card);
 
@@ -88,13 +90,15 @@
       const L = window.L;
       if (!L || !elRef.current || mapRef.current) return;
       // 🔒 MAP-VIEW-101：打開時停在事件設定的地圖預設位置（沒設定＝全台）；有任務單時下面會框住它們
-      const mv = window.WGBridge && window.WGBridge.readMapView ? window.WGBridge.readMapView() : { center: CENTER, zoom: 13 };
+      const mv = window.WGBridge && window.WGBridge.readMapView ? window.WGBridge.readMapView("ticket") : { center: CENTER, zoom: 13 };
+      fitKeyRef.current = mv.isLast ? "__restored__" : null;   // MAP-VIEW-104：停在上次的位置時，第一次不框資料
       const map = L.map(elRef.current, { center: mv.center, zoom: mv.zoom, zoomControl: false, attributionControl: true });
       const zc = L.control.zoom({ position: "topright" });
       zc.addTo(map);
       zoomRef.current = zc.getContainer();
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
       mapRef.current = map;
+      if (window.WGBridge && window.WGBridge.watchMapLast) window.WGBridge.watchMapLast("ticket", map);
       setTimeout(() => map.invalidateSize(), 60);
       return () => { map.remove(); mapRef.current = null; markersRef.current = {}; };
     }, []);
@@ -124,7 +128,11 @@
         if (!keep[id]) { map.removeLayer(markersRef.current[id]); delete markersRef.current[id]; }
       });
       // 預設視野框住當前篩選結果（避免固定 center/zoom 將標點置於可視區外）
-      if (!selRef.current) {
+      const fitKey = rows.filter((t) => coordOf(t)).map((t) => t.id).sort().join(",");
+      const restored = fitKeyRef.current === "__restored__";
+      const changed = fitKeyRef.current !== fitKey;
+      fitKeyRef.current = fitKey;
+      if (!selRef.current && changed && !restored) {
         const pts = rows.map(coordOf).filter(Boolean);
         if (pts.length === 1) map.setView(pts[0], 15);
         else if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [48, 48] });

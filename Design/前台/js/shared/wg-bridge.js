@@ -693,8 +693,36 @@
     }
     return window.WG_BLANK ? null : MAP_VIEW_DEMO_EVENT;   // 還沒進過設定頁：示範事件的值
   }
-  /** 地圖打開時用的視野：有設定用設定，沒有就全台。回傳 { center, zoom, isSet }。 */
-  function readMapView() {
+  /* 🔒 MAP-VIEW-104（2026-10-26 Sucre：「不要一律停留，每次打開應該是上次的位置比較合理」）
+   *    每張地圖打開時停在**這個人上次看的位置**。順序：
+   *      ① 前台分享連結帶的位置（只有前台，site-route／site-controls 處理）
+   *      ② 上次看的位置（這台裝置、這張地圖）
+   *      ③ 第一次打開：後台有資料就框住資料；沒有資料用事件的地圖預設位置
+   *      ④ 都沒有 → 全台
+   *    🚨 我定的：存在瀏覽器（localStorage `wg.mapLast.<地圖>`），換電腦不帶過去；每張地圖各記一份
+   *       （site／ticket／mutual-aid／station）；後台改了事件預設位置，已經有「上次位置」的人不會被拉回去。
+   *    ❌ 不要用 writeRaw 存：它會廣播 bridge 變更，每次拖地圖都讓整頁重算。
+   *    正式版：前端自己存就好，不用後端。 */
+  function mapLastKey(k) { return 'wg.mapLast.' + k; }
+  function readMapLast(k) {
+    try { var st = store(); var v = st && JSON.parse(st.getItem(mapLastKey(k)) || 'null'); return validMapView(v) ? v : null; }
+    catch (e) { return null; }
+  }
+  function watchMapLast(k, map) {
+    if (!k || !map || !map.on) return;
+    map.on('moveend', function () {
+      try {
+        var c = map.getCenter(), st = store();
+        if (st) st.setItem(mapLastKey(k), JSON.stringify({ center: [+c.lat.toFixed(5), +c.lng.toFixed(5)], zoom: map.getZoom() }));
+      } catch (e) { /* 無痕視窗：安靜降級 */ }
+    });
+  }
+
+  /** 地圖打開時用的視野。傳 key 就先看「上次的位置」（MAP-VIEW-104）。
+   *  回傳 { center, zoom, isSet, isLast }：isLast＝停在上次的位置，呼叫端第一次不要再框資料。 */
+  function readMapView(key) {
+    var last = key ? readMapLast(key) : null;
+    if (last) return { center: last.center.slice(), zoom: last.zoom, isSet: true, isLast: true };
     var v = readMapViewSetting();
     return v ? { center: v.center.slice(), zoom: v.zoom, isSet: true }
              : { center: MAP_VIEW_TAIWAN.center.slice(), zoom: MAP_VIEW_TAIWAN.zoom, isSet: false };
@@ -720,7 +748,7 @@
     readStationReports: readStationReports, readStationReportsFor: readStationReportsFor, pushStationReport: pushStationReport,
     readRoleRequests: readRoleRequests, readRoleRequestsFor: readRoleRequestsFor,
     readTeamDirectory: readTeamDirectory,
-    readMapView: readMapView, readMapViewSetting: readMapViewSetting,
+    readMapView: readMapView, readMapViewSetting: readMapViewSetting, watchMapLast: watchMapLast,
     MAP_VIEW_TAIWAN: MAP_VIEW_TAIWAN, MAP_VIEW_DEMO_EVENT: MAP_VIEW_DEMO_EVENT,
     readSiteProfile: readSiteProfile, writeSiteProfile: writeSiteProfile, isPhoneTaken: isPhoneTaken, normalizePhone: normalizePhone,
     pendingRoleRequestFor: pendingRoleRequestFor, submitRoleRequest: submitRoleRequest, withdrawRoleRequest: withdrawRoleRequest, decideRoleRequest: decideRoleRequest,

@@ -226,10 +226,10 @@
     const back = () => { const m = mapRef.current; if (m) m.setView((saved || TW).center, (saved || TW).zoom); };
     return (
       <Row label={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>地圖預設位置 <PendingTag title="後端 project_settings 還沒有地圖中心與縮放的欄位（2026-10-26 Carol 裁示要加）">後端還沒有這一欄</PendingTag></span>}
-        help="前台與後台的地圖一打開，會停在這個畫面。沒設定時顯示全台。">
+        help="每個人第一次打開地圖會停在這個畫面；之後打開會停在他自己上次看的地方（MAP-VIEW-104）。沒設定時顯示全台。">
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }} data-st="mapView">
           <div style={{ font: "var(--font-body-400)", color: saved ? "var(--color-fg-neutral-default)" : "var(--color-fg-warning)" }} data-st="mapViewStatus">
-            {saved ? "已設定。大家打開地圖會停在下面這個畫面。" : "還沒設定 —— 大家打開地圖會看到整個台灣，要自己找到災區。"}
+            {saved ? "已設定。大家第一次打開地圖會停在下面這個畫面。" : "還沒設定 —— 大家第一次打開地圖會看到整個台灣，要自己找到災區。"}
           </div>
           <div style={{ position: "relative" }}>
             <div ref={hostRef} style={{ height: 260, borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)", overflow: "hidden" }} />

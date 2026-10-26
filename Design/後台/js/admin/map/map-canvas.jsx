@@ -125,7 +125,7 @@ function zc(z) { return window.wgZoneColor ? window.wgZoneColor(z.kind) : z.colo
       const L = window.L;
       if (!L || !hostRef.current || mapRef.current) return;
       // 🔒 MAP-VIEW-101：打開時停在事件設定的地圖預設位置（沒設定＝全台）
-      const mv = window.WGBridge && window.WGBridge.readMapView ? window.WGBridge.readMapView() : { center: window.MAP_CENTER, zoom: 13 };
+      const mv = window.WGBridge && window.WGBridge.readMapView ? window.WGBridge.readMapView("mutual-aid") : { center: window.MAP_CENTER, zoom: 13 };   // MAP-VIEW-104：先停在上次看的位置
       const map = L.map(hostRef.current, { center: mv.center, zoom: mv.zoom, zoomControl: false, doubleClickZoom: false });
       L.control.zoom({ position: "topright" }).addTo(map);
       L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
@@ -152,13 +152,14 @@ function zc(z) { return window.wgZoneColor ? window.wgZoneColor(z.kind) : z.colo
         if (s.drawing && (s.draft || []).length >= 3) s.onFinishDraw();
       });
       mapRef.current = map;
+      if (window.WGBridge && window.WGBridge.watchMapLast) window.WGBridge.watchMapLast("mutual-aid", map);
       setTimeout(() => {
         map.invalidateSize();
         // 預設視野框住既有區域。固定 center/zoom 會讓標點擠成一團看不出分佈
         // ——與 tk-map.jsx 的 fitBounds 同一個理由。
         const all = [];
         (liveRef.current.zones || []).forEach((z) => all.push(...z.ring));
-        if (all.length) map.fitBounds(L.latLngBounds(all), { padding: [56, 56] });
+        if (all.length && !mv.isLast) map.fitBounds(L.latLngBounds(all), { padding: [56, 56] });
       }, 60);
       return () => { map.remove(); mapRef.current = null; };
     }, []);
