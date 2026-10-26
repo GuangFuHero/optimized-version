@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 
 # The head this migration chains off.
-_BEFORE = "a8d3e6b1c207"
+_BEFORE = "50e667b42105"
 
 _DB_NAME = f"{TEST_DB_URL.rsplit('/', 1)[-1]}_actor_columns_nullable"
 _DB_URL = TEST_DB_URL.rsplit("/", 1)[0] + "/" + _DB_NAME

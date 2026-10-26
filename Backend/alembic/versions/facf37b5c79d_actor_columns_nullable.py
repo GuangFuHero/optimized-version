@@ -3,7 +3,7 @@
 station_suggestion_merges.reviewed_by, briefings.updated_by and announcements.updated_by.
 
 Revision ID: facf37b5c79d
-Revises: a8d3e6b1c207
+Revises: 50e667b42105
 Create Date: 2026-10-26
 
 NULL means the account that reviewed the merge, or last changed the briefing or announcement, is
@@ -22,7 +22,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "facf37b5c79d"
-down_revision: str | Sequence[str] | None = "a8d3e6b1c207"
+down_revision: str | Sequence[str] | None = "50e667b42105"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
