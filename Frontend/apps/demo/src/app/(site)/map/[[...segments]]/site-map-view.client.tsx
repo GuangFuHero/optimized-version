@@ -507,6 +507,7 @@ function SiteMapViewportDataLayer({
           <Map
             markers={visibleMarkers}
             closureAreas={liveDataSnapshot.closureAreas}
+            publicZones={liveDataSnapshot.publicZones}
             routeState={baseRouteState}
             onRouteStateChange={onMapRouteStateChange}
             showScale

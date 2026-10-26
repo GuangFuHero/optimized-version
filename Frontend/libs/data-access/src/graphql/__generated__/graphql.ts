@@ -2116,23 +2116,29 @@ export type GetStationQuery = {
     | null;
 };
 
-export type GetClosureAreasQueryVariables = Exact<{
+export type GetMapAreasQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
-export type GetClosureAreasQuery = {
+export type GetMapAreasQuery = {
   __typename?: 'Query';
-  hazardousZones: {
-    __typename?: 'HazardousZoneConnection';
-    items: Array<
-      { __typename?: 'HazardousZoneType' } & {
-        ' $fragmentRefs'?: {
-          ClosureAreaFieldsFragment: ClosureAreaFieldsFragment;
-        };
-      }
-    >;
+  areas: {
+    __typename?: 'AreaConnection';
+    items: Array<{
+      __typename?: 'AreaType';
+      uuid: string;
+      type: string;
+      name?: string | null;
+      note?: string | null;
+      geometry?: Geometry | null;
+      assignedTeams: Array<{
+        __typename?: 'AssignedTeamType';
+        uuid: string;
+        name: string;
+      }>;
+    }>;
     pageInfo: { __typename?: 'PageInfo' } & {
       ' $fragmentRefs'?: { PageInfoFieldsFragment: PageInfoFieldsFragment };
     };
@@ -3325,13 +3331,13 @@ export const GetStationDocument = {
     },
   ],
 } as unknown as DocumentNode<GetStationQuery, GetStationQueryVariables>;
-export const GetClosureAreasDocument = {
+export const GetMapAreasDocument = {
   kind: 'Document',
   definitions: [
     {
       kind: 'OperationDefinition',
       operation: 'query',
-      name: { kind: 'Name', value: 'GetClosureAreas' },
+      name: { kind: 'Name', value: 'GetMapAreas' },
       variableDefinitions: [
         {
           kind: 'VariableDefinition',
@@ -3365,7 +3371,7 @@ export const GetClosureAreasDocument = {
         selections: [
           {
             kind: 'Field',
-            name: { kind: 'Name', value: 'hazardousZones' },
+            name: { kind: 'Name', value: 'areas' },
             arguments: [
               {
                 kind: 'Argument',
@@ -3401,9 +3407,30 @@ export const GetClosureAreasDocument = {
                   selectionSet: {
                     kind: 'SelectionSet',
                     selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'note' } },
                       {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'ClosureAreaFields' },
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'geometry' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'assignedTeams' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'name' },
+                            },
+                          ],
+                        },
                       },
                     ],
                   },
@@ -3443,34 +3470,8 @@ export const GetClosureAreasDocument = {
         ],
       },
     },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'ClosureAreaFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'HazardousZoneType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'informationSource' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'note' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
   ],
-} as unknown as DocumentNode<
-  GetClosureAreasQuery,
-  GetClosureAreasQueryVariables
->;
+} as unknown as DocumentNode<GetMapAreasQuery, GetMapAreasQueryVariables>;
 export const GetClosureAreaDocument = {
   kind: 'Document',
   definitions: [

@@ -1,4 +1,11 @@
-import { Route, Ban, MapPin, MapIcon, Satellite } from 'lucide-react';
+import {
+  Route,
+  Ban,
+  MapPin,
+  MapIcon,
+  MapPinned,
+  Satellite,
+} from 'lucide-react';
 import { designTokens } from '@rescue-frontend/ui';
 
 import type {
@@ -6,6 +13,7 @@ import type {
   RescueMapBaseLayerConfig,
   RescueMapOverlayLayer,
   RescueMapOverlayLayerConfig,
+  RescueMapPublicZone,
 } from './types';
 
 const { color, primitives } = designTokens;
@@ -132,10 +140,20 @@ export function isSelectableBaseLayer(
 }
 
 export const RESCUE_MAP_OVERLAY_LAYER_ORDER: readonly RescueMapOverlayLayer[] =
-  ['closure-areas', 'routes', 'secondary-locations'];
+  ['closure-areas', 'public-zones', 'routes', 'secondary-locations'];
 
 export const DEFAULT_RESCUE_MAP_OVERLAY_LAYERS: readonly RescueMapOverlayLayer[] =
-  ['closure-areas'];
+  ['closure-areas', 'public-zones'];
+
+/**
+ * The backend keeps no colour for an area, so each kind of zone takes one: the prototype back
+ * office's legend for it (`map-panel.jsx:255`, from its `ZONE_COLORS`), picked there to stay clear of
+ * the tickets' priority colours and of the 危險區's orange.
+ */
+export const PUBLIC_ZONE_COLORS: Record<RescueMapPublicZone['kind'], string> = {
+  team_zone: '#4338CA',
+  mark_zone: '#15803D',
+};
 
 export const OVERLAY_LAYER_CONFIG: Record<
   RescueMapOverlayLayer,
@@ -149,7 +167,15 @@ export const OVERLAY_LAYER_CONFIG: Record<
     // subtle tone (5.90:1), and closure areas are warm-toned either way.
     color: color.brand.primary.subtle,
     icon: Ban,
-    sourceLabel: 'closure_areas.geometry via base_geometries',
+    sourceLabel: 'areas (hazardous_zone)',
+  },
+  'public-zones': {
+    label: '責任區與標示區',
+    description: '團隊負責的範圍，和志工休息區、集合點等',
+    // The 責任區's indigo: 7.9:1 on the panel's white surface.
+    color: PUBLIC_ZONE_COLORS.team_zone,
+    icon: MapPinned,
+    sourceLabel: 'areas (team_zone, mark_zone)',
   },
   routes: {
     label: '路線',
