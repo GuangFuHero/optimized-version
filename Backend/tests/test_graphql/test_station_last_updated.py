@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import update
 
 from app.models.geo import BaseGeometry
-from tests.test_graphql.conftest import auth_header, test_db
+from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
 from tests.test_graphql.test_station_assignment_api import ASSIGN, _gov_assigner, _station_and_team
 
 # Every test first puts the station's updatedAt back to this, so "moved" and "unchanged" are exact.
@@ -262,3 +262,80 @@ async def test_a_team_assignment_moves_it(client, redis, coordinator_auth):
     await _gql(client, await _gov_assigner(redis), ASSIGN, {"stationUuid": station, "teamUuid": team})
 
     assert await _updated_at(client, admin, station) > EARLIER
+
+
+async def _refused(client, token, query, variables) -> None:
+    """POST one GraphQL request that must be refused."""
+    resp = await client.post(
+        "/graphql", json={"query": query, "variables": variables}, headers=auth_header(token)
+    )
+    assert "errors" in resp.json(), resp.json()
+
+
+@pytest.mark.asyncio
+async def test_approving_and_revoking_a_property_suggestion_each_move_it(
+    client, coordinator_auth, auditor_auth, login_user_auth, sample_station, sample_station_property
+):
+    """A property is part of the station, so its approval and its revoke stamp the station."""
+    _, admin = coordinator_auth
+    _, reviewer = auditor_auth
+    _, public = login_user_auth
+    await _gql(
+        client,
+        public,
+        CREATE_SUGGESTION,
+        {
+            "input": {
+                "targetType": "station_property",
+                "targetUuid": sample_station_property,
+                "fieldName": "quantity",
+                "newValue": "9",
+            }
+        },
+    )
+    await _set_earlier(sample_station)
+    decision = {"targetUuid": sample_station_property, "fieldName": "quantity", "approve": True, "value": "9"}
+    merge = (await _gql(client, reviewer, MERGE, {"station": sample_station, "decisions": [decision]}))[
+        "mergeStationSuggestions"
+    ]
+    assert await _updated_at(client, admin, sample_station) == datetime.fromisoformat(merge["createdAt"])
+
+    await _set_earlier(sample_station)
+    revoked = await _gql(client, reviewer, REVOKE, {"uuid": merge["uuid"]})
+
+    revoked_at = datetime.fromisoformat(revoked["revokeStationSuggestionMerge"]["revokedAt"])
+    assert await _updated_at(client, admin, sample_station) == revoked_at
+
+
+@pytest.mark.asyncio
+async def test_a_refused_revoke_leaves_it_alone(
+    client, coordinator_auth, auditor_auth, login_user_auth, sample_station
+):
+    """A revoke refused because the field changed since writes nothing, so nothing moves."""
+    _, admin = coordinator_auth
+    _, reviewer = auditor_auth
+    _, public = login_user_auth
+    await _suggest(client, public, sample_station, "op_hour", "24h")
+    merge = await _decide(client, reviewer, sample_station, "op_hour", "24h", True)
+    await _gql(client, admin, UPDATE_STATION, {"uuid": sample_station, "input": {"opHour": "06:00-22:00"}})
+    await _set_earlier(sample_station)
+
+    await _refused(client, reviewer, REVOKE, {"uuid": merge["uuid"]})
+
+    assert await _updated_at(client, admin, sample_station) == EARLIER
+
+
+@pytest.mark.asyncio
+async def test_a_refused_photo_delete_leaves_it_alone(
+    client, redis, coordinator_auth, login_user_auth, sample_station
+):
+    """Someone without station.review cannot delete another person's photo, and the station does not move."""
+    _, admin = coordinator_auth
+    _, owner = login_user_auth
+    _, stranger = await _create_user_with_role(redis, "Login User")
+    photo = await _gql(client, owner, ATTACH_PHOTO, {"s": sample_station, "url": "https://img.test/b.jpg"})
+    await _set_earlier(sample_station)
+
+    await _refused(client, stranger, DETACH_PHOTO, {"uuid": photo["attachStationPhoto"]["uuid"]})
+
+    assert await _updated_at(client, admin, sample_station) == EARLIER

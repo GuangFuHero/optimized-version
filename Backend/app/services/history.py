@@ -353,7 +353,8 @@ def build_events(rows: list[AuditLog]) -> list[Event]:
                         after=after,
                     )
                 )
-        # A write that only moved `updated_at` marks a change to a related row, which has its own event.
+        # A write that only moved `updated_at` is the stamp a change to a related row left. That row has its
+        # own event where the timeline covers it; photos and disaster answers it never has.
         if {change.field for change in event.changes} == {"updated_at"}:
             continue
         events.append(event)

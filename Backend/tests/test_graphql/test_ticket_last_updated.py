@@ -47,6 +47,8 @@ mutation($uuid: UUID!, $input: UpdateTaskPropertyInput!) {
 
 SIGN_UP = "mutation($task: UUID!) { assignTaskActor(taskUuid: $task) { uuid } }"
 
+LEAVE = "mutation($uuid: UUID!) { unassignTaskActor(uuid: $uuid) }"
+
 STOP_RECRUITING = "mutation($task: UUID!) { stopRecruiting(taskUuid: $task) { uuid } }"
 
 AUDIT = """
@@ -236,4 +238,38 @@ async def test_a_review_verdict_does_not_move_it(client, coordinator_auth, sampl
 
     await _gql(client, admin, AUDIT, {"uuid": sample_ticket, "hash": seen})
 
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
+async def test_leaving_a_need_that_keeps_the_status_does_not_move_it(
+    client, coordinator_auth, login_user_auth, sample_ticket, sample_ticket_task
+):
+    """With someone still on the need the ticket stays in_progress, so a leave changes nothing visible."""
+    _, admin = coordinator_auth
+    _, volunteer = login_user_auth
+    await _gql(client, admin, SIGN_UP, {"task": sample_ticket_task})
+    place = (await _gql(client, volunteer, SIGN_UP, {"task": sample_ticket_task}))["assignTaskActor"]["uuid"]
+    await _set_earlier(sample_ticket)
+
+    await _gql(client, volunteer, LEAVE, {"uuid": place})
+
+    after = await _ticket(client, admin, sample_ticket)
+    assert (after["status"], after["updatedAt"]) == ("in_progress", EARLIER)
+
+
+@pytest.mark.asyncio
+async def test_a_refused_edit_leaves_it_alone(client, coordinator_auth, login_user_auth, sample_ticket):
+    """Someone who may edit only their own tickets cannot edit this one, and it does not move."""
+    _, admin = coordinator_auth
+    _, stranger = login_user_auth
+    await _set_earlier(sample_ticket)
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": UPDATE_TICKET, "variables": {"uuid": sample_ticket, "input": {"title": "改掉"}}},
+        headers=auth_header(stranger),
+    )
+
+    assert "errors" in resp.json(), resp.json()
     assert await _updated_at(client, admin, sample_ticket) == EARLIER
