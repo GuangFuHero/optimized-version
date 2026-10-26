@@ -212,12 +212,16 @@ describe('dashboard states and filters', () => {
     });
     await settle();
     expect(state.requests).toHaveLength(0);
+    // An emptied start is 事件發生到今日: it queries, with no start date.
     await act(async () => {
       setter?.call(start, '');
       start?.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await settle();
-    expect(state.requests).toHaveLength(0);
+    expect(state.requests.length).toBeGreaterThan(0);
+    expect(
+      state.requests.every(({ query }) => query.start_date === undefined),
+    ).toBe(true);
   });
   it('applies granularity and zone while the dates are invalid, and says why the dates wait', async () => {
     await mount();
@@ -300,7 +304,7 @@ describe('dashboard states and filters', () => {
     await mount();
     state.requests = [];
     const button = Array.from(container.querySelectorAll('button')).find(
-      (el) => el.textContent === '近 7 天',
+      (el) => el.textContent === '近一週',
     );
     expect(button).toBeDefined();
     await act(async () => button?.click());
@@ -326,5 +330,58 @@ describe('dashboard states and filters', () => {
         .filter(({ kind }) => kind === 'chart')
         .every(({ query }) => query.x_granularity === 'week'),
     ).toBe(true);
+  });
+
+  it('今日 asks for today only, by day, and disables 週', async () => {
+    await mount();
+    state.requests = [];
+    const buttons = () => Array.from(container.querySelectorAll('button'));
+    await act(async () =>
+      buttons()
+        .find((el) => el.textContent === '一週')
+        ?.click(),
+    );
+    await settle();
+    state.requests = [];
+    await act(async () =>
+      buttons()
+        .find((el) => el.textContent === '今日')
+        ?.click(),
+    );
+    await settle();
+    const charts = state.requests.filter(({ kind }) => kind === 'chart');
+    expect(charts.length).toBeGreaterThan(0);
+    expect(
+      state.requests.every(
+        ({ query }) =>
+          query.start_date !== undefined && query.start_date === query.end_date,
+      ),
+    ).toBe(true);
+    expect(charts.every(({ query }) => query.x_granularity === 'day')).toBe(
+      true,
+    );
+    const week = buttons().find((el) => el.textContent === '一週');
+    expect(week?.disabled).toBe(true);
+    expect(container.textContent).toContain('今日建立');
+  });
+
+  it('事件發生到今日 sends no start date and switches to weeks', async () => {
+    await mount();
+    state.requests = [];
+    await act(async () =>
+      Array.from(container.querySelectorAll('button'))
+        .find((el) => el.textContent === '事件發生到今日')
+        ?.click(),
+    );
+    await settle();
+    const charts = state.requests.filter(({ kind }) => kind === 'chart');
+    expect(charts.length).toBeGreaterThan(0);
+    expect(
+      state.requests.every(({ query }) => query.start_date === undefined),
+    ).toBe(true);
+    expect(charts.every(({ query }) => query.x_granularity === 'week')).toBe(
+      true,
+    );
+    expect(container.textContent).toContain('事件發生至今建立');
   });
 });

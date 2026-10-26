@@ -12,7 +12,9 @@ import {
   localDateString,
   lookbackRange,
   rangeLengthDays,
-  rangeQuickDays,
+  quickRangeDates,
+  rangeCreatedCaption,
+  rangeQuickRange,
 } from './kpis';
 
 describe('localDateString', () => {
@@ -49,23 +51,92 @@ describe('lookbackRange', () => {
   });
 });
 
-describe('rangeQuickDays', () => {
-  it('names the shortcut a range is, and 自訂 (0) for every other span', () => {
-    expect(
-      rangeQuickDays({ start_date: '2026-10-08', end_date: '2026-10-14' }),
-    ).toBe(7);
-    expect(
-      rangeQuickDays({ start_date: '2026-09-15', end_date: '2026-10-14' }),
-    ).toBe(30);
-    expect(
-      rangeQuickDays({ start_date: '2026-10-01', end_date: '2026-10-14' }),
-    ).toBe(0);
-    // An open range is 自訂 too: neither shortcut describes it.
-    expect(rangeQuickDays({})).toBe(0);
+describe('the 看多久 shortcuts', () => {
+  const today = '2026-10-26';
+
+  it('offers the five ranges product set on Oct 25, 自定義 last', () => {
+    expect(DASHBOARD_QUICK_RANGES.map((range) => range.label)).toEqual([
+      '今日',
+      '事件發生到今日',
+      '近一週',
+      '近 30 天',
+      '自定義',
+    ]);
   });
 
-  it('offers exactly the shortcuts it can name, 自訂 last', () => {
-    expect(DASHBOARD_QUICK_RANGES.map((range) => range.id)).toEqual([7, 30, 0]);
+  it('turns each shortcut into dates ending today', () => {
+    expect(quickRangeDates('today', today)).toEqual({
+      start_date: today,
+      end_date: today,
+    });
+    // No start: the backend counts from the first ticket.
+    expect(quickRangeDates('all', today)).toEqual({ end_date: today });
+    expect(quickRangeDates(7, today)).toEqual({
+      start_date: '2026-10-20',
+      end_date: today,
+    });
+    expect(quickRangeDates(30, today)).toEqual({
+      start_date: '2026-09-27',
+      end_date: today,
+    });
+    expect(quickRangeDates('custom', today)).toBeNull();
+  });
+
+  it('names the shortcut each set of dates is, round trip', () => {
+    for (const { id } of DASHBOARD_QUICK_RANGES) {
+      const dates = quickRangeDates(id, today);
+      if (dates) expect(rangeQuickRange(dates, today)).toBe(id);
+    }
+  });
+
+  it('calls a range that does not end today 自定義, whatever its length', () => {
+    expect(
+      rangeQuickRange(
+        { start_date: '2026-10-08', end_date: '2026-10-14' },
+        today,
+      ),
+    ).toBe('custom');
+    expect(
+      rangeQuickRange(
+        { start_date: '2026-10-14', end_date: '2026-10-14' },
+        today,
+      ),
+    ).toBe('custom');
+    expect(rangeQuickRange({ end_date: '2026-10-14' }, today)).toBe('custom');
+    expect(
+      rangeQuickRange({ start_date: '2026-10-13', end_date: today }, today),
+    ).toBe('custom');
+  });
+});
+
+describe('rangeCreatedCaption', () => {
+  const today = '2026-10-26';
+
+  it('says which tickets a card counts, by when they were created', () => {
+    expect(
+      rangeCreatedCaption({ start_date: today, end_date: today }, today),
+    ).toBe('今日建立');
+    expect(rangeCreatedCaption({ end_date: today }, today)).toBe(
+      '事件發生至今建立',
+    );
+    expect(
+      rangeCreatedCaption({ start_date: '2026-10-20', end_date: today }, today),
+    ).toBe('近一週建立');
+    expect(
+      rangeCreatedCaption({ start_date: '2026-09-27', end_date: today }, today),
+    ).toBe('近 30 天建立');
+  });
+
+  it('writes out a custom range', () => {
+    expect(
+      rangeCreatedCaption(
+        { start_date: '2026-10-01', end_date: '2026-10-20' },
+        today,
+      ),
+    ).toBe('10/01–10/20 建立');
+    expect(rangeCreatedCaption({ end_date: '2026-10-20' }, today)).toBe(
+      '10/20 以前建立',
+    );
   });
 });
 
@@ -148,12 +219,16 @@ describe('isValidDateRange', () => {
     for (const range of [
       {},
       { start_date: '2026-10-01' },
+      { start_date: '', end_date: '2026-10-01' },
       { start_date: '2026-10-01', end_date: '' },
       { start_date: '2026-02-30', end_date: '2026-03-01' },
       { start_date: '2026-10-20', end_date: '2026-10-01' },
       { start_date: '0000-01-01', end_date: 'invalid' },
     ])
       expect(isValidDateRange(range)).toBe(false);
+  });
+  it('accepts an open start, which is 事件發生到今日', () => {
+    expect(isValidDateRange({ end_date: '2026-10-01' })).toBe(true);
   });
   it('accepts same-day and leap-year ranges', () => {
     expect(
@@ -203,7 +278,7 @@ describe('dateRangeProblem', () => {
 
   it('names what is wrong and which period is still shown', () => {
     expect(dateRangeProblem({ start_date: '2026-10-01' }, applied)).toBe(
-      '起訖日期還沒選完，圖表仍顯示 2026-10-01 → 2026-10-30。',
+      '訖日還沒選，圖表仍顯示 2026-10-01 → 2026-10-30。',
     );
     expect(
       dateRangeProblem(

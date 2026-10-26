@@ -23,16 +23,26 @@ export const DASHBOARD_TIME_ZONES: readonly { id: string; label: string }[] = [
 export const DEFAULT_LOOKBACK_DAYS = 30;
 
 /**
- * The 看多久 switch. `0` is 自訂 — selected whenever the two dates are not exactly one of the quick
- * ranges, and picking it changes nothing (matching the design: the dates are the state, this is a
- * shortcut into them).
+ * A 看多久 shortcut. `all` is 事件發生到今日: no start date, so the backend counts from the first
+ * ticket. A number is a lookback of that many days ending today.
  */
-export const DASHBOARD_QUICK_RANGES: readonly { id: number; label: string }[] =
-  [
-    { id: 7, label: '近 7 天' },
-    { id: 30, label: '近 30 天' },
-    { id: 0, label: '自訂' },
-  ];
+export type DashboardQuickRange = 'today' | 'all' | 7 | 30 | 'custom';
+
+/**
+ * The 看多久 switch, in the order product set on Oct 25 (ADMIN-023). 自定義 is selected whenever the
+ * dates match none of the shortcuts, and picking it changes nothing: the dates are the state, the
+ * others are shortcuts into them.
+ */
+export const DASHBOARD_QUICK_RANGES: readonly {
+  id: DashboardQuickRange;
+  label: string;
+}[] = [
+  { id: 'today', label: '今日' },
+  { id: 'all', label: '事件發生到今日' },
+  { id: 7, label: '近一週' },
+  { id: 30, label: '近 30 天' },
+  { id: 'custom', label: '自定義' },
+];
 
 /** `start_date` / `end_date` exactly as the analytics value endpoints take them: inclusive, local to the zone. */
 export interface DashboardDateRange {
@@ -134,10 +144,52 @@ export function rangeLengthDays(range: DashboardDateRange): number | null {
   return Math.round(ms / 86_400_000) + 1;
 }
 
-/** Which quick range these dates are, or 0 (自訂) when they match none of them. */
-export function rangeQuickDays(range: DashboardDateRange): number {
+/** The dates a shortcut stands for, ending `today`. Null for 自定義, which sets no dates. */
+export function quickRangeDates(
+  quick: DashboardQuickRange,
+  today: string,
+): DashboardDateRange | null {
+  if (quick === 'custom') return null;
+  if (quick === 'all') return { end_date: today };
+  if (quick === 'today') return { start_date: today, end_date: today };
+  return { start_date: addDays(today, -(quick - 1)), end_date: today };
+}
+
+/**
+ * Which shortcut these dates are. Every shortcut ends today, so a past week is 自定義, not 近一週.
+ */
+export function rangeQuickRange(
+  range: DashboardDateRange,
+  today: string,
+): DashboardQuickRange {
+  if (range.end_date !== today) return 'custom';
+  if (!range.start_date) return 'all';
   const length = rangeLengthDays(range);
-  return length === 7 || length === 30 ? length : 0;
+  if (length === 1) return 'today';
+  return length === 7 || length === 30 ? length : 'custom';
+}
+
+/** `MM/DD`, the year left out: the cards only need to tell days of one event apart. */
+function shortDate(isoDate: string): string {
+  return `${isoDate.slice(5, 7)}/${isoDate.slice(8, 10)}`;
+}
+
+/**
+ * Which tickets a KPI card counts, for its title. Every number is filtered by creation date, so the
+ * card says so, e.g. 未指派（今日建立）.
+ */
+export function rangeCreatedCaption(
+  range: DashboardDateRange,
+  today: string,
+): string {
+  const quick = rangeQuickRange(range, today);
+  if (quick === 'today') return '今日建立';
+  if (quick === 'all') return '事件發生至今建立';
+  if (quick === 7) return '近一週建立';
+  if (quick === 30) return '近 30 天建立';
+  const end = shortDate(range.end_date ?? today);
+  if (!range.start_date) return `${end} 以前建立`;
+  return `${shortDate(range.start_date)}–${end} 建立`;
 }
 
 export type KpiAvailability =
@@ -189,10 +241,15 @@ function isIsoDate(date: string | undefined): date is string {
   );
 }
 
-/** Apply only complete, real calendar dates in ascending order. */
+/**
+ * Apply only real calendar dates in ascending order. The start may be left out: the backend then
+ * counts from the first ticket (事件發生到今日). The end may not.
+ */
 export function isValidDateRange(range: DashboardDateRange): boolean {
   const { start_date, end_date } = range;
-  if (!isIsoDate(start_date) || !isIsoDate(end_date)) return false;
+  if (!isIsoDate(end_date)) return false;
+  if (start_date === undefined) return true;
+  if (!isIsoDate(start_date)) return false;
   return start_date <= end_date;
 }
 
@@ -211,7 +268,7 @@ export function applyFilterChange<T extends { range: DashboardDateRange }>(
 }
 
 function formatRange({ start_date, end_date }: DashboardDateRange): string {
-  return `${start_date ?? '?'} → ${end_date ?? '?'}`;
+  return `${start_date ?? '事件發生'} → ${end_date ?? '?'}`;
 }
 
 /**
@@ -224,10 +281,13 @@ export function dateRangeProblem(
 ): string | null {
   if (isValidDateRange(range)) return null;
   const showing = `圖表仍顯示 ${formatRange(applied)}。`;
-  if (!range.start_date || !range.end_date) {
-    return `起訖日期還沒選完，${showing}`;
+  if (!range.end_date) {
+    return `訖日還沒選，${showing}`;
   }
-  if (!isIsoDate(range.start_date) || !isIsoDate(range.end_date)) {
+  if (
+    (range.start_date !== undefined && !isIsoDate(range.start_date)) ||
+    !isIsoDate(range.end_date)
+  ) {
     return `日期無效，${showing}`;
   }
   return `起日晚於訖日，${showing}`;

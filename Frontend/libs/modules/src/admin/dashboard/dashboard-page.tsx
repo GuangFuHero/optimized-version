@@ -43,7 +43,10 @@ import {
   DEFAULT_LOOKBACK_DAYS,
   formatKpiValue,
   kpiAvailability,
+  localDateString,
   lookbackRange,
+  rangeCreatedCaption,
+  rangeLengthDays,
   type AnalyticsCatalog,
   type DashboardDateRange,
   type DashboardKpi,
@@ -160,17 +163,21 @@ function KpiCard({
   availability,
   query,
   devMode,
+  rangeCaption,
 }: {
   kpi: DashboardKpi;
   spec: MetricSpec | undefined;
   availability: KpiAvailability;
   query: ValueQuery;
   devMode: boolean;
+  /** Which tickets the number counts, from `rangeCreatedCaption`, e.g. 今日建立. */
+  rangeCaption: string;
 }) {
+  const title = spec ? `${spec.label}（${rangeCaption}）` : undefined;
   return (
     <Box
       component="article"
-      aria-label={spec?.label ?? kpi.metric}
+      aria-label={title ?? kpi.metric}
       title={spec?.description}
       sx={{
         display: 'flex',
@@ -203,7 +210,7 @@ function KpiCard({
       <Typography
         sx={{ ...typography.label[400], color: color.fg.neutral.default }}
       >
-        {spec?.label}
+        {title}
       </Typography>
       <Typography
         component="div"
@@ -397,7 +404,14 @@ export function DashboardPage() {
     setSyncedAt(stamp());
   }, []);
 
-  const { range, granularity, timeZone } = applied;
+  const { range, timeZone } = applied;
+  // A single day has one bucket; the filter card disables 週 for it, and the queries follow.
+  const granularity: ChartGranularity =
+    rangeLengthDays(range) === 1 ? 'day' : applied.granularity;
+  const rangeCaption = rangeCreatedCaption(
+    range,
+    localDateString(new Date(), timeZone),
+  );
 
   const changeFilters = (next: DashboardFilters) => {
     setFilters(next);
@@ -467,6 +481,7 @@ export function DashboardPage() {
           key={`${card.kpi.domain}.${card.kpi.metric}`}
           {...card}
           devMode={devMode}
+          rangeCaption={rangeCaption}
         />
       ))}
     </KpiGrid>

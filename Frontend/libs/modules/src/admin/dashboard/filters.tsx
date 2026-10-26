@@ -6,14 +6,15 @@ import { designTokens } from '@rescue-frontend/ui';
 
 import { GRANULARITY_OPTIONS, type ChartGranularity } from './charts';
 import {
-  addDays,
   DASHBOARD_QUICK_RANGES,
   DASHBOARD_TIME_ZONES,
   isValidDateRange,
   localDateString,
+  quickRangeDates,
   rangeLengthDays,
-  rangeQuickDays,
+  rangeQuickRange,
   type DashboardDateRange,
+  type DashboardQuickRange,
 } from './kpis';
 import { SegmentedControl } from './segmented-control';
 
@@ -120,13 +121,21 @@ export function DashboardFilterBar({
   const days = isValidDateRange(range) ? rangeLengthDays(range) : null;
   const today = localDateString(new Date(), timeZone);
 
+  const quick = rangeQuickRange(range, today);
+  // A single day has one bucket, so a week would only repeat it.
+  const singleDay = days === 1;
+
   const setRange = (next: Partial<DashboardDateRange>) =>
     onChange({ ...value, range: { ...range, ...next } });
-  // 自訂 (0) is where the switch lands whenever the dates match neither shortcut, and picking it
-  // deliberately does nothing — the dates themselves are the state.
-  const pickQuick = (quickDays: number) => {
-    if (!quickDays) return;
-    setRange({ start_date: addDays(today, -(quickDays - 1)), end_date: today });
+  // 自定義 is where the switch lands whenever the dates match no shortcut, and picking it
+  // deliberately does nothing: the dates themselves are the state.
+  const pickQuick = (next: DashboardQuickRange) => {
+    const dates = quickRangeDates(next, today);
+    if (!dates) return;
+    // 今日 has one day to show; 事件發生到今日 can run for weeks, so it starts on weeks.
+    const nextGranularity =
+      next === 'today' ? 'day' : next === 'all' ? 'week' : granularity;
+    onChange({ ...value, range: dates, granularity: nextGranularity });
   };
 
   return (
@@ -153,7 +162,7 @@ export function DashboardFilterBar({
         <SegmentedControl
           label="看多久"
           options={DASHBOARD_QUICK_RANGES}
-          value={rangeQuickDays(range)}
+          value={quick}
           onChange={pickQuick}
         />
       </FilterField>
@@ -170,7 +179,7 @@ export function DashboardFilterBar({
             aria-invalid={dateProblem ? true : undefined}
             value={range.start_date ?? ''}
             // An emptied input means "no bound", not an empty string: the backend takes an absent
-            // date as open-ended, but would 422 on "".
+            // start as 事件發生到今日, but would 422 on "".
             onChange={(event) =>
               setRange({ start_date: event.target.value || undefined })
             }
@@ -207,8 +216,12 @@ export function DashboardFilterBar({
       <FilterField label="每格代表">
         <SegmentedControl
           label="每格代表"
-          options={GRANULARITY_OPTIONS}
-          value={granularity}
+          options={GRANULARITY_OPTIONS.map((option) =>
+            option.id === 'week' && singleDay
+              ? { ...option, disabled: true, hint: '只看一天時沒有週可分' }
+              : option,
+          )}
+          value={singleDay ? 'day' : granularity}
           onChange={(next) => onChange({ ...value, granularity: next })}
         />
       </FilterField>

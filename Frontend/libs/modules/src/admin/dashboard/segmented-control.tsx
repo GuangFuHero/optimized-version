@@ -23,7 +23,13 @@ export function SegmentedControl<T extends string | number>({
 }: {
   /** Names the group for assistive tech. */
   label: string;
-  options: readonly { id: T; label: string; hint?: string }[];
+  /** `disabled` greys a segment out and ignores clicks on it; `hint` says why, as a tooltip. */
+  options: readonly {
+    id: T;
+    label: string;
+    hint?: string;
+    disabled?: boolean;
+  }[];
   value: T;
   onChange: (value: T) => void;
   size?: 'sm' | 'md';
@@ -55,6 +61,7 @@ export function SegmentedControl<T extends string | number>({
             key={option.id}
             disableRipple
             aria-pressed={selected}
+            disabled={option.disabled}
             title={option.hint}
             onClick={() => onChange(option.id)}
             sx={{
@@ -83,6 +90,10 @@ export function SegmentedControl<T extends string | number>({
               '&:hover': selected
                 ? undefined
                 : { bgcolor: color.bg.neutral.subtle },
+              '&.Mui-disabled': {
+                bgcolor: color.bg.disable,
+                color: color.fg.disable,
+              },
             }}
           >
             {option.label}
