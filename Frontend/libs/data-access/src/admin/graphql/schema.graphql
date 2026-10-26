@@ -1302,6 +1302,10 @@ type StationType {
   """When supply_status last changed; null while it has never been set"""
   supplyStatusUpdatedAt: DateTime
   createdAt: DateTime
+
+  """
+  When anything about this station last changed: any field, property, photo or team assignment, or an approved or revoked suggestion. A pending or rejected suggestion leaves it as is
+  """
   updatedAt: DateTime
 
   """

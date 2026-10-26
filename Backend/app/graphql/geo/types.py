@@ -198,7 +198,11 @@ class StationType:
         default=None, description="When supply_status last changed; null while it has never been set"
     )
     created_at: datetime | None = None
-    updated_at: datetime | None = None
+    updated_at: datetime | None = strawberry.field(
+        default=None,
+        description="When anything about this station last changed: any field, property, photo or team "
+        "assignment, or an approved or revoked suggestion. A pending or rejected suggestion leaves it as is",
+    )
 
     # Private storage backing the contact_* PII resolvers below (mirrors TicketType,
     # ADR-049) and the comment resolver (ADR-332) — never exposed directly in the schema,
