@@ -1021,6 +1021,9 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
         # need, which the fold soft-deleted: "merged" says where it went, "not found" would not.
         raise ValueError(MOVED_DURING_DEDUP)
     await _need_still_on(db, task.uuid, ticket_uuid)
+    if prop.delete_at is not None:
+        # A dedup resolve cancelled the item while this one waited for the lock.
+        raise ValueError("Task property not found")
     for field, value in changes.items():
         if hasattr(prop, field):
             setattr(prop, field, value)
