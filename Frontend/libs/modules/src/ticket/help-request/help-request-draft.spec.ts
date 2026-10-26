@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { FilledAddress } from '../address-lookup';
 import {
   clearAllHelpRequestDrafts,
   clearHelpRequestDraft,
@@ -77,6 +78,23 @@ function filledForm(): HelpRequestForm {
   };
 }
 
+const looked = (from: FilledAddress['from']): FilledAddress => ({
+  fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+  token: 'token-19',
+  lat: 23.658676,
+  lng: 121.420631,
+  from,
+});
+
+/** A form opened at a point, with the pin's 門牌 filled in and nothing else done. */
+function lookedUpForm(from: FilledAddress['from']): HelpRequestForm {
+  return {
+    ...emptyHelpRequestForm(point('gps')),
+    address: looked(from).fullAddress,
+    addressFilled: looked(from),
+  };
+}
+
 describe('help request draft', () => {
   it('keeps a filled-in form for the person who filled it, and no one else', () => {
     const storage = memoryStorage();
@@ -104,6 +122,86 @@ describe('help request draft', () => {
     );
 
     expect(storage.items.size).toBe(0);
+  });
+
+  it("keeps nothing for a form holding only the pin's 門牌, filled in for it", () => {
+    const storage = memoryStorage();
+
+    writeHelpRequestDraft(storage, 'user-1', lookedUpForm('pin'));
+
+    expect(storage.items.size).toBe(0);
+  });
+
+  it('keeps an address filled in by hand: changed from the lookup, or typed and checked', () => {
+    const forms: HelpRequestForm[] = [
+      { ...lookedUpForm('pin'), address: '糖廠街19號' },
+      lookedUpForm('typed'),
+    ];
+
+    for (const form of forms) {
+      const storage = memoryStorage();
+
+      writeHelpRequestDraft(storage, 'user-1', form);
+
+      expect(readHelpRequestDraft(storage, 'user-1')).toEqual(form);
+    }
+  });
+
+  it("keeps the lookup's token with a draft, so an untouched address still goes with it", () => {
+    const storage = memoryStorage();
+    const form = { ...lookedUpForm('pin'), title: '一樓客廳積泥' };
+
+    writeHelpRequestDraft(storage, 'user-1', form);
+
+    expect(readHelpRequestDraft(storage, 'user-1')?.addressFilled).toEqual(
+      looked('pin'),
+    );
+  });
+
+  it('keeps a line taken back with 改回你打的, so it is not checked again once reopened', () => {
+    const storage = memoryStorage();
+    const form = {
+      ...filledForm(),
+      address: '糖廠街19號',
+      addressKept: '糖廠街19號',
+    };
+
+    writeHelpRequestDraft(storage, 'user-1', form);
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(form);
+  });
+
+  it('reads a draft kept before addresses were looked up as one with none', () => {
+    const storage = memoryStorage();
+    const older: Partial<HelpRequestForm> = filledForm();
+
+    delete older.addressFilled;
+    delete older.addressKept;
+
+    storage.setItem(
+      helpRequestDraftKey('user-1'),
+      JSON.stringify({ v: 1, form: older }),
+    );
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(filledForm());
+  });
+
+  it('drops a lookup of another shape rather than the whole draft: the address is still there', () => {
+    const storage = memoryStorage();
+
+    storage.setItem(
+      helpRequestDraftKey('user-1'),
+      JSON.stringify({
+        v: 1,
+        form: {
+          ...filledForm(),
+          addressFilled: { ...looked('pin'), token: 3 },
+          addressKept: 3,
+        },
+      }),
+    );
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(filledForm());
   });
 
   it('keeps a form with one thing done by hand: a field, a need, a photo or a pin', () => {

@@ -6,6 +6,7 @@
  * 登出 in this tab.
  */
 
+import { isFilledFromPin, type FilledAddress } from '../address-lookup';
 import {
   SITE_NEED_OPTIONS,
   type HelpRequestForm,
@@ -16,7 +17,10 @@ import {
 /** The parts of `Storage` the draft uses: `sessionStorage` on the site, a stand-in in tests. */
 export type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-/** Raised when the form's shape changes, so a draft of the old shape is read as none. */
+/**
+ * Raised when the form's shape changes, so a draft of the old shape is read as none. Not for a field
+ * added that a draft can do without: `addressFilled` and `addressKept` are read as none instead.
+ */
 const DRAFT_VERSION = 1;
 
 const DRAFT_KEY_PREFIX = 'wg:help-request-draft:';
@@ -45,12 +49,15 @@ const TEXT_FIELDS = [
 ] as const;
 
 /**
- * Something the person did. A point the drawer was opened at, or the device's, is not: a draft of
- * that alone would come back on every opening.
+ * Something the person did. A point the drawer was opened at, or the device's, is not, nor the 門牌
+ * looked up for it: a draft of that alone would come back on every opening.
  */
 function hasContent(form: HelpRequestForm): boolean {
   return (
-    TEXT_FIELDS.some((field) => form[field].trim() !== '') ||
+    TEXT_FIELDS.some(
+      (field) => field !== 'address' && form[field].trim() !== '',
+    ) ||
+    (form.address.trim() !== '' && !isFilledFromPin(form)) ||
     form.needs.some(
       (row) => row.need !== null || row.name.trim() || row.quantity.trim(),
     ) ||
@@ -76,6 +83,19 @@ function isPoint(value: unknown): value is PickedPoint {
   );
 }
 
+const FILLED_FROM = new Set<unknown>(['pin', 'typed']);
+
+function isFilledAddress(value: unknown): value is FilledAddress {
+  return (
+    isRecord(value) &&
+    typeof value.fullAddress === 'string' &&
+    typeof value.token === 'string' &&
+    typeof value.lat === 'number' &&
+    typeof value.lng === 'number' &&
+    FILLED_FROM.has(value.from)
+  );
+}
+
 function isNeedDraft(value: unknown): value is NeedDraft {
   return (
     isRecord(value) &&
@@ -85,7 +105,10 @@ function isNeedDraft(value: unknown): value is NeedDraft {
   );
 }
 
-/** The drawer reads every field without a check, and always has a last need row. */
+/**
+ * The drawer reads every field without a check, and always has a last need row. `addressFilled` and
+ * `addressKept` are left to `readHelpRequestDraft`: without them the address is still the person's.
+ */
 function isHelpRequestForm(value: unknown): value is HelpRequestForm {
   return (
     isRecord(value) &&
@@ -99,7 +122,11 @@ function isHelpRequestForm(value: unknown): value is HelpRequestForm {
   );
 }
 
-/** Null when there is none, or none this version of the form can take. */
+/**
+ * Null when there is none, or none this version of the form can take. One kept before addresses
+ * were looked up, or with a lookup of another shape, comes back with none: its address then goes
+ * without a token, as typed.
+ */
 export function readHelpRequestDraft(
   storage: DraftStorage | null,
   userId: string,
@@ -109,11 +136,24 @@ export function readHelpRequestDraft(
       storage?.getItem(helpRequestDraftKey(userId)) ?? 'null',
     );
 
-    return isRecord(saved) &&
-      saved.v === DRAFT_VERSION &&
-      isHelpRequestForm(saved.form)
-      ? saved.form
-      : null;
+    if (
+      !isRecord(saved) ||
+      saved.v !== DRAFT_VERSION ||
+      !isHelpRequestForm(saved.form)
+    ) {
+      return null;
+    }
+
+    const { addressFilled, addressKept } = saved.form as {
+      addressFilled?: unknown;
+      addressKept?: unknown;
+    };
+
+    return {
+      ...saved.form,
+      addressFilled: isFilledAddress(addressFilled) ? addressFilled : null,
+      addressKept: typeof addressKept === 'string' ? addressKept : null,
+    };
   } catch {
     return null;
   }
