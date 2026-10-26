@@ -17,6 +17,7 @@ from app.models.photo import Photo
 from app.repositories.geo_repository import station_repository
 from app.repositories.photo_repository import photo_repository
 from app.services.authz import require_scope
+from app.services.station import touch_station
 
 _MAX_URL_LEN = 500  # matches app/models/photo.py: url = mapped_column(String(500))
 
@@ -77,6 +78,7 @@ async def attach_photo_to_geometry(
     url = normalize_photo_url(url)
     if not await station_repository.get_by_uuid_active(db, base_geometry_uuid):
         raise ValueError("Station not found")
+    await touch_station(db, base_geometry_uuid)
     return await photo_repository.create(
         db,
         obj_in={
@@ -145,4 +147,5 @@ async def detach_station_photo(db: AsyncSession, *, actor: User, uuid: str) -> N
                 created_by=photo.created_by, team_uuid=station.team_uuid, geometry=station.geometry
             ),
         )
+    await touch_station(db, station.uuid)
     await photo_repository.soft_delete(db, db_obj=photo)

@@ -26,7 +26,7 @@ from app.services.authz import require_scope
 from app.services.geo_validation import normalize_supply_status
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
-from app.services.station import OPERATIONAL_PROPERTY_NAMES, notify_operational_status_change
+from app.services.station import OPERATIONAL_PROPERTY_NAMES, notify_operational_status_change, touch_station
 
 # Free text a caller can write on every submit; the audit trigger copies each write.
 _MAX_TEXT = 1000
@@ -90,8 +90,13 @@ async def create_station_suggestion(
         await db.execute(
             insert(StationUpdateSuggestion)
             .values(
-                target_type=target_type, target_uuid=target_uuid, field_name=field_name,
-                new_value=value, comment=comment, status="pending", created_by=str(actor_uid),
+                target_type=target_type,
+                target_uuid=target_uuid,
+                field_name=field_name,
+                new_value=value,
+                comment=comment,
+                status="pending",
+                created_by=str(actor_uid),
             )
             .on_conflict_do_update(
                 index_elements=["created_by", "target_uuid", "field_name"],
@@ -155,23 +160,33 @@ async def merge_station_suggestions(
         raise ValueError("Each field may be decided only once")
 
     pending = (
-        await db.execute(
-            select(StationUpdateSuggestion).where(
-                StationUpdateSuggestion.target_uuid.in_({uuid for uuid, _ in keys}),
-                StationUpdateSuggestion.status == "pending",
-                StationUpdateSuggestion.delete_at.is_(None),
+        (
+            await db.execute(
+                select(StationUpdateSuggestion).where(
+                    StationUpdateSuggestion.target_uuid.in_({uuid for uuid, _ in keys}),
+                    StationUpdateSuggestion.status == "pending",
+                    StationUpdateSuggestion.delete_at.is_(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     rows_by_field: dict[tuple[str, str], list[StationUpdateSuggestion]] = defaultdict(list)
     for row in pending:
         rows_by_field[(row.target_uuid, row.field_name)].append(row)
 
     changes, touched = await _apply_decisions(db, station, decisions, rows_by_field)
+    if changes:
+        # Same transaction as the merge row, so this equals the merge's created_at.
+        await touch_station(db, station.uuid)
 
     merge = StationSuggestionMerge(
-        station_uuid=str(station.uuid), changes=changes, review_note=review_note,
-        status="applied", reviewed_by=actor_uid,
+        station_uuid=str(station.uuid),
+        changes=changes,
+        review_note=review_note,
+        status="applied",
+        reviewed_by=actor_uid,
     )
     db.add(merge)
     await db.flush()
@@ -242,6 +257,7 @@ async def revoke_station_suggestion_merge(
     merge.status = "revoked"
     merge.revoked_by = actor_uid
     merge.revoked_at = datetime.now(UTC)
+    await touch_station(db, station.uuid, at=merge.revoked_at)
     await db.execute(
         update(StationUpdateSuggestion)
         .where(

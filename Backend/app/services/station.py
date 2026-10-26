@@ -10,14 +10,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import active_team
 from app.graphql.scalars import geojson_to_geom
 from app.models.auth import User
-from app.models.geo import Station
+from app.models.geo import BaseGeometry, Station
 from app.models.station_property import CrowdSourcing, StationProperty
 from app.models.team import Team
 from app.repositories.geo_repository import (
@@ -86,6 +86,17 @@ async def notify_operational_status_change(
         ref_type="station",
         ref_uuid=station_uuid,
         explicit_recipients=recipients,
+    )
+
+
+async def touch_station(db: AsyncSession, uuid, at: datetime | None = None) -> None:
+    """Move a station's 「最後更新」 to `at`, or to the transaction's time when `at` is None.
+
+    A write to only `stations` columns, a property or a photo never writes `base_geometries`, so
+    each such path calls this.
+    """
+    await db.execute(
+        update(BaseGeometry.__table__).where(BaseGeometry.uuid == uuid).values(updated_at=at or func.now())
     )
 
 
@@ -282,6 +293,8 @@ async def update_station(
         obj_in["supply_status"] = normalize_supply_status(obj_in["supply_status"])
         if obj_in["supply_status"] != station.supply_status:
             obj_in["supply_status_updated_at"] = datetime.now(UTC)
+    if any(getattr(station, field) != value for field, value in obj_in.items()):
+        await touch_station(db, station.uuid)
     updated = await station_repository.update(db, db_obj=station, obj_in=obj_in)
 
     # 觸發通知
@@ -349,6 +362,7 @@ async def assign_station(
     # runs with expire_on_commit=True (see update_station_property).
     station_name = station.name or "物資站"
     actor_uid = actor.uuid
+    await touch_station(db, station_uuid)
     updated = await station_repository.update(db, db_obj=station, obj_in={"team_uuid": team_uuid})
     team_admins = NotificationRecipientResolver.resolve_team_admin
     if new_team:
@@ -397,6 +411,7 @@ async def create_station_property(
     await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
     if not await station_repository.get_by_uuid_active(db, station_uuid):
         raise ValueError("Station not found")
+    await touch_station(db, station_uuid)
     return await station_property_repository.create(
         db,
         obj_in={
@@ -456,6 +471,8 @@ async def update_station_property(
     actor_uid = actor.uuid
     old_value = (prop.quantity, prop.comment)
 
+    if any(getattr(prop, field) != value for field, value in changes.items()):
+        await touch_station(db, station_uuid)
     updated = await station_property_repository.update(db, db_obj=prop, obj_in=changes)
 
     # `comment` cannot change here — UpdateStationPropertyInput has no such field — but it is
