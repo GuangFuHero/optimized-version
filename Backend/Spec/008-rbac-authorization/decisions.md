@@ -1434,6 +1434,8 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
    `services/project_settings.py` 只做 checkpoint 1：任何不是 `none` 的 scope 都會放行（`services/authz.py`
    的 `require_scope`），寫 `all` 才跟實際行為一致。
 2. **`user` 不授**：前台不讀專案設定；通報表單要的災害類型清單，從 ADR-263 起由公開的 `ticket.view` 把關。
+   （2026-10-25：前台頂欄的事件名稱改讀公開的 `currentDisaster`，只有名稱與簡稱，`user` 仍不授
+   `project.view`，見 Spec/013 的 ADR-392。）
 3. **`project.edit` 不動**，仍只有超管：改災害類型會連動整批動態欄位的可見性（ADR-090）。
 4. seed 是 additive bootstrap（ADR-055、ADR-064），`deploy.sh` 每次部署都重跑 seed，既有資料庫就會補上，不需要資料
    migration。

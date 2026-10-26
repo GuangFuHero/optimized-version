@@ -38,6 +38,7 @@ import type {
   RescueMapDraftPoint,
   RescueMapLocationCell,
   RescueMapMarkerItem,
+  RescueMapPublicZone,
   RescueMapRouteState,
   RescueMapViewportStoreLike,
 } from './types';
@@ -148,6 +149,41 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-location-cell-wrapper:hover .map-location-cell': {
     transform: 'scale(1.06)',
   },
+  // An area's name, teams and note, opened from its label (rescue-map-canvas
+  // `createAreaPopupContent`). Leaflet's margin leaves room for its ×.
+  '.map-area-popup .leaflet-popup-content': {
+    margin: '10px 28px 10px 14px',
+    ...displayTextSizeCss(13),
+    lineHeight: 1.5,
+  },
+  '.map-area-popup__name': {
+    fontWeight: 700,
+  },
+  // An area's label, 「責任區・大平村」 (rescue-map-canvas `createAreaLabel`; prototype `前台地圖 Site
+  // Map.html`, 2026-10-23). Centred on the point `placeAreaLabels` found room at (ZONE-LABEL-102).
+  '.map-area-label-anchor': {
+    background: 'none',
+    border: 'none',
+  },
+  '.map-area-label': {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    transform: 'translate(-50%, -50%)',
+    padding: '3px 8px',
+    borderRadius: 6,
+    border: `1px solid ${color.border.default}`,
+    backgroundColor: color.bg.neutral.default,
+    color: color.fg.neutral.default,
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.15)',
+    ...displayTextSizeCss(12),
+    fontWeight: 700,
+    lineHeight: 1.3,
+    whiteSpace: 'nowrap',
+  },
+  '.map-area-label--hazard': {
+    borderColor: color.bg.warning.hover,
+  },
 } as const;
 
 interface MapProps {
@@ -186,6 +222,8 @@ interface MapProps {
   draftPointAction?: ReactNode;
   /** 封閉區域疊圖資料。 */
   closureAreas?: readonly RescueMapClosureArea[];
+  /** 責任區與標示區疊圖資料。 */
+  publicZones?: readonly RescueMapPublicZone[];
   /** 以 external store 提供視角狀態，避免拖動時將 viewport 更新擴散到整個 React tree。 */
   viewportStore?: RescueMapViewportStoreLike;
   /** 只用於訪客提示文案（「登入後可看」）；遮不遮由後端決定。 */
@@ -207,6 +245,7 @@ export const Map = memo(function Map({
   onDraftPointChange,
   draftPointAction,
   closureAreas,
+  publicZones,
   viewportStore,
   isAuthenticated = false,
 }: MapProps = {}) {
@@ -215,6 +254,7 @@ export const Map = memo(function Map({
     onRouteStateChange,
     sourceMarkers: markers,
     closureAreas,
+    publicZones,
     // 視窗外的標記在地圖上本就不可見，關閉 bbox 過濾讓視角移動不重建 markers。
     filterMarkersByBbox: false,
   });

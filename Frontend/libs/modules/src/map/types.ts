@@ -27,6 +27,7 @@ export type RescueMapDataType = 'station' | 'ticket';
 
 export type RescueMapOverlayLayer =
   | 'closure-areas'
+  | 'public-zones'
   | 'routes'
   | 'secondary-locations';
 
@@ -106,13 +107,23 @@ export interface RescueMapAdministrativeArea {
   points: [number, number][];
 }
 
-export interface RescueMapClosureArea {
+/** An area drawn on the back office's 互助地圖, as the public map shows it (backend `areas`, ADR-311). */
+export interface RescueMapArea {
   id: string;
-  label: string;
-  status: string;
-  informationSource?: string | null;
+  /** Null when the back office gave it none. */
+  name: string | null;
   comment?: string | null;
   polygons: [number, number][][][];
+}
+
+/** A 危險區, on the 封閉區域 layer. */
+export type RescueMapClosureArea = RescueMapArea;
+
+/** A 責任區, or a 標示區 switched to public, on the 責任區與標示區 layer. */
+export interface RescueMapPublicZone extends RescueMapArea {
+  kind: 'team_zone' | 'mark_zone';
+  /** The teams a 責任區 is assigned to, public since ADR-311's 10-11 revision; none for a 標示區. */
+  teams: readonly string[];
 }
 
 export interface RescueMapOverlayLayerMeta {
@@ -123,6 +134,8 @@ export interface RescueMapOverlayLayerMeta {
 export interface RescueMapLayerPreferences {
   baseLayer?: RescueMapBaseLayer;
   enabledOverlayLayers?: RescueMapOverlayLayer[];
+  /** The overlay layers there were when these were saved. One added since starts as its default. */
+  knownOverlayLayers?: RescueMapOverlayLayer[];
 }
 
 export interface RescueMapMarkerItem {
@@ -227,6 +240,7 @@ export interface RescueMapControllerValue {
   closeLayerPanel: () => void;
   markers: RescueMapMarkerItem[];
   closureAreas: RescueMapClosureArea[];
+  publicZones: RescueMapPublicZone[];
   overlayLayerMeta: Partial<
     Record<RescueMapOverlayLayer, RescueMapOverlayLayerMeta>
   >;

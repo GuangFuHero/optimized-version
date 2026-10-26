@@ -1,4 +1,4 @@
-# Project Settings & Account Activity — ADR 全集（ADR-090~095、164~173）
+# Project Settings & Account Activity — ADR 全集（ADR-090~095、164~173、ADR-392）
 
 **Date**: 2026-08-16
 **Feature**: 013-project-settings-activity
@@ -466,3 +466,32 @@ KeyError: 'b7e4c1a90d52'
    `a1b2c3d4e5f6` 跑完再還原（#43 的 review 就是這樣驗的），**那個暫時修改不可提交**。
 
 **與 ADR-167/173 的關係**：兩者的決策都維持有效，本 ADR 只更正它們的事實敘述並補上代價的完整範圍。
+
+---
+
+### ADR-392 公開的事件名稱（`currentDisaster`），加一個可以空著的簡稱 `short_name`
+
+**白話**：前台頂欄要寫這次事件的名稱，例如「花蓮馬太鞍溪」。名稱公開，誰都讀得到；災害類型、開始時間等其他設定，照舊只有後台身分讀得到。
+
+**Date**: 2026-10-25（使用者同意 B 案：加簡稱）
+
+**Context**：糖的前台視覺對齊（`Design/前台/docs/前台視覺對齊.md` §3）要頂欄顯示事件名稱。名稱存在 `project_settings.name`，
+但只能從 `GET /api/v1/admin/project-settings` 讀，要 `project.view`；`user` 和訪客都沒有（ADR-324 第 2 點）。
+原型的頂欄寫簡稱「花蓮馬太鞍溪」，全名「花蓮馬太鞍溪堰塞湖專案」放在滑鼠移上去的提示裡
+（`Design/前台/js/site/site-shell.jsx:29-32`、`:143-155`）；原型的設定頁和後台側欄也是「簡稱＋全名」一套，
+`st-data.js:14` 自己註明「shortName 後端沒有」。
+
+**Decision**：
+
+- GraphQL 新增 `currentDisaster: CurrentDisasterType`，只有 `name` 與 `shortName`；表裡還沒有那一列時回 null。
+- **不檢查任何權限**：它是部署的顯示名稱，跟網站標題同等級。其他公開查詢會檢查一個 `PUBLIC_PERMS` 裡的權限，
+  但事件名稱不屬於地圖、公告、站點、任務單任何一個；硬掛一個，只會多出「把那個權限縮掉，頂欄就壞了」的路。
+- **不把 `project.view` 加進 `PUBLIC_PERMS`**：那樣訪客也能讀管理端的整列設定，後台側欄靠
+  `project.view` 做的判斷也會跟著變。`disaster_types`、`started_at` 照舊只從管理端讀，要 `project.view`。
+- `project_settings.short_name`：`String(30)`，可以是 null，沒填就用 `name`。migration `50e667b42105` 只加欄位、
+  不搬資料。管理端 `PATCH` 收 `short_name`：去掉前後空白，空白或 null 就清掉，超過 30 字回 422。
+
+➕ 頂欄、側欄、設定頁跟原型同一套，之後做設定頁不用再加 migration。
+➕ 公開的只有名稱；管理端那支的權限沒有放寬。
+➖ 設定頁還沒做，簡稱暫時只能從管理端 API 設。
+◾ 後台側欄（`shell/admin/sidebar.tsx`）也可以改讀 `currentDisaster`，不必等 `project.view`；不在這次範圍。

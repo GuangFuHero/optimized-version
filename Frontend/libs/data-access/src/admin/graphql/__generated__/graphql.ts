@@ -518,6 +518,15 @@ export type CrowdSourcingType = {
   uuid: Scalars['UUID']['output'];
 };
 
+/** The disaster this deployment responds to, as the public site names it */
+export type CurrentDisasterType = {
+  __typename?: 'CurrentDisasterType';
+  /** Full name, e.g. 花蓮馬太鞍溪堰塞湖專案 */
+  name: Scalars['String']['output'];
+  /** Short name for tight spots such as the site's top bar, e.g. 花蓮馬太鞍溪; null when unset, so use name */
+  shortName?: Maybe<Scalars['String']['output']>;
+};
+
 export type DisasterTypeType = {
   __typename?: 'DisasterTypeType';
   /** False retires the type: no new writes, existing ones readable */
@@ -978,6 +987,8 @@ export type Query = {
   buildingMap?: Maybe<BuildingMapType>;
   buildingMapTickets: Array<TicketType>;
   buildingMaps: BuildingMapConnection;
+  /** The deployment's disaster, readable without signing in; null until first configured */
+  currentDisaster?: Maybe<CurrentDisasterType>;
   disasterTypes: Array<DisasterTypeType>;
   hazardousZone?: Maybe<HazardousZoneType>;
   hazardousZones: HazardousZoneConnection;

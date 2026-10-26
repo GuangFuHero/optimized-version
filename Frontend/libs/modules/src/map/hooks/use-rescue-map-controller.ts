@@ -72,6 +72,7 @@ interface RescueMapControllerOptions {
   /** 覆寫預設 marker 資料源。 */
   sourceMarkers?: readonly RescueMapMarkerItem[];
   closureAreas?: readonly import('../types').RescueMapClosureArea[];
+  publicZones?: readonly import('../types').RescueMapPublicZone[];
   /** 是否用地圖疊加圖層開關過濾 marker。列表頁會關閉此行為。 */
   filterMarkersByOverlayLayers?: boolean;
   /**
@@ -90,10 +91,18 @@ const EMPTY_ROUTE_STATE: RescueMapRouteState = {};
 const MAP_LAYER_PREFERENCE_STORAGE_KEY = 'rescue-map:layer-preferences';
 
 const FALLBACK_LAYER_PREFERENCES: Required<
-  Pick<RescueMapLayerPreferences, 'enabledOverlayLayers'>
+  Pick<RescueMapLayerPreferences, 'enabledOverlayLayers' | 'knownOverlayLayers'>
 > = {
   enabledOverlayLayers: [...DEFAULT_RESCUE_MAP_OVERLAY_LAYERS],
+  knownOverlayLayers: [...RESCUE_MAP_OVERLAY_LAYER_ORDER],
 };
+
+// Preferences saved before `knownOverlayLayers` knew only these.
+const OVERLAY_LAYERS_BEFORE_PUBLIC_ZONES: readonly RescueMapOverlayLayer[] = [
+  'closure-areas',
+  'routes',
+  'secondary-locations',
+];
 
 function normalizeOverlayLayers(
   value: unknown,
@@ -108,7 +117,9 @@ function normalizeOverlayLayers(
   return RESCUE_MAP_OVERLAY_LAYER_ORDER.filter((layer) => values.has(layer));
 }
 
-function normalizeLayerPreferences(value: unknown): RescueMapLayerPreferences {
+export function normalizeLayerPreferences(
+  value: unknown,
+): RescueMapLayerPreferences {
   if (!value || typeof value !== 'object') {
     return FALLBACK_LAYER_PREFERENCES;
   }
@@ -123,12 +134,23 @@ function normalizeLayerPreferences(value: unknown): RescueMapLayerPreferences {
     candidate.enabledOverlayLayers,
     FALLBACK_LAYER_PREFERENCES.enabledOverlayLayers,
   );
+  const knownOverlayLayers = new Set(
+    Array.isArray(candidate.knownOverlayLayers)
+      ? candidate.knownOverlayLayers
+      : OVERLAY_LAYERS_BEFORE_PUBLIC_ZONES,
+  );
 
   return {
     baseLayer,
-    enabledOverlayLayers: RESCUE_MAP_OVERLAY_LAYER_ORDER.filter((layer) =>
-      enabledOverlayLayers.includes(layer),
+    // A layer added since these were saved starts as its default: its absence from them was no one's
+    // choice.
+    enabledOverlayLayers: RESCUE_MAP_OVERLAY_LAYER_ORDER.filter(
+      (layer) =>
+        enabledOverlayLayers.includes(layer) ||
+        (!knownOverlayLayers.has(layer) &&
+          DEFAULT_RESCUE_MAP_OVERLAY_LAYERS.includes(layer)),
     ),
+    knownOverlayLayers: [...RESCUE_MAP_OVERLAY_LAYER_ORDER],
   };
 }
 
@@ -168,6 +190,7 @@ export function useRescueMapController({
   onRouteStateChange,
   sourceMarkers = RESCUE_MAP_MARKERS,
   closureAreas: sourceClosureAreas = [],
+  publicZones: sourcePublicZones = [],
   filterMarkersByOverlayLayers = true,
   filterMarkersByBbox = true,
   filterMarkersBySearch = true,
@@ -448,11 +471,20 @@ export function useRescueMapController({
         : [],
     [enabledOverlayLayerSet, sourceClosureAreas],
   );
+  const publicZones = useMemo(
+    () =>
+      enabledOverlayLayerSet.has('public-zones') ? [...sourcePublicZones] : [],
+    [enabledOverlayLayerSet, sourcePublicZones],
+  );
   const overlayLayerMeta = useMemo(() => {
     return {
       'closure-areas': {
         itemCount: sourceClosureAreas.length,
-        sourceLabel: 'closure_areas + base_geometries',
+        sourceLabel: 'areas (hazardous_zone)',
+      },
+      'public-zones': {
+        itemCount: sourcePublicZones.length,
+        sourceLabel: 'areas (team_zone, mark_zone)',
       },
       routes: {
         itemCount: 0,
@@ -463,7 +495,7 @@ export function useRescueMapController({
         sourceLabel: 'secondary_locations + base_geometries',
       },
     } as const;
-  }, [sourceClosureAreas.length]);
+  }, [sourceClosureAreas.length, sourcePublicZones.length]);
   const initialView = useMemo(
     () => ({
       center: state.position?.center ?? RESCUE_MAP_INITIAL_VIEW.center,
@@ -489,6 +521,7 @@ export function useRescueMapController({
     closeLayerPanel,
     markers,
     closureAreas,
+    publicZones,
     overlayLayerMeta,
     tileLayer,
     initialView,

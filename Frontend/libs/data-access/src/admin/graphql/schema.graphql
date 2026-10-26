@@ -609,6 +609,17 @@ type CrowdSourcingType {
   createdAt: DateTime
 }
 
+"""The disaster this deployment responds to, as the public site names it"""
+type CurrentDisasterType {
+  """Full name, e.g. 花蓮馬太鞍溪堰塞湖專案"""
+  name: String!
+
+  """
+  Short name for tight spots such as the site's top bar, e.g. 花蓮馬太鞍溪; null when unset, so use name
+  """
+  shortName: String
+}
+
 """Date with time (isoformat)"""
 scalar DateTime
 
@@ -916,6 +927,11 @@ type Query {
   taskPropertyConfigs(taskType: String!, includeInactive: Boolean! = false): [TaskPropertyConfigType!]!
   ticketPropertyConfigs(disasterTypes: [String!]!, includeInactive: Boolean! = false): [TicketPropertyConfigType!]!
   disasterTypes(includeInactive: Boolean! = false): [DisasterTypeType!]!
+
+  """
+  The deployment's disaster, readable without signing in; null until first configured
+  """
+  currentDisaster: CurrentDisasterType
   announcements(filter: AnnouncementFilter! = ACTIVE, placement: AnnouncementPlacement! = public_page): [AnnouncementType!]!
   announcement(uuid: UUID!): AnnouncementType
   briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!

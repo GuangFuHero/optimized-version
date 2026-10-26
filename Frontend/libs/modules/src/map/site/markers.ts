@@ -1,18 +1,20 @@
 import {
-  ClosureAreaFieldsFragmentDoc,
   StationFieldsFragmentDoc,
   TicketFieldsFragmentDoc,
   useFragment,
-  type GetClosureAreasQuery,
+  type GetMapAreasQuery,
   type GetStationsQuery,
   type GetTicketsQuery,
   type StationFieldsFragment,
 } from '@rescue-frontend/data-access';
 import type { Geometry, Polygon } from 'geojson';
 
+import { areaSignature, isAreaKind } from '../areas';
 import type {
+  RescueMapArea,
   RescueMapClosureArea,
   RescueMapMarkerItem,
+  RescueMapPublicZone,
 } from '../types';
 import { readOpHour } from '../../station/availability';
 import { getStationTypeLabel } from '../../station/type-options';
@@ -248,9 +250,9 @@ function convertPolygonCoordinates(coordinates: Polygon['coordinates']) {
   );
 }
 
-function readClosureAreaPolygons(
+function readAreaPolygons(
   geometry?: Geometry | null,
-): RescueMapClosureArea['polygons'] {
+): RescueMapArea['polygons'] {
   if (!geometry) {
     return [];
   }
@@ -268,40 +270,56 @@ function readClosureAreaPolygons(
   return [];
 }
 
-export function mapClosureAreaToOverlay(
-  areaRef: GetClosureAreasQuery['hazardousZones']['items'][number],
-): RescueMapClosureArea | null {
-  const area = useFragment(ClosureAreaFieldsFragmentDoc, areaRef);
-  const polygons = readClosureAreaPolygons(area.geometry ?? null);
-
-  if (polygons.length === 0) {
-    return null;
-  }
-
-  return {
-    id: area.uuid,
-    label: area.propertyName,
-    status: area.status,
-    informationSource: area.informationSource,
-    comment: area.note,
-    polygons,
-  };
+export interface SiteMapAreaOverlays {
+  closureAreas: RescueMapClosureArea[];
+  publicZones: RescueMapPublicZone[];
 }
 
-export function closureAreasSignature(
-  areas: readonly RescueMapClosureArea[],
-): string {
-  return areas
-    .map((area) => {
-      let pointCount = 0;
+/**
+ * The public map's areas, one layer each (prototype `site-data.js:709-721`): a 危險區 to 封閉區域,
+ * a 責任區 or a public 標示區 to 責任區與標示區. An area with nothing to draw, or of a kind this map does
+ * not know, is left out.
+ */
+export function mapAreasToOverlays(
+  items: readonly GetMapAreasQuery['areas']['items'][number][],
+): SiteMapAreaOverlays {
+  const overlays: SiteMapAreaOverlays = { closureAreas: [], publicZones: [] };
 
-      area.polygons.forEach((rings) => {
-        rings.forEach((ring) => {
-          pointCount += ring.length;
-        });
-      });
+  items.forEach((item) => {
+    const polygons = readAreaPolygons(item.geometry ?? null);
 
-      return `${area.id}:${area.status}:${pointCount}`;
-    })
-    .join('|');
+    if (polygons.length === 0 || !isAreaKind(item.type)) {
+      return;
+    }
+
+    const area: RescueMapArea = {
+      id: item.uuid,
+      name: item.name?.trim() || null,
+      comment: item.note,
+      polygons,
+    };
+
+    if (item.type === 'hazardous_zone') {
+      overlays.closureAreas.push(area);
+      return;
+    }
+
+    overlays.publicZones.push({
+      ...area,
+      kind: item.type,
+      teams: item.assignedTeams.map((team) => team.name),
+    });
+  });
+
+  return overlays;
+}
+
+export function areaOverlaysSignature({
+  closureAreas,
+  publicZones,
+}: {
+  closureAreas: readonly RescueMapClosureArea[];
+  publicZones: readonly RescueMapPublicZone[];
+}): string {
+  return [...closureAreas, ...publicZones].map(areaSignature).join('\n');
 }
