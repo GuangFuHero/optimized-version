@@ -118,6 +118,35 @@ async def test_a_pending_suggestion_keeps_the_admin_edit_until_approval_moves_it
 
 
 @pytest.mark.asyncio
+async def test_an_approved_status_carries_the_approval_time_as_its_own_stamp(
+    client, coordinator_auth, auditor_auth, login_user_auth, sample_station
+):
+    """The operational and supply statuses approved in one merge say they changed when it did."""
+    _, admin = coordinator_auth
+    _, reviewer = auditor_auth
+    _, public = login_user_auth
+    await _suggest(client, public, sample_station, "operational_status", "temporarily_closed")
+    await _suggest(client, public, sample_station, "supply_status", "缺飲用水")
+    decisions = [
+        {
+            "targetUuid": sample_station,
+            "fieldName": "operational_status",
+            "approve": True,
+            "value": "temporarily_closed",
+        },
+        {"targetUuid": sample_station, "fieldName": "supply_status", "approve": True, "value": "缺飲用水"},
+    ]
+
+    merge = await _gql(client, reviewer, MERGE, {"station": sample_station, "decisions": decisions})
+
+    query = "query($uuid: UUID!) { station(uuid: $uuid) { updatedAt statusChangedAt supplyStatusUpdatedAt } }"
+    station = (await _gql(client, admin, query, {"uuid": sample_station}))["station"]
+    assert {datetime.fromisoformat(value) for value in station.values()} == {
+        datetime.fromisoformat(merge["mergeStationSuggestions"]["createdAt"])
+    }
+
+
+@pytest.mark.asyncio
 async def test_approving_the_value_the_station_already_has_still_moves_it(
     client, coordinator_auth, auditor_auth, login_user_auth, sample_station
 ):

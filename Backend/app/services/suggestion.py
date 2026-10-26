@@ -7,7 +7,7 @@ fields of one station, writes the reviewer's values, and records the before/afte
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import func, literal_column, select, text, update
 from sqlalchemy.dialects.postgresql import insert
@@ -176,9 +176,9 @@ async def merge_station_suggestions(
     for row in pending:
         rows_by_field[(row.target_uuid, row.field_name)].append(row)
 
-    changes, touched = await _apply_decisions(db, station, decisions, rows_by_field)
-    # The database's clock, read under the station's lock, as every other stamp is.
+    # The database's clock, read under the station's lock; every stamp this merge writes carries it.
     decided_at = await db.scalar(select(func.clock_timestamp()))
+    changes, touched = await _apply_decisions(db, station, decisions, rows_by_field, decided_at)
     if changes:
         # An approval is an update at its own time, even one that wrote a property or an unchanged value.
         touch(station, at=decided_at)
@@ -251,15 +251,16 @@ async def revoke_station_suggestion_merge(
     if drifted:
         raise ValueError(f"Changed since the merge, cannot revoke: {', '.join(drifted)}")
 
+    revoked_at = await db.scalar(select(func.clock_timestamp()))
     for change, target in zip(changes, targets, strict=True):
-        _set_field(target, change["field_name"], change["before"])
+        _set_field(target, change["field_name"], change["before"], revoked_at)
         stamp = _STAMPS.get(change["field_name"])
         if stamp and f"{stamp}_before" in change:
             before = change[f"{stamp}_before"]
             setattr(target, stamp, datetime.fromisoformat(before) if before else None)
     merge.status = "revoked"
     merge.revoked_by = actor_uid
-    merge.revoked_at = await db.scalar(select(func.clock_timestamp()))
+    merge.revoked_at = revoked_at
     touch(station, at=merge.revoked_at)
     await db.execute(
         update(StationUpdateSuggestion)
@@ -278,7 +279,9 @@ async def revoke_station_suggestion_merge(
     return merge
 
 
-async def _apply_decisions(db: AsyncSession, station: Station, decisions, rows_by_field):
+async def _apply_decisions(
+    db: AsyncSession, station: Station, decisions, rows_by_field, decided_at: datetime
+):
     """Validate each decision and write the approved values; return the changes and their targets."""
     changes: list[dict] = []
     touched = []
@@ -308,7 +311,7 @@ async def _apply_decisions(db: AsyncSession, station: Station, decisions, rows_b
             # A revoke restores the old value, so it restores when that value began too.
             began = getattr(target, stamp)
             change[f"{stamp}_before"] = began.isoformat() if began else None
-        _set_field(target, decision.field_name, value)
+        _set_field(target, decision.field_name, value, decided_at)
         touched.append(target)
         changes.append(change)
     return changes, touched
@@ -354,11 +357,11 @@ def _check_length(**fields: str | None) -> None:
             raise ValueError(f"'{name}' must be at most {_MAX_TEXT} characters")
 
 
-def _set_field(target, field_name: str, value) -> None:
-    """Write one field, moving its stamp (see _STAMPS) only when the value really changes."""
+def _set_field(target, field_name: str, value, at: datetime) -> None:
+    """Write one field, moving its stamp (see _STAMPS) to `at` only when the value really changes."""
     stamp = _STAMPS.get(field_name)
     if stamp and value != getattr(target, field_name):
-        setattr(target, stamp, datetime.now(UTC))
+        setattr(target, stamp, at)
     setattr(target, field_name, value)
 
 
