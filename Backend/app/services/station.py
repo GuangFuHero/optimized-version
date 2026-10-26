@@ -460,8 +460,10 @@ async def update_station_property(
     actor_uid = actor.uuid
     old_value = (prop.quantity, prop.comment)
 
-    if any(getattr(prop, field) != value for field, value in changes.items()):
-        touch(await db.get(Station, station_uuid))
+    if any(getattr(prop, field) != value for field, value in changes.items()) and (
+        station := await station_repository.get_by_uuid_active(db, station_uuid)
+    ):
+        touch(station)
     updated = await station_property_repository.update(db, db_obj=prop, obj_in=changes)
 
     # `comment` cannot change here — UpdateStationPropertyInput has no such field — but it is

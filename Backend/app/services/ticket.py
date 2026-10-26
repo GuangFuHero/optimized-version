@@ -461,6 +461,9 @@ async def update_ticket(
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
     # Locked before anything is read, so the address's change check compares against what is current.
     ticket = await lock_ticket(db, uuid)
+    if ticket is None or ticket.delete_at is not None:
+        # Deleted by a concurrent call while this one waited for the lock.
+        raise ValueError("Ticket not found")
     if secondary_location is not None:
         secondary_location = apply_address(
             secondary_location, point=point_of(geom_to_geojson(ticket.geometry))
@@ -531,6 +534,9 @@ async def set_ticket_disaster_details(
     _check_disaster_detail_size(details)
     # Locked before the answers are read, so the change check compares against what is current.
     ticket = await lock_ticket(db, ticket_uuid)
+    if ticket is None or ticket.delete_at is not None:
+        # Deleted by a concurrent call while this one waited for the lock.
+        raise ValueError("Ticket not found")
     before = {
         (d.property_name, d.value)
         for d in await ticket_disaster_detail_repository.list_by_ticket(db, ticket_uuid)

@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import update
 
 from app.models.geo import BaseGeometry
+from app.services.ticket_audit import flag_need_audit
 from tests.test_graphql.conftest import auth_header, test_db
 
 # Every test first puts the ticket's updatedAt back to this, so "moved" and "unchanged" are exact.
@@ -272,4 +273,16 @@ async def test_a_refused_edit_leaves_it_alone(client, coordinator_auth, login_us
     )
 
     assert "errors" in resp.json(), resp.json()
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
+async def test_the_audit_scan_flag_does_not_move_it(client, coordinator_auth, sample_ticket):
+    """Flagging a ticket for audit is part of a verdict's life, not a change to the ticket."""
+    _, admin = coordinator_auth
+    await _set_earlier(sample_ticket)
+
+    async with test_db() as db:
+        assert await flag_need_audit(db, [sample_ticket]) == 1
+
     assert await _updated_at(client, admin, sample_ticket) == EARLIER

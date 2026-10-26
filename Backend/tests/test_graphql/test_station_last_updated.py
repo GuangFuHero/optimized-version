@@ -7,7 +7,7 @@ from sqlalchemy import update
 
 from app.models.geo import BaseGeometry
 from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
-from tests.test_graphql.test_station_assignment_api import ASSIGN, _gov_assigner, _station_and_team
+from tests.test_graphql.test_station_assignment_api import ASSIGN, UNASSIGN, _gov_assigner, _station_and_team
 
 # Every test first puts the station's updatedAt back to this, so "moved" and "unchanged" are exact.
 EARLIER = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
@@ -253,13 +253,18 @@ async def test_adding_and_deleting_a_photo_each_move_it(
 
 
 @pytest.mark.asyncio
-async def test_a_team_assignment_moves_it(client, redis, coordinator_auth):
-    """Which team runs the station is part of the station."""
+async def test_a_team_assignment_and_an_unassignment_each_move_it(client, redis, coordinator_auth):
+    """Which team runs the station, or that none does, is part of the station."""
     _, admin = coordinator_auth
     station, team = await _station_and_team()
     await _set_earlier(station)
 
-    await _gql(client, await _gov_assigner(redis), ASSIGN, {"stationUuid": station, "teamUuid": team})
+    assigner = await _gov_assigner(redis)
+    await _gql(client, assigner, ASSIGN, {"stationUuid": station, "teamUuid": team})
+    assert await _updated_at(client, admin, station) > EARLIER
+
+    await _set_earlier(station)
+    await _gql(client, assigner, UNASSIGN, {"stationUuid": station})
 
     assert await _updated_at(client, admin, station) > EARLIER
 

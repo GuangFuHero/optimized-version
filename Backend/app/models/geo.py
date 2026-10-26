@@ -169,7 +169,8 @@ class Station(BaseGeometry):
 def touch(record: BaseGeometry, at: datetime | None = None) -> None:
     """Move a station's or ticket's 「最後更新」 (`updated_at`) to `at`, or to the time of the write.
 
-    For a change `stamp_updated_at` cannot see, to a related row, or one that must carry a set time.
+    For a change `stamp_updated_at` cannot see, to a related row, or one that must carry a set time. The
+    database fills a default time in, so `updated_at` reads back only after a refresh.
     """
     # clock_timestamp(), not now(): now() is when the transaction began, which a write that waited on
     # a lock would stamp after a later one.
