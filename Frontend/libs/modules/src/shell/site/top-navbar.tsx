@@ -2,9 +2,8 @@
 
 import { Suspense } from 'react';
 
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
 import PublicRoundedIcon from '@mui/icons-material/PublicRounded';
-import { Box, ButtonBase, Stack, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
 import {
@@ -22,6 +21,7 @@ import {
   SiteHeaderSearchInputFallback,
 } from './header-search-input';
 import { PageHelpButton } from './page-help';
+import { SiteSignInButton } from './sign-in-button';
 import { SiteUserMenu } from './user-menu';
 
 const { color, typography } = designTokens;
@@ -146,23 +146,7 @@ export function SiteTopNavBar({
         {isAuthenticated ? (
           <SiteUserMenu userName={userName} onSignOut={onSignOut} />
         ) : (
-          <ButtonBase
-            disableRipple
-            aria-label="登入"
-            onClick={onSignIn}
-            sx={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              color: palette.brandText,
-              transition: 'box-shadow 120ms ease',
-              '&:hover': {
-                boxShadow: `0 0 0 3px ${palette.avatarHover}`,
-              },
-            }}
-          >
-            <LoginRoundedIcon sx={{ fontSize: 20 }} />
-          </ButtonBase>
+          <SiteSignInButton onClick={onSignIn} />
         )}
       </Stack>
     </Box>

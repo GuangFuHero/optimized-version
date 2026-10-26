@@ -14,6 +14,7 @@ export {
   primitives,
   semanticColor,
   semanticElevation,
+  semanticIconSize,
   semanticMotion,
   semanticRadius,
   semanticShadow,

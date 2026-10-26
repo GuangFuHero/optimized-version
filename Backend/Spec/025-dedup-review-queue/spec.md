@@ -70,7 +70,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 
 | 參數 | 預設 | 說明 |
 |---|---|---|
-| `status` | 待審（`dup_ignored`＋`suggested`，ADR-339） | 可多選，含 `confirmed`、`rejected` |
+| `status` | 待審（`dup_ignored`＋`suggested`，ADR-339） | 可多選，含 `confirmed_duplicate`、`not_duplicate`（Spec 028 ADR-391 前叫 `confirmed`、`rejected`） |
 | `entity_kind` | 全部 | `ticket_task`／`station`／`ticket` |
 | `source_layer` | 全部 | `fast`／`slow`／`manual`／`system` |
 | `sort` | `-created_at` | `similarity`、`-similarity`、`created_at`、`-created_at` |
@@ -105,7 +105,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 ### 2.3 `POST /admin/duplicate-pairs/{uuid}/confirm`、`/reject` — `ai_duplicate.review`
 
 - 鎖住這張卡（`FOR UPDATE`）；不是待審狀態 → 409（ADR-343）。
-- `status` → `confirmed`／`rejected`，記 `reviewed_by`、`reviewed_at`。
+- `status` → `confirmed_duplicate`／`not_duplicate`（ADR-391 前叫 `confirmed`／`rejected`），記 `reviewed_by`、`reviewed_at`。
 - 寫事件 `confirmed`／`rejected`：`before_state = {status: 原狀態}`、`after_state = {status: 新狀態}`、
   `actor_uuid`、`source_layer = manual`、`decision_reason`（body 可帶 `note`，選填，長度上限 1000）。
 - 不動任何實體（ADR-341）。
@@ -113,7 +113,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 
 ### 2.4 `POST /admin/duplicate-pairs/{uuid}/revoke` — `ai_duplicate.review`（＋`ai_duplicate.revoke`）
 
-- 鎖住這張卡；不是 `confirmed`／`rejected` → 409。
+- 鎖住這張卡；不是 `confirmed_duplicate`／`not_duplicate` → 409。
 - `reviewed_by` 不是目前使用者 → 還需要 `ai_duplicate.revoke`，沒有 → 403（ADR-342）。
 - 狀態改回最近一筆判定事件的 `before_state.status`，清掉 `reviewed_by`／`reviewed_at`。
 - 寫事件 `verdict_revoked`（ADR-344）。
