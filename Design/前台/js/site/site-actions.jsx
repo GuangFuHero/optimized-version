@@ -1825,6 +1825,29 @@
         return { icon: 'Info', c: touched ? 'var(--color-fg-danger)' : muted, t: '這附近 500 公尺內查不到門牌，請自己填地址' };
       return null;
     })();
+    /* 地址下面那一行提示（手機、桌機都緊貼地址正下方，見 #126） */
+    const addressNoteEl = addressNote ? (
+                  <div data-address-note style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexWrap: 'wrap',
+                    font: '400 var(--fs-11)/1.5 var(--font-body)', color: addressNote.c }}>
+                    <WGIcon n={addressNote.icon} s={14} c={addressNote.c} />
+                    <span style={{ flex: '1 1 160px', minWidth: 0 }}>{addressNote.t}</span>
+                    {/* onMouseDown + preventDefault：按鈕不搶走地址欄的焦點，不然會先觸發一次「離開欄位就查」。 */}
+                    {addressNote.undo ? (
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={undoTyped}
+                        style={{ border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)', borderRadius: 999,
+                          padding: '2px 10px', font: '500 var(--fs-11)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)', cursor: 'pointer', maxWidth: '100%', textAlign: 'left' }}>
+                        改回你打的：{addressNote.undo}
+                      </button>
+                    ) : null}
+                    {addressNote.back ? (
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={usePinDoor}
+                        style={{ border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)', borderRadius: 999,
+                          padding: '2px 10px', font: '500 var(--fs-11)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)', cursor: 'pointer', maxWidth: '100%', textAlign: 'left' }}>
+                        用大頭針的地址：{shortDoor(addressNote.back)}
+                      </button>
+                    ) : null}
+                  </div>
+    ) : null;
 
     if (!isAuthenticated) {
       return (
@@ -2032,34 +2055,16 @@
                查到門牌後會換成很長的正式寫法（「花蓮縣光復鄉大進村3鄰糖廠街19號」），
                擠在 80px 兩欄旁邊會被截掉，他就看不到我們把他的字換成了什麼。
                桌機維持同一列。提示一律緊貼在地址正下方。 */
-            <div data-field="address" style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr) 110px 110px', gap: 'var(--space-3)' }}>
-              <div style={{ gridColumn: isMobile ? '1 / -1' : 'auto', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            /* 🔒 #126（2026-10-26）：**桌機也一樣**，地址自己一列、提示緊貼地址下方，樓層＋戶／室在下一列。
+               請求協助的抽屜在桌機只有約 440px 寬，跟地址擠一列時地址欄只剩約 116px，
+               正式地址「花蓮縣光復鄉大進村3鄰…」整個被截掉 —— 跟手機（Q9）是同一個問題。 */
+            <div data-field="address" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 'var(--space-3)' }}>
+              <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
                 <Field label="地址" required error={touched && !address.trim() && !(addressNote && addressNote.t.indexOf('查不到門牌') !== -1) ? '必填' : undefined}>
                   <Input value={address} onChange={(e) => setAddress(e.target.value)} onBlur={checkTyped} maxLength={255}
                     invalid={touched && !address.trim()} placeholder={landmark ? '例：花蓮縣光復鄉中山路100號' : '放好大頭針後會自動帶入'} />
                 </Field>
-                {addressNote && (
-                  <div data-address-note style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexWrap: 'wrap',
-                    font: '400 var(--fs-11)/1.5 var(--font-body)', color: addressNote.c }}>
-                    <WGIcon n={addressNote.icon} s={14} c={addressNote.c} />
-                    <span style={{ flex: '1 1 160px', minWidth: 0 }}>{addressNote.t}</span>
-                    {/* onMouseDown + preventDefault：按鈕不搶走地址欄的焦點，不然會先觸發一次「離開欄位就查」。 */}
-                    {addressNote.undo ? (
-                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={undoTyped}
-                        style={{ border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)', borderRadius: 999,
-                          padding: '2px 10px', font: '500 var(--fs-11)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)', cursor: 'pointer', maxWidth: '100%', textAlign: 'left' }}>
-                        改回你打的：{addressNote.undo}
-                      </button>
-                    ) : null}
-                    {addressNote.back ? (
-                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={usePinDoor}
-                        style={{ border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)', borderRadius: 999,
-                          padding: '2px 10px', font: '500 var(--fs-11)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)', cursor: 'pointer', maxWidth: '100%', textAlign: 'left' }}>
-                        用大頭針的地址：{shortDoor(addressNote.back)}
-                      </button>
-                    ) : null}
-                  </div>
-                )}
+                {addressNoteEl}
               </div>
               <Field label="樓層">
                 <Input value={floor} onChange={(e) => setFloor(e.target.value)} placeholder="3" />

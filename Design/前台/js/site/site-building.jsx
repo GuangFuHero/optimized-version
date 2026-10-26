@@ -541,7 +541,8 @@
                 onOpenTicket={onOpenTicket}
                 onClaimNeed={onClaimNeed} viewerId={viewerId} isAuthenticated={isAuthenticated}
                 showKind={showKind}
-                note="知道在這一棟，但不知道在哪一層 —— 這棟開放看各樓層之前進來的單、通報者說不出在幾樓，或寫的樓層對不上。" />
+                /* 2026-10-26（前端核對）：拿掉「這棟開放看各樓層之前進來的單」—— V1 的單只在建立時掛進這一棟，不會有這種。 */
+                note="知道在這一棟，但不知道在哪一層 —— 通報者說不出在幾樓，或寫的樓層對不上。" />
             ) : null}
           </div>
         </div>

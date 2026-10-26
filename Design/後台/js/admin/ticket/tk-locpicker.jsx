@@ -1,7 +1,9 @@
 // tk-locpicker.jsx — 地標選點（建單抽屜內嵌小地圖：自動定位一次 → 可點圖／拖曳大頭針調整）
 (function () {
   const Icon = window.WGIcon;
-  const FALLBACK = [23.6725, 121.4235]; // 光復鄉；無定位時的起始視野
+  /* 2026-10-26 MAP-VIEW-102：沒有大頭針時的起始視野改讀事件設定（wg-bridge readMapView；沒設定＝全台），不再寫死光復鄉。
+     這張是選點用的小地圖，不記「上次位置」（MAP-VIEW-104 只用在瀏覽用的大地圖）。 */
+  const startView = () => (window.WGBridge && window.WGBridge.readMapView) ? window.WGBridge.readMapView() : { center: [23.65, 120.95], zoom: 7 };
 
   const fmt = (n) => Number(n).toFixed(5);
 
@@ -44,7 +46,8 @@
     React.useEffect(() => {
       const L = window.L;
       if (!L || !elRef.current || mapRef.current) return;
-      const map = L.map(elRef.current, { center: value ? [value.lat, value.lng] : FALLBACK, zoom: value ? 17 : 14, zoomControl: false, attributionControl: false });
+      const sv = startView();
+      const map = L.map(elRef.current, { center: value ? [value.lat, value.lng] : sv.center, zoom: value ? 17 : sv.zoom, zoomControl: false, attributionControl: false });
       L.control.zoom({ position: "topright" }).addTo(map);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
       map.on("click", (e) => {
