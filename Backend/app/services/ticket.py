@@ -1012,8 +1012,11 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     ticket_uuid = str(task.ticket_uuid)
     ticket = await lock_ticket(db, ticket_uuid)  # the ticket before the need, as in _add_task_property
-    on_task = await db.scalar(select(TaskProperty.task_uuid).where(TaskProperty.uuid == prop.uuid))
-    if str(on_task) != str(task.uuid):
+    # Read again under the lock, so the change check below compares against what is current.
+    prop = await db.scalar(
+        select(TaskProperty).where(TaskProperty.uuid == prop.uuid).execution_options(populate_existing=True)
+    )
+    if str(prop.task_uuid) != str(task.uuid):
         # The item itself moved to the need its need folded into (ADR-388). Checked before the
         # need, which the fold soft-deleted: "merged" says where it went, "not found" would not.
         raise ValueError(MOVED_DURING_DEDUP)

@@ -177,7 +177,8 @@ async def merge_station_suggestions(
         rows_by_field[(row.target_uuid, row.field_name)].append(row)
 
     changes, touched = await _apply_decisions(db, station, decisions, rows_by_field)
-    decided_at = datetime.now(UTC)  # read under the station's lock, like a revoke's revoked_at
+    # The database's clock, read under the station's lock, as every other stamp is.
+    decided_at = await db.scalar(select(func.clock_timestamp()))
     if changes:
         # An approval is an update at its own time, even one that wrote a property or an unchanged value.
         touch(station, at=decided_at)
@@ -258,7 +259,7 @@ async def revoke_station_suggestion_merge(
             setattr(target, stamp, datetime.fromisoformat(before) if before else None)
     merge.status = "revoked"
     merge.revoked_by = actor_uid
-    merge.revoked_at = datetime.now(UTC)
+    merge.revoked_at = await db.scalar(select(func.clock_timestamp()))
     touch(station, at=merge.revoked_at)
     await db.execute(
         update(StationUpdateSuggestion)

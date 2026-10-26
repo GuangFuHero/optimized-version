@@ -14,9 +14,9 @@ alone (ADR-341).
 import json
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
-from sqlalchemy import delete, select, tuple_, update
+from sqlalchemy import delete, func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disaster_types import validate_disaster_types
@@ -96,7 +96,7 @@ async def resolve(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, reques
     primary, secondary = (low, high) if plan.primary_uuid == low.uuid else (high, low)
     ticket_changes = await _checked_ticket_changes(db, plan.ticket_changes, primary)
 
-    now = datetime.now(UTC)
+    now = await db.scalar(select(func.clock_timestamp()))  # the database's clock, as every stamp is
     tasks = await _tasks_by_uuid(db, (primary.uuid, secondary.uuid))
     await _write(db, plan, ticket_changes, tasks, now)
 
