@@ -138,6 +138,6 @@ export { NeedClaimProvider } from './ticket/needs';
 export type { ReloadedTicket } from './ticket/needs';
 export {
   clearAllHelpRequestDrafts,
-  MapRequestHelpButton,
+  MapRequestHelpBar,
   PlaceHereAction,
 } from './ticket/help-request';

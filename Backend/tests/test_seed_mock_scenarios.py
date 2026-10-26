@@ -204,7 +204,7 @@ async def _dedup_verdict() -> None:
         f"""INSERT INTO duplicate_pairs (uuid, entity_kind, low_uuid, high_uuid, method, source_layer,
                                          status, reviewed_by)
             VALUES (gen_random_uuid(), 'ticket', '{MOCK_TICKET}', '{MOCK_TICKET_2}', 'manual', 'manual',
-                    'confirmed', '{MOCK_USER}')""",
+                    'confirmed_duplicate', '{MOCK_USER}')""",
     )
 
 
@@ -217,7 +217,7 @@ async def _dedup_verdict_on_real_tickets() -> None:
         f"""INSERT INTO duplicate_pairs (uuid, entity_kind, low_uuid, high_uuid, method, source_layer,
                                          status, reviewed_by)
             VALUES (gen_random_uuid(), 'ticket', '{REAL_TICKET}', '{REAL_TICKET_2}', 'manual', 'manual',
-                    'confirmed', '{MOCK_USER}')""",
+                    'confirmed_duplicate', '{MOCK_USER}')""",
     )
 
 

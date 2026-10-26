@@ -343,7 +343,10 @@ users ||--o{ announcements : "last published"
 %%   ticket_task_moderation_update, task_assignment_created, task_assignment_removed, task_claimed,
 %%   task_full, task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
 %%   station_assigned, station_unassigned, station_suggestion_created, dedup_review_pending,
+%%   dedup_task_merged, dedup_task_canceled, dedup_ticket_merged, dedup_ticket_updated,
+%%   dedup_ticket_contact_changed,
 %%   role_request_submitted, role_request_approved, role_request_rejected
+%% (The five dedup_* after dedup_review_pending are sent once a reviewer resolves a pair card, Spec 028 ADR-379, 389.)
 %% (ticket_task_status_update is gone: a need's status is no longer edited by hand, ADR-293.)
 %% (dedup_flag_ticket / dedup_flag_station are gone: nothing could set is_duplicate, so they never
 %%  fired. dedup_review_pending replaces them, one per submission that leaves pair cards, ADR-345.)
@@ -428,6 +431,7 @@ users |o--o{ briefings : "published"
 project_settings {
     uuid uuid PK
     string name "disaster name, e.g. 花蓮 0816"
+    string short_name "nullable, String(30); for the site's top bar, falls back to name (ADR-392)"
     string_array disaster_types "default '{}' — e.g. {landslide,flood}; drives which config rows apply"
     timestamp started_at "nullable"
     timestamp created_at
@@ -768,6 +772,7 @@ tickets {
     string_array disaster_types "default '{}', references disaster_types.key by string; stored sorted+deduped (ADR-246)"
     string person_trapped_reported "nullable, String(20), yes/no/unknown — reporter's answer, NOT a medical judgement"
     string immediate_danger_reported "nullable, String(20), yes/no/unknown — NOT a triage grade"
+    uuid replaced_by_uuid FK "nullable FK to tickets: the ticket a dedup resolve cancelled this one into (Spec 028, ADR-372)"
     string search_text "GENERATED ALWAYS AS title + left(description, 500), STORED"
 }
 %% INDEX: ix_tickets_search_text_trgm USING gin (search_text gin_trgm_ops)
@@ -839,6 +844,7 @@ ticket_tasks {
     string progress_note "nullable"
     boolean is_duplicate
     string dedup_group_id "nullable"
+    uuid merged_into_uuid FK "nullable FK to ticket_tasks: the need a dedup resolve folded this one into (Spec 028, ADR-372)"
     uuid created_by FK
     timestamp completed_at "nullable, set when status enters 'fulfilled' and cleared when it leaves"
     timestamp canceled_at "nullable, set when status enters 'canceled' and cleared when it leaves"
@@ -982,7 +988,7 @@ duplicate_pairs {
     text method "fast_rule / slow_vector / slow_hybrid / manual"
     text engine_version "nullable only when method = manual, e.g. fast-v4"
     text source_layer "fast / slow / manual / system"
-    text status "dup_ignored / suggested / confirmed / rejected"
+    text status "dup_ignored / suggested / confirmed_duplicate / not_duplicate (renamed from confirmed / rejected, ADR-391; event types keep the old names)"
     jsonb reason "nullable"
     text hint_outcome "nullable, ignored_hint / accepted_hint"
     boolean rescan_needed "default false"

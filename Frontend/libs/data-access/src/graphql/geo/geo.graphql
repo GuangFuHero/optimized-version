@@ -97,14 +97,20 @@ query GetStation($uuid: UUID!) {
   }
 }
 
-query GetClosureAreas(
-  $bounds: BoundsInput
-  $skip: Int = 0
-  $limit: Int = 50
-) {
-  hazardousZones(bounds: $bounds, skip: $skip, limit: $limit) {
+# The public map's areas, all three kinds at once (ADR-311): every 危險區 and 責任區, and the 標示區
+# switched to public. A team zone names its teams (ADR-311 point 8).
+query GetMapAreas($bounds: BoundsInput, $skip: Int = 0, $limit: Int = 50) {
+  areas(bounds: $bounds, skip: $skip, limit: $limit) {
     items {
-      ...ClosureAreaFields
+      uuid
+      type
+      name
+      note
+      geometry
+      assignedTeams {
+        uuid
+        name
+      }
     }
     pageInfo {
       ...PageInfoFields
