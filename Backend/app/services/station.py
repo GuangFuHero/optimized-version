@@ -460,7 +460,8 @@ async def update_station_property(
     actor_uid = actor.uuid
     old_value = (prop.quantity, prop.comment)
 
-    if any(getattr(prop, field) != value for field, value in changes.items()) and (
+    # A verdict on the property (pending/verified/rejected) says it was checked, not that it changed.
+    if any(getattr(prop, field) != value for field, value in changes.items() if field != "status") and (
         station := await station_repository.get_by_uuid_active(db, station_uuid)
     ):
         touch(station)

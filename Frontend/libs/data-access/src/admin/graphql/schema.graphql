@@ -1304,7 +1304,7 @@ type StationType {
   createdAt: DateTime
 
   """
-  When anything about this station last changed: any field, property, photo or team assignment, or an approved or revoked suggestion. A pending or rejected suggestion leaves it as is
+  When anything about this station last changed: any field, property, photo or team assignment, or an approved or revoked suggestion. A pending or rejected suggestion, or a verdict on a property (pending, verified, rejected), leaves it as is
   """
   updatedAt: DateTime
 

@@ -201,7 +201,8 @@ class StationType:
     updated_at: datetime | None = strawberry.field(
         default=None,
         description="When anything about this station last changed: any field, property, photo or team "
-        "assignment, or an approved or revoked suggestion. A pending or rejected suggestion leaves it as is",
+        "assignment, or an approved or revoked suggestion. A pending or rejected suggestion, or a verdict on "
+        "a property (pending, verified, rejected), leaves it as is",
     )
 
     # Private storage backing the contact_* PII resolvers below (mirrors TicketType,

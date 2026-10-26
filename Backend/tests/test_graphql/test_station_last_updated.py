@@ -214,6 +214,29 @@ async def test_a_property_edit_moves_it_and_a_save_without_changes_does_not(
 
 
 @pytest.mark.asyncio
+async def test_a_property_verdict_does_not_move_it_but_a_change_sent_with_one_does(
+    client, coordinator_auth, sample_station, sample_station_property
+):
+    """Marking a property verified or rejected says it was checked; the station itself did not change."""
+    _, admin = coordinator_auth
+    await _set_earlier(sample_station)
+    for verdict in ("verified", "rejected", "pending"):
+        await _gql(
+            client, admin, UPDATE_PROPERTY, {"uuid": sample_station_property, "input": {"status": verdict}}
+        )
+    assert await _updated_at(client, admin, sample_station) == EARLIER
+
+    await _gql(
+        client,
+        admin,
+        UPDATE_PROPERTY,
+        {"uuid": sample_station_property, "input": {"status": "verified", "quantity": 5}},
+    )
+
+    assert await _updated_at(client, admin, sample_station) > EARLIER
+
+
+@pytest.mark.asyncio
 async def test_adding_a_property_moves_it(client, coordinator_auth, sample_station):
     """A new property shows on the station at once, so it is a change to the station."""
     _, admin = coordinator_auth
