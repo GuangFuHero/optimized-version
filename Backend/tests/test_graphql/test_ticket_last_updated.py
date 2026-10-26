@@ -3,9 +3,10 @@
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.models.geo import BaseGeometry
+from app.models.ticket_task import TicketTask
 from app.services.ticket_audit import flag_need_audit
 from tests.test_graphql.conftest import auth_header, test_db
 
@@ -79,6 +80,14 @@ async def _ticket(client, token, ticket: str) -> dict:
     """The ticket's updatedAt (as a datetime), status and audit hash, as the API returns them."""
     data = (await _gql(client, token, TICKET, {"uuid": ticket}))["ticket"]
     return {**data, "updatedAt": datetime.fromisoformat(data["updatedAt"])}
+
+
+async def _need_and_ticket(client, token, need: str, ticket: str) -> tuple[str, str, datetime]:
+    """The need's status, then the ticket's status and updatedAt as the API returns them."""
+    async with test_db() as db:
+        need_status = await db.scalar(select(TicketTask.status).where(TicketTask.uuid == need))
+    data = await _ticket(client, token, ticket)
+    return need_status, data["status"], data["updatedAt"]
 
 
 async def _updated_at(client, token, ticket: str) -> datetime:
@@ -216,6 +225,26 @@ async def test_a_sign_up_counts_only_when_it_changes_the_status(
     await _gql(client, volunteer, SIGN_UP, {"task": sample_ticket_task})
 
     assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
+async def test_a_sign_up_that_fills_a_need_and_a_leave_that_reopens_it_do_not_move_it(
+    client, coordinator_auth, login_user_auth, sample_ticket, sample_ticket_task
+):
+    """Only the ticket's own status counts: with another need still open, the ticket stays in_progress."""
+    _, admin = coordinator_auth
+    _, volunteer = login_user_auth
+    need = {"ticketUuid": sample_ticket, "taskType": "hr", "taskName": "送便當", "quantity": 1}
+    one_place = (await _gql(client, admin, CREATE_NEED, {"input": need}))["createTicketTask"]["task"]["uuid"]
+    await _gql(client, admin, SIGN_UP, {"task": sample_ticket_task})
+    await _set_earlier(sample_ticket)
+
+    place = (await _gql(client, volunteer, SIGN_UP, {"task": one_place}))["assignTaskActor"]["uuid"]
+    filled = await _need_and_ticket(client, admin, one_place, sample_ticket)
+    await _gql(client, volunteer, LEAVE, {"uuid": place})
+    reopened = await _need_and_ticket(client, admin, one_place, sample_ticket)
+
+    assert [filled, reopened] == [("fulfilled", "in_progress", EARLIER), ("pending", "in_progress", EARLIER)]
 
 
 @pytest.mark.asyncio
