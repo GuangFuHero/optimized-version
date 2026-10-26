@@ -212,6 +212,20 @@ async def test_an_edit_to_only_a_stations_column_moves_it_and_a_save_without_cha
     assert await _updated_at(client, admin, sample_station) > EARLIER
 
 
+@pytest.mark.asyncio
+async def test_saving_an_empty_field_as_blank_does_not_move_it(client, coordinator_auth, sample_station):
+    """A description that was never set and one saved as blank read the same, so neither is a change."""
+    _, admin = coordinator_auth
+    await _set_earlier(sample_station)
+    for blank in ("", "  "):
+        await _gql(client, admin, UPDATE_STATION, {"uuid": sample_station, "input": {"description": blank}})
+    assert await _updated_at(client, admin, sample_station) == EARLIER
+
+    await _gql(client, admin, UPDATE_STATION, {"uuid": sample_station, "input": {"description": "二樓可住"}})
+
+    assert await _updated_at(client, admin, sample_station) > EARLIER
+
+
 @pytest.mark.parametrize(
     ("field", "value"), [("operationalStatus", "temporarily_closed"), ("supplyStatus", "缺飲用水")]
 )

@@ -177,19 +177,35 @@ def touch(record: BaseGeometry, at: datetime | None = None) -> None:
     record.updated_at = func.clock_timestamp() if at is None else at
 
 
-def stamp_updated_at(mapper, _connection, target) -> None:
+def _blank(value) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def edited(record, ignored: frozenset[str] = frozenset()) -> bool:
+    """Whether a column of `record`, other than those in `ignored`, now holds a different value.
+
+    A blank string and NULL read the same, so turning one into the other is not an edit.
+    """
+    state = inspect(record)
+    for attr in state.mapper.column_attrs:
+        history = state.attrs[attr.key].history
+        if attr.key in ignored or not history.has_changes():
+            continue
+        # `deleted` is empty when the old value was never loaded, which counts as a change.
+        if not (history.deleted and all(_blank(value) for value in (*history.deleted, *history.added))):
+            return True
+    return False
+
+
+def stamp_updated_at(_mapper, _connection, target) -> None:
     """Move `updated_at` when a record's own columns change, unless it was set already in this flush.
 
     A change to only the subclass's table never writes `base_geometries`, so the column's onupdate
     alone misses it. Columns named in the model's `not_an_update` do not count.
     """
-    state = inspect(target)
-    if state.attrs.updated_at.history.has_changes():
+    if inspect(target).attrs.updated_at.history.has_changes():
         return
-    ignored = getattr(target, "not_an_update", frozenset())
-    if any(
-        state.attrs[attr.key].history.has_changes() for attr in mapper.column_attrs if attr.key not in ignored
-    ):
+    if edited(target, getattr(target, "not_an_update", frozenset())):
         target.updated_at = func.clock_timestamp()
 
 

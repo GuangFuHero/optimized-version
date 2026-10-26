@@ -128,6 +128,23 @@ async def test_a_new_address_moves_it_and_sending_the_same_one_again_does_not(
 
 
 @pytest.mark.asyncio
+async def test_blank_where_nothing_was_set_does_not_move_it(
+    client, coordinator_auth, sample_ticket, sample_ticket_task
+):
+    """An address floor or a need's progress note saved blank reads the same as never set."""
+    _, admin = coordinator_auth
+    address = {"fullAddress": "花蓮縣光復鄉中正路一段1號"}
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}})
+    await _set_earlier(sample_ticket)
+
+    blank_floor = {"secondaryLocation": {**address, "floor": ""}}
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": blank_floor})
+    await _gql(client, admin, UPDATE_NEED, {"uuid": sample_ticket_task, "input": {"progressNote": " "}})
+
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
 async def test_new_disaster_answers_move_it_and_the_same_answers_again_do_not(
     client, coordinator_auth, sample_ticket
 ):

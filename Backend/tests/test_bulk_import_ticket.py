@@ -321,6 +321,24 @@ async def test_an_imported_need_moves_the_last_update_and_the_same_file_again_do
 
 
 @pytest.mark.asyncio
+async def test_an_imported_need_value_moves_the_last_update(db):
+    """A value a file adds to a need already on the ticket is a change to the ticket."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("求救")])
+    await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+    stamp = (await _ticket_titled(db, "求救")).updated_at
+
+    raw, filename = _file([_row("求救", people="4")])
+    await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    ticket = await _ticket_titled(db, "求救")
+    task = (await db.execute(select(TicketTask).where(TicketTask.ticket_uuid == ticket.uuid))).scalar_one()
+    prop = (await db.execute(select(TaskProperty).where(TaskProperty.task_uuid == task.uuid))).scalar_one()
+    assert (prop.property_value, ticket.updated_at > stamp) == ("4", True)
+
+
+@pytest.mark.asyncio
 async def test_a_different_phone_makes_it_a_different_ticket(db):
     """The same words from another person are another request (ADR-107)."""
     await _configs(db)

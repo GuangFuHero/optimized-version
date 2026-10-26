@@ -16,7 +16,7 @@ from app.core.disaster_types import validate_disaster_types
 from app.core.permissions import Perm
 from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
-from app.models.geo import touch
+from app.models.geo import edited, touch
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
@@ -500,7 +500,7 @@ async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, valu
         return True
     for field, value in values.items():
         setattr(existing, field, value)
-    changed = db.is_modified(existing)
+    changed = edited(existing)
     await db.flush()
     return changed
 
@@ -900,7 +900,7 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     for field, value in changes.items():
         if hasattr(task, field):
             setattr(task, field, value)
-    if db.is_modified(task):
+    if edited(task):
         touch(ticket)
     await db.flush()
     await void_stale_verdict(db, str(task.ticket_uuid))
@@ -1027,7 +1027,7 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
     for field, value in changes.items():
         if hasattr(prop, field):
             setattr(prop, field, value)
-    if db.is_modified(prop):
+    if edited(prop):
         touch(ticket)
     await db.flush()
     await void_stale_verdict(db, ticket_uuid)
