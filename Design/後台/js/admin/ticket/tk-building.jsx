@@ -34,6 +34,12 @@
       → 🚨 我定的：清單標題「已新增的地點」、按鈕圖示 MapPinPlus、
         事件設定與設定頁的區塊名稱跟著改。
       → **前台不動**，仍叫「現場分區」（`js/site/site-building.jsx`）。
+   🔄 2026-10-26 Sucre（BE-036 核對）：
+      → 🔒 按鈕改名「**開啟空間**」；清單叫「已開啟的空間」
+      → 🔒 建立完直接關掉表單：空間會出現在任務管理列表與地圖上（tk-space.jsx SP-1），不再先進清單
+      → 🔒 編輯改成名稱、地址、樓層數（tk-space.jsx SpaceEditModal，對齊 updateBuildingMap）；
+         下面清單的「編輯分區」（一行一個樓層名稱）拿掉 —— 後端只存樓層數，自訂名稱是 V2（BE-037）
+      → 🔒 沒權限的人看不到開啟空間按鈕（SP-5）
         前台民眾看到的是分區清單本身，沒有「新增」這個動作。 */
 (function () {
   const { Button, Field, Input, Alert } = window.WanGuardDesignSystem_9c8f68;
@@ -208,19 +214,20 @@
         lat: pin.lat, lng: pin.lng, addressStatus: verified ? "verified" : "unverified",
         floorsAbove: nAbove, floorsBelow: nBelow, unitsPerFloor: 1, segments: segments,
         userId: tk.persona && tk.persona.id });
-      tk.toast("已新增地點：" + name.trim());
+      tk.toast("已開啟空間：" + name.trim() + "（列表與地圖上看得到）");
       setPin(null); setAddress(""); setLookup(null); setName(""); setAbove(""); setBelow("0");
-      autoAddrRef.current = ""; setTouched(false); setMode("list");
+      autoAddrRef.current = ""; setTouched(false);
+      onClose();   // 2026-10-26：建立完直接關掉，空間就在列表與地圖上（BE-036：no list in front of it）
     };
 
     if (mode === "list") {
       return (
-        <TKModal title="已新增的地點" width={560} onClose={onClose}
+        <TKModal title="已開啟的空間" width={560} onClose={onClose}
           icon={<Icon n="Building2" s={20} c="var(--color-fg-neutral-subtle)" />}
           footer={<>
             <Button variant="ghost" onClick={onClose}>關閉</Button>
             {canManage && <Button variant="primary" startIcon={<Icon n="Plus" s={16} />}
-              onClick={() => setMode("new")}>新增地點</Button>}
+              onClick={() => setMode("new")}>開啟空間</Button>}
           </>}>
           <Alert tone="info" title="這是給「一棟建築要分樓層」的情況用的">
             新增之後，這個地點在前台會多一份<strong>樓層清單</strong>：每一層是一個框，
@@ -252,12 +259,10 @@
     })();
 
     return (
-      <TKModal title="新增地點" width={600} onClose={onClose}
+      <TKModal title="開啟空間" width={600} onClose={onClose}
         icon={<Icon n="MapPinPlus" s={20} c="var(--color-fg-neutral-subtle)" />}
         footer={<>
-          <Button variant="ghost" onClick={() => (existing.length ? setMode("list") : onClose())}>
-            {existing.length ? "看已新增的地點（" + existing.length + "）" : "取消"}
-          </Button>
+          <Button variant="ghost" onClick={onClose}>取消</Button>
           <Button variant="primary" onClick={submit}>建立</Button>
         </>}>
 
@@ -269,7 +274,7 @@
         </Field>
 
         {near && <Alert tone="warning" title={"附近 " + near.m + " 公尺已經有「" + (near.b.alias || near.b.address) + "」"}>
-          是同一棟的話不用再新增，到「看已新增的地點」裡改樓層就好。不是的話照常建立。
+          是同一棟的話不用再開，到任務管理列表點那個空間改樓層就好。不是的話照常建立。
         </Alert>}
 
         {/* 查不到門牌時下面那行已經講了「請自己填」，不再重複掛一個「必填」 —— 同一件事講兩次，
@@ -346,7 +351,7 @@
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {hint}
           <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>
-            還沒有新增任何地點。
+            還沒有開啟任何空間。
           </span>
         </div>
       );
@@ -363,12 +368,13 @@
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ font: "var(--font-label-400)" }}>{b.alias || b.address}</div>
                 <div className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>
-                  {b.addressStatus === "verified" ? "✓ " : ""}{b.address}
-                  {b.addressStatus === "unverified" ? "（未確認門牌）" : ""}
+                  {b.address}
+                  {{ verified: "　✓ 已確認門牌", pin_mismatch: "　地址與標記不符", unverified: "　未確認" }[b.addressStatus] || ""}
                   {typeof b.lat !== "number" ? "（⚠️ 沒有位置）" : ""}｜{floorSummary(B.buildingSegments(b))}
                 </div>
               </div>
-              {canManage && <button className="tk-chipbtn"
+              {/* 「編輯分區」2026-10-26 停用：編輯改在任務管理列表點空間 →「編輯」（名稱、地址、樓層數，SpaceEditModal） */}
+              {false && canManage && <button className="tk-chipbtn"
                 onClick={() => setEditing(editing === b.id ? null : b.id)}>
                 {editing === b.id ? "收合" : "編輯分區"}
               </button>}

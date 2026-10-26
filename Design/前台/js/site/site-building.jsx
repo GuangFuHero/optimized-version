@@ -367,11 +367,12 @@
                 「沒有消息不等於沒事」的地方。 */}
             {!sum.ticketCount ? (
               <div style={{ font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
-                {emptyText || '尚未有人通報這一區。這不代表這一區沒事。'}
+                {/* 🔒 鎖定的安全文字。2026-10-26：V1 一區＝一層，「這一區」改「這一層」，句子結構不動 */}
+                {emptyText || '尚未有人通報這一層。這不代表這一層沒事。'}
               </div>
             ) : !shown.length ? (
               <div style={{ font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
-                這一區的 {sum.ticketCount} 張單都已經結案了。
+                這一層的 {sum.ticketCount} 張單都已經結案了。
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -387,7 +388,7 @@
             {onCreateHere ? (
               <Button variant="ghost" size="sm" onClick={onCreateHere}
                 startIcon={<WGIcon n="Plus" s={14} />}
-                style={{ marginTop: 'var(--space-2)' }}>在這一區請求協助</Button>
+                style={{ marginTop: 'var(--space-2)' }}>在這一層請求協助</Button>
             ) : null}
           </div>
         ) : null}
@@ -507,7 +508,7 @@
             <span style={{ marginLeft: 'auto', font: '400 var(--fs-12)/1.4 var(--font-body)',
               color: 'var(--color-fg-neutral-muted)' }}>
               {totals.rescueOpen > 0 ? '搜救 ' + totals.rescueOpen + '　·　' : ''}
-              {totals.ticketCount} 張單　·　{segments.length} 個分區
+              {segments.length} 層　·　{totals.ticketCount} 張單
             </span>
           </div>
 
@@ -540,7 +541,7 @@
                 onOpenTicket={onOpenTicket}
                 onClaimNeed={onClaimNeed} viewerId={viewerId} isAuthenticated={isAuthenticated}
                 showKind={showKind}
-                note="知道在這一棟，但對不到任何分區 —— 開啟分區之前進來的單，通報者說不出位置，或寫法與分區名稱不一致。" />
+                note="知道在這一棟，但不知道在哪一層 —— 這棟開放看各樓層之前進來的單、通報者說不出在幾樓，或寫的樓層對不上。" />
             ) : null}
           </div>
         </div>
@@ -548,6 +549,8 @@
     );
   }
 
+/* 🔒 2026-10-26 Sucre（BE-036 前台用字）：前台用**具體的字**「這一棟／這一層」，不用「分區」也不用「空間」。
+   後台叫「開啟空間」是管理的動作；V1 只有大樓、只有樓層，民眾看到的就是那棟樓的名字。V2 加車廂／自訂時再改。 */
   Object.assign(window, {
     BuildingDrawer, SegmentSection, TicketRow, buildingTicketOrder,
     summarizeTicket, summarizeList, sortForStack, useBuildingForAddress,

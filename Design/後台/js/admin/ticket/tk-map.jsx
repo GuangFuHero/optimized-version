@@ -9,11 +9,13 @@
   // 沒有任何標點時的預設視野（花蓮縣光復鄉）。正式版改讀 project_settings 的事件中心點。
   const CENTER = [23.6725, 121.4235];
   const coordOf = (t) => window.tkCoord(t);
-  const isAnchor = (t) => !!t.buildingId;
+  /* 2026-10-26：方形只給開啟的空間（SP-1）。空間裡的單不另外畫（點位跟空間一樣，會疊在一起）。 */
+  const isAnchor = (t) => t.kind === "space";
 
   // 標點：填色 = 優先級；選中以外環 + 放大 + 層級表達（F5，不動色相）
   function pinHtml(t, selected) {
-    const col = PRI_HEX[t.priority] || "#2592B9";
+    /* 空間：顏色取裡面最急的那張單；還沒有任務單就用灰色 */
+    const col = t.kind === "space" && !t.hasPriority ? "#64748B" : (PRI_HEX[t.priority] || "#2592B9");
     const ring = selected ? "outline:3px solid #fff;outline-offset:2px;border:2px solid #0F172A;" : "";
     const shadow = selected ? "0 10px 24px rgba(227,121,30,.34)" : "0 3px 8px rgba(227,121,30,.24)";
     const scale = selected ? "scale(1.18)" : "scale(1)";
@@ -28,6 +30,11 @@
   }
 
   function tipHtml(t) {
+    if (t.kind === "space") return `<div style="min-width:170px;text-align:left">
+      <div style="font:var(--font-data-300);color:var(--color-fg-neutral-muted)">空間</div>
+      <div style="font:var(--font-label-400);color:var(--color-fg-neutral-default);margin-top:1px">${t.title}</div>
+      <div style="font:var(--font-body-300);color:var(--color-fg-neutral-subtle);margin-top:2px">${t.a.members.length} 張任務單${t.a.need ? " · " + t.a.need + " 層還需要幫忙" : ""}</div>
+    </div>`;
     return `<div style="min-width:170px;text-align:left">
       <div style="font:var(--font-data-300);color:var(--color-fg-neutral-muted)">#${t.id}</div>
       <div style="font:var(--font-label-400);color:var(--color-fg-neutral-default);margin-top:1px">${t.title}</div>
@@ -98,6 +105,7 @@
       if (!L || !map) return;
       const keep = {};
       rows.forEach((t) => {
+        if (t.buildingId && t.kind !== "space") return;   // 空間裡的單：從空間點進去看
         const c = coordOf(t);
         if (!c) return;
         keep[t.id] = true;
@@ -166,7 +174,9 @@
           </div>
         )}
 
-        {shown && <DetailCard t={shown} cardRef={cardRef} onOpen={onOpen} onClose={() => setCard(null)} />}
+        {shown && (shown.kind === "space" && window.SpaceMapCard
+          ? <window.SpaceMapCard s={shown} cardRef={cardRef} onOpen={onOpen} onClose={() => setCard(null)} />
+          : <DetailCard t={shown} cardRef={cardRef} onOpen={onOpen} onClose={() => setCard(null)} />)}
 
         {/* 圖例：直式分組，水滴尖端朝下 */}
         <div style={{ position: "absolute", left: 12, bottom: 24, display: "flex", flexDirection: "column", gap: 7, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-sm)", zIndex: 500 }}>
@@ -186,7 +196,7 @@
                 <Icon n="Building2" s={10} c="var(--color-bg-neutral-default)" />
               </span>
             </span>
-            <span className="wg-caption" style={{ color: "var(--color-fg-neutral-subtle)", whiteSpace: "nowrap" }}>建築錨點</span>
+            <span className="wg-caption" style={{ color: "var(--color-fg-neutral-subtle)", whiteSpace: "nowrap" }}>開啟的空間</span>
           </span>
         </div>
       </div>

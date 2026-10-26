@@ -451,7 +451,8 @@
                       <Button variant="secondary" onClick={onOpenBuilding}
                         startIcon={<WGIcon n="Building2" s={16} />}
                         style={{ marginTop: 'var(--space-2)', width: '100%' }}>
-                        查看整棟（{window.WGBridge ? window.WGBridge.buildingSegments(building).length : 0} 個分區）
+                        {/* 🔒 2026-10-26：「查看整棟（N 個分區）」→「看各樓層」，跟後台地圖小卡同名；前台用「這一棟／這一層」，不用分區、空間 */}
+                        看各樓層（{window.WGBridge ? window.WGBridge.buildingSegments(building).length : 0} 層）
                       </Button>
                     ) : null}
                     {/* 🔴 2026-09-21 Sucre：「點開 ticket 卡片後又突然跳出去，然後再回來」。

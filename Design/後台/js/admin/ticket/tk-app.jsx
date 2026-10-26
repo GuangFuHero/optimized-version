@@ -28,7 +28,10 @@
     const tk = window.useTK();
     const [detail, setDetail] = React.useState(null);
     const [form, setForm] = React.useState(null);
+    const [space, setSpace] = React.useState(null);     // 點開的空間 id（tk-space.jsx）
     const can = tk.can;
+    /* 列表與地圖上的一列可能是任務單，也可能是空間（SP-1）。 */
+    const openRow = (t) => { if (t && t.kind === "space") setSpace(t.id); else setDetail(t); };
 
     // 通知 deep-link（IAM-UP-108）：收到 wg:notify-open 就直接開該任務單的 Drawer。
     // preventDefault() 是在告訴 wg-notify「本頁已經處理掉了，不用跨頁」。
@@ -49,7 +52,9 @@
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <window.TicketTable onOpen={(t) => setDetail(t)} onNew={can.create ? () => setForm({ new: true }) : null} />
+        <window.TicketTable onOpen={openRow} onNew={can.create ? () => setForm({ new: true }) : null} />
+        {/* 從空間點開一張單時，兩層抽屜都在；Esc 只關最上面那層（任務單），空間留著 */}
+        {space && window.SpaceDetail && <window.SpaceDetail id={space} onClose={() => { if (!detail && !form) setSpace(null); }} onOpenTicket={(t) => setDetail(t)} />}
         {detail && !form && <window.TicketDetail ticket={detail} onClose={() => setDetail(null)} onEdit={() => setForm({ ticket: detail })} />}
         {form && <window.TicketForm ticket={form.ticket} onClose={() => setForm(null)} />}
       </div>
@@ -162,6 +167,14 @@
       fieldOrder,
 
       immediateRescue: (tkt) => { patch(tkt.id, (x) => ({ ...x, priority: "critical", updatedMin: 0 })); toast(`${tkt.id} 已升為生命危急`, "danger"); },
+      /* SP-3：刪除空間。🔒 底下的任務單保留，只是不再歸在這個空間（BE-036：deleteBuildingMap 後 household records stay, just unlinked）。 */
+      deleteSpace: (id) => {
+        const b = window.WGBridge.buildingById(id);
+        const n = tickets.filter((x) => x.buildingId === id).length;
+        window.WGBridge.deleteBuilding(id);
+        setTickets((ts) => ts.map((x) => x.buildingId === id ? { ...x, buildingId: null } : x));
+        toast(`已刪除空間「${(b && (b.alias || b.address)) || id}」` + (n ? `，${n} 張任務單保留` : ""), "danger");
+      },
       deleteTicket: (tkt) => setConfirm({ title: `刪除任務 #${tkt.id}`, body: "刪除後不可復原，僅 Super Admin 可執行。", confirmLabel: "確認刪除", danger: true, onConfirm: () => { setTickets((ts) => ts.filter((x) => x.id !== tkt.id)); toast(`已刪除 ${tkt.id}`, "danger"); } }),
       assignOne: (tkt) => setAssignTicket(tkt),
       setTeam: (id, team) => { patch(id, (x) => ({ ...x, team, updatedMin: 0 })); toast(`${id} 已指派給 ${team}`); },

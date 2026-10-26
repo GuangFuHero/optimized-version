@@ -641,6 +641,12 @@
     return buildingById(id);
   }
 
+  /** 刪除空間（2026-10-26，BE-036：deleteBuildingMap 是軟刪除）。
+   *  🔒 底下的任務單**不刪**，只是不再歸在這個空間 —— 解除連結由呼叫端處理（任務單在各頁自己的狀態裡）。 */
+  function deleteBuilding(id) {
+    writeRaw(KEYS.buildings, readBuildings().filter(function (b) { return b.id !== id; }));
+  }
+
   /** 切換某一格「存在／不存在」。 */
   function toggleCellMissing(id, floor, unit) {
     var b = buildingById(id);
@@ -720,7 +726,7 @@
     pendingRoleRequestFor: pendingRoleRequestFor, submitRoleRequest: submitRoleRequest, withdrawRoleRequest: withdrawRoleRequest, decideRoleRequest: decideRoleRequest,
     normalizeAddr: normalizeAddr,
     readBuildings: readBuildings, buildingById: buildingById, buildingForAddress: buildingForAddress,
-    createBuilding: createBuilding, updateBuilding: updateBuilding, toggleCellMissing: toggleCellMissing,
+    createBuilding: createBuilding, updateBuilding: updateBuilding, deleteBuilding: deleteBuilding, toggleCellMissing: toggleCellMissing,
     cellKey: cellKey, buildingFloors: buildingFloors, floorLabel: floorLabel, unitLabel: unitLabel,
     buildingSegments: buildingSegments,
     isCellMissing: isCellMissing,

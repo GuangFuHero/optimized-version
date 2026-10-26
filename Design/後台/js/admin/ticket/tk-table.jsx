@@ -52,6 +52,16 @@
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>#{t.id}</span>
+          {/* 2026-10-26 SP-1：屬於某個空間的單，標出是哪一棟、幾樓（點那一列空間可看各樓層） */}
+          {t.buildingId && window.WGBridge && (() => {
+            const b = window.WGBridge.buildingById(t.buildingId);
+            if (!b) return null;
+            return (
+              <span data-space-of={t.buildingId} title={"屬於空間「" + (b.alias || b.address) + "」"} style={{ display: "inline-flex", alignItems: "center", gap: 3, height: 18, padding: "0 7px", borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-sunken)", font: "var(--font-data-300)", color: "var(--color-fg-neutral-subtle)", whiteSpace: "nowrap", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>
+                <Icon n="Building2" s={10} c="var(--color-fg-neutral-subtle)" />{(b.alias || b.address) + (t.floor ? " · " + t.floor : "")}
+              </span>
+            );
+          })()}
           {t.verification === "disputed" && (tk.persona.rbac === "auditor" || tk.persona.rbac === "super") && (
             <span title="疑似重複 · 待查核（Data Auditor／Super Admin 可見）" style={{ display: "inline-flex", alignItems: "center", gap: 3, height: 18, padding: "0 7px", borderRadius: "var(--radius-full)", background: "var(--color-bg-warning-subtle)", border: "1px solid color-mix(in srgb, var(--color-fg-warning) 35%, transparent)", font: "var(--font-data-300)", fontWeight: 700, color: "var(--color-fg-warning)", whiteSpace: "nowrap" }}>
               <Icon n="Flag" s={10} c="var(--color-fg-warning)" />疑似重複
@@ -143,6 +153,8 @@
     const [fTeam, setFTeam] = React.useState("all");
     const [fTime, setFTime] = React.useState("all");
 
+    const bridgeVersion = window.WGBridge ? window.WGBridge.useBridgeVersion() : 0;
+    const spaces = React.useMemo(() => (window.tkSpaceItems ? window.tkSpaceItems(tk.allTickets || tk.tickets) : []), [tk.allTickets, tk.tickets, bridgeVersion]);
     const regionOpts = React.useMemo(() => [...new Set(tk.tickets.map((t) => t.region).filter(Boolean))].map((r) => [r, r]), [tk.tickets]);
     const teamOpts = React.useMemo(() => {
       const teams = [...new Set(tk.tickets.map((t) => t.team).filter(Boolean))].map((t) => [t, t]);
@@ -161,6 +173,16 @@
     if (fTeam !== "all") rows = rows.filter((t) => fTeam === "__none__" ? !t.team : t.team === fTeam);
     if (fTime !== "all") rows = rows.filter((t) => fTime === "today" ? isToday(t) : !isToday(t));
     rows = rows.filter((t) => matches(t, q));
+    /* SP-1（2026-10-26）：開啟的空間跟任務單一起排。
+       沒有篩選時全部列出；有篩選或搜尋時，空間「名稱／地址對到搜尋」或「裡面有單通過篩選」才列。 */
+    const ticketCount = rows.length;
+    const rowIds = new Set(rows.map((t) => t.id));
+    const spacesShown = spaces.filter((sp) => {
+      if (!activeCount && !q) return true;
+      if (!activeCount && q && matches({ id: sp.id, title: sp.title, street: sp.b.address, tasks: [] }, q)) return true;
+      return sp.a.members.some((m) => rowIds.has(m.id));
+    });
+    rows = rows.concat(spacesShown);
     // §4 預設排序：優先級 → 缺口 → 更新時間
     rows = [...rows].sort((a, b) => {
       const p = window.TK_PRIORITY[b.priority].rank - window.TK_PRIORITY[a.priority].rank;
@@ -181,7 +203,7 @@
     // 空白狀態分兩種：
     //   ① 整個事件還沒有任何任務單 → 說明單會從哪裡來，有權限的人直接給「新增任務」
     //   ② 有單，但被篩選／搜尋／「我的單位」範圍濾光 → 叫人放寬條件，不是叫人建單
-    const noData = tk.tickets.length === 0;
+    const noData = tk.tickets.length === 0 && spaces.length === 0;
     const emptyState = noData
       ? (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingBottom: 48 }}>
@@ -201,7 +223,7 @@
             <span></span>
           </div>
           {rows.length === 0 && emptyState}
-          {rows.map((t) => <TicketRow key={t.id} t={t} onOpen={onOpen} />)}
+          {rows.map((t) => t.kind === "space" ? <window.SpaceRow key={t.id} s={t} onOpen={onOpen} /> : <TicketRow key={t.id} t={t} onOpen={onOpen} />)}
         </div>
       </Card>
     );
@@ -215,7 +237,7 @@
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {rows.length === 0 && emptyState}
-            {rows.map((t) => <TicketCard key={t.id} t={t} selected={sel === t.id} onSelect={setSel} onOpen={onOpen} />)}
+            {rows.map((t) => t.kind === "space" ? <window.SpaceCard key={t.id} s={t} selected={sel === t.id} onSelect={setSel} onOpen={onOpen} /> : <TicketCard key={t.id} t={t} selected={sel === t.id} onSelect={setSel} onOpen={onOpen} />)}
           </div>
         </Card>
         <window.TicketMapPane rows={rows} selectedId={sel} onSelect={setSel} onOpen={onOpen} height={MAP_H} />
@@ -245,7 +267,7 @@
             placeholder="搜尋 ID／標題／地址／需求／聯絡人…" style={{ width: 320, height: 42 }} />
           {(activeCount > 0 || q) && <button onClick={() => { reset(); setQ(""); }} style={{ border: "none", background: "none", cursor: "pointer", font: "var(--font-label-300)", color: "var(--color-fg-neutral-subtle)", textDecoration: "underline" }}>清除</button>}
           {scopeHint}
-          <span className="wg-caption" style={{ marginLeft: "auto", color: "var(--color-fg-neutral-muted)" }}>{rows.length} 筆任務</span>
+          <span className="wg-caption" style={{ marginLeft: "auto", color: "var(--color-fg-neutral-muted)" }}>{ticketCount} 筆任務{spacesShown.length ? ` · ${spacesShown.length} 個空間` : ""}</span>
           {/* TM-FS-101：欄位順序與「哪些欄位當列表欄位」是同一組全域設定，
               唯一維護處是欄位設定頁。此頁不再提供任何欄位控制。 */}
           {/* 🔴 2026-09-13 Sucre：「看不到直立地圖在後台哪裡可以設定。」
@@ -253,14 +275,13 @@
               左側事件名稱旁一顆不起眼的 ⓘ。設定頁裡仍然保留那一份（它本來就屬於
               事件層設定），但**入口要在工作的地方**：會用到現場分區的人，正在看的
               是這張任務清單，不是事件設定頁。 */}
-          {window.BuildingSetupModal && (
-            /* 2026-10-25：只有能新增的人（tk.can.activate ＝ 超管／政府；後端 BM-3 要政府隊）看到「新增地點」，
-               其他人看到唯讀的「已新增的地點」。原本所有人都會直接進新增表單。 */
-            tk.can && tk.can.activate
-              ? <Button variant="outline" startIcon={<Icon n="MapPinPlus" s={17} />}
-                  onClick={() => tk.setModal("buildingNew")}>新增地點</Button>
-              : <Button variant="outline" startIcon={<Icon n="Building2" s={17} />}
-                  onClick={() => tk.setModal("building")}>已新增的地點</Button>
+          {/* 🔒 2026-10-26 Sucre：按鈕改名「開啟空間」。
+              🔒 SP-5（BE-036，Carol 10/14）：只有超管／政府看得到，其他人**不顯示**。
+                 正式版看後端 capability `zone.add`（Carol 10-26：跟畫責任區同一個權限），不要看角色名稱。
+                 10-25 那顆唯讀「已新增的地點」拿掉了 —— 空間已經直接出現在這張列表與地圖上（SP-1）。 */}
+          {window.BuildingSetupModal && tk.can && tk.can.activate && (
+            <Button variant="outline" startIcon={<Icon n="Building2" s={17} />} data-open-space
+              onClick={() => tk.setModal("buildingNew")}>開啟空間</Button>
           )}
           {onNew && <Button variant="primary" startIcon={<Icon n="Plus" s={17} />} onClick={onNew}>新增任務</Button>}
         </div>
