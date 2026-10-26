@@ -20,6 +20,7 @@ from app.core.permissions import Perm
 from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, AUDITED_TABLES, get_audit_trigger_sql
 from app.models.auth import User
 from app.models.dedup import DedupAuditEvent, DuplicatePair
+from app.models.geo import BaseGeometry
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.schemas.duplicate_pair import ResolveRequest
@@ -324,6 +325,23 @@ async def test_the_card_is_confirmed_with_a_merged_event(db):
     assert event.affected_refs["absorbed"] == {ids["b1"]: ids["a1"], ids["b2"]: ids["a2"]}
     assert event.affected_refs["dropped_assignments"] == [[ids["b1"], ids["v2"]]]
     assert event.after_state["ticket"]["uuid"] == ids["a"]
+
+
+async def test_both_tickets_show_the_merge_as_their_last_update(db):
+    """A merge changes both tickets, so each one's updated_at becomes the time of the merge."""
+    reviewer, ids = await _world(db)
+    geometries = BaseGeometry.__table__
+    await db.execute(
+        update(geometries)
+        .where(geometries.c.uuid.in_([ids["a"], ids["b"]]))
+        .values(updated_at=datetime(2026, 1, 1, tzinfo=UTC))
+    )
+
+    await _resolve(db, reviewer, ids)
+
+    (event,) = (await db.scalars(select(DedupAuditEvent).where(DedupAuditEvent.event_type == "merged"))).all()
+    for ticket in ("a", "b"):
+        assert (await _row(db, Tickets, ids[ticket])).updated_at == event.created_at
 
 
 # --- need status (ADR-370) ----------------------------------------------------------------

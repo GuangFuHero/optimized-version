@@ -626,7 +626,12 @@ class TicketType:
         ),
     )
     created_at: datetime | None = None
-    updated_at: datetime | None = None
+    updated_at: datetime | None = strawberry.field(
+        default=None,
+        description="When anything visible about this ticket last changed: a field, its address, disaster "
+        "details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only "
+        "when it changes the status; a review verdict never does",
+    )
 
     # Private storage backing the contact_* PII resolvers below (ADR-049) — never exposed
     # directly in the schema, only readable (raw or masked) through the gated resolvers.

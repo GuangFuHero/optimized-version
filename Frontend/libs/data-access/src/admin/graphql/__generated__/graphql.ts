@@ -1787,6 +1787,7 @@ export type TicketType = {
   tasks: Array<TicketTaskType>;
   /** Short subject line describing the request */
   title: Scalars['String']['output'];
+  /** When anything visible about this ticket last changed: a field, its address, disaster details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only when it changes the status; a review verdict never does */
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };

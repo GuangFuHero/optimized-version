@@ -23,6 +23,7 @@ from app.core.disaster_types import validate_disaster_types
 from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.dedup import DedupAuditEvent, DuplicatePair
+from app.models.geo import touch
 from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
@@ -120,6 +121,8 @@ async def _write(db: AsyncSession, plan: ResolvePlan, ticket_changes: dict, task
     await _write_items(db, plan, now)
     await _write_photos_and_answers(db, plan, now)
     await _cancel_secondary(db, plan, now)
+    # The kept ticket's needs, items, photos and answers are related rows, which the update hook cannot see.
+    touch(await db.get(Tickets, plan.primary_uuid))
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=plan.primary_uuid)
     await void_stale_verdict(db, plan.primary_uuid)
