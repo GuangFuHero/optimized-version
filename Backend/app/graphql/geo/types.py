@@ -332,7 +332,6 @@ class StationType:
         """Resolve station.export against this station's scope, as the export's row filter would."""
         return await _holds_over_station(info, self, Perm.STATION_EXPORT)
 
-
     @strawberry.field(
         description="Whether the contact fields on this station come back unmasked for the caller"
     )
