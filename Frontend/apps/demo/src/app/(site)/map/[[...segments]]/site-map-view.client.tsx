@@ -520,6 +520,7 @@ function SiteMapViewportDataLayer({
             draftPointAction={draftPointAction}
             ticketDetailOverrides={createTicketDetailOverrides}
             stationDetailSecondaryAction={stationDetailSecondaryAction}
+            stationLayout="site"
           />
         </Box>
         <MapRequestHelpBar />
