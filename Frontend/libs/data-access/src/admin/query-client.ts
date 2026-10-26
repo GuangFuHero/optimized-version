@@ -1,4 +1,9 @@
-import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  type Query,
+} from '@tanstack/react-query';
 import { CombinedError } from 'urql';
 
 import ApiError from '../rest/api-error';
@@ -25,6 +30,17 @@ export function isAdminPermissionError(error: Error | null) {
  * app's sign-out on an expired session hangs off `onError`.
  */
 export const SILENT_ERROR_META = 'silentError';
+
+/**
+ * Whether a failed query turns the whole page into the shell's 403 page. A silent query shows its
+ * own forbidden state, so the rest of the page keeps rendering (ADMIN-023: one section per domain).
+ */
+export function forbidsPage(query: Query) {
+  return (
+    query.meta?.[SILENT_ERROR_META] !== true &&
+    isAdminPermissionError(query.state.error)
+  );
+}
 
 /** The HTTP status behind a REST or GraphQL failure; undefined when there was no response. */
 function statusOf(error: Error): number | undefined {

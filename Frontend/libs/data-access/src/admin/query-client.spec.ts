@@ -2,7 +2,11 @@ import { CombinedError } from 'urql';
 import { describe, expect, it, vi } from 'vitest';
 
 import ApiError from '../rest/api-error';
-import { createAdminQueryClient, SILENT_ERROR_META } from './query-client';
+import {
+  createAdminQueryClient,
+  forbidsPage,
+  SILENT_ERROR_META,
+} from './query-client';
 
 /** Runs one failing query through a fresh admin client and returns what `onError` received. */
 async function reported(error: Error, silent: boolean) {
@@ -74,5 +78,43 @@ describe('createAdminQueryClient — SILENT_ERROR_META', () => {
     );
     expect(calls).toHaveLength(1);
     expect((calls[0] as ApiError).code).toBe('origin_not_allowed');
+  });
+});
+
+describe('forbidsPage', () => {
+  /** Runs one failing query and returns it as the shell finds it in the cache. */
+  async function failed(error: Error, silent: boolean) {
+    const client = createAdminQueryClient(vi.fn());
+    await client
+      .fetchQuery({
+        queryKey: ['admin', 'test'],
+        queryFn: () => Promise.reject(error),
+        retry: false,
+        meta: silent ? { [SILENT_ERROR_META]: true } : undefined,
+      })
+      .catch(() => undefined);
+    const query = client.getQueryCache().find({ queryKey: ['admin', 'test'] });
+    if (!query) throw new Error('query missing from the cache');
+    return query;
+  }
+
+  it('turns the page into the 403 page for a query that shows no error state of its own', async () => {
+    expect(
+      forbidsPage(await failed(new ApiError(403, 'Permission Denied.'), false)),
+    ).toBe(true);
+  });
+
+  it('leaves the page alone for a silent query’s 403: its card or section shows it', async () => {
+    expect(
+      forbidsPage(await failed(new ApiError(403, 'Permission Denied.'), true)),
+    ).toBe(false);
+  });
+
+  it('leaves the page alone for a failure that is not about permissions', async () => {
+    expect(
+      forbidsPage(
+        await failed(new ApiError(500, 'Internal Server Error'), false),
+      ),
+    ).toBe(false);
   });
 });

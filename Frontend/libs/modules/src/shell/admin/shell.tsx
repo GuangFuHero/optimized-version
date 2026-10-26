@@ -12,7 +12,7 @@ import { usePathname } from 'next/navigation';
 
 import {
   AnnouncementFilter,
-  isAdminPermissionError,
+  forbidsPage,
   useAnnouncements,
   useCurrentUser,
 } from '@rescue-frontend/data-access/admin';
@@ -49,7 +49,7 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
     () =>
       queryCache
         .findAll({ queryKey: ['admin'], type: 'active' })
-        .some((query) => isAdminPermissionError(query.state.error)),
+        .some(forbidsPage),
     () => false,
   );
   const capabilityForbidden = Boolean(
