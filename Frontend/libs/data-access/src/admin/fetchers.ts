@@ -10,7 +10,6 @@ import type { components, paths } from '../rest/openapi';
 import { adminRestClient } from './client';
 import { responseData } from '../rest/openapi-client';
 import type { AdminQueryOptions } from './graphql-fetchers';
-import { SILENT_ERROR_META } from './query-client';
 
 export const currentUserQuery = () =>
   queryOptions({
@@ -75,14 +74,8 @@ export const projectSettingsQuery = () =>
         .then(responseData),
   });
 
-export function useProjectSettings(
-  options: AdminQueryOptions & { silentError?: boolean } = {},
-) {
-  return useQuery({
-    ...projectSettingsQuery(),
-    enabled: options.enabled,
-    meta: { [SILENT_ERROR_META]: options.silentError === true },
-  });
+export function useProjectSettings(options: AdminQueryOptions = {}) {
+  return useQuery({ ...projectSettingsQuery(), enabled: options.enabled });
 }
 
 export const capabilitiesQuery = () =>
