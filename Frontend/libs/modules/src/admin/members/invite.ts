@@ -13,11 +13,19 @@ export interface TeamInvite {
 }
 
 /**
- * The user site's invite page, on the same origin as the back office (the sidebar's 回到前台
- * links `/map`). The path mirrors `GET /api/v1/invites/{token}`, which that page reads.
+ * The public site's origin is supplied by the server's SITE_APP_URL. The admin app runs on
+ * a different origin, so its window.location must never become the invitation's destination.
  */
-export function inviteUrl(token: string, origin: string): string {
-  return `${origin}/invites/${encodeURIComponent(token)}`;
+export function inviteUrl(token: string, siteUrl: string): string {
+  const site = new URL(siteUrl);
+  if (
+    !['http:', 'https:'].includes(site.protocol) ||
+    site.username ||
+    site.password
+  ) {
+    throw new Error('Invalid public site URL');
+  }
+  return new URL(`/invites/${encodeURIComponent(token)}`, site.origin).href;
 }
 
 export function toTeamInvite(

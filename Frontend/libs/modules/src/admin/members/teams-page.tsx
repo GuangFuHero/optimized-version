@@ -338,6 +338,7 @@ function TeamDetail({
   candidates,
   teamTypes,
   focusMemberUuid,
+  siteUrl,
 }: {
   team: Team;
   teams: readonly Team[];
@@ -346,6 +347,7 @@ function TeamDetail({
   teamTypes: ReadonlyMap<string, string>;
   /** Marked in the roster: the applicant just approved as this new team's admin. */
   focusMemberUuid?: string | null;
+  siteUrl?: string;
 }) {
   const [adding, setAdding] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -478,7 +480,11 @@ function TeamDetail({
         />
       ) : null}
       {inviting ? (
-        <InviteSheet team={team} onClose={() => setInviting(false)} />
+        <InviteSheet
+          team={team}
+          siteUrl={siteUrl}
+          onClose={() => setInviting(false)}
+        />
       ) : null}
       {editing ? (
         <EditTeamDialog
@@ -498,7 +504,7 @@ function TeamDetail({
 }
 
 /** 團隊 as a super admin sees it: every team on the left, the chosen one on the right. */
-function SuperTeamsView() {
+function SuperTeamsView({ siteUrl }: { siteUrl?: string }) {
   const teamsQuery = useTeams();
   const usersQuery = useAllUsers();
   // `?team=…&member=…`: where approving a new-team application leads (`newTeamHref`).
@@ -610,6 +616,7 @@ function SuperTeamsView() {
       </Panel>
 
       <TeamDetail
+        siteUrl={siteUrl}
         team={team}
         teams={teams}
         roster={roster}
@@ -725,12 +732,14 @@ function MyTeamView({
   isAdmin,
   selfUuid,
   can,
+  siteUrl,
 }: {
   teamUuid: string;
   teamName: string;
   isAdmin: boolean;
   selfUuid: string;
   can: (perm: Perm) => boolean;
+  siteUrl?: string;
 }) {
   const teamsQuery = useTeams();
   const canManage = can('team.member.manage');
@@ -888,7 +897,11 @@ function MyTeamView({
 
       {dialogs}
       {inviting ? (
-        <InviteSheet team={team} onClose={() => setInviting(false)} />
+        <InviteSheet
+          team={team}
+          siteUrl={siteUrl}
+          onClose={() => setInviting(false)}
+        />
       ) : null}
       {editing ? (
         <EditTeamDialog
@@ -901,7 +914,7 @@ function MyTeamView({
   );
 }
 
-function TeamsView() {
+function TeamsView({ siteUrl }: { siteUrl?: string }) {
   const { data: user, isPending } = useCurrentUser();
 
   if (isPending) {
@@ -914,6 +927,7 @@ function TeamsView() {
   if (identity?.team_uuid && can('team.view')) {
     return (
       <MyTeamView
+        siteUrl={siteUrl}
         teamUuid={identity.team_uuid}
         teamName={identity.team ?? ''}
         isAdmin={identity.role === 'admin'}
@@ -923,19 +937,19 @@ function TeamsView() {
     );
   }
   if (can('team.edit')) {
-    return <SuperTeamsView />;
+    return <SuperTeamsView siteUrl={siteUrl} />;
   }
   // A platform identity with team.view but neither a team nor team.edit: the nav already hides
   // 團隊 from anyone without team.view, so this is only a guard.
   return <AdminErrorPage code="403" />;
 }
 
-export function TeamsPage() {
+export function TeamsPage({ siteUrl }: { siteUrl?: string }) {
   return (
     <PageFrame>
       {/* `useSearchParams` (SuperTeamsView) needs a boundary, or the route cannot prerender. */}
       <Suspense fallback={<Typography sx={captionSx}>載入中…</Typography>}>
-        <TeamsView />
+        <TeamsView siteUrl={siteUrl} />
       </Suspense>
     </PageFrame>
   );

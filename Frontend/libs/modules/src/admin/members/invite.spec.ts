@@ -10,6 +10,15 @@ const invite = (token: string, expires_at: string) => ({
 });
 
 describe('inviteUrl', () => {
+  it('uses the configured public origin when admin and site are deployed separately', () => {
+    expect(inviteUrl('token', 'https://site.example.com/')).toBe(
+      'https://site.example.com/invites/token',
+    );
+    expect(() => inviteUrl('token', 'javascript:alert(1)')).toThrow();
+    expect(() =>
+      inviteUrl('token', 'https://name:password@example.com'),
+    ).toThrow();
+  });
   it('points at the user site on the same origin, carrying the token', () => {
     expect(inviteUrl('abc_DEF-123', 'https://wan-guard.com')).toBe(
       'https://wan-guard.com/invites/abc_DEF-123',

@@ -160,6 +160,7 @@ export { DashboardPage } from './admin/dashboard';
 export { MembersPermissionsPage, TeamsPage } from './admin/members';
 export { SettingsPage } from './admin/settings/settings-page';
 export { BackOfficePlaceholder } from './role-request';
+export { TeamInvitePage } from './role-request/invite-page';
 export {
   AdminErrorPage,
   AdminPlaceholderPage,
