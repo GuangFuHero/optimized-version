@@ -171,6 +171,7 @@ query AdminStations(
   $assignedTeamUuid: UUID
   $unassignedOnly: Boolean = false
   $hasPendingSuggestions: Boolean = false
+  $reviewableOnly: Boolean = false
   $skip: Int = 0
   $limit: Int = 50
 ) {
@@ -182,6 +183,7 @@ query AdminStations(
     assignedTeamUuid: $assignedTeamUuid
     unassignedOnly: $unassignedOnly
     hasPendingSuggestions: $hasPendingSuggestions
+    reviewableOnly: $reviewableOnly
     skip: $skip
     limit: $limit
   ) {

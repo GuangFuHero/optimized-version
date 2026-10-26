@@ -2301,6 +2301,7 @@ export type AdminStationsQueryVariables = Exact<{
   assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   unassignedOnly?: InputMaybe<Scalars['Boolean']['input']>;
   hasPendingSuggestions?: InputMaybe<Scalars['Boolean']['input']>;
+  reviewableOnly?: InputMaybe<Scalars['Boolean']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
@@ -4560,6 +4561,15 @@ export const AdminStationsDocument = {
         },
         {
           kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'reviewableOnly' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
+          defaultValue: { kind: 'BooleanValue', value: false },
+        },
+        {
+          kind: 'VariableDefinition',
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           defaultValue: { kind: 'IntValue', value: '0' },
@@ -4632,6 +4642,14 @@ export const AdminStationsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'hasPendingSuggestions' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'reviewableOnly' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'reviewableOnly' },
                 },
               },
               {
