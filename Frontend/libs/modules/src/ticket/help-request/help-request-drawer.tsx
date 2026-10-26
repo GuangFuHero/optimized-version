@@ -259,9 +259,6 @@ function FieldNote({
   );
 }
 
-// Floor and room under the address on a phone, beside it wider.
-const UNIT_ROW_GAP = { mobile: 1.5, tablet: 0 };
-
 const sameCheck = (a: AddressCheck | null, b: AddressCheck | null) =>
   a?.address === b?.address && a?.lat === b?.lat && a?.lng === b?.lng;
 
@@ -708,24 +705,18 @@ function HelpRequestFormDrawer({
             )}
           </Stack>
 
-          {/* On a phone the address has a row of its own, floor and room side by side under it: the
-              official line a lookup puts in is long, and beside two narrow fields it would be cut off,
-              hiding what the typed words became. Wider, the three share a row. The note is right
-              under the address either way (designer, 2026-10-25); wider, across the whole row, since
-              the drawer leaves the address alone too narrow to hold it. Next to the address in the
-              page too, so a Tab from it goes to the note's button before the floor. */}
+          {/* The address has a row of its own, floor and room side by side under it: the official
+              line a lookup puts in is long, and beside two narrow fields it would be cut off, hiding
+              what the typed words became. So on a wider screen too, where the drawer is 440px across
+              and the address beside them kept about 116px (designer, 2026-10-27). The note is right
+              under the address, and next to it in the page, so a Tab from it goes to the note's
+              button before the floor. */}
           <Box
             data-field="address"
             sx={{
               display: 'grid',
-              gridTemplateColumns: {
-                mobile: 'minmax(0, 1fr) minmax(0, 1fr)',
-                tablet: 'minmax(0, 1fr) 110px 110px',
-              },
-              gridTemplateAreas: {
-                mobile: '"address address" "note note" "floor room"',
-                tablet: '"address floor room" "note note note"',
-              },
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+              gridTemplateAreas: '"address address" "note note" "floor room"',
               // Spaced by the fields and the note, so an empty note leaves no gap.
               columnGap: 1.5,
               alignItems: 'start',
@@ -769,7 +760,7 @@ function HelpRequestFormDrawer({
               onChange={(event) => set('floor')(event.target.value)}
               placeholder="3樓"
               slotProps={{ htmlInput: { maxLength: MAX_LENGTH.floor } }}
-              sx={{ gridArea: 'floor', mt: UNIT_ROW_GAP }}
+              sx={{ gridArea: 'floor', mt: 1.5 }}
             />
             <TextField
               label="戶／室"
@@ -778,7 +769,7 @@ function HelpRequestFormDrawer({
               onChange={(event) => set('room')(event.target.value)}
               placeholder="302室"
               slotProps={{ htmlInput: { maxLength: MAX_LENGTH.room } }}
-              sx={{ gridArea: 'room', mt: UNIT_ROW_GAP }}
+              sx={{ gridArea: 'room', mt: 1.5 }}
             />
           </Box>
 
