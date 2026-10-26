@@ -30,6 +30,8 @@ mutation($station: UUID!, $decisions: [SuggestionDecisionInput!]!) {
 
 REVOKE = "mutation($uuid: UUID!) { revokeStationSuggestionMerge(uuid: $uuid) { revokedAt } }"
 
+RATE = "mutation($input: CreateCrowdSourcingInput!) { createCrowdSourcing(input: $input) { uuid } }"
+
 CREATE_PROPERTY = """
 mutation($input: CreateStationPropertyInput!) { createStationProperty(input: $input) { uuid } }
 """
@@ -179,6 +181,38 @@ async def test_an_edit_to_only_a_stations_column_moves_it_and_a_save_without_cha
     await _gql(client, admin, UPDATE_STATION, {"uuid": sample_station, "input": {"opHour": "24h"}})
 
     assert await _updated_at(client, admin, sample_station) > EARLIER
+
+
+@pytest.mark.parametrize(
+    ("field", "value"), [("operationalStatus", "temporarily_closed"), ("supplyStatus", "缺飲用水")]
+)
+@pytest.mark.asyncio
+async def test_a_direct_status_edit_moves_it(client, coordinator_auth, sample_station, field, value):
+    """The operational and supply statuses carry stamps of their own, and still count as changes."""
+    _, admin = coordinator_auth
+    await _set_earlier(sample_station)
+
+    await _gql(client, admin, UPDATE_STATION, {"uuid": sample_station, "input": {field: value}})
+
+    assert await _updated_at(client, admin, sample_station) > EARLIER
+
+
+@pytest.mark.asyncio
+async def test_a_crowd_rating_does_not_move_it(
+    client, coordinator_auth, sample_station, sample_station_property
+):
+    """A rating is someone's opinion of a property, not a change to the station."""
+    _, admin = coordinator_auth
+    await _set_earlier(sample_station)
+
+    await _gql(
+        client,
+        admin,
+        RATE,
+        {"input": {"stationUuid": sample_station, "itemUuid": sample_station_property, "rating": "up"}},
+    )
+
+    assert await _updated_at(client, admin, sample_station) == EARLIER
 
 
 @pytest.mark.asyncio
