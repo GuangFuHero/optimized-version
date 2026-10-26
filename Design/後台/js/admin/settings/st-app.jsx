@@ -198,6 +198,62 @@
     );
   }
 
+  // ════════ 地圖預設位置（2026-10-26，MAP-VIEW-101〜103，規則在 wg-bridge.js）═══════════
+  // 🔒 Carol 裁示「直接做 B」：地圖中心跟著這次災害走。前台與後台的地圖一打開都停在這裡；沒設定＝全台。
+  // 做法：小地圖拖到、縮放到想要的畫面，按「設成預設位置」—— 存的就是這個畫面的中心與縮放。
+  //   ❌ 不讓人打經緯度：沒有人知道光復鄉的經緯度，打錯也看不出來。看著地圖設最不會錯。
+  // 🚨 版面、文案、「清除」按鈕是設計端定的。
+  function MapViewRow({ ev, canEdit, update }) {
+    const hostRef = React.useRef(null), mapRef = React.useRef(null);
+    const saved = ev.mapView || null;
+    const [cur, setCur] = React.useState(null);   // 小地圖目前的畫面
+    const TW = (window.WGBridge && window.WGBridge.MAP_VIEW_TAIWAN) || { center: [23.65, 120.95], zoom: 7 };
+    React.useEffect(() => {
+      const L = window.L;
+      if (!L || !hostRef.current) return;
+      const v = saved || TW;
+      const map = L.map(hostRef.current, { center: v.center, zoom: v.zoom, zoomControl: true, attributionControl: true,
+        dragging: canEdit, scrollWheelZoom: canEdit, doubleClickZoom: canEdit, touchZoom: canEdit, boxZoom: false, keyboard: canEdit });
+      if (!canEdit) map.zoomControl.remove();
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
+      const sync = () => { const c = map.getCenter(); setCur({ center: [+c.lat.toFixed(5), +c.lng.toFixed(5)], zoom: map.getZoom() }); };
+      map.on("moveend zoomend", sync); sync();
+      mapRef.current = map;
+      const t = setTimeout(() => map.invalidateSize(), 60);
+      return () => { clearTimeout(t); map.remove(); mapRef.current = null; };
+    }, []); // eslint-disable-line
+    const same = saved && cur && Math.abs(saved.center[0] - cur.center[0]) < 1e-4 && Math.abs(saved.center[1] - cur.center[1]) < 1e-4 && saved.zoom === cur.zoom;
+    const back = () => { const m = mapRef.current; if (m) m.setView((saved || TW).center, (saved || TW).zoom); };
+    return (
+      <Row label={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>地圖預設位置 <PendingTag title="後端 project_settings 還沒有地圖中心與縮放的欄位（2026-10-26 Carol 裁示要加）">後端還沒有這一欄</PendingTag></span>}
+        help="前台與後台的地圖一打開，會停在這個畫面。沒設定時顯示全台。">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }} data-st="mapView">
+          <div style={{ font: "var(--font-body-400)", color: saved ? "var(--color-fg-neutral-default)" : "var(--color-fg-warning)" }} data-st="mapViewStatus">
+            {saved ? "已設定。大家打開地圖會停在下面這個畫面。" : "還沒設定 —— 大家打開地圖會看到整個台灣，要自己找到災區。"}
+          </div>
+          <div style={{ position: "relative" }}>
+            <div ref={hostRef} style={{ height: 260, borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)", overflow: "hidden" }} />
+            {/* 中心準星：存的是畫面中心，讓人看得到「中心在哪」 */}
+            <div aria-hidden="true" style={{ position: "absolute", left: "50%", top: "50%", width: 18, height: 18, marginLeft: -9, marginTop: -9, pointerEvents: "none", zIndex: 500,
+              borderRadius: "50%", border: "2px solid var(--color-brand-primary-default, #E3791E)", boxShadow: "0 0 0 2px #fff" }} />
+          </div>
+          {canEdit && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ font: "var(--font-body-300)", ...muted, marginRight: "auto" }}>拖曳、縮放地圖，讓災區剛好填滿畫面，再按「設成預設位置」。</span>
+              {saved && !same && <Button variant="ghost" size="sm" onClick={back}>回到已設定的位置</Button>}
+              {saved && <Button variant="ghost" size="sm" data-st="mapViewClear"
+                onClick={() => update((s) => ({ ...s, event: { ...s.event, mapView: null } }), "已清除地圖預設位置，地圖打開會顯示全台")}>清除</Button>}
+              <Button variant="primary" size="sm" disabled={!cur || same} data-st="mapViewSave" startIcon={<Icon n="MapPin" s={14} />}
+                onClick={() => update((s) => ({ ...s, event: { ...s.event, mapView: cur } }), "已設成地圖預設位置")}>
+                設成預設位置
+              </Button>
+            </div>
+          )}
+        </div>
+      </Row>
+    );
+  }
+
   // ════════ ① 這次災害 ════════════════════════════════════════════════════
   function EventSection({ st, update, canEdit, ask, goFields }) {
     const ev = st.event;
@@ -249,6 +305,7 @@
               onSave={(v) => { setTimeDialog(false); update((s) => ({ ...s, event: { ...s.event, startedAt: v } }), ev.startedAt ? `起始時間已從 ${ev.startedAt} 修正為 ${v}` : `已設定起始時間 ${v}`); }} />
           )}
         </Row>
+        <MapViewRow ev={ev} canEdit={canEdit} update={update} />
         {canEdit && dirty && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
             <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-warning)", marginRight: "auto" }}>有還沒儲存的修改</span>

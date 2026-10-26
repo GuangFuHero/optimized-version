@@ -80,7 +80,9 @@
     React.useEffect(() => {
       const L = window.L;
       if (!L || !elRef.current || mapRef.current) return;
-      const map = L.map(elRef.current, { center: CENTER, zoom: 13, zoomControl: false, attributionControl: true });
+      // 🔒 MAP-VIEW-101：打開時停在事件設定的地圖預設位置（沒設定＝全台）；有任務單時下面會框住它們
+      const mv = window.WGBridge && window.WGBridge.readMapView ? window.WGBridge.readMapView() : { center: CENTER, zoom: 13 };
+      const map = L.map(elRef.current, { center: mv.center, zoom: mv.zoom, zoomControl: false, attributionControl: true });
       const zc = L.control.zoom({ position: "topright" });
       zc.addTo(map);
       zoomRef.current = zc.getContainer();

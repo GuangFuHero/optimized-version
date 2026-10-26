@@ -124,7 +124,9 @@ function zc(z) { return window.wgZoneColor ? window.wgZoneColor(z.kind) : z.colo
     React.useEffect(() => {
       const L = window.L;
       if (!L || !hostRef.current || mapRef.current) return;
-      const map = L.map(hostRef.current, { center: window.MAP_CENTER, zoom: 13, zoomControl: false, doubleClickZoom: false });
+      // 🔒 MAP-VIEW-101：打開時停在事件設定的地圖預設位置（沒設定＝全台）
+      const mv = window.WGBridge && window.WGBridge.readMapView ? window.WGBridge.readMapView() : { center: window.MAP_CENTER, zoom: 13 };
+      const map = L.map(hostRef.current, { center: mv.center, zoom: mv.zoom, zoomControl: false, doubleClickZoom: false });
       L.control.zoom({ position: "topright" }).addTo(map);
       L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);

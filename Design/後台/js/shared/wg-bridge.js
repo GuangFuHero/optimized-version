@@ -667,6 +667,33 @@
     writeRaw(KEYS.publicZones, Array.isArray(list) ? list : []);
   }
 
+  /* ── 地圖一打開的預設位置（2026-10-26）────────────────────────────────
+   * 🔒 MAP-VIEW-101 Carol 裁示「直接做 B」：地圖中心跟著**事件設定**走，存在「設定 → 這次災害 → 地圖預設位置」。
+   *    前台地圖、後台互助地圖／任務管理／資源站點的地圖，打開時都停在這裡。換一場災害不用改程式。
+   * 🔒 MAP-VIEW-102 **沒設定 → 顯示全台**（MAP_VIEW_TAIWAN）。不要退回寫死的某個鄉鎮。
+   * 🔒 MAP-VIEW-103 ❌ 不用手機定位當預設：地圖的主要讀者是還沒到現場的人，定位會停在他們自己家。
+   * ⚠️ 後端：project_settings 要加地圖中心（緯度、經度）與縮放。原型存在 wg.settings.v1 的 event.mapView。
+   * 原型的示範事件設在光復鄉（MAP_VIEW_DEMO_EVENT）；空白版（WG_BLANK）是「沒設定」。 */
+  var MAP_VIEW_TAIWAN = { center: [23.65, 120.95], zoom: 7 };
+  var MAP_VIEW_DEMO_EVENT = { center: [23.6700, 121.4180], zoom: 14 };
+  function validMapView(v) {
+    return !!(v && Array.isArray(v.center) && v.center.length === 2 && isFinite(v.center[0]) && isFinite(v.center[1]) && isFinite(v.zoom));
+  }
+  /** 事件設定裡的地圖預設位置；null＝沒設定。 */
+  function readMapViewSetting() {
+    var st = readRaw('wg.settings.v1', null);
+    if (st && st.event && Object.prototype.hasOwnProperty.call(st.event, 'mapView')) {
+      return validMapView(st.event.mapView) ? st.event.mapView : null;
+    }
+    return window.WG_BLANK ? null : MAP_VIEW_DEMO_EVENT;   // 還沒進過設定頁：示範事件的值
+  }
+  /** 地圖打開時用的視野：有設定用設定，沒有就全台。回傳 { center, zoom, isSet }。 */
+  function readMapView() {
+    var v = readMapViewSetting();
+    return v ? { center: v.center.slice(), zoom: v.zoom, isSet: true }
+             : { center: MAP_VIEW_TAIWAN.center.slice(), zoom: MAP_VIEW_TAIWAN.zoom, isSet: false };
+  }
+
   /** 清空（給 demo 重置用）。 */
   function reset() {
     writeRaw(KEYS.tickets, []);
@@ -687,6 +714,8 @@
     readStationReports: readStationReports, readStationReportsFor: readStationReportsFor, pushStationReport: pushStationReport,
     readRoleRequests: readRoleRequests, readRoleRequestsFor: readRoleRequestsFor,
     readTeamDirectory: readTeamDirectory,
+    readMapView: readMapView, readMapViewSetting: readMapViewSetting,
+    MAP_VIEW_TAIWAN: MAP_VIEW_TAIWAN, MAP_VIEW_DEMO_EVENT: MAP_VIEW_DEMO_EVENT,
     readSiteProfile: readSiteProfile, writeSiteProfile: writeSiteProfile, isPhoneTaken: isPhoneTaken, normalizePhone: normalizePhone,
     pendingRoleRequestFor: pendingRoleRequestFor, submitRoleRequest: submitRoleRequest, withdrawRoleRequest: withdrawRoleRequest, decideRoleRequest: decideRoleRequest,
     normalizeAddr: normalizeAddr,

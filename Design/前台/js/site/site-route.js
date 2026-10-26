@@ -198,7 +198,11 @@
 
   // ── map/constants.ts ──────────────────────────────────────────────────────
   /* 初始視角：光復鄉市區（repo 常數為 [23.884, 121.0]，此原型的 mock 座標採真實地理位置）。 */
-  const RESCUE_MAP_INITIAL_VIEW = { center: [23.6700, 121.4180], zoom: 14 };
+  // 🔒 MAP-VIEW-101（2026-10-26）：不再寫死光復鄉，改讀事件設定（wg-bridge.js 的 readMapView；沒設定＝全台）。
+  //    網址有帶位置時仍以網址為準（分享連結）。
+  const RESCUE_MAP_INITIAL_VIEW = (window.WGBridge && window.WGBridge.readMapView)
+    ? window.WGBridge.readMapView()
+    : { center: [23.65, 120.95], zoom: 7 };
   const RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH = 352;
 
   /* 底圖設定沿用 repo 的 label/description/licenseNote；

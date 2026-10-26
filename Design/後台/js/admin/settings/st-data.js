@@ -2,6 +2,7 @@
 //
 // 對應後端（ERD @ main，2026-10-05 查）：
 //   這次災害   → project_settings（單列）：name / disaster_types / started_at
+//                ＋ 地圖預設位置 mapView（⚠️ 後端還沒有這兩三欄：中心緯度、經度、縮放；10-26 Carol 裁示要做）
 //   災害類型   → disaster_types：key（建立後不能改）/ label / is_active
 //   災害欄位   → ticket_property_config：property_name / label / data_type / enum_options /
 //                unit / disaster_types / hint / is_active        —— 沒有 sort_order（ADR-248）
@@ -57,6 +58,8 @@
         shortName: act.shortName || "",
         startedAt: act.startedAt || "",
         types: (act.types || []).slice(),
+        // 地圖預設位置（MAP-VIEW-101，wg-bridge.js）：{ center: [lat, lng], zoom } 或 null（沒設定＝全台）
+        mapView: window.WGBridge ? window.WGBridge.readMapViewSetting() : null,
       },
       // 災害類型清單：照 ERD disaster_types 的 key 範例六種
       vocab: [
@@ -94,7 +97,12 @@
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const st = JSON.parse(raw);
+        // 10-26 以前存的設定沒有 mapView：補上示範事件的值，跟前台實際看到的一致（MAP-VIEW-101）
+        if (st && st.event && !("mapView" in st.event)) st.event.mapView = window.WGBridge ? window.WGBridge.readMapViewSetting() : null;
+        return st;
+      }
     } catch (e) {}
     return seed();
   }
