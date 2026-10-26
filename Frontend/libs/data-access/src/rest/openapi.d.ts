@@ -3405,6 +3405,8 @@ export interface components {
       uuid?: string | null;
       /** Name */
       name?: string | null;
+      /** Short Name */
+      short_name?: string | null;
       /** Disaster Types */
       disaster_types?: string[];
       /** Started At */
@@ -3419,6 +3421,8 @@ export interface components {
     ProjectSettingsUpdate: {
       /** Name */
       name?: string | null;
+      /** Short Name */
+      short_name?: string | null;
       /** Disaster Types */
       disaster_types?: string[] | null;
       /** Started At */

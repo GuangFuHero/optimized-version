@@ -90,15 +90,16 @@ async def list_team_members(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
 
 
-def _project_settings_response(
-    settings, warnings: tuple[str, ...] = ()
-) -> ProjectSettingsResponse:
+def _project_settings_response(settings, warnings: tuple[str, ...] = ()) -> ProjectSettingsResponse:
     """Render the settings row, or the empty shape while the deployment is unconfigured."""
     if settings is None:
         return ProjectSettingsResponse()
     return ProjectSettingsResponse(
-        uuid=settings.uuid, name=settings.name,
-        disaster_types=list(settings.disaster_types or []), started_at=settings.started_at,
+        uuid=settings.uuid,
+        name=settings.name,
+        short_name=settings.short_name,
+        disaster_types=list(settings.disaster_types or []),
+        started_at=settings.started_at,
         warnings=list(warnings),
     )
 
@@ -140,13 +141,9 @@ async def update_project_settings(
         if values.get(not_nullable) is None:
             values.pop(not_nullable, None)
     try:
-        result = await project_settings_service.update_project_settings(
-            db, actor=current_user, values=values
-        )
+        result = await project_settings_service.update_project_settings(db, actor=current_user, values=values)
     except ProjectSettingsValidationError as err:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)
-        ) from err
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)) from err
     return _project_settings_response(result.settings, result.warnings)
 
 
@@ -322,8 +319,11 @@ async def add_team_member(
     """
     try:
         user = await admin_service.add_team_member(
-            db, actor=current_user, team_uuid=str(team_uuid),
-            user_uuid=str(body.user_uuid), team_role_name=body.team_role_name,
+            db,
+            actor=current_user,
+            team_uuid=str(team_uuid),
+            user_uuid=str(body.user_uuid),
+            team_role_name=body.team_role_name,
         )
     except AdminNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
