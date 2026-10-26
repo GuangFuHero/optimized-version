@@ -17,11 +17,11 @@ import {
   formatTicketRowTime,
   isClosedTicket,
   quickClaimNeed,
-  removedFloorNote,
   sortTickets,
   summarizeTicket,
   summarizeTickets,
   ticketUnitLabel,
+  writtenFloorNote,
   type BuildingTicket,
 } from './summary';
 
@@ -45,7 +45,7 @@ function priorityStripe(ticket: BuildingTicket): string {
 
 interface TicketRowProps {
   ticket: BuildingTicket;
-  /** On one of the building's floors; an unplaced row says which floor it was on, if one. */
+  /** On one of the building's floors; an unplaced row says what floor is written on it, if any. */
   placed: boolean;
   showKind: boolean;
   /** Someone on this floor gave a room: a row without one then says so. */
@@ -73,7 +73,7 @@ function TicketRow({
   const status = marker.ticketMeta?.status;
   const statusText = formatTicketStatusLabel(status);
   const unit = ticketUnitLabel(ticket);
-  const removedFloor = removedFloorNote(ticket, placed);
+  const writtenFloor = writtenFloorNote(ticket, placed);
   const description = [
     marker.subtitle.trim(),
     formatTicketRowTime(marker.ticketMeta?.createdAt),
@@ -99,7 +99,7 @@ function TicketRow({
         aria-label={[
           marker.title,
           unit,
-          removedFloor,
+          writtenFloor,
           statusText,
           summary.needText,
         ]
@@ -180,7 +180,7 @@ function TicketRow({
             ) : null}
           </Box>
           {/* Its own line, not the chip: it tells a volunteer which floor to go to. */}
-          {removedFloor ? (
+          {writtenFloor ? (
             <Typography
               component="span"
               sx={{
@@ -192,7 +192,7 @@ function TicketRow({
                 color: color.fg.neutral.subtle,
               }}
             >
-              {removedFloor}
+              {writtenFloor}
             </Typography>
           ) : null}
           {description ? (
@@ -426,11 +426,11 @@ export function FloorSection({
           ) : null}
           {summary.ticketCount === 0 ? (
             <Typography sx={bodyText}>
-              尚未有人通報這一區。這不代表這一區沒事。
+              尚未有人通報這一層。這不代表這一層沒事。
             </Typography>
           ) : shown.length === 0 ? (
             <Typography sx={bodyText}>
-              這一區的 {summary.ticketCount} 張單都已經結案了。
+              這一層的 {summary.ticketCount} 張單都已經結案了。
             </Typography>
           ) : (
             <Stack>

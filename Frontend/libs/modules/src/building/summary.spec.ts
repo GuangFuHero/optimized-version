@@ -8,12 +8,12 @@ import {
   isRescueTicket,
   opensByItself,
   quickClaimNeed,
-  removedFloorNote,
   showsTicketKinds,
   sortTickets,
   summarizeTicket,
   summarizeTickets,
   ticketUnitLabel,
+  writtenFloorNote,
   type BuildingTicket,
 } from './summary';
 
@@ -275,20 +275,20 @@ describe('ticketUnitLabel', () => {
   });
 });
 
-describe('removedFloorNote', () => {
-  it('names the floor an unplaced ticket was filed on, which the building no longer has', () => {
+describe('writtenFloorNote', () => {
+  it('says what floor is written on an unplaced ticket, as written', () => {
     expect(
-      removedFloorNote(ticket('a', { floor: '7F', room: '701' }), false),
-    ).toBe('原本在 7F（這一層已從大樓設定移除）');
-    expect(removedFloorNote(ticket('b', { floor: ' B2 ' }), false)).toBe(
-      '原本在 B2（這一層已從大樓設定移除）',
+      writtenFloorNote(ticket('a', { floor: '7F', room: '701' }), false),
+    ).toBe('單上寫的是 7F');
+    expect(writtenFloorNote(ticket('b', { floor: ' 頂樓加蓋 ' }), false)).toBe(
+      '單上寫的是 頂樓加蓋',
     );
   });
 
   it('has nothing to say for a ticket on its floor, or filed without one', () => {
-    expect(removedFloorNote(ticket('a', { floor: '3F' }), true)).toBeNull();
-    expect(removedFloorNote(ticket('b'), false)).toBeNull();
-    expect(removedFloorNote(ticket('c', { floor: '  ' }), false)).toBeNull();
+    expect(writtenFloorNote(ticket('a', { floor: '3F' }), true)).toBeNull();
+    expect(writtenFloorNote(ticket('b'), false)).toBeNull();
+    expect(writtenFloorNote(ticket('c', { floor: '  ' }), false)).toBeNull();
   });
 });
 

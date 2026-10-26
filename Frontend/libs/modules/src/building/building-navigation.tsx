@@ -24,7 +24,7 @@ interface BuildingTicketNavigationProps {
 
 /**
  * Under a ticket's 位置資訊, for one filed inside a building (prototype `site-detail.jsx:424-450`):
- * 查看整棟 opens the building's drawer, and 上一張／下一張 step through the building's other tickets
+ * 看各樓層 opens the building's drawer, and 上一張／下一張 step through the building's other tickets
  * without going back to it — looking through several on one floor is the usual thing, and back to the
  * list and in again for each turns one act into three (Sucre, 2026-09-21). The steps follow the
  * drawer's order, so 「下一張」 is the row below, and keep working with the drawer shut.
@@ -58,7 +58,8 @@ export function BuildingTicketNavigation({
         onClick={() => onOpenBuilding(buildingUuid)}
         sx={{ minHeight: 44 }}
       >
-        查看整棟（{building.floors.length} 個分區）
+        {/* The site says 這一棟／這一層, never 分區 or 空間 (designer, 2026-10-26). */}
+        看各樓層（{building.floors.length} 層）
       </Button>
       {index >= 0 && order.length > 1 ? (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>

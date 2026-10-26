@@ -18,7 +18,7 @@ interface TaskMatchTicketDetailOptions {
   marker: RescueMapMarkerItem;
   isAuthenticated: boolean;
   onShare?: () => void;
-  /** For a ticket filed inside a building: its 查看整棟, which opens the page's `BuildingDrawer`. */
+  /** For a ticket filed inside a building: its 看各樓層, which opens the page's `BuildingDrawer`. */
   onOpenBuilding?: (buildingUuid: string) => void;
   /** Its 上一張／下一張: open that ticket of the same building instead. */
   onSelectTicket?: (marker: RescueMapMarkerItem) => void;

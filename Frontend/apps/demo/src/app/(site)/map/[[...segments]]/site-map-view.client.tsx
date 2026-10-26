@@ -352,7 +352,7 @@ function SiteMapViewportDataLayer({
   // dropped here, or it would stand in for the fetched one it was waiting for.
   const [goneTicketIds, setGoneTicketIds] = useState<readonly string[]>([]);
 
-  // 現場分區: the building a ticket's 查看整棟 opened, and the last of its tickets opened from it —
+  // 現場分區: the building a ticket's 看各樓層 opened, and the last of its tickets opened from it —
   // from its drawer or 上一張／下一張 — which the view may not have fetched (past its pages).
   const [buildingUuid, setBuildingUuid] = useState<string | null>(null);
   const [buildingTicketMarker, setBuildingTicketMarker] =

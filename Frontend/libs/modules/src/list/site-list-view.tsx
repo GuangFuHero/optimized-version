@@ -291,7 +291,7 @@ export function SiteListView() {
     );
   };
 
-  // 現場分區: the building a ticket's 查看整棟 opened, shut again on opening one of its tickets.
+  // 現場分區: the building a ticket's 看各樓層 opened, shut again on opening one of its tickets.
   const [buildingUuid, setBuildingUuid] = useState<string | null>(null);
 
   // One of a building's tickets, from its drawer or 上一張／下一張. One the list holds opens as any

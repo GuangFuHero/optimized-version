@@ -192,8 +192,8 @@ function BuildingDrawerContent({
         >
           {[
             totals.rescueOpen > 0 ? `搜救 ${totals.rescueOpen}` : null,
+            `${building.floors.length} 層`,
             `${totals.ticketCount} 張單`,
-            `${building.floors.length} 個分區`,
           ]
             .filter(Boolean)
             .join('　·　')}
@@ -229,7 +229,7 @@ function BuildingDrawerContent({
             showClosed={showClosed}
             showKind={showKind}
             isAuthenticated={isAuthenticated}
-            note="知道在這一棟，但不知道在哪一層 —— 通報者說不出樓層，或那一層後來從大樓設定拿掉了。"
+            note="知道在這一棟，但不知道在哪一層 —— 通報者說不出在幾樓，或寫的樓層對不上。"
             onOpenTicket={onOpenTicket}
           />
         ) : null}
@@ -251,7 +251,7 @@ interface BuildingDrawerProps {
  * 現場分區 (prototype `BuildingDrawer`, `site-building.jsx`, revised 2026-09-20): a building's tickets,
  * one box per floor, each holding that floor's tickets as narrow rows. Floors only — rooms are free
  * text on the ticket — since floors are what can be known after a disaster, and how many households
- * each holds cannot. Opened from a ticket's 查看整棟; within the site's `NeedClaimProvider`, which its
+ * each holds cannot. Opened from a ticket's 看各樓層; within the site's `NeedClaimProvider`, which its
  * 接這筆 claims through.
  */
 export function BuildingDrawer({
@@ -281,15 +281,13 @@ export function BuildingDrawer({
 
   if (!hasData) {
     content = error ? (
-      <Alert severity="error">載入整棟資料失敗。</Alert>
+      <Alert severity="error">這一棟的資料載入失敗。</Alert>
     ) : (
       <Typography sx={bodyText}>{fetching ? '載入中...' : null}</Typography>
     );
   } else if (!building || !uuid) {
     content = (
-      <Typography sx={bodyText}>
-        找不到這一棟，可能已經從大樓設定刪除。
-      </Typography>
+      <Typography sx={bodyText}>找不到這一棟，可能已經被刪除。</Typography>
     );
   } else {
     content = (
@@ -308,7 +306,8 @@ export function BuildingDrawer({
   return (
     <SiteActionDrawer
       open={Boolean(buildingUuid)}
-      title={building?.name ?? '現場分區'}
+      // Loading, or not found: the name of the button that opened it.
+      title={building?.name ?? '看各樓層'}
       subtitle={building?.address}
       onClose={onClose}
       contentRef={scrollRef}

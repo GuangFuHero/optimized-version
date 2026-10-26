@@ -7,7 +7,7 @@ import type { RescueMapMarkerItem } from '../map/types';
 import { resolveNeedClaim, type TicketNeed } from '../ticket/needs/need-claim';
 import { normalizeTicketStatusSelection } from '../ticket/status';
 import { timeAgo } from '../time';
-import { floorName, groupByFloor, type BuildingFloor } from './floors';
+import { groupByFloor, type BuildingFloor } from './floors';
 
 /** A ticket filed inside a building, as the drawer reads it. */
 export interface BuildingTicket {
@@ -217,23 +217,24 @@ export function showsTicketKinds(tickets: readonly BuildingTicket[]): boolean {
   );
 }
 
-/** The row's unit chip: the room. A floor the building no longer has is said apart, in words. */
+/** The row's unit chip: the room. A floor written on it that the building lacks is said apart, in words. */
 export function ticketUnitLabel(ticket: BuildingTicket): string | null {
   return ticket.room?.trim() || null;
 }
 
 /**
- * For a ticket under 未定位 that was filed on a floor — which, being unplaced, the building's floors
- * no longer include — the floor it was on (the designer, uiux 2026-10-25). Otherwise a volunteer
- * reads it as a reporter who could not say, and does not know which floor to go to.
+ * For a ticket under 未定位 with a floor written on it — one the building's floors do not include: a
+ * floor taken off the building since, or one changed by hand in the back office, which nothing
+ * checks — that floor as written (the designer, uiux 2026-10-27). Otherwise a volunteer reads it as
+ * a reporter who could not say, and does not know which floor to go to.
  */
-export function removedFloorNote(
+export function writtenFloorNote(
   ticket: BuildingTicket,
   placed: boolean,
 ): string | null {
   const floor = placed ? null : ticket.floor?.trim();
 
-  return floor ? `原本在 ${floorName(floor)}（這一層已從大樓設定移除）` : null;
+  return floor ? `單上寫的是 ${floor}` : null;
 }
 
 const TAIWAN_DAY_FORMAT = new Intl.DateTimeFormat('en-US', {
