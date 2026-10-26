@@ -83,7 +83,6 @@ describe('STATION_IMPORT_FIELDS', () => {
       'op_hour',
       'level',
       'comment',
-      'source',
       'visibility',
       'latitude',
       'longitude',

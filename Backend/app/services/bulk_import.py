@@ -369,7 +369,7 @@ async def _write_station(
             level=fixed.get("level") or 0,
             comment=fixed.get("comment"),
             # Bulk import is admin-only, and an admin-created station is official (ADMIN-026),
-            # so the file's own `source` column does not get a say.
+            # so `source` is an export-only column (bulk_columns.py).
             source="official",
             visibility=fixed.get("visibility") or "public",
             # A listed station isn't known to be open: it stays closed until someone confirms it

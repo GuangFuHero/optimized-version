@@ -13,7 +13,6 @@ type StationImportField =
   | 'op_hour'
   | 'level'
   | 'comment'
-  | 'source'
   | 'visibility'
   | 'latitude'
   | 'longitude'
@@ -36,7 +35,6 @@ export const STATION_IMPORT_FIELDS: readonly {
   { value: 'op_hour', label: '開放時間' },
   { value: 'level', label: 'level' },
   { value: 'comment', label: 'comment' },
-  { value: 'source', label: '來源' },
   { value: 'visibility', label: '公開範圍' },
   { value: 'latitude', label: '緯度', required: true },
   { value: 'longitude', label: '經度', required: true },
@@ -47,7 +45,7 @@ export const STATION_IMPORT_FIELDS: readonly {
 
 /**
  * A starter file for a station import. The headers are the system field names, so the preview maps
- * them without help. `source` stays blank: the backend marks every imported station official.
+ * them without help.
  */
 export function stationImportTemplate(stationType: string): string {
   const example: Partial<Record<StationImportField, string>> = {
