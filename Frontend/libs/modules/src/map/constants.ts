@@ -34,6 +34,18 @@ export const RESCUE_MAP_INITIAL_VIEW: {
   zoom: 13,
 };
 
+/**
+ * Where a map opens when the disaster has no map view set: all of Taiwan, never a hard-coded township
+ * (prototype `wg-bridge.js` MAP-VIEW-102). Same shape as `RESCUE_MAP_INITIAL_VIEW`.
+ */
+export const MAP_VIEW_TAIWAN: {
+  center: [number, number];
+  zoom: number;
+} = {
+  center: [23.65, 120.95],
+  zoom: 7,
+};
+
 export const RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH = 352;
 
 export const BASE_LAYER_CONFIG: Record<
