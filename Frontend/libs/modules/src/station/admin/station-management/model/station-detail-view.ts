@@ -1,5 +1,6 @@
 import type { AdminStationQuery } from '@rescue-frontend/data-access/admin';
 
+import { taiwanDateParts } from '../../../../time';
 import { stationPoint } from '../../../station-point';
 import { getStationTypeLabel } from '../../../type-options';
 import { UNNAMED_STATION } from './station-row';
@@ -86,25 +87,19 @@ function verification(station: DetailStation) {
     : { verified: false, label: '未驗證' };
 }
 
+/** The day a station was set up, as the design's 成立時間 shows it: 「2026-09-30」, in Taiwan time. */
+function formatCreatedDate(iso: string | null | undefined): string {
+  const time = iso ? new Date(iso) : null;
+  if (!time || Number.isNaN(time.getTime())) return '—';
+  const { year, month, day } = taiwanDateParts(time);
+  return `${year}-${month}-${day}`;
+}
+
 function contactLine(station: DetailStation): string | null {
   const parts = [station.contactName, station.contactPhone]
     .map((part) => part?.trim())
     .filter(Boolean);
   return parts.length ? parts.join(' ・ ') : null;
-}
-
-/** `en-CA` formats dates as YYYY-MM-DD. */
-const isoDate = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Taipei',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-function formatDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  const time = Date.parse(value);
-  return Number.isNaN(time) ? '—' : isoDate.format(time);
 }
 
 /**
@@ -141,7 +136,7 @@ export function toStationDetailView(
       email: station.contactEmail?.trim() || null,
       maskedNote: canViewPii ? null : '無個資權限，顯示遮罩值',
     },
-    createdDate: formatDate(station.createdAt),
+    createdDate: formatCreatedDate(station.createdAt),
     resources: station.properties.map((property) => {
       const quantity =
         property.quantity == null ? '—' : String(property.quantity);
