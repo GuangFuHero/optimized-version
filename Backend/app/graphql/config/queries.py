@@ -10,6 +10,7 @@ import strawberry
 
 from app.core.permissions import Perm
 from app.graphql.config.types import (
+    CurrentDisasterType,
     DisasterTypeType,
     StationPropertyConfigType,
     TaskPropertyConfigType,
@@ -33,7 +34,10 @@ class PropertyConfigQuery:
 
     @strawberry.field
     async def station_property_configs(
-        self, info: strawberry.types.Info, station_type: str, include_inactive: bool = False,
+        self,
+        info: strawberry.types.Info,
+        station_type: str,
+        include_inactive: bool = False,
     ) -> list[StationPropertyConfigType]:
         """List property config entries for a station type (includes universal 'all' configs).
 
@@ -55,13 +59,19 @@ class PropertyConfigQuery:
         db = info.context["db"]
         disaster_types = await project_settings_repository.get_current_disaster_types(db)
         items = await station_property_config_repository.list_by_type(
-            db, station_type, disaster_types=disaster_types, include_inactive=include_inactive,
+            db,
+            station_type,
+            disaster_types=disaster_types,
+            include_inactive=include_inactive,
         )
         return [StationPropertyConfigType.from_model(c) for c in items]
 
     @strawberry.field
     async def task_property_configs(
-        self, info: strawberry.types.Info, task_type: str, include_inactive: bool = False,
+        self,
+        info: strawberry.types.Info,
+        task_type: str,
+        include_inactive: bool = False,
     ) -> list[TaskPropertyConfigType]:
         """List property config entries for a task type.
 
@@ -76,7 +86,10 @@ class PropertyConfigQuery:
         db = info.context["db"]
         disaster_types = await project_settings_repository.get_current_disaster_types(db)
         items = await task_property_config_repository.list_by_type(
-            db, task_type, disaster_types=disaster_types, include_inactive=include_inactive,
+            db,
+            task_type,
+            disaster_types=disaster_types,
+            include_inactive=include_inactive,
         )
         return [TaskPropertyConfigType.from_model(c) for c in items]
 
@@ -113,7 +126,9 @@ class PropertyConfigQuery:
             await check_permission(info, Perm.FIELD_EDIT)
         db = info.context["db"]
         items = await ticket_property_config_repository.list_for_disasters(
-            db, disaster_types, include_inactive=include_inactive,
+            db,
+            disaster_types,
+            include_inactive=include_inactive,
         )
         return [TicketPropertyConfigType.from_model(c) for c in items]
 
@@ -135,7 +150,18 @@ class PropertyConfigQuery:
         await check_permission(info, Perm.TICKET_VIEW)
         if include_inactive:
             await check_permission(info, Perm.PROJECT_EDIT)
-        items = await disaster_type_repository.list_all(
-            info.context["db"], include_inactive=include_inactive
-        )
+        items = await disaster_type_repository.list_all(info.context["db"], include_inactive=include_inactive)
         return [DisasterTypeType.from_model(d) for d in items]
+
+    @strawberry.field(
+        description="The deployment's disaster, readable without signing in; null until first configured"
+    )
+    async def current_disaster(self, info: strawberry.types.Info) -> CurrentDisasterType | None:
+        """The disaster's name for the public site's top bar (ADR-392).
+
+        No capability check: it names the deployment, as the page title does, for every visitor.
+        Every other field of the settings row stays behind project.view on the admin endpoint
+        (ADR-324), which is why this is its own type rather than project.view made public.
+        """
+        settings = await project_settings_repository.get_singleton(info.context["db"])
+        return CurrentDisasterType.from_model(settings) if settings else None

@@ -44,6 +44,8 @@ class ProjectSettingsResponse(BaseModel):
 
     uuid: UUID | None = None
     name: str | None = None
+    # For the site's top bar and other tight spots; null means use `name` (ADR-392).
+    short_name: str | None = None
     disaster_types: list[str] = Field(default_factory=list)
     started_at: datetime | None = None
     # Advisory only, and only on write: a saved disaster type that no configured dynamic
@@ -57,8 +59,18 @@ class ProjectSettingsUpdate(BaseModel):
     """PATCH body: every field optional; omitted fields keep their stored value."""
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
+    # Optional, unlike `name`: null or blank clears it, and the full name is shown instead.
+    short_name: str | None = Field(default=None, max_length=30)
     disaster_types: list[str] | None = None
     started_at: datetime | None = None
+
+    @field_validator("short_name", mode="before")
+    @classmethod
+    def _blank_short_name_is_none(cls, value):
+        """Trim it before the length check, so stray spaces neither count nor get stored."""
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
 
 
 class AssignRoleRequest(BaseModel):

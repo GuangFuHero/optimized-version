@@ -25,9 +25,16 @@ class ProjectSettings(Base, UUIDPKMixin):
     )
 
     name: Mapped[str] = mapped_column(String(100), comment="災害名稱，例如「花蓮 0816」")
+    # 前台頂欄、後台側欄放不下全名時用；沒填就用 name（ADR-392）
+    short_name: Mapped[str | None] = mapped_column(
+        String(30), nullable=True, comment="災害簡稱，例如「花蓮馬太鞍溪」；沒填用 name"
+    )
     # 空陣列 = 尚未設定，動態欄位一律啟用（沿用 station_type='all' 的慣例）
     disaster_types: Mapped[list[str]] = mapped_column(
-        ARRAY(String), server_default=text("'{}'"), default=list, nullable=False,
+        ARRAY(String),
+        server_default=text("'{}'"),
+        default=list,
+        nullable=False,
         comment="這場災害的型別集合，例如 {landslide,flood}",
     )
     started_at: Mapped[datetime | None] = mapped_column(
@@ -40,6 +47,8 @@ class ProjectSettings(Base, UUIDPKMixin):
         DateTime(timezone=True), server_default=func.now(), comment="建立時間"
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
         comment="最後更新時間",
     )
