@@ -243,12 +243,19 @@ nothing.
 The first deploy:
 
 1. Merge it only after the back office has moved off NextAuth: the `admin` container gets no NextAuth secret.
-2. In the Cloudflare Zero Trust dashboard, add the staging tunnel's public hostname
-   `admin-staging.wan-guard.com` → `http://admin:3000`.
-3. **Run `deploy.sh` twice in a row.** The first run is still the old script (see above): it neither builds
+2. **Run `deploy.sh` twice in a row.** The first run is still the old script (see above): it neither builds
    nor starts `admin`, but it does rebuild the site, whose `/admin` then already points at
-   `admin-staging.wan-guard.com`. The second run builds and starts `admin`. Run them back to back.
-4. After the second run, delete the secrets nothing reads any more. The first run still needs them: its old
+   `admin-staging.wan-guard.com`. The second run builds and starts `admin`. Run them back to back. The first
+   run applies one migration, `facf37b5c79d` (ADR-393): three "who did it" columns may now be NULL, which
+   only the mock seed's cleanup writes (see "What does SEED_MOCK touch?" below). The backup step runs before it.
+3. Give the two back-office test accounts, `asuper01@mock.test` (super_admin) and `aaudit01@mock.test`
+   (data_auditor), a password of their own, as in
+   [The back-office test accounts' password](#the-back-office-test-accounts-password). Do it before the next
+   step. Both were added by hand with the mock password, which is published in the seed header, and a deploy
+   without `SEED_MOCK` leaves them as they are.
+4. In the Cloudflare Zero Trust dashboard, add the staging tunnel's public hostname
+   `admin-staging.wan-guard.com` → `http://admin:3000`.
+5. After the second run, delete the secrets nothing reads any more. The first run still needs them: its old
    `gen_env` reads them.
 
    ```bash
@@ -257,13 +264,10 @@ The first deploy:
      gcloud secrets delete $s
    done
    ```
-5. No migration. The mock seed now includes the two back-office test accounts, `asuper01@mock.test`
-   (super_admin) and `aaudit01@mock.test` (data_auditor), with the other mock accounts' password. They were
-   first added by hand, and every `SEED_MOCK=true` run deleted them.
-6. Sign in at `admin-staging.wan-guard.com` twice. `asuper01@mock.test` gets the dashboard. A volunteer, such
-   as `avol01@mock.test`, has no back-office identity and gets 這個帳號還沒有管理權限, with a 回到公開地圖
-   button that opens `https://staging.wan-guard.com/map`. No button means the container has no
-   `SITE_APP_URL`.
+6. Sign in at `admin-staging.wan-guard.com` twice. `asuper01@mock.test`, with the password from step 3, gets the
+   dashboard. A volunteer, such as `avol01@mock.test`, has no back-office identity and gets 這個帳號還沒有管理權限,
+   with a 回到公開地圖 button that opens `https://staging.wan-guard.com/map`. No button means the container has
+   no `SITE_APP_URL`.
 7. To roll back, deploy the previous ref. A ref from before this change defines no `admin` service:
    `deploy.sh` skips it, and the site's `/admin` goes back to its placeholder page. The `admin` container
    that is already running is left alone, because that ref's compose file no longer knows it. Stop it by
@@ -383,10 +387,32 @@ Still on the humans (migration-writing discipline):
   future-work item).
 
 **"What does SEED_MOCK touch?"**
-Only rows with the fixed mock UUID prefixes (users `c…`, the two back-office test accounts among them,
-scenario-A stations `a…`, scenario-B `b…`,
-tickets `d…`, tasks `e…`, assignments `f…`): it deletes those and re-inserts them (idempotent).
-Real (non-prefixed) data is untouched. Without the flag, the seed step is skipped entirely.
+The rows with the fixed mock UUID prefixes (users `c…`, scenario-A stations `a…`, scenario-B `b…`, tickets
+`d…`, tasks `e…`, assignments `f…`), and what testers made with the mock accounts: it deletes those and
+re-inserts the seed (idempotent). The two back-office test accounts are kept, with the password set on the VM;
+their roles are handed out again and what they did is cleared like any mock account's.
+Real data stays: rows a real person made are kept, and where a mock account reviewed, published or audited
+them, that reference is set to NULL. Without the flag, the seed step is skipped entirely.
+
+### The back-office test accounts' password
+
+`asuper01@mock.test` (super_admin) and `aaudit01@mock.test` (data_auditor) sign in to a public back office
+with the widest rights there are, so they get no password from the seed: the mock password is in its header.
+Their `@mock.test` addresses receive no mail, so forgot-password cannot reach them either. Set each one on the
+VM:
+
+```bash
+cd /opt/wanguard/Backend
+sudo docker compose -f docker-compose.staging.yml run --rm -e PYTHONPATH=/app backend \
+  python scripts/set_password.py asuper01@mock.test
+```
+
+It asks for the password twice, without echoing it, and signs the account out everywhere. The password needs
+at least 8 characters, as on the login page. Keep it out of the repo and out of public channels; the
+person who looks after staging hands it to testers.
+
+`SEED_MOCK=true` keeps both accounts and their password, so this is done once. Only a database rebuilt
+from empty needs it again; until then the two accounts cannot sign in.
 
 ---
 

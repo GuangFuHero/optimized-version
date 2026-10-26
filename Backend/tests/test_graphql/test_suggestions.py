@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select, update
 
 from app.models.geo import Station
-from app.models.station_property import StationProperty, StationUpdateSuggestion
+from app.models.station_property import StationProperty, StationSuggestionMerge, StationUpdateSuggestion
 from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
 
 # ---------------------------------------------------------------------------
@@ -636,3 +636,27 @@ async def test_stations_filter_has_pending_suggestions(
 
     listed = (await _gql(client, None, queue, {}))["data"]["stations"]["items"]
     assert sample_station in {s["uuid"] for s in listed}
+
+
+@pytest.mark.asyncio
+async def test_a_merge_whose_reviewer_is_gone_reads_a_null_reviewer(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """ADR-393: a SEED_MOCK run keeps a real merge a mock account reviewed and empties reviewed_by."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, user_token, "station", sample_station, "op_hour", "24h")
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", "24h"),
+    ]))["data"]["mergeStationSuggestions"]
+    async with test_db() as db:
+        await db.execute(
+            update(StationSuggestionMerge)
+            .where(StationSuggestionMerge.uuid == merge["uuid"])
+            .values(reviewed_by=None)
+        )
+
+    history = "query($uuid: UUID!) { station(uuid: $uuid) { suggestionMerges { uuid reviewedBy } } }"
+    view = (await _gql(client, auditor_token, history, {"uuid": sample_station}))["data"]["station"]
+
+    assert view["suggestionMerges"] == [{"uuid": merge["uuid"], "reviewedBy": None}]

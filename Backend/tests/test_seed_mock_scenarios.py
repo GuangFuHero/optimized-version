@@ -50,8 +50,14 @@ REAL_TEAM = "99999999-0000-4000-8000-0000000000ee"
 REAL_STATION = "99999999-0000-4000-8000-0000000000ff"
 REAL_MERGE = "99999999-0000-4000-8000-000000000101"
 REAL_BRIEFING = "99999999-0000-4000-8000-000000000102"
+REAL_REQUEST = "99999999-0000-4000-8000-000000000103"
+REAL_SUGGESTION = "99999999-0000-4000-8000-000000000104"
+REAL_ANNOUNCEMENT = "99999999-0000-4000-8000-000000000105"
+BACK_OFFICE_BRIEFING = "99999999-0000-4000-8000-000000000106"
 MOCK_NEED = "e0000000-0000-4000-8000-000000000001"
 MOCK_BRIEFING = "80000000-0000-4000-8000-000000000001"
+MOCK_TEMPLATE = "70000000-0000-4000-8000-000000000001"
+MOCK_ANNOUNCEMENT = "90000000-0000-4000-8000-000000000001"
 BUILDING = "99999999-0000-4000-8000-0000000000bb"
 
 
@@ -164,22 +170,64 @@ async def test_every_key_into_a_cleared_table_is_cleared_first(seeded):
     assert not missing, f"section 0 of seed_mock_scenarios.sql does not clear: {sorted(missing)}"
 
 
+SUPER_ADMIN = "c0000000-0000-4000-8000-000000000038"
+AUDITOR = "c0000000-0000-4000-8000-000000000039"
+_BACK_OFFICE_ROLES = (
+    "SELECT c.value, r.name FROM user_contacts c"
+    " JOIN user_role_assign a ON a.user_uuid = c.user_uuid"
+    " JOIN roles r ON r.uuid = a.role_uuid AND r.kind = 'platform' AND r.name <> 'user'"
+    " WHERE c.value IN ('asuper01@mock.test', 'aaudit01@mock.test') AND c.verified"
+    " ORDER BY c.value"
+)
+
+
 @pytest.mark.asyncio(loop_scope="module")
 async def test_the_back_office_test_accounts_hold_their_platform_roles(seeded):
-    """asuper01 and aaudit01 sign in with the mock password as super_admin and data_auditor.
+    """asuper01 and aaudit01 are super_admin and data_auditor, with verified addresses.
 
     They were first added on staging by hand, under the mock uuid prefix, so the next SEED_MOCK run
     deleted them along with every other mock account.
     """
+    rows = await _fetch(_CASE_DSN, _BACK_OFFICE_ROLES)
+    assert [tuple(row) for row in rows] == [
+        ("aaudit01@mock.test", "data_auditor"),
+        ("asuper01@mock.test", "super_admin"),
+    ]
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_the_seed_gives_the_back_office_test_accounts_no_password(seeded):
+    """The mock password is in the seed header, and the back office is on a public host.
+
+    Every other mock account signs in with it; these two get theirs from scripts/set_password.py.
+    """
     rows = await _fetch(
         _CASE_DSN,
-        "SELECT c.value, r.name FROM user_contacts c"
-        " JOIN user_identities i ON i.user_uuid = c.user_uuid AND i.provider = 'password'"
-        " JOIN user_role_assign a ON a.user_uuid = c.user_uuid"
-        " JOIN roles r ON r.uuid = a.role_uuid AND r.kind = 'platform' AND r.name <> 'user'"
-        " WHERE c.value IN ('asuper01@mock.test', 'aaudit01@mock.test') AND c.verified"
-        " ORDER BY c.value",
+        "SELECT user_uuid::text FROM user_identities WHERE user_uuid = ANY($1::uuid[])",
+        [SUPER_ADMIN, AUDITOR],
     )
+    assert rows == []
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_a_password_set_on_the_back_office_test_accounts_survives_a_rerun(seeded):
+    """SEED_MOCK keeps the two accounts, so the password set once on the VM is not lost to it.
+
+    Their roles are handed out again, and what they did is still cleared (see RERUN_CASES).
+    """
+    await _execute(
+        _CASE_DSN,
+        "INSERT INTO user_identities (uuid, user_uuid, provider, password_hash, created_at)"
+        f" VALUES (gen_random_uuid(), '{SUPER_ADMIN}', 'password', 'set-on-the-vm', now())",
+    )
+
+    await _execute(_CASE_DSN, SEED_SQL)
+
+    identities = await _fetch(
+        _CASE_DSN, f"SELECT password_hash FROM user_identities WHERE user_uuid = '{SUPER_ADMIN}'"
+    )
+    assert [row["password_hash"] for row in identities] == ["set-on-the-vm"]
+    rows = await _fetch(_CASE_DSN, _BACK_OFFICE_ROLES)
     assert [tuple(row) for row in rows] == [
         ("aaudit01@mock.test", "data_auditor"),
         ("asuper01@mock.test", "super_admin"),
@@ -370,6 +418,110 @@ async def _real_briefing_live() -> None:
     )
 
 
+async def _real_user() -> None:
+    await _execute(
+        _CASE_DSN, f"INSERT INTO users (uuid, name, credibility_score) VALUES ('{REAL_USER}', '真人', 50)"
+    )
+
+
+async def _real_station() -> None:
+    await _real_user()
+    await _copy_row("base_geometries", MOCK_STATION, REAL_STATION, created_by="NULL")
+    await _copy_row(
+        "stations", MOCK_STATION, REAL_STATION, updated_by="NULL", team_uuid="NULL", child_station_uuid="NULL"
+    )
+
+
+async def _real_request_reviewed_by_mock_account() -> None:
+    await _real_user()
+    await _execute(
+        _CASE_DSN,
+        f"""INSERT INTO role_requests (uuid, requested_role, reason, created_by, status, reviewed_by,
+                                       review_note, closed_at)
+            VALUES ('{REAL_REQUEST}', 'data_auditor', '想幫忙審核', '{REAL_USER}', 'rejected', '{MOCK_USER}',
+                    '資料不足', now())""",
+    )
+
+
+async def _real_suggestion_reviewed_by_mock_account() -> None:
+    await _real_station()
+    await _execute(
+        _CASE_DSN,
+        f"""INSERT INTO station_update_suggestions (uuid, target_type, target_uuid, field_name, new_value,
+                                                    status, reviewed_by, created_by)
+            VALUES ('{REAL_SUGGESTION}', 'station', '{REAL_STATION}', 'name', '新站名', 'rejected',
+                    '{MOCK_USER}', '{REAL_USER}')""",
+    )
+
+
+async def _real_merge_reviewed_by_mock_account() -> None:
+    await _real_station()
+    await _execute(
+        _CASE_DSN,
+        f"""INSERT INTO station_suggestion_merges (uuid, station_uuid, status, reviewed_by)
+            VALUES ('{REAL_MERGE}', '{REAL_STATION}', 'applied', '{MOCK_USER}');
+            INSERT INTO station_update_suggestions (uuid, target_type, target_uuid, field_name, new_value,
+                                                    status, reviewed_by, created_by, merge_uuid)
+            VALUES ('{REAL_SUGGESTION}', 'station', '{REAL_STATION}', 'name', '新站名', 'approved',
+                    '{MOCK_USER}', '{REAL_USER}', '{REAL_MERGE}')""",
+    )
+
+
+async def _real_briefing(**actors: str) -> None:
+    """A real person's briefing version, taken down so it never competes with the seed's live one."""
+    await _real_user()
+    real = f"'{REAL_USER}'"
+    values = {
+        "template_uuid": "NULL",
+        "status": "'inactive'",
+        "created_by": real,
+        "updated_by": real,
+        "published_by": real,
+        **actors,
+    }
+    await _copy_row("briefings", MOCK_BRIEFING, REAL_BRIEFING, **values)
+
+
+async def _real_briefing_published_by_mock_account() -> None:
+    await _real_briefing(updated_by=f"'{MOCK_USER}'", published_by=f"'{MOCK_USER}'")
+
+
+async def _real_briefing_taken_down_by_mock_account() -> None:
+    # Publishing a new version takes the live one down and names the publisher as its updater.
+    await _real_briefing(updated_by=f"'{MOCK_USER}'")
+
+
+async def _real_briefing_from_a_mock_template() -> None:
+    await _real_briefing(template_uuid=f"'{MOCK_TEMPLATE}'")
+
+
+async def _real_announcement_published_by_mock_account() -> None:
+    await _real_user()
+    await _copy_row(
+        "announcements",
+        MOCK_ANNOUNCEMENT,
+        REAL_ANNOUNCEMENT,
+        active="false",
+        created_by=f"'{REAL_USER}'",
+        updated_by=f"'{MOCK_USER}'",
+        published_by=f"'{MOCK_USER}'",
+    )
+
+
+async def _briefing_by_a_back_office_test_account() -> None:
+    account = f"'{SUPER_ADMIN}'"
+    await _copy_row(
+        "briefings",
+        MOCK_BRIEFING,
+        BACK_OFFICE_BRIEFING,
+        template_uuid="NULL",
+        status="'inactive'",
+        created_by=account,
+        updated_by=account,
+        published_by=account,
+    )
+
+
 # What a tester did with a mock account, and a query that is true once the rerun has handled it.
 RERUN_CASES = {
     "dedup verdict by a mock account": (
@@ -442,6 +594,61 @@ RERUN_CASES = {
             f"SELECT EXISTS (SELECT 1 FROM briefings WHERE uuid = '{REAL_BRIEFING}' AND status = 'published')"
             f" AND NOT EXISTS (SELECT 1 FROM briefings WHERE uuid = '{MOCK_BRIEFING}')"
         ),
+    ),
+    # A real person's row that a mock account only reviewed, published or last touched stays, with
+    # that reference emptied (ADR-393).
+    "real role request a mock account reviewed": (
+        _real_request_reviewed_by_mock_account,
+        (
+            "SELECT EXISTS (SELECT 1 FROM role_requests"
+            f" WHERE uuid = '{REAL_REQUEST}' AND status = 'rejected' AND reviewed_by IS NULL)"
+        ),
+    ),
+    "real station suggestion a mock account reviewed": (
+        _real_suggestion_reviewed_by_mock_account,
+        (
+            "SELECT EXISTS (SELECT 1 FROM station_update_suggestions"
+            f" WHERE uuid = '{REAL_SUGGESTION}' AND status = 'rejected' AND reviewed_by IS NULL)"
+        ),
+    ),
+    "real merge a mock account reviewed": (
+        _real_merge_reviewed_by_mock_account,
+        (
+            "SELECT EXISTS (SELECT 1 FROM station_suggestion_merges"
+            f" WHERE uuid = '{REAL_MERGE}' AND status = 'applied' AND reviewed_by IS NULL)"
+            " AND EXISTS (SELECT 1 FROM station_update_suggestions"
+            f" WHERE uuid = '{REAL_SUGGESTION}' AND merge_uuid = '{REAL_MERGE}' AND reviewed_by IS NULL)"
+        ),
+    ),
+    "real briefing a mock account published": (
+        _real_briefing_published_by_mock_account,
+        (
+            f"SELECT EXISTS (SELECT 1 FROM briefings WHERE uuid = '{REAL_BRIEFING}'"
+            f" AND created_by = '{REAL_USER}' AND updated_by IS NULL AND published_by IS NULL)"
+        ),
+    ),
+    "real briefing a mock account took down": (
+        _real_briefing_taken_down_by_mock_account,
+        (
+            "SELECT EXISTS (SELECT 1 FROM briefings WHERE uuid = "
+            f"'{REAL_BRIEFING}' AND updated_by IS NULL AND published_by = '{REAL_USER}')"
+        ),
+    ),
+    "real briefing from a mock template": (
+        _real_briefing_from_a_mock_template,
+        f"SELECT EXISTS (SELECT 1 FROM briefings WHERE uuid = '{REAL_BRIEFING}' AND template_uuid IS NULL)",
+    ),
+    "real announcement a mock account published": (
+        _real_announcement_published_by_mock_account,
+        (
+            "SELECT EXISTS (SELECT 1 FROM announcements WHERE uuid = "
+            f"'{REAL_ANNOUNCEMENT}' AND updated_by IS NULL AND published_by IS NULL)"
+        ),
+    ),
+    # The back-office test accounts are kept, and what they did is cleared like any mock account's.
+    "briefing a back-office test account wrote": (
+        _briefing_by_a_back_office_test_account,
+        f"SELECT NOT EXISTS (SELECT 1 FROM briefings WHERE uuid = '{BACK_OFFICE_BRIEFING}')",
     ),
 }
 
