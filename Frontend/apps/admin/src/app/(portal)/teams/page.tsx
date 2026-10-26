@@ -7,4 +7,11 @@ export const metadata: Metadata = {
   description: '島嶼守望管理平台的團隊與成員名單',
 };
 
-export default TeamsPage;
+export default function Page() {
+  const siteUrl =
+    process.env.SITE_APP_URL ??
+    (process.env.NODE_ENV === 'development'
+      ? 'http://localhost:3000'
+      : undefined);
+  return <TeamsPage siteUrl={siteUrl} />;
+}

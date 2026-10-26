@@ -25,7 +25,12 @@ import {
   createQrDataUrl,
   downloadQrPng,
 } from '../../point-share';
-import { currentInvite, INVITE_VALID_HOURS, toTeamInvite } from './invite';
+import {
+  currentInvite,
+  inviteUrl,
+  INVITE_VALID_HOURS,
+  toTeamInvite,
+} from './invite';
 import { captionSx, formatDateTime } from './parts';
 import type { Team } from './roster';
 
@@ -47,16 +52,26 @@ function lineShareUrl(text: string, url: string) {
  */
 export function InviteSheet({
   team,
+  siteUrl,
   onClose,
 }: {
   team: Team;
+  siteUrl?: string;
   onClose: () => void;
 }) {
   const [canShareNatively, setCanShareNatively] = useState(false);
-  const invites = useTeamInvites(team.uuid);
+  const siteConfigured = useMemo(() => {
+    try {
+      return Boolean(siteUrl && inviteUrl('check', siteUrl));
+    } catch {
+      return false;
+    }
+  }, [siteUrl]);
+  const invites = useTeamInvites(team.uuid, { enabled: siteConfigured });
   const createInvite = useCreateTeamInvite();
   const existing = currentInvite(invites.data);
-  const needsInvite = invites.isSuccess && !existing && createInvite.isIdle;
+  const needsInvite =
+    siteConfigured && invites.isSuccess && !existing && createInvite.isIdle;
   const { mutate: issueInvite } = createInvite;
 
   useEffect(() => {
@@ -64,15 +79,17 @@ export function InviteSheet({
   }, [needsInvite, issueInvite, team.uuid]);
 
   const issued = existing ?? createInvite.data ?? null;
-  const invite = useMemo(
-    () =>
-      issued && typeof window !== 'undefined'
-        ? toTeamInvite(issued, window.location.origin)
-        : null,
-    [issued],
-  );
+  const invite = useMemo(() => {
+    if (!issued || !siteUrl) return null;
+    try {
+      return toTeamInvite(issued, siteUrl);
+    } catch {
+      return null;
+    }
+  }, [issued, siteUrl]);
   const loading =
-    invites.isPending || createInvite.isPending || (needsInvite && !issued);
+    siteConfigured &&
+    (invites.isPending || createInvite.isPending || (needsInvite && !issued));
   const qr = useMemo(() => {
     if (!invite) return null;
     try {
@@ -108,7 +125,11 @@ export function InviteSheet({
           <b>你核准了才會加入</b>，並以成員身份加入本隊。
         </Typography>
 
-        {loading ? (
+        {!siteConfigured ? (
+          <Callout tone="danger">
+            暫時無法分享邀請，請聯絡管理員確認公開網站網址。
+          </Callout>
+        ) : loading ? (
           <Typography sx={captionSx}>產生邀請連結中…</Typography>
         ) : !invite || !qr ? (
           <Callout tone="danger">

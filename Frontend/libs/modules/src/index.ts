@@ -99,6 +99,7 @@ export type {
 export { AnnouncementPage } from './admin/announcement';
 export { MembersPermissionsPage, TeamsPage } from './admin/members';
 export { BackOfficePlaceholder } from './role-request';
+export { TeamInvitePage } from './role-request/invite-page';
 export {
   AdminErrorPage,
   AdminPlaceholderPage,

@@ -10,10 +10,8 @@ import {
 } from '@rescue-frontend/modules';
 
 interface SiteListPageProps {
-  params?: Promise<{ segments?: string[] }> | { segments?: string[] };
-  searchParams?:
-    | Promise<Record<string, string | string[] | undefined>>
-    | Record<string, string | string[] | undefined>;
+  params?: Promise<{ segments?: string[] }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }
 
 async function resolveMaybe<T>(value: T | Promise<T> | undefined, fallback: T) {

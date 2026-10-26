@@ -12,6 +12,7 @@ import { adminRestClient } from './client';
 import ApiError from '../rest/api-error';
 import { responseData } from '../rest/openapi-client';
 import type { AdminQueryOptions } from './graphql-fetchers';
+import { readAllTeamMembers } from './team-members';
 
 export const currentUserQuery = () =>
   queryOptions({
@@ -571,22 +572,18 @@ export function useRemoveTeamMember() {
   });
 }
 
-/** One team's members (Spec/026, ADR-362). A team is small; one page of the maximum covers it. */
-const TEAM_MEMBERS_PAGE_SIZE = 200;
-
 export const teamMembersQuery = (teamUuid: string) =>
   queryOptions({
     queryKey: ['admin', 'teams', 'TeamMembers', teamUuid],
     queryFn: ({ signal }) =>
-      adminRestClient
-        .GET('/api/v1/admin/teams/{team_uuid}/members', {
-          params: {
-            path: { team_uuid: teamUuid },
-            query: { limit: TEAM_MEMBERS_PAGE_SIZE },
-          },
-          signal,
-        })
-        .then(responseData),
+      readAllTeamMembers((skip, limit) =>
+        adminRestClient
+          .GET('/api/v1/admin/teams/{team_uuid}/members', {
+            params: { path: { team_uuid: teamUuid }, query: { skip, limit } },
+            signal,
+          })
+          .then(responseData),
+      ),
   });
 
 export function useTeamMembers(
