@@ -278,6 +278,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 - ~~contract test 的效能門檻與 `ENGINE_TIMEOUT_S`~~：已依實測定案（ADR-307）；Chi 在 Task 0 仍可提意見。
 - **離線 harness**：engine 需要 DB 後，Chi 的離線回測要有對應的資料庫或替身，由 Chi 決定。
 - ~~任務的 visibility~~：`visibility` 已在 #84 移除，這條不再適用。
+- **同時送出可能漏提示**：呼叫端先查再寫，中間沒有上鎖。同一地點幾乎同時送出的單，在彼此 commit 之前都查不到對方，會一起建立（QA 在本機實測：20 張一樣的單同時送出，4 張建立、16 張被擋）。目前接受，等慢層（背景掃描）做出來後補抓；真的常發生再考慮加鎖。
 
 ---
 
