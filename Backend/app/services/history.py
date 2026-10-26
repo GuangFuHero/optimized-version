@@ -353,6 +353,9 @@ def build_events(rows: list[AuditLog]) -> list[Event]:
                         after=after,
                     )
                 )
+        # A write that only moved `updated_at` marks a change to a related row, which has its own event.
+        if {change.field for change in event.changes} == {"updated_at"}:
+            continue
         events.append(event)
 
     events.sort(key=lambda e: e.at, reverse=True)

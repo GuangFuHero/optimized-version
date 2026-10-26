@@ -339,9 +339,9 @@ async def test_both_tickets_show_the_merge_as_their_last_update(db):
 
     await _resolve(db, reviewer, ids)
 
-    (event,) = (await db.scalars(select(DedupAuditEvent).where(DedupAuditEvent.event_type == "merged"))).all()
+    merged_at = (await _row(db, DuplicatePair, ids["pair"])).reviewed_at
     for ticket in ("a", "b"):
-        assert (await _row(db, Tickets, ids[ticket])).updated_at == event.created_at
+        assert (await _row(db, Tickets, ids[ticket])).updated_at == merged_at
 
 
 # --- need status (ADR-370) ----------------------------------------------------------------

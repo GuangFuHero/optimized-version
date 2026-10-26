@@ -177,9 +177,10 @@ async def merge_station_suggestions(
         rows_by_field[(row.target_uuid, row.field_name)].append(row)
 
     changes, touched = await _apply_decisions(db, station, decisions, rows_by_field)
+    decided_at = datetime.now(UTC)  # read under the station's lock, like a revoke's revoked_at
     if changes:
         # An approval is an update at its own time, even one that wrote a property or an unchanged value.
-        touch(station)
+        touch(station, at=decided_at)
 
     merge = StationSuggestionMerge(
         station_uuid=str(station.uuid),
@@ -187,6 +188,7 @@ async def merge_station_suggestions(
         review_note=review_note,
         status="applied",
         reviewed_by=actor_uid,
+        created_at=decided_at,
     )
     db.add(merge)
     await db.flush()

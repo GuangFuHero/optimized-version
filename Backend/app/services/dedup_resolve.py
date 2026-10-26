@@ -121,11 +121,13 @@ async def _write(db: AsyncSession, plan: ResolvePlan, ticket_changes: dict, task
     await _write_items(db, plan, now)
     await _write_photos_and_answers(db, plan, now)
     await _cancel_secondary(db, plan, now)
-    # The kept ticket's needs, items, photos and answers are related rows, which the update hook cannot see.
-    touch(await db.get(Tickets, plan.primary_uuid))
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=plan.primary_uuid)
     await void_stale_verdict(db, plan.primary_uuid)
+    # Last, so no later write stamps its own time: both tickets read the merge time, related rows included.
+    for ticket_uuid in (plan.primary_uuid, plan.secondary_uuid):
+        touch(await db.get(Tickets, ticket_uuid), at=now)
+    await db.flush()
 
 
 async def _locked_snapshot(db: AsyncSession, pair: DuplicatePair, request):

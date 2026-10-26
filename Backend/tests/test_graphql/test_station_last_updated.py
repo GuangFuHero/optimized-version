@@ -182,6 +182,23 @@ async def test_an_edit_to_only_a_stations_column_moves_it_and_a_save_without_cha
 
 
 @pytest.mark.asyncio
+async def test_re_sending_the_same_point_does_not_move_it_and_a_new_point_does(
+    client, coordinator_auth, sample_station
+):
+    """The edit form and a bulk re-import send the point back every time; only a moved pin is a change."""
+    _, admin = coordinator_auth
+    await _set_earlier(sample_station)
+    same = {"type": "Point", "coordinates": [121.5, 25.0]}
+    await _gql(client, admin, UPDATE_STATION, {"uuid": sample_station, "input": {"geometry": same}})
+    assert await _updated_at(client, admin, sample_station) == EARLIER
+
+    moved = {"type": "Point", "coordinates": [121.51, 25.0]}
+    await _gql(client, admin, UPDATE_STATION, {"uuid": sample_station, "input": {"geometry": moved}})
+
+    assert await _updated_at(client, admin, sample_station) > EARLIER
+
+
+@pytest.mark.asyncio
 async def test_a_property_edit_moves_it_and_a_save_without_changes_does_not(
     client, coordinator_auth, sample_station, sample_station_property
 ):

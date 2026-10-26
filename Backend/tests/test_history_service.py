@@ -359,6 +359,26 @@ def test_creating_a_resource_is_one_event_not_two():
     assert events[0].tables == {"base_geometries", "tickets"}
 
 
+def test_a_write_that_only_moved_updated_at_is_not_an_event():
+    """Adding a need also stamps its ticket's updated_at; the need's own event already says what happened."""
+    ticket, need, at = uuidlib.uuid4(), uuidlib.uuid4(), _at()
+    events = build_events(
+        [
+            _audit("ticket_tasks", "INSERT", need, new={"task_name": "清淤"}, at=at),
+            _audit(
+                "base_geometries",
+                "UPDATE",
+                ticket,
+                old={"updated_at": "2026-08-21T08:00:00+00:00"},
+                new={"updated_at": "2026-08-21T09:00:00+00:00"},
+                at=at,
+            ),
+        ]
+    )
+
+    assert [event.row_id for event in events] == [need]
+
+
 def test_a_soft_delete_reads_as_deleted_not_updated():
     """ADR-135: it is an UPDATE on base_geometries, and the subclass table is untouched.
 

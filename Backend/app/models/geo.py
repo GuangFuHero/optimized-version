@@ -167,11 +167,13 @@ class Station(BaseGeometry):
 
 
 def touch(record: BaseGeometry, at: datetime | None = None) -> None:
-    """Move a station's or ticket's 「最後更新」 (`updated_at`) to `at`, or to the transaction's time.
+    """Move a station's or ticket's 「最後更新」 (`updated_at`) to `at`, or to the time of the write.
 
     For a change `stamp_updated_at` cannot see, to a related row, or one that must carry a set time.
     """
-    record.updated_at = func.now() if at is None else at
+    # clock_timestamp(), not now(): now() is when the transaction began, which a write that waited on
+    # a lock would stamp after a later one.
+    record.updated_at = func.clock_timestamp() if at is None else at
 
 
 def stamp_updated_at(mapper, _connection, target) -> None:
@@ -187,7 +189,7 @@ def stamp_updated_at(mapper, _connection, target) -> None:
     if any(
         state.attrs[attr.key].history.has_changes() for attr in mapper.column_attrs if attr.key not in ignored
     ):
-        target.updated_at = func.now()
+        target.updated_at = func.clock_timestamp()
 
 
 event.listen(Station, "before_update", stamp_updated_at)
