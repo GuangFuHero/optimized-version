@@ -20,9 +20,9 @@ async function reported(error: Error, silent: boolean) {
 }
 
 describe('createAdminQueryClient — SILENT_ERROR_META', () => {
-  it('keeps a silent query’s 403 away from onError: the card shows it instead', async () => {
+  it('keeps a silent query’s failure away from onError: the card shows it instead', async () => {
     expect(
-      await reported(new ApiError(403, 'Permission Denied.'), true),
+      await reported(new ApiError(500, 'Internal Server Error'), true),
     ).toEqual([]);
   });
 
@@ -46,12 +46,12 @@ describe('createAdminQueryClient — SILENT_ERROR_META', () => {
     expect((calls[0] as ApiError).status).toBe(401);
   });
 
-  it('reports a 403 from a query that did not opt out', async () => {
+  it('reports a failure from a query that did not opt out', async () => {
     const calls = await reported(
-      new ApiError(403, 'Permission Denied.'),
+      new ApiError(500, 'Internal Server Error'),
       false,
     );
     expect(calls).toHaveLength(1);
-    expect((calls[0] as ApiError).status).toBe(403);
+    expect((calls[0] as ApiError).status).toBe(500);
   });
 });

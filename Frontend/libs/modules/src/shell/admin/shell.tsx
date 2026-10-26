@@ -1,8 +1,14 @@
 'use client';
 
 import { Box, Drawer, useMediaQuery, useTheme } from '@mui/material';
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { usePathname } from 'next/navigation';
 
 import {
   AnnouncementFilter,
@@ -26,7 +32,11 @@ export interface AdminShellProps {
 
 export function AdminShell({ children, notFound = false }: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  // The drawer is open on the page it was opened on, so any navigation closes it: a link in the
+  // drawer, the browser's back button, or a redirect.
+  const pathname = usePathname();
+  const [openedOn, setOpenedOn] = useState<string | null>(null);
+  const mobileOpen = openedOn === pathname;
   const theme = useTheme();
   const mobile = useMediaQuery(theme.breakpoints.down('tablet'));
   const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
@@ -63,7 +73,7 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
 
   // Widening past the breakpoint closes the drawer, so it does not reopen on the next narrowing.
   useEffect(() => {
-    if (!mobile) setMobileOpen(false);
+    if (!mobile) setOpenedOn(null);
   }, [mobile]);
 
   return (
@@ -94,7 +104,7 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
         <Drawer
           open={mobile && mobileOpen}
           transitionDuration={reduceMotion ? 0 : undefined}
-          onClose={() => setMobileOpen(false)}
+          onClose={() => setOpenedOn(null)}
           slotProps={{
             paper: {
               id: 'admin-mobile-navigation',
@@ -102,16 +112,10 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
             },
           }}
         >
-          <Box
-            sx={{ display: 'flex', height: '100%' }}
-            onClick={(event) => {
-              if ((event.target as HTMLElement).closest('a[href]'))
-                setMobileOpen(false);
-            }}
-          >
+          <Box sx={{ display: 'flex', height: '100%' }}>
             <AdminSidebar
               collapsed={false}
-              onToggle={() => setMobileOpen(false)}
+              onToggle={() => setOpenedOn(null)}
               activeId={forbidden ? undefined : activeItem?.id}
             />
           </Box>
@@ -138,7 +142,7 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
         >
           <AdminHeader
             title={pageTitle}
-            onOpenNavigation={() => setMobileOpen(true)}
+            onOpenNavigation={() => setOpenedOn(pathname)}
             navigationOpen={mobileOpen}
           />
           <Box
