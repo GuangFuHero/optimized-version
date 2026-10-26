@@ -158,12 +158,16 @@ async def test_no_token_is_unauthorized(client, db_session):
 async def test_filters_and_page_reach_the_service(client, db_session, redis):
     """Repeated query parameters filter; skip and limit page."""
     await _card(db_session)
-    confirmed = await _card(db_session, status="confirmed")
+    confirmed = await _card(db_session, status="confirmed_duplicate")
     headers = await _headers(db_session, redis, "super_admin")
 
     response = await client.get(
         URL,
-        params=[("status", "confirmed"), ("status", "rejected"), ("entity_kind", "ticket_task")],
+        params=[
+            ("status", "confirmed_duplicate"),
+            ("status", "not_duplicate"),
+            ("entity_kind", "ticket_task"),
+        ],
         headers=headers,
     )
     paged = await client.get(URL, params={"skip": 1, "limit": 1}, headers=headers)
@@ -206,7 +210,9 @@ async def test_an_unknown_card_is_not_found(client, db_session, redis):
 # --- decisions (Spec 025 §2.3) -----------------------------------------------------------
 
 
-@pytest.mark.parametrize(("action", "verdict"), [("confirm", "confirmed"), ("reject", "rejected")])
+@pytest.mark.parametrize(
+    ("action", "verdict"), [("confirm", "confirmed_duplicate"), ("reject", "not_duplicate")]
+)
 @pytest.mark.parametrize("role_name", ["super_admin", "data_auditor"])
 async def test_the_seeded_reviewers_decide_a_card(client, db_session, redis, role_name, action, verdict):
     """ADR-337: both roles hold ai_duplicate.review; the response is the updated card."""
@@ -241,7 +247,7 @@ async def test_everyone_else_cannot_decide(client, db_session, redis, role_name)
 
 async def test_a_refusal_carries_the_status_that_says_why(client, db_session, redis):
     """409 for a decided card (ADR-343), 404 for a missing one, 422 for an oversized note."""
-    decided = await _card(db_session, status="confirmed")
+    decided = await _card(db_session, status="confirmed_duplicate")
     pending = await _card(db_session)
     headers = await _headers(db_session, redis, "super_admin")
 
@@ -293,7 +299,9 @@ async def test_a_data_auditor_cannot_undo_a_super_admins_verdict(client, db_sess
     response = await client.post(f"{URL}/{card['pair']}/revoke", headers=auditor)
 
     assert response.status_code == 403
-    assert (await client.get(f"{URL}/{card['pair']}", headers=auditor)).json()["status"] == "confirmed"
+    assert (await client.get(f"{URL}/{card['pair']}", headers=auditor)).json()[
+        "status"
+    ] == "confirmed_duplicate"
 
 
 async def test_a_super_admin_undoes_a_data_auditors_verdict(client, db_session, redis):

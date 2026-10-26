@@ -162,7 +162,7 @@ async def test_default_lists_pending_cards_only(db):
     for status in ("dup_ignored", "suggested"):
         a, b = await _two_tasks(db, actor)
         pending.append(await _pair(db, a, b, status=status))
-    for status in ("confirmed", "rejected"):
+    for status in ("confirmed_duplicate", "not_duplicate"):
         a, b = await _two_tasks(db, actor)
         await _pair(db, a, b, status=status)
     a, b = await _two_tasks(db, actor)
@@ -178,11 +178,11 @@ async def test_status_filter_reaches_decided_cards(db):
     """Asking for confirmed returns only those, not the pending ones."""
     actor = await _actor(db, Perm.AI_DUP_VIEW)
     a, b = await _two_tasks(db, actor)
-    confirmed = await _pair(db, a, b, status="confirmed")
+    confirmed = await _pair(db, a, b, status="confirmed_duplicate")
     a, b = await _two_tasks(db, actor)
     await _pair(db, a, b)
 
-    page = await dedup_review.list_pairs(db, actor=actor, statuses=["confirmed"])
+    page = await dedup_review.list_pairs(db, actor=actor, statuses=["confirmed_duplicate"])
 
     assert [item.pair.uuid for item in page.items] == [confirmed.uuid]
 

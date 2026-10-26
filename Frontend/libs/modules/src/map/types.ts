@@ -78,6 +78,10 @@ export interface RescueMapBaseLayerConfig {
   licenseNote?: string;
   /** 暫時從圖層面板與可選清單中隱藏，但設定保留。 */
   hidden?: boolean;
+  /** 圖層面板中仍顯示但不可選，並以此說明取代描述。 */
+  disabledReason?: string;
+  /** 上游提供的最大縮放層級；超過時放大此層級的圖磚。 */
+  maxNativeZoom?: number;
 }
 
 export interface RescueMapOverlayLayerConfig {

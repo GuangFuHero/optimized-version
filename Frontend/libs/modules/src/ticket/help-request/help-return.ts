@@ -4,18 +4,14 @@
  * point, `help=<lat>,<lng>` with one. Built as A's claim does (`needs/claim-return.ts`).
  */
 
+import {
+  buildSignInHref,
+  stripQueryKeys,
+  type ReturnLocation,
+  type ReturnQuery,
+} from '../../route/return-query';
+
 import type { HelpRequestSeed } from './open-help-request';
-
-/** Where the guest pressed the button — `window.location` will do. */
-export interface HelpReturnLocation {
-  pathname: string;
-  search: string;
-}
-
-/** What reading the way back needs of a query: `URLSearchParams`, or Next's read-only one. */
-export interface HelpReturnQuery {
-  get(name: string): string | null;
-}
 
 /** The drawer to open again, from where on the map if from anywhere. */
 export interface HelpReturn {
@@ -37,41 +33,23 @@ function readSeed(value: string): HelpRequestSeed | null {
 }
 
 /** A point that is not one still reopens the drawer, which then asks the device where it is. */
-export function readHelpReturn(query: HelpReturnQuery): HelpReturn | null {
+export function readHelpReturn(query: ReturnQuery): HelpReturn | null {
   const value = query.get(HELP_KEY);
 
   return value === null ? null : { seed: readSeed(value) };
 }
 
-/** The address without `help=` — taken off once read, so a reload or a copied link does nothing. */
+/** The address without `help=`. */
 export function stripHelpReturn(href: string): string {
-  const url = new URL(href, 'http://site.invalid');
-
-  // Rewriting the query re-spells what stays (`%20` as `+`): without the marker, hand the address
-  // back as it came, so nothing mistakes it for a changed one.
-  if (!url.searchParams.has(HELP_KEY)) {
-    return href;
-  }
-
-  url.searchParams.delete(HELP_KEY);
-
-  return `${url.pathname}${url.search}${url.hash}`;
+  return stripQueryKeys(href, [HELP_KEY]);
 }
 
-/**
- * From `window.location`, not the router: the map rewrites its address in place
- * (`replaceState`), which the router's pathname does not follow — the shell's own sign-in sent
- * guests back to a bare `/map`.
- */
+/** The shell's own sign-in sent guests back to a bare `/map`: this one keeps the address. */
 export function buildHelpSignInHref(
-  location: HelpReturnLocation,
+  location: ReturnLocation,
   seed: HelpRequestSeed | null,
 ): string {
-  const query = new URLSearchParams(location.search);
-  query.set(
-    HELP_KEY,
-    seed ? `${seed.lat.toFixed(6)},${seed.lng.toFixed(6)}` : '1',
-  );
-
-  return `/login?callbackUrl=${encodeURIComponent(`${location.pathname}?${query}`)}`;
+  return buildSignInHref(location, {
+    [HELP_KEY]: seed ? `${seed.lat.toFixed(6)},${seed.lng.toFixed(6)}` : '1',
+  });
 }

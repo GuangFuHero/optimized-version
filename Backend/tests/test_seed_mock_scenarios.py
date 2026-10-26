@@ -49,7 +49,9 @@ REAL_TICKET_2 = "99999999-0000-4000-8000-0000000000dd"
 REAL_TEAM = "99999999-0000-4000-8000-0000000000ee"
 REAL_STATION = "99999999-0000-4000-8000-0000000000ff"
 REAL_MERGE = "99999999-0000-4000-8000-000000000101"
+REAL_BRIEFING = "99999999-0000-4000-8000-000000000102"
 MOCK_NEED = "e0000000-0000-4000-8000-000000000001"
+MOCK_BRIEFING = "80000000-0000-4000-8000-000000000001"
 BUILDING = "99999999-0000-4000-8000-0000000000bb"
 
 
@@ -202,7 +204,7 @@ async def _dedup_verdict() -> None:
         f"""INSERT INTO duplicate_pairs (uuid, entity_kind, low_uuid, high_uuid, method, source_layer,
                                          status, reviewed_by)
             VALUES (gen_random_uuid(), 'ticket', '{MOCK_TICKET}', '{MOCK_TICKET_2}', 'manual', 'manual',
-                    'confirmed', '{MOCK_USER}')""",
+                    'confirmed_duplicate', '{MOCK_USER}')""",
     )
 
 
@@ -215,7 +217,7 @@ async def _dedup_verdict_on_real_tickets() -> None:
         f"""INSERT INTO duplicate_pairs (uuid, entity_kind, low_uuid, high_uuid, method, source_layer,
                                          status, reviewed_by)
             VALUES (gen_random_uuid(), 'ticket', '{REAL_TICKET}', '{REAL_TICKET_2}', 'manual', 'manual',
-                    'confirmed', '{MOCK_USER}')""",
+                    'confirmed_duplicate', '{MOCK_USER}')""",
     )
 
 
@@ -327,6 +329,25 @@ async def _real_person_applies_to_mock_team() -> None:
     )
 
 
+async def _real_briefing_live() -> None:
+    await _execute(
+        _CASE_DSN,
+        f"""INSERT INTO users (uuid, name, credibility_score) VALUES ('{REAL_USER}', '真人', 50);
+            UPDATE briefings SET status = 'inactive' WHERE uuid = '{MOCK_BRIEFING}'""",
+    )
+    real = f"'{REAL_USER}'"
+    await _copy_row(
+        "briefings",
+        MOCK_BRIEFING,
+        REAL_BRIEFING,
+        template_uuid="NULL",
+        status="'published'",
+        created_by=real,
+        updated_by=real,
+        published_by=real,
+    )
+
+
 # What a tester did with a mock account, and a query that is true once the rerun has handled it.
 RERUN_CASES = {
     "dedup verdict by a mock account": (
@@ -391,6 +412,13 @@ RERUN_CASES = {
         (
             f"SELECT NOT EXISTS (SELECT 1 FROM role_requests WHERE team_uuid = '{MOCK_TEAM}')"
             f" AND EXISTS (SELECT 1 FROM users WHERE uuid = '{REAL_USER}')"
+        ),
+    ),
+    "real briefing live in the mock briefing's state": (
+        _real_briefing_live,
+        (
+            f"SELECT EXISTS (SELECT 1 FROM briefings WHERE uuid = '{REAL_BRIEFING}' AND status = 'published')"
+            f" AND NOT EXISTS (SELECT 1 FROM briefings WHERE uuid = '{MOCK_BRIEFING}')"
         ),
     ),
 }

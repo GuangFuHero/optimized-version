@@ -16,7 +16,7 @@ import {
   dedupeMarkersById,
   hasRescueMapDetailItem,
   Map,
-  MapRequestHelpButton,
+  MapRequestHelpBar,
   NeedClaimProvider,
   PlaceHereAction,
   PointShareDrawer,
@@ -465,9 +465,6 @@ function SiteMapViewportDataLayer({
       <>
         <SiteMapControls controller={controller} />
         <SiteMapCenterPin open={createModeActive} />
-        {/* A phone's 請求協助; set aside while 「＋」 is open, whose 新增站點 reaches
-            the middle of a 390px screen. */}
-        {createModeActive ? null : <MapRequestHelpButton />}
         {isAuthenticated ? (
           <SiteMapCreateDock
             active={createModeActive}
@@ -498,23 +495,35 @@ function SiteMapViewportDataLayer({
     // The drawer's claim buttons claim through this. The map keeps no copy of the needs (its popups
     // offer no claiming), only each ticket's status.
     <NeedClaimProvider onTicketReloaded={showReloadedTicketStatus}>
-      <Map
-        markers={visibleMarkers}
-        closureAreas={liveDataSnapshot.closureAreas}
-        publicZones={liveDataSnapshot.publicZones}
-        routeState={baseRouteState}
-        onRouteStateChange={onMapRouteStateChange}
-        showScale
-        viewportStore={viewportStore}
-        isAuthenticated={isAuthenticated}
-        renderControls={renderControls}
-        onMapClick={handleMapClick}
-        draftPoint={draftPoint}
-        onDraftPointChange={setDraftPoint}
-        draftPointAction={draftPointAction}
-        ticketDetailOverrides={createTicketDetailOverrides}
-        stationDetailSecondaryAction={stationDetailSecondaryAction}
-      />
+      {/* A phone's 請求協助 takes a row under the map; the map keeps the rest. */}
+      <Box
+        sx={{
+          height: '100%',
+          display: 'grid',
+          gridTemplateRows: 'minmax(0, 1fr) auto',
+        }}
+      >
+        <Box sx={{ minHeight: 0 }}>
+          <Map
+            markers={visibleMarkers}
+            closureAreas={liveDataSnapshot.closureAreas}
+            publicZones={liveDataSnapshot.publicZones}
+            routeState={baseRouteState}
+            onRouteStateChange={onMapRouteStateChange}
+            showScale
+            viewportStore={viewportStore}
+            isAuthenticated={isAuthenticated}
+            renderControls={renderControls}
+            onMapClick={handleMapClick}
+            draftPoint={draftPoint}
+            onDraftPointChange={setDraftPoint}
+            draftPointAction={draftPointAction}
+            ticketDetailOverrides={createTicketDetailOverrides}
+            stationDetailSecondaryAction={stationDetailSecondaryAction}
+          />
+        </Box>
+        <MapRequestHelpBar />
+      </Box>
     </NeedClaimProvider>
   );
 }

@@ -56,7 +56,7 @@ function Pill({
 /** 看是哪幾項: the first marked item, brought to the middle of the screen. */
 function showFirstUpdated() {
   document
-    .querySelector('[data-briefing-updated]')
+    .querySelector('li[data-task-updated="true"]')
     ?.closest('li')
     ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }

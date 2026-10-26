@@ -2,7 +2,6 @@
 
 import { Suspense } from 'react';
 
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
 import { Box, ButtonBase } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
@@ -14,6 +13,7 @@ import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
 } from './header-search-input';
+import { SiteSignInButton } from './sign-in-button';
 import { SiteUserMenu } from './user-menu';
 
 interface SiteMobileTopNavBarProps {
@@ -95,22 +95,7 @@ export function SiteMobileTopNavBar({
         {isAuthenticated ? (
           <SiteUserMenu userName={userName} onSignOut={onSignOut} />
         ) : (
-          <ButtonBase
-            disableRipple
-            aria-label="登入"
-            onClick={onSignIn}
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: '12px',
-              color: palette.brandText,
-              '&:hover': {
-                bgcolor: palette.avatarHover,
-              },
-            }}
-          >
-            <LoginRoundedIcon sx={{ fontSize: 22 }} />
-          </ButtonBase>
+          <SiteSignInButton compact onClick={onSignIn} />
         )}
       </Box>
     </Box>
