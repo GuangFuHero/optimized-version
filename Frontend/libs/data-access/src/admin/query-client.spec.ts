@@ -54,4 +54,25 @@ describe('createAdminQueryClient — SILENT_ERROR_META', () => {
     expect(calls).toHaveLength(1);
     expect((calls[0] as ApiError).status).toBe(500);
   });
+
+  it('keeps a permission 403 from onError whether or not the query opted out: the shell shows 403', async () => {
+    for (const silent of [true, false]) {
+      expect(
+        await reported(new ApiError(403, 'Permission Denied.'), silent),
+      ).toEqual([]);
+    }
+    const graphql = new CombinedError({
+      graphQLErrors: ['403: Permission Denied.'],
+    });
+    expect(await reported(graphql, false)).toEqual([]);
+  });
+
+  it('still reports a 403 that is not about permissions', async () => {
+    const calls = await reported(
+      new ApiError(403, 'Origin not allowed.', 'origin_not_allowed'),
+      false,
+    );
+    expect(calls).toHaveLength(1);
+    expect((calls[0] as ApiError).code).toBe('origin_not_allowed');
+  });
 });
