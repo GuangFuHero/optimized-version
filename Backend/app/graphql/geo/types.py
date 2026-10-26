@@ -65,6 +65,16 @@ class StationOperationalStatus(enum.Enum):
     permanently_closed = "permanently_closed"
 
 
+@strawberry.enum
+class StationOrder(enum.Enum):
+    """How `stations` sorts (ADR-394)."""
+
+    # Relevance while searching, then newest first: the order the site has always had.
+    DEFAULT = "default"
+    # Open stations first, then the most recently updated: the back office's list.
+    OPEN_FIRST_RECENTLY_UPDATED = "open_first_recently_updated"
+
+
 @strawberry.input
 class BoundsInput:
     """Geographic bounding box for spatial filtering."""
@@ -399,6 +409,51 @@ class StationConnection:
 
     items: list[StationType]
     page_info: PageInfo
+
+
+@strawberry.type
+class StationStatusCountType:
+    """How many of the counted stations have one operational status."""
+
+    status: str = strawberry.field(
+        description="An operationalStatus value: active, temporarily_closed or permanently_closed"
+    )
+    count: int
+
+
+@strawberry.type
+class StationTypeCountType:
+    """How many of the counted stations have one type, and how many of those an export would include."""
+
+    type: str | None = strawberry.field(description="The station type; null for stations with none")
+    count: int
+    exportable: int = strawberry.field(
+        description="How many of them the caller's station export would include: none without station.export"
+    )
+
+
+@strawberry.type
+class StationAreaCountType:
+    """How many of the counted stations have their address in one 縣市 and 鄉鎮市區."""
+
+    county: str
+    town: str | None
+    count: int
+
+
+@strawberry.type
+class StationFacetsType:
+    """Counts over the stations `stations` would list for the same filters (ADR-394)."""
+
+    total: int
+    by_status: list[StationStatusCountType]
+    by_type: list[StationTypeCountType]
+    areas: list[StationAreaCountType] = strawberry.field(
+        description="Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none"
+    )
+    pending_review_count: int = strawberry.field(
+        description="Stations with a pending suggestion that the caller holds station.review over"
+    )
 
 
 @strawberry.input

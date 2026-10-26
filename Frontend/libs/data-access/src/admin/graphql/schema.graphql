@@ -857,7 +857,8 @@ input PromoteMarkZoneInput {
 }
 
 type Query {
-  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, county: String = null, town: String = null, official: Boolean = null, createdAfter: DateTime = null, createdBefore: DateTime = null, updatedAfter: DateTime = null, updatedBefore: DateTime = null, orderBy: StationOrder! = DEFAULT, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stationFacets(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, county: String = null, town: String = null, official: Boolean = null, createdAfter: DateTime = null, createdBefore: DateTime = null, updatedAfter: DateTime = null, updatedBefore: DateTime = null): StationFacetsType!
   station(uuid: UUID!): StationType
   hazardousZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): HazardousZoneConnection!
   hazardousZone(uuid: UUID!): HazardousZoneType
@@ -1106,6 +1107,12 @@ type SecondaryLocationType {
   poleNote: String
 }
 
+type StationAreaCountType {
+  county: String!
+  town: String
+  count: Int!
+}
+
 type StationConnection {
   items: [StationType!]!
   pageInfo: PageInfo!
@@ -1115,10 +1122,29 @@ type StationCreated {
   station: StationType!
 }
 
+type StationFacetsType {
+  total: Int!
+  byStatus: [StationStatusCountType!]!
+  byType: [StationTypeCountType!]!
+
+  """Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none"""
+  areas: [StationAreaCountType!]!
+
+  """
+  Stations with a pending suggestion that the caller holds station.review over
+  """
+  pendingReviewCount: Int!
+}
+
 enum StationOperationalStatus {
   active
   temporarily_closed
   permanently_closed
+}
+
+enum StationOrder {
+  DEFAULT
+  OPEN_FIRST_RECENTLY_UPDATED
 }
 
 type StationPropertyConfigType {
@@ -1192,6 +1218,14 @@ type StationPropertyType {
   """
   pendingSuggestedFields: [String!]!
   crowdSourcings: [CrowdSourcingType!]!
+}
+
+type StationStatusCountType {
+  """
+  An operationalStatus value: active, temporarily_closed or permanently_closed
+  """
+  status: String!
+  count: Int!
 }
 
 type StationSuggestionMergeType {
@@ -1346,6 +1380,17 @@ type StationType {
   Merges applied to this station, newest first; empty without station.review over this station
   """
   suggestionMerges: [StationSuggestionMergeType!]!
+}
+
+type StationTypeCountType {
+  """The station type; null for stations with none"""
+  type: String
+  count: Int!
+
+  """
+  How many of them the caller's station export would include: none without station.export
+  """
+  exportable: Int!
 }
 
 input SubmitRoleRequestInput {

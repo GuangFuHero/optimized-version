@@ -990,6 +990,7 @@ export type Query = {
   reverseGeocode: AddressLookupType;
   roleRequestTeams: Array<RoleRequestTeam>;
   station?: Maybe<StationType>;
+  stationFacets: StationFacetsType;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stations: StationConnection;
   suggestableFields: Array<SuggestableFieldType>;
@@ -1088,6 +1089,23 @@ export type QueryStationArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+export type QueryStationFacetsArgs = {
+  assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
+  bounds?: InputMaybe<BoundsInput>;
+  county?: InputMaybe<Scalars['String']['input']>;
+  createdAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  createdBefore?: InputMaybe<Scalars['DateTime']['input']>;
+  hasPendingSuggestions?: Scalars['Boolean']['input'];
+  official?: InputMaybe<Scalars['Boolean']['input']>;
+  operationalStatus?: InputMaybe<StationOperationalStatus>;
+  q?: InputMaybe<Scalars['String']['input']>;
+  stationType?: InputMaybe<Scalars['String']['input']>;
+  town?: InputMaybe<Scalars['String']['input']>;
+  unassignedOnly?: Scalars['Boolean']['input'];
+  updatedAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  updatedBefore?: InputMaybe<Scalars['DateTime']['input']>;
+};
+
 export type QueryStationPropertyConfigsArgs = {
   includeInactive?: Scalars['Boolean']['input'];
   stationType: Scalars['String']['input'];
@@ -1096,13 +1114,21 @@ export type QueryStationPropertyConfigsArgs = {
 export type QueryStationsArgs = {
   assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   bounds?: InputMaybe<BoundsInput>;
+  county?: InputMaybe<Scalars['String']['input']>;
+  createdAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  createdBefore?: InputMaybe<Scalars['DateTime']['input']>;
   hasPendingSuggestions?: Scalars['Boolean']['input'];
   limit?: Scalars['Int']['input'];
+  official?: InputMaybe<Scalars['Boolean']['input']>;
   operationalStatus?: InputMaybe<StationOperationalStatus>;
+  orderBy?: StationOrder;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   stationType?: InputMaybe<Scalars['String']['input']>;
+  town?: InputMaybe<Scalars['String']['input']>;
   unassignedOnly?: Scalars['Boolean']['input'];
+  updatedAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  updatedBefore?: InputMaybe<Scalars['DateTime']['input']>;
 };
 
 export type QuerySuggestableFieldsArgs = {
@@ -1298,6 +1324,13 @@ export type SecondaryLocationType = {
   village?: Maybe<Scalars['String']['output']>;
 };
 
+export type StationAreaCountType = {
+  __typename?: 'StationAreaCountType';
+  count: Scalars['Int']['output'];
+  county: Scalars['String']['output'];
+  town?: Maybe<Scalars['String']['output']>;
+};
+
 export type StationConnection = {
   __typename?: 'StationConnection';
   items: Array<StationType>;
@@ -1309,6 +1342,17 @@ export type StationCreated = {
   station: StationType;
 };
 
+export type StationFacetsType = {
+  __typename?: 'StationFacetsType';
+  /** Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none */
+  areas: Array<StationAreaCountType>;
+  byStatus: Array<StationStatusCountType>;
+  byType: Array<StationTypeCountType>;
+  /** Stations with a pending suggestion that the caller holds station.review over */
+  pendingReviewCount: Scalars['Int']['output'];
+  total: Scalars['Int']['output'];
+};
+
 export const StationOperationalStatus = {
   Active: 'active',
   PermanentlyClosed: 'permanently_closed',
@@ -1317,6 +1361,12 @@ export const StationOperationalStatus = {
 
 export type StationOperationalStatus =
   (typeof StationOperationalStatus)[keyof typeof StationOperationalStatus];
+export const StationOrder = {
+  Default: 'DEFAULT',
+  OpenFirstRecentlyUpdated: 'OPEN_FIRST_RECENTLY_UPDATED',
+} as const;
+
+export type StationOrder = (typeof StationOrder)[keyof typeof StationOrder];
 export type StationPropertyConfigType = {
   __typename?: 'StationPropertyConfigType';
   /** Which control the form renders for this field */
@@ -1364,6 +1414,13 @@ export type StationPropertyType = {
   uuid: Scalars['UUID']['output'];
   /** Credibility weight applied during score aggregation [0.0–2.0], default 1.0 */
   weightings: Scalars['Float']['output'];
+};
+
+export type StationStatusCountType = {
+  __typename?: 'StationStatusCountType';
+  count: Scalars['Int']['output'];
+  /** An operationalStatus value: active, temporarily_closed or permanently_closed */
+  status: Scalars['String']['output'];
 };
 
 export type StationSuggestionMergeType = {
@@ -1463,6 +1520,15 @@ export type StationType = {
   verificationStatus?: Maybe<Scalars['String']['output']>;
   /** Who can see this station: 'public' or 'restricted' */
   visibility?: Maybe<Scalars['String']['output']>;
+};
+
+export type StationTypeCountType = {
+  __typename?: 'StationTypeCountType';
+  count: Scalars['Int']['output'];
+  /** How many of them the caller's station export would include: none without station.export */
+  exportable: Scalars['Int']['output'];
+  /** The station type; null for stations with none */
+  type?: Maybe<Scalars['String']['output']>;
 };
 
 export type SubmitRoleRequestInput = {

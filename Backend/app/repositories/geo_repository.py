@@ -1,6 +1,6 @@
 """Repositories for stations, map areas, building maps, station properties, and crowd sourcing."""
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
@@ -86,8 +86,12 @@ class StationRepository(GenericRepository[Station]):
             conditions.append(self._search_condition(term))
         return conditions
 
-    def _order_by(self, term: str | None) -> list:
+    def _order_by(self, term: str | None, order: str = "default") -> list:
         """Relevance first when searching, otherwise the standing order (ADR-083/147/153).
+
+        `order="open_first_recently_updated"` is the back office's list instead (ADR-394): open
+        stations first, then the most recently updated. It replaces relevance as well, since that
+        list sorts the same way whether or not it is searching.
 
         Two relevance keys, in this order:
 
@@ -108,6 +112,12 @@ class StationRepository(GenericRepository[Station]):
         # (the boolean is false, similarity() is 0 — see the ADR-147 note above), and
         # `created_at` defaults to func.now(), which is transaction-scoped, so a bulk
         # insert leaves a whole block sharing one timestamp.
+        if order == "open_first_recently_updated":
+            return [
+                (self.model.operational_status == "active").desc(),
+                self.model.updated_at.desc().nulls_last(),
+                self.model.uuid.desc(),
+            ]
         standing = [
             self.model.created_at.desc(),
             self.model.uuid.desc(),
@@ -123,7 +133,7 @@ class StationRepository(GenericRepository[Station]):
     async def list_active(
         self, db: AsyncSession, *,
         bounds=None, station_type: str | None = None, operational_status: str | None = None,
-        q: str | None = None, skip: int = 0, limit: int = 50, extra_filters=(),
+        q: str | None = None, skip: int = 0, limit: int = 50, extra_filters=(), order: str = "default",
     ) -> list[Station]:
         """List active stations filtered by bbox/type/operational_status/keyword and RBAC scope."""
         term = normalize_query(q)
@@ -134,7 +144,7 @@ class StationRepository(GenericRepository[Station]):
         async with search_timeout(db, term):
             result = await db.execute(
                 select(self.model).where(*conditions)
-                .order_by(*self._order_by(term))
+                .order_by(*self._order_by(term, order))
                 .offset(skip).limit(limit)
             )
         return result.scalars().all()
@@ -153,6 +163,56 @@ class StationRepository(GenericRepository[Station]):
             return await db.scalar(
                 select(func.count()).select_from(select(self.model).where(*conditions).subquery())
             )
+
+    def _matching(
+        self, columns, *,
+        bounds=None, station_type: str | None = None, operational_status: str | None = None,
+        q: str | None = None, extra_filters=(),
+    ):
+        """The stations list_active() would return, as a subquery of `columns` — for the counts below."""
+        conditions = self._active_conditions(
+            bounds=bounds, station_type=station_type, operational_status=operational_status,
+            q=q, extra_filters=extra_filters,
+        )
+        return select(*columns).where(*conditions).subquery()
+
+    async def count_by_status(self, db: AsyncSession, **filters) -> list[tuple[str, int]]:
+        """Matching stations per operational status (ADR-394), in status order."""
+        rows = self._matching([self.model.operational_status.label("status")], **filters)
+        async with search_timeout(db, normalize_query(filters.get("q"))):
+            result = await db.execute(
+                select(rows.c.status, func.count()).group_by(rows.c.status).order_by(rows.c.status)
+            )
+        return [tuple(row) for row in result.all()]
+
+    async def count_by_type(
+        self, db: AsyncSession, *, exportable_filters, **filters
+    ) -> list[tuple[str | None, int, int]]:
+        """Matching stations per type, and how many of them `exportable_filters` keeps (ADR-394)."""
+        exportable = and_(true(), *exportable_filters).label("exportable")
+        rows = self._matching([self.model.type.label("type"), exportable], **filters)
+        async with search_timeout(db, normalize_query(filters.get("q"))):
+            result = await db.execute(
+                select(rows.c.type, func.count(), func.count().filter(rows.c.exportable))
+                .group_by(rows.c.type)
+                .order_by(rows.c.type.nulls_last())
+            )
+        return [tuple(row) for row in result.all()]
+
+    async def count_by_area(self, db: AsyncSession, **filters) -> list[tuple[str, str | None, int]]:
+        """Matching stations per 縣市 and 鄉鎮市區 of their address; one with no address is in none."""
+        rows = self._matching([self.model.uuid.label("uuid")], **filters)
+        async with search_timeout(db, normalize_query(filters.get("q"))):
+            result = await db.execute(
+                select(
+                    SecondaryLocation.county, SecondaryLocation.town, func.count(func.distinct(rows.c.uuid))
+                )
+                .join(rows, SecondaryLocation.geometry_uuid == rows.c.uuid)
+                .where(SecondaryLocation.county.is_not(None))
+                .group_by(SecondaryLocation.county, SecondaryLocation.town)
+                .order_by(SecondaryLocation.county, SecondaryLocation.town.nulls_last())
+            )
+        return [tuple(row) for row in result.all()]
 
     async def get_high_level_stations(self, db: AsyncSession, min_level: int) -> list[Station]:
         """Return all stations with a level at or above min_level."""

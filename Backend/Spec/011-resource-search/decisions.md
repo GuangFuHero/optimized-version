@@ -1,8 +1,8 @@
-# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276）
+# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
-**Status**: 已實作（PR #35）；ADR-146~158 為 review 後的修正，ADR-174~177 為第二輪 review 後的修正；ADR-276 補上 ADR-149 當初「另開票」的那支守衛測試（PR #48）
+**Status**: 已實作（PR #35）；ADR-146~158 為 review 後的修正，ADR-174~177 為第二輪 review 後的修正；ADR-276 補上 ADR-149 當初「另開票」的那支守衛測試（PR #48）；ADR-394 是站點列表的篩選、排序與計數，給管理平台的站點頁分頁用（393 已分給 PR #125）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/010-multi-team-membership/decisions.md`（ADR-068~076）。
 
 ---
@@ -757,3 +757,55 @@ alembic 走 subprocess 而非 in-process，有兩個原因：`alembic/env.py` �
 ◾ 對 production 零行為差異，純測試基礎建設。
 ➖ 只釘名稱，所以 ADR-149 的「DDL 與 `create_all` 產出逐字相符」這條通則仍然沒有自動守衛；型別與 nullability 的漂移抓不到，還是靠人工與 `autogenerate` 的幽靈 diff。
 ➖ suite 多一次真實的 migration run（session-scoped，兩支測試共用，實測 3.5s），且執行者需要 `CREATE DATABASE` 權限。
+
+---
+
+### ADR-394 `stations` 多了行政區、官方、建立與更新時間的篩選和一種排序；`stationFacets` 回傳同一組篩選的計數
+
+**白話**：管理平台的站點頁不用再把所有站點抓下來，在瀏覽器裡篩選和計數；後端直接照條件回一頁，數字另外一次拿齊。
+
+**Context**：
+- #97 的 `/stations` 把呼叫者看得到的站點全部抓下來（每頁 200、最多 5,000），用來：
+  - 在瀏覽器篩行政區、官方認定、成立時間、更新時間並排序；
+  - 從不篩選的那份算出行政區選項和每種類型可匯出的筆數；
+  - 從待審那份算出審查按鈕的數字。
+- 統計列另外讀 `/analytics/stations/data` 的中文標籤，再對回狀態值。
+- 超過 5,000 筆時，這些數字都是從截斷的資料算的。chingweih 和 Seaweed0112 在 #97 的 review 都要求改到後端算。
+- 做法：`docs/plans/2026-10-26-admin-stations-server-side.md`（本機）。
+
+**Decision**：
+- **`stations` 的新參數**，都放進 `extra_filters`，`count_active` 和 `list_active` 用同一組條件，`totalCount` 才會跟列數一致：
+  - `county`、`town`：用 `EXISTS` 查 `secondary_locations`，跟關鍵字搜尋碰地址的方式一樣，不 JOIN，免得一個站點
+    出現兩次。沒有地址的站點不屬於任何行政區。只給 `town` 會回錯誤 `town needs county`，因為鄉鎮市區的名字會在
+    不同縣市重複（中正區、東區）。
+  - `official`：true 是 `source = 'official'`，也就是管理平台建立或匯入的站點，前台的「官方」標示也看這欄；
+    false 是其他的，包含 `source` 是 NULL 的。`is_official` 沒有任何程式會寫，所以不看它。
+  - `createdAfter`／`createdBefore`、`updatedAfter`／`updatedBefore`：半開區間 `[after, before)`，相鄰的兩段不會
+    重複算到同一個站點。成立第幾週、新鮮度門檻（24 小時／72 小時）都是前端的顯示規則，由前端算出時間點再傳進來。
+  - `orderBy: StationOrder`：`DEFAULT` 是現在的順序（搜尋時依相關度，然後最新建立的在前）；
+    `OPEN_FIRST_RECENTLY_UPDATED` 是開設中的在前，再依最近更新排，最後用 uuid 收尾讓分頁穩定（ADR-153）。
+    它連相關度也一起取代，因為管理平台的列表搜不搜尋都用同一種排序。
+  - `limit` 上限 1,000，超過回 `limit must be at most 1000`，寫法跟 tickets 的 200 一樣（`TICKET_LIST_MAX_LIMIT`）。
+    1,000 是為了比現在所有呼叫端都大：最大的是後端測試的 500，前台送 200。
+- **`stationFacets`**：
+  - 權限和參數跟 `stations` 一樣，只是沒有分頁和排序。回傳：
+    - `total`；
+    - `byStatus`：狀態值和筆數，不是中文標籤；
+    - `byType`：類型、筆數，以及 `exportable`；
+    - `areas`：縣市、鄉鎮市區和筆數；
+    - `pendingReviewCount`。
+  - `exportable` 照呼叫者的 `station.export` scope 算，跟匯出 endpoint 的列篩選一致（`require_scope` →
+    `scope_filter`，gov 團隊的 team 會放寬成 all，ADR-285）。
+  - `pendingReviewCount` 是有待審建議、而且呼叫者有 `station.review` 的站點數。
+  - 訪客或沒有權限的人，這兩項都是 0，不回錯誤。
+  - 一次請求就能填好統計列、行政區選項、匯出筆數和審查按鈕的數字。統計列要不要跟著篩選變由頁面決定：不帶
+    篩選參數就是全部的數字。
+
+**Consequences**：
+➕ 前端可以真的分頁；超過 5,000 筆時，數字也是對的。
+➕ 統計列不用再靠中文標籤對回狀態值。
+➖ `stations` 和 `stationFacets` 的參數清單要一起維護：共用的條件都寫在 `_station_filters`，新增篩選時兩邊都要加。
+◾ 先不做（等前端要改時再問糖）：
+  - 統計列要不要跟著篩選變；
+  - 「未填地址」要不要成為一個行政區選項。
+◾ 前端改用這些參數和 facets，另外開 PR。
