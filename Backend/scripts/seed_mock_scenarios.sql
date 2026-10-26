@@ -197,6 +197,10 @@ DELETE FROM user_role_assign
  WHERE user_uuid IN (SELECT uuid FROM mock_users) OR team_uuid::text LIKE '10000000-%';
 DELETE FROM user_identities
  WHERE user_uuid IN (SELECT uuid FROM mock_users) AND user_uuid NOT IN (SELECT uuid FROM kept_mock_users);
+-- 留下的兩個帳號如果還是公開的 mock 密碼(staging 上手動加的就是),也刪掉:要在 VM 上設過才登得入。
+DELETE FROM user_identities
+ WHERE user_uuid IN (SELECT uuid FROM kept_mock_users)
+   AND password_hash LIKE 'pbkdf2_sha256$600000$mockdata12345678$%';
 DELETE FROM user_contacts
  WHERE user_uuid IN (SELECT uuid FROM mock_users) AND user_uuid NOT IN (SELECT uuid FROM kept_mock_users);
 -- notifications 指向 users 是 cascade(收件人)/set null(觸發者),刪帳號時會跟著清;留下的兩個帳號

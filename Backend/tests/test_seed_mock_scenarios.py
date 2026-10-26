@@ -234,6 +234,37 @@ async def test_a_password_set_on_the_back_office_test_accounts_survives_a_rerun(
     ]
 
 
+# The hash section 1b gives every other mock account: the published password, under the fixed salt.
+_MOCK_HASH = re.search(r"'(pbkdf2_sha256\$600000\$mockdata12345678\$[^']+)'", SEED_SQL).group(1)
+# What set_password.py or the login page stores: a random 32-hex frontend salt.
+_VM_HASH = (
+    "pbkdf2_sha256$600000$5b0e3c9a7d214f6e8a1b2c3d4e5f6a7b$9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f$" + "ab" * 32
+)
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_a_rerun_drops_the_published_password_from_the_back_office_test_accounts(seeded):
+    """Both were added to staging by hand with the mock password; a rerun must not give it super_admin.
+
+    A password set on the VM is kept: its salt is random, so it never carries the seed's fixed one.
+    """
+    await _execute(
+        _CASE_DSN,
+        "INSERT INTO user_identities (uuid, user_uuid, provider, password_hash, created_at) VALUES"
+        f" (gen_random_uuid(), '{SUPER_ADMIN}', 'password', '{_MOCK_HASH}', now()),"
+        f" (gen_random_uuid(), '{AUDITOR}', 'password', '{_VM_HASH}', now())",
+    )
+
+    await _execute(_CASE_DSN, SEED_SQL)
+
+    rows = await _fetch(
+        _CASE_DSN,
+        "SELECT user_uuid::text, password_hash FROM user_identities WHERE user_uuid = ANY($1::uuid[])",
+        [SUPER_ADMIN, AUDITOR],
+    )
+    assert [tuple(row) for row in rows] == [(AUDITOR, _VM_HASH)]
+
+
 @pytest.mark.asyncio(loop_scope="module")
 async def test_seed_runs_again_untouched(seeded):
     """The plain rerun SEED_MOCK does on every staging deploy."""

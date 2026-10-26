@@ -245,9 +245,12 @@ The first deploy:
 1. Merge it only after the back office has moved off NextAuth: the `admin` container gets no NextAuth secret.
 2. **Run `deploy.sh` twice in a row.** The first run is still the old script (see above): it neither builds
    nor starts `admin`, but it does rebuild the site, whose `/admin` then already points at
-   `admin-staging.wan-guard.com`. The second run builds and starts `admin`. Run them back to back. The first
-   run applies one migration, `facf37b5c79d` (ADR-393): three "who did it" columns may now be NULL, which
-   only the mock seed's cleanup writes (see "What does SEED_MOCK touch?" below). The backup step runs before it.
+   `admin-staging.wan-guard.com`. The second run builds and starts `admin`. Run them back to back, both
+   without `SEED_MOCK`: nothing in this change needs the mock data rebuilt. The first run applies one
+   migration, `facf37b5c79d` (ADR-393): three "who did it" columns may now be NULL, which only the mock seed's
+   cleanup writes (see "What does SEED_MOCK touch?" below). The backup step runs before it.
+   The second run ends with `WARN: https://admin-staging.wan-guard.com not reachable yet`. That is expected:
+   the hostname is added in step 4. Until then the site's 前往管理平台 also ends on Cloudflare's error page.
 3. Give the two back-office test accounts, `asuper01@mock.test` (super_admin) and `aaudit01@mock.test`
    (data_auditor), a password of their own, as in
    [The back-office test accounts' password](#the-back-office-test-accounts-password). Do it before the next
@@ -390,7 +393,8 @@ Still on the humans (migration-writing discipline):
 The rows with the fixed mock UUID prefixes (users `c…`, scenario-A stations `a…`, scenario-B `b…`, tickets
 `d…`, tasks `e…`, assignments `f…`), and what testers made with the mock accounts: it deletes those and
 re-inserts the seed (idempotent). The two back-office test accounts are kept, with the password set on the VM;
-their roles are handed out again and what they did is cleared like any mock account's.
+their roles are handed out again and what they did is cleared like any mock account's. A password of theirs
+that is still the published mock one is dropped, so they sign in only once one is set on the VM.
 Real data stays: rows a real person made are kept, and where a mock account reviewed, published or audited
 them, that reference is set to NULL. Without the flag, the seed step is skipped entirely.
 
@@ -411,8 +415,10 @@ It asks for the password twice, without echoing it, and signs the account out ev
 at least 8 characters, as on the login page. Keep it out of the repo and out of public channels; the
 person who looks after staging hands it to testers.
 
-`SEED_MOCK=true` keeps both accounts and their password, so this is done once. Only a database rebuilt
-from empty needs it again; until then the two accounts cannot sign in.
+`SEED_MOCK=true` keeps both accounts and a password set this way, so this is done once. It drops one that is
+still the published mock password, which the hand-added staging copies carried: that hash has the seed's
+fixed salt, `mockdata12345678`, while this script and the login page always use a random one. Only a
+database rebuilt from empty needs the password set again; until then the two accounts cannot sign in.
 
 ---
 
