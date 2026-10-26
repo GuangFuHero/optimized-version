@@ -116,6 +116,22 @@ async def test_a_pending_suggestion_keeps_the_admin_edit_until_approval_moves_it
 
 
 @pytest.mark.asyncio
+async def test_approving_the_value_the_station_already_has_still_moves_it(
+    client, coordinator_auth, auditor_auth, login_user_auth, sample_station
+):
+    """An approval is an update at the approval time, even when the value it writes is unchanged."""
+    _, admin = coordinator_auth
+    _, reviewer = auditor_auth
+    _, public = login_user_auth
+    await _suggest(client, public, sample_station, "op_hour", "08:00-18:00")
+    await _set_earlier(sample_station)
+
+    merge = await _decide(client, reviewer, sample_station, "op_hour", "08:00-18:00", True)
+
+    assert await _updated_at(client, admin, sample_station) == datetime.fromisoformat(merge["createdAt"])
+
+
+@pytest.mark.asyncio
 async def test_a_rejected_suggestion_keeps_the_admin_edit(
     client, coordinator_auth, auditor_auth, login_user_auth, sample_station
 ):

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import Perm
 from app.graphql.suggestions.fields import VALID_TARGET_TYPES, coerce_and_validate
 from app.models.auth import User
-from app.models.geo import Station
+from app.models.geo import Station, touch
 from app.models.station_property import StationSuggestionMerge, StationUpdateSuggestion
 from app.repositories.geo_repository import (
     station_property_repository,
@@ -26,7 +26,7 @@ from app.services.authz import require_scope
 from app.services.geo_validation import normalize_supply_status
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
-from app.services.station import OPERATIONAL_PROPERTY_NAMES, notify_operational_status_change, touch_station
+from app.services.station import OPERATIONAL_PROPERTY_NAMES, notify_operational_status_change
 
 # Free text a caller can write on every submit; the audit trigger copies each write.
 _MAX_TEXT = 1000
@@ -178,8 +178,8 @@ async def merge_station_suggestions(
 
     changes, touched = await _apply_decisions(db, station, decisions, rows_by_field)
     if changes:
-        # Same transaction as the merge row, so this equals the merge's created_at.
-        await touch_station(db, station.uuid)
+        # An approval is an update at its own time, even one that wrote a property or an unchanged value.
+        touch(station)
 
     merge = StationSuggestionMerge(
         station_uuid=str(station.uuid),
@@ -257,7 +257,7 @@ async def revoke_station_suggestion_merge(
     merge.status = "revoked"
     merge.revoked_by = actor_uid
     merge.revoked_at = datetime.now(UTC)
-    await touch_station(db, station.uuid, at=merge.revoked_at)
+    touch(station, at=merge.revoked_at)
     await db.execute(
         update(StationUpdateSuggestion)
         .where(

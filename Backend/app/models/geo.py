@@ -3,7 +3,19 @@
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, Index, String, false, func, text
+from sqlalchemy import (
+    Boolean,
+    Computed,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    event,
+    false,
+    func,
+    inspect,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -152,3 +164,30 @@ class Station(BaseGeometry):
     __table_args__ = (search_text_index("stations"),)
 
     properties: Mapped[list["StationProperty"]] = relationship(back_populates="station")  # noqa: F821
+
+
+def touch(record: BaseGeometry, at: datetime | None = None) -> None:
+    """Move a station's or ticket's 「最後更新」 (`updated_at`) to `at`, or to the transaction's time.
+
+    For a change `stamp_updated_at` cannot see, to a related row, or one that must carry a set time.
+    """
+    record.updated_at = func.now() if at is None else at
+
+
+def stamp_updated_at(mapper, _connection, target) -> None:
+    """Move `updated_at` when a record's own columns change, unless it was set already in this flush.
+
+    A change to only the subclass's table never writes `base_geometries`, so the column's onupdate
+    alone misses it. Columns named in the model's `not_an_update` do not count.
+    """
+    state = inspect(target)
+    if state.attrs.updated_at.history.has_changes():
+        return
+    ignored = getattr(target, "not_an_update", frozenset())
+    if any(
+        state.attrs[attr.key].history.has_changes() for attr in mapper.column_attrs if attr.key not in ignored
+    ):
+        target.updated_at = func.now()
+
+
+event.listen(Station, "before_update", stamp_updated_at)
