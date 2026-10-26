@@ -6,11 +6,11 @@ describe('normalizeLayerPreferences', () => {
   it('turns on 責任區與標示區 for preferences saved before it existed', () => {
     expect(
       normalizeLayerPreferences({
-        baseLayer: 'carto',
+        baseLayer: 'osm',
         enabledOverlayLayers: ['closure-areas'],
       }),
     ).toEqual({
-      baseLayer: 'carto',
+      baseLayer: 'osm',
       enabledOverlayLayers: ['closure-areas', 'public-zones'],
       knownOverlayLayers: [
         'closure-areas',
