@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>前台帳號安全與待確認通知</title>
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/primitives.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/semantic.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/motion.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/base.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<link rel="stylesheet" href="js/site/site.css?v=20261024a">
+<style>
+  body { margin: 0; background: var(--color-bg-neutral-sunken); }
+  .board { display: flex; flex-wrap: wrap; gap: 32px; padding: 32px; align-items: flex-start; }
+  .frame-title { font: 700 var(--fs-14)/1.4 var(--font-body); color: var(--color-fg-neutral-default); margin: 0 0 4px; }
+  .frame-note { font: 400 var(--fs-12)/1.5 var(--font-body); color: var(--color-fg-neutral-subtle); margin: 0 0 10px; max-width: 390px; }
+  .phone { width: 390px; background: var(--color-bg-neutral-default); border-radius: 20px; box-shadow: var(--shadow-lg); overflow: hidden; }
+  h1.board-h { font: 700 var(--fs-20)/1.4 var(--font-display); margin: 32px 32px 0; color: var(--color-fg-neutral-default); }
+  p.board-p { font: 400 var(--fs-14)/1.7 var(--font-body); margin: 6px 32px 0; color: var(--color-fg-neutral-subtle); max-width: 900px; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
+<script src="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/_ds_bundle.js"></script>
+<script src="js/site/site-route.js?v=20261026d"></script>
+<script type="text/babel" src="js/site/site-controls.jsx?v=20260925b" data-presets="react"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+/* 前台帳號安全（PR #144）與「求助單內容待確認」通知（PR #138）的設計稿 —— 2026-10-27 Sucre
+ *
+ * 🔒 受眾包含九十歲長輩：**全部用中文**（「Email」→「電子郵件」）、不出現工程用語
+ *    （refresh token、綁定、step_up）、字級 16px 起、一個畫面只叫他做一件事。
+ * 🔒 兩組驗證碼一定要分得出來：欄位名稱寫明「原本的…收到的」「新的…收到的」，
+ *    並寫出寄到哪裡（遮罩後的聯絡方式，要後端在訊息裡帶）。
+ * 🔒 只用 Google、又沒有聯絡方式的帳號：一進頁面就說明做不到，不顯示按鈕（不要按了才說不行）。
+ * 這頁是設計稿（並排看所有狀態），不是可操作的頁面。正式頁面：/account/security（前端已有）。
+ */
+const { Button, Badge, Field, Input, Alert } = window.WanGuardDesignSystem_9c8f68;
+const WGIcon = window.WGIcon;
+
+const T = {
+  h: { font: '700 var(--fs-20)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' },
+  sh: { font: '700 var(--fs-17)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' },
+  p: { font: '400 var(--fs-16)/1.7 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty', margin: 0 },
+};
+
+function Page({ children, login }) {
+  return (
+    <div className="phone">
+      <div style={{ padding: '20px 20px 8px' }}>
+        <div style={T.h}>帳號安全</div>
+        <p style={{ ...T.p, marginTop: 4 }}>登入方式：{login || 'LINE'}</p>
+      </div>
+      <div style={{ padding: '8px 20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>{children}</div>
+    </div>
+  );
+}
+function Section({ title, desc, children }) {
+  return (
+    <div style={{ padding: 16, borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-default)',
+      display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={T.sh}>{title}</div>
+        {desc ? <p style={{ ...T.p, marginTop: 4 }}>{desc}</p> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+function F({ label, type, value, placeholder }) {
+  return (
+    <Field label={label}>
+      <Input type={type || 'text'} defaultValue={value || ''} placeholder={placeholder || ''} style={{ fontSize: 16, height: 48 }} />
+    </Field>
+  );
+}
+const Big = (props) => <Button {...props} style={{ height: 48, fontSize: 16, width: '100%', ...(props.style || {}) }} />;
+/* 二選一用「分段選擇」：一個外框、兩格，選中的那格白底＋粗字＋勾。
+   ❌ 不用兩顆按鈕（橘色實心那顆看起來像「送出」）；❌ 不用開關 switch（那是開／關，不是二選一）。 */
+function Toggle({ value }) {
+  return (
+    <div role="radiogroup" aria-label="要新增哪一種" style={{ display: 'flex', padding: 4, gap: 4, borderRadius: 'var(--radius-full)',
+      background: 'var(--color-bg-neutral-sunken)' }}>
+      {['電子郵件', '手機號碼'].map((v) => {
+        const on = v === value;
+        return (
+          <span key={v} role="radio" aria-checked={on} style={{ flex: 1, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            borderRadius: 'var(--radius-full)', cursor: 'pointer',
+            background: on ? 'var(--color-bg-neutral-default)' : 'transparent', boxShadow: on ? 'var(--shadow-sm)' : 'none',
+            font: (on ? 700 : 500) + ' var(--fs-16)/1 var(--font-body)',
+            color: on ? 'var(--color-fg-neutral-default)' : 'var(--color-fg-neutral-subtle)' }}>
+            {on ? <WGIcon n="Check" s={16} c="var(--color-brand-secondary-default)" /> : null}{v}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+/* 步驟改成「由上往下」的清單（2026-10-27 Sucre：左右並排看起來像擇一，其實是兩關都要過）。
+   做完的打勾、寫出填了什麼；現在這一步亮起來，內容就接在它下面；還沒到的灰色。 */
+function Steps({ at, done }) {
+  const s = ['輸入新的電子郵件', '確認是你本人', '輸入新的電子郵件收到的驗證碼'];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {s.map((x, i) => {
+        const isDone = i < at, isNow = i === at;
+        return (
+          <div key={x} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', position: 'relative', paddingBottom: i < s.length - 1 ? 10 : 0 }}>
+            {i < s.length - 1 ? <span style={{ position: 'absolute', left: 13, top: 28, bottom: 0, width: 2,
+              background: isDone ? 'var(--color-brand-secondary-default)' : 'var(--color-border-default)' }}></span> : null}
+            <span style={{ width: 28, height: 28, flexShrink: 0, borderRadius: '50%', display: 'grid', placeItems: 'center',
+              font: '700 var(--fs-14)/1 var(--font-body)',
+              background: isDone ? 'var(--color-brand-secondary-default)' : isNow ? 'var(--color-bg-secondary-subtle)' : 'var(--color-bg-neutral-subtle)',
+              color: isDone ? '#fff' : isNow ? 'var(--color-brand-secondary-default)' : 'var(--color-fg-neutral-muted)',
+              border: isNow ? '2px solid var(--color-brand-secondary-default)' : '2px solid transparent' }}>
+              {isDone ? <WGIcon n="Check" s={16} c="#fff" /> : i + 1}
+            </span>
+            <span style={{ paddingTop: 3, font: (isNow ? 700 : 500) + ' var(--fs-16)/1.4 var(--font-body)',
+              color: isNow ? 'var(--color-fg-neutral-default)' : isDone ? 'var(--color-fg-neutral-subtle)' : 'var(--color-fg-neutral-muted)' }}>
+              {x}{isDone && done && done[i] ? <span style={{ display: 'block', fontWeight: 400, fontSize: 'var(--fs-14)' }}>{done[i]}</span> : null}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function Frame({ title, note, children }) {
+  return (
+    <div>
+      <p className="frame-title">{title}</p>
+      {note ? <p className="frame-note">{note}</p> : null}
+      {children}
+    </div>
+  );
+}
+
+/* ── #138 通知 ───────────────────────────────────────────── */
+function NoticeDrawer({ who }) {
+  const items = who === 'requester' ? [
+    { kind: 'audit', title: '求助單內容待確認：大進村獨居長者物資配送',
+      body: '你的求助單「大進村獨居長者物資配送」有資料需要確認。如果有寫錯，請聯絡協調人員。', at: '10/27 14:20', read: false },
+    { kind: 'claimed', title: '有人接了你的需求：分送志工', body: '陳志工 接了 1 個名額。', at: '10/27 09:10', read: true },
+  ] : [
+    { kind: 'audit', title: '求助單內容待確認：大進村獨居長者物資配送',
+      body: '你報名的求助單「大進村獨居長者物資配送」資料可能有誤，出發前請先跟開單者確認。', at: '10/27 14:20', read: false },
+  ];
+  const META = { audit: { icon: 'TriangleAlert', tone: 'var(--color-fg-warning)' }, claimed: { icon: 'HandHeart', tone: 'var(--color-brand-secondary-subtle)' } };
+  return (
+    <div className="phone">
+      <div style={{ padding: '24px 16px 16px', borderBottom: '1px solid var(--color-border-default)' }}>
+        <div style={T.h}>通知</div>
+      </div>
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.map((n, i) => {
+          const m = META[n.kind];
+          return (
+            <div key={i} style={{ display: 'flex', gap: 12, padding: 12, borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border-default)', background: n.read ? 'transparent' : 'var(--color-bg-neutral-subtle)' }}>
+              <span style={{ marginTop: 2, color: m.tone }}><WGIcon n={m.icon} s={20} c={m.tone} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', font: (n.read ? 500 : 700) + ' var(--fs-16)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>{n.title}</span>
+                <span style={{ display: 'block', marginTop: 2, font: '400 var(--fs-15)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>{n.body}</span>
+                <span style={{ display: 'block', marginTop: 4, font: '400 var(--fs-12)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>{n.at}</span>
+              </span>
+              {!n.read ? <Badge tone="warning" variant="subtle">新</Badge> : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <div>
+      <h1 className="board-h">#138 鈴鐺「求助單內容待確認」</h1>
+      <p className="board-p">警示三角形＋警示色（不用紅色：單還在，只是內容可能有問題）。點了打開那張單。開單者跟志工看到的內文不一樣。</p>
+      <div className="board">
+        <Frame title="開單者看到的" note="前台還不能改單，所以叫他聯絡協調人員，不叫他「確認資料」。"><NoticeDrawer who="requester" /></Frame>
+        <Frame title="報名的志工看到的"><NoticeDrawer who="volunteer" /></Frame>
+      </div>
+
+      <h1 className="board-h">#144 帳號安全：確認是你本人</h1>
+      <p className="board-p">全部用中文、不用工程用語；字 16px 起；一次只叫他做一件事。兩組驗證碼的欄位名稱一定要分得出來。</p>
+      <div className="board">
+        <Frame title="① 頁面一進來（只用 LINE 登入、有電子郵件）">
+          <Page>
+            <Section title="設定登入密碼" desc="你現在是用 LINE 登入。設一組密碼，以後也可以用密碼登入。設好後要重新登入一次。">
+              <F label="新密碼" type="password" />
+              <F label="再輸入一次新密碼" type="password" />
+              <Big variant="primary">設定密碼</Big>
+            </Section>
+            <Section title="新增電子郵件或手機" desc="一次新增一個。為了安全，要先確認是你本人，再輸入新的電子郵件收到的驗證碼，共三步。">
+              <p style={{ ...T.p, fontWeight: 700, color: "var(--color-fg-neutral-default)" }}>要新增哪一種？（選一個）</p>
+              <Toggle value="電子郵件" />
+              <F label="新的電子郵件" placeholder="例：wang@gmail.com" />
+              <Big variant="primary">寄驗證碼</Big>
+            </Section>
+            <Section title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台。">
+              <Big variant="outline">登出所有裝置</Big>
+            </Section>
+          </Page>
+        </Frame>
+
+        <Frame title="② 有密碼的帳號：先輸入現在的密碼" note="按「寄驗證碼」之後才出現。忘記密碼的人：改寄驗證碼到他原本的電子郵件或手機（🚨 要後端同意，見說明）。">
+          <Page>
+            <Section title="新增電子郵件或手機">
+              <Steps at={1} done={["wang@gmail.com"]} />
+              <p style={T.p}>為了確認是你本人，請先輸入你現在的密碼。</p>
+              <F label="現在的密碼" type="password" />
+              <Big variant="primary">確認</Big>
+              <a href="#" style={{ alignSelf: 'center', font: '500 var(--fs-16)/1.5 var(--font-body)', color: 'var(--color-brand-secondary-default)' }}>忘記密碼？改用驗證碼確認</a>
+              <Big variant="ghost">取消</Big>
+            </Section>
+          </Page>
+        </Frame>
+
+        <Frame title="③ 沒有密碼的帳號：先輸入「原本的」電子郵件收到的碼" note="寄到哪裡要寫出來（遮罩後的地址）→ 需要後端在訊息裡帶。">
+          <Page>
+            <Section title="新增電子郵件或手機">
+              <Steps at={1} done={["wang@gmail.com"]} />
+              <Alert tone="info">為了確認是你本人，我們寄了一組驗證碼到你<b>原本的電子郵件</b> w***@yahoo.com.tw。</Alert>
+              <F label="原本的電子郵件收到的驗證碼" placeholder="6 位數字" />
+              <Big variant="primary">確認</Big>
+              <Big variant="ghost">沒收到？重新寄一次</Big>
+            </Section>
+          </Page>
+        </Frame>
+
+        <Frame title="④ 最後一步：輸入「新的」電子郵件收到的碼">
+          <Page>
+            <Section title="新增電子郵件或手機">
+              <Steps at={2} done={["wang@gmail.com", "已確認"]} />
+              <Alert tone="info">驗證碼已經寄到你<b>新的電子郵件</b> wang@gmail.com。</Alert>
+              <F label="新的電子郵件收到的驗證碼" placeholder="6 位數字" />
+              <Big variant="primary">完成新增</Big>
+              <Big variant="ghost">沒收到？重新寄一次</Big>
+            </Section>
+          </Page>
+        </Frame>
+
+        <Frame title="⑤ 只用 LINE、沒有電子郵件或手機" note="按了才跳去 LINE；回來後自動接著做。">
+          <Page>
+            <Section title="新增電子郵件或手機">
+              <Steps at={1} done={["wang@gmail.com"]} />
+              <p style={T.p}>為了確認是你本人，要先到 LINE 再登入一次。登入好會自動回到這裡。</p>
+              <Big variant="primary">到 LINE 確認是我</Big>
+              <Big variant="ghost">取消</Big>
+            </Section>
+          </Page>
+        </Frame>
+
+        <Frame title="⑥ 從 LINE 回來但沒成功" note="寫出發生什麼事＋下一步按哪一顆，剛剛打的還留著。另外兩種：「你剛剛登入的 LINE 不是這個帳號用的那一個，請用原本的 LINE 再試一次。」「現在連不上 LINE，請等一下再按「寄驗證碼」。」">
+          <Page>
+            <Section title="新增電子郵件或手機">
+              <Alert tone="warning">你在 LINE 那邊按了取消，所以還沒新增。要再試一次，請按「寄驗證碼」。</Alert>
+              <Toggle value="電子郵件" />
+              <F label="新的電子郵件" value="wang@gmail.com" />
+              <Big variant="primary">寄驗證碼</Big>
+            </Section>
+          </Page>
+        </Frame>
+
+        <Frame title="⑦ 只用 Google、沒有電子郵件或手機" note="這是整個「帳號安全」頁（從右上個人選單進來）。密碼、聯絡方式那兩區換成一段說明、不顯示按鈕；下面的「登出所有裝置」是這頁本來就有的區塊，不是叫他登出。">
+          <Page login="Google">
+            {/* 不包成卡片、不放標題：卡片＋粗體標題看起來像可以按的區塊。只是一段說明。 */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '4px 2px' }}>
+              <span style={{ marginTop: 3 }}><WGIcon n="Info" s={20} c="var(--color-fg-neutral-subtle)" /></span>
+              <p style={T.p}>你的帳號只用 Google 登入，也還沒有電子郵件或手機，所以暫時不能在這裡設定密碼或新增聯絡方式。</p>
+            </div>
+            <Section title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台。">
+              <Big variant="outline">登出所有裝置</Big>
+            </Section>
+          </Page>
+        </Frame>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
