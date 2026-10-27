@@ -40,7 +40,8 @@
  *    （refresh token、綁定、step_up）、字級 16px 起、一個畫面只叫他做一件事。
  * 🔒 兩組驗證碼一定要分得出來：欄位名稱寫明「原本的…收到的」「新的…收到的」，
  *    並寫出寄到哪裡（遮罩後的聯絡方式，要後端在訊息裡帶）。
- * 🔒 只用 Google、又沒有聯絡方式的帳號：一進頁面就說明做不到，不顯示按鈕（不要按了才說不行）。
+ * 🔒 只用 LINE、沒有電子郵件或手機的帳號（丙）：不能先設密碼（密碼登入要打電子郵件或手機），密碼欄灰掉＋說明；先新增聯絡方式。
+ *    流程圖：前台登入方式與帳號安全流程 Site Login Flows.html
  * 這頁是設計稿（並排看所有狀態），不是可操作的頁面。正式頁面：/account/security（前端已有）。
  */
 const { Button, Badge, Field, Input, Alert } = window.WanGuardDesignSystem_9c8f68;
@@ -104,32 +105,23 @@ function Toggle({ value }) {
     </div>
   );
 }
-/* 步驟改成「由上往下」的清單（2026-10-27 Sucre：左右並排看起來像擇一，其實是兩關都要過）。
-   做完的打勾、寫出填了什麼；現在這一步亮起來，內容就接在它下面；還沒到的灰色。 */
-function Steps({ at, done }) {
-  const s = ['輸入新的電子郵件', '確認是你本人', '輸入新的電子郵件收到的驗證碼'];
+/* 步驟（2026-10-27 Sucre：用點點表示有幾步，每一步自己有標題）
+   🔒 點點＋「第 2 步，共 3 步」一起用：只有點點，長輩不一定讀得出「還剩幾步」；字要寫出來。
+   🔒 這一步要做什麼寫在下面的粗體標題，點點本身不放文字。 */
+const STEP_TITLES = ['輸入新的電子郵件', '確認是你本人', '輸入新的電子郵件收到的驗證碼'];
+function Steps({ at }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {s.map((x, i) => {
-        const isDone = i < at, isNow = i === at;
-        return (
-          <div key={x} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', position: 'relative', paddingBottom: i < s.length - 1 ? 10 : 0 }}>
-            {i < s.length - 1 ? <span style={{ position: 'absolute', left: 13, top: 28, bottom: 0, width: 2,
-              background: isDone ? 'var(--color-brand-secondary-default)' : 'var(--color-border-default)' }}></span> : null}
-            <span style={{ width: 28, height: 28, flexShrink: 0, borderRadius: '50%', display: 'grid', placeItems: 'center',
-              font: '700 var(--fs-14)/1 var(--font-body)',
-              background: isDone ? 'var(--color-brand-secondary-default)' : isNow ? 'var(--color-bg-secondary-subtle)' : 'var(--color-bg-neutral-subtle)',
-              color: isDone ? '#fff' : isNow ? 'var(--color-brand-secondary-default)' : 'var(--color-fg-neutral-muted)',
-              border: isNow ? '2px solid var(--color-brand-secondary-default)' : '2px solid transparent' }}>
-              {isDone ? <WGIcon n="Check" s={16} c="#fff" /> : i + 1}
-            </span>
-            <span style={{ paddingTop: 3, font: (isNow ? 700 : 500) + ' var(--fs-16)/1.4 var(--font-body)',
-              color: isNow ? 'var(--color-fg-neutral-default)' : isDone ? 'var(--color-fg-neutral-subtle)' : 'var(--color-fg-neutral-muted)' }}>
-              {x}{isDone && done && done[i] ? <span style={{ display: 'block', fontWeight: 400, fontSize: 'var(--fs-14)' }}>{done[i]}</span> : null}
-            </span>
-          </div>
-        );
-      })}
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ display: 'flex', gap: 6 }} aria-hidden="true">
+          {STEP_TITLES.map((x, i) => (
+            <span key={x} style={{ width: i === at ? 22 : 10, height: 10, borderRadius: 999,
+              background: i <= at ? 'var(--color-brand-secondary-default)' : 'var(--color-border-default)' }}></span>
+          ))}
+        </span>
+        <span style={{ font: '500 var(--fs-14)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>第 {at + 1} 步，共 3 步</span>
+      </div>
+      <div style={{ marginTop: 8, font: '700 var(--fs-17)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-default)' }}>{STEP_TITLES[at]}</div>
     </div>
   );
 }
@@ -215,7 +207,7 @@ function App() {
         <Frame title="② 有密碼的帳號：先輸入現在的密碼" note="按「寄驗證碼」之後才出現。忘記密碼的人：改寄驗證碼到他原本的電子郵件或手機（🚨 要後端同意，見說明）。">
           <Page>
             <Section title="新增電子郵件或手機">
-              <Steps at={1} done={["wang@gmail.com"]} />
+              <Steps at={1} />
               <p style={T.p}>為了確認是你本人，請先輸入你現在的密碼。</p>
               <F label="現在的密碼" type="password" />
               <Big variant="primary">確認</Big>
@@ -228,7 +220,7 @@ function App() {
         <Frame title="③ 沒有密碼的帳號：先輸入「原本的」電子郵件收到的碼" note="寄到哪裡要寫出來（遮罩後的地址）→ 需要後端在訊息裡帶。">
           <Page>
             <Section title="新增電子郵件或手機">
-              <Steps at={1} done={["wang@gmail.com"]} />
+              <Steps at={1} />
               <Alert tone="info">為了確認是你本人，我們寄了一組驗證碼到你<b>原本的電子郵件</b> w***@yahoo.com.tw。</Alert>
               <F label="原本的電子郵件收到的驗證碼" placeholder="6 位數字" />
               <Big variant="primary">確認</Big>
@@ -240,7 +232,7 @@ function App() {
         <Frame title="④ 最後一步：輸入「新的」電子郵件收到的碼">
           <Page>
             <Section title="新增電子郵件或手機">
-              <Steps at={2} done={["wang@gmail.com", "已確認"]} />
+              <Steps at={2} />
               <Alert tone="info">驗證碼已經寄到你<b>新的電子郵件</b> wang@gmail.com。</Alert>
               <F label="新的電子郵件收到的驗證碼" placeholder="6 位數字" />
               <Big variant="primary">完成新增</Big>
@@ -252,7 +244,7 @@ function App() {
         <Frame title="⑤ 只用 LINE、沒有電子郵件或手機" note="按了才跳去 LINE；回來後自動接著做。">
           <Page>
             <Section title="新增電子郵件或手機">
-              <Steps at={1} done={["wang@gmail.com"]} />
+              <Steps at={1} />
               <p style={T.p}>為了確認是你本人，要先到 LINE 再登入一次。登入好會自動回到這裡。</p>
               <Big variant="primary">到 LINE 確認是我</Big>
               <Big variant="ghost">取消</Big>
@@ -271,15 +263,19 @@ function App() {
           </Page>
         </Frame>
 
-        <Frame title="⑦ 只用 Google、沒有電子郵件或手機" note="這是整個「帳號安全」頁（從右上個人選單進來）。密碼、聯絡方式那兩區換成一段說明、不顯示按鈕；下面的「登出所有裝置」是這頁本來就有的區塊，不是叫他登出。">
-          <Page login="Google">
-            {/* 不包成卡片、不放標題：卡片＋粗體標題看起來像可以按的區塊。只是一段說明。 */}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '4px 2px' }}>
-              <span style={{ marginTop: 3 }}><WGIcon n="Info" s={20} c="var(--color-fg-neutral-subtle)" /></span>
-              <p style={T.p}>你的帳號只用 Google 登入，也還沒有電子郵件或手機，所以暫時不能在這裡設定密碼或新增聯絡方式。</p>
-            </div>
-            <Section title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台。">
-              <Big variant="outline">登出所有裝置</Big>
+        <Frame title="⑦ 只用 LINE、沒有電子郵件或手機：先不能設密碼" note="密碼登入要打電子郵件或手機當帳號，他一個都沒有，設了也登不進來（PM 10-27）。密碼欄灰掉、不能輸入，正下方說明；新增電子郵件或手機照常可用，加好之後才能設密碼。（「只用 Google、沒有聯絡方式」正常不會發生：Google 第一次登入一定會存信箱。）">
+          <Page>
+            {/* 🔒 灰掉的欄位＋正下方說明；不放按鈕（灰掉的按鈕長輩會一直按）。 */}
+            <Section title="設定登入密碼">
+              <Field label="新密碼"><Input disabled placeholder="" style={{ fontSize: 16, height: 48, opacity: .55, background: 'var(--color-bg-neutral-sunken)' }} /></Field>
+              <p style={{ ...T.p, display: 'flex', gap: 6 }}><span style={{ marginTop: 3 }}><WGIcon n="Info" s={18} c="var(--color-fg-neutral-subtle)" /></span>
+                要先在下面新增電子郵件或手機，才能設密碼。以後用密碼登入時，就打你新增的電子郵件或手機。</p>
+            </Section>
+            <Section title="新增電子郵件或手機" desc="一次新增一個。為了安全，要先確認是你本人，再輸入新的電子郵件收到的驗證碼，共三步。">
+              <p style={{ ...T.p, fontWeight: 700, color: "var(--color-fg-neutral-default)" }}>要新增哪一種？（選一個）</p>
+              <Toggle value="電子郵件" />
+              <F label="新的電子郵件" placeholder="例：wang@gmail.com" />
+              <Big variant="primary">寄驗證碼</Big>
             </Section>
           </Page>
         </Frame>
