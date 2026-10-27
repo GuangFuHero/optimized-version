@@ -78,7 +78,8 @@
       showToast(`已即時更新為「${SD.STATUS[status].label}」，未排入審核佇列（AC-10 快速通道）`);
     }
 
-    // CSV 批次匯入。匯入後營運狀態一律為「已關閉」（2026-08-06 決策：名單匯入後預設為關）
+    // CSV 批次匯入。🔄 2026-10-27 Carol：匯入的站點營運狀態用預設（開設中）、而且是官方（後台匯入＝可信來源），
+    //   推翻 2026-08-06「匯入後一律已關閉」與 2026-08-21「匯入 ≠ 官方造冊」
     function importStations(rows) {
       const actor = actorName(role);
       const ts = nowTs();
@@ -87,14 +88,14 @@
         return {
           id, name: r.name, type: r.type, area: r.area, address: r.address,
           lat: r.lat, lng: r.lng, x: 50, y: 50,
-          status: "closed",                       // ← 匯入後預設為關
+          status: "open",                         // 🔄 2026-10-27：匯入用預設（開設中）
           supplies: [],
           contact: r.contact, phone: r.phone, hours: r.hours,
           parentId: null, photos: [], assignedTeam: null,
-          isOfficial: false, verified: true, verifiedBy: actor,   // 匯入 ≠ 官方造冊（2026-08-21）
+          isOfficial: true, verified: true, verifiedBy: actor,    // 🔄 2026-10-27：匯入的是官方
           established: ts.slice(0, 10), createdBy: actor,
           updated: ts, updatedMin: 0, version: 1, deleted: false,
-          history: [{ v: 1, who: actor, when: ts, note: `CSV 匯入（第 ${i + 1} 筆）`, diff: [{ field: "operational_status", old: "—", new: "已關閉（待現場確認後開啟）" }] }],
+          history: [{ v: 1, who: actor, when: ts, note: `CSV 匯入（第 ${i + 1} 筆）`, diff: [{ field: "operational_status", old: "—", new: "開設中（匯入預設）" }] }],
         };
       });
       setStations((arr) => [...made, ...arr]);

@@ -6,7 +6,7 @@
 //       （2026-08-02~08-14，該卡內容為空，欄位與流程細節無正典規格）。
 //
 // ⚠️ 規則來源：
-//   - 匯入後營運狀態預設「已關閉」— CLAUDE.md 記載的 2026-08-06 決策「名單匯入後預設為關」
+//   - 🔄 2026-10-27 Carol：匯入的站點營運狀態用預設（開設中）、而且是官方（後台匯入＝可信來源）。推翻 08-06／08-21
 //   - 匯入為後台建立，直接生效不進審核 — CLAUDE.md「後台建立直接生效」
 //   - 其餘（欄位名稱、驗證規則、重複判定）都是我定的，見 PENDING.import
 (function () {
@@ -180,9 +180,9 @@
       React.createElement("div", { style: { display: "flex", gap: 10, padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--color-bg-warning-subtle)", alignItems: "flex-start" } },
         React.createElement(Icon, { n: "Info", s: 17, c: "var(--color-fg-warning)", style: { marginTop: 1, flexShrink: 0 } }),
         React.createElement("div", null,
-          React.createElement("div", { className: "wg-label-sm", style: { fontWeight: 700, color: "var(--color-fg-warning)" } }, "匯入後營運狀態一律為「已關閉」"),
+          React.createElement("div", { className: "wg-label-sm", style: { fontWeight: 700, color: "var(--color-fg-warning)" } }, "匯入的站點是「開設中」、標為官方"),
           React.createElement("div", { className: "wg-caption", style: { marginTop: 2 } },
-            "名單匯入不等於站點已開設，需要有人到現場確認後再逐一開啟。匯入為後台建立，直接生效、不進審核佇列。")
+            "後台匯入視為可信來源。匯入為後台建立，直接生效、不進審核佇列；聯絡人與電話請之後補上。")
         )
       ),
 
