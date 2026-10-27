@@ -1,0 +1,86 @@
+name: Backend Tests
+
+on:
+  pull_request:
+    paths:
+      - "Backend/**"
+      - ".github/workflows/backend-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Backend/**"
+      - ".github/workflows/backend-tests.yml"
+
+permissions:
+  contents: read
+
+# A new push to a PR cancels its run still going; every run on main finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # PostGIS with h3-pg, the image docker-compose.yml builds: the tests install h3 and h3_postgis.
+      # A service container cannot be built from a Dockerfile, so it is built and started here.
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Postgres image
+        uses: docker/build-push-action@v6
+        with:
+          context: Backend/docker/postgres-h3
+          load: true
+          tags: disaster-postgres-h3:ci
+          cache-from: type=gha,scope=postgres-h3
+          cache-to: type=gha,mode=max,scope=postgres-h3
+      - name: Start Postgres
+        run: >-
+          docker run -d --name postgres -p 5432:5432
+          -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres
+          disaster-postgres-h3:ci
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: Backend/pyproject.toml
+      - name: Install dependencies
+        working-directory: Backend
+        run: uv sync
+
+      # Over TCP: while the image runs its init scripts, Postgres listens on the socket alone.
+      - name: Wait for Postgres
+        run: |
+          for _ in $(seq 1 60); do
+            if docker exec postgres pg_isready -h 127.0.0.1 -U postgres; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs postgres
+          exit 1
+
+      # conftest.py gives each xdist worker its own database and Redis db (15, 14, 13, 12).
+      - name: Run tests
+        working-directory: Backend
+        env:
+          ENV: testing
+          PYTHONPATH: .
+          TEST_DB_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/disaster_rescue_test
+          TEST_ADMIN_DB_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+          TEST_REDIS_URL: redis://localhost:6379/15
+        run: uv run --no-sync python -m pytest tests -q -n 4
