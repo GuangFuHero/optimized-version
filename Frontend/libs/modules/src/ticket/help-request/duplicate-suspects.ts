@@ -5,7 +5,15 @@
  * like an open need of another ticket is named by its place in what was sent, `task:0`, `task:1`…
  */
 
+import type { SiteModule, SiteRouteState } from '../../route/types';
 import { distanceM, type LatLng } from '../address-lookup';
+import {
+  openClaimedTicket,
+  type ClaimedTicketOpening,
+} from '../my-claims/my-claims';
+
+/** Near enough to see the street, as a ticket just filed is shown (`help-request-host.tsx`). */
+const TICKET_ZOOM = 16;
 
 /** One suspect, as the mutations in `tickets.graphql` read it. */
 export interface DuplicateSuspect {
@@ -162,4 +170,52 @@ export function distanceToTicketM(
   const point = readPoint(ticket.geometry);
 
   return point ? Math.round(distanceM(from, point)) : null;
+}
+
+/** Where a ticket is, to centre the map on: for one shown only as its cell, the cell's centre. */
+export function ticketPoint(ticket: TicketPlace | null): LatLng | null {
+  return ticket ? readPoint(ticket.geometry) : null;
+}
+
+/** How a ticket it looks like opens: selected on the map or the list, or gone to. */
+export type SuspectTicketOpening =
+  | ClaimedTicketOpening
+  | { onMap: SiteRouteState };
+
+/**
+ * On the map the person stays there, and the ticket is selected on tickets with no filter that
+ * could hide it, centred on `point` — as a ticket just filed is shown. Going to the list would
+ * remount the page, and with it the toast saying what was typed was not sent. Anywhere else, as 查看
+ * opens a claimed ticket. `map`: the map's route state and zoom, null off the map. Without a
+ * `point` the view stays where it is.
+ */
+export function openSuspectTicket(
+  current: { module: SiteModule; state: SiteRouteState },
+  map: { state: SiteRouteState; zoom: number } | null,
+  ticketUuid: string,
+  point: LatLng | null,
+): SuspectTicketOpening {
+  if (!map) {
+    return openClaimedTicket(current, ticketUuid);
+  }
+
+  const onTickets: SiteRouteState = {
+    ...map.state,
+    dataType: 'ticket',
+    subDataTypes: undefined,
+    search: undefined,
+    selectedMarkerId: ticketUuid,
+  };
+
+  return {
+    onMap: point
+      ? {
+          ...onTickets,
+          position: {
+            center: [point.lat, point.lng],
+            zoom: Math.max(map.zoom, TICKET_ZOOM),
+          },
+        }
+      : onTickets,
+  };
 }

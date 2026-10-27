@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   distanceToTicketM,
   groupSuspectsByTicket,
+  openSuspectTicket,
   readHeldHelpRequest,
   sentNeedIndex,
+  ticketPoint,
 } from './duplicate-suspects';
 
 describe('sentNeedIndex', () => {
@@ -211,5 +213,85 @@ describe('distanceToTicketM', () => {
         geometry: { type: 'Polygon', coordinates: [] },
       }),
     ).toBeNull();
+  });
+});
+
+describe('ticketPoint', () => {
+  it('reads the ticket’s point, a cell centre included', () => {
+    const geometry = { type: 'Point', coordinates: [121.4235, 23.6726] };
+
+    expect(ticketPoint({ geometry })).toEqual({ lat: 23.6726, lng: 121.4235 });
+    expect(ticketPoint({ geometry, locationCell: '884ba0a511fffff' })).toEqual({
+      lat: 23.6726,
+      lng: 121.4235,
+    });
+  });
+
+  it('has none without a ticket or a point', () => {
+    expect(ticketPoint(null)).toBeNull();
+    expect(ticketPoint({ geometry: null })).toBeNull();
+  });
+});
+
+describe('openSuspectTicket', () => {
+  const point = { lat: 23.6726, lng: 121.4235 };
+  const onMap = { module: 'map', state: { dataType: 'ticket' } } as const;
+
+  it('stays on the map, the ticket selected with no filter that could hide it and centred', () => {
+    // Going to the list would remount the page, and the toast saying it was not sent with it.
+    const map = {
+      state: {
+        baseLayer: 'nlsc',
+        dataType: 'station',
+        subDataTypes: ['hr'],
+        search: '清淤',
+      },
+      zoom: 13,
+    } as const;
+
+    expect(openSuspectTicket(onMap, map, 'ticket-1', point)).toEqual({
+      onMap: {
+        baseLayer: 'nlsc',
+        dataType: 'ticket',
+        selectedMarkerId: 'ticket-1',
+        position: { center: [23.6726, 121.4235], zoom: 16 },
+      },
+    });
+  });
+
+  it('keeps a closer zoom, and the view without a point', () => {
+    const map = { state: { dataType: 'ticket' }, zoom: 18 } as const;
+
+    expect(openSuspectTicket(onMap, map, 'ticket-1', point)).toMatchObject({
+      onMap: { position: { zoom: 18 } },
+    });
+    expect(openSuspectTicket(onMap, map, 'ticket-1', null)).toEqual({
+      onMap: { dataType: 'ticket', selectedMarkerId: 'ticket-1' },
+    });
+  });
+
+  it('opens it as 查看 does off the map: in place on the ticket list, or on the list', () => {
+    expect(
+      openSuspectTicket(
+        { module: 'list', state: { dataType: 'ticket', search: '清淤' } },
+        null,
+        'ticket-1',
+        point,
+      ),
+    ).toEqual({
+      select: {
+        dataType: 'ticket',
+        search: '清淤',
+        selectedMarkerId: 'ticket-1',
+      },
+    });
+    expect(
+      openSuspectTicket(
+        { module: 'list', state: { dataType: 'station' } },
+        null,
+        'ticket-1',
+        point,
+      ),
+    ).toEqual({ href: '/list/ticket?id=ticket-1' });
   });
 });

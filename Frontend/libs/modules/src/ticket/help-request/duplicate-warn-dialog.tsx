@@ -2,7 +2,7 @@
 
 import { ButtonBase, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
-import type { MouseEvent } from 'react';
+import { useContext, type MouseEvent } from 'react';
 import { useQuery } from 'urql';
 
 import {
@@ -18,18 +18,25 @@ import {
   displayTextSize,
 } from '@rescue-frontend/ui';
 
+import { useOptionalSiteMapRouteState } from '../../map/site/use-site-map-route-state';
+import { SiteMapViewportStoreContext } from '../../map/site/use-site-map-viewport-state';
 import { useSiteRouteState } from '../../route';
 import { useAuthSession } from '../../session/auth-session';
 import { timeAgo } from '../../time';
 import { formatTicketAddress } from '../address';
 import type { LatLng } from '../address-lookup';
-import { myClaimTicketHref, openClaimedTicket } from '../my-claims/my-claims';
+import { myClaimTicketHref } from '../my-claims/my-claims';
 import { isTicketRequester } from '../needs/need-actions';
 import {
   readTicketNeeds,
   TICKET_NEEDS_QUERY_CONTEXT,
 } from '../needs/use-ticket-needs';
-import { distanceToTicketM, type SuspectTicket } from './duplicate-suspects';
+import {
+  distanceToTicketM,
+  openSuspectTicket,
+  ticketPoint,
+  type SuspectTicket,
+} from './duplicate-suspects';
 
 const { color, radius } = designTokens;
 
@@ -47,7 +54,8 @@ function readTicketFields(ticket: GetTicketQuery['ticket']) {
  * One ticket it looks like, read for what tells the requester whether it is theirs: when it was
  * filed, its title, the needs it matched, which of theirs it is like, and where it is — the
  * prototype's rule is that the reason shows. The backend gives no distance; it is worked out from
- * the ticket's point, which a signed-in person is shown. Pressed, it opens that ticket.
+ * the ticket's point, which a signed-in person is shown. Pressed, it opens that ticket, handing on
+ * where it is.
  */
 function SuspectTicketCard({
   suspect,
@@ -58,7 +66,7 @@ function SuspectTicketCard({
   suspect: SuspectTicket;
   from: LatLng | null;
   viewerId: string | null;
-  onOpen: (event: MouseEvent<HTMLElement>) => void;
+  onOpen: (event: MouseEvent<HTMLElement>, point: LatLng | null) => void;
 }) {
   const [{ data, fetching }] = useQuery({
     query: GetTicketDocument,
@@ -94,7 +102,9 @@ function SuspectTicketCard({
     <ButtonBase
       LinkComponent={Link}
       href={myClaimTicketHref(suspect.ticketUuid)}
-      onClick={onOpen}
+      onClick={(event: MouseEvent<HTMLElement>) =>
+        onOpen(event, ticketPoint(fields))
+      }
       sx={{
         display: 'block',
         width: '100%',
@@ -191,13 +201,30 @@ export function DuplicateWarnDialog({
   onLeave,
 }: DuplicateWarnDialogProps) {
   const route = useSiteRouteState();
+  const mapRoute = useOptionalSiteMapRouteState();
+  // Only on the map, whose zoom the ticket is shown at, unless that is too far out.
+  const mapViewport = useContext(SiteMapViewportStoreContext);
   const viewerId = useAuthSession().user?.uuid ?? null;
   const { verb, busy } = ACTS[act];
 
-  const openTicket = (event: MouseEvent<HTMLElement>, ticketUuid: string) => {
-    const opening = openClaimedTicket(route, ticketUuid);
+  const openTicket = (
+    event: MouseEvent<HTMLElement>,
+    ticketUuid: string,
+    point: LatLng | null,
+  ) => {
+    const map = mapRoute
+      ? {
+          state: mapRoute.state,
+          zoom: mapViewport?.getSnapshot().position?.zoom ?? 0,
+        }
+      : null;
+    // Near what is being sent, should the ticket's own point not have been read yet.
+    const opening = openSuspectTicket(route, map, ticketUuid, point ?? from);
 
-    if ('select' in opening) {
+    if ('onMap' in opening) {
+      event.preventDefault();
+      mapRoute?.replace(opening.onMap);
+    } else if ('select' in opening) {
       // Already on the ticket list: the link would change only `?id=`, which it does not reread.
       event.preventDefault();
       route.replace(opening.select);
@@ -233,7 +260,9 @@ export function DuplicateWarnDialog({
           suspect={suspect}
           from={from}
           viewerId={viewerId}
-          onOpen={(event) => openTicket(event, suspect.ticketUuid)}
+          onOpen={(event, point) =>
+            openTicket(event, suspect.ticketUuid, point)
+          }
         />
       ))}
     </Dialog>
