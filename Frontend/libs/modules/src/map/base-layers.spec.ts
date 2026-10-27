@@ -23,11 +23,11 @@ describe('parseSiteRouteState', () => {
   it('opens a link to the unavailable CARTO layer on the viewer’s own layer', () => {
     const state = parseSiteRouteState(
       'map',
-      ['carto', 'station'],
+      ['carto', 'ticket'],
       new URLSearchParams(),
     );
 
     expect(state.baseLayer).toBeUndefined();
-    expect(state.dataType).toBe('station');
+    expect(state.dataType).toBe('ticket');
   });
 });
