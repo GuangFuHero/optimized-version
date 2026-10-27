@@ -1,4 +1,4 @@
-# 去重引擎介面 — ADR 全集（ADR-295~299、301~307、313~323、397）
+# 去重引擎介面 — ADR 全集（ADR-295~299、301~307、313~323、396~397）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/008-rbac-authorization/decisions.md`（ADR-285 為 2026-09-28 全 repo 各分支掃描的最大值）。
@@ -589,6 +589,45 @@ ADR-301／302 的 API 保留，但回傳的疑似重複改為通用形狀（見 
 ◾ 測試：`tests/test_dedup_check.py`（score 的 SQL 出錯、逾時、偷寫、對方不存在、不是 uuid、大寫 uuid）、`tests/test_dedup_submission.py`（真 engine 的工單層級確認、建單時 score 逾時）。
 
 ---
+
+### ADR-396 同一區域的送出依地點排隊：查詢前取 advisory lock，最多等 500 ms，等不到照常建立
+
+**白話**：兩個人幾乎同時在同一個地方送出一樣的東西，以前兩筆都會建立、也都不會跳提示。
+現在同一區域的送出會排隊，後面那筆查得到前面那筆，就會被提示。排隊最多等 0.5 秒，等不到就照以前的方式建立，不會比以前差。
+
+**Context**（PR #132 回報，2026-10-27 實測，證據在 PR #132 的審查附件）：
+
+1. 三個進入點（`submit_new_ticket`、`submit_new_task`、`submit_new_station`）都是「先問 engine → 寫入 → commit」，中間沒有鎖。
+   兩筆在彼此 commit 之前都查不到對方。用兩條連線重現：先後送出時第二筆被擋；第一筆在寫入後、commit 前暫停時，兩筆都建立。三條路徑都一樣。
+2. 漏掉的重複沒有配對卡（配對卡只在使用者確認時寫），所以 admin 審核清單也看不到。
+3. 20 筆一樣的單同時送出、共用預設連線池（15 條）：
+   - 現況：15 筆建立。
+   - 不設上限的鎖：只建立 1 筆，但 engine 一筆 1.5 秒時，最慢一筆要等 32.6 秒，其他區域的請求也被拖到 8.3 秒（排隊的請求佔住連線）。
+   - 上限 300 ms：engine 比上限快時只建立 1 筆；比上限慢時退回現況（15 筆），最慢一筆只比現況多約 0.6 秒，其他區域跟現況差不多。
+4. 漏洞在後端的流程，不在 engine（ADR-304／306），所以由後端修，engine 不用改。
+
+**Decision**：
+
+1. 三個進入點在驗證完、問 engine（`score` 與 `check`）之前，先鎖住送出位置所在的區域。
+   位置：新開單、站點用草稿的 `location`；替既有的單加任務用所屬工單的位置（後端自己查，算法與 `app/db/h3.py` 相同，用 `ST_PointOnSurface`）。
+2. 區域 = 該點的 h3 第 8 級格子加周圍一圈（共 7 格）。依 h3 index 由小到大逐一 `pg_advisory_xact_lock(<h3 index 轉 bigint>)`，順序固定避免互相卡死。
+   鎖在 commit 或 rollback 時自動放掉；被提示的那筆會先 commit `hint_shown`，鎖也跟著放掉。
+3. 等待上限 `AREA_LOCK_TIMEOUT_MS = 500`：在 SAVEPOINT 裡 `SET LOCAL lock_timeout`，逾時就 rollback 這個 SAVEPOINT、記 warning，不帶鎖照常往下走（fail-open）。
+   500 ms 是 engine 最差 p99 約 245 ms（ADR-307）的兩倍。上限要比「前一筆從拿到鎖到 commit」長，後面那筆才查得到它。
+4. 鎖得住的前提：engine 的比對半徑不能超過 `AREA_LOCK_MAX_RADIUS_M = 500`（公尺）。
+   相距小於這個距離的兩點，h3 第 8 級格子的距離 ≤ 2，兩邊的 7 格一定有重疊。現行 fast-v4 半徑：任務 291 m、站點 137 m。
+   守門測試（後端擁有，ADR-306）：(a) 台灣範圍內隨機取相距 `AREA_LOCK_MAX_RADIUS_M` 的點對，格子距離都 ≤ 2；(b) registry 的 engine 半徑 ≤ `AREA_LOCK_MAX_RADIUS_M`。
+   Chi 把半徑調大時 (b) 會紅，由後端改格子層級或範圍。
+5. engine 出錯時 `check`／`score` 會整個 transaction rollback（ADR-313），鎖跟著放掉，這一筆就不帶鎖建立。這跟現況相同，接受。
+
+這條取代 PR #132 在 spec §9 想加的「同時送出可能漏提示，目前接受」。
+
+➕ 一般情況下（engine 比 500 ms 快），同一區域爆量時只會建立一筆，其他的都會被提示。
+➕ 最差就是退回現況；不同區域互不影響；engine 不用改。
+➖ 同一區域爆量時，每筆最多多等約 0.5 秒。
+➖ 每次送出多一次查詢（取 7 個鎖）。
+◾ 實測時 DB 是 amd64 模擬，數字偏悲觀。上限之後要改，依 ADR-306 由後端拍板。
+◾ 測試：`tests/test_dedup_area_lock.py`（三條路徑的兩連線確定性重現、逾時照常建立、鎖在 commit／hold 後放掉、守門 (a)(b)）。
 
 ### ADR-397 前台的請求協助 `createHelpRequest` 也走兩段式
 
