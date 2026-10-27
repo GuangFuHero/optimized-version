@@ -13,6 +13,7 @@ import {
 import { Button, designTokens, TextInput } from '@rescue-frontend/ui';
 
 import { DisasterTypesRow } from './disaster-types-row';
+import { MapViewRow } from './map-view-row';
 import { SettingsRow, SettingsSection } from './settings-layout';
 import {
   basicsBody,
@@ -149,6 +150,11 @@ export function EventSection({
       />
       <StartedAtRow
         startedAt={settings.started_at ?? null}
+        canEdit={canEdit}
+        needsName={needsName}
+      />
+      <MapViewRow
+        saved={settings.map_view ?? null}
         canEdit={canEdit}
         needsName={needsName}
       />

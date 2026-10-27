@@ -46,6 +46,13 @@ export const MAP_VIEW_TAIWAN: {
   zoom: 7,
 };
 
+/**
+ * The zooms a map view is saved at: the main map's own range (`rescue-map-canvas`), which the backend
+ * holds a saved view to as well (ADR-395).
+ */
+export const MAP_VIEW_MIN_ZOOM = 7;
+export const MAP_VIEW_MAX_ZOOM = 18;
+
 export const RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH = 352;
 
 export const BASE_LAYER_CONFIG: Record<
