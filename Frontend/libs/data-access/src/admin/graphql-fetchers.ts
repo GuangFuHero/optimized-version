@@ -285,6 +285,27 @@ export function useDisasterTypes(
   });
 }
 
+// Public (ADR-392), so the site reads it too. Under `settings`, so saving the settings reads it
+// again. Quiet: a name that does not load leaves the platform's, which is no error to report.
+export const currentDisasterQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'settings', 'currentDisaster'],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminCurrentDisasterDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData),
+    meta: { quietErrors: true },
+  });
+
+export function useCurrentDisaster(options: AdminQueryOptions = {}) {
+  return useQuery({ ...currentDisasterQuery(), enabled: options.enabled });
+}
+
 export function useCreateTicket() {
   const queryClient = useQueryClient();
   return useMutation({

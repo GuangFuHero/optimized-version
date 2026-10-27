@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 
 import PublicRoundedIcon from '@mui/icons-material/PublicRounded';
-import { Box, Stack, Typography } from '@mui/material';
+import { Box, Stack } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
 import {
@@ -16,6 +16,7 @@ import { GuangFuBrandIcon } from '../../brand';
 import { SiteNotifyBell } from '../../notification';
 import { SitePortalSwitch, type SitePortalEntry } from '../../role-request';
 import { RequestHelpButton } from '../../ticket/help-request/request-help-button';
+import { SiteBrandName } from './brand-name';
 import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
@@ -104,17 +105,16 @@ export function SiteTopNavBar({
     >
       <Stack sx={{ flexDirection: 'row', alignItems: 'center', gap: 1.25 }}>
         <GuangFuBrandIcon width={38} height={26} />
-        <Typography
+        {/* Capped, so a long name without a short one cannot squeeze the search out. */}
+        <SiteBrandName
           sx={{
+            maxWidth: { tablet: 160, desktop: 240 },
             color: palette.brandText,
             fontSize: displayTextSize[16],
             lineHeight: '24px',
             fontWeight: 700,
-            whiteSpace: 'nowrap',
           }}
-        >
-          島嶼守望
-        </Typography>
+        />
         {portalEntry === 'backOffice' ? <SiteRealmBadge /> : null}
         <SitePortalSwitch entry={portalEntry} onApply={onApplyRoleRequest} />
       </Stack>
