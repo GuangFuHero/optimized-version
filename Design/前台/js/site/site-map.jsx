@@ -1088,15 +1088,6 @@
 
     const [reportStation, setReportStation] = useState(null);
     const [pendingDelete, setPendingDelete] = useState(null);
-    /* DUP-FE-301（2026-10-23）：疑似重複的單按「接」→ 先開承接確認，兩張並排。不是疑似重複的照舊直接接。 */
-    const [pendingClaim, setPendingClaim] = useState(null);
-    const guardClaim = (marker, task) => {
-      if (window.siteDupsFor && window.siteDupsFor(marker.id).length) {
-        setPendingClaim({ marker, task, state: getNeedState(marker, task) });
-        return;
-      }
-      claimNeedAndNudge(marker, task);
-    };
     const [shareTarget, setShareTarget] = useState(null);
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
     useEffect(() => {
@@ -1237,7 +1228,7 @@
       onSuggestUpdate: () => setReportStation(selectedMarker),
       onShare: () => openShare(selectedMarker),
       viewerId: session.userId,
-      onClaimNeed: (task) => guardClaim(selectedMarker, task),
+      onClaimNeed: (task) => claimNeedAndNudge(selectedMarker, task),
       onDeleteMatchSheet: () => setPendingDelete(selectedMarker),
       /* 現場分區（2026-09-12）：這個地址有沒有被後台開成「幾樓幾戶」。
          沒開就是 null，詳情面板照原本的單張單流程走，什麼都不多出來。 */
@@ -1331,11 +1322,6 @@
           reports={reportStation ? reportsByStationId[reportStation.id] : []}
           onClose={() => setReportStation(null)}
           onSubmit={(values) => { submitStationReport(reportStation, values); setReportStation(null); }} />
-        <NeedClaimConfirmDialog open={Boolean(pendingClaim)}
-          marker={pendingClaim && pendingClaim.marker} task={pendingClaim && pendingClaim.task}
-          state={(pendingClaim && pendingClaim.state) || {}}
-          onCancel={() => setPendingClaim(null)}
-          onConfirm={() => { claimNeedAndNudge(pendingClaim.marker, pendingClaim.task); setPendingClaim(null); }} />
         <TaskMatchDeleteConfirmDialog open={Boolean(pendingDelete)} task={pendingDelete}
           onCancel={() => setPendingDelete(null)}
           onConfirm={() => {
@@ -1373,7 +1359,7 @@
             markers={buildingMarkers} getTaskMatchState={getTaskMatchState}
             viewerId={session.userId} isAuthenticated={session.isAuthenticated}
             onClose={() => setBuildingOpen(null)}
-            onClaimNeed={guardClaim}
+            onClaimNeed={claimNeedAndNudge}
             onOpenTicket={(mk) => { setBuildingOpen(null); controller.setSelectedMarkerId(mk.id); }}
             onCreateAtCell={(cell) => {
               /* 從矩陣的某一格起手建單：帶著樓層與戶室進表單（Q16 解讀 A）。
