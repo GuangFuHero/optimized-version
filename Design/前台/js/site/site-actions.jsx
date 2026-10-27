@@ -948,7 +948,7 @@
    *  沒有回饋的話，使用者按下送出只看到抽屜關掉 —— 分不出「成功了」還是「壞掉了」，
    *  接著就會再送一次。這是重複單最常見的來源。
    *  auto-dismiss 給 6 秒：夠讀完，也夠按「查看」。 */
-  function SiteToast({ open, title, description, actionLabel, onAction, onClose }) {
+  function SiteToast({ open, tone, title, description, actionLabel, onAction, onClose }) {
     React.useEffect(() => {
       if (!open) return undefined;
       const timer = setTimeout(onClose, 6000);
@@ -958,7 +958,7 @@
     return (
       <WGPortal>
         <div role="status" aria-live="polite"
-          style={{ position: 'fixed', zIndex: 200, left: '50%', bottom: 'var(--space-6)',
+          style={{ position: 'fixed', zIndex: tone === 'info' ? 2600 : 200, left: '50%', bottom: 'var(--space-6)',   /* info 那則是在詳情抽屜開著時跳的，要壓在抽屜上面 */
             transform: 'translateX(-50%)', width: 'min(420px, calc(100vw - 32px))',
             display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)',
             padding: 'var(--space-4)', borderRadius: 'var(--radius-lg)',
@@ -966,7 +966,9 @@
             border: '1px solid var(--color-border-default)',
             animation: 'wgPop var(--duration-base) var(--ease-spring)' }}>
           <span style={{ flexShrink: 0, marginTop: 1, color: 'var(--color-fg-success)' }}>
-            <WGIcon n="CircleCheck" s={20} c="var(--color-fg-success)" />
+            {tone === 'info'
+              ? <WGIcon n="Info" s={20} c="var(--color-fg-info)" />
+              : <WGIcon n="CircleCheck" s={20} c="var(--color-fg-success)" />}
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ font: '700 var(--fs-14)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' }}>{title}</div>
@@ -1574,119 +1576,455 @@
     a.forEach((g) => { if (b.has(g)) hit++; });
     return hit / Math.min(a.size, b.size);
   }
+  const digitsOnly = (p) => String(p || '').replace(/\D/g, '');
 
   const OPEN_TICKET_STATUSES = ['pending', 'in_progress', 'open'];
 
-  /** 找出疑似重複的既有任務單。
-   *  回傳 `[{ ticket, meters, reasons }]`，最多三筆，近的在前。
-   *
-   *  🔒 **三個訊號都只是「疑似」，任何一個都不足以判定。**
-   *     所以每一筆都要把**理由**寫出來給人看（距離幾公尺、地址哪裡像、
-   *     哪個詞重疊）—— 由填單的人決定是不是同一件事，不是由分數決定。
-   *     這也是「只提示不擋」的前提：系統沒有把握，就不該替他做決定。 */
-  function findPossibleDuplicates(draft) {
+  /** 把 mock 與 bridge 的未結案任務單正規化成同一個形狀，比對只認這個形狀。
+   *  同一個 id 以 bridge 版本為準（同 useMyCreatedTickets）。
+   *  🔴 2026-10-23 修：mock 的地址原本讀成 `description`（描述），「地址很像」從來沒比對到真的地址。 */
+  function readOpenTicketsForDup() {
     const D = window.SiteData;
-    const mine = { lat: draft.landmark && draft.landmark.lat, lng: draft.landmark && draft.landmark.lng };
-    const myText = bigrams((draft.title || '') + (draft.needNames || []).join(''));
-    const myAddr = bigrams(draft.address || '');
-
     const fromMock = ((D && D.TICKETS) || [])
       .filter((t) => OPEN_TICKET_STATUSES.indexOf(t.status) !== -1)
       .map((t) => ({
-        /* mock 的 createdAt 是 ISO 字串，bridge 的是 "MM/DD HH:mm"。
-           這裡統一成後者 —— 對話框裡要並排顯示，兩種格式混在一起讀起來像兩種東西。 */
+        /* mock 的 createdAt 是 ISO 字串，bridge 的是 "MM/DD HH:mm"。統一成後者。 */
         id: t.uuid, title: t.title, createdBy: t.createdBy,
         createdAt: String(t.createdAt || '').slice(5, 16).replace('T', ' ').replace('-', '/'),
-        address: t.description || '',
+        address: t.address || '',
+        floor: typeof t.floor === 'number' ? t.floor : null,
+        room: t.room != null ? t.room : null,
+        contactName: t.contactName || '', contactPhone: t.contactPhone || '',
         needNames: (t.tasks || []).map((k) => k.name),
         pos: (t.geometry && t.geometry.coordinates)
           ? { lat: t.geometry.coordinates[1], lng: t.geometry.coordinates[0] } : null,
+        ack: t.acknowledgedDuplicateOf || [],
       }));
     const fromBridge = Bridge.readSiteTickets()
       .filter((t) => OPEN_TICKET_STATUSES.indexOf(t.status) !== -1)
       .map((t) => ({
         id: t.id, title: t.title, createdBy: t._site && t._site.createdBy, createdAt: t.createdAt,
         address: t.street || '',
+        floor: t.floor != null && t.floor !== '' && !isNaN(Number(t.floor)) ? Number(t.floor) : null,
+        room: t.room != null && t.room !== '' ? t.room : null,
+        contactName: t.contact_name || '', contactPhone: t.contact_phone || '',
         needNames: (t.tasks || []).map((k) => k.name),
         pos: (t._site && t._site.lat != null) ? { lat: t._site.lat, lng: t._site.lng } : null,
+        ack: t.acknowledgedDuplicateOf || [],
       }));
+    const byId = {};
+    fromMock.concat(fromBridge).forEach((t) => { byId[t.id] = t; });
+    return Object.keys(byId).map((id) => byId[id]);
+  }
 
-    return fromMock.concat(fromBridge).map((t) => {
-      const meters = metersBetween(mine, t.pos);
-      if (!(meters <= SITE_DUP_RADIUS_M)) return null;
-      const reasons = ['距離約 ' + Math.round(meters) + ' 公尺'];
-      const addrHit = overlapRatio(myAddr, bigrams(t.address));
-      const textHit = overlapRatio(myText, bigrams(t.title + t.needNames.join('')));
-      if (addrHit >= 0.34) reasons.push('地址寫的地方很像');
-      if (textHit >= 0.25) reasons.push('要幫的事情很像');
-      return { ticket: t, meters, reasons, score: (addrHit + textHit) };
+  const unitText = (t) => (t.floor == null ? '（沒填）'
+    : (t.floor < 0 ? 'B' + (-t.floor) : t.floor) + ' 樓' + (t.room != null ? ' ' + t.room + ' 室' : ''));
+
+  /** 兩張單逐欄比對。回傳每一欄「像不像」，畫面照這個寫出**哪些欄位**疑似重複。
+   *
+   *  🔒 2026-10-23 Sucre：開單時、前台列表、志工承接三處都要「顯示哪些欄位疑似重複」。
+   *     三處共用這一支，判準只有一份。
+   *  🚨 我定的（待確認）：五個欄位與各自的門檻 ——
+   *     位置 ≤ 50 公尺 · 地址字面重疊 ≥ 34% · 要幫的事情（標題＋需求名稱）字面重疊 ≥ 25%
+   *     · 聯絡電話數字完全相同 · 樓層／戶室兩邊都有填且相同。
+   *  🔒 **兩邊都填了樓層而且不同 ＝ 不同戶，不算重複**（DUP-FE-104）。
+   *     同一棟大樓的鄰居座標完全一樣、地址也一樣，不排除的話整棟都會被標成重複。
+   *  ⚠️ 電話只寫「相同／不同」，**不把別人的號碼印給開單的人看**。 */
+  function compareForDup(a, b) {
+    const meters = metersBetween(a.pos, b.pos);
+    const bothFloor = a.floor != null && b.floor != null;
+    const differentUnit = bothFloor && (a.floor !== b.floor
+      || (a.room != null && b.room != null && String(a.room) !== String(b.room)));
+    const addrHit = overlapRatio(bigrams(a.address), bigrams(b.address)) >= 0.34;
+    const needText = (t) => t.title + (t.needNames || []).join('');
+    const needHit = overlapRatio(bigrams(needText(a)), bigrams(needText(b))) >= 0.25;
+    const pa = digitsOnly(a.contactPhone), pb = digitsOnly(b.contactPhone);
+    const phoneHit = pa.length >= 8 && pa === pb;
+    const fields = [
+      { key: 'place', label: '位置', hit: meters <= SITE_DUP_RADIUS_M,
+        note: isFinite(meters) ? '相距約 ' + Math.round(meters) + ' 公尺' : '其中一張沒有位置' },
+      { key: 'address', label: '地址', hit: addrHit, a: a.address || '（沒填）', b: b.address || '（沒填）' },
+    ];
+    if (a.floor != null || b.floor != null) {
+      fields.push({ key: 'unit', label: '樓層／戶室', hit: bothFloor && !differentUnit, a: unitText(a), b: unitText(b) });
+    }
+    const needShow = (t) => [t.title, (t.needNames || []).join('、')].filter(Boolean).join('：') || '（沒填）';
+    fields.push({ key: 'need', label: '要幫的事情', hit: needHit, a: needShow(a), b: needShow(b) });
+    fields.push({ key: 'phone', label: '聯絡電話', hit: phoneHit,
+      note: !pa || !pb ? '其中一張沒填' : phoneHit ? '號碼相同' : '號碼不同' });
+    return { meters, differentUnit, fields, hits: fields.filter((f) => f.hit) };
+  }
+
+  /** 哪些欄位疑似重複，寫成一句：「位置（相距約 12 公尺）、要幫的事情、聯絡電話」。 */
+  function dupHitText(cmp) {
+    return cmp.hits.map((f) => (f.key === 'place' ? '位置（' + f.note + '）' : f.label)).join('、');
+  }
+
+  /** 開單當下：找出疑似重複的既有任務單。回傳 `[{ ticket, cmp }]`，最多三筆，近的在前。
+   *
+   *  🔒 **每個訊號都只是「疑似」**，所以把**逐欄比對**攤給人看，由填單的人決定是不是同一件事。
+   *     這也是「只提示不擋」的前提：系統沒有把握，就不該替他做決定。 */
+  function findPossibleDuplicates(draft) {
+    const mine = {
+      id: null, title: draft.title || '', address: draft.address || '',
+      floor: draft.floor != null && draft.floor !== '' && !isNaN(Number(draft.floor)) ? Number(draft.floor) : null,
+      room: draft.room != null && draft.room !== '' ? draft.room : null,
+      contactPhone: draft.contactPhone || '', needNames: draft.needNames || [],
+      pos: draft.landmark && draft.landmark.lat != null ? { lat: draft.landmark.lat, lng: draft.landmark.lng } : null,
+    };
+    return readOpenTicketsForDup().map((t) => {
+      const cmp = compareForDup(mine, t);
+      if (!(cmp.meters <= SITE_DUP_RADIUS_M) || cmp.differentUnit) return null;
+      return { ticket: t, cmp };
     }).filter(Boolean)
-      .sort((a, b) => a.meters - b.meters)
+      .sort((x, y) => (y.cmp.hits.length - x.cmp.hits.length) || (x.cmp.meters - y.cmp.meters))
       .slice(0, 3);
   }
 
-  /** 疑似重複的提示。
+  /* ── 前台常駐的「疑似重複」標記（2026-10-23）──────────────────────────
    *
-   *  🔒 **只提示不擋**（2026-09-10 Sucre）。所以：
-   *    - 「還是要送出」是一顆**正常的按鈕**，不是灰掉、不是要再確認一次。
-   *    - 標題問的是「是不是同一件事？」，不是「你確定嗎？」——
-   *      後者是在暗示他做錯了，但他很可能是對的（隔壁鄰居也淹水）。
-   *    - 災害中擋錯一次的代價，遠大於多一張重複單。後台本來就有去重。
-   */
+   * Sucre：「前台兩張很像的，在前台直接表示『疑似重複』，並且顯示哪些欄位重複。」
+   *
+   * 🔒 DUP-FE-201 什麼算「兩張很像」：**位置在 50 公尺內，而且要幫的事情很像或電話相同**；
+   *    或其中一張是開單時看過提示、仍選擇送出的（`acknowledgedDuplicateOf`）。
+   *    🚨 判準是我定的：光是「位置＋地址」很像不算 —— 同一棟、同一條巷子的鄰居
+   *    本來就會這樣，標出來會讓整棟樓都掛著「疑似重複」，標記就沒有意義了。
+   * 🔒 DUP-FE-202 只看未結案的單；已完成／已取消的不標。
+   * 🔒 DUP-FE-203 這只是**提醒**，不改單、不擋承接。真的合併由後台 重複審核處理。
+   * ⚠️ 正式版這份配對應由後端給（`dedup_group_id` 或審核 API 的配對卡），前端不該自己兩兩比。 */
+  let dupCache = { sig: null, map: {} };
+  function siteDupIndex() {
+    const list = readOpenTicketsForDup();
+    const sig = list.map((t) => t.id + ':' + (t.ack || []).join('+')).join(',');
+    if (dupCache.sig === sig) return dupCache.map;
+    const map = {};
+    const add = (a, b) => { (map[a.id] = map[a.id] || []).push({ other: b, cmp: compareForDup(a, b) }); };
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j];
+        const acked = (a.ack || []).indexOf(b.id) !== -1 || (b.ack || []).indexOf(a.id) !== -1;
+        let suspect = acked;
+        if (!suspect) {
+          const c = compareForDup(a, b);
+          suspect = !c.differentUnit && c.meters <= SITE_DUP_RADIUS_M
+            && c.hits.some((f) => f.key === 'need' || f.key === 'phone');
+        }
+        if (suspect) { add(a, b); add(b, a); }
+      }
+    }
+    dupCache = { sig, map };
+    return map;
+  }
+  /** 這張單疑似和哪幾張重複。`[{ other, cmp }]` */
+  function siteDupsFor(ticketId) { return (ticketId && siteDupIndex()[ticketId]) || []; }
+
+  /** 列表卡片標題旁的小標記。沒有疑似重複就什麼都不畫。 */
+  function SiteDupBadge({ ticketId }) {
+    const dups = siteDupsFor(ticketId);
+    if (!dups.length) return null;
+    return (
+      <span title={'疑似與 ' + dups.map((d) => d.other.title).join('、') + ' 重複：' + dupHitText(dups[0].cmp)}
+        data-site-dup-badge={ticketId}
+        style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, height: 20, padding: '0 7px',
+          borderRadius: 'var(--radius-full)', background: 'var(--color-bg-warning-subtle)', color: 'var(--color-fg-warning)',
+          font: '700 var(--fs-11)/1 var(--font-body)', whiteSpace: 'nowrap' }}>
+        <WGIcon n="Copy" s={11} />疑似重複
+      </span>
+    );
+  }
+
+  /** 卡片標題下那一行：重複的是哪些欄位。
+   *  只在「沒有被包進同一組」時出現（例如另一張被篩選掉了）—— 包成一組時說明在組的抬頭，不在每張卡重複一次。 */
+  function SiteDupLine({ ticketId }) {
+    const dups = siteDupsFor(ticketId);
+    if (!dups.length) return null;
+    const d = dups[0];
+    return (
+      <div data-site-dup-line={ticketId} style={{ marginTop: 4, paddingLeft: 23,
+        font: '400 var(--fs-12)/1.45 var(--font-body)', color: 'var(--color-fg-warning)', textWrap: 'pretty' }}>
+        疑似跟「{dupTitle(d.other.title)}」重複
+      </div>
+    );
+  }
+
+  /** 詳情面板頂部：列出每一張疑似重複的單、像的地方，可以點過去看。 */
+  /* 🔒 DUP-FE-206 句子裡引用另一張單的名稱，最多 16 個字；超過就留前 15 個字＋「…」。
+   *    完整名稱按「看那張」就看得到。手機 390 寬、15px 字，一行大約 14〜15 個字 ——
+   *    16 字以內最多折成兩行，句子還讀得通；不截的話長名稱會把「重複」兩個字擠到第三、四行。
+   *    ⚠️ 前台開單的「標題」目前沒有字數上限（後端 tickets.title 長度也要再確認），所以前端一定要截。 */
+  const DUP_TITLE_MAX = 16;
+  function dupTitle(t) {
+    const a = Array.from(String(t || ''));
+    return a.length > DUP_TITLE_MAX ? a.slice(0, DUP_TITLE_MAX - 1).join('') + '…' : a.join('');
+  }
+
+  /* 詳情頂部的「疑似重複」說明（2026-10-27 Sucre 比稿 A／B／C／D 後定 B＋淡底）：
+   *   一句話「疑似跟『XXX』重複」—— 文字本身就講清楚，不靠顏色或框線；
+   *   底下一行「相距 38 公尺，地址、需求很像」，再一行承接提醒。
+   *   很淡的橘底只是把這幾行收成一組，不搶畫面。 */
+  function SiteDupNotice({ ticketId, onOpenTicket }) {
+    const dups = siteDupsFor(ticketId);
+    if (!dups.length) return null;
+    return (
+      <div data-site-dup-notice={ticketId} style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)',
+        background: 'color-mix(in srgb, var(--color-bg-warning-subtle) 40%, var(--color-bg-neutral-default))',
+        display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {dups.map((d) => (
+          <div key={d.other.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
+            font: '400 var(--fs-15)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)' }}>
+            <span style={{ marginTop: 4, display: 'inline-flex' }}><WGIcon n="Copy" s={16} c="var(--color-fg-warning)" /></span>
+            <span style={{ flex: 1, minWidth: 0, textWrap: 'pretty' }}>
+              疑似跟<strong>「{dupTitle(d.other.title)}」</strong>重複
+              <DupChips cmp={d.cmp} />
+            </span>
+            {onOpenTicket ? (
+              <button type="button" onClick={() => onOpenTicket(d.other.id)} data-site-dup-open={d.other.id}
+                style={{ flexShrink: 0, padding: '2px 0', border: 0, background: 'transparent', cursor: 'pointer',
+                  font: '700 var(--fs-14)/1.6 var(--font-body)', color: 'var(--color-brand-secondary-default)', textDecoration: 'underline' }}>看那張</button>
+            ) : null}
+          </div>
+        ))}
+        <span style={{ paddingLeft: 24, font: '400 var(--fs-12)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-muted)' }}>
+          承接前建議先聯絡開單者，避免兩邊都派人過去。
+        </span>
+      </div>
+    );
+  }
+
+  /** 「像的地方」一句話。 */
+  /* 2026-10-27 Sucre：「位置 38m／地址／要幫的事情」三個小標籤看不懂 → 改成一句話：
+   *   「相距 38 公尺，地址、需求很像」。名稱跟開單對話框的「像你填的：…」用同一組短名。 */
+  const DUP_SHORT = { address: '地址', unit: '樓層', need: '需求', phone: '聯絡方式' };
+  function DupChips({ cmp }) {
+    const place = cmp.hits.find((f) => f.key === 'place');
+    const m = place && place.note ? place.note.match(/\d+/) : null;
+    const alike = cmp.hits.filter((f) => f.key !== 'place').map((f) => DUP_SHORT[f.key] || f.label);
+    const parts = [];
+    if (m) parts.push('相距 ' + m[0] + ' 公尺');
+    if (alike.length) parts.push(alike.join('、') + '很像');
+    if (!parts.length) return null;
+    return (
+      <span data-dup-reason style={{ display: 'block', marginTop: 2, font: '400 var(--fs-13)/1.5 var(--font-body)',
+        color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
+        {parts.join('，')}
+      </span>
+    );
+  }
+
+  /* ── 前台列表：疑似重複的單包成一組（2026-10-23 Sucre）──────────────────
+   * 「疑似重複的兩張單要不要呈現上被包起來？這樣就不用兩張單都出現一樣的文字。」
+   * 🔒 DUP-FE-204 同一頁上互相疑似重複的單，排在一起、外面包一個框；
+   *    「像的地方」寫在框的抬頭一次，卡片上不再各寫一次。
+   *    組的位置＝組裡最前面那張原本的位置（不打亂原本的排序太多）。
+   * 🔒 另一張不在這一頁（被篩掉、還沒載入）就不包，卡片自己掛一行「可能跟『…』是同一件事」。 */
+  function siteDupClusters(ids) {
+    const inList = {};
+    ids.forEach((id) => { inList[id] = true; });
+    const groupOf = {};
+    const groups = [];
+    ids.forEach((id) => {
+      if (groupOf[id]) return;
+      const stack = [id], members = [];
+      groupOf[id] = members;
+      while (stack.length) {
+        const cur = stack.pop();
+        members.push(cur);
+        siteDupsFor(cur).forEach((d) => {
+          if (inList[d.other.id] && !groupOf[d.other.id]) { groupOf[d.other.id] = members; stack.push(d.other.id); }
+        });
+      }
+      groups.push(members);
+    });
+    // 依原本順序回傳；每組的成員也照原本順序
+    const order = {};
+    ids.forEach((id, i) => { order[id] = i; });
+    return groups.map((m) => m.sort((a, b) => order[a] - order[b]));
+  }
+  /** 一組裡共同像的地方（取各配對都有的欄位；沒有交集就取聯集）。 */
+  function clusterHits(ids) {
+    const pairs = [];
+    ids.forEach((id, i) => siteDupsFor(id).forEach((d) => { const j = ids.indexOf(d.other.id); if (j > i) pairs.push(d.cmp); }));
+    if (!pairs.length) return [];
+    const keys = ['place', 'address', 'unit', 'need', 'phone'];
+    let pick = keys.filter((k) => pairs.every((c) => c.hits.some((f) => f.key === k)));
+    if (!pick.length) pick = keys.filter((k) => pairs.some((c) => c.hits.some((f) => f.key === k)));
+    const maxM = Math.max.apply(null, pairs.map((c) => c.meters));
+    return pick.map((k) => (k === 'place'
+      ? { key: k, label: '位置', hit: true, note: '相距約 ' + Math.round(maxM) + ' 公尺' }
+      : { key: k, label: { address: '地址', unit: '樓層／戶室', need: '要幫的事情', phone: '聯絡電話' }[k], hit: true }));
+  }
+  function SiteDupGroup({ ids, children }) {
+    const hits = clusterHits(ids);
+    return (
+      <div data-site-dup-group={ids.join(',')} style={{ padding: '10px 8px 8px', borderRadius: 'calc(var(--radius-lg) + 4px)',
+        border: '1.5px dashed var(--color-fg-warning)', background: 'var(--color-bg-warning-subtle)',
+        display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ padding: '0 6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, font: '700 var(--fs-14)/1.4 var(--font-body)', color: 'var(--color-fg-warning)' }}>
+            <WGIcon n="Copy" s={15} />疑似重複的單 · {ids.length} 張
+          </div>
+          <DupChips cmp={{ hits, fields: hits }} onTint />
+          <div style={{ marginTop: 4, font: '400 var(--fs-12)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+            承接前建議先聯絡開單者，避免兩邊都派人過去。
+          </div>
+        </div>
+        {children}
+      </div>
+    );
+  }
+
+  /** 逐欄比對（只在展開「看比對」時出現）。只列有值可比的欄位；位置與電話已在標籤上講過，不再重複。 */
+  function DupCompareRows({ fields, leftLabel, rightLabel }) {
+    const rows = fields.filter((f) => !f.note);
+    if (!rows.length) return null;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+        {rows.map((f) => (
+          <div key={f.key} data-dup-field={f.key} data-dup-hit={f.hit ? '1' : '0'}>
+            <div style={{ font: '700 var(--fs-12)/1.4 var(--font-body)', color: f.hit ? 'var(--color-fg-warning)' : 'var(--color-fg-neutral-subtle)' }}>
+              {f.label}{f.hit ? '（像）' : '（不同）'}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 8, rowGap: 2,
+              font: '400 var(--fs-13)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-default)' }}>
+              <span style={{ color: 'var(--color-fg-neutral-muted)', whiteSpace: 'nowrap' }}>{leftLabel}</span><span style={{ textWrap: 'pretty' }}>{f.a}</span>
+              <span style={{ color: 'var(--color-fg-neutral-muted)', whiteSpace: 'nowrap' }}>{rightLabel}</span><span style={{ textWrap: 'pretty' }}>{f.b}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function Disclosure({ label, children, testId }) {
+    const [open, setOpen] = useState(false);
+    return (
+      <div>
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} data-dup-disclosure={testId}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, padding: '4px 0', border: 0, background: 'none',
+            cursor: 'pointer', font: '700 var(--fs-12)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+          <WGIcon n={open ? 'ChevronDown' : 'ChevronRight'} s={14} />{label}
+        </button>
+        {open ? children : null}
+      </div>
+    );
+  }
+
+  /** 開單時的疑似重複提示。
+   *
+   *  🔒 **只提示不擋**（2026-09-10 Sucre）。2026-10-23 加：
+   *    - 顯示哪些欄位疑似重複；三條路由他決定：仍要開單／回去修改／是同一件不開了
+   *      「仍要開單」→ 把這幾張記在新單的 `acknowledgedDuplicateOf`（對齊後端 createTicket）
+   *  🔒 2026-10-23 第二輪（Sucre：手機上文字太多、看不清楚）：
+   *    每張只給「標題＋像的地方（標籤）＋不同的地方（一行灰字）」，
+   *    兩邊填的值收在「看比對」裡，要看才展開。
+   *  🚨 三顆按鈕的文案與順序是我定的。 */
+  /* ── 開單時「附近有類似的單」（2026-10-27 依 Sucre／Carol 定案的 11〜15 改）──
+   *
+   * 🔒 DUP-FE-111 每張只寫兩種理由：**相距多遠**、**像你填的：X**（X 是撞到的欄位名）。
+   *    不再列「不同：…」，也不再收一個「看比對」—— 開單的人只需要判斷「是不是同一件」，
+   *    逐欄對照是後台重複審核的事。
+   * 🔒 DUP-FE-112 只有一顆主按鈕「不是同一件，送出」。想改內容就按右上 ×（回到表單，內容都在）。
+   * 🔒 DUP-FE-113 是他自己之前送過的那張 → 掛「你之前送過這張」，並告訴他
+   *    「要多加一件，到那張單按『再加一件』」—— 自己的單要補東西，不該再開一張。
+   * 🔒 DUP-FE-114 按「看這張」→ 草稿**留著**，關掉表單去看那張單，
+   *    跳一則提示「你的求助單還沒送出，按『請求協助』可以接著填」。
+   * 🔒 DUP-FE-115 不顯示單號，只顯示建立時間。民眾看不懂單號，也用不到。 */
   function DuplicateWarnDialog({ matches, viewerId, onOpenTicket, onCancel, onSubmitAnyway }) {
     return (
       <WGPortal>
         <div style={{ ...BELOW_BANNER, zIndex: 2400, display: 'grid', placeItems: 'center',
-          padding: 'var(--space-4)' }} role="dialog" aria-modal="true" aria-label="附近有類似的求助單">
+          padding: 'var(--space-4)' }} role="dialog" aria-modal="true" aria-label="疑似重複的單" data-site-dup-dialog>
           <div onClick={onCancel} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,.5)' }}></div>
-          <div style={{ position: 'relative', width: 'min(460px, 100%)', maxHeight: '84dvh',
+          <div style={{ position: 'relative', width: 'min(480px, 100%)', maxHeight: '86dvh',
             display: 'flex', flexDirection: 'column', borderRadius: 'var(--radius-lg)',
             background: 'var(--color-bg-neutral-default)', boxShadow: 'var(--shadow-lg)' }}>
-            <div style={{ padding: 'var(--space-4) var(--space-4) var(--space-3)' }}>
-              <div style={{ font: '700 var(--fs-17)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' }}>
-                附近已經有 {matches.length} 張類似的單
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: 'var(--space-4) var(--space-4) var(--space-3)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ font: '700 var(--fs-17)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' }}>
+                  疑似重複的單
+                </div>
+                <div style={{ marginTop: 2, font: '400 var(--fs-13)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
+                  不重複開單，避免造成現場混亂。
+                </div>
               </div>
-              <div style={{ marginTop: 4, font: '400 var(--fs-13)/1.6 var(--font-body)',
-                color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
-                看一下是不是同一件事。如果不是（例如隔壁鄰居也需要幫忙），照樣送出就好。
-              </div>
+              <button type="button" onClick={onCancel} aria-label="回去修改" title="回去修改" data-site-dup-back
+                style={{ flexShrink: 0, width: 36, height: 36, margin: '-6px -6px 0 0', display: 'grid', placeItems: 'center',
+                  border: 0, borderRadius: 'var(--radius-full)', background: 'transparent', cursor: 'pointer',
+                  color: 'var(--color-fg-neutral-subtle)' }}>
+                <WGIcon n="X" s={20} />
+              </button>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto',
               padding: '0 var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              {matches.map((m) => (
-                <button key={m.ticket.id} type="button" onClick={() => onOpenTicket(m.ticket.id)}
-                  style={{ textAlign: 'left', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-subtle)',
-                    cursor: 'pointer' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-                    font: '400 var(--fs-11)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>
-                    {m.ticket.id} · {m.ticket.createdAt}
-                    {m.ticket.createdBy && m.ticket.createdBy === viewerId
-                      ? <Badge tone="info" variant="subtle">這是你建的</Badge> : null}
-                  </span>
-                  <span style={{ display: 'block', marginTop: 2, font: '700 var(--fs-15)/1.4 var(--font-display)',
-                    color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>{m.ticket.title}</span>
-                  {m.ticket.needNames.length ? (
-                    <span style={{ display: 'block', marginTop: 2, font: '400 var(--fs-13)/1.6 var(--font-body)',
-                      color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
-                      需要：{m.ticket.needNames.join('、')}
-                    </span>
-                  ) : null}
-                  {/* 🔒 理由要寫出來。只說「疑似重複」等於要他相信一個他看不到的判斷；
-                      寫出「距離約 12 公尺」他自己一秒就知道是不是同一戶。 */}
-                  <span style={{ display: 'block', marginTop: 6, font: '400 var(--fs-12)/1.5 var(--font-body)',
-                    color: 'var(--color-fg-neutral-muted)' }}>{m.reasons.join(' · ')}</span>
-                </button>
-              ))}
+              {matches.map((m) => {
+                const mine = m.ticket.createdBy && m.ticket.createdBy === viewerId;
+                const SHORT = { address: '地址', unit: '樓層', need: '需求', phone: '聯絡方式' };   // 對話框裡用短名，跟表單欄位叫法一致
+                const alike = m.cmp.hits.filter((f) => f.key !== 'place').map((f) => SHORT[f.key] || f.label);
+                const dist = isFinite(m.cmp.meters) ? '相距 ' + Math.round(m.cmp.meters) + ' 公尺' : null;
+                return (
+                  <div key={m.ticket.id} data-site-dup-match={m.ticket.id} style={{ padding: '12px', borderRadius: 'var(--radius-md)',
+                    border: '1px solid ' + (mine ? 'var(--color-border-info, var(--color-border-default))' : 'var(--color-border-default)'),
+                    background: 'var(--color-bg-neutral-subtle)' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {mine ? <div style={{ marginBottom: 4 }}><Badge tone="info" variant="subtle">你曾經開過的單</Badge></div> : null}
+                        <span style={{ display: 'block', font: '700 var(--fs-15)/1.4 var(--font-display)',
+                          color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>{m.ticket.title}</span>
+                        <span style={{ display: 'block', marginTop: 2, font: '400 var(--fs-12)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>
+                          {m.ticket.createdAt} 建立
+                        </span>
+                      </div>
+                      <button type="button" onClick={() => onOpenTicket(m.ticket.id)} data-site-dup-open
+                        style={{ flexShrink: 0, height: 32, padding: '0 12px', borderRadius: 'var(--radius-full)', cursor: 'pointer',
+                          border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)',
+                          font: '700 var(--fs-13)/1 var(--font-body)', color: 'var(--color-fg-neutral-default)' }}>看這張</button>
+                    </div>
+                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4,
+                      font: '400 var(--fs-13)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+                      {dist ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }} data-site-dup-dist>
+                          <WGIcon n="MapPin" s={14} c="var(--color-fg-warning)" />{dist}
+                        </span>
+                      ) : null}
+                      {alike.length ? (
+                        <span style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }} data-site-dup-alike>
+                          <span style={{ flexShrink: 0, marginTop: 2, display: 'inline-flex' }}><WGIcon n="Copy" s={14} c="var(--color-fg-warning)" /></span>
+                          <span>像你填的：<strong style={{ color: 'var(--color-fg-neutral-default)' }}>{alike.join('、')}</strong></span>
+                        </span>
+                      ) : null}
+                    </div>
+                    {mine ? (
+                      <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 'var(--radius-sm)',
+                        background: 'var(--color-bg-info-subtle)', font: '400 var(--fs-13)/1.5 var(--font-body)',
+                        color: 'var(--color-fg-neutral-default)' }} data-site-dup-mine>
+                        要補需求，到那張按「再加一件」。
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', padding: 'var(--space-4)' }}>
-              <Button variant="outline" onClick={onCancel} style={{ flex: 1 }}>回去修改</Button>
-              <Button variant="primary" onClick={onSubmitAnyway} style={{ flex: 1 }}>不是同一件，送出</Button>
+            <div style={{ padding: 'var(--space-4)' }}>
+              <Button variant="primary" onClick={onSubmitAnyway} data-site-dup-submit style={{ width: '100%' }}>確認不重複，送出</Button>
             </div>
           </div>
         </div>
       </WGPortal>
     );
+  }
+
+  /* DUP-FE-114：按「看這張」時把草稿收起來，下次按「請求協助」（沒有帶點位進來的那種）接著填。
+   * ⚠️ 原型存在記憶體；正式版用 sessionStorage 即可（重整也還在），不要上傳。 */
+  let siteDraftStash = null;
+  function takeSiteDraft() { const d = siteDraftStash; siteDraftStash = null; return d; }
+  function showDraftKeptNotice() {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = ReactDOM.createRoot(host);
+    const close = () => { root.unmount(); host.remove(); };
+    root.render(<SiteToast open tone="info" title="剛才的單還沒送出"
+      description="填的內容都留著。" actionLabel="回去繼續填"
+      onAction={() => { close(); window.openNewTicketDrawer && window.openNewTicketDrawer(); }} onClose={close} />);
   }
 
   /* ⚠️ 本元件由呼叫端**條件掛載**（`{open ? <SiteTicketCreateDrawer/> : null}`），不是自己 render null。
@@ -1713,25 +2051,28 @@
 
   function SiteTicketCreateDrawer({ isAuthenticated, viewerId, seedLandmark, seedCell, onClose, onSubmit, onSignIn }) {
     const isMobile = useIsMobile();
-    const [title, setTitle] = useState('');
+    /* DUP-FE-114：從頂欄「請求協助」進來（沒帶點位）才接回草稿。 */
+    const [draft0] = useState(() => (seedLandmark || seedCell) ? null : takeSiteDraft());
+    const d0 = draft0 || {};
+    const [title, setTitle] = useState(d0.title || '');
     /* 現場分區（2026-09-12，Q16 解讀 A）：從矩陣某一格起手時，地址／樓層／戶室
        都是**點出來的**，不是打出來的 —— 所以它們是結構化的（`floor` 是數字、
        `room` 是數字），而不是自由文字「3F」。
        ⚠️ 這正是既有的落差：自由文字地址拆不回 ERD 的
           county/city/lane/alley/no/floor/room 七欄。點格子建的單從此拆得回。
        lazy initializer：必須在第一次 render 前就有值（理由同下方 landmark）。 */
-    const [address, setAddress] = useState(() => (seedCell && seedCell.building && seedCell.building.address) || '');
-    const [floor, setFloor] = useState(() => (seedCell ? String(seedCell.floor) : ''));
-    const [room, setRoom] = useState(() => (seedCell ? String(seedCell.unit) : ''));
-    const [contactName, setContactName] = useState('');
-    const [contactPhone, setContactPhone] = useState('');
-    const [desc, setDesc] = useState('');
+    const [address, setAddress] = useState(() => d0.address || (seedCell && seedCell.building && seedCell.building.address) || '');
+    const [floor, setFloor] = useState(() => d0.floor != null ? d0.floor : (seedCell ? String(seedCell.floor) : ''));
+    const [room, setRoom] = useState(() => d0.room != null ? d0.room : (seedCell ? String(seedCell.unit) : ''));
+    const [contactName, setContactName] = useState(d0.contactName || '');
+    const [contactPhone, setContactPhone] = useState(d0.contactPhone || '');
+    const [desc, setDesc] = useState(d0.desc || '');
     /* 圖片連結（TM-FEAT-010 D-1）：平台不存圖片，只存網址。
        🔒 這裡沒有「選擇檔案」，也不會有 —— 見 wg-photos.jsx 檔頭。 */
-    const [photos, setPhotos] = useState([]);
+    const [photos, setPhotos] = useState(d0.photos || []);
     /* lazy initializer：必須在第一次 render 前就有值，理由見上方註解。 */
-    const [landmark, setLandmark] = useState(() => seedLandmark || null);
-    const [needs, setNeeds] = useState([emptyNeed()]);
+    const [landmark, setLandmark] = useState(() => seedLandmark || d0.landmark || null);
+    const [needs, setNeeds] = useState(() => d0.needs || [emptyNeed()]);
     const [touched, setTouched] = useState(false);
     const open = true;
 
@@ -1962,6 +2303,7 @@
       if (dupMatches === null) {
         const hits = findPossibleDuplicates({
           landmark, address: address.trim(), title: title.trim(),
+          floor: floor.trim(), room: room.trim(), contactPhone: contactPhone.trim(),
           needNames: namedNeeds.map((n) => n.name.trim() || (getNeedOption(n.need) || {}).label || ''),
         });
         setDupMatches(hits);
@@ -2192,9 +2534,20 @@
               「不是同一件，送出」直接送。兩條路都不會把他困在這裡。 */}
           {dupMatches && dupMatches.length ? (
             <DuplicateWarnDialog matches={dupMatches} viewerId={viewerId}
-              onOpenTicket={(id) => { setDupMatches(null); onClose(); window.openSiteTicket && window.openSiteTicket(id); }}
+              onOpenTicket={(id) => {
+                siteDraftStash = { title, address, floor, room, contactName, contactPhone, desc, photos, landmark, needs };
+                setDupMatches(null); onClose();
+                window.openSiteTicket && window.openSiteTicket(id);
+                showDraftKeptNotice();
+              }}
               onCancel={() => setDupMatches(null)}
-              onSubmitAnyway={() => { setDupMatches([]); onSubmit(buildPayload()); }} />
+              onSubmitAnyway={() => {
+                /* DUP-FE-105：看過提示仍要開 → 把那幾張記下來（對齊後端 createTicket 的 acknowledgedDuplicateOf），
+                   前台兩張單都會掛「疑似重複」，志工承接時也會被提醒。 */
+                const ack = dupMatches.map((m) => m.ticket.id);
+                setDupMatches([]);
+                onSubmit({ ...buildPayload(), acknowledgedDuplicateOf: ack });
+              }} />
           ) : null}
 
         </div>
@@ -2412,38 +2765,99 @@
     const left = Math.max(0, (state.required || 1) - (state.matched || 0));
     const meta = marker.ticketMeta || {};
     const contact = [meta.contactName, meta.contactPhone].filter(Boolean).join(' · ');
+    /* 🆕 2026-10-23 DUP-FE-301〜303（Sucre：「志工承接疑似重複單的時候，把兩張單呈現給他確認，
+       並且告知可能會過多人力，請主動聯絡開單者」）。
+       🔒 只提醒、不擋：兩張可能真的是兩件事（隔壁鄰居），擋下來的代價比多一位志工大。
+       🔒 2026-10-23 第二輪（Sucre：相似的收折，只條列不同的）：
+          兩張單做成「這張｜那張」兩欄，**只列不同的欄位**＋兩邊的聯絡人；
+          像的地方收成一行標籤，要看值才展開。 */
+    const dups = siteDupsFor(marker.id);
+    const isDup = dups.length > 0;
+    const cell = { minWidth: 0, font: '400 var(--fs-13)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' };
+    const rowLabel = { gridColumn: '1 / -1', marginTop: 8, font: '700 var(--fs-12)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-muted)' };
+    const telOf = (p) => (p ? <a href={'tel:' + String(p).replace(/[^\d+]/g, '')} style={{ color: 'inherit', fontWeight: 700 }}>{p}</a> : null);
     return (
       <WGPortal>
       <div style={{ ...BELOW_BANNER, zIndex: Z_ACTION_DRAWER + 10, display: 'grid', placeItems: 'center', padding: 'var(--space-4)' }}
-        role="dialog" aria-modal="true" aria-label="確認承接">
+        role="dialog" aria-modal="true" aria-label="確認承接" data-site-claim-dialog={isDup ? 'dup' : 'plain'}>
         <div style={scrimStyle} onClick={onCancel}></div>
-        <div style={{ position: 'relative', width: 'min(440px, 100%)', padding: 'var(--space-6)',
-          borderRadius: 'var(--radius-lg)', background: 'var(--color-bg-neutral-default)', boxShadow: 'var(--shadow-lg)',
+        <div style={{ position: 'relative', width: isDup ? 'min(520px, 100%)' : 'min(440px, 100%)', maxHeight: '88dvh', overflowY: 'auto',
+          padding: isDup ? '20px' : 'var(--space-6)', borderRadius: 'var(--radius-lg)', background: 'var(--color-bg-neutral-default)', boxShadow: 'var(--shadow-lg)',
           animation: 'wgPop var(--duration-base) var(--ease-spring)' }}>
-          <div style={{ font: '700 var(--fs-20)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' }}>確認承接這一筆？</div>
-
-          <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)',
-            background: 'var(--color-bg-neutral-subtle)', border: '1px solid var(--color-border-default)' }}>
-            <div style={{ font: '700 var(--fs-16)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>
-              {task.name}
-            </div>
-            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4,
-              font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
-              <span style={{ display: 'flex', gap: 6 }}><WGIcon n="ClipboardList" s={14} />{marker.title}</span>
-              <span style={{ display: 'flex', gap: 6 }}><WGIcon n="MapPin" s={14} /><span style={{ textWrap: 'pretty' }}>{marker.subtitle}</span></span>
-              {contact ? <span style={{ display: 'flex', gap: 6 }}><WGIcon n="User" s={14} />{contact}</span> : null}
-              <span style={{ display: 'flex', gap: 6 }}><WGIcon n="Users" s={14} />目前 {state.matched}/{state.required} 人{left ? '，還缺 ' + left + ' 位' : ''}</span>
-            </div>
+          <div style={{ font: '700 var(--fs-20)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' }}>
+            {isDup ? '這張可能跟另一張是同一件事' : '確認承接這一筆？'}
           </div>
 
-          <div style={{ marginTop: 'var(--space-4)', font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-muted)', textWrap: 'pretty' }}>
-            去不了的話請到「我的任務 › 我承接的」釋出名額，讓建立者有機會補人。
-          </div>
+          {isDup ? (
+            <React.Fragment>
+              <div style={{ marginTop: 6, font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-warning)', textWrap: 'pretty' }}>
+                兩邊都有人去，現場可能人力過多。<strong>承接後請主動聯絡開單者</strong>確認。
+              </div>
+              {dups.map((d) => {
+                const diff = d.cmp.fields.filter((f) => !f.hit && f.key !== 'phone');
+                return (
+                  <div key={d.other.id} style={{ marginTop: 'var(--space-4)' }} data-site-claim-dup={d.other.id}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 10, padding: '10px 12px',
+                      borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-subtle)' }}>
+                      <span style={{ font: '700 var(--fs-11)/1.4 var(--font-body)', color: 'var(--color-brand-primary-subtle, var(--color-fg-warning))' }}>你要接的</span>
+                      <span style={{ font: '700 var(--fs-11)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-muted)' }}>另一張</span>
+                      <span style={{ ...cell, font: '700 var(--fs-14)/1.4 var(--font-body)' }}>{marker.title}</span>
+                      <span style={{ ...cell, font: '700 var(--fs-14)/1.4 var(--font-body)' }}>{d.other.title}</span>
+                      <span style={{ ...cell, color: 'var(--color-fg-neutral-subtle)', font: '400 var(--fs-12)/1.5 var(--font-body)' }}>
+                        {task.name} · 還缺 {left} 位
+                      </span>
+                      <span></span>
 
-          <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-6)' }}>
+                      {diff.length ? <span style={rowLabel} data-site-claim-diff>不同的地方</span> : null}
+                      {diff.map((f) => (
+                        <React.Fragment key={f.key}>
+                          <span style={{ ...rowLabel, marginTop: 4, fontWeight: 400 }}>{f.label}</span>
+                          <span style={cell} data-dup-diff={f.key}>{f.a}</span>
+                          <span style={cell}>{f.b}</span>
+                        </React.Fragment>
+                      ))}
+
+                      <span style={rowLabel}>聯絡開單者{d.cmp.hits.some((f) => f.key === 'phone') ? '（同一支電話）' : ''}</span>
+                      <span style={cell}>{meta.contactName || '—'}<br />{telOf(meta.contactPhone)}</span>
+                      <span style={cell}>{d.other.contactName || '—'}<br />{telOf(d.other.contactPhone)}</span>
+                    </div>
+                    <div style={{ marginTop: 10, font: '700 var(--fs-12)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+                      很像的地方
+                      <DupChips cmp={d.cmp} />
+                    </div>
+                    <Disclosure label="看兩邊填的內容" testId={'claim-' + d.other.id}>
+                      <DupCompareRows fields={d.cmp.hits} leftLabel="這張" rightLabel="另一張" />
+                    </Disclosure>
+                  </div>
+                );
+              })}
+            </React.Fragment>
+          ) : (
+            <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)',
+              background: 'var(--color-bg-neutral-subtle)', border: '1px solid var(--color-border-default)' }}>
+              <div style={{ font: '700 var(--fs-16)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>
+                {task.name}
+              </div>
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4,
+                font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+                <span style={{ display: 'flex', gap: 6 }}><WGIcon n="ClipboardList" s={14} />{marker.title}</span>
+                <span style={{ display: 'flex', gap: 6 }}><WGIcon n="MapPin" s={14} /><span style={{ textWrap: 'pretty' }}>{marker.subtitle}</span></span>
+                {contact ? <span style={{ display: 'flex', gap: 6 }}><WGIcon n="User" s={14} />{contact}</span> : null}
+                <span style={{ display: 'flex', gap: 6 }}><WGIcon n="Users" s={14} />目前 {state.matched}/{state.required} 人{left ? '，還缺 ' + left + ' 位' : ''}</span>
+              </div>
+            </div>
+          )}
+
+          {!isDup ? (
+            <div style={{ marginTop: 'var(--space-4)', font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-muted)', textWrap: 'pretty' }}>
+              去不了的話請到「我的任務 › 我承接的」釋出名額，讓建立者有機會補人。
+            </div>
+          ) : null}
+
+          <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: '20px' }}>
             <Button variant="ghost" onClick={onCancel} style={{ flex: 1 }}>取消</Button>
-            <Button variant="primary" onClick={onConfirm} style={{ flex: 1 }}
-              startIcon={<WGIcon n="HeartHandshake" s={16} />}>確認承接</Button>
+            <Button variant="primary" onClick={onConfirm} style={{ flex: 1 }} data-site-claim-confirm
+              startIcon={<WGIcon n="HeartHandshake" s={16} />}>{isDup ? '了解，仍要承接' : '確認承接'}</Button>
           </div>
         </div>
       </div>
@@ -2458,6 +2872,7 @@
     STATION_STATUS_VALUE_OPTIONS, createStationReportSummary,
     useStationReports, useTaskMatches, ActionDrawer, useIsMobile, SHARE_TARGETS, useQrSvg,
     SiteStationReportDrawer, PointShareDrawer, TaskMatchDeleteConfirmDialog, NeedClaimConfirmDialog, createPointShareTarget,
+    siteDupsFor, SiteDupBadge, SiteDupLine, SiteDupNotice, siteDupClusters, SiteDupGroup, findPossibleDuplicates, DuplicateWarnDialog,
     BriefingDepartureBar, BRIEFING_HREF,
   });
 })();

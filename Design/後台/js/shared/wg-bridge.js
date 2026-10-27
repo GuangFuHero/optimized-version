@@ -151,6 +151,10 @@
       /* TM-IMG-101：只存網址字串，不存圖片檔。
          前台貼的圖直接進任務單，後台看得到（TM-IMG-137）—— 這裡不過濾、不改寫網址。 */
       photos: Array.isArray(input.photos) ? input.photos : [],
+      /* DUP-FE-105（2026-10-23）：開單時看過「疑似重複」提示、仍選擇開單 → 記下那幾張單的 id。
+         對齊後端 createTicket 每個需求草稿上的 `acknowledgedDuplicateOf`（原型簡化成整張單一份）。
+         前台靠它把兩張單都標成「疑似重複」。 */
+      acknowledgedDuplicateOf: Array.isArray(input.acknowledgedDuplicateOf) ? input.acknowledgedDuplicateOf : [],
       tasks: rows.map(function (t, i) {
         return {
           id: 'K-' + seq + '-' + (i + 1),

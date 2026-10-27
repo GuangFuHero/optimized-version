@@ -165,7 +165,7 @@
     );
   }
 
-  function SiteTicketNeedCard({ marker, needs, active, isAuthenticated, viewerId, compact, onSelect, onClaim, onShare }) {
+  function SiteTicketNeedCard({ marker, needs, active, isAuthenticated, viewerId, compact, onSelect, onClaim, onShare, inDupGroup }) {
     const tk = marker.ticketMeta || {};
     return (
       /* 下內距比上內距小 —— 最後一列的按鈕本身帶著 5px 外距（觸控目標用），
@@ -188,6 +188,9 @@
             </span>
             {/* 🔴 2026-09-21：原本只判斷 === 'high'，ERD 的 tickets.priority 是四值
                 (low/medium/high/critical)，critical 比 high 更嚴重卻完全沒有呈現。 */}
+            {/* DUP-FE-201（2026-10-23）：兩張很像的單直接掛「疑似重複」，下一行寫出重複的是哪些欄位 */}
+            {/* DUP-FE-204：已經包進「疑似同一件事」框裡的卡，標記和說明交給框的抬頭，這裡不再各寫一次 */}
+            {window.SiteDupBadge && !inDupGroup ? <window.SiteDupBadge ticketId={marker.id} /> : null}
             {tk.priority === 'critical' ? <Badge tone="danger" variant="solid">最高優先</Badge>
               : tk.priority === 'high' ? <Badge tone="warning" variant="solid">高優先</Badge> : null}
           </div>
@@ -195,6 +198,7 @@
             color: 'var(--color-fg-neutral-subtle)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {marker.subtitle}
           </div>
+          {window.SiteDupLine && !inDupGroup ? <window.SiteDupLine ticketId={marker.id} /> : null}
         </button>
 
         <div style={{ marginTop: 8 }}>
@@ -266,6 +270,7 @@
                   {/* 官方認定（2026-08-21）：只有官方站點掛 chip，非官方不掛 */}
                   {isStation && marker.stationMeta && marker.stationMeta.isOfficial
                     ? <Badge tone="secondary" variant="subtle"><WGIcon n="ShieldCheck" s={12} /> 官方</Badge> : null}
+                  {!isStation && window.SiteDupBadge ? <window.SiteDupBadge ticketId={marker.id} /> : null}
                 </span>
                 {/* 站點在列表上要直接回答「現在能不能去」——
                     status 與開放時間合起來算（Sucre 2026-08-09），不是只印 status。 */}
@@ -386,6 +391,15 @@
       claimNeed(marker, task);
       setClaimedNeed({ name: task && task.name });
     }, [claimNeed]);
+    /* DUP-FE-301（2026-10-23）：疑似重複的單，不論從哪裡按「接」（卡片、詳情、現場分區），
+       一律先開承接確認，把兩張單並排給他看。不是疑似重複的照舊。 */
+    const guardClaim = (marker, task) => {
+      if (window.siteDupsFor && window.siteDupsFor(marker.id).length) {
+        setPendingClaim({ marker, task, state: getNeedState(marker, task) });
+        return;
+      }
+      claimNeedAndNudge(marker, task);
+    };
     const [pendingSelectId, setPendingSelectId] = useState(null);
 
     /* 請求協助的按鈕住在 shell（site-shell.jsx），抽屜住在這裡，靠 CustomEvent 串接。
@@ -585,7 +599,7 @@
       onSuggestUpdate: () => setReportStation(selectedMarker),
       onShare: () => openShare(selectedMarker),
       viewerId: session.userId,
-      onClaimNeed: (task) => claimNeedAndNudge(selectedMarker, task),
+      onClaimNeed: (task) => guardClaim(selectedMarker, task),
       onDeleteMatchSheet: () => setPendingDelete(selectedMarker),
       building: selectedBuilding,
       onOpenBuilding: selectedBuilding ? () => setBuildingOpen(selectedBuilding) : undefined,
@@ -646,15 +660,28 @@
                 /* 需求卡在桌機收窄到 720 —— 880 會讓「接這筆」後面拖一大片空白，
                    而且一行太長不利於掃視。站點維持 880。 */
                 maxWidth: dataType === 'ticket' ? 720 : 880 }}>
-                {dataType === 'ticket' ? needCards.map((card) => (
-                  <SiteTicketNeedCard key={card.marker.id} marker={card.marker} needs={card.needs}
-                    active={card.marker.id === controller.selectedMarkerId}
-                    isAuthenticated={session.isAuthenticated} viewerId={session.userId}
-                    compact={isMobile}
-                    onSelect={() => controller.setSelectedMarkerId(card.marker.id)}
-                    onShare={() => openShare(card.marker)}
-                    onClaim={(row) => setPendingClaim(row)} />
-                )) : controller.markers.map((marker) => (
+                {dataType === 'ticket' ? (() => {
+                  const renderCard = (card, inDupGroup) => (
+                    <SiteTicketNeedCard key={card.marker.id} marker={card.marker} needs={card.needs}
+                      active={card.marker.id === controller.selectedMarkerId}
+                      isAuthenticated={session.isAuthenticated} viewerId={session.userId}
+                      compact={isMobile} inDupGroup={inDupGroup}
+                      onSelect={() => controller.setSelectedMarkerId(card.marker.id)}
+                      onShare={() => openShare(card.marker)}
+                      onClaim={(row) => setPendingClaim(row)} />
+                  );
+                  /* DUP-FE-204（2026-10-23）：同一頁上互相疑似重複的單排在一起、包成一組 */
+                  if (!window.siteDupClusters) return needCards.map((card) => renderCard(card, false));
+                  const byId = {};
+                  needCards.forEach((card) => { byId[card.marker.id] = card; });
+                  return window.siteDupClusters(needCards.map((card) => card.marker.id)).map((ids) => (
+                    ids.length < 2 ? renderCard(byId[ids[0]], false) : (
+                      <window.SiteDupGroup key={'dup-' + ids.join('-')} ids={ids}>
+                        {ids.map((id) => renderCard(byId[id], true))}
+                      </window.SiteDupGroup>
+                    )
+                  ));
+                })() : controller.markers.map((marker) => (
                   <SiteListRow key={marker.id} marker={marker}
                     active={marker.id === controller.selectedMarkerId}
                     latestReport={(reportsByStationId[marker.id] || [])[0]}
@@ -666,7 +693,7 @@
                     onShare={() => openShare(marker)}
                     onSuggestUpdate={marker.detailType === 'station' ? () => setReportStation(marker) : undefined}
                     viewerId={session.userId}
-                    onClaimNeed={marker.detailType === 'ticket' ? ((task) => claimNeedAndNudge(marker, task)) : undefined}
+                    onClaimNeed={marker.detailType === 'ticket' ? ((task) => guardClaim(marker, task)) : undefined}
                     onDeleteMatchSheet={marker.detailType === 'ticket' ? () => setPendingDelete(marker) : undefined} />
                 ))}
                 <div ref={loadMoreRef} style={{ height: 1 }}></div>
@@ -748,7 +775,7 @@
             markers={buildingMarkers} getTaskMatchState={getTaskMatchState}
             viewerId={session.userId} isAuthenticated={session.isAuthenticated}
             onClose={() => setBuildingOpen(null)}
-            onClaimNeed={claimNeedAndNudge}
+            onClaimNeed={guardClaim}
             onOpenTicket={(mk) => { setBuildingOpen(null); controller.setSelectedMarkerId(mk.id); }}
             onCreateAtCell={(cell) => {
               setBuildingOpen(null);

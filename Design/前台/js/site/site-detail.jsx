@@ -345,6 +345,7 @@
             return <Badge tone={d.tone} variant="solid">{d.label}</Badge>; })()}
           {tk.priority === 'critical' ? <Badge tone="danger" variant="solid">最高優先</Badge>
             : tk.priority === 'high' ? <Badge tone="warning" variant="subtle">高優先</Badge> : null}
+          {window.SiteDupBadge ? <window.SiteDupBadge ticketId={marker.id} /> : null}
           {/* 狀態標籤已經寫「媒合完成」時，不要再掛一顆一模一樣的。 */}
           {R.resolveTicketDisplay(tk.status, taskMatch).fromMatch ? null
             : <Badge tone={TASK_MATCH_TONES[taskMatch.status]} variant="subtle">{TASK_MATCH_LABELS[taskMatch.status]}</Badge>}
@@ -357,6 +358,8 @@
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-4) var(--space-6) var(--space-6)' }}>
           {tab === 'details' ? (
             <div style={rowGap}>
+              {/* DUP-FE-201／202（2026-10-23）：疑似重複時在最上面講，並列出重複的欄位、可以點去看那張 */}
+              {window.SiteDupNotice ? <window.SiteDupNotice ticketId={marker.id} onOpenTicket={window.openSiteTicket} /> : null}
               <VolunteerProgress matched={taskMatch.matched} required={taskMatch.required} needCount={needs.length} />
 
               <NeedList needs={needs} viewerId={viewerId} isAuthenticated={isAuthenticated} onClaimNeed={onClaimNeed} />
