@@ -31,6 +31,11 @@ class SuspectedRowResponse(BaseModel):
     status: str | None = Field(description="站點營運狀態或任務狀態")
     distance_m: int | None = Field(description="這一列跟它相距幾公尺")
     created_at: datetime | None
+    followers: list[int] = Field(
+        default_factory=list,
+        description="這一列建立一張新單時，同一張單後面幾列的列號：這一列不建立，它們也跟著不建立，"
+        "也不算在 to_create、to_update 裡",
+    )
 
     @classmethod
     def of(cls, row: SuspectedRow) -> "SuspectedRowResponse":

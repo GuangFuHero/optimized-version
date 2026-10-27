@@ -4,18 +4,20 @@
   back, timeout, write detection, malformed and acknowledged results dropped. Fail-open.
   `try_check_submission` is the same, but says when the engine gave no answer.
 - `record_suspect_shown`: audit that a hint was shown.
-- `score_acknowledged`: score a pair the submitter chose to file anyway, before creating.
+- `bear_out_acknowledged`: which of the submitter's "file it anyway" answers name what the engine
+  suspects for their draft (ADR-400), before creating. Batch import uses its parts,
+  `acknowledged_uuids`, `borne_out` and `unchecked_pairs`.
 - `record_pair_ignored`: card that pair once the new entity exists. Does not commit.
 
-Both engine calls, `check` and `score`, go through `_guarded` before anything is written, so a
-failure can roll back the whole transaction.
+Every engine call goes through `_guarded` before anything is written, so a failure can roll back
+the whole transaction.
 """
 
 import asyncio
 import contextlib
 import logging
 import uuid as _uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -112,9 +114,10 @@ async def record_suspect_shown(db: AsyncSession, *, suspect: Suspect, actor_uuid
 
 @dataclass(frozen=True)
 class AcknowledgedPair:
-    """A pair the submitter filed anyway, scored before anything was created.
+    """A pair the submitter filed anyway, settled before anything was created.
 
-    `related_uuid` is in canonical form; `suspect` is None when scoring failed (carded unscored).
+    `related_uuid` is in canonical form; `suspect` is the engine's own hint for the draft, or
+    None when the engine gave no answer (carded unscored).
     """
 
     draft_ref: str
@@ -124,47 +127,79 @@ class AcknowledgedPair:
     engine_version: str
 
 
-async def score_acknowledged(
+async def bear_out_acknowledged(
     db: AsyncSession,
     *,
     submission: Submission,
-    draft_ref: str,
-    related_kind: RelatedKind,
-    related_uuid: str,
+    acknowledged: Mapping[str, str | None],
     actor: User,
     now: datetime,
-) -> AcknowledgedPair | None:
-    """Score a pair the submitter acknowledged, before anything is created. Never raises.
+) -> list[AcknowledgedPair]:
+    """The acknowledgements the engine bears out, by asking it about `submission`. Never raises.
 
-    Called while the transaction has written nothing, under the same guard as `check`, so a
-    failure can roll everything back and the create still goes ahead. None
-    means nothing to card: not a uuid, or the related entity is gone. If the engine fails, the
-    submitter's choice is still carded unscored — but only when the related entity exists,
-    since nobody vouched for that uuid.
+    An acknowledgement answers the hint its draft was shown, so it counts only when it names the
+    entity the engine suspects for that draft now (ADR-400). One naming anything else, or a draft
+    no longer suspected, counts for nothing: the draft is checked as usual and is not carded.
+    When the engine gives no answer nothing is checked anyway, so each one naming an entity that
+    exists is carded unscored (ADR-313). Called before anything is written, like `check`.
     """
-    engine = get_engine()
-    canonical = _canonical_uuid(related_uuid)
-    if canonical is None:
-        logger.warning("acknowledged duplicate %r is not a uuid; creating without a pair card", related_uuid)
-        return None
-    try:
-        suspect = await _guarded(
-            db, lambda: engine.score(db, submission, draft_ref, related_kind, canonical, now)
-        )
-        found = suspect is not None
-    except Exception:
-        logger.exception("dedup scoring failed for an acknowledged pair; carding it without a score")
-        with contextlib.suppress(Exception):
-            await db.rollback()
-        await refresh_actor(db, actor)
-        suspect = None
-        found = await duplicate_pair_repository.entity_exists(db, entity_kind=related_kind, uuid=canonical)
-    if not found:
+    named = acknowledged_uuids(acknowledged)
+    if not named:
+        return []
+    suspects = await try_check_submission(
+        db, submission=submission, acknowledged=frozenset(), actor=actor, now=now
+    )
+    if suspects is None:
+        return await unchecked_pairs(db, named)
+    return borne_out(suspects, named)
+
+
+def acknowledged_uuids(acknowledged: Mapping[str, str | None]) -> dict[str, str]:
+    """Each acknowledged draft's uuid in canonical form; one that is not a uuid is left out."""
+    named = {}
+    for draft_ref, related_uuid in acknowledged.items():
+        if not related_uuid:
+            continue
+        canonical = _canonical_uuid(related_uuid)
+        if canonical is None:
+            logger.warning(
+                "acknowledged duplicate %r is not a uuid; checking the draft as usual", related_uuid
+            )
+            continue
+        named[draft_ref] = canonical
+    return named
+
+
+def borne_out(suspects: Sequence[Suspect], named: Mapping[str, str]) -> list[AcknowledgedPair]:
+    """The acknowledgements in `named` that name their draft's suspect, each scored by it."""
+    version = get_engine().version
+    pairs = []
+    for suspect in suspects:
+        related = named.get(suspect.draft_ref)
+        if related is not None and related == _canonical_uuid(suspect.related_uuid):
+            pairs.append(AcknowledgedPair(suspect.draft_ref, suspect.related_kind, related, suspect, version))
+    for draft_ref in named.keys() - {pair.draft_ref for pair in pairs}:
         logger.warning(
-            "acknowledged duplicate %s (%s) not found; creating without a pair card", canonical, related_kind
+            "acknowledged duplicate %s is not the hint for %s; checking it as usual",
+            named[draft_ref],
+            draft_ref,
         )
-        return None
-    return AcknowledgedPair(draft_ref, related_kind, canonical, suspect, engine.version)
+    return pairs
+
+
+async def unchecked_pairs(db: AsyncSession, named: Mapping[str, str]) -> list[AcknowledgedPair]:
+    """With no answer from the engine: each acknowledgement naming an entity that exists, unscored."""
+    version = get_engine().version
+    pairs = []
+    for draft_ref, related_uuid in named.items():
+        kind = kind_of_ref(draft_ref)
+        if await duplicate_pair_repository.entity_exists(db, entity_kind=kind, uuid=related_uuid):
+            pairs.append(AcknowledgedPair(draft_ref, kind, related_uuid, None, version))
+        else:
+            logger.warning(
+                "acknowledged duplicate %s (%s) not found; creating without a pair card", related_uuid, kind
+            )
+    return pairs
 
 
 async def record_pair_ignored(

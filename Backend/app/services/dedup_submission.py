@@ -5,10 +5,10 @@ created (so nothing is left half-created), the API returns `Suspected`, and the 
 decides. No suspect creates as usual.
 
 A draft may carry `acknowledged_duplicate_of`: the entity the submitter was shown and
-confirmed this draft is not a duplicate of. Acknowledgements are scored first; a draft whose
-acknowledged entity scoring found skips the check, so the same hint is not shown again. Every other draft,
-including one whose acknowledgement names nothing, is checked and can still be held. On
-create, the scored pairs are carded in the same commit.
+confirmed this draft is not a duplicate of. It skips the check only when it names the very
+entity the engine suspects for that draft (ADR-400), so the same hint is not shown again. Every
+other draft, including one whose acknowledgement names anything else, is checked and can still
+be held. On create, those pairs are carded in the same commit.
 
 Every engine call happens before anything is written, so a failed call can roll back the
 transaction. Batch import does not come through here: it compares a whole file before writing
@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dedup_engine.contract import NewStation, NewTask, NewTicket, Suspect, kind_of_ref, task_ref
+from app.dedup_engine.contract import NewStation, NewTask, NewTicket, Suspect, task_ref
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.request import Tickets
@@ -189,25 +189,10 @@ async def _hold_if_suspected(db, *, submission, acknowledged, actor, now) -> Sub
 async def _score_acknowledged(
     db, submission, acknowledged, actor, now
 ) -> list[dedup_service.AcknowledgedPair]:
-    """Score each acknowledged draft against the entity it names.
-
-    Returns only the pairs whose related entity exists.
-    """
-    pairs = []
-    for draft_ref, related_uuid in acknowledged.items():
-        if related_uuid:
-            pair = await dedup_service.score_acknowledged(
-                db,
-                submission=submission,
-                draft_ref=draft_ref,
-                related_kind=kind_of_ref(draft_ref),
-                related_uuid=related_uuid,
-                actor=actor,
-                now=now,
-            )
-            if pair is not None:
-                pairs.append(pair)
-    return pairs
+    """The acknowledgements that name the hint the engine gives their draft, scored by it (ADR-400)."""
+    return await dedup_service.bear_out_acknowledged(
+        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
+    )
 
 
 async def _record_acknowledged(db, pairs, created, actor_uuid) -> int:

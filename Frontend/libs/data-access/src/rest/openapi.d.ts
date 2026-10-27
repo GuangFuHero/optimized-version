@@ -4042,6 +4042,11 @@ export interface components {
       distance_m: number | null;
       /** Created At */
       created_at: string | null;
+      /**
+       * Followers
+       * @description 這一列建立一張新單時，同一張單後面幾列的列號：這一列不建立，它們也跟著不建立，也不算在 to_create、to_update 裡
+       */
+      followers?: number[];
     };
     /**
      * SwitchIdentityRequest

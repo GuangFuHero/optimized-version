@@ -260,11 +260,14 @@ grant 矩陣（ADR-111）：
    - 整份檔先比完才開始寫，所以 commit 的結果跟 preview 一致。
    - 有疑似、沒放進 `decisions` 的列不建立，放進錯誤報告，訊息是「疑似重複，未建立：很像…」。
    - 放進 `decisions` 的列照常建立，並留一張配對卡進審核佇列；審核者整次匯入只收到一則通知。
+   - `acknowledged_duplicate_of` 必須正是這次比對給那一列的那一筆（ADR-400）。指別筆、不存在、不是 uuid，都當成
+     沒放進 `decisions`。
 3. 呼叫的人沒有 `*.add`，或去重引擎出錯、逾時：照常匯入（fail-open），`dedup_checked` 回 `false`。
-   這時畫面要說「這次沒比對重複」，不能當成沒有重複。
+   這時畫面要說「這次沒比對重複」，不能當成沒有重複。引擎第一次出錯或逾時，就不再問這份檔的其他列。
 
-新任務單佔好幾列時，整張單一起問（`NewTicket`，每列一個任務）。領頭列被擋，同一張單的後續列照 ADR-211 一起不匯入；
-只有後續列被擋，只擋那一列。
+新任務單佔好幾列時，整張單一起問（`NewTicket`，每列一個任務）。領頭列被擋，同一張單的後續列沒有單可掛，跟著不建立：
+preview 就不算進 `to_update`，列在領頭列那筆 `suspects` 的 `followers`；commit 時放進錯誤報告，訊息是
+「同一張單的第 N 列疑似重複，未建立，這一列跟著未建立」，不算 `failed`。只有後續列被擋，只擋那一列。
 
 ### 錯誤報表格式
 
@@ -277,7 +280,7 @@ preview 與 commit 的回應都帶逐列錯誤，commit 另外附上可以直接
 | `partial_rows[]` | 主資料已寫入、後續步驟才失敗的列號（ADR-212） |
 | `batch_id` | 這次匯入的識別碼，只出現在回應裡（ADR-124） |
 | `suspected` | 疑似重複的列數。preview：送出時沒確認就不建立的；commit：這次沒建立的。不算在 `failed` 裡（ADR-398） |
-| `suspects[]` | `{ line, related_kind, related_uuid, related_ticket_uuid, title, task_name, type, status, distance_m, created_at }`，照列號排。`title` 是站點名稱，或任務所屬單的標題；不給相似度和聯絡資料 |
+| `suspects[]` | `{ line, related_kind, related_uuid, related_ticket_uuid, title, task_name, type, status, distance_m, created_at, followers }`，照列號排。`title` 是站點名稱，或任務所屬單的標題；不給相似度和聯絡資料。`followers` 是跟著這一列的同張單後續列號，只有新單的領頭列才有 |
 | `dedup_checked` | 要新建的列都比過了才是 `true` |
 
 報表內嵌在回應裡而不是給下載網址：端點是無狀態的（ADR-114），而且 commit 之後用同一份檔重算，得到的答案不會一樣。
@@ -368,6 +371,6 @@ Schema 在 `app/schemas/bulk.py` 的 `BulkPreviewResponse` / `BulkImportResponse
 | `tests/test_bulk_import_station.py` | 預覽不寫入、全部錯誤一次回報、新增/更新、重複匯入不變、zone 限制、錯誤報表、單列失敗不拖垮整份、`partial_rows`、多筆比對不透露 uuid |
 | `tests/test_bulk_import_ticket.py` | 三層寫入、新單一律 pending、狀態機、同單多任務、遮蔽電話不能匯回、ADR-211 的兩種情境、ADR-240/241/242 |
 | `tests/test_bulk_endpoints.py` | HTTP 層：下載標頭、中文型別、400/403、mapping 與 decisions 解析、報表 base64 解碼、疑似重複走一趟 |
-| `tests/test_bulk_import_dedup.py` | 去重（ADR-398）：只問要新建的列、預覽不寫、沒有 add 或引擎失敗時說沒比、沒確認的列被擋進報表、確認的列建立＋配對卡＋一則通知、確認指向不存在的東西、新單的領頭列／後續列被擋、新單和第一個任務一次 commit；真 engine 兩支 |
+| `tests/test_bulk_import_dedup.py` | 去重（ADR-398、400）：只問要新建的列、預覽不寫、沒有 add 或引擎失敗時說沒比、引擎失敗一次就不再問、沒確認的列被擋進報表、確認的列建立＋配對卡＋一則通知、確認指別筆／不存在／不是 uuid 仍被擋、新單領頭列被擋時預覽與報表帶後續列、只擋後續列、領頭列確認後後續列跟著建立、新單和第一個任務一次 commit；真 engine 兩支 |
 | `tests/test_bulk_permissions.py` | capability 命名、grant 矩陣符合 ADR-111、import 必搭 add/edit |
 | `tests/test_bulk_audit.py` | 動態欄位表的 insert/update/delete 都有稽核，且每張稽核表都有 migration 掛 trigger |

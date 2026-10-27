@@ -163,7 +163,7 @@ async def test_an_acknowledgement_follows_its_draft(db, engine):
     pair = (await db.execute(select(DuplicatePair))).scalar_one()
     assert (pair.entity_kind, pair.status) == ("ticket_task", "dup_ignored")
     assert {str(pair.low_uuid), str(pair.high_uuid)} == {water_uuid, related}
-    assert engine.score_calls == [("task:0", "ticket_task", related)]
+    assert float(pair.similarity) == 0.95  # the engine's own hint for task:0, where 送水 now is
     assert sorted(await _events(db)) == ["hint_shown", "ignored_by_submitter"]
 
 
@@ -177,6 +177,7 @@ async def test_the_create_is_atomic(db, engine, monkeypatch):
         raise RuntimeError("disk full")
 
     monkeypatch.setattr(dedup_service, "record_pair_ignored", write_then_fail)
+    engine.suspects = _suspect_tasks_named("送水")
     with pytest.raises(RuntimeError):
         await submit_new_ticket(db, actor=actor, tasks=[_task("送水", ack=RELATED)], **_ticket())
     await db.rollback()
@@ -214,20 +215,28 @@ async def test_an_engine_failure_still_creates(db, engine):
     )
 
 
-@pytest.mark.parametrize(
-    ("ack", "scored"),
-    [("x", "default"), (RELATED, None)],
-    ids=["not-a-uuid", "related-gone"],
-)
-async def test_an_acknowledgement_that_names_nothing_still_gets_the_hint(db, engine, ack, scored):
-    """Only an acknowledgement that scoring found skips the check; anything else is held as usual."""
+@pytest.mark.parametrize("ack", ["x", str(uuid_mod.uuid4())], ids=["not-a-uuid", "not-what-it-was-shown"])
+async def test_an_acknowledgement_naming_anything_but_the_hint_still_gets_the_hint(db, engine, ack):
+    """Only the entity the engine suspects for that draft skips the check (ADR-400); anything else is held."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     engine.suspects = _suspect_tasks_named("抽水")
-    engine.scored = scored
     result = await submit_new_ticket(db, actor=actor, tasks=[_task("抽水", ack=ack)], **_ticket())
     assert isinstance(result, SubmissionHeld)
+    assert [(s.draft_ref, s.related_uuid) for s in result.suspects] == [("task:0", RELATED)]
     await db.rollback()
     assert (await _count(db, Tickets), await _count(db, DuplicatePair)) == (0, 0)
+
+
+async def test_a_station_acknowledging_another_station_is_still_held(db, engine, notifications):
+    """The same rule for createStation: naming a station that exists is not enough."""
+    actor = await actor_with(db, Perm.STATION_ADD)
+    engine.suspects = [Suspect("station", "station", RELATED, 0.97, {})]
+    result = await submit_new_station(
+        db, actor=actor, acknowledged_duplicate_of=str(uuid_mod.uuid4()), **_station()
+    )
+    assert isinstance(result, SubmissionHeld)
+    await db.rollback()
+    assert (await _count(db, Station), await _count(db, DuplicatePair)) == (0, 0)
 
 
 # --- task on an existing ticket ------------------------------------------------------------
@@ -267,6 +276,7 @@ async def test_new_task_acknowledged_is_added_and_carded(db, engine):
     """With the acknowledgement it is added and the pair recorded."""
     actor = await actor_with(db, Perm.TICKET_ADD, Perm.TICKET_EDIT)
     ticket_uuid = await _existing_ticket(db, actor)
+    engine.suspects = _suspect_tasks_named("抽水")
     result = await submit_new_task(db, actor=actor, ticket_uuid=ticket_uuid, task=_task("抽水", ack=RELATED))
     assert isinstance(result, SubmissionCreated)
     await db.rollback()
@@ -343,6 +353,7 @@ async def test_station_created_notifies_and_acknowledged_is_carded(db, engine, n
         SubmissionCreated,
     )
     await db.refresh(actor)
+    engine.suspects = [Suspect("station", "station", RELATED, 0.97, {})]
     assert isinstance(
         await submit_new_station(db, actor=actor, acknowledged_duplicate_of=RELATED, **_station()),
         SubmissionCreated,
@@ -409,8 +420,51 @@ async def test_end_to_end_with_fast_v2(db, monkeypatch):
     assert float(pair.similarity) >= 0.8
 
 
-async def test_a_slow_score_on_an_acknowledged_create_still_creates(db, engine, monkeypatch):
-    """Score is cut at the timeout before anything is written, so everything is still created."""
+async def test_with_the_real_engine_acknowledging_a_task_far_away_does_not_file_it(db, monkeypatch):
+    """The near duplicate is still the hint, and nothing pairs the new task with the far one (ADR-400)."""
+    monkeypatch.setattr(registry, "_ENGINE", FastEngine())
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    near = await _existing_ticket(db, actor)
+    far = Tickets(
+        geometry=from_shape(Point(LON + 0.15, LAT), srid=4326),  # about 15 km east
+        title="淹水",
+        status="pending",
+        priority="high",
+        contact_name="李",
+        created_by=actor.uuid,
+    )
+    db.add(far)
+    await db.flush()
+    for ticket_uuid in (near, far.uuid):
+        db.add(
+            TicketTask(
+                ticket_uuid=ticket_uuid,
+                task_type="rescue",
+                task_name="一樓淹水需要抽水機",
+                created_by=actor.uuid,
+                created_at=datetime.now(UTC) - timedelta(minutes=10),
+            )
+        )
+    await db.flush()
+    far_task = str(
+        (await db.execute(select(TicketTask.uuid).where(TicketTask.ticket_uuid == far.uuid))).scalar_one()
+    )
+    await db.commit()
+    await db.refresh(actor)
+    pump = TaskSubmission(
+        task_type="rescue", task_name="一樓淹水需要抽水機", acknowledged_duplicate_of=far_task
+    )
+
+    result = await submit_new_ticket(db, actor=actor, tasks=[pump], **_ticket())
+
+    assert isinstance(result, SubmissionHeld)
+    assert [s.related_ticket_uuid for s in result.suspects] == [near]
+    await db.rollback()
+    assert await _count(db, DuplicatePair) == 0
+
+
+async def test_a_slow_check_on_an_acknowledged_create_still_creates(db, engine, monkeypatch):
+    """The check is cut at the timeout before anything is written: all created, carded unscored."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     ticket_uuid = await _existing_ticket(db, actor)
     task = TicketTask(ticket_uuid=ticket_uuid, task_type="rescue", task_name="送水", created_by=actor.uuid)
@@ -420,7 +474,7 @@ async def test_a_slow_score_on_an_acknowledged_create_still_creates(db, engine, 
     await db.commit()
     await db.refresh(actor)
     monkeypatch.setattr(dedup_service, "ENGINE_TIMEOUT_S", 0.2)
-    engine.score_sql = "SELECT pg_sleep(5)"
+    engine.check_sql = "SELECT pg_sleep(5)"
     filed = await submit_new_ticket(db, actor=actor, tasks=[_task("送水", ack=related)], **_ticket())
     assert isinstance(filed, SubmissionCreated)
     await db.rollback()

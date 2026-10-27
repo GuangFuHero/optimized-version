@@ -173,6 +173,28 @@ async def test_a_preview_asks_only_about_rows_it_would_create_and_records_nothin
 
 
 @pytest.mark.asyncio
+async def test_after_the_engine_fails_once_it_is_not_asked_again(db, engine):
+    """Each call may wait out the 2-second limit, so 500 of them would stretch a commit past 15 minutes.
+
+    The rows land fail-open as before; one filed anyway is still carded, unscored, as for a single
+    create whose check failed (ADR-313).
+    """
+    actor = await _station_importer(db)
+    school = await _existing_station(db, actor, "光復國小")
+    engine.fail = True
+    raw, filename = _stations([_station_row("大進國小"), _station_row("光復國民小學")])
+
+    outcome = await commit_stations(
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter", decisions={3: school}
+    )
+
+    assert len(engine.check_calls) == 1
+    assert (outcome.created, outcome.suspected, outcome.dedup_checked) == (2, 0, False)
+    pair = (await db.execute(select(DuplicatePair))).scalar_one()
+    assert (school in {str(pair.low_uuid), str(pair.high_uuid)}, pair.similarity) == (True, None)
+
+
+@pytest.mark.asyncio
 async def test_a_preview_for_someone_who_may_not_add_stations_does_not_ask(db, engine):
     """Their new rows fail at commit anyway; the preview says nothing was compared."""
     actor = await _importer(db, Perm.STATION_IMPORT, Perm.STATION_EDIT)
@@ -265,22 +287,25 @@ async def test_rows_filed_anyway_are_created_and_carded_and_reviewers_hear_once(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("ack", "scored"), [("x", "default"), (str(uuid_mod.uuid4()), None)], ids=["not-a-uuid", "gone"]
-)
-async def test_a_decision_that_names_nothing_still_holds_the_row(db, engine, ack, scored):
-    """Nothing to file it anyway against, so it is checked like any other row."""
+@pytest.mark.parametrize("ack", ["x", "gone", "another"])
+async def test_a_decision_naming_anything_but_the_hint_still_holds_the_row(db, engine, ack):
+    """Only the station the engine suspects for that line at commit files it anyway (ADR-400).
+
+    "another" is a station that exists, 15 km away, which the engine did not suggest.
+    """
     actor = await _station_importer(db)
     school = await _existing_station(db, actor, "光復國小")
+    elsewhere = await _existing_station(db, actor, "富源國小", lon=LON + 0.15)
     engine.suspects = _suspect_stations_named("光復國民小學", related=school)
-    engine.scored = scored
+    named = {"x": "x", "gone": str(uuid_mod.uuid4()), "another": elsewhere}[ack]
     raw, filename = _stations([_station_row("光復國民小學")])
 
     outcome = await commit_stations(
-        db, actor=actor, raw=raw, filename=filename, station_type="shelter", decisions={2: ack}
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter", decisions={2: named}
     )
 
     assert (outcome.created, outcome.suspected) == (0, 1)
+    assert [s.related_uuid for s in outcome.suspects] == [school]
     assert await _count(db, DuplicatePair) == 0
 
 
@@ -474,25 +499,72 @@ async def _task_names(db, title: str) -> list[str]:
     return sorted(rows.scalars())
 
 
-@pytest.mark.asyncio
-async def test_a_held_first_line_leaves_its_ticket_out_and_the_lines_after_it_fail(db, engine):
-    """The first line creates the ticket; held, there is no ticket for the rest to attach to (ADR-211)."""
-    actor = await _ticket_importer(db)
-    dry, dry_tasks = await _existing_ticket(db, actor, "中山路缺水", "0922222222", "送水")
-    engine.suspects = _suspect_tasks_named({"送水": (dry_tasks["送水"], dry)})
-    raw, filename = _tickets(
+def _ticket_on_two_lines() -> tuple[bytes, str]:
+    """A new ticket whose first line, 送水, is suspected; its second line attaches to it."""
+    return _tickets(
         [
             _ticket_row("中正路受困", "送水", phone="0933333333"),
             _ticket_row("中正路受困", "救人", phone="0933333333"),
         ]
     )
 
+
+@pytest.mark.asyncio
+async def test_a_preview_counts_the_lines_after_a_suspected_first_line_with_it(db, engine):
+    """The first line creates the ticket, so the rest land only if it does; the preview says so."""
+    actor = await _ticket_importer(db)
+    dry, dry_tasks = await _existing_ticket(db, actor, "中山路缺水", "0922222222", "送水")
+    engine.suspects = _suspect_tasks_named({"送水": (dry_tasks["送水"], dry)})
+    raw, filename = _ticket_on_two_lines()
+
+    preview = await preview_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    assert [(s.line, s.followers) for s in preview.suspects] == [(2, (3,))]
+    assert (preview.to_create, preview.to_update, preview.suspected) == (0, 0, 1)
+
+
+@pytest.mark.asyncio
+async def test_a_held_first_line_holds_the_lines_after_it_and_says_why(db, engine):
+    """Not failures: held with it, each report line naming the suspected first line."""
+    actor = await _ticket_importer(db)
+    dry, dry_tasks = await _existing_ticket(db, actor, "中山路缺水", "0922222222", "送水")
+    engine.suspects = _suspect_tasks_named({"送水": (dry_tasks["送水"], dry)})
+    raw, filename = _ticket_on_two_lines()
+
     outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
     assert await _count(db, Tickets) == 1
-    assert (outcome.created, outcome.updated, outcome.failed, outcome.suspected) == (0, 0, 1, 1)
-    assert "沒有匯入成功" in outcome.errors[0].message
-    assert [row["task_name"] for row in _report_rows(outcome)] == ["送水", "救人"]
+    assert (outcome.created, outcome.updated, outcome.failed, outcome.errors) == (0, 0, 0, ())
+    assert (outcome.suspected, [(s.line, s.followers) for s in outcome.suspects]) == (1, [(2, (3,))])
+    first, second = _report_rows(outcome)
+    assert (first["task_name"], second["task_name"]) == ("送水", "救人")
+    assert "疑似重複，未建立" in first["error"]
+    assert "第 2 列疑似重複，未建立，這一列跟著未建立" in second["error"]
+
+
+@pytest.mark.asyncio
+async def test_a_first_line_filed_anyway_takes_the_lines_after_it_with_it(db, engine):
+    """Its decision decides for them too, while another ticket's undecided first line is held."""
+    actor = await _ticket_importer(db)
+    dry, dry_tasks = await _existing_ticket(db, actor, "中山路缺水", "0922222222", "送水", "清淤")
+    engine.suspects = _suspect_tasks_named(
+        {"送水": (dry_tasks["送水"], dry), "清淤": (dry_tasks["清淤"], dry)}
+    )
+    raw, filename = _tickets(
+        [
+            _ticket_row("中正路受困", "送水", phone="0933333333"),
+            _ticket_row("中正路受困", "救人", phone="0933333333"),
+            _ticket_row("民權路淤泥", "清淤", phone="0944444444"),
+        ]
+    )
+
+    outcome = await commit_tickets(
+        db, actor=actor, raw=raw, filename=filename, task_type="rescue", decisions={2: dry_tasks["送水"]}
+    )
+
+    assert (outcome.created, outcome.updated, outcome.suspected) == (1, 1, 1)
+    assert await _task_names(db, "中正路受困") == ["救人", "送水"]
+    assert [row["title"] for row in _report_rows(outcome)] == ["民權路淤泥"]
 
 
 @pytest.mark.asyncio

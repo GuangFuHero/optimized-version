@@ -16,6 +16,7 @@ says to; otherwise it is held and joins the report.
 
 import base64
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -761,7 +762,12 @@ async def _new_ticket_draft(
         if task is not None:
             refs[task_ref(len(tasks))] = plan.line
             tasks.append(task_draft(task))
-    return RowDraft(NewTicket(ticket=ticket_draft(ticket), tasks=tuple(tasks)), refs)
+    return RowDraft(
+        NewTicket(ticket=ticket_draft(ticket), tasks=tuple(tasks)),
+        refs,
+        first_line=lines[0].line,
+        followers=tuple(plan.line for plan in lines[1:]),
+    )
 
 
 async def _checked_task(db: AsyncSession, *, actor: User, task: dict):
@@ -794,12 +800,18 @@ def _preview_of(
     *,
     comparison: Comparison,
     suspects: tuple[SuspectedRow, ...],
+    following: Mapping[int, int],
     skipped=(),
 ) -> PreviewResult:
     suggested = _suggest_mapping(table.headers, columns)
     errors = tuple(error for plan in plans for error in plan.errors)
-    # A suspected row is created only if the importer says so at commit (ADR-398).
-    landing = [plan for plan in plans if plan.ok and plan.line not in comparison.suspects]
+    # A suspected row is created only if the importer says so at commit (ADR-398), and so are the
+    # lines attaching to the ticket it creates.
+    landing = [
+        plan
+        for plan in plans
+        if plan.ok and plan.line not in comparison.suspects and plan.line not in following
+    ]
     return PreviewResult(
         detected_headers=table.headers,
         suggested_mapping=suggested,
@@ -848,7 +860,9 @@ async def preview_stations(
             db, actor=actor, drafts=drafts, decisions={}, now=datetime.now(UTC)
         )
         suspects = await bulk_dedup.describe(db, comparison, drafts)
-        return _preview_of(table, plans, columns, comparison=comparison, suspects=suspects, skipped=skipped)
+        return _preview_of(
+            table, plans, columns, comparison=comparison, suspects=suspects, following={}, skipped=skipped
+        )
 
 
 async def preview_tickets(
@@ -871,7 +885,10 @@ async def preview_tickets(
             db, actor=actor, drafts=drafts, decisions={}, now=datetime.now(UTC)
         )
         suspects = await bulk_dedup.describe(db, comparison, drafts)
-        return _preview_of(table, plans, columns, comparison=comparison, suspects=suspects)
+        following = bulk_dedup.held_with(comparison, drafts)
+        return _preview_of(
+            table, plans, columns, comparison=comparison, suspects=suspects, following=following
+        )
 
 
 async def _commit(
@@ -884,6 +901,7 @@ async def _commit(
     filename: str,
     comparison: Comparison,
     suspects: tuple[SuspectedRow, ...],
+    following: Mapping[int, int],
 ) -> ImportOutcome:
     """Write every writable row, collecting failures instead of stopping at the first.
 
@@ -892,12 +910,14 @@ async def _commit(
     validation runs first, so the realistic cause is a permission the caller lacks for the
     dependent write (for example station.contribute for a dynamic value).
 
-    A suspected row the importer did not file anyway is held (ADR-398): not written, and put in
-    the report beside the failures, though not counted as one. Reviewers hear once about every
-    pair card the import left.
+    A suspected row the importer did not file anyway is held (ADR-398), with the lines attaching
+    to the ticket it creates: not written, and put in the report beside the failures, though not
+    counted as ones. Reviewers hear once about every pair card the import left.
     """
     failures: dict[int, list[RowError]] = {plan.index: list(plan.errors) for plan in plans if not plan.ok}
-    held = await _hold(db, actor=actor, plans=plans, comparison=comparison, suspects=suspects)
+    held = await _hold(
+        db, actor=actor, plans=plans, comparison=comparison, suspects=suspects, following=following
+    )
 
     created, updated, partial, carded = await _write_all(
         db, actor, [plan for plan in plans if plan.index not in held], write, failures
@@ -913,7 +933,7 @@ async def _commit(
         errors=errors,
         error_report=_as_report(table, failures | held, filename=filename),
         partial_rows=tuple(partial),
-        suspected=len(held),
+        suspected=len(comparison.suspects),
         suspects=suspects,
         dedup_checked=comparison.complete,
     )
@@ -926,10 +946,12 @@ async def _hold(
     plans: list[RowPlan],
     comparison: Comparison,
     suspects: tuple[SuspectedRow, ...],
+    following: Mapping[int, int],
 ) -> dict[int, list[RowError]]:
     """Record the hint each held row was shown, and say in its report line why it was not created.
 
-    A hint shown and nothing created is the hint taken (ADR-303), as for a single create.
+    A hint shown and nothing created is the hint taken (ADR-303), as for a single create. A line
+    held with its ticket's first line says which line that is; it was shown no hint of its own.
     """
     if not comparison.suspects:
         return {}
@@ -938,10 +960,12 @@ async def _hold(
     held = {}
     for plan in plans:
         suspect = comparison.suspects.get(plan.line)
-        if suspect is None:
-            continue
-        await dedup_service.record_suspect_shown(db, suspect=suspect, actor_uuid=actor_uuid)
-        held[plan.index] = [_error(plan.line, "-", _held_message(shown.get(plan.line)))]
+        if suspect is not None:
+            await dedup_service.record_suspect_shown(db, suspect=suspect, actor_uuid=actor_uuid)
+            held[plan.index] = [_error(plan.line, "-", _held_message(shown.get(plan.line)))]
+        elif plan.line in following:
+            message = f"同一張單的第 {following[plan.line]} 列疑似重複，未建立，這一列跟著未建立"
+            held[plan.index] = [_error(plan.line, "-", message)]
     await db.commit()
     return held
 
@@ -1058,6 +1082,7 @@ async def commit_stations(
             filename=filename,
             comparison=comparison,
             suspects=suspects,
+            following=bulk_dedup.held_with(comparison, drafts),
         )
 
 
@@ -1108,4 +1133,5 @@ async def commit_tickets(
             filename=filename,
             comparison=comparison,
             suspects=suspects,
+            following=bulk_dedup.held_with(comparison, drafts),
         )

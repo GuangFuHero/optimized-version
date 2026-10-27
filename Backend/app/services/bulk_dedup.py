@@ -7,7 +7,8 @@ already in the database, never with each other.
 
 Each submission is one row (a new station, or a task added to a ticket already there) or one
 new ticket with the rows that file its tasks. A row's decision, `acknowledged_duplicate_of`,
-means what it means on `createTicket`: the importer saw the suspect and files the row anyway.
+means what it means on `createTicket`: the importer saw the suspect and files the row anyway,
+which counts only when it names that suspect (ADR-400).
 """
 
 import math
@@ -26,7 +27,6 @@ from app.dedup_engine.contract import (
     NewTicket,
     Submission,
     Suspect,
-    kind_of_ref,
 )
 from app.models.auth import User
 from app.repositories.dedup_repository import duplicate_pair_repository
@@ -37,10 +37,16 @@ _EARTH_RADIUS_M = 6_371_008.8
 
 @dataclass(frozen=True)
 class RowDraft:
-    """One submission to the engine, and the file line each of its drafts came from."""
+    """One submission to the engine, and the file line each of its drafts came from.
+
+    For a ticket the file creates, `first_line` is the line that creates it and `followers` the
+    lines after it, which attach to it: held, it holds them too (ADR-211).
+    """
 
     submission: Submission
     lines: Mapping[str, int]
+    first_line: int | None = None
+    followers: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -62,7 +68,8 @@ class SuspectedRow:
     """A row that looks like something already there, with what the importer is shown of it.
 
     For a task, `title` is its ticket's; for a station, its name. No similarity: what the number
-    means changes with the engine's version. No contact details.
+    means changes with the engine's version. No contact details. `followers` are the lines held
+    with it, when it is the line that creates a new ticket.
     """
 
     line: int
@@ -75,6 +82,7 @@ class SuspectedRow:
     status: str | None
     distance_m: int | None
     created_at: datetime | None
+    followers: tuple[int, ...] = ()
 
 
 async def compare(
@@ -85,7 +93,12 @@ async def compare(
     decisions: Mapping[int, str],
     now: datetime,
 ) -> Comparison:
-    """Score each acknowledged row, then ask the engine about every submission. Writes nothing.
+    """Ask the engine about every submission once, and settle each row's decision. Writes nothing.
+
+    A decision files its row anyway only when it names the suspect the engine finds for that
+    line now (ADR-400); otherwise the row is held like any other. After the engine first fails,
+    it is not asked about the rest of the file: each call may wait out `ENGINE_TIMEOUT_S`, and the
+    rows land fail-open either way, decisions carded unscored as for a single create.
 
     `drafts` is None when rows to create could not be put to the engine at all. Must run before
     the import writes anything: every engine call is guarded on that (`dedup._guarded`).
@@ -96,33 +109,36 @@ async def compare(
     pairs: dict[int, dedup_service.AcknowledgedPair] = {}
     complete = True
     for draft in drafts:
-        acknowledged = set()
-        for draft_ref, line in draft.lines.items():
-            related = decisions.get(line)
-            if not related:
-                continue
-            pair = await dedup_service.score_acknowledged(
-                db,
-                submission=draft.submission,
-                draft_ref=draft_ref,
-                related_kind=kind_of_ref(draft_ref),
-                related_uuid=related,
-                actor=actor,
-                now=now,
-            )
-            if pair is not None:
-                pairs[line] = pair
-                acknowledged.add(draft_ref)
-        found = await dedup_service.try_check_submission(
-            db, submission=draft.submission, acknowledged=frozenset(acknowledged), actor=actor, now=now
+        named = dedup_service.acknowledged_uuids(
+            {draft_ref: decisions.get(line) for draft_ref, line in draft.lines.items()}
         )
+        found = None
+        if complete:
+            found = await dedup_service.try_check_submission(
+                db, submission=draft.submission, acknowledged=frozenset(), actor=actor, now=now
+            )
         if found is None:
             complete = False
-            continue
+            borne, found = await dedup_service.unchecked_pairs(db, named), []
+        else:
+            borne = dedup_service.borne_out(found, named)
+        for pair in borne:
+            pairs[draft.lines[pair.draft_ref]] = pair
+        filed = {pair.draft_ref for pair in borne}
         for suspect in found:
-            if suspect.draft_ref in draft.lines:
+            if suspect.draft_ref in draft.lines and suspect.draft_ref not in filed:
                 suspects[draft.lines[suspect.draft_ref]] = suspect
     return Comparison(suspects=suspects, pairs=pairs, complete=complete)
+
+
+def held_with(comparison: Comparison, drafts: list[RowDraft] | None) -> dict[int, int]:
+    """The lines held because the line creating their ticket is: each, and that first line."""
+    return {
+        line: draft.first_line
+        for draft in drafts or []
+        if draft.first_line in comparison.suspects
+        for line in draft.followers
+    }
 
 
 async def describe(
@@ -141,6 +157,7 @@ async def describe(
     for kind, uuids in related.items():
         summaries |= await duplicate_pair_repository.entity_summaries(db, kind, uuids)
     where = await _locations(db, drafts or [])
+    followers = {draft.first_line: draft.followers for draft in drafts or [] if draft.first_line is not None}
 
     rows = []
     for line in sorted(comparison.suspects):
@@ -164,6 +181,7 @@ async def describe(
                     else None
                 ),
                 created_at=summary.get("created_at"),
+                followers=followers.get(line, ()),
             )
         )
     return tuple(rows)

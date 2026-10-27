@@ -779,6 +779,8 @@ ADR-112 的整個循環是「照著它說的改、重新上傳、完成」，而
 **Date**：2026-10-27。Carol 要求所有前後台的輸入都要先過快層（Discord #frontend-only，台灣日期 2026-10-27，
 UTC 10-26 19:29），批次匯入也算在內。Dan 10-27 同意取代 ADR-299 的這一點、更新的列不比、量過時間後不降列數上限。
 同一份檔案裡很像的列怎麼辦，Carol 10-27 在 Discord #uiux 定「先只跟資料庫比」；畫面上的其他題照建議。
+HC 10-27 在 #148 的 review 提三點，Dan 10-27 照改：確認只認那一列這次比到的那一筆（ADR-400，`Spec/022`）；
+新單的領頭列被擋時，預覽就把同張單的後續列算成跟著擋；引擎第一次失敗就不再問。
 Notion 票：https://app.notion.com/p/406bc24b8353813d9f1afba3465ab9e2
 
 **Context**：
@@ -812,24 +814,30 @@ Notion 票：https://app.notion.com/p/406bc24b8353813d9f1afba3465ab9e2
      `title`（站點名稱，或任務所屬單的標題）、`task_name`、`type`、`status`、`distance_m`、`created_at`。不給相似度
      （數字的意思會隨引擎版本變），不給聯絡資料。單筆路徑只回 uuid、畫面自己查；批次一次幾百列，所以摘要由後端
      一次查好（`DuplicatePairRepository.entity_summaries`，審核佇列用的同一支）。每個登入的人都有 `station.view`、
-     `ticket.view` 和 `ticket.view_detail` 的 `all`（`scripts/seed_rbac.py`），摘要不比現在多露。
-   - `suspected`：疑似重複的列數。`to_create`、`to_update` 不再算這些列。
+     `ticket.view` 和 `ticket.view_detail` 的 `all`（`scripts/seed_rbac.py`），摘要不比現在多露。疑似的是新單的
+     領頭列時，再加 `followers`：同張單後續列的列號，這一列不建立，它們也跟著不建立。
+   - `suspected`：疑似重複的列數。`to_create`、`to_update` 不再算這些列，也不算它們的 `followers`。
    - `dedup_checked`：要新建的列都比過了才是 true。引擎失敗或逾時、或呼叫的人沒有 `*.add`（新建的列送出時本來就
      會失敗，不替他比）時是 false，畫面才不會把「沒比」當成「沒有重複」。
 4. **送出**：多一個 form 欄位 `decisions`，JSON 陣列，每列一項 `{line, acknowledged_duplicate_of}`。意思跟單筆的
    `acknowledgedDuplicateOf` 一樣；REST 用 snake_case，跟 `mapping` 一樣隨檔案送，伺服器不存（ADR-114）。
-   - 照現在的方式規劃整份檔；帶了確認的列先打分（`score_acknowledged`），再把要比的全部比完，才開始寫。
+   - 照現在的方式規劃整份檔；每份要比的只問引擎一次，全部比完才開始寫。確認只在它指的正是引擎這次給那一列的
+     那一筆時才算（ADR-400）。
    - 逐列寫：
 
      | 這一列 | 做什麼 |
      |---|---|
      | 沒有疑似 | 照常建立 |
-     | 帶了確認，指向的東西還在 | 建立，不再檢查；配對卡 `dup_ignored`＋`ignored_by_submitter`，跟建立同一個 commit |
+     | 帶了確認，指的正是這次比到的那一筆 | 建立；配對卡 `dup_ignored`＋`ignored_by_submitter`，分數是那次比對的，跟建立同一個 commit |
      | 有疑似，沒帶確認 | 不建立；寫 `hint_shown`（推定接受提示，ADR-303）；放進錯誤報告，訊息「疑似重複，未建立」 |
-     | 帶了確認，指向的東西不見了 | 當成沒帶確認 |
+     | 帶了確認，但指的不是這次比到的那一筆（別筆、不存在、不是 uuid） | 當成沒帶確認 |
 
    - 沒決定的列就是不建立，跟單筆一致。選項只有「仍要建立」和「不建立」，沒有「改成更新那一筆」。
-   - 新任務單的領頭列不建立時，同張單的後續列照 ADR-211 一起不匯入；只有後續列疑似時，只擋那一列。
+   - 新任務單的領頭列不建立時，同張單的後續列沒有單可掛（ADR-211），跟著不建立：放進錯誤報告，訊息
+     「同一張單的第 N 列疑似重複，未建立，這一列跟著未建立」，不算 `failed`、不寫 `hint_shown`。領頭列確認仍要建立，
+     後續列照常建立。只有後續列疑似時，只擋那一列。
+   - 引擎第一次失敗或逾時，就不再問這份檔的其他列：每次最多等 2 秒（`ENGINE_TIMEOUT_S`），500 列可能拖過 15 分鐘。
+     後面的列照 fail-open 建立；帶了確認的列，對方存在就寫一張沒分數的卡（ADR-313）；`dedup_checked` 是 false。
    - 回應多 `suspected`、`suspects`（被擋的列，形狀同預覽）、`dedup_checked`。被擋的列不算 `failed`、不在 `errors`
      裡，但跟失敗的列一起放進錯誤報告檔；修完重傳會再比一次，要再確認一次。
    - 全部寫完，有新配對卡才通知審核者一次（`notify_new_cards`），不是一列一則。
@@ -854,8 +862,9 @@ Notion 票：https://app.notion.com/p/406bc24b8353813d9f1afba3465ab9e2
 ➖ 預覽和送出各多一輪比對：密集區 500 列各多約 19 秒，一般約 2 秒。畫面要有「比對中」的提示。
 ➖ 檔內很像的兩列都會建立，要靠審核。真的常見再做草稿對草稿的比對（要 Chi 改 contract）。
 ➖ 被擋的列重傳會再被擋，要再確認一次。
-➖ `decisions` 依列號對應。送出時換了檔，確認可能落到別列，結果只是多一張配對卡進審核佇列，跟 ADR-114 接受的
-  調包風險同一級。
-◾ 測試：`tests/test_bulk_import_dedup.py`（假引擎：問哪些列、預覽不寫、沒比時怎麼說、被擋、確認後建立和配對卡、
-  新單的領頭列與後續列、一次 commit；真引擎：被擋再確認、同一份檔裡很像的兩列都建立）、`tests/test_bulk_endpoints.py`
-  （`decisions` 的格式、走一趟 HTTP）。`test_a_different_phone_makes_it_a_different_ticket` 改成先被擋、確認後才建立。
+➖ `decisions` 依列號對應。送出時換了檔，確認落到別列：那一列比到的不是它指的那一筆，就被擋下、不建立
+  （ADR-400），要重新確認一次。
+◾ 測試：`tests/test_bulk_import_dedup.py`（假引擎：問哪些列、預覽不寫、沒比時怎麼說、引擎失敗一次就不再問、被擋、
+  確認後建立和配對卡、確認指別筆仍被擋、新單的領頭列與後續列、一次 commit；真引擎：被擋再確認、同一份檔裡很像的
+  兩列都建立）、`tests/test_bulk_endpoints.py`（`decisions` 的格式、走一趟 HTTP）。
+  `test_a_different_phone_makes_it_a_different_ticket` 改成先被擋、確認後才建立。
