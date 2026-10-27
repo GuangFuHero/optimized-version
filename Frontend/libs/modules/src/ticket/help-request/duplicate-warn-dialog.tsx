@@ -242,6 +242,12 @@ export function DuplicateWarnDialog({
     ticketUuid: string,
     point: LatLng | null,
   ) => {
+    // Mid-send it would close the drawer as not sent, and the send may yet file the ticket.
+    if (submitting) {
+      event.preventDefault();
+      return;
+    }
+
     const map = mapRoute
       ? {
           state: mapRoute.state,
