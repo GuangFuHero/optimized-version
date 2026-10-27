@@ -48,8 +48,9 @@ export type AddNeedOutcome =
       kind: 'held';
       tickets: SuspectTicket[];
       /**
-       * What 確認不重複，加上去 sends as `acknowledgedDuplicateOf`. Any suspect will do: the backend
-       * then takes the whole need as looked at (`dedup_submission.py` `submit_new_task`).
+       * What 確認不重複，加上去 sends as `acknowledgedDuplicateOf`: the suspect the backend named,
+       * the only one it names for a need. It counts only for that one (ADR-400); held again for
+       * another, this is that one.
        */
       acknowledge: string;
     };

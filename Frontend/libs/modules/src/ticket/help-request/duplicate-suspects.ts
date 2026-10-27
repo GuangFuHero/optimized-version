@@ -83,9 +83,10 @@ export function groupSuspectsByTicket(
 export interface HeldHelpRequest {
   tickets: SuspectTicket[];
   /**
-   * For each need held, by its place among the needs sent, one suspect it looks like. Sent back as
-   * that need's `acknowledgedDuplicateOf`, the need is not checked again. Every need held is named,
-   * one with no ticket to show included, or the request would be held again for it.
+   * For each need held, by its place among the needs sent, the suspect the backend named for it.
+   * Sent back as that need's `acknowledgedDuplicateOf`, the need is not held again while the
+   * backend still finds that one; held for another, it takes that one instead (ADR-400). Every need
+   * held is named, one with no ticket to show included, or the request would be held again for it.
    */
   acknowledge: Record<number, string>;
 }
