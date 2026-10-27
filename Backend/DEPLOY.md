@@ -425,10 +425,10 @@ database rebuilt from empty needs the password set again; until then the two acc
 ## TGOS address keys
 
 The backend looks addresses up in two TGOS services, each with its own APPID and API KEY. The four values
-are in Secret Manager with the other staging secrets, readable by the VM's service account alone. `gen_env`
-writes them into `.env` on every deploy, so the `backend` container has them (and `retention`, which shares
-`.env`); the Next apps and the tunnel do not. A deploy stops at step 4 if one of them is empty or holds a
-line break, as it does for the OAuth secrets.
+are in Secret Manager with the other staging secrets, readable by the VM's service account (so from any
+shell on the VM) and by project owners. `gen_env` writes them into `.env` on every deploy, so the `backend`
+container has them (and `retention`, which shares `.env`); the Next apps and the tunnel do not. A deploy
+stops at step 4 if one of them is empty or holds a line break, as it does for the OAuth secrets.
 
 | Variable | Secret | TGOS service |
 |---|---|---|
@@ -438,8 +438,10 @@ line break, as it does for the OAuth secrets.
 After a key change, add the new version and deploy, then check the backend has all four:
 
 ```bash
-printf '%s' '<new-value>' | gcloud secrets versions add staging-backend-tgos-addr-api-key --data-file=-
-./scripts/deploy.sh
+# read -rs takes the key without echoing it or leaving it in the shell history
+read -rs v && printf '%s' "$v" \
+  | gcloud secrets versions add staging-backend-tgos-addr-api-key --data-file=- && unset v
+cd /opt/wanguard/Backend && ./scripts/deploy.sh
 docker compose -f docker-compose.staging.yml exec backend python -c \
   "from app.core.config import settings as s; print(all([s.TGOS_ADDR_APP_ID, s.TGOS_ADDR_API_KEY, s.TGOS_GEO_APP_ID, s.TGOS_GEO_API_KEY]))"
 ```
@@ -456,11 +458,17 @@ Until this change the keys sat in a hand-written `Backend/.env.tgos` on the VM, 
 backend. The change edits `gen_env`, and a running `deploy.sh` keeps the `gen_env` it parsed before
 checkout (see SMS in Environment facts):
 
-1. **Run `deploy.sh` twice in a row.** The first run already has the new compose file, which no longer reads
+1. **Before deploying**, create the four `staging-backend-tgos-*` secrets with the values in `.env.tgos`,
+   and give the VM's service account read access to each (see One-time setup below). The second run stops
+   at step 4 without them. On staging they were created on 2026-10-26;
+   `gcloud secrets list --filter='name~staging-backend-tgos'` lists all four.
+2. **Run `deploy.sh` twice in a row.** The first run already has the new compose file, which no longer reads
    `.env.tgos`, but still writes a `.env` without the keys: until the second run finishes, every lookup
-   answers `unavailable`. The second run writes them.
-2. Check for `True` as above.
-3. Delete the old file: `rm /opt/wanguard/Backend/.env.tgos`.
+   answers `unavailable`. The second run writes them. Only `.env` changes between the two, so the second can
+   be `NEXT_APPS= ./scripts/deploy.sh`, which skips both Next builds and shortens that window; the first run
+   has already built both apps from the same ref.
+3. Check for `True` as above.
+4. Delete the old file: `rm /opt/wanguard/Backend/.env.tgos`.
 
 ---
 
