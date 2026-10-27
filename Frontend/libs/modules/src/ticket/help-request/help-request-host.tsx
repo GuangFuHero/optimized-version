@@ -25,6 +25,11 @@ import { useAuthSession } from '../../session/auth-session';
 import { SiteToast } from '../../shell/site/site-toast';
 import { announceTicketCreated } from '../ticket-changes';
 import {
+  readHeldHelpRequest,
+  type HeldHelpRequest,
+} from './duplicate-suspects';
+import { DuplicateWarnDialog } from './duplicate-warn-dialog';
+import {
   clearHelpRequestDraft,
   sessionDraftStorage,
 } from './help-request-draft';
@@ -59,6 +64,11 @@ interface FiledTicket {
   uuid: string;
   point: PickedPoint;
   needCount: number;
+}
+
+/** Held as looking like what is already there, with the form as sent, to send again as it was. */
+interface HeldRequest extends HeldHelpRequest {
+  form: HelpRequestForm;
 }
 
 /**
@@ -106,7 +116,8 @@ function HelpRequestReturn({
  * 請求協助, kept once in the site shell so every page has it, and opened through
  * `openHelpRequest` — or by itself for a guest back from signing in. It also does what
  * follows a ticket filed: the drawer closes, the map and the list are handed the new ticket,
- * the page turns to tickets with it selected, and a toast says it went through.
+ * the page turns to tickets with it selected, and a toast says it went through. One held as
+ * looking like an open need nearby is asked about over the drawer, not stopped.
  */
 export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   const router = useRouter();
@@ -124,6 +135,11 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [toastOpen, setToastOpen] = useState(false);
   const [filed, setFiled] = useState<FiledTicket | null>(null);
+  // Open is kept apart from what is shown, so the dialog keeps its content while it fades out.
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [held, setHeld] = useState<HeldRequest | null>(null);
+  const [heldError, setHeldError] = useState<string | null>(null);
+  const [unsentOpen, setUnsentOpen] = useState(false);
 
   const openDrawer = useCallback((seed: HelpRequestSeed | null) => {
     setOpening((current) => ({
@@ -131,6 +147,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
       seed: seed ? { ...seed, source: 'seed' } : null,
     }));
     setSubmitError(null);
+    setUnsentOpen(false);
     setOpen(true);
   }, []);
 
@@ -183,30 +200,55 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
     [mapRoute, mapViewport, pathname, router, siteRoute],
   );
 
-  const submit = async (form: HelpRequestForm) => {
+  /** Sent as filled in, or again as it was once the requester said it is not the same thing. */
+  const submit = async (
+    form: HelpRequestForm,
+    acknowledged?: HeldHelpRequest['acknowledge'],
+  ) => {
     if (submitting || !form.landmark) {
       return;
     }
 
     setSubmitting(true);
     setSubmitError(null);
+    setHeldError(null);
 
     try {
-      const result = await createHelpRequest({
-        input: toHelpRequestInput(form),
-      });
-      const ticket = result.data?.createHelpRequest;
+      const input = toHelpRequestInput(form, acknowledged);
+      const result = await createHelpRequest({ input });
+      const answer = result.data?.createHelpRequest;
+
+      // Held: nothing was written. What was typed stays in the drawer, under the dialog.
+      if (answer?.__typename === 'DuplicatesSuspected') {
+        setHeld({
+          form,
+          ...readHeldHelpRequest(
+            answer.suspects,
+            input.tasks.map((task) => task.taskName),
+            acknowledged,
+          ),
+        });
+        setHeldOpen(true);
+        return;
+      }
 
       // What was typed stays for another try.
-      if (!ticket) {
-        setSubmitError(submitErrorMessage(result.error));
+      if (answer?.__typename !== 'TicketCreated') {
+        const message = submitErrorMessage(result.error);
+
+        if (acknowledged) {
+          setHeldError(message);
+        } else {
+          setSubmitError(message);
+        }
+
         return;
       }
 
       const next: FiledTicket = {
-        uuid: useFragment(TicketFieldsFragmentDoc, ticket).uuid,
+        uuid: useFragment(TicketFieldsFragmentDoc, answer.ticket).uuid,
         point: form.landmark,
-        needCount: ticket.tasks.length,
+        needCount: answer.tasks.length,
       };
 
       // Filed: nothing is left to bring back the next time it opens.
@@ -214,20 +256,34 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
         clearHelpRequestDraft(sessionDraftStorage(), userId);
       }
 
+      setHeldOpen(false);
       setOpen(false);
       // Handed over before the page turns to it, in the same render: the map drops a selection it
       // cannot find among its markers.
-      announceTicketCreated(ticket);
+      announceTicketCreated({ ...answer.ticket, tasks: answer.tasks });
       showTicket(next);
       setFiled(next);
+      setUnsentOpen(false);
       setToastOpen(true);
     } finally {
       setSubmitting(false);
     }
   };
 
+  /**
+   * Off to one of the tickets it looks like. The drawer closes as the prototype's does, but what was
+   * typed is kept for the tab, and a toast says it was not sent: closing alone looks like sending.
+   */
+  const leaveHeld = () => {
+    setHeldOpen(false);
+    setOpen(false);
+    setToastOpen(false);
+    setUnsentOpen(true);
+  };
+
   // Stable, so a re-render does not restart the toast's timer.
   const closeToast = useCallback(() => setToastOpen(false), []);
+  const closeUnsent = useCallback(() => setUnsentOpen(false), []);
 
   return (
     <>
@@ -245,6 +301,23 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
           onSubmit={(form) => void submit(form)}
         />
       ) : null}
+      {/* Only asks. 回去修改 goes back to the drawer, and sending again checks again; 不是同一件，送出
+          sends it as it was. Neither keeps them here (prototype `site-actions.jsx:2191-2197`). */}
+      <DuplicateWarnDialog
+        open={heldOpen}
+        tickets={held?.tickets ?? []}
+        act="send"
+        from={held?.form.landmark ?? null}
+        error={heldError}
+        submitting={submitting}
+        onBack={() => setHeldOpen(false)}
+        onConfirm={() => {
+          if (held) {
+            void submit(held.form, held.acknowledge);
+          }
+        }}
+        onLeave={leaveHeld}
+      />
       <Suspense fallback={null}>
         <HelpRequestReturn onReturn={openDrawer} />
       </Suspense>
@@ -271,6 +344,19 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
             : undefined
         }
         onClose={closeToast}
+      />
+      <SiteToast
+        open={unsentOpen}
+        title="你的求助單還沒送出"
+        description="填好的都還在，按「請求協助」可以接著填。"
+        action={{
+          label: '接著填',
+          onClick: () => {
+            // The drawer brings back what was typed from the tab, whatever point it opens at.
+            openDrawer(null);
+          },
+        }}
+        onClose={closeUnsent}
       />
     </>
   );

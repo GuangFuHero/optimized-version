@@ -7,6 +7,11 @@
 import type { CreateTicketTaskInput } from '@rescue-frontend/data-access';
 
 import { isTicketRequester } from '../needs/need-actions';
+import {
+  groupSuspectsByTicket,
+  type DuplicateSuspect,
+  type SuspectTicket,
+} from './duplicate-suspects';
 import { toNeedInput, type NeedDraft } from './help-request-form';
 
 interface AddNeedTicket {
@@ -34,18 +39,8 @@ export type CreateTicketTaskAnswer =
   | { __typename: 'TicketTaskCreated' }
   | {
       __typename: 'DuplicatesSuspected';
-      suspects: ReadonlyArray<{
-        relatedUuid: string;
-        relatedTicketUuid?: string | null;
-      }>;
+      suspects: ReadonlyArray<DuplicateSuspect>;
     };
-
-/** Another ticket with open needs the one being added looks like. */
-export interface SuspectTicket {
-  ticketUuid: string;
-  /** Which of its needs. */
-  needUuids: string[];
-}
 
 export type AddNeedOutcome =
   | { kind: 'added' }
@@ -70,27 +65,9 @@ export function readAddNeedOutcome(
     return { kind: 'added' };
   }
 
-  const tickets: SuspectTicket[] = [];
-
-  for (const { relatedUuid, relatedTicketUuid } of answer.suspects) {
-    if (!relatedTicketUuid) {
-      continue;
-    }
-
-    const ticket = tickets.find(
-      (item) => item.ticketUuid === relatedTicketUuid,
-    );
-
-    if (ticket) {
-      ticket.needUuids.push(relatedUuid);
-    } else {
-      tickets.push({ ticketUuid: relatedTicketUuid, needUuids: [relatedUuid] });
-    }
-  }
-
   return {
     kind: 'held',
-    tickets,
+    tickets: groupSuspectsByTicket(answer.suspects),
     acknowledge: answer.suspects[0]?.relatedUuid ?? '',
   };
 }

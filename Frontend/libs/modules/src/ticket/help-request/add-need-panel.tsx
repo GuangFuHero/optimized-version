@@ -15,9 +15,9 @@ import {
   canAddNeed,
   readAddNeedOutcome,
   toCreateTicketTaskInput,
-  type SuspectTicket,
 } from './add-need';
-import { AddNeedDuplicateDialog } from './add-need-duplicate-dialog';
+import type { SuspectTicket } from './duplicate-suspects';
+import { DuplicateWarnDialog } from './duplicate-warn-dialog';
 import {
   emptyNeed,
   isQuantityMissing,
@@ -126,13 +126,17 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
   };
 
   const dialog = (
-    <AddNeedDuplicateDialog
+    <DuplicateWarnDialog
       open={heldOpen}
       tickets={held?.tickets ?? []}
+      act="add"
+      // No point to measure from here: the address on each card is the reason to go by.
+      from={null}
       error={heldError}
       submitting={submitting}
       onBack={() => setHeldOpen(false)}
-      onAddAnyway={() => void submit(held?.acknowledge)}
+      onConfirm={() => void submit(held?.acknowledge)}
+      // Leaving for one of the tickets: what was typed goes, as in the prototype.
       onLeave={close}
     />
   );

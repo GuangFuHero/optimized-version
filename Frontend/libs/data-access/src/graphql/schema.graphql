@@ -714,6 +714,11 @@ input HelpRequestTaskInput {
   People or units needed, at least 1; required except for a 'rescue' need, which may omit it
   """
   quantity: Int = null
+
+  """
+  Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again
+  """
+  acknowledgedDuplicateOf: String = null
 }
 
 """
@@ -736,7 +741,7 @@ type Mutation {
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
   createTicket(input: CreateTicketInput!): CreateTicketResult!
-  createHelpRequest(input: CreateHelpRequestInput!): TicketType!
+  createHelpRequest(input: CreateHelpRequestInput!): CreateTicketResult!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
   auditTicket(
