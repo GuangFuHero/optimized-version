@@ -98,8 +98,8 @@ describe('setPasswordBlocked', () => {
   });
 
   it('stops an account with nothing to sign in with a password by, and says to add one first', () => {
-    expect(setPasswordBlocked([], [{ provider: 'line' }])).toContain(
-      '請先在下面新增電子郵件或手機',
+    expect(setPasswordBlocked([], [{ provider: 'line' }])).toBe(
+      '要先新增電子郵件或手機，才能設密碼。以後用密碼登入時，就打你新增的電子郵件或手機。',
     );
   });
 
@@ -302,6 +302,9 @@ describe('error messages', () => {
     expect(
       setPasswordErrorMessage(refusal(422, 'step_up_reauth_required'), 'send'),
     ).toContain('先在下面新增');
+    expect(
+      setPasswordErrorMessage(refusal(409, 'password_needs_contact'), 'send'),
+    ).toBe('要先新增電子郵件或手機，才能設定密碼。');
   });
 
   it('falls back to its own words for anything unknown', () => {

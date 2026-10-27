@@ -99,7 +99,7 @@ export function setPasswordBlocked(
 
   return cannotProveHere(contacts, methods)
     ? '你是用 Google 登入，又還沒有電子郵件或手機，所以暫時不能設定。'
-    : '你還沒有電子郵件或手機，設了密碼也沒辦法登入。請先在下面新增電子郵件或手機，再回來設定密碼。';
+    : '要先新增電子郵件或手機，才能設密碼。以後用密碼登入時，就打你新增的電子郵件或手機。';
 }
 
 const CONTACT_NAMES: Record<AuthIdentityType, string> = {
