@@ -437,3 +437,28 @@ await identity_repository.delete_identity(db, identity=identity)
    這是 ADR-233 原本已經修好、現在刻意退回的狀態，記在 PR 的 Known gaps，需要一張前端票。
    影響範圍已因 ADR-234 擴大：零 contact 的 SSO 帳號還需要 `id_token` 欄位。
 ➖ 簡訊少了英文，非中文使用者收到的通知看不懂。這是 #41 已經替整個系統做過的取捨，本 stack 跟隨而非另立。
+
+---
+
+### ADR-399 忘記密碼重設之後，也通知帳號的每一個聯絡方式
+
+**白話**：設定密碼、變更密碼之後都會通知，用忘記密碼重設之後卻不會。現在三條改密碼的路都通知。
+
+**Date**: 2026-10-27（Dan；在 #144 的前台改動裡發現）
+
+**Context**：ADR-218 第 3 點讓 `link` / `unlink` / `change-password` 成功後通知帳號上每一個聯絡方式，
+`set-password` 也通知（ADR-215，`notify_password_set`）。`reset-password`（忘記密碼的第二步）寫入
+新密碼、撤銷所有 session，但什麼都不寄：只有收到驗證碼的那個聯絡方式知道有人要重設，帳號上的其他
+聯絡方式沒收到任何訊息，收驗證碼的那個也不會知道密碼真的換了。
+
+**Decision**：`reset-password` 撤銷 session 之後呼叫 `notify_password_set(..., changed=True)`，寄的
+就是 `change-password` 那封「您的帳號密碼已變更」，同樣走 BackgroundTasks 加 `_or_log`
+（ADR-162）：密碼已經寫入，寄送失敗不會讓請求變成 500。
+
+**Consequences**：
+➕ 設定、變更、重設三條路的通知一致。
+➖ 收驗證碼的那個聯絡方式會收到兩則，先是驗證碼、再是「已變更」。`change-password` 也通知每一個
+   聯絡方式、不排除任何一個，這裡照做。
+
+**回歸測試**：`tests/test_forgot_password.py` 的 `test_a_reset_tells_every_contact_on_the_account`
+（信箱和手機都收到「已變更」）。拿掉那個呼叫會紅：`assert [] == [('owner@x.com', True)]`。

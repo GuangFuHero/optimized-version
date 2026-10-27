@@ -6,6 +6,7 @@ import pytest
 from app.core.security import generate_salt, get_password_hash
 from app.messaging.email import build_password_reset_email, build_sso_notice_email
 from app.messaging.sms import build_password_reset_sms, build_sso_notice_sms
+from app.repositories.auth_repository import contact_repository
 from app.repositories.verification_repository import VerificationRepository
 from app.services.auth_account import create_account
 
@@ -175,6 +176,23 @@ async def test_reset_revokes_sessions(client, db_session, capture_email):
         "new_password": "newsecret", "salt_frontend": "webtest"})
     r = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_a_reset_tells_every_contact_on_the_account(client, db_session, capture_email, capture_sms):
+    """As set-password and change-password do (ADR-218): each contact hears the password changed."""
+    user = await _email_pw_user(db_session)
+    await contact_repository.create_verified(
+        db_session, user_uuid=user.uuid, type_="phone", value="+886912345678")
+    await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "owner@x.com"})
+    code = capture_email.last_code
+    r = await client.post("/api/v1/auth/reset-password", json={
+        "type": "email", "value": "owner@x.com", "code": code,
+        "new_password": "newsecret", "salt_frontend": "webtest"})
+    assert r.status_code == 204
+    assert [(to, "已變更" in subject) for to, subject, _, _ in capture_email.messages[1:]] == [
+        ("owner@x.com", True)]
+    assert [(to, "已變更" in body) for to, body in capture_sms.messages] == [("+886912345678", True)]
 
 
 @pytest.mark.asyncio

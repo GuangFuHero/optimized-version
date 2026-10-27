@@ -23,7 +23,7 @@
 | `POST /auth/change-password` | ✅ 驗舊密碼、寫新 hash、撤銷所有 session |
 | `POST /auth/set-password` | ✅ SSO-only 帳號首次設密碼 |
 | `POST /auth/forgot-password` | ✅ 防列舉（所有分支回相同 202）、`BackgroundTasks` 讓回應時間恆定避免延遲側漏、SSO-only 帳號另發「請用第三方登入」通知 |
-| `POST /auth/reset-password` | ✅ 消耗驗證碼、寫新密碼、撤銷所有 session |
+| `POST /auth/reset-password` | ✅ 消耗驗證碼、寫新密碼、撤銷所有 session、通知帳號每一個聯絡方式（017 ADR-399） |
 
 **Account Profile 則有四個缺口：**
 
@@ -299,7 +299,7 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 刪最後一個但有 SSO → 成功 | `test_deleting_the_last_contact_is_allowed_with_an_sso_identity` |
 | 刪其中一個（尚有另一型別）→ 成功 | `test_deleting_one_of_two_contacts_is_allowed` |
 | `/users/me` 回 contacts / login_methods，不含 `provider_subject` | `test_users_me_returns_contacts_and_login_methods`、`test_users_me_never_exposes_provider_subject` |
-| 忘記密碼流程行為不變 | `forgot-password` / `reset-password` / `change-password` 仍為零改動；**`set-password` 已於 2026-08-27 依 ADR-160 改動**（見 10.4），故原先「`password.py` 全檔零改動」的宣稱作廢。另外 017 ADR-218 讓 `change-password` 成功後會通知帳號 |
+| 忘記密碼流程行為不變 | `forgot-password` / `reset-password` / `change-password` 仍為零改動；**`set-password` 已於 2026-08-27 依 ADR-160 改動**（見 10.4），故原先「`password.py` 全檔零改動」的宣稱作廢。另外 017 ADR-218 讓 `change-password` 成功後會通知帳號，017 ADR-399（2026-10-27）讓 `reset-password` 也通知 |
 
 **超出 §9 的補充測試**：`test_sso_only_account_replaces_with_the_old_channel_code`（SSO-only 的成功路徑）、`test_deleting_a_contact_type_the_user_does_not_have`（404）、`test_users_me_does_not_mask_your_own_contacts`；以及 `tests/test_add_contact.py` 的改寫——原本斷言「第二個 email → 409」的案例，改為斷言「422 要求 step-up，且新地址收不到任何碼」（`test_add_second_email_requires_step_up`、`test_add_second_phone_requires_step_up`、`test_a_code_is_never_issued_to_a_new_address_without_step_up`）。
 

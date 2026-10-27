@@ -131,7 +131,7 @@ DELETE /api/v1/auth/link/{provider} body: {step_up?}              新增
   3. 要求證明（慢的事情在鎖外做）
   4. 取 `users` 列的鎖後**重新**檢查第 2 步，通過才刪除（ADR-235）
   5. 刪除後撤銷該帳號所有 session（ADR-236）
-- 成功的 link / unlink / `change-password` 都會透過 BackgroundTasks 通知帳號每一個聯絡方式；寄送失敗不會回滾變更（ADR-218，沿用 ADR-162）。
+- 成功的 link / unlink / `change-password` / `reset-password` 都會透過 BackgroundTasks 通知帳號每一個聯絡方式；寄送失敗不會回滾變更（ADR-218，沿用 ADR-162；`reset-password` 是 ADR-399 補上的）。
 
 錯誤碼（PR #41 的 `code` 合約）與前端應對方式見 `prd.md` §5。
 
@@ -196,6 +196,7 @@ pool    = settled or [最舊的那一個]      # 全新帳號的第一週仍然�
 | 解綁沒有綁定的 provider → 404 | 218 | `test_unlinking_something_the_account_does_not_have_is_404` |
 | 未知 provider → 404 | 218 | `test_an_unknown_provider_is_404` |
 | 改密碼通知帳號 | 218 | `test_changing_a_password_notifies_the_account` |
+| 忘記密碼重設後通知帳號每一個聯絡方式 | 399 | `test_forgot_password.py::test_a_reset_tells_every_contact_on_the_account` |
 | 只有 session 不能加聯絡方式再走密碼重設（路徑 C） | 220 | `test_a_session_cannot_attach_a_contact_and_reset_the_password_through_it` |
 | 擁有者仍能新增第二種聯絡方式 | 220 | `test_the_owner_can_still_add_a_second_contact_type` |
 | SSO-only 帳號在既有管道上證明新增 | 220 | `test_an_sso_only_account_proves_the_add_on_its_existing_channel` |
