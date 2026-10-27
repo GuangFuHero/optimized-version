@@ -618,6 +618,11 @@ type CurrentDisasterType {
   Short name for tight spots such as the site's top bar, e.g. 花蓮馬太鞍溪; null when unset, so use name
   """
   shortName: String
+
+  """
+  Where the site's map opens for this disaster; null when unset, so keep the site's own default
+  """
+  mapView: MapViewType
 }
 
 """Date with time (isoformat)"""
@@ -739,6 +744,18 @@ input HelpRequestTaskInput {
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf).
 """
 scalar JSON @specifiedBy(url: "https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf")
+
+"""Where the site's map opens: a centre and a zoom"""
+type MapViewType {
+  """Latitude of the centre, e.g. 23.67"""
+  lat: Float!
+
+  """Longitude of the centre, e.g. 121.418"""
+  lng: Float!
+
+  """Zoom level, 7 to 18 as the site's map allows, e.g. 14"""
+  zoom: Int!
+}
 
 type Mutation {
   createStation(input: CreateStationInput!, acknowledgedDuplicateOf: String = null): CreateStationResult!

@@ -305,9 +305,18 @@ class DisasterTypeType:
         return cls(uuid=m.uuid, key=m.key, label=m.label, is_active=m.is_active)
 
 
+@strawberry.type(description="Where the site's map opens: a centre and a zoom")
+class MapViewType:
+    """The map's opening view (ADR-395). Named fields, since GeoJSON and Leaflet order a pair differently."""
+
+    lat: float = strawberry.field(description="Latitude of the centre, e.g. 23.67")
+    lng: float = strawberry.field(description="Longitude of the centre, e.g. 121.418")
+    zoom: int = strawberry.field(description="Zoom level, 7 to 18 as the site's map allows, e.g. 14")
+
+
 @strawberry.type(description="The disaster this deployment responds to, as the public site names it")
 class CurrentDisasterType:
-    """The public face of the settings row: its name only (ADR-392)."""
+    """The public face of the settings row: its name and where its map opens (ADR-392, ADR-395)."""
 
     name: str = strawberry.field(description="Full name, e.g. 花蓮馬太鞍溪堰塞湖專案")
     short_name: str | None = strawberry.field(
@@ -317,11 +326,20 @@ class CurrentDisasterType:
             "so use name"
         ),
     )
+    map_view: MapViewType | None = strawberry.field(
+        default=None,
+        description=(
+            "Where the site's map opens for this disaster; null when unset, so keep the site's own default"
+        ),
+    )
 
     @classmethod
     def from_model(cls, m) -> "CurrentDisasterType":
         """Build from the ProjectSettings row."""
-        return cls(name=m.name, short_name=m.short_name)
+        map_view = None
+        if m.map_zoom is not None:
+            map_view = MapViewType(lat=m.map_center_lat, lng=m.map_center_lng, zoom=m.map_zoom)
+        return cls(name=m.name, short_name=m.short_name, map_view=map_view)
 
 
 @strawberry.input

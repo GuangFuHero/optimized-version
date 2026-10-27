@@ -694,3 +694,36 @@ async def test_seed_runs_again_after_a_tester_used_a_mock_account(seeded, case):
     await _execute(_CASE_DSN, SEED_SQL)
 
     assert (await _fetch(_CASE_DSN, handled))[0][0] is True
+
+
+_SETTINGS = "SELECT name, short_name, map_center_lat, map_center_lng, map_zoom FROM project_settings"
+
+
+async def _settings() -> list[tuple]:
+    return [tuple(row) for row in await _fetch(_CASE_DSN, _SETTINGS)]
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_the_seed_names_an_unconfigured_deployment_and_opens_its_map_on_guangfu(seeded):
+    """ADR-395: with no settings row, as on staging, the seed's disaster becomes the deployment's."""
+    assert await _settings() == [("花蓮馬太鞍溪堰塞湖專案", "花蓮馬太鞍溪", 23.67, 121.418, 14)]
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_the_seed_fills_a_missing_view_and_leaves_what_someone_set(seeded):
+    """The row is the whole deployment's, so the seed fills only what nobody set, as with announcements."""
+    await _execute(
+        _CASE_DSN,
+        "DELETE FROM project_settings;"
+        " INSERT INTO project_settings (uuid, name) VALUES (gen_random_uuid(), '真的災害')",
+    )
+    await _execute(_CASE_DSN, SEED_SQL)
+    filled = await _settings()
+    await _execute(
+        _CASE_DSN, "UPDATE project_settings SET map_center_lat = 24.0, map_center_lng = 121.6, map_zoom = 12"
+    )
+    await _execute(_CASE_DSN, SEED_SQL)
+    kept = await _settings()
+
+    assert filled == [("真的災害", None, 23.67, 121.418, 14)]
+    assert kept == [("真的災害", None, 24.0, 121.6, 12)]
