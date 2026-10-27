@@ -5,8 +5,9 @@ Revises: facf37b5c79d
 Create Date: 2026-10-27
 
 Three nullable columns with no backfill: a deployment without a view keeps opening the map where the
-frontend's own default puts it. A CHECK keeps the three set together or not at all. Downgrade drops
-them, and with them any view that was set.
+frontend's own default puts it. One CHECK keeps the three set together or not at all; another holds
+them to the ranges the admin API accepts, so a row written by SQL cannot hold a view the map cannot
+open. Downgrade drops them, and with them any view that was set.
 """
 
 from collections.abc import Sequence
@@ -22,7 +23,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Add the centre and zoom, empty, and the all-or-none CHECK."""
+    """Add the centre and zoom, empty, with the all-or-none and range CHECKs."""
     op.add_column(
         "project_settings",
         sa.Column("map_center_lat", sa.Float(), nullable=True, comment="地圖起始中心的緯度，例如 23.67"),
@@ -40,10 +41,16 @@ def upgrade() -> None:
         "project_settings",
         "(map_center_lat IS NULL) = (map_center_lng IS NULL) AND (map_center_lat IS NULL) = (map_zoom IS NULL)",
     )
+    op.create_check_constraint(
+        "ck_project_settings_map_view_range",
+        "project_settings",
+        "map_center_lat BETWEEN -90 AND 90 AND map_center_lng BETWEEN -180 AND 180 AND map_zoom BETWEEN 7 AND 18",
+    )
 
 
 def downgrade() -> None:
     """Drop them."""
+    op.drop_constraint("ck_project_settings_map_view_range", "project_settings", type_="check")
     op.drop_constraint("ck_project_settings_map_view_all_or_none", "project_settings", type_="check")
     op.drop_column("project_settings", "map_zoom")
     op.drop_column("project_settings", "map_center_lng")

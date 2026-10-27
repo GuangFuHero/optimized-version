@@ -106,6 +106,20 @@ async def outcomes():
         whole_refused = await _refused(
             engine, "map_center_lat = 23.67, map_center_lng = 121.418, map_zoom = 14"
         )
+        out_of_range_refused = {
+            "swapped centre": await _refused(
+                engine, "map_center_lat = 121.418, map_center_lng = 23.67, map_zoom = 14"
+            ),
+            "longitude off the globe": await _refused(
+                engine, "map_center_lat = 23.67, map_center_lng = 181, map_zoom = 14"
+            ),
+            "zoom 6": await _refused(
+                engine, "map_center_lat = 23.67, map_center_lng = 121.418, map_zoom = 6"
+            ),
+            "zoom 19": await _refused(
+                engine, "map_center_lat = 23.67, map_center_lng = 121.418, map_zoom = 19"
+            ),
+        }
 
         code, output = await _alembic("downgrade", _BEFORE)
         assert code == 0, output
@@ -118,6 +132,7 @@ async def outcomes():
             "view_after": tuple(view_after),
             "partial_refused": partial_refused,
             "whole_refused": whole_refused,
+            "out_of_range_refused": out_of_range_refused,
             "columns_back": columns_back,
             "name_back": name_back,
         }
@@ -137,6 +152,17 @@ async def test_a_view_is_stored_whole_or_not_at_all(outcomes):
     """A centre without a zoom, or half a centre, is no view the map can open on."""
     assert outcomes["partial_refused"] == {"lat only": True, "no zoom": True}
     assert outcomes["whole_refused"] is False
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_a_view_the_map_cannot_open_is_refused_by_the_database(outcomes):
+    """The API's ranges hold for a row written by SQL too: a swapped centre or a zoom of 19 never lands."""
+    assert outcomes["out_of_range_refused"] == {
+        "swapped centre": True,
+        "longitude off the globe": True,
+        "zoom 6": True,
+        "zoom 19": True,
+    }
 
 
 @pytest.mark.asyncio(loop_scope="module")
