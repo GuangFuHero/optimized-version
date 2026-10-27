@@ -17,7 +17,9 @@ import { Box, Drawer, GlobalStyles, useMediaQuery } from '@mui/material';
 import dynamic from 'next/dynamic';
 
 import type { StationDetailActionProps } from '../station/station-detail';
-import { rescueMapMarkerStyles } from './components/map-marker';
+// The styles' own file, not the folder: through `./components/map-marker`, the pins' builder and
+// the server renderer it draws station icons with would load on every page, not only the map's.
+import { rescueMapMarkerStyles } from './components/map-marker/styles';
 import {
   RescueMapDetailDrawer,
   type RescueMapStationLayout,
