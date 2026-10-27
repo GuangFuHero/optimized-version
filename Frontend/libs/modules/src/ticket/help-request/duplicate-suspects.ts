@@ -30,7 +30,7 @@ export interface SuspectTicket {
   ticketUuid: string;
   /** Which of its needs. */
   needUuids: string[];
-  /** Which of the needs being sent look like them, by name: 請求協助 only, which sends several. */
+  /** Which of the needs being sent look like them, by name. */
   alike?: string[];
 }
 

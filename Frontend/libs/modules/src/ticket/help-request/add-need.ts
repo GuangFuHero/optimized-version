@@ -56,10 +56,12 @@ export type AddNeedOutcome =
 
 /**
  * Added, or held with nothing added: the backend found open needs of other tickets it looks like —
- * never the ticket's own. One entry per ticket, in the order the backend ranked them.
+ * never the ticket's own. One entry per ticket, in the order the backend ranked them, each like
+ * `sentName`, the need's name as sent: with no point to measure from, the one reason a card gives.
  */
 export function readAddNeedOutcome(
   answer: CreateTicketTaskAnswer,
+  sentName: string,
 ): AddNeedOutcome {
   if (answer.__typename === 'TicketTaskCreated') {
     return { kind: 'added' };
@@ -67,7 +69,7 @@ export function readAddNeedOutcome(
 
   return {
     kind: 'held',
-    tickets: groupSuspectsByTicket(answer.suspects),
+    tickets: groupSuspectsByTicket(answer.suspects, () => sentName),
     acknowledge: answer.suspects[0]?.relatedUuid ?? '',
   };
 }

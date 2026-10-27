@@ -92,7 +92,9 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
     try {
       const result = await createTicketTask({ input, acknowledgedDuplicateOf });
       const answer = result.data?.createTicketTask;
-      const outcome = answer ? readAddNeedOutcome(answer) : null;
+      const outcome = answer
+        ? readAddNeedOutcome(answer, input.taskName)
+        : null;
 
       // Held: nothing was added, so nothing on the ticket changed.
       if (outcome?.kind === 'held') {
