@@ -18,26 +18,32 @@ import {
 } from '../login';
 import {
   addContactErrorMessage,
+  contactName,
+  lineProofExpired,
   lineReturnError,
+  OLD_CODE_STILL_PENDING,
   readStepUpRequired,
   type AccountStepUpReturn,
   type AddContactStep,
+  type StepUpProblem,
 } from './account-step-up';
 import type { ContactDraft } from './use-contact-draft';
 
 type StepUp = components['schemas']['StepUp'];
 
 /**
- * Where the new contact is in being added:
- * - `enter`: typing it, then 發送驗證碼.
- * - `password`: a password account says it is them before a code goes out (ADR-220).
- * - `old-code`: an account without a password gets a code at a contact it already has first.
- * - `code`: the code went to the new contact.
+ * Where the new contact is in being added, the design's three steps:
+ * - `enter` (step 1): typing it, then 寄驗證碼.
+ * - `password` (step 2): a password account says it is them before a code goes out (ADR-220).
+ * - `old-code` (step 2): an account without a password gets a code at a contact it already has first.
+ * - `line` (step 2): an account with neither signs in at LINE again (ADR-361), when the person presses.
+ * - `code` (step 3): the code went to the new contact.
  */
 export type AddContactStage =
   | { kind: 'enter' }
   | { kind: 'password' }
-  | { kind: 'old-code'; message: string }
+  | { kind: 'old-code'; pending: boolean }
+  | { kind: 'line' }
   | { kind: 'code'; type: AuthIdentityType; value: string };
 
 interface AddContactOptions {
@@ -51,7 +57,7 @@ interface AddContactOptions {
 }
 
 /**
- * 新增聯絡方式, with the proof the account can give first: 申請管理權限's phone check
+ * 新增電子郵件或手機, with the proof the account can give first: 申請管理權限's phone check
  * (`role-request/use-phone-verification.ts`) for an email or a phone. `POST /auth/contacts` → `/verify`.
  */
 export function useAddContact({
@@ -64,23 +70,25 @@ export function useAddContact({
   const [value, setValue] = useState('');
   const [stage, setStage] = useState<AddContactStage>({ kind: 'enter' });
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<StepUpProblem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // The latest, without making `request` — and `resume`, which the page runs in an effect — new on
   // every render.
   const onReauthRef = useRef(onReauth);
   onReauthRef.current = onReauth;
 
+  const fail = (message: string) => setProblem({ message, tone: 'error' });
+
   const request = useCallback(
     async (
       draft: ContactDraft,
       step: AddContactStep,
       stepUp?: StepUp,
-      backFromLine = false,
+      { backFromLine = false, resending = false } = {},
     ) => {
       const normalized = normalizeIdentityValue(draft.type, draft.value);
       setBusy(true);
-      setError(null);
+      setProblem(null);
       setNotice(null);
 
       try {
@@ -90,7 +98,6 @@ export function useAddContact({
           step_up: stepUp,
         });
         setStage({ kind: 'code', type: draft.type, value: normalized });
-        setNotice('驗證碼已發送，請輸入後完成綁定。');
       } catch (cause) {
         const code = cause instanceof ApiError ? cause.code : undefined;
 
@@ -98,9 +105,12 @@ export function useAddContact({
           // Straight back from LINE, the proof has already run out: say so rather than go round again.
           if (backFromLine) {
             setStage({ kind: 'enter' });
-            setError('LINE 驗證已逾時，請再按一次「發送驗證碼」');
+            setProblem({
+              message: lineProofExpired('add_contact'),
+              tone: 'warning',
+            });
           } else {
-            onReauthRef.current(draft);
+            setStage({ kind: 'line' });
           }
           return;
         }
@@ -110,14 +120,25 @@ export function useAddContact({
 
           if (ask.kind === 'refused') {
             setStage({ kind: 'enter' });
-            setError(ask.message);
+            setProblem({ message: ask.message, tone: 'error' });
           } else {
             setStage(ask);
+
+            if (resending) {
+              setNotice(
+                ask.kind === 'old-code' && ask.pending
+                  ? OLD_CODE_STILL_PENDING
+                  : '驗證碼已經重新寄出。',
+              );
+            }
           }
           return;
         }
 
-        setError(addContactErrorMessage(cause, step));
+        setProblem({
+          message: addContactErrorMessage(cause, step),
+          tone: 'error',
+        });
       } finally {
         setBusy(false);
       }
@@ -125,17 +146,17 @@ export function useAddContact({
     [],
   );
 
-  /** 發送驗證碼: a password account is asked for it first, so the code goes out in one try. */
+  /** 寄驗證碼: a password account is asked for it first, so the code goes out in one try. */
   const send = () => {
     const validation = validateIdentityValue(type, value);
 
     if (validation !== true) {
-      setError(validation);
+      fail(validation);
       return;
     }
 
     if (hasPassword) {
-      setError(null);
+      setProblem(null);
       setNotice(null);
       setStage({ kind: 'password' });
       return;
@@ -146,7 +167,7 @@ export function useAddContact({
 
   const submitPassword = async (password: string) => {
     if (!saltIdentity) {
-      setError('你的帳號還沒有已驗證的聯絡方式，無法確認目前的密碼。');
+      fail('你的帳號還沒有已驗證的電子郵件或手機，沒辦法確認現在的密碼。');
       return;
     }
 
@@ -160,12 +181,19 @@ export function useAddContact({
       await request({ type, value }, 'password', { password: hashedPassword });
     } catch (cause) {
       setBusy(false);
-      setError(addContactErrorMessage(cause, 'password'));
+      fail(addContactErrorMessage(cause, 'password'));
     }
   };
 
   const submitOldCode = (code: string) =>
     void request({ type, value }, 'old-code', { old_channel_code: code });
+
+  /** 沒收到？重新寄一次 on the first code: asked again, and the backend says whether one went out. */
+  const resendOldCode = () =>
+    void request({ type, value }, 'send', undefined, { resending: true });
+
+  /** 到 LINE 確認是我. */
+  const proveAtLine = () => onReauthRef.current({ type, value });
 
   const verify = async (code: string) => {
     if (stage.kind !== 'code') {
@@ -173,12 +201,12 @@ export function useAddContact({
     }
 
     if (code.trim().length < 4) {
-      setError('請輸入有效驗證碼');
+      fail('請輸入收到的驗證碼');
       return;
     }
 
     setBusy(true);
-    setError(null);
+    setProblem(null);
     setNotice(null);
 
     try {
@@ -189,10 +217,10 @@ export function useAddContact({
       });
       setStage({ kind: 'enter' });
       setValue('');
-      setNotice('聯絡方式已完成驗證與綁定。');
+      setNotice(`已新增${contactName(stage.type)} ${stage.value}。`);
       onVerified();
     } catch (cause) {
-      setError(addContactErrorMessage(cause, 'code'));
+      fail(addContactErrorMessage(cause, 'code'));
     } finally {
       setBusy(false);
     }
@@ -205,20 +233,27 @@ export function useAddContact({
     }
 
     setBusy(true);
-    setError(null);
+    setProblem(null);
     setNotice(null);
 
     try {
       await resendContactAsync({ type: stage.type, value: stage.value });
-      setNotice('驗證碼已重新發送。');
+      setNotice('驗證碼已經重新寄出。');
     } catch (cause) {
-      setError(addContactErrorMessage(cause, 'resend'));
+      fail(addContactErrorMessage(cause, 'resend'));
     } finally {
       setBusy(false);
     }
   };
 
-  /** A different contact: the steps start over, as a code waits under the contact it went to. */
+  /** 取消: back to step 1 with what was typed, as a code waits under the contact it went to. */
+  const cancel = () => {
+    setStage({ kind: 'enter' });
+    setProblem(null);
+    setNotice(null);
+  };
+
+  /** A different contact: the steps start over. */
   const change = (next: Partial<ContactDraft>) => {
     if (next.type !== undefined) {
       setType(next.type);
@@ -228,14 +263,12 @@ export function useAddContact({
       setValue(next.value);
     }
 
-    setStage({ kind: 'enter' });
-    setError(null);
-    setNotice(null);
+    cancel();
   };
 
   /**
    * Back from LINE: the contact as it was typed, and with the proof made, the code goes out by itself
-   * — the person already pressed 發送驗證碼 once.
+   * — the person already pressed 寄驗證碼 once.
    */
   const resume = useCallback(
     (draft: ContactDraft, outcome: AccountStepUpReturn['stepUp']) => {
@@ -243,9 +276,12 @@ export function useAddContact({
       setValue(draft.value);
 
       if (outcome === 'ok') {
-        void request(draft, 'send', undefined, true);
+        void request(draft, 'send', undefined, { backFromLine: true });
       } else if (outcome) {
-        setError(lineReturnError(outcome.error, 'add_contact'));
+        setProblem({
+          message: lineReturnError(outcome.error, 'add_contact'),
+          tone: 'warning',
+        });
       }
     },
     [request],
@@ -256,13 +292,16 @@ export function useAddContact({
     value,
     stage,
     busy,
-    error,
+    problem,
     notice,
     send,
     submitPassword,
     submitOldCode,
+    resendOldCode,
+    proveAtLine,
     verify,
     resend,
+    cancel,
     change,
     resume,
   };

@@ -4,8 +4,13 @@ import { ApiError } from '@rescue-frontend/data-access';
 
 import {
   addContactErrorMessage,
+  addContactSteps,
   buildAccountStepUpHref,
+  cannotProveHere,
+  lineProofExpired,
   lineReturnError,
+  oldCodeSentText,
+  originalContactName,
   readAccountStepUpReturn,
   readStepUpRequired,
   setPasswordErrorMessage,
@@ -16,26 +21,20 @@ const refusal = (status: number, code: string, message = '') =>
   new ApiError(status, message, code);
 
 describe('readStepUpRequired', () => {
-  it('asks for the code the backend just sent, in words for a box rather than an API field', () => {
+  it('asks for the code the backend just sent to a contact the account already had', () => {
     expect(
       readStepUpRequired(
         '已將設定密碼的驗證碼寄至您帳號的聯絡方式，請填入 step_up.old_channel_code',
       ),
-    ).toEqual({
-      kind: 'old-code',
-      message:
-        '已將設定密碼的驗證碼寄至您帳號的聯絡方式，請在下面輸入那組驗證碼',
-    });
+    ).toEqual({ kind: 'old-code', pending: false });
   });
 
   it('asks for the code already on its way, without sending another', () => {
-    const pending =
-      '新增聯絡方式的驗證碼已寄至您帳號的聯絡方式，請使用先前收到的那一組';
-
-    expect(readStepUpRequired(pending)).toEqual({
-      kind: 'old-code',
-      message: pending,
-    });
+    expect(
+      readStepUpRequired(
+        '新增聯絡方式的驗證碼已寄至您帳號的聯絡方式，請使用先前收到的那一組',
+      ),
+    ).toEqual({ kind: 'old-code', pending: true });
   });
 
   it('asks a password account for its password', () => {
@@ -62,6 +61,82 @@ describe('readStepUpRequired', () => {
       kind: 'refused',
       message: '驗證碼寄送次數已達上限，請稍後再試',
     });
+  });
+});
+
+describe('cannotProveHere', () => {
+  it('knows an account with only Google and nothing to send a code to', () => {
+    expect(cannotProveHere([], [{ provider: 'google' }])).toBe(true);
+  });
+
+  it('lets through an account with a contact, a password or LINE', () => {
+    expect(
+      cannotProveHere(
+        [{ type: 'email', value: 'wang@yahoo.com.tw', verified: true }],
+        [{ provider: 'google' }],
+      ),
+    ).toBe(false);
+    expect(
+      cannotProveHere([], [{ provider: 'google' }, { provider: 'password' }]),
+    ).toBe(false);
+    expect(
+      cannotProveHere([], [{ provider: 'google' }, { provider: 'line' }]),
+    ).toBe(false);
+  });
+});
+
+describe('originalContactName', () => {
+  it('names the contact of the same kind, which the code goes to when it is replaced', () => {
+    expect(
+      originalContactName(
+        [
+          { type: 'email', value: 'wang@yahoo.com.tw', verified: true },
+          { type: 'phone', value: '+886912345678', verified: true },
+        ],
+        'phone',
+      ),
+    ).toBe('手機');
+  });
+
+  it('names the one contact there is', () => {
+    expect(
+      originalContactName(
+        [{ type: 'email', value: 'wang@yahoo.com.tw', verified: true }],
+        'phone',
+      ),
+    ).toBe('電子郵件');
+    expect(
+      originalContactName([
+        { type: 'phone', value: '+886912345678', verified: true },
+      ]),
+    ).toBe('手機');
+  });
+
+  it('names both when the backend picks between them', () => {
+    expect(
+      originalContactName([
+        { type: 'phone', value: '+886912345678', verified: true },
+        { type: 'email', value: 'wang@yahoo.com.tw', verified: true },
+      ]),
+    ).toBe('電子郵件或手機');
+  });
+});
+
+describe('the words for each step', () => {
+  it('names the three steps of adding an email, or a phone', () => {
+    expect(addContactSteps('email')).toEqual([
+      '輸入新的電子郵件',
+      '確認是你本人',
+      '輸入新的電子郵件收到的驗證碼',
+    ]);
+    expect(addContactSteps('phone')[2]).toBe('輸入新的手機收到的驗證碼');
+  });
+
+  it('says where the code went without the address, until the backend names it', () => {
+    expect(oldCodeSentText('電子郵件', false)).toBe(
+      '為了確認是你本人，我們寄了一組驗證碼到你原本的電子郵件。',
+    );
+    expect(oldCodeSentText('手機', true)).toContain('請輸入那一組');
   });
 });
 
@@ -116,13 +191,24 @@ describe('the way to LINE and back', () => {
     ).toBe('/account/security');
   });
 
-  it('says what to press again after LINE went wrong', () => {
-    expect(lineReturnError('oauth_cancelled', 'set_password')).toBe(
-      '已取消 LINE 驗證。要建立密碼，請再按一次「建立密碼」。',
+  it('says what happened at LINE and which button to press again', () => {
+    expect(lineReturnError('oauth_cancelled', 'add_contact')).toBe(
+      '你在 LINE 那邊按了取消，所以還沒新增。要再試一次，請按「寄驗證碼」。',
+    );
+    expect(lineReturnError('step_up_invalid', 'set_password')).toBe(
+      '你剛剛登入的 LINE 不是這個帳號用的那一個，請用原本的 LINE 再試一次。',
+    );
+    expect(lineReturnError('oauth_exchange_failed', 'set_password')).toBe(
+      '現在連不上 LINE，請等一下再按「設定密碼」。',
     );
     expect(lineReturnError('something_new', 'add_contact')).toBe(
-      'LINE 驗證沒有完成。要新增聯絡方式，請再按一次「發送驗證碼」。',
+      'LINE 那邊沒有確認成功，所以還沒新增。要再試一次，請按「寄驗證碼」。',
     );
+  });
+
+  it('says the proof ran out rather than going round again', () => {
+    expect(lineProofExpired('add_contact')).toContain('「寄驗證碼」');
+    expect(lineProofExpired('set_password')).toContain('「設定密碼」');
   });
 });
 
@@ -144,7 +230,7 @@ describe('error messages', () => {
   it('says a contact another account holds is taken, rather than to sign in', () => {
     expect(
       addContactErrorMessage(refusal(409, 'identifier_taken'), 'send'),
-    ).toBe('這個 Email 或手機號碼已經是別的帳號在用，請換一個');
+    ).toBe('這個電子郵件或手機已經是別的帳號在用，請換一個');
   });
 
   it('points an account with nothing to receive a code at adding a contact first', () => {
@@ -155,10 +241,20 @@ describe('error messages', () => {
 
   it('falls back to its own words for anything unknown', () => {
     expect(setPasswordErrorMessage(new Error('offline'), 'send')).toBe(
-      '建立密碼失敗，請稍後再試。',
+      '設定密碼失敗，請稍後再試。',
     );
     expect(addContactErrorMessage(new Error('offline'), 'code')).toBe(
       '驗證失敗，請稍後再試。',
     );
+  });
+
+  it('uses no English but the brand names', () => {
+    const words = [
+      addContactErrorMessage(refusal(409, 'identifier_taken'), 'send'),
+      setPasswordErrorMessage(refusal(422, 'no_proof_channel'), 'send'),
+      ...addContactSteps('email'),
+    ];
+
+    expect(words.join('')).not.toMatch(/Email|token|step_up/);
   });
 });
