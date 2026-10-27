@@ -44,14 +44,15 @@ import {
   buildAccountStepUpHref,
   cannotProveHere,
   contactName,
-  LINE_OK_SET_PASSWORD,
-  lineProofExpired,
-  lineReturnError,
+  newCodeSentText,
   OLD_CODE_STILL_PENDING,
   oldCodeSentText,
   originalContactName,
   readAccountStepUpReturn,
   readStepUpRequired,
+  replacedContact,
+  replaceNotice,
+  setPasswordBlocked,
   setPasswordErrorMessage,
   stripAccountStepUpReturn,
   type AccountStepUpAction,
@@ -77,11 +78,10 @@ function signInAgain() {
   continueSignedOut('/login');
 }
 
-/** Where a first password is: typed, waiting on the code the backend sent to a contact, or on LINE. */
+/** Where a first password is: typed, or waiting on the code the backend sent to a contact first. */
 type SetPasswordStage =
   | { kind: 'enter' }
-  | { kind: 'old-code'; pending: boolean }
-  | { kind: 'line' };
+  | { kind: 'old-code'; pending: boolean };
 
 // The design's floor for a reader up to ninety (design A1): 16px text, fields and buttons; 48px buttons.
 const BODY_TEXT = { fontSize: 16, lineHeight: 1.7, color: '#6A5F5B' } as const;
@@ -160,6 +160,8 @@ export function AccountSecurityClient({
   const signsInWithPassword = hasPassword(loginMethods);
   // Only Google and nothing to send a code to: both sections say so before anything is pressed.
   const googleOnly = cannotProveHere(contacts, loginMethods);
+  // No email or phone to sign in with a password by: 設定登入密碼 says to add one first.
+  const passwordBlocked = setPasswordBlocked(contacts, loginMethods);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
@@ -179,8 +181,6 @@ export function AccountSecurityClient({
   const [setPasswordSuccessMessage, setSetPasswordSuccessMessage] =
     useState<string>();
   const [isSettingPassword, setIsSettingPassword] = useState(false);
-  // Back from LINE with the proof: a second 「去 LINE」 now means it ran out, not a first visit.
-  const [lineProofReady, setLineProofReady] = useState(false);
 
   const [contactPassword, setContactPassword] = useState('');
   const [contactOldCode, setContactOldCode] = useState('');
@@ -215,6 +215,7 @@ export function AccountSecurityClient({
   const contact = useAddContact({
     hasPassword: signsInWithPassword,
     saltIdentity,
+    replaces: (type) => replacedContact(contacts, type) !== null,
     onReauth: (draft) => void goProveAtLine('add_contact', draft),
     // `saltIdentity` reads the account's contacts, which the server read before this one was added.
     onVerified: () => router.refresh(),
@@ -253,16 +254,8 @@ export function AccountSecurityClient({
       stripAccountStepUpReturn(address),
     );
 
-    if (back.action === 'set_password') {
-      if (back.stepUp === 'ok') {
-        setLineProofReady(true);
-        setSetPasswordNotice(LINE_OK_SET_PASSWORD);
-      } else if (back.stepUp) {
-        setSetPasswordProblem({
-          message: lineReturnError(back.stepUp.error, 'set_password'),
-          tone: 'warning',
-        });
-      }
+    // A first password does not go to LINE any more (`setPasswordBlocked`): nothing to pick up.
+    if (back.action !== 'add_contact') {
       return;
     }
 
@@ -321,8 +314,8 @@ export function AccountSecurityClient({
 
   /**
    * A first password, with the proof the backend asks for first (`require_step_up_for_first_password`):
-   * a code it sends to a contact the account already had, or LINE when that is all there is.
-   * `resending` asks again without the code, for 沒收到？重新寄一次.
+   * a code it sends to a contact the account already had. `resending` asks again without the code, for
+   * 沒收到？重新寄一次.
    */
   async function handleSetPasswordAsync({ resending = false } = {}) {
     const passwordProblem = newPasswordProblem(
@@ -366,20 +359,6 @@ export function AccountSecurityClient({
       signInAgain();
     } catch (error) {
       const code = error instanceof ApiError ? error.code : undefined;
-
-      if (code === 'step_up_reauth_required') {
-        // Straight back from LINE, the proof has already run out: say so rather than go round again.
-        if (lineProofReady) {
-          setLineProofReady(false);
-          setSetPasswordProblem({
-            message: lineProofExpired('set_password'),
-            tone: 'warning',
-          });
-        } else {
-          setSetPasswordStage({ kind: 'line' });
-        }
-        return;
-      }
 
       if (code === 'step_up_required' && !withCode) {
         const ask = readStepUpRequired((error as ApiError).message);
@@ -435,6 +414,8 @@ export function AccountSecurityClient({
   const setPasswordOriginal = originalContactName(contacts);
   const newName = contactName(contact.type);
   const contactOriginal = originalContactName(contacts, contact.type);
+  // The account's own email or phone of the kind being added, which the new one takes the place of.
+  const replacing = replacedContact(contacts, contact.type);
   const contactStep =
     contact.stage.kind === 'enter' ? 0 : contact.stage.kind === 'code' ? 2 : 1;
 
@@ -504,113 +485,92 @@ export function AccountSecurityClient({
           title="設定登入密碼"
           description={`你現在是用 ${loginMethodsText(loginMethods)} 登入。設一組密碼，以後也可以用密碼登入。設好後要重新登入一次。`}
         >
-          {setPasswordStage.kind === 'line' ? (
-            <Stack spacing={2}>
-              <Typography sx={BODY_TEXT}>{LINE_TEXT}</Typography>
+          <Stack spacing={2}>
+            <TextField
+              label="新密碼"
+              type="password"
+              disabled={Boolean(passwordBlocked)}
+              placeholder={newPasswordText.placeholder}
+              value={setPasswordValue}
+              onChange={(event) => setSetPasswordValue(event.target.value)}
+            />
+            <TextField
+              label="再輸入一次新密碼"
+              type="password"
+              disabled={Boolean(passwordBlocked)}
+              value={setPasswordConfirm}
+              onChange={(event) => setSetPasswordConfirm(event.target.value)}
+            />
+
+            {passwordBlocked ? (
+              <CannotHere>{passwordBlocked}</CannotHere>
+            ) : null}
+
+            {setPasswordStage.kind === 'old-code' ? (
+              <>
+                <Alert severity="info" sx={ALERT_TEXT}>
+                  {oldCodeSentText(
+                    setPasswordOriginal,
+                    setPasswordStage.pending,
+                  )}
+                </Alert>
+                <TextField
+                  label={`原本的${setPasswordOriginal}收到的驗證碼`}
+                  placeholder="6 位數字"
+                  autoFocus
+                  value={setPasswordCode}
+                  slotProps={CODE_INPUT}
+                  onChange={(event) => setSetPasswordCode(event.target.value)}
+                />
+              </>
+            ) : null}
+
+            {setPasswordNotice ? (
+              <Alert severity="info" sx={ALERT_TEXT}>
+                {setPasswordNotice}
+              </Alert>
+            ) : null}
+            <ProblemAlert problem={setPasswordProblem} />
+            {setPasswordSuccessMessage ? (
+              <Alert severity="success" sx={ALERT_TEXT}>
+                {setPasswordSuccessMessage}
+              </Alert>
+            ) : null}
+
+            {passwordBlocked ? null : (
               <Button
                 variant="contained"
+                disabled={isSettingPassword}
                 sx={BIG_BUTTON}
-                onClick={() => void goProveAtLine('set_password')}
+                onClick={() => {
+                  void handleSetPasswordAsync();
+                }}
               >
-                到 LINE 確認是我
+                {setPasswordStage.kind === 'old-code' ? '確認' : '設定密碼'}
               </Button>
-              <Button
-                variant="text"
-                sx={BIG_BUTTON}
-                onClick={cancelSetPassword}
-              >
-                取消
-              </Button>
-            </Stack>
-          ) : (
-            <Stack spacing={2}>
-              <TextField
-                label="新密碼"
-                type="password"
-                disabled={googleOnly}
-                placeholder={newPasswordText.placeholder}
-                value={setPasswordValue}
-                onChange={(event) => setSetPasswordValue(event.target.value)}
-              />
-              <TextField
-                label="再輸入一次新密碼"
-                type="password"
-                disabled={googleOnly}
-                value={setPasswordConfirm}
-                onChange={(event) => setSetPasswordConfirm(event.target.value)}
-              />
-
-              {googleOnly ? (
-                <CannotHere>
-                  你是用 Google 登入，又還沒有電子郵件或手機，所以暫時不能設定。
-                </CannotHere>
-              ) : null}
-
-              {setPasswordStage.kind === 'old-code' ? (
-                <>
-                  <Alert severity="info" sx={ALERT_TEXT}>
-                    {oldCodeSentText(
-                      setPasswordOriginal,
-                      setPasswordStage.pending,
-                    )}
-                  </Alert>
-                  <TextField
-                    label={`原本的${setPasswordOriginal}收到的驗證碼`}
-                    placeholder="6 位數字"
-                    value={setPasswordCode}
-                    slotProps={CODE_INPUT}
-                    onChange={(event) => setSetPasswordCode(event.target.value)}
-                  />
-                </>
-              ) : null}
-
-              {setPasswordNotice ? (
-                <Alert severity="info" sx={ALERT_TEXT}>
-                  {setPasswordNotice}
-                </Alert>
-              ) : null}
-              <ProblemAlert problem={setPasswordProblem} />
-              {setPasswordSuccessMessage ? (
-                <Alert severity="success" sx={ALERT_TEXT}>
-                  {setPasswordSuccessMessage}
-                </Alert>
-              ) : null}
-
-              {googleOnly ? null : (
+            )}
+            {setPasswordStage.kind === 'old-code' ? (
+              <>
                 <Button
-                  variant="contained"
+                  variant="text"
                   disabled={isSettingPassword}
                   sx={BIG_BUTTON}
                   onClick={() => {
-                    void handleSetPasswordAsync();
+                    void handleSetPasswordAsync({ resending: true });
                   }}
                 >
-                  {setPasswordStage.kind === 'old-code' ? '確認' : '設定密碼'}
+                  沒收到？重新寄一次
                 </Button>
-              )}
-              {setPasswordStage.kind === 'old-code' ? (
-                <>
-                  <Button
-                    variant="text"
-                    disabled={isSettingPassword}
-                    sx={BIG_BUTTON}
-                    onClick={() => {
-                      void handleSetPasswordAsync({ resending: true });
-                    }}
-                  >
-                    沒收到？重新寄一次
-                  </Button>
-                  <Button
-                    variant="text"
-                    sx={BIG_BUTTON}
-                    onClick={cancelSetPassword}
-                  >
-                    取消
-                  </Button>
-                </>
-              ) : null}
-            </Stack>
-          )}
+                <Button
+                  variant="text"
+                  sx={BIG_BUTTON}
+                  onClick={cancelSetPassword}
+                >
+                  取消
+                </Button>
+              </>
+            ) : null}
+          </Stack>
         </SecuritySection>
       )}
 
@@ -650,6 +610,11 @@ export function AccountSecurityClient({
                   contact.change({ value: event.target.value })
                 }
               />
+              {replacing && !googleOnly ? (
+                <Alert severity="warning" sx={ALERT_TEXT}>
+                  {replaceNotice(replacing, signsInWithPassword)}
+                </Alert>
+              ) : null}
               {googleOnly ? (
                 <CannotHere>
                   你是用 Google 登入，暫時不能在這裡新增。
@@ -678,6 +643,7 @@ export function AccountSecurityClient({
                 label="現在的密碼"
                 type="password"
                 autoComplete="current-password"
+                autoFocus
                 value={contactPassword}
                 onChange={(event) => setContactPassword(event.target.value)}
               />
@@ -716,6 +682,7 @@ export function AccountSecurityClient({
               <TextField
                 label={`原本的${contactOriginal}收到的驗證碼`}
                 placeholder="6 位數字"
+                autoFocus
                 value={contactOldCode}
                 slotProps={CODE_INPUT}
                 onChange={(event) => setContactOldCode(event.target.value)}
@@ -761,12 +728,16 @@ export function AccountSecurityClient({
           {contact.stage.kind === 'code' ? (
             <>
               <Alert severity="info" sx={ALERT_TEXT}>
-                驗證碼已經寄到你新的{contactName(contact.stage.type)}{' '}
-                {contact.stage.value}。
+                {newCodeSentText(
+                  contact.stage.type,
+                  contact.stage.value,
+                  replacing,
+                )}
               </Alert>
               <TextField
                 label={`新的${contactName(contact.stage.type)}收到的驗證碼`}
                 placeholder="6 位數字"
+                autoFocus
                 value={contactCode}
                 slotProps={CODE_INPUT}
                 onChange={(event) => setContactCode(event.target.value)}

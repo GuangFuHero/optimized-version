@@ -18,7 +18,7 @@ import {
 } from '../login';
 import {
   addContactErrorMessage,
-  contactName,
+  contactAddedText,
   lineProofExpired,
   lineReturnError,
   OLD_CODE_STILL_PENDING,
@@ -50,6 +50,8 @@ interface AddContactOptions {
   hasPassword: boolean;
   /** Any verified contact of the account, to look the password's salt up by. */
   saltIdentity: string | null;
+  /** Whether the account already has one of this kind, which the new one replaces (`replacedContact`). */
+  replaces: (type: AuthIdentityType) => boolean;
   /** Only LINE can prove it is them (ADR-361): keep the contact and go to LINE. */
   onReauth: (draft: ContactDraft) => void;
   /** The contact is on the account now. */
@@ -63,6 +65,7 @@ interface AddContactOptions {
 export function useAddContact({
   hasPassword,
   saltIdentity,
+  replaces,
   onReauth,
   onVerified,
 }: AddContactOptions) {
@@ -217,7 +220,9 @@ export function useAddContact({
       });
       setStage({ kind: 'enter' });
       setValue('');
-      setNotice(`已新增${contactName(stage.type)} ${stage.value}。`);
+      setNotice(
+        contactAddedText(stage.type, stage.value, replaces(stage.type)),
+      );
       onVerified();
     } catch (cause) {
       fail(addContactErrorMessage(cause, 'code'));

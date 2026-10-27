@@ -2,6 +2,7 @@
 
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
+import { useRef, type KeyboardEvent } from 'react';
 
 import { designTokens } from '@rescue-frontend/ui';
 
@@ -14,9 +15,17 @@ const CONTACT_TYPE_LABELS: ReadonlyArray<[AuthIdentityType, string]> = [
   ['phone', '手機號碼'],
 ];
 
+const ARROW_STEPS: Record<string, number> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
+};
+
 /**
  * 電子郵件 or 手機號碼, as a segmented choice (design A1): one grey track, the chosen half white, bold
  * and ticked. Not two buttons — a filled one reads as 「送出」 — and not a switch, which is on or off.
+ * A radio group to a keyboard too: one tab stop, on the chosen half, and the arrow keys move the choice.
  */
 export function ContactTypeChoice({
   value,
@@ -27,10 +36,30 @@ export function ContactTypeChoice({
   disabled?: boolean;
   onChange: (value: AuthIdentityType) => void;
 }) {
+  const halves = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const move = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = ARROW_STEPS[event.key];
+
+    if (!step || disabled) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const count = CONTACT_TYPE_LABELS.length;
+    const at = CONTACT_TYPE_LABELS.findIndex(([type]) => type === value);
+    const next = (at + step + count) % count;
+
+    onChange(CONTACT_TYPE_LABELS[next][0]);
+    halves.current[next]?.focus();
+  };
+
   return (
     <Box
       role="radiogroup"
       aria-label="要新增哪一種"
+      onKeyDown={move}
       sx={{
         display: 'flex',
         gap: 0.5,
@@ -40,14 +69,18 @@ export function ContactTypeChoice({
         opacity: disabled ? 0.6 : 1,
       }}
     >
-      {CONTACT_TYPE_LABELS.map(([type, label]) => {
+      {CONTACT_TYPE_LABELS.map(([type, label], index) => {
         const on = type === value;
 
         return (
           <ButtonBase
             key={type}
+            ref={(half: HTMLButtonElement | null) => {
+              halves.current[index] = half;
+            }}
             role="radio"
             aria-checked={on}
+            tabIndex={on ? 0 : -1}
             disabled={disabled}
             onClick={() => onChange(type)}
             sx={{

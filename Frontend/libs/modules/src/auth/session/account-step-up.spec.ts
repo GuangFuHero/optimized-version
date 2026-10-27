@@ -7,12 +7,17 @@ import {
   addContactSteps,
   buildAccountStepUpHref,
   cannotProveHere,
+  contactAddedText,
   lineProofExpired,
   lineReturnError,
+  newCodeSentText,
   oldCodeSentText,
   originalContactName,
   readAccountStepUpReturn,
   readStepUpRequired,
+  replacedContact,
+  replaceNotice,
+  setPasswordBlocked,
   setPasswordErrorMessage,
   stripAccountStepUpReturn,
 } from './account-step-up';
@@ -82,6 +87,63 @@ describe('cannotProveHere', () => {
     expect(
       cannotProveHere([], [{ provider: 'google' }, { provider: 'line' }]),
     ).toBe(false);
+  });
+});
+
+describe('setPasswordBlocked', () => {
+  const email = { type: 'email', value: 'wang@yahoo.com.tw', verified: true };
+
+  it('lets an account with an email or a phone set one', () => {
+    expect(setPasswordBlocked([email], [{ provider: 'line' }])).toBeNull();
+  });
+
+  it('stops an account with nothing to sign in with a password by, and says to add one first', () => {
+    expect(setPasswordBlocked([], [{ provider: 'line' }])).toContain(
+      '請先在下面新增電子郵件或手機',
+    );
+  });
+
+  it('says why for Google, where nothing can be added here either', () => {
+    expect(setPasswordBlocked([], [{ provider: 'google' }])).toBe(
+      '你是用 Google 登入，又還沒有電子郵件或手機，所以暫時不能設定。',
+    );
+  });
+});
+
+describe('a contact of a kind the account already has', () => {
+  const email = { type: 'email', value: 'wang@yahoo.com.tw', verified: true };
+  const phone = { type: 'phone', value: '+886912345678', verified: true };
+
+  it('is the one the new contact replaces, as the account holds one of each kind', () => {
+    expect(replacedContact([email, phone], 'phone')).toBe(phone);
+    expect(replacedContact([email], 'phone')).toBeNull();
+  });
+
+  it('is named with its address before anything is sent', () => {
+    expect(replaceNotice(email, false)).toBe(
+      '你已經有電子郵件 wang@yahoo.com.tw。新增新的電子郵件後，原本這個會被取代，不能再用。',
+    );
+    expect(replaceNotice(phone, true)).toBe(
+      '你已經有手機 +886912345678。新增新的手機後，原本這個會被取代，不能再用。以後登入要用新的手機。',
+    );
+  });
+
+  it('is named again where the new code is typed', () => {
+    expect(newCodeSentText('email', 'new@gmail.com', null)).toBe(
+      '驗證碼已經寄到你新的電子郵件 new@gmail.com。',
+    );
+    expect(newCodeSentText('email', 'new@gmail.com', email)).toBe(
+      '驗證碼已經寄到你新的電子郵件 new@gmail.com。完成後，原本的 wang@yahoo.com.tw 就不能再用。',
+    );
+  });
+
+  it('is said to be replaced once it is done', () => {
+    expect(contactAddedText('email', 'new@gmail.com', false)).toBe(
+      '已新增電子郵件 new@gmail.com。',
+    );
+    expect(contactAddedText('email', 'new@gmail.com', true)).toBe(
+      '已把電子郵件換成 new@gmail.com。',
+    );
   });
 });
 
@@ -236,6 +298,9 @@ describe('error messages', () => {
   it('points an account with nothing to receive a code at adding a contact first', () => {
     expect(
       setPasswordErrorMessage(refusal(422, 'no_proof_channel'), 'send'),
+    ).toContain('先在下面新增');
+    expect(
+      setPasswordErrorMessage(refusal(422, 'step_up_reauth_required'), 'send'),
     ).toContain('先在下面新增');
   });
 

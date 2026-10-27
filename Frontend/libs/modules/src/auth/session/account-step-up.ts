@@ -20,7 +20,11 @@ export interface StepUpProblem {
   tone: 'error' | 'warning';
 }
 
-/** The two actions here that can need the account's provider (backend `REAUTH_ACTIONS`). */
+/**
+ * The two actions here that can need the account's provider (backend `REAUTH_ACTIONS`). The page goes to
+ * LINE only for a contact: a first password needs an email or a phone first (`setPasswordBlocked`), whose
+ * code proves the person instead.
+ */
 export type AccountStepUpAction = 'add_contact' | 'set_password';
 
 const ACTIONS: readonly AccountStepUpAction[] = ['add_contact', 'set_password'];
@@ -80,6 +84,24 @@ export function cannotProveHere(
   );
 }
 
+/**
+ * Why 設定登入密碼 is closed, or null when it is open. A password signs in with an email or a phone, so an
+ * account with neither could not use one (Carol and 糖, 2026-10-27): it adds one first. Google only cannot
+ * add one here either (`cannotProveHere`).
+ */
+export function setPasswordBlocked(
+  contacts: readonly AccountContact[],
+  methods: readonly LoginMethod[],
+): string | null {
+  if (contacts.length > 0) {
+    return null;
+  }
+
+  return cannotProveHere(contacts, methods)
+    ? '你是用 Google 登入，又還沒有電子郵件或手機，所以暫時不能設定。'
+    : '你還沒有電子郵件或手機，設了密碼也沒辦法登入。請先在下面新增電子郵件或手機，再回來設定密碼。';
+}
+
 const CONTACT_NAMES: Record<AuthIdentityType, string> = {
   email: '電子郵件',
   phone: '手機',
@@ -87,6 +109,53 @@ const CONTACT_NAMES: Record<AuthIdentityType, string> = {
 
 export function contactName(type: AuthIdentityType): string {
   return CONTACT_NAMES[type];
+}
+
+/**
+ * The contact a new one of the same kind takes the place of: an account holds one of each
+ * (`uq_contact_user_type`), so the backend replaces it (`start_contact_change`), and with it the address a
+ * password signs in with.
+ */
+export function replacedContact(
+  contacts: readonly AccountContact[],
+  type: AuthIdentityType,
+): AccountContact | null {
+  return contacts.find((contact) => contact.type === type) ?? null;
+}
+
+/** Which contact goes, with its address — the person's own, from `/users/me` — before anything is sent. */
+export function replaceNotice(
+  replaced: Pick<AccountContact, 'type' | 'value'>,
+  signsInWithPassword: boolean,
+): string {
+  const name =
+    replaced.type === 'phone' ? CONTACT_NAMES.phone : CONTACT_NAMES.email;
+  const notice = `你已經有${name} ${replaced.value}。新增新的${name}後，原本這個會被取代，不能再用。`;
+
+  return signsInWithPassword ? `${notice}以後登入要用新的${name}。` : notice;
+}
+
+/** Where the second code went, and, at the moment of finishing, the contact that goes. */
+export function newCodeSentText(
+  type: AuthIdentityType,
+  value: string,
+  replaced: Pick<AccountContact, 'value'> | null,
+): string {
+  const sent = `驗證碼已經寄到你新的${CONTACT_NAMES[type]} ${value}。`;
+
+  return replaced
+    ? `${sent}完成後，原本的 ${replaced.value} 就不能再用。`
+    : sent;
+}
+
+export function contactAddedText(
+  type: AuthIdentityType,
+  value: string,
+  replaced: boolean,
+): string {
+  return replaced
+    ? `已把${CONTACT_NAMES[type]}換成 ${value}。`
+    : `已新增${CONTACT_NAMES[type]} ${value}。`;
 }
 
 /**
@@ -120,8 +189,8 @@ export function addContactSteps(type: AuthIdentityType): readonly string[] {
 }
 
 /**
- * Where the first code went. Without the address for now: the backend's sentence does not name it, and
- * whether it will is with the backend (design A2-4).
+ * Where the first code went, without the address: the backend's sentence does not name it, and Carol kept
+ * the design's four backend questions to V1 (design A2-4).
  */
 export function oldCodeSentText(name: string, pending: boolean): string {
   return pending
@@ -218,13 +287,6 @@ export function lineProofExpired(action: AccountStepUpAction): string {
   return `LINE 的確認已經過期（要在 5 分鐘內完成），請再按一次${AGAIN[action].button}。`;
 }
 
-/**
- * Back from LINE with the proof, for a first password: the password itself never left the page, so it
- * is typed again, within the proof's 5 minutes (`PROOF_TTL_SECONDS`).
- */
-export const LINE_OK_SET_PASSWORD =
-  '已用 LINE 確認是你本人。請在 5 分鐘內再輸入一次新密碼，按「設定密碼」。';
-
 /** Where in adding a contact a refusal came: a wrong password and a wrong code share one code. */
 export type AddContactStep =
   | 'send'
@@ -261,9 +323,14 @@ export function setPasswordErrorMessage(
   cause: unknown,
   step: 'send' | 'old-code',
 ): string {
+  const addOneFirst =
+    '你的帳號還沒有可以收驗證碼的電子郵件或手機。請先在下面新增一個，再設定密碼。';
+
+  // The page closes the section for such an account (`setPasswordBlocked`); these are its last contact
+  // being gone since the page was read.
   return resolveAuthErrorMessage(cause, '設定密碼失敗，請稍後再試。', {
-    no_proof_channel:
-      '你的帳號還沒有可以收驗證碼的電子郵件或手機。請先在下面新增一個，再設定密碼。',
+    no_proof_channel: addOneFirst,
+    step_up_reauth_required: addOneFirst,
     step_up_invalid:
       step === 'old-code'
         ? '驗證碼不正確或已過期，請重新輸入'
