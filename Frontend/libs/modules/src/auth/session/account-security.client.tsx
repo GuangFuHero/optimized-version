@@ -10,23 +10,18 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+
+import { ApiError } from '@rescue-frontend/data-access';
 
 import { continueSignedOut } from '../../session/end-expired-session';
+import { newPasswordProblem, newPasswordText } from '../login';
 import {
-  newPasswordProblem,
-  newPasswordText,
-  normalizeIdentityValue,
-  validateIdentityValue,
-  type AuthIdentityType,
-} from '../login';
-import {
-  addContactAsync,
   changePasswordAsync,
+  getCurrentUserAsync,
   logoutAllAsync,
-  resendContactAsync,
   setPasswordAsync,
-  verifyContactAsync,
 } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import {
@@ -40,8 +35,22 @@ import {
   type AccountContact,
   type LoginMethod,
 } from './account-security-view';
+import {
+  buildAccountStepUpHref,
+  LINE_OK_SET_PASSWORD,
+  lineReturnError,
+  readAccountStepUpReturn,
+  readStepUpRequired,
+  setPasswordErrorMessage,
+  stripAccountStepUpReturn,
+  type AccountStepUpAction,
+} from './account-step-up';
+import { useAddContact } from './use-add-contact';
+import { useContactDraft, type ContactDraft } from './use-contact-draft';
 
 interface AccountSecurityClientProps {
+  /** The account, so a contact kept for the way back from LINE is only brought back to it. */
+  userId: string;
   /** `/users/me`'s contacts and login methods, read on the server. */
   contacts: AccountContact[];
   loginMethods: LoginMethod[];
@@ -56,10 +65,10 @@ function signInAgain() {
   continueSignedOut('/login');
 }
 
-interface PendingContact {
-  identityType: AuthIdentityType;
-  normalizedIdentity: string;
-}
+/** Where a first password is: typed, or waiting on the code the backend sent to a contact first. */
+type SetPasswordStage =
+  | { kind: 'enter' }
+  | { kind: 'old-code'; message: string };
 
 function SecuritySection({
   title,
@@ -101,9 +110,11 @@ function SecuritySection({
 }
 
 export function AccountSecurityClient({
+  userId,
   contacts,
   loginMethods,
 }: AccountSecurityClientProps) {
+  const router = useRouter();
   const saltIdentity = saltLookupIdentity(contacts);
   const signsInWithPassword = hasPassword(loginMethods);
   const [oldPassword, setOldPassword] = useState('');
@@ -115,24 +126,107 @@ export function AccountSecurityClient({
 
   const [setPasswordValue, setSetPasswordValue] = useState('');
   const [setPasswordConfirm, setSetPasswordConfirm] = useState('');
-  const [setPasswordErrorMessage, setSetPasswordErrorMessage] =
-    useState<string>();
+  const [setPasswordStage, setSetPasswordStage] = useState<SetPasswordStage>({
+    kind: 'enter',
+  });
+  const [setPasswordCode, setSetPasswordCode] = useState('');
+  const [setPasswordErrorText, setSetPasswordErrorText] = useState<string>();
+  const [setPasswordNotice, setSetPasswordNotice] = useState<string>();
   const [setPasswordSuccessMessage, setSetPasswordSuccessMessage] =
     useState<string>();
   const [isSettingPassword, setIsSettingPassword] = useState(false);
+  // Back from LINE with the proof: a second 「去 LINE」 now means it ran out, not a first visit.
+  const [lineProofReady, setLineProofReady] = useState(false);
 
-  const [contactType, setContactType] = useState<AuthIdentityType>('email');
-  const [contactValue, setContactValue] = useState('');
+  const [contactPassword, setContactPassword] = useState('');
+  const [contactOldCode, setContactOldCode] = useState('');
   const [contactCode, setContactCode] = useState('');
-  const [pendingContact, setPendingContact] = useState<PendingContact | null>(
-    null,
-  );
-  const [contactError, setContactError] = useState<string>();
-  const [contactSuccess, setContactSuccess] = useState<string>();
-  const [isAddingContact, setIsAddingContact] = useState(false);
-  const [isVerifyingContact, setIsVerifyingContact] = useState(false);
-  const [isResendingContact, setIsResendingContact] = useState(false);
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
+
+  const { keep: keepContactDraft, take: takeContactDraft } =
+    useContactDraft(userId);
+
+  /**
+   * Only LINE can prove it is them (ADR-361): the page goes to LINE and comes back. `/users/me` first,
+   * through the session's own fetch: a session refreshed or ended there, rather than in the navigation,
+   * which would show its error as a page of JSON.
+   */
+  const goProveAtLine = async (
+    action: AccountStepUpAction,
+    draft?: ContactDraft,
+  ) => {
+    if (draft) {
+      keepContactDraft(draft);
+    }
+
+    try {
+      await getCurrentUserAsync();
+    } catch {
+      // An ended session reloads the tab as a guest by itself; anything else, LINE is tried anyway.
+    }
+
+    window.location.assign(buildAccountStepUpHref(action));
+  };
+
+  const contact = useAddContact({
+    hasPassword: signsInWithPassword,
+    saltIdentity,
+    onReauth: (draft) => void goProveAtLine('add_contact', draft),
+    // `saltIdentity` reads the account's contacts, which the server read before this one was added.
+    onVerified: () => router.refresh(),
+  });
+  const resumeContact = contact.resume;
+
+  // Each step asks for its own: what was typed for one does not carry into the next.
+  useEffect(() => {
+    setContactPassword('');
+    setContactOldCode('');
+    setContactCode('');
+  }, [contact.stage.kind]);
+
+  // Back from LINE (`account-step-up.ts`), once: off the address, then on with what was pressed.
+  const handledReturn = useRef(false);
+
+  useEffect(() => {
+    if (handledReturn.current) {
+      return;
+    }
+
+    handledReturn.current = true;
+
+    const back = readAccountStepUpReturn(
+      new URLSearchParams(window.location.search),
+    );
+
+    if (!back) {
+      return;
+    }
+
+    const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.history.replaceState(
+      window.history.state,
+      '',
+      stripAccountStepUpReturn(address),
+    );
+
+    if (back.action === 'set_password') {
+      if (back.stepUp === 'ok') {
+        setLineProofReady(true);
+        setSetPasswordNotice(LINE_OK_SET_PASSWORD);
+      } else if (back.stepUp) {
+        setSetPasswordErrorText(
+          lineReturnError(back.stepUp.error, 'set_password'),
+        );
+      }
+      return;
+    }
+
+    const draft = takeContactDraft();
+
+    if (draft) {
+      resumeContact(draft, back.stepUp);
+    }
+  }, [resumeContact, takeContactDraft]);
 
   async function handleChangePasswordAsync() {
     if (!saltIdentity) {
@@ -178,6 +272,10 @@ export function AccountSecurityClient({
     }
   }
 
+  /**
+   * A first password, with the proof the backend asks for first (`require_step_up_for_first_password`):
+   * a code it sends to a contact the account already had, or LINE when that is all there is.
+   */
   async function handleSetPasswordAsync() {
     const setPasswordProblem = newPasswordProblem(
       setPasswordValue,
@@ -185,12 +283,20 @@ export function AccountSecurityClient({
     );
 
     if (setPasswordProblem) {
-      setSetPasswordErrorMessage(setPasswordProblem);
+      setSetPasswordErrorText(setPasswordProblem);
+      return;
+    }
+
+    const withCode = setPasswordStage.kind === 'old-code';
+
+    if (withCode && setPasswordCode.trim().length < 4) {
+      setSetPasswordErrorText('請輸入有效驗證碼');
       return;
     }
 
     setIsSettingPassword(true);
-    setSetPasswordErrorMessage(undefined);
+    setSetPasswordErrorText(undefined);
+    setSetPasswordNotice(undefined);
     setSetPasswordSuccessMessage(undefined);
 
     try {
@@ -200,6 +306,9 @@ export function AccountSecurityClient({
       await setPasswordAsync({
         password: createdPassword.hashedPassword,
         salt_frontend: createdPassword.saltFrontend,
+        step_up: withCode
+          ? { old_channel_code: setPasswordCode.trim() }
+          : undefined,
       });
 
       setSetPasswordSuccessMessage('已建立登入密碼，請用新密碼重新登入。');
@@ -208,106 +317,40 @@ export function AccountSecurityClient({
       // The backend ends the session on a password created, as on one changed.
       signInAgain();
     } catch (error) {
-      setSetPasswordErrorMessage(
-        resolveAuthErrorMessage(error, '建立密碼失敗，請稍後再試。'),
+      const code = error instanceof ApiError ? error.code : undefined;
+
+      if (code === 'step_up_reauth_required') {
+        // Straight back from LINE, the proof has already run out: say so rather than go round again.
+        if (lineProofReady) {
+          setLineProofReady(false);
+          setSetPasswordErrorText('LINE 驗證已逾時，請再按一次「建立密碼」');
+        } else {
+          void goProveAtLine('set_password');
+        }
+        return;
+      }
+
+      if (code === 'step_up_required' && !withCode) {
+        const ask = readStepUpRequired((error as ApiError).message);
+
+        if (ask.kind === 'old-code') {
+          setSetPasswordCode('');
+          setSetPasswordStage(ask);
+        } else {
+          setSetPasswordErrorText(
+            ask.kind === 'refused'
+              ? ask.message
+              : setPasswordErrorMessage(error, 'send'),
+          );
+        }
+        return;
+      }
+
+      setSetPasswordErrorText(
+        setPasswordErrorMessage(error, withCode ? 'old-code' : 'send'),
       );
     } finally {
       setIsSettingPassword(false);
-    }
-  }
-
-  async function handleAddContactAsync() {
-    const validation = validateIdentityValue(contactType, contactValue);
-
-    if (validation !== true) {
-      setContactError(validation);
-      return;
-    }
-
-    setIsAddingContact(true);
-    setContactError(undefined);
-    setContactSuccess(undefined);
-
-    try {
-      const normalizedIdentity = normalizeIdentityValue(
-        contactType,
-        contactValue,
-      );
-
-      await addContactAsync({
-        type: contactType,
-        value: normalizedIdentity,
-      });
-
-      setPendingContact({
-        identityType: contactType,
-        normalizedIdentity,
-      });
-      setContactSuccess('驗證碼已發送，請輸入後完成綁定。');
-    } catch (error) {
-      setContactError(
-        resolveAuthErrorMessage(error, '新增聯絡方式失敗，請稍後再試。'),
-      );
-    } finally {
-      setIsAddingContact(false);
-    }
-  }
-
-  async function handleVerifyContactAsync() {
-    if (!pendingContact) {
-      return;
-    }
-
-    if (contactCode.trim().length < 4) {
-      setContactError('請輸入有效驗證碼');
-      return;
-    }
-
-    setIsVerifyingContact(true);
-    setContactError(undefined);
-    setContactSuccess(undefined);
-
-    try {
-      await verifyContactAsync({
-        type: pendingContact.identityType,
-        value: pendingContact.normalizedIdentity,
-        code: contactCode.trim(),
-      });
-
-      setPendingContact(null);
-      setContactValue('');
-      setContactCode('');
-      setContactSuccess('聯絡方式已完成驗證與綁定。');
-    } catch (error) {
-      setContactError(
-        resolveAuthErrorMessage(error, '驗證聯絡方式失敗，請稍後再試。'),
-      );
-    } finally {
-      setIsVerifyingContact(false);
-    }
-  }
-
-  async function handleResendContactAsync() {
-    if (!pendingContact) {
-      return;
-    }
-
-    setIsResendingContact(true);
-    setContactError(undefined);
-    setContactSuccess(undefined);
-
-    try {
-      await resendContactAsync({
-        type: pendingContact.identityType,
-        value: pendingContact.normalizedIdentity,
-      });
-      setContactSuccess('驗證碼已重新發送。');
-    } catch (error) {
-      setContactError(
-        resolveAuthErrorMessage(error, '重新發送驗證碼失敗，請稍後再試。'),
-      );
-    } finally {
-      setIsResendingContact(false);
     }
   }
 
@@ -398,8 +441,28 @@ export function AccountSecurityClient({
               onChange={(event) => setSetPasswordConfirm(event.target.value)}
             />
 
-            {setPasswordErrorMessage ? (
-              <Alert severity="error">{setPasswordErrorMessage}</Alert>
+            {setPasswordStage.kind === 'old-code' ? (
+              <>
+                <Alert severity="info">{setPasswordStage.message}</Alert>
+                <TextField
+                  label="驗證碼"
+                  value={setPasswordCode}
+                  slotProps={{
+                    htmlInput: {
+                      inputMode: 'numeric',
+                      autoComplete: 'one-time-code',
+                    },
+                  }}
+                  onChange={(event) => setSetPasswordCode(event.target.value)}
+                />
+              </>
+            ) : null}
+
+            {setPasswordNotice ? (
+              <Alert severity="info">{setPasswordNotice}</Alert>
+            ) : null}
+            {setPasswordErrorText ? (
+              <Alert severity="error">{setPasswordErrorText}</Alert>
             ) : null}
             {setPasswordSuccessMessage ? (
               <Alert severity="success">{setPasswordSuccessMessage}</Alert>
@@ -412,7 +475,9 @@ export function AccountSecurityClient({
                 void handleSetPasswordAsync();
               }}
             >
-              建立密碼
+              {setPasswordStage.kind === 'old-code'
+                ? '確認並建立密碼'
+                : '建立密碼'}
             </Button>
           </Stack>
         </SecuritySection>
@@ -425,14 +490,14 @@ export function AccountSecurityClient({
         <Stack spacing={2}>
           <Stack direction="row" spacing={0.5}>
             {(['email', 'phone'] as const).map((value) => {
-              const active = contactType === value;
+              const active = contact.type === value;
 
               return (
                 <Button
                   key={value}
                   type="button"
                   variant={active ? 'contained' : 'outlined'}
-                  onClick={() => setContactType(value)}
+                  onClick={() => contact.change({ type: value })}
                 >
                   {value === 'email' ? 'Email' : '手機號碼'}
                 </Button>
@@ -441,43 +506,97 @@ export function AccountSecurityClient({
           </Stack>
 
           <TextField
-            label={contactType === 'email' ? '電子郵件' : '手機號碼'}
-            value={contactValue}
-            onChange={(event) => setContactValue(event.target.value)}
+            label={contact.type === 'email' ? '電子郵件' : '手機號碼'}
+            value={contact.value}
+            onChange={(event) => contact.change({ value: event.target.value })}
           />
 
-          <Button
-            variant="contained"
-            disabled={isAddingContact}
-            onClick={() => {
-              void handleAddContactAsync();
-            }}
-          >
-            發送驗證碼
-          </Button>
+          {contact.stage.kind === 'enter' ? (
+            <Button
+              variant="contained"
+              disabled={contact.busy}
+              onClick={contact.send}
+            >
+              發送驗證碼
+            </Button>
+          ) : null}
 
-          {pendingContact ? (
+          {contact.stage.kind === 'password' ? (
+            <Stack spacing={2}>
+              <Typography sx={{ fontSize: 14, color: '#6A5F5B' }}>
+                請先輸入目前的密碼，確認是你本人後才會寄出驗證碼。
+              </Typography>
+              <TextField
+                label="目前密碼"
+                type="password"
+                autoComplete="current-password"
+                value={contactPassword}
+                onChange={(event) => setContactPassword(event.target.value)}
+              />
+              <Button
+                variant="contained"
+                disabled={contact.busy || !contactPassword}
+                onClick={() => {
+                  void contact.submitPassword(contactPassword);
+                }}
+              >
+                確認並發送驗證碼
+              </Button>
+            </Stack>
+          ) : null}
+
+          {contact.stage.kind === 'old-code' ? (
+            <Stack spacing={2}>
+              <Alert severity="info">{contact.stage.message}</Alert>
+              <TextField
+                label="驗證碼"
+                value={contactOldCode}
+                slotProps={{
+                  htmlInput: {
+                    inputMode: 'numeric',
+                    autoComplete: 'one-time-code',
+                  },
+                }}
+                onChange={(event) => setContactOldCode(event.target.value)}
+              />
+              <Button
+                variant="contained"
+                disabled={contact.busy || contactOldCode.trim().length < 4}
+                onClick={() => contact.submitOldCode(contactOldCode.trim())}
+              >
+                確認並發送驗證碼
+              </Button>
+            </Stack>
+          ) : null}
+
+          {contact.stage.kind === 'code' ? (
             <Stack spacing={2}>
               <TextField
                 label="驗證碼"
                 value={contactCode}
+                slotProps={{
+                  htmlInput: {
+                    inputMode: 'numeric',
+                    autoComplete: 'one-time-code',
+                  },
+                }}
                 onChange={(event) => setContactCode(event.target.value)}
               />
               <Stack direction="row" spacing={1}>
                 <Button
                   variant="outlined"
-                  disabled={isVerifyingContact}
+                  disabled={contact.busy}
                   onClick={() => {
-                    void handleVerifyContactAsync();
+                    void contact.verify(contactCode);
                   }}
                 >
                   驗證並綁定
                 </Button>
                 <Button
                   variant="text"
-                  disabled={isResendingContact}
+                  disabled={contact.busy}
                   onClick={() => {
-                    void handleResendContactAsync();
+                    void contact.resend();
                   }}
                 >
                   重新發送
@@ -486,9 +605,11 @@ export function AccountSecurityClient({
             </Stack>
           ) : null}
 
-          {contactError ? <Alert severity="error">{contactError}</Alert> : null}
-          {contactSuccess ? (
-            <Alert severity="success">{contactSuccess}</Alert>
+          {contact.error ? (
+            <Alert severity="error">{contact.error}</Alert>
+          ) : null}
+          {contact.notice ? (
+            <Alert severity="success">{contact.notice}</Alert>
           ) : null}
         </Stack>
       </SecuritySection>
