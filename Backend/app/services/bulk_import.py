@@ -372,9 +372,6 @@ async def _write_station(
             # so `source` is an export-only column (bulk_columns.py).
             source="official",
             visibility=fixed.get("visibility") or "public",
-            # A listed station isn't known to be open: it stays closed until someone confirms it
-            # on site. Temporarily, not permanently, so the duplicate matcher still sees it.
-            operational_status="temporarily_closed",
             secondary_location={"location_type": "address", **address} if address else None,
         )
         progress.parent_written = True

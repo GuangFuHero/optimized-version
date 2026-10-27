@@ -245,8 +245,8 @@ async def test_a_row_that_matches_nothing_is_created(db):
     station = await _station_named(db, "光復國小")
     assert str(station.created_by) == str(actor.uuid)
     assert station.source == "official"
-    # Closed until someone confirms it on site (ADMIN-026 import dialog).
-    assert station.operational_status == "temporarily_closed"
+    # The default status, as for any new station.
+    assert station.operational_status == "active"
 
 
 @pytest.mark.asyncio
@@ -330,14 +330,14 @@ async def test_a_row_that_matches_updates_in_place(db):
 
 
 @pytest.mark.asyncio
-async def test_an_update_leaves_a_reopened_station_open(db):
-    """Only a new station starts closed; re-importing must not close one someone reopened."""
+async def test_an_update_leaves_the_status_alone(db):
+    """Re-importing a station must not reopen one someone closed."""
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([_row("光復國小", comment="第一版")])
     await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
     station = await _station_named(db, "光復國小")
-    station.operational_status = "active"
+    station.operational_status = "temporarily_closed"
     await db.commit()
 
     raw, filename = _file([_row("光復國小", comment="第二版")])
@@ -345,7 +345,7 @@ async def test_an_update_leaves_a_reopened_station_open(db):
 
     updated = await _station_named(db, "光復國小")
     assert updated.comment == "第二版"
-    assert updated.operational_status == "active"
+    assert updated.operational_status == "temporarily_closed"
 
 
 @pytest.mark.asyncio

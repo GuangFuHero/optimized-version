@@ -393,8 +393,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                   <ErrorList errors={preview.errors} />
                 ) : null}
                 <Callout tone="warning">
-                  新增的站點營運狀態一律「已關閉」，需要有人到現場確認後再開啟。可能重複的會送進「AI
-                  重複審核」，不會在這裡擋下。
+                  可能重複的會送進「AI 重複審核」，不會在這裡擋下。
                 </Callout>
               </Step>
             ) : null}
