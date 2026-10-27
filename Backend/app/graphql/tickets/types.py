@@ -502,6 +502,13 @@ class HelpRequestTaskInput:
             "People or units needed, at least 1; required except for a 'rescue' need, which may omit it"
         ),
     )
+    acknowledged_duplicate_of: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); "
+            "not checked again"
+        ),
+    )
 
 
 @strawberry.input
@@ -1054,7 +1061,7 @@ class MyTaskAssignmentType:
 
 @strawberry.type
 class TicketCreated:
-    """`createTicket` created the ticket and all its tasks, in the order sent."""
+    """`createTicket` or `createHelpRequest` created the ticket and all its tasks, in the order sent."""
 
     ticket: TicketType
     tasks: list[TicketTaskType]

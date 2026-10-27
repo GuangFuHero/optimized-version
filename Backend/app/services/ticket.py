@@ -317,7 +317,20 @@ def _checked_photo_links(photo_urls: list[str] | None) -> list[str]:
     return [normalize_photo_url(link) for link in links]
 
 
-async def create_help_request(
+@dataclass(frozen=True)
+class HelpRequestFields:
+    """A help request that passed authz and every check but is not written yet.
+
+    `ticket` is ready for `insert_ticket`; `needs` are its tasks, in the order the requester
+    listed them; `photo_links` are the links as they will be stored.
+    """
+
+    ticket: TicketFields
+    needs: tuple["TaskFields", ...]
+    photo_links: tuple[str, ...]
+
+
+async def validate_help_request(
     db: AsyncSession,
     *,
     actor: User,
@@ -330,19 +343,12 @@ async def create_help_request(
     tasks: list[dict],
     photo_urls: list[str] | None = None,
     contact_email: str | None = None,
-) -> Tickets:
-    """File a citizen's request for help: the ticket, every need and photo link, in one commit.
-
-    The public site's 「請求協助」. `create_ticket` followed by one `create_ticket_task` per need
-    commits each step on its own, so a failure part-way leaves a ticket with some of its needs
-    missing and a retry files a second ticket. Here nothing is written unless all of it is.
+) -> HelpRequestFields:
+    """Every check `create_help_request` makes, without writing anything.
 
     The site never asks how urgent a request is: priority is `medium`, and staff adjust it
     afterwards. The ticket's own `task_type` is the first need's, as the admin form sets it. An
     email is optional; the account's own is never filled in for it.
-
-    Photo links (「現場照片（選填）」) become the ticket's photos, read back by
-    `TicketType.photos` and withheld from whoever cannot see the ticket's detail.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
     if not title.strip():
@@ -364,35 +370,50 @@ async def create_help_request(
         required=frozenset({"contact_name"}),
     )
     secondary_location = apply_address(secondary_location, point=point_of(geometry))
-    creator = str(actor.uuid)
-    ticket = await ticket_repository.add(
-        db,
-        obj_in={
-            "property_name": "request",
-            "geometry": geojson_to_geom(geometry),
-            "created_by": creator,
-            "title": title,
-            "description": description,
-            **contacts,
-            "status": "pending",
-            "priority": "medium",
-            "task_type": tasks[0]["task_type"],
-        },
+    return HelpRequestFields(
+        ticket=TicketFields(
+            point=geometry,
+            values={
+                "title": title,
+                "description": description,
+                **contacts,
+                "priority": "medium",
+                "task_type": tasks[0]["task_type"],
+            },
+            secondary_location=secondary_location,
+        ),
+        needs=tuple(
+            TaskFields(
+                values={
+                    "task_type": task["task_type"],
+                    "task_name": task["task_name"],
+                    "task_description": task.get("task_description"),
+                    "quantity": task.get("quantity"),
+                    "source": "user",
+                }
+            )
+            for task in tasks
+        ),
+        photo_links=tuple(photo_links),
     )
-    if secondary_location:
-        await secondary_location_repository.add(
-            db, obj_in={"geometry_uuid": str(ticket.uuid), **secondary_location}
-        )
-    for position, task in enumerate(tasks):
+
+
+async def insert_help_request(
+    db: AsyncSession, *, actor: User, fields: HelpRequestFields
+) -> tuple[Tickets, list[TicketTask]]:
+    """Write a checked help request and flush: the ticket, its address, needs and photos.
+
+    The caller owns the commit. Photo links (「現場照片（選填）」) become the ticket's photos, read
+    back by `TicketType.photos` and withheld from whoever cannot see the ticket's detail.
+    """
+    ticket = await insert_ticket(db, actor=actor, fields=fields.ticket)
+    creator = str(actor.uuid)
+    needs = [
         await ticket_task_repository.add(
             db,
             obj_in={
                 "ticket_uuid": str(ticket.uuid),
-                "task_type": task["task_type"],
-                "task_name": task["task_name"],
-                "task_description": task.get("task_description"),
-                "quantity": task.get("quantity"),
-                "source": "user",
+                **need.values,
                 "created_by": creator,
                 # One transaction means one `now()` for every need, and the tasks loader
                 # breaks that tie on uuid — random. A microsecond apart keeps them in the order
@@ -400,7 +421,9 @@ async def create_help_request(
                 "created_at": func.now() + timedelta(microseconds=position),
             },
         )
-    for position, url in enumerate(photo_links):
+        for position, need in enumerate(fields.needs)
+    ]
+    for position, url in enumerate(fields.photo_links):
         await photo_repository.add(
             db,
             obj_in={
@@ -413,6 +436,46 @@ async def create_help_request(
                 "created_at": func.now() + timedelta(microseconds=position),
             },
         )
+    return ticket, needs
+
+
+async def create_help_request(
+    db: AsyncSession,
+    *,
+    actor: User,
+    geometry: dict,
+    title: str,
+    description: str | None,
+    contact_name: str,
+    contact_phone: str | None,
+    secondary_location: dict | None,
+    tasks: list[dict],
+    photo_urls: list[str] | None = None,
+    contact_email: str | None = None,
+) -> Tickets:
+    """File a citizen's request for help: the ticket, every need and photo link, in one commit.
+
+    The public site's 「請求協助」. `create_ticket` followed by one `create_ticket_task` per need
+    commits each step on its own, so a failure part-way leaves a ticket with some of its needs
+    missing and a retry files a second ticket. Here nothing is written unless all of it is.
+
+    No duplicate check: the site's GraphQL path goes through
+    `dedup_submission.submit_help_request`, which runs the same two steps around one.
+    """
+    fields = await validate_help_request(
+        db,
+        actor=actor,
+        geometry=geometry,
+        title=title,
+        description=description,
+        contact_name=contact_name,
+        contact_phone=contact_phone,
+        secondary_location=secondary_location,
+        tasks=tasks,
+        photo_urls=photo_urls,
+        contact_email=contact_email,
+    )
+    ticket, _ = await insert_help_request(db, actor=actor, fields=fields)
     await db.commit()
     await db.refresh(ticket)
     return ticket

@@ -50,6 +50,13 @@ Spec 021 交付了去重快層（2026-09-29 起比對單位是任務）。本功
 **觸發點固定三個**：新開單（工單連同任務）、替既有的單加任務、登記站點。所有會被去重的東西都經過其中之一，
 所以觸發時機不隨演算法改變。
 
+| 觸發點 | GraphQL 入口 | 誰在用 |
+|---|---|---|
+| 新開單 | `createTicket`（§5.1） | 管理平台 |
+| 新開單 | `createHelpRequest`（§5.1，ADR-397） | 前台「請求協助」 |
+| 替既有的單加任務 | `createTicketTask`（§5.2） | 前台「再加一件」、管理平台 |
+| 登記站點 | `createStation`（§5.3） | 前台、管理平台 |
+
 ---
 
 ## 2. 輸入：送出的草稿（ADR-304，沿用 ADR-317 的白名單與只加不改）
@@ -203,6 +210,10 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
    - 確認的值不是 uuid、或 engine 回報對方找不到或已刪：照常建立、不寫卡。
    - `score` 失敗（例外、逾時、偷寫）：照常建立；後端自己查對方存在才寫卡，分數為 null，不存在就不寫。
    - uuid 一律轉成 Postgres 的寫法（小寫、有連字號）再用，配對卡的 `low_uuid < high_uuid` 才會跟資料庫一致。
+
+前台的請求協助 `createHelpRequest` 也是新開單，流程同上（ADR-397）：回 `CreateTicketResult`，每件需求
+（`HelpRequestTaskInput`）各自可帶 `acknowledgedDuplicateOf`，`draftRef` 的 `task:i` 是第 i 件需求。
+民眾那邊的檢查（需求件數、照片連結等，`validate_help_request`）在第 1 步，所以被擋時單、地址、需求、照片都不寫。
 
 ### 5.2 替既有的單加任務
 

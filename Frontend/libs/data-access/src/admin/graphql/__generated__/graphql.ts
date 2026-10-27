@@ -605,6 +605,8 @@ export type HazardousZoneType = {
 };
 
 export type HelpRequestTaskInput = {
+  /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   taskDescription?: InputMaybe<Scalars['String']['input']>;
@@ -626,7 +628,7 @@ export type Mutation = {
   createBriefingTemplate: BriefingTemplateType;
   createBuildingMap: BuildingMapType;
   createCrowdSourcing: CrowdSourcingType;
-  createHelpRequest: TicketType;
+  createHelpRequest: CreateTicketResult;
   createStation: CreateStationResult;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;

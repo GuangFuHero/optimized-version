@@ -1,4 +1,4 @@
-# 去重引擎介面 — ADR 全集（ADR-295~299、301~307、313~323）
+# 去重引擎介面 — ADR 全集（ADR-295~299、301~307、313~323、397）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/008-rbac-authorization/decisions.md`（ADR-285 為 2026-09-28 全 repo 各分支掃描的最大值）。
@@ -587,3 +587,42 @@ ADR-301／302 的 API 保留，但回傳的疑似重複改為通用形狀（見 
 ➕ 不會再出現指向不存在東西的配對卡。
 ➖ 確認那一段多一個查詢（只在 `score` 失敗時）。
 ◾ 測試：`tests/test_dedup_check.py`（score 的 SQL 出錯、逾時、偷寫、對方不存在、不是 uuid、大寫 uuid）、`tests/test_dedup_submission.py`（真 engine 的工單層級確認、建單時 score 逾時）。
+
+---
+
+### ADR-397 前台的請求協助 `createHelpRequest` 也走兩段式
+
+**白話**：民眾從前台「請求協助」送出的單，現在也會先比對附近有沒有一樣的需求。有的話先不建，讓民眾確認；
+確認不是同一件再送一次才建立，跟管理平台的 `createTicket` 一樣。
+
+**Date**：2026-10-27。Carol 在 Discord #frontend-only 要求所有前後台的輸入都要先過快層（台灣日期 2026-10-27，
+UTC 10-26 19:29）；Dan 10-27 定了做法和部署方式。
+
+**Context**：
+
+- `createHelpRequest` 是 2026-09-27 加的（`a64a93c1`），一次寫入單、地址、需求、照片。兩段式（ADR-296、299、301）
+  之後才接上，只接了 `createTicket`／`createTicketTask`／`createStation`，這支漏了：它直接呼叫
+  `ticket.create_help_request`，完全不比對。
+- ADR-304 定的觸發點是「新開單、替既有的單加任務、登記站點」。請求協助就是新開單，所以這條是補上漏列的入口，
+  不推翻 ADR-299（「兩段式只在互動建單走」本來就涵蓋它）。
+
+**Decision**：
+
+- `ticket.create_help_request` 拆成 `validate_help_request`（民眾的所有檢查，不寫入）與 `insert_help_request`
+  （寫入並 flush，不 commit），跟 ADR-299 拆 `create_ticket` 的方式一樣。民眾的規則一條都不改。
+- `dedup_submission.submit_help_request` 照 `submit_new_ticket` 的流程：`NewTicket`，每件需求是 `task:i`。
+- GraphQL：
+  - `HelpRequestTaskInput` 加 `acknowledgedDuplicateOf: String = null`，跟 `CreateTicketTaskDraft` 的同名欄位同義；
+  - `createHelpRequest` 的回傳從 `TicketType` 改成 `CreateTicketResult`（`TicketCreated | DuplicatesSuspected`）。
+- 權限不變（`ticket.add`），不用 migration。
+
+**部署**：回傳型別改變是 breaking change。前台原本的查詢直接在 `createHelpRequest` 上選 `TicketType` 的欄位，
+union 上不合法，每一次請求協助都會失敗。所以後端和前台的 PR 同一天接連合併、同一次部署，只合一支的那天不部署
+（Dan 10-27 選定）。
+
+➕ 民眾送的單（最大宗的輸入）也會被快層攔下，疑似重複進審核佇列。
+➕ API 跟 `createTicket` 完全一致：同一個 union、同一個確認欄位。
+➖ 後端和前台要綁在一起上線。
+➖ 被擋時什麼都沒寫，民眾要再送一次。前台要保留表單內容（草稿機制已經會保留）。
+◾ 測試：`tests/test_graphql/test_create_dedup.py`（真 engine：被擋、帶確認建立）、`tests/test_dedup_submission.py`
+（沒有疑似整份建立、確認只蓋自己那件、確認指向不存在的東西、engine 失敗、驗證不過時不問 engine）。

@@ -19,6 +19,7 @@ from app.dedup_engine.registry import get_engine
 from app.graphql.schema import schema
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.geo import BuildingMapTicketMap, Station
+from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TicketTask
@@ -42,6 +43,15 @@ mutation($input: CreateTicketTaskInput!, $ack: String) {{
     createTicketTask(input: $input, acknowledgedDuplicateOf: $ack) {{
         __typename
         ... on TicketTaskCreated {{ task {{ uuid taskName }} }}
+        {SUSPECTS}
+    }}
+}}
+"""
+CREATE_HELP_REQUEST = f"""
+mutation($input: CreateHelpRequestInput!) {{
+    createHelpRequest(input: $input) {{
+        __typename
+        ... on TicketCreated {{ ticket {{ uuid }} tasks {{ uuid taskName }} }}
         {SUSPECTS}
     }}
 }}
@@ -82,7 +92,7 @@ async def _clean_tables():
                 SecondaryLocation.geometry_uuid.in_(select(Tickets.uuid).union(select(Station.uuid)))
             )
         )
-        for model in (DedupAuditEvent, DuplicatePair, TicketTask, Tickets, Station):
+        for model in (DedupAuditEvent, DuplicatePair, Photo, TicketTask, Tickets, Station):
             for row in (await db.execute(select(model))).scalars().all():
                 await db.delete(row)
     yield
@@ -142,6 +152,21 @@ def _ticket_input(tasks=(), **overrides) -> dict:
     return fields | overrides
 
 
+HELP_ADDRESS = "花蓮縣光復鄉民生街"
+
+
+def _help_input(tasks) -> dict:
+    """請求協助 from the flooded street, with an address and a photo link a hold must not keep."""
+    return {
+        "geometry": {"type": "Point", "coordinates": list(FLOODED_STREET)},
+        "title": "民生街淹水",
+        "contactName": "王小明",
+        "secondaryLocation": {"landmarkNote": HELP_ADDRESS},
+        "photoUrls": ["https://duk.tw/flood.jpg"],
+        "tasks": list(tasks),
+    }
+
+
 async def _post(client, token, query, variables) -> dict:
     res = await client.post(
         "/graphql", json={"query": query, "variables": variables}, headers=auth_header(token)
@@ -152,6 +177,13 @@ async def _post(client, token, query, variables) -> dict:
 async def _count(model) -> int:
     async with test_db() as db:
         return (await db.execute(select(func.count()).select_from(model))).scalar_one()
+
+
+async def _help_addresses() -> int:
+    """Addresses carrying `_help_input`'s line; other tests leave addresses of their own behind."""
+    async with test_db() as db:
+        query = select(func.count()).where(SecondaryLocation.landmark_note == HELP_ADDRESS)
+        return (await db.execute(query)).scalar_one()
 
 
 async def _events() -> list[str]:
@@ -235,6 +267,52 @@ async def test_without_ticket_add_nothing_is_revealed(client, content_admin_auth
     assert "Permission Denied" in body["errors"][0]["message"]
     assert "Suspected" not in str(body)
     assert await _events() == []
+
+
+# --- help request (請求協助) ---------------------------------------------------------------
+
+
+async def test_a_help_request_need_like_an_open_one_holds_the_whole_request(client, login_user_auth):
+    """The site's new ticket is checked like createTicket's: one need suspected, nothing is filed."""
+    user_uuid, token = login_user_auth
+    ticket_uuid, task_uuid = await _seed_ticket_with_task(user_uuid)
+
+    body = await _post(client, token, CREATE_HELP_REQUEST, {"input": _help_input([WATER, PUMP])})
+
+    assert body.get("errors") is None, body
+    assert body["data"]["createHelpRequest"] == {
+        "__typename": "DuplicatesSuspected",
+        "suspects": [
+            {
+                "draftRef": "task:1",
+                "relatedKind": "ticket_task",
+                "relatedUuid": task_uuid,
+                "relatedTicketUuid": ticket_uuid,
+            }
+        ],
+    }
+    assert (await _count(Tickets), await _count(TicketTask), await _count(Photo)) == (1, 1, 0)
+    assert await _help_addresses() == 0
+    assert await _events() == ["hint_shown"]
+
+
+async def test_filing_a_help_request_anyway_files_every_need_and_the_pair(client, login_user_auth):
+    """The acknowledgement travels on its need: TicketCreated with both needs, one pair card."""
+    user_uuid, token = login_user_auth
+    _, task_uuid = await _seed_ticket_with_task(user_uuid)
+    acked = PUMP | {"acknowledgedDuplicateOf": task_uuid}
+
+    body = await _post(client, token, CREATE_HELP_REQUEST, {"input": _help_input([WATER, acked])})
+
+    created = body["data"]["createHelpRequest"]
+    assert created["__typename"] == "TicketCreated", body
+    assert [t["taskName"] for t in created["tasks"]] == ["需要飲用水", "一樓淹水需要抽水機"]
+    async with test_db() as db:
+        pair = (await db.execute(select(DuplicatePair))).scalar_one()
+        facts = (pair.entity_kind, pair.status, {str(pair.low_uuid), str(pair.high_uuid)})
+    assert facts == ("ticket_task", "dup_ignored", {task_uuid, created["tasks"][1]["uuid"]})
+    assert await _events() == ["ignored_by_submitter"]
+    assert (await _count(Photo), await _help_addresses()) == (1, 1)
 
 
 # --- task on an existing ticket ------------------------------------------------------------
