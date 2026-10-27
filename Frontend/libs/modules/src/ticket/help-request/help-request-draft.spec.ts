@@ -5,6 +5,7 @@ import {
   clearAllHelpRequestDrafts,
   clearHelpRequestDraft,
   helpRequestDraftKey,
+  holdHelpRequestDraft,
   readHelpRequestDraft,
   writeHelpRequestDraft,
   type DraftStorage,
@@ -297,5 +298,79 @@ describe('help request draft', () => {
       clearAllHelpRequestDrafts(null);
     }).not.toThrow();
     expect(readHelpRequestDraft(null, 'user-1')).toBeNull();
+  });
+});
+
+describe('holdHelpRequestDraft', () => {
+  /** A tab holding the draft of an earlier opening. */
+  function keptStorage() {
+    const storage = memoryStorage();
+
+    writeHelpRequestDraft(storage, 'user-1', filledForm());
+
+    return storage;
+  }
+
+  const typedAtPoint = (): HelpRequestForm => ({
+    ...emptyHelpRequestForm(point('seed')),
+    title: '路口淹水',
+  });
+
+  it('brings the draft back from 請求協助, and keeps the form from then on, blank or not', () => {
+    const storage = keptStorage();
+    const hold = holdHelpRequestDraft(true);
+
+    expect(hold.read(storage, 'user-1')).toEqual(filledForm());
+
+    hold.write(storage, 'user-1', { ...filledForm(), title: '二樓也積泥' });
+    expect(readHelpRequestDraft(storage, 'user-1')?.title).toBe('二樓也積泥');
+
+    hold.write(storage, 'user-1', emptyHelpRequestForm());
+    expect(storage.items.size).toBe(0);
+  });
+
+  it('lets 取消 drop the draft it brought back', () => {
+    const storage = keptStorage();
+
+    holdHelpRequestDraft(true).discard(storage, 'user-1');
+
+    expect(storage.items.size).toBe(0);
+  });
+
+  it("does not bring it back at a point on the map, and leaves it be while nothing is done: the point, the pin's 門牌 and 取消 included", () => {
+    const storage = keptStorage();
+    const hold = holdHelpRequestDraft(false);
+
+    expect(hold.read(storage, 'user-1')).toBeNull();
+
+    hold.write(storage, 'user-1', emptyHelpRequestForm(point('seed')));
+    hold.write(storage, 'user-1', {
+      ...lookedUpForm('pin'),
+      landmark: point('seed'),
+    });
+    hold.discard(storage, 'user-1');
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(filledForm());
+  });
+
+  it('takes the draft over once something is done at the point, and drops it when blank again', () => {
+    const storage = keptStorage();
+    const hold = holdHelpRequestDraft(false);
+
+    hold.write(storage, 'user-1', typedAtPoint());
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(typedAtPoint());
+
+    hold.write(storage, 'user-1', emptyHelpRequestForm(point('seed')));
+    expect(storage.items.size).toBe(0);
+  });
+
+  it('lets 取消 drop it once something was done at the point', () => {
+    const storage = keptStorage();
+    const hold = holdHelpRequestDraft(false);
+
+    hold.write(storage, 'user-1', typedAtPoint());
+    hold.discard(storage, 'user-1');
+
+    expect(storage.items.size).toBe(0);
   });
 });
