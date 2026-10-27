@@ -113,11 +113,17 @@ async def set_password(
     revoked, and it means a session that watched a password being set does not keep running
     on the strength of it. The owner is told afterwards, because a first password on an
     SSO-only account is a new permanent way in and must not appear silently.
+
+    An account with no verified email or phone is refused before any proof (ADR-401): a password
+    signs in with one of them, so it could never be used.
     """
     user_uuid = str(current_user.uuid)
     if await identity_repository.get_password_identity(db, user_uuid) is not None:
         raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_ALREADY_SET,
                        detail="Password already set; use /auth/change-password")
+    if not any(contact.verified for contact in await contact_repository.list_by_user(db, user_uuid)):
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_NEEDS_CONTACT,
+                       detail="Add an email or phone number first: a password signs in with one")
     try:
         await contact_service.require_step_up_for_first_password(
             db, redis, actor=current_user, step_up=body.step_up,

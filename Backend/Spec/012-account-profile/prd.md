@@ -103,6 +103,7 @@
 | | 404 | `no_proof_channel` | ⚠️ 見 §8 待決 1 |
 | `POST /auth/contacts/resend` | 404 | `no_pending_contact` | 「沒有等待驗證的變更，請重新送出」 |
 | `POST /auth/set-password` | 409 | `password_already_set` | 導去改密碼 |
+| | 409 | `password_needs_contact` | 「要先新增電子郵件或手機，才能設定密碼」，**不要**顯示證明欄位（ADR-401） |
 | | 422 | `no_proof_channel` | 「請先新增一個聯絡方式」 |
 
 `step_up` 的欄位：`password`（前端先雜湊，與 change-password 相同）、`old_channel_code`、`id_token`。

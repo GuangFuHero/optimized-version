@@ -257,9 +257,10 @@ ACTION_REMOVE = "remove"
 ACTION_SET_PASSWORD = "set_password"
 ACTION_LINK = "link_identity"
 ACTION_UNLINK = "unlink_identity"
-# The actions `require_channel_proof` gates, so the only ones whose proof can be the account's provider: a
-# step-up at the provider is recorded for one of these (ADR-361).
-REAUTH_ACTIONS = (ACTION_ADD, ACTION_SET_PASSWORD, ACTION_LINK, ACTION_UNLINK)
+# The actions `require_channel_proof` gates whose proof can be the account's provider: a step-up at the
+# provider is recorded for one of these (ADR-361). Not a first password: an account with no contact is
+# refused one, and one with a contact proves it there (ADR-401).
+REAUTH_ACTIONS = (ACTION_ADD, ACTION_LINK, ACTION_UNLINK)
 
 _ACTION_ZH = {
     ACTION_ADD: "新增聯絡方式",
