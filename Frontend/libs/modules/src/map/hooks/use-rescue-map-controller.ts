@@ -154,35 +154,39 @@ export function normalizeLayerPreferences(
   };
 }
 
-function readLayerPreferences(): RescueMapLayerPreferences {
+export function readLayerPreferences(): RescueMapLayerPreferences {
   if (typeof window === 'undefined') {
     return FALLBACK_LAYER_PREFERENCES;
   }
 
-  const storedValue = window.localStorage.getItem(
-    MAP_LAYER_PREFERENCE_STORAGE_KEY,
-  );
-
-  if (!storedValue) {
-    return FALLBACK_LAYER_PREFERENCES;
-  }
-
+  // A browser that blocks site data throws on any touch of localStorage: the map then opens on its
+  // default layer.
   try {
-    return normalizeLayerPreferences(JSON.parse(storedValue));
+    const storedValue = window.localStorage.getItem(
+      MAP_LAYER_PREFERENCE_STORAGE_KEY,
+    );
+
+    return storedValue
+      ? normalizeLayerPreferences(JSON.parse(storedValue))
+      : FALLBACK_LAYER_PREFERENCES;
   } catch {
     return FALLBACK_LAYER_PREFERENCES;
   }
 }
 
-function writeLayerPreferences(preferences: RescueMapLayerPreferences) {
+export function writeLayerPreferences(preferences: RescueMapLayerPreferences) {
   if (typeof window === 'undefined') {
     return;
   }
 
-  window.localStorage.setItem(
-    MAP_LAYER_PREFERENCE_STORAGE_KEY,
-    JSON.stringify(preferences),
-  );
+  try {
+    window.localStorage.setItem(
+      MAP_LAYER_PREFERENCE_STORAGE_KEY,
+      JSON.stringify(preferences),
+    );
+  } catch {
+    // Blocked site data: the layers picked hold until the page closes.
+  }
 }
 
 export function useRescueMapController({
