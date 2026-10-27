@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SITE_BASE_LAYERS, SITE_FALLBACK_BASE_LAYER } from '../route/constants';
+import { SITE_BASE_LAYERS } from '../route/constants';
 import { parseSiteRouteState } from '../route/parse';
 import { isSelectableBaseLayer } from './constants';
 
@@ -20,13 +20,14 @@ describe('isSelectableBaseLayer', () => {
 });
 
 describe('parseSiteRouteState', () => {
-  it('sends a link to the unavailable CARTO layer to the fallback layer', () => {
+  it('opens a link to the unavailable CARTO layer on the viewer’s own layer', () => {
     const state = parseSiteRouteState(
       'map',
       ['carto', 'station'],
       new URLSearchParams(),
     );
 
-    expect(state.baseLayer).toBe(SITE_FALLBACK_BASE_LAYER);
+    expect(state.baseLayer).toBeUndefined();
+    expect(state.dataType).toBe('station');
   });
 });
