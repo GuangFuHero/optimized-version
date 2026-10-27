@@ -1,7 +1,10 @@
 """Response shapes for the bulk export/import endpoints (feature 015)."""
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
+from app.services.bulk_dedup import SuspectedRow
 from app.services.bulk_import import ImportOutcome, PreviewResult
 
 
@@ -11,6 +14,28 @@ class RowErrorResponse(BaseModel):
     line: int = Field(description="試算表的列號，表頭是第 1 列")
     column: str = Field(description="出問題的欄位；`-` 代表整列層級的問題")
     message: str
+
+
+class SuspectedRowResponse(BaseModel):
+    """A row that looks like something already there (ADR-398). No similarity, no contact details."""
+
+    line: int = Field(description="試算表的列號，表頭是第 1 列")
+    related_kind: str = Field(description="`station` 或 `ticket_task`")
+    related_uuid: str = Field(
+        description="很像的那一筆。送出時放進 `decisions` 的 `acknowledged_duplicate_of`，這一列就仍會建立"
+    )
+    related_ticket_uuid: str | None = Field(description="很像的是任務時，它所屬的單")
+    title: str | None = Field(description="站點名稱；任務則是它所屬單的標題")
+    task_name: str | None = Field(description="任務名稱；站點是 null")
+    type: str | None = Field(description="站點類型或任務類型")
+    status: str | None = Field(description="站點營運狀態或任務狀態")
+    distance_m: int | None = Field(description="這一列跟它相距幾公尺")
+    created_at: datetime | None
+
+    @classmethod
+    def of(cls, row: SuspectedRow) -> "SuspectedRowResponse":
+        """Build the response from the service's row."""
+        return cls(**vars(row))
 
 
 class BulkPreviewResponse(BaseModel):
@@ -27,6 +52,15 @@ class BulkPreviewResponse(BaseModel):
     skipped_columns: list[dict[str, str]] = Field(
         default_factory=list, description="設定裡有、但這種檔案存不下的動態欄位（ADR-118）"
     )
+    suspected: int = Field(
+        default=0, description="疑似重複的列數；送出時沒確認就不建立，不算在 to_create、to_update 裡"
+    )
+    suspects: list[SuspectedRowResponse] = Field(
+        default_factory=list, description="每個疑似重複一筆，照列號排（ADR-398）"
+    )
+    dedup_checked: bool = Field(
+        default=True, description="要新建的列都跟資料庫比過了。false 是這次沒比完，不代表沒有重複"
+    )
 
     @classmethod
     def of(cls, result: PreviewResult) -> "BulkPreviewResponse":
@@ -41,6 +75,9 @@ class BulkPreviewResponse(BaseModel):
             to_update=result.to_update,
             errors=[RowErrorResponse(**vars(error)) for error in result.errors],
             skipped_columns=list(result.skipped_columns),
+            suspected=result.suspected,
+            suspects=[SuspectedRowResponse.of(row) for row in result.suspects],
+            dedup_checked=result.dedup_checked,
         )
 
 
@@ -70,6 +107,15 @@ class BulkImportResponse(BaseModel):
         default_factory=list,
         description="主資料已寫入、但後續步驟因權限失敗的列號——這幾列處於半完成狀態",
     )
+    suspected: int = Field(
+        default=0, description="疑似重複、沒確認所以沒建立的列數。不算在 failed 裡，但在錯誤報告裡"
+    )
+    suspects: list[SuspectedRowResponse] = Field(
+        default_factory=list, description="沒建立的疑似重複列，形狀同預覽（ADR-398）"
+    )
+    dedup_checked: bool = Field(
+        default=True, description="要新建的列都跟資料庫比過了。false 是這次沒比完，不代表沒有重複"
+    )
 
     @classmethod
     def of(cls, outcome: ImportOutcome) -> "BulkImportResponse":
@@ -84,4 +130,7 @@ class BulkImportResponse(BaseModel):
                 ErrorReportResponse(**vars(outcome.error_report)) if outcome.error_report else None
             ),
             partial_rows=list(outcome.partial_rows),
+            suspected=outcome.suspected,
+            suspects=[SuspectedRowResponse.of(row) for row in outcome.suspects],
+            dedup_checked=outcome.dedup_checked,
         )

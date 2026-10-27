@@ -286,14 +286,23 @@ async def test_a_matched_row_updates_rather_than_duplicating(db):
 
 @pytest.mark.asyncio
 async def test_a_different_phone_makes_it_a_different_ticket(db):
-    """The same words from another person are another request (ADR-107)."""
+    """The same words from another person are another request (ADR-107).
+
+    Not an update, so it is a new ticket — and one the fast dedup layer says looks like the first,
+    at the same place with the same need. It lands once the importer files it anyway (ADR-398).
+    """
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([_row("需要飲用水", phone="0912345678")])
     await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
     raw, filename = _file([_row("需要飲用水", phone="0987654321")])
-    await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+    held = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+    assert (held.updated, held.created, held.suspected) == (0, 0, 1)
+    await commit_tickets(
+        db, actor=actor, raw=raw, filename=filename, task_type="rescue",
+        decisions={2: held.suspects[0].related_uuid},
+    )
 
     assert await _count(db, Tickets) == 2
 

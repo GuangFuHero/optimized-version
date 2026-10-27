@@ -399,3 +399,64 @@ async def test_ticket_preview_and_commit_are_wired_up(client, db_session, redis)
 
     assert preview.json()["to_create"] == 1
     assert commit.json()["created"] == 1
+
+
+# --- the fast dedup layer (ADR-398) ---
+
+
+async def _commit(client, headers, rows, **data):
+    return await client.post(
+        f"{BASE}/stations/import/commit?station_type=shelter", headers=headers, files=_upload(rows), data=data
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_suspected_row_comes_back_from_preview_and_lands_with_its_decision(client, db_session, redis):
+    """The preview names what the row looks like; the commit's `decisions` files it anyway."""
+    headers = await _importer(db_session, redis)
+    await _commit(client, headers, [_row("光復國小臨時收容所")])
+
+    preview = await client.post(
+        f"{BASE}/stations/import/preview?station_type=shelter",
+        headers=headers,
+        files=_upload([_row("光復國小臨時收容處")]),
+    )
+    body = preview.json()
+    (suspect,) = body["suspects"]
+    assert (body["to_create"], body["suspected"], body["dedup_checked"]) == (0, 1, True)
+    assert {k: suspect[k] for k in ("line", "related_kind", "title", "task_name", "distance_m")} == {
+        "line": 2,
+        "related_kind": "station",
+        "title": "光復國小臨時收容所",
+        "task_name": None,
+        "distance_m": 0,
+    }
+    decisions = json.dumps([{"line": 2, "acknowledged_duplicate_of": suspect["related_uuid"]}])
+    commit = await _commit(client, headers, [_row("光復國小臨時收容處")], decisions=decisions)
+
+    assert (commit.json()["created"], commit.json()["suspected"]) == (1, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "decisions",
+    [
+        "not json",
+        json.dumps({"2": "x"}),
+        json.dumps([{"line": "2", "acknowledged_duplicate_of": "x"}]),
+        json.dumps([{"line": True, "acknowledged_duplicate_of": "x"}]),
+        json.dumps([{"line": 2}]),
+        json.dumps(
+            [{"line": 2, "acknowledged_duplicate_of": "x"}, {"line": 2, "acknowledged_duplicate_of": "y"}]
+        ),
+    ],
+    ids=["not-json", "not-a-list", "line-not-a-number", "line-a-bool", "no-uuid", "a-line-twice"],
+)
+async def test_malformed_decisions_are_a_400(client, db_session, redis, decisions):
+    """The caller's mistake, said before anything is written."""
+    headers = await _importer(db_session, redis)
+
+    resp = await _commit(client, headers, [_row("光復國小")], decisions=decisions)
+
+    assert resp.status_code == 400
+    assert "decisions" in resp.json()["detail"]

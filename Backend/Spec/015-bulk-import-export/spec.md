@@ -248,6 +248,24 @@ grant 矩陣（ADR-111）：
 
 **超長或超出範圍的儲存格只讓那一列失敗**（ADR-241）。20 個有寬度上限的欄位在 Python 端檢查長度，Integer 檢查 int4 範圍；逐列迴圈另外接住 `SQLAlchemyError` 當作防線，任何未預期的資料庫錯誤最多毀掉一列。
 
+### 去重：要新建的列先過快層（ADR-398）
+
+要新建的列（新站點、新任務單的每個任務、替既有單加的新任務）都先問去重快層「資料庫裡附近有沒有很像的」。
+更新的列不比：比對鍵配到的就是同一筆（ADR-106）。只跟資料庫比，不跟同一份檔的其他列比。
+
+1. **preview**：回傳每一列的疑似重複（`suspects`）和列數（`suspected`）。這些列不算在 `to_create`、`to_update`。
+   preview 照舊什麼都不寫。
+2. **commit**：表單多一個 `decisions`，JSON 陣列 `[{ "line": 5, "acknowledged_duplicate_of": "<uuid>" }]`。
+   `acknowledged_duplicate_of` 放 preview 給的 `related_uuid`，意思是「看過了，不是同一筆，仍要建立」。
+   - 整份檔先比完才開始寫，所以 commit 的結果跟 preview 一致。
+   - 有疑似、沒放進 `decisions` 的列不建立，放進錯誤報告，訊息是「疑似重複，未建立：很像…」。
+   - 放進 `decisions` 的列照常建立，並留一張配對卡進審核佇列；審核者整次匯入只收到一則通知。
+3. 呼叫的人沒有 `*.add`，或去重引擎出錯、逾時：照常匯入（fail-open），`dedup_checked` 回 `false`。
+   這時畫面要說「這次沒比對重複」，不能當成沒有重複。
+
+新任務單佔好幾列時，整張單一起問（`NewTicket`，每列一個任務）。領頭列被擋，同一張單的後續列照 ADR-211 一起不匯入；
+只有後續列被擋，只擋那一列。
+
 ### 錯誤報表格式
 
 preview 與 commit 的回應都帶逐列錯誤，commit 另外附上可以直接下載的報表：
@@ -255,15 +273,18 @@ preview 與 commit 的回應都帶逐列錯誤，commit 另外附上可以直接
 | 欄位 | 內容 |
 |---|---|
 | `errors[]` | `{ line, column, message }`。`line` 是試算表列號（表頭是第 1 列）；`column` 是出問題的欄位，`-` 代表整列層級的問題 |
-| `error_report` | `{ filename, media_type, content_base64 }`，沒有失敗列時為 `null`。內容是**失敗的原始列 + 最後一欄錯誤原因**，格式與上傳的檔相同 |
+| `error_report` | `{ filename, media_type, content_base64 }`，沒有失敗列、也沒有被擋的疑似重複列時為 `null`。內容是**失敗或被擋的原始列 + 最後一欄原因**，格式與上傳的檔相同 |
 | `partial_rows[]` | 主資料已寫入、後續步驟才失敗的列號（ADR-212） |
 | `batch_id` | 這次匯入的識別碼，只出現在回應裡（ADR-124） |
+| `suspected` | 疑似重複的列數。preview：送出時沒確認就不建立的；commit：這次沒建立的。不算在 `failed` 裡（ADR-398） |
+| `suspects[]` | `{ line, related_kind, related_uuid, related_ticket_uuid, title, task_name, type, status, distance_m, created_at }`，照列號排。`title` 是站點名稱，或任務所屬單的標題；不給相似度和聯絡資料 |
+| `dedup_checked` | 要新建的列都比過了才是 `true` |
 
 報表內嵌在回應裡而不是給下載網址：端點是無狀態的（ADR-114），而且 commit 之後用同一份檔重算，得到的答案不會一樣。
 
 錯誤原因那一欄預設叫 `error`；原檔已經有 `error` 欄時改用 `error_1`、`error_2`⋯⋯，報表才能直接重新上傳（ADR-242）。解析報表的工具應該讀最後一欄，不要寫死欄名。
 
-Schema 在 `app/schemas/bulk.py` 的 `BulkPreviewResponse` / `BulkImportResponse` / `RowErrorResponse` / `ErrorReportResponse`。
+Schema 在 `app/schemas/bulk.py` 的 `BulkPreviewResponse` / `BulkImportResponse` / `RowErrorResponse` / `ErrorReportResponse` / `SuspectedRowResponse`。
 
 ---
 
@@ -332,10 +353,11 @@ Schema 在 `app/schemas/bulk.py` 的 `BulkPreviewResponse` / `BulkImportResponse
 | 權限：`*.import` + `*.add` / `*.edit` | 110、111 | `*.import` 由 `bulk_import.py` 的 `preview_*` / `commit_*` 呼叫 `require_scope` 檢查；`*.add` / `*.edit` 與 own/zone 範圍由 `_write_station()` / `_write_ticket()` 呼叫的既有 station/ticket service 檢查（`test_importing_without_the_add_capability_fails_every_new_row`、`test_a_zone_scoped_importer_cannot_update_outside_its_area`）；grant 矩陣由 `test_seed_matrix_matches_adr_111` 釘住 |
 | 動態欄位表納入稽核 | 124 | `alembic/versions/b3f1c07d2a95_audit_dynamic_field_tables.py` |
 | commit 端點 rate limit | 116 | **未實作**（見 §4） |
+| 要新建的列先過快層、逐列確認 | 398 | `bulk_import.py` `_station_drafts()` / `_ticket_drafts()`（問什麼）、`_hold()`（擋下的列）、`_create_station()` / `_create_ticket()` / `_write_task()`（建立＋配對卡一次 commit）；`app/services/bulk_dedup.py` `compare()` / `describe()`；`bulk.py` `_parse_decisions()` |
 
 ### 13.2 測試
 
-9 個檔案、142 支測試：
+10 個檔案（2026-10-27 加 `test_bulk_import_dedup.py`，ADR-398）：
 
 | 檔案 | 涵蓋 |
 |---|---|
@@ -345,6 +367,7 @@ Schema 在 `app/schemas/bulk.py` 的 `BulkPreviewResponse` / `BulkImportResponse
 | `tests/test_bulk_export.py` | 欄位配置、zone 範圍、空範本、CSV/XLSX 一致、PII 逐列遮蔽、格式先檢查、上限拒絕（ADR-238/239） |
 | `tests/test_bulk_import_station.py` | 預覽不寫入、全部錯誤一次回報、新增/更新、重複匯入不變、zone 限制、錯誤報表、單列失敗不拖垮整份、`partial_rows`、多筆比對不透露 uuid |
 | `tests/test_bulk_import_ticket.py` | 三層寫入、新單一律 pending、狀態機、同單多任務、遮蔽電話不能匯回、ADR-211 的兩種情境、ADR-240/241/242 |
-| `tests/test_bulk_endpoints.py` | HTTP 層：下載標頭、中文型別、400/403、mapping 解析、報表 base64 解碼 |
+| `tests/test_bulk_endpoints.py` | HTTP 層：下載標頭、中文型別、400/403、mapping 與 decisions 解析、報表 base64 解碼、疑似重複走一趟 |
+| `tests/test_bulk_import_dedup.py` | 去重（ADR-398）：只問要新建的列、預覽不寫、沒有 add 或引擎失敗時說沒比、沒確認的列被擋進報表、確認的列建立＋配對卡＋一則通知、確認指向不存在的東西、新單的領頭列／後續列被擋、新單和第一個任務一次 commit；真 engine 兩支 |
 | `tests/test_bulk_permissions.py` | capability 命名、grant 矩陣符合 ADR-111、import 必搭 add/edit |
 | `tests/test_bulk_audit.py` | 動態欄位表的 insert/update/delete 都有稽核，且每張稽核表都有 migration 掛 trigger |

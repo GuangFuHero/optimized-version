@@ -114,6 +114,44 @@ def _parse_mapping(raw: str | None) -> dict[str, str]:
     return mapping
 
 
+_DECISIONS_SHAPE = "decisions 必須是 [{line: 列號, acknowledged_duplicate_of: uuid}] 的陣列"
+
+
+def _parse_decisions(raw: str | None) -> dict[int, str]:
+    """Parse the suspected rows to file anyway, by line (ADR-398), from a JSON array in the form data."""
+    if not raw:
+        return {}
+    try:
+        decisions = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="decisions 不是合法的 JSON"
+        ) from exc
+    if not isinstance(decisions, list):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_DECISIONS_SHAPE)
+    parsed: dict[int, str] = {}
+    for decision in decisions:
+        if not (
+            isinstance(decision, dict)
+            and type(decision.get("line")) is int  # not a bool, which isinstance would let through
+            and isinstance(decision.get("acknowledged_duplicate_of"), str)
+        ):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_DECISIONS_SHAPE)
+        if decision["line"] in parsed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"decisions 裡第 {decision['line']} 列出現了兩次",
+            )
+        parsed[decision["line"]] = decision["acknowledged_duplicate_of"]
+    return parsed
+
+
+_DECISIONS_DESCRIPTION = (
+    "仍要建立的疑似重複列，JSON 陣列：[{line, acknowledged_duplicate_of}]，"
+    "acknowledged_duplicate_of 是預覽給的 related_uuid。沒列的疑似重複列不建立（ADR-398）"
+)
+
+
 async def _read_upload(file: UploadFile) -> tuple[bytes, str]:
     raw = await file.read()
     return raw, file.filename or ""
@@ -183,15 +221,16 @@ async def commit_station_import(
     station_type: str = Query(description="這份檔案的站點型別"),
     file: UploadFile = File(description="與 preview 相同的那份檔"),
     mapping: str | None = Form(None, description="preview 確認過的欄位映射 JSON"),
+    decisions: str | None = Form(None, description=_DECISIONS_DESCRIPTION),
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Write the file row by row; failed rows come back as a downloadable report."""
+    """Write the file row by row; failed and held rows come back as a downloadable report."""
     raw, filename = await _read_upload(file)
     try:
         outcome = await bulk_import.commit_stations(
             db, actor=current_user, raw=raw, filename=filename,
-            station_type=station_type, mapping=_parse_mapping(mapping),
+            station_type=station_type, mapping=_parse_mapping(mapping), decisions=_parse_decisions(decisions),
         )
     except (BulkImportError, TableFormatError) as exc:
         raise _bad_request(exc) from exc
@@ -208,6 +247,7 @@ async def commit_ticket_import(
     task_type: str = Query(description="這份檔案的任務型別"),
     file: UploadFile = File(description="與 preview 相同的那份檔"),
     mapping: str | None = Form(None, description="preview 確認過的欄位映射 JSON"),
+    decisions: str | None = Form(None, description=_DECISIONS_DESCRIPTION),
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
@@ -216,7 +256,7 @@ async def commit_ticket_import(
     try:
         outcome = await bulk_import.commit_tickets(
             db, actor=current_user, raw=raw, filename=filename,
-            task_type=task_type, mapping=_parse_mapping(mapping),
+            task_type=task_type, mapping=_parse_mapping(mapping), decisions=_parse_decisions(decisions),
         )
     except (BulkImportError, TableFormatError) as exc:
         raise _bad_request(exc) from exc

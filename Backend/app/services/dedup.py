@@ -2,6 +2,7 @@
 
 - `check_submission`: ask the engine about a submission, guarded — savepoint always rolled
   back, timeout, write detection, malformed and acknowledged results dropped. Fail-open.
+  `try_check_submission` is the same, but says when the engine gave no answer.
 - `record_suspect_shown`: audit that a hint was shown.
 - `score_acknowledged`: score a pair the submitter chose to file anyway, before creating.
 - `record_pair_ignored`: card that pair once the new entity exists. Does not commit.
@@ -56,6 +57,25 @@ async def check_submission(
     treated as "no suspects" (fail-open). The actor is reloaded on the way out in case a rollback
     expired it, since the caller goes on to create with it.
     """
+    suspects = await try_check_submission(
+        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
+    )
+    return suspects or []
+
+
+async def try_check_submission(
+    db: AsyncSession,
+    *,
+    submission: Submission,
+    acknowledged: frozenset[str],
+    actor: User,
+    now: datetime,
+) -> list[Suspect] | None:
+    """`check_submission`, but None when the engine gave no answer, so the caller can say so.
+
+    Batch import reports whether its rows were compared at all (ADR-398): an engine that failed
+    must not read as "nothing looks like a duplicate".
+    """
     engine = get_engine()
     try:
         suspects = await _guarded(db, lambda: engine.check(db, submission, now))
@@ -63,13 +83,13 @@ async def check_submission(
         logger.error(
             "dedup engine %s wrote to the database during check; ignoring its answer", engine.version
         )
-        return []
+        return None
     except Exception:
         logger.exception("dedup check failed or timed out; creating without a hint (fail-open)")
         with contextlib.suppress(Exception):
             await db.rollback()
         await refresh_actor(db, actor)
-        return []
+        return None
     await refresh_actor(db, actor)
     return _usable(suspects, acknowledged)
 

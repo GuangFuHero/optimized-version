@@ -30,7 +30,8 @@ Spec 021 交付了去重快層（2026-09-29 起比對單位是任務）。本功
 - **不改演算法本身。** Phase 2 的 fast-v2 只做 021 已定的任務層級。
 - **不做慢層**（背景掃描、向量、admin 審核）。admin 審核清單、判定與撤銷後來由 `Spec/025-dedup-review-queue/` 交付（ADR-336～345）。
 - **不存重播用的輸入**（ADR-295）。
-- **批次匯入不去重**（ADR-299）。
+- **不管批次匯入的流程**：它也跑快層（預覽列出疑似重複、送出逐列確認），寫在 `Spec/015` 的 ADR-398；
+  ADR-299 原本的「批次匯入不去重」被它取代。
 - **不處理前端**：交接說明見 plan「交給前端的 API 變更」。
 
 ---
@@ -44,7 +45,7 @@ Spec 021 交付了去重快層（2026-09-29 起比對單位是任務）。本功
 | 守門測試 | `tests/dedup_engine/test_contract.py`、`test_core_isolation.py`、`test_candidates.py` 的 index 測試 | 後端（Chi 可改） | 合約、隔離、唯讀、效能、index（ADR-306） | Chi 改動需後端 review |
 | contract | `app/dedup_engine/contract.py` | 雙方 | 草稿與 `Submission`、`Suspect`、`DedupEngine` Protocol | 改動需雙方同意 |
 | service | `app/services/dedup.py` | 後端 | 呼叫 engine（SAVEPOINT＋rollback、逾時、fail-open）、寫 `hint_shown`／配對卡／audit；`ENGINE_TIMEOUT_S` 與效能門檻由後端拍板、Chi 提意見（ADR-306） | 不含任何比對邏輯 |
-| 編排 | `app/services/dedup_submission.py` | 後端 | 三個觸發點的兩段式（§5），只給 GraphQL 用 | 批次匯入不經過這裡 |
+| 編排 | `app/services/dedup_submission.py` | 後端 | 三個觸發點的兩段式（§5），只給 GraphQL 用 | 批次匯入不經過這裡，走 `app/services/bulk_dedup.py`（ADR-398） |
 | model／schema | `app/models/`、`alembic/versions/` | 後端 | `duplicate_pairs`、`dedup_audit_events`，以及候選查詢要用的 index（ADR-305） | engine 不改 model、migration、index |
 
 **觸發點固定三個**：新開單（工單連同任務）、替既有的單加任務、登記站點。所有會被去重的東西都經過其中之一，

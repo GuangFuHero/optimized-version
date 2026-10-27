@@ -1574,7 +1574,7 @@ export interface paths {
     put?: never;
     /**
      * 執行資源站點匯入
-     * @description Write the file row by row; failed rows come back as a downloadable report.
+     * @description Write the file row by row; failed and held rows come back as a downloadable report.
      */
     post: operations['commit_station_import_api_v1_bulk_stations_import_commit_post'];
     delete?: never;
@@ -2164,6 +2164,11 @@ export interface components {
        * @description preview 確認過的欄位映射 JSON
        */
       mapping?: string | null;
+      /**
+       * Decisions
+       * @description 仍要建立的疑似重複列，JSON 陣列：[{line, acknowledged_duplicate_of}]，acknowledged_duplicate_of 是預覽給的 related_uuid。沒列的疑似重複列不建立（ADR-398）
+       */
+      decisions?: string | null;
     };
     /** Body_commit_ticket_import_api_v1_bulk_tickets_import_commit_post */
     Body_commit_ticket_import_api_v1_bulk_tickets_import_commit_post: {
@@ -2177,6 +2182,11 @@ export interface components {
        * @description preview 確認過的欄位映射 JSON
        */
       mapping?: string | null;
+      /**
+       * Decisions
+       * @description 仍要建立的疑似重複列，JSON 陣列：[{line, acknowledged_duplicate_of}]，acknowledged_duplicate_of 是預覽給的 related_uuid。沒列的疑似重複列不建立（ADR-398）
+       */
+      decisions?: string | null;
     };
     /** Body_login_api_v1_auth_login_post */
     Body_login_api_v1_auth_login_post: {
@@ -2252,6 +2262,23 @@ export interface components {
        * @description 主資料已寫入、但後續步驟因權限失敗的列號——這幾列處於半完成狀態
        */
       partial_rows?: number[];
+      /**
+       * Suspected
+       * @description 疑似重複、沒確認所以沒建立的列數。不算在 failed 裡，但在錯誤報告裡
+       * @default 0
+       */
+      suspected: number;
+      /**
+       * Suspects
+       * @description 沒建立的疑似重複列，形狀同預覽（ADR-398）
+       */
+      suspects?: components['schemas']['SuspectedRowResponse'][];
+      /**
+       * Dedup Checked
+       * @description 要新建的列都跟資料庫比過了。false 是這次沒比完，不代表沒有重複
+       * @default true
+       */
+      dedup_checked: boolean;
     };
     /**
      * BulkPreviewResponse
@@ -2291,6 +2318,23 @@ export interface components {
       skipped_columns?: {
         [key: string]: string;
       }[];
+      /**
+       * Suspected
+       * @description 疑似重複的列數；送出時沒確認就不建立，不算在 to_create、to_update 裡
+       * @default 0
+       */
+      suspected: number;
+      /**
+       * Suspects
+       * @description 每個疑似重複一筆，照列號排（ADR-398）
+       */
+      suspects?: components['schemas']['SuspectedRowResponse'][];
+      /**
+       * Dedup Checked
+       * @description 要新建的列都跟資料庫比過了。false 是這次沒比完，不代表沒有重複
+       * @default true
+       */
+      dedup_checked: boolean;
     };
     /**
      * CapabilityCatalogResponse
@@ -3945,6 +3989,59 @@ export interface components {
       old_channel_code?: string | null;
       /** Id Token */
       id_token?: string | null;
+    };
+    /**
+     * SuspectedRowResponse
+     * @description A row that looks like something already there (ADR-398). No similarity, no contact details.
+     */
+    SuspectedRowResponse: {
+      /**
+       * Line
+       * @description 試算表的列號，表頭是第 1 列
+       */
+      line: number;
+      /**
+       * Related Kind
+       * @description `station` 或 `ticket_task`
+       */
+      related_kind: string;
+      /**
+       * Related Uuid
+       * @description 很像的那一筆。送出時放進 `decisions` 的 `acknowledged_duplicate_of`，這一列就仍會建立
+       */
+      related_uuid: string;
+      /**
+       * Related Ticket Uuid
+       * @description 很像的是任務時，它所屬的單
+       */
+      related_ticket_uuid: string | null;
+      /**
+       * Title
+       * @description 站點名稱；任務則是它所屬單的標題
+       */
+      title: string | null;
+      /**
+       * Task Name
+       * @description 任務名稱；站點是 null
+       */
+      task_name: string | null;
+      /**
+       * Type
+       * @description 站點類型或任務類型
+       */
+      type: string | null;
+      /**
+       * Status
+       * @description 站點營運狀態或任務狀態
+       */
+      status: string | null;
+      /**
+       * Distance M
+       * @description 這一列跟它相距幾公尺
+       */
+      distance_m: number | null;
+      /** Created At */
+      created_at: string | null;
     };
     /**
      * SwitchIdentityRequest

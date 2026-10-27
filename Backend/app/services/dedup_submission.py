@@ -11,8 +11,8 @@ including one whose acknowledgement names nothing, is checked and can still be h
 create, the scored pairs are carded in the same commit.
 
 Every engine call happens before anything is written, so a failed call can roll back the
-transaction. Batch import does not come through here; it calls `create_ticket` /
-`create_station` directly.
+transaction. Batch import does not come through here: it compares a whole file before writing
+any row, and decides row by row (`bulk_dedup`, ADR-398).
 """
 
 from dataclasses import dataclass

@@ -768,3 +768,94 @@ ADR-112 的整個循環是「照著它說的改、重新上傳、完成」，而
 **回歸測試**：`test_the_error_report_is_re_uploadable_when_the_file_has_an_error_column`——
 把報表讀回來，斷言 `error` 與 `error_1` 都在，且檔案本來那一欄的值沒被覆寫。
 拿掉修正會紅在 `TableFormatError: 表頭有重複的欄位名稱：error`。
+
+---
+
+### ADR-398 匯入要新建的列先過快層去重：預覽列出疑似重複，送出時逐列確認
+
+**白話**：匯入的檔案裡要新建的站點、任務，現在也會先跟資料庫裡附近的比。預覽列出哪幾列看起來跟現有的很像；
+送出時，使用者對那一列說「仍要建立」才建，沒說的就不建，放進錯誤報告。
+
+**Date**：2026-10-27。Carol 要求所有前後台的輸入都要先過快層（Discord #frontend-only，台灣日期 2026-10-27，
+UTC 10-26 19:29），批次匯入也算在內。Dan 10-27 同意取代 ADR-299 的這一點、更新的列不比、量過時間後不降列數上限。
+同一份檔案裡很像的列怎麼辦，Carol 10-27 在 Discord #uiux 定「先只跟資料庫比」；畫面上的其他題照建議。
+Notion 票：https://app.notion.com/p/406bc24b8353813d9f1afba3465ab9e2
+
+**Context**：
+
+- ADR-299（`Spec/022-dedup-engine-interface/decisions.md`）定的是「批次匯入不跑去重，重複留給慢層」。理由是兩段式
+  放進 `create_*`，匯入遇到疑似就不建，也沒有人能逐筆確認。慢層到現在還沒做，所以匯入造成的重複沒有人擋，也沒有人掃。
+- 比對鍵（ADR-107）跟快層問的是兩件事：比對鍵問「是不是同一筆」，配到就更新；快層問「是不是很像附近某一筆」。
+  資料庫有「光復國小」、檔案寫「光復國民小學」、相距 50 m：比對鍵不同，匯入當成新站點；快層會說很像。
+- 2026-10-27 在 5433 的臨時資料庫量過（2 萬張單、5,000 個站點）：500 列全擠在同一處的任務單，每次多約 19 秒；
+  一般情況約 2 秒；沒有一次碰到 2 秒逾時。ADR-116 的 500 列上限不用改。
+
+**Decision**：
+
+1. **只比要新建的列**：
+
+   | 這一列 | 送給引擎 |
+   |---|---|
+   | 新站點（比對鍵沒配到） | `NewStation` |
+   | 新任務單，含同一份檔裡同張單的後續列 | 一張單一個 `NewTicket`，每列是一個 `task:i` |
+   | 替資料庫裡已有的單加新任務 | `NewTask` |
+   | 更新（站點配到；或單和任務都配到） | 不比 |
+   | 驗證就失敗的列 | 不比 |
+
+   後續列要掛的單還不存在，不能用 `NewTask`（引擎找不到位置），所以合進領頭列的 `NewTicket`，跟 `createTicket`
+   一次帶多個任務一樣。
+2. **只跟資料庫比，不跟同一份檔的其他列比**。送出時整份檔先比完才開始寫，所以第 9 列不會被剛建好的第 3 列擋，
+   送出的結果跟預覽一致。檔內很像的兩列都會建立，留給審核。
+3. **預覽**：每份要比的送去 `dedup.try_check_submission`（savepoint、一定 rollback、逾時、fail-open）。預覽不寫
+   `hint_shown`，維持「預覽什麼都不寫」（ADR-112、114）。回應多三個欄位：
+   - `suspects`：每個疑似一筆、照列號排：`line`、`related_kind`、`related_uuid`、`related_ticket_uuid`，加上對方的
+     `title`（站點名稱，或任務所屬單的標題）、`task_name`、`type`、`status`、`distance_m`、`created_at`。不給相似度
+     （數字的意思會隨引擎版本變），不給聯絡資料。單筆路徑只回 uuid、畫面自己查；批次一次幾百列，所以摘要由後端
+     一次查好（`DuplicatePairRepository.entity_summaries`，審核佇列用的同一支）。每個登入的人都有 `station.view`、
+     `ticket.view` 和 `ticket.view_detail` 的 `all`（`scripts/seed_rbac.py`），摘要不比現在多露。
+   - `suspected`：疑似重複的列數。`to_create`、`to_update` 不再算這些列。
+   - `dedup_checked`：要新建的列都比過了才是 true。引擎失敗或逾時、或呼叫的人沒有 `*.add`（新建的列送出時本來就
+     會失敗，不替他比）時是 false，畫面才不會把「沒比」當成「沒有重複」。
+4. **送出**：多一個 form 欄位 `decisions`，JSON 陣列，每列一項 `{line, acknowledged_duplicate_of}`。意思跟單筆的
+   `acknowledgedDuplicateOf` 一樣；REST 用 snake_case，跟 `mapping` 一樣隨檔案送，伺服器不存（ADR-114）。
+   - 照現在的方式規劃整份檔；帶了確認的列先打分（`score_acknowledged`），再把要比的全部比完，才開始寫。
+   - 逐列寫：
+
+     | 這一列 | 做什麼 |
+     |---|---|
+     | 沒有疑似 | 照常建立 |
+     | 帶了確認，指向的東西還在 | 建立，不再檢查；配對卡 `dup_ignored`＋`ignored_by_submitter`，跟建立同一個 commit |
+     | 有疑似，沒帶確認 | 不建立；寫 `hint_shown`（推定接受提示，ADR-303）；放進錯誤報告，訊息「疑似重複，未建立」 |
+     | 帶了確認，指向的東西不見了 | 當成沒帶確認 |
+
+   - 沒決定的列就是不建立，跟單筆一致。選項只有「仍要建立」和「不建立」，沒有「改成更新那一筆」。
+   - 新任務單的領頭列不建立時，同張單的後續列照 ADR-211 一起不匯入；只有後續列疑似時，只擋那一列。
+   - 回應多 `suspected`、`suspects`（被擋的列，形狀同預覽）、`dedup_checked`。被擋的列不算 `failed`、不在 `errors`
+     裡，但跟失敗的列一起放進錯誤報告檔；修完重傳會再比一次，要再確認一次。
+   - 全部寫完，有新配對卡才通知審核者一次（`notify_new_cards`），不是一列一則。
+5. **寫入結構**：
+   - 新任務單的單、第一個任務、配對卡一起寫、一次 commit（原本 `create_ticket`、`import_ticket_task` 各 commit 一次）。
+     任務寫失敗時整列 rollback，不再留下一張沒有任務的單。
+   - 新站點：`validate_station`＋`insert_station`＋配對卡＋commit，再發通知，同 `submit_new_station`。
+   - `import_ticket_task` 換成 `validate_imported_task`（照舊只要 `ticket.add`，ADR-120），寫入用 `insert_added_task`，
+     配對卡同一個 commit。不呼叫 `submit_new_task`：它要的是那張單的 `ticket.edit`。
+   - 動態欄位照舊在主資料之後寫；`partial_rows`（ADR-212）的判定不變。
+6. **編排放在 `services/bulk_dedup.py`，不跟 `dedup_submission` 共用骨架**。單筆是「整份一起擋、一起建」，批次是
+   「先全部比完、逐列決定、逐列 commit」，兩邊共用的只有 `services/dedup.py` 的那幾支。
+7. **不拿區域鎖**。如果 ADR-396（#140）的區域鎖合了，批次匯入也不拿：整份檔先比完才寫，要鎖就得在整個匯入期間
+   鎖住幾百個區域，同一處的手動建單會一起卡住。匯入那幾十秒內有人在同一處手動建同一筆，兩邊都會建立，留給審核。
+
+**取代**：ADR-299 的「批次匯入不跑去重，匯入造成的重複留給慢層」。ADR-299 其他兩點（兩段式在
+`dedup_submission`、`create_*` 拆成驗證和寫入）不變。
+
+➕ 匯入的資料也會被快層比對；外部清冊裡跟既有資料很像的，先問使用者。
+➕ 確認的意思、配對卡、audit、通知都跟單筆同一套。
+➕ 新任務單不再一列兩次 commit。
+➖ 預覽和送出各多一輪比對：密集區 500 列各多約 19 秒，一般約 2 秒。畫面要有「比對中」的提示。
+➖ 檔內很像的兩列都會建立，要靠審核。真的常見再做草稿對草稿的比對（要 Chi 改 contract）。
+➖ 被擋的列重傳會再被擋，要再確認一次。
+➖ `decisions` 依列號對應。送出時換了檔，確認可能落到別列，結果只是多一張配對卡進審核佇列，跟 ADR-114 接受的
+  調包風險同一級。
+◾ 測試：`tests/test_bulk_import_dedup.py`（假引擎：問哪些列、預覽不寫、沒比時怎麼說、被擋、確認後建立和配對卡、
+  新單的領頭列與後續列、一次 commit；真引擎：被擋再確認、同一份檔裡很像的兩列都建立）、`tests/test_bulk_endpoints.py`
+  （`decisions` 的格式、走一趟 HTTP）。`test_a_different_phone_makes_it_a_different_ticket` 改成先被擋、確認後才建立。

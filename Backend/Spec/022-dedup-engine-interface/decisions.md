@@ -315,6 +315,9 @@ SemVer 的 major/minor 對演算法很難定義；commit hash 讀不懂且改註
 
 ### ADR-299 兩段式只在互動建單走；批次匯入不跑去重；`create_*` 拆成「驗證／寫入／commit」
 
+> **部分被 ADR-398 取代（2026-10-27，`Spec/015-bulk-import-export/decisions.md`）**：批次匯入改跑快層，預覽列出
+> 疑似重複，送出時逐列確認。兩段式在 `dedup_submission`、`create_*` 拆成驗證和寫入，這兩點不變。
+
 **白話**：去重放在一個獨立的編排函式裡，只有 GraphQL 的 `createTicket` / `createStation` 呼叫它。
 批次匯入照舊直接呼叫 `create_ticket` / `create_station`，行為完全不變。
 
