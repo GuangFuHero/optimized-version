@@ -1639,10 +1639,14 @@
    *  🔒 DUP-FE-111 理由只寫兩種：「相距 N 公尺」（前端用兩邊座標算）、「像你填的：X」（X＝這次填的需求名稱，
    *     對應 suspect 的 draftRef）。
    *  🔒 DUP-FE-112 主按鈕只有一顆「確認不重複，送出」；右上 × 回到表單（內容都在）。
-   *  🔒 DUP-FE-113 自己開過的單：標籤「你曾經開過的單」＋「要補需求，到那張按「再加一件」。」
+   *  🔒 DUP-FE-113 自己開過的單：標籤「你曾經開過的單」＋「這張是你開的。要多加，到那張單按「再加一件需要的幫忙」。」
+ *  🔒 DUP-FE-116 同一張單裡已經有一樣的需求：不提醒（後端也不比）。前台不能改人數，再加一件就是要更多人。
    *  🔒 DUP-FE-114 按「看這張」：草稿留著，提示「剛才的單還沒送出／填的內容都留著。／回去繼續填」。
    *  🔒 DUP-FE-115 不顯示單號，只放建立時間。 */
-  function DuplicateWarnDialog({ matches, viewerId, onOpenTicket, onCancel, onSubmitAnyway }) {
+  /* mode：'create'＝請求協助開新單（預設）；'add-need'＝在既有的單「再加一件需要的幫忙」（2026-10-27 前端 #143）。
+     加一件不算開單，所以副標與主按鈕換字；其他都一樣。比對、確認都走既有的 createTicketTask（Spec 022 §5.2），不用改後端。 */
+  function DuplicateWarnDialog({ matches, viewerId, onOpenTicket, onCancel, onSubmitAnyway, mode }) {
+    const addNeed = mode === 'add-need';
     return (
       <WGPortal>
         <div style={{ ...BELOW_BANNER, zIndex: 2400, display: 'grid', placeItems: 'center',
@@ -1657,7 +1661,7 @@
                   疑似重複的單
                 </div>
                 <div style={{ marginTop: 2, font: '400 var(--fs-13)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
-                  不重複開單，避免造成現場混亂。
+                  {addNeed ? '不重複加需求，避免造成現場混亂。' : '不重複開單，避免造成現場混亂。'}
                 </div>
               </div>
               <button type="button" onClick={onCancel} aria-label="回去修改" title="回去修改" data-site-dup-back
@@ -1708,7 +1712,9 @@
                       <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 'var(--radius-sm)',
                         background: 'var(--color-bg-info-subtle)', font: '400 var(--fs-13)/1.5 var(--font-body)',
                         color: 'var(--color-fg-neutral-default)' }} data-site-dup-mine>
-                        要補需求，到那張按「再加一件」。
+                        {/* 開新單、再加一件都用同一句；文字要跟按鈕名稱一模一樣。
+                            前台不能改人數 —— 同一件事要更多人也是「再加一件」，所以不分「別的事／同一件」。 */}
+                        這張是你開的。要多加，到那張單按「再加一件需要的幫忙」。
                       </div>
                     ) : null}
                   </div>
@@ -1716,7 +1722,7 @@
               })}
             </div>
             <div style={{ padding: 'var(--space-4)' }}>
-              <Button variant="primary" onClick={onSubmitAnyway} data-site-dup-submit style={{ width: '100%' }}>確認不重複，送出</Button>
+              <Button variant="primary" onClick={onSubmitAnyway} data-site-dup-submit style={{ width: '100%' }}>{addNeed ? '確認不重複，加上去' : '確認不重複，送出'}</Button>
             </div>
           </div>
         </div>
