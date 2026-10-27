@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>前台加入團隊</title>
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/primitives.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/semantic.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/motion.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/base.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<link rel="stylesheet" href="js/site/site.css?v=20261024b">
+<style>
+  body { margin: 0; background: var(--color-bg-neutral-sunken); }
+  .board { display: flex; flex-wrap: wrap; gap: 32px; padding: 32px; align-items: flex-start; }
+  .frame-title { font: 700 var(--fs-14)/1.4 var(--font-body); color: var(--color-fg-neutral-default); margin: 0 0 4px; }
+  .frame-note { font: 400 var(--fs-12)/1.5 var(--font-body); color: var(--color-fg-neutral-subtle); margin: 0 0 10px; max-width: 390px; }
+  .phone { width: 390px; background: var(--color-bg-neutral-default); border-radius: 20px; box-shadow: var(--shadow-lg); overflow: hidden; }
+  h1.board-h { font: 700 var(--fs-20)/1.4 var(--font-display); margin: 32px 32px 0; color: var(--color-fg-neutral-default); }
+  p.board-p { font: 400 var(--fs-14)/1.7 var(--font-body); margin: 6px 32px 0; color: var(--color-fg-neutral-subtle); max-width: 900px; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
+<script src="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/_ds_bundle.js"></script>
+<script src="js/site/site-route.js?v=20261026d"></script>
+<script type="text/babel" src="js/site/site-controls.jsx?v=20260925b" data-presets="react"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+/* 前台「加入團隊」（PR #146，Jarvis）的設計稿 —— 2026-10-27 Sucre
+ *
+ * 入口：團隊管理員在成員管理按「邀請成員」產生的 QR（MEM-QR，10-20：24 小時失效、不限人數）。
+ * 這頁是設計稿（並排看所有狀態），不是可操作的頁面。
+ *
+ * 🔒 JOIN-101 掃碼也要等那一隊的管理員核准（#146 現行規則）。掃碼的好處只剩「團隊已經選好、不用自己找」。
+
+ * 依據：後端 Backend/Spec/026-join-requests/spec.md（main）＋前端 PR #146 invite-page.tsx（10-27 讀過）。
+ * 🔒 JOIN-102 一頁只回答一件事：「我能不能申請加入這一隊、現在卡在哪」。頂部永遠是同一張團隊卡，
+ *    讓人知道自己掃到的是哪一隊（掃錯 QR 是常見情況）。
+ * 🔒 JOIN-103（10-27 依後端改）登入前看不到是哪一隊：GET /api/v1/invites/{token} 要登入才能叫（Spec 026），
+ *    連結能不能用也要登入後才知道。所以①只寫「你收到一個加入團隊的邀請」。
+ * 🔒 JOIN-104 登入／註冊完要回到這一頁，而且邀請連結還在（不要回首頁讓他再掃一次）。
+ * 🔒 JOIN-105 名字＋手機必填、手機要驗證；帳號已有的手機帶入唯讀（與「申請管理權限」10-05 同一套 ApplicantSection）。
+ * 🔒 JOIN-106 撤回要先展開確認（不用彈窗，因為可逆；10-06 同規則）。撤回後回到填表，剛剛填的還在。
+ * 🔒 JOIN-107 一個人同時只能有一筆申請在審核（含「申請管理權限」）。另一筆在審核時不給填表，
+ *    寫清楚是哪一筆、要先撤回；撤回＋改申請這一隊放在同一個確認裡做完。
+ *    另一筆就是這一隊 → 直接顯示「已送出」那個狀態，不算衝突。
+ * 🔒 JOIN-108（10-27 依後端改）過期、不存在、團隊停權後端一律回同一個 404「Invite not found」，前端分不出來
+ *    → 只有一個畫面⑥，三種可能一起寫。給另一條路：「申請管理權限」自己選團隊。
+ * 🔒 JOIN-109 被拒絕過的人再掃：後端有留那筆（status rejected＋理由，也發了含理由的通知），但邀請 API 只回
+ *    「審核中」的那筆 → 畫面跟第一次來一樣，直接填表（Spec 026 AC-RE-107：被拒絕或撤回可以立刻再申請）。
+ * 🔒 JOIN-110 表單上寫「有效至」（後端給 expires_at，前端不自己算到期）；送出後邀請到期不影響已送出的申請。
+ * 🔒 JOIN-112 ⑪（送出時邀請已不能用）與⑩（必填沒填）：提示在表單最上方，送出按鈕在最下方 →
+ *    出錯時畫面要自動捲回最上面、讓提示進入視線（scrollIntoView），並把焦點移到提示（role="alert"）。
+ *    不捲的話他只看到按鈕沒反應。（10-27 Sucre）
+ * 🔒 JOIN-111 加手機前要先確認本人（ADR-220）：有密碼→打密碼；沒密碼有電子郵件→寄到原本信箱的碼；
+ *    只用 LINE→到 LINE 再登入一次。名字、理由要留著（#146 已做到跨 LINE 保留草稿）。
+ * 🔒 受眾可能是長輩：全中文、16px 起、一畫面只叫他做一件事（同帳號安全頁 10-27）。
+ *
+ * 🚨 以下是我（Claude）定的，待 Sucre 確認：版面、全部文案、按鈕順序、JOIN 規則編號、
+ *    「已經是成員」時的兩顆按鈕、失效時不說原因、示範的人名團隊名（壯闊台灣、慈濟基金會、王志豪）。
+ */
+const { Button, Badge, Field, Input, Alert } = window.WanGuardDesignSystem_9c8f68;
+const WGIcon = window.WGIcon;
+
+const T = {
+  h: { font: '700 var(--fs-20)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)', margin: 0 },
+  sh: { font: '700 var(--fs-17)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)', margin: 0 },
+  p: { font: '400 var(--fs-16)/1.7 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty', margin: 0 },
+  strong: { fontWeight: 700, color: 'var(--color-fg-neutral-default)' },
+};
+const Big = (props) => <Button {...props} style={{ height: 48, fontSize: 16, width: '100%', ...(props.style || {}) }} />;
+
+const TEAM = { name: '壯闊台灣', type: 'ngo', inviter: '黃曉芳' };
+const TYPE_LABEL = { gov: '政府', ngo: '非政府組織' };
+
+function Page({ children, dim }) {
+  return (
+    <div className="phone">
+      <div style={{ padding: '20px 20px 4px' }}>
+        <p style={T.h}>加入團隊</p>
+      </div>
+      <div style={{ padding: '12px 20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>{children}</div>
+    </div>
+  );
+}
+/* 頂部團隊卡：每個狀態都一樣（JOIN-102）。dim＝連結失效時灰掉，仍寫出是哪一隊。 */
+function TeamCard({ dim, inviter = true, expires }) {
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14, borderRadius: 'var(--radius-lg)',
+      background: dim ? 'var(--color-bg-neutral-sunken)' : 'var(--color-bg-secondary-subtle)', opacity: dim ? .7 : 1 }}>
+      <span style={{ width: 44, height: 44, borderRadius: 12, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--color-bg-neutral-default)' }}>
+        <WGIcon n="Users" s={22} c={dim ? 'var(--color-fg-neutral-muted)' : 'var(--color-brand-secondary-default)'} />
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ font: '700 var(--fs-18)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' }}>{TEAM.name}</span>
+          <Badge tone="neutral" variant="subtle">{TYPE_LABEL[TEAM.type]}</Badge>
+        </span>
+        {inviter ? <span style={{ display: 'block', marginTop: 2, font: '400 var(--fs-14)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+          {TEAM.inviter} 邀請你加入</span> : null}
+        {expires ? <span style={{ display: 'block', marginTop: 2, font: '400 var(--fs-14)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+          邀請有效至 10/28 14:05</span> : null}
+      </span>
+    </div>
+  );
+}
+function F({ label, value, placeholder, readOnly, helper, required, children, rows }) {
+  const style = { fontSize: 16, height: rows ? 'auto' : 48, ...(readOnly ? { background: 'var(--color-bg-neutral-sunken)' } : {}) };
+  return (
+    <Field label={<span>{label}{required ? <span aria-hidden="true" style={{ color: 'var(--color-fg-danger)' }}> *</span> : null}</span>} helper={helper}>
+      {children || (rows
+        ? <textarea defaultValue={value || ''} placeholder={placeholder || ''} rows={rows}
+            style={{ width: '100%', boxSizing: 'border-box', padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-default)',
+              font: '400 var(--fs-16)/1.6 var(--font-body)', resize: 'vertical' }}></textarea>
+        : <Input defaultValue={value || ''} placeholder={placeholder || ''} readOnly={readOnly} style={style} />)}
+    </Field>
+  );
+}
+function StatusIcon({ n, c, bg }) {
+  return (
+    <span style={{ width: 56, height: 56, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: bg, alignSelf: 'center' }}>
+      <WGIcon n={n} s={28} c={c} />
+    </span>
+  );
+}
+function Summary({ rows }) {
+  return (
+    <dl style={{ margin: 0, padding: 14, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-default)',
+      display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 14px' }}>
+      {rows.map(([k, v]) => (
+        <React.Fragment key={k}>
+          <dt style={{ font: '400 var(--fs-15)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>{k}</dt>
+          <dd style={{ margin: 0, font: '500 var(--fs-15)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>{v}</dd>
+        </React.Fragment>
+      ))}
+    </dl>
+  );
+}
+const LinkBtn = ({ children, danger }) => (
+  <a href="#" onClick={(e) => e.preventDefault()} style={{ alignSelf: 'center', font: '500 var(--fs-16)/1.5 var(--font-body)',
+    color: danger ? 'var(--color-fg-danger)' : 'var(--color-brand-secondary-default)' }}>{children}</a>
+);
+function Frame({ title, note, children }) {
+  return (
+    <div>
+      <p className="frame-title">{title}</p>
+      {note ? <p className="frame-note">{note}</p> : null}
+      {children}
+    </div>
+  );
+}
+
+/* ── 各狀態 ─────────────────────────────────────────────── */
+
+function NotLoggedIn() {
+  return (
+    <Page>
+      <StatusIcon n="Users" c="var(--color-brand-secondary-default)" bg="var(--color-bg-secondary-subtle)" />
+      <div style={{ textAlign: 'center' }}>
+        <p style={T.sh}>你收到一個加入團隊的邀請</p>
+        <p style={{ ...T.p, marginTop: 6 }}>登入後就會看到是哪一個團隊，再決定要不要申請。</p>
+      </div>
+      <Big variant="primary">登入</Big>
+      <Big variant="outline">註冊帳號</Big>
+      {/* 說明放按鈕下面：先看到要按什麼，再看補充（10-27 Sucre） */}
+      <p style={{ ...T.p, fontSize: 'var(--fs-15)' }}>還沒有帳號的話，用手機或電子郵件就能註冊。登入或註冊好會自動回到這一頁，<span style={T.strong}>不用再掃一次</span>。</p>
+    </Page>
+  );
+}
+
+const ErrLine = ({ children }) => (
+  <p role="alert" style={{ margin: '-4px 0 0', font: '400 var(--fs-15)/1.6 var(--font-body)', color: 'var(--color-fg-danger)', textWrap: 'pretty' }}>{children}</p>
+);
+function FormState({ phoneVerified, codeError, phoneTaken, missing, inviteDead }) {
+  return (
+    <Page>
+      <TeamCard expires={!inviteDead} />
+      {inviteDead ? (
+        <Alert tone="danger" title="申請沒有送出">這個邀請連結剛剛不能用了（可能超過 24 小時，或被收回）。你填的內容還在，可以改成自己申請，不用重打。</Alert>
+      ) : missing ? (
+        <Alert tone="danger" title="還有 2 項沒填">請補上：手機驗證、為什麼想加入。</Alert>
+      ) : (
+        <p style={T.p}>填好送出後，要等{TEAM.name}的管理員核准，才算加入。</p>
+      )}
+      <F label="你的名字" required value="王志豪" helper="團隊裡的人會看到這個名字" />
+      {phoneVerified ? (
+        <F label="手機" required value="0912-345-678" readOnly helper="這是你登入用的，已經驗證過，不在這裡改。" />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <F label="手機" required value={missing ? '' : '0912-345-678'} placeholder="例：0912-345-678" helper="管理員核准後，團隊會用這支手機聯絡你" />
+          {phoneTaken ? <ErrLine>這支手機已經用在另一個帳號。如果那是你的，請改用那個帳號登入；不是的話，請換一支手機。</ErrLine> : null}
+          {missing ? <ErrLine>必填：要先驗證手機</ErrLine> : null}
+          <Big variant="outline" disabled={phoneTaken}>寄驗證碼到這支手機</Big>
+          {missing || phoneTaken ? null : <F label="手機收到的驗證碼" value={codeError ? '482915' : ''} placeholder="6 位數字" />}
+          {codeError ? <ErrLine>驗證碼不對，請再看一次簡訊。過期或沒收到，請按「重新寄一次」。</ErrLine> : null}
+          {codeError ? <Big variant="ghost">重新寄一次</Big> : null}
+        </div>
+      )}
+      <F label="電子郵件（選填）" value={phoneVerified ? 'wang@gmail.com' : ''} readOnly={phoneVerified}
+        placeholder="例：wang@gmail.com" helper={phoneVerified ? '帳號裡驗證過的電子郵件，會一起給管理員。' : '團隊也可以用這個聯絡你。'} />
+      <F label="為什麼想加入" required rows={3} value={missing ? '' : (inviteDead ? '我是黃曉芳介紹來的，週末可以去光復幫忙清淤。' : '')}
+        placeholder="例：我是黃曉芳介紹來的，週末可以去光復幫忙清淤。"
+        helper="寫你是誰、怎麼認識這個團隊，管理員比較好判斷。" />
+      {missing ? <ErrLine>必填</ErrLine> : null}
+      {inviteDead ? <Big variant="primary">改成自己申請（帶著剛剛填的）</Big> : <Big variant="primary">送出申請</Big>}
+    </Page>
+  );
+}
+
+function Submitted({ confirming }) {
+  return (
+    <Page>
+      <TeamCard inviter={false} />
+      <StatusIcon n="Clock" c="var(--color-brand-secondary-default)" bg="var(--color-bg-secondary-subtle)" />
+      <div style={{ textAlign: 'center' }}>
+        <p style={T.sh}>申請已送出，等管理員核准</p>
+        <p style={{ ...T.p, marginTop: 6 }}>核准或沒通過，都會通知你。你可以先離開這一頁。</p>
+      </div>
+      <Summary rows={[['申請加入', TEAM.name], ['送出時間', '10/27 15:42'], ['名字', '王志豪'], ['手機', '0912-345-678']]} />
+      {confirming ? (
+        <div style={{ padding: 14, borderRadius: 'var(--radius-md)', background: 'var(--color-bg-neutral-sunken)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <p style={{ ...T.p, ...T.strong }}>確定要撤回嗎？</p>
+          <p style={T.p}>撤回後管理員就看不到這筆申請。之後想加入，可以再送一次。</p>
+          <Big variant="danger">撤回申請</Big>
+          <Big variant="ghost">不撤回</Big>
+        </div>
+      ) : (
+        <>
+          <Big variant="outline">回到前台</Big>
+          <LinkBtn danger>撤回這筆申請</LinkBtn>
+        </>
+      )}
+    </Page>
+  );
+}
+
+function AlreadyMember() {
+  return (
+    <Page>
+      <TeamCard inviter={false} />
+      <StatusIcon n="UserCheck" c="var(--color-fg-success)" bg="var(--color-bg-success-subtle)" />
+      <div style={{ textAlign: 'center' }}>
+        <p style={T.sh}>你已經是{TEAM.name}的成員</p>
+        <p style={{ ...T.p, marginTop: 6 }}>不用再申請。要做團隊的事，請到管理平台。</p>
+      </div>
+      <Big variant="primary">前往管理平台</Big>
+      <Big variant="ghost">回到前台</Big>
+    </Page>
+  );
+}
+
+function OtherPending({ confirming }) {
+  return (
+    <Page>
+      <TeamCard />
+      <Alert tone="warning" title="你有另一筆申請還在審核">一次只能有一筆申請在審核。要申請加入{TEAM.name}，請先撤回那一筆。</Alert>
+      <Summary rows={[['那一筆是', '申請加入 慈濟基金會'], ['送出時間', '10/26 09:15'], ['狀態', '等管理員核准']]} />
+      {confirming ? (
+        <div style={{ padding: 14, borderRadius: 'var(--radius-md)', background: 'var(--color-bg-neutral-sunken)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <p style={{ ...T.p, ...T.strong }}>撤回「慈濟基金會」那一筆？</p>
+          <p style={T.p}>撤回後就接著填這一隊的申請。慈濟基金會的管理員會看不到你原本那一筆。</p>
+          <Big variant="danger">撤回，改申請{TEAM.name}</Big>
+          <Big variant="ghost">不撤回</Big>
+        </div>
+      ) : (
+        <>
+          <Big variant="outline">撤回那一筆，改申請{TEAM.name}</Big>
+          <Big variant="ghost">先不要，回到前台</Big>
+        </>
+      )}
+    </Page>
+  );
+}
+
+function LinkDead() {
+  return (
+    <Page>
+      <StatusIcon n="Link2Off" c="var(--color-fg-neutral-subtle)" bg="var(--color-bg-neutral-sunken)" />
+      <div style={{ textAlign: 'center' }}>
+        <p style={T.sh}>這個邀請連結不能用了</p>
+        <p style={{ ...T.p, marginTop: 6 }}>可能已經超過 24 小時，或是被收回了。請跟給你邀請的人要一個新的，再掃一次。</p>
+      </div>
+      <div style={{ paddingTop: 12, borderTop: '1px solid var(--color-border-default)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <p style={T.p}>沒有新的邀請，也可以自己申請：選好團隊、填資料，一樣等管理員核准。</p>
+        <Big variant="outline">自己申請加入團隊</Big>
+        <Big variant="ghost">回到前台</Big>
+      </div>
+    </Page>
+  );
+}
+
+function StepUp({ via }) {
+  return (
+    <Page>
+      <TeamCard expires />
+      <div style={{ padding: 16, borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-default)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p style={T.sh}>加手機之前，先確認是你本人</p>
+        {via === 'password' ? (<>
+          <p style={T.p}>為了安全，請先輸入你現在的密碼。確認好就會寄驗證碼到新手機。</p>
+          <F label="現在的密碼" />
+          <Big variant="primary">確認</Big>
+          <LinkBtn>忘記密碼？改用驗證碼確認</LinkBtn>
+        </>) : via === 'email' ? (<>
+          <Alert tone="info">我們寄了一組驗證碼到你<b>原本的電子郵件</b> w***@yahoo.com.tw。</Alert>
+          <F label="原本的電子郵件收到的驗證碼" placeholder="6 位數字" />
+          <Big variant="primary">確認</Big>
+          <Big variant="ghost">沒收到？重新寄一次</Big>
+        </>) : (<>
+          <p style={T.p}>你是用 LINE 登入的。要先到 LINE 再登入一次，確認好會自動回到這裡，<span style={T.strong}>剛剛填的名字和理由都會留著</span>。</p>
+          <Big variant="primary">到 LINE 確認是我</Big>
+        </>)}
+        <Big variant="ghost">取消，回到表單</Big>
+      </div>
+    </Page>
+  );
+}
+
+function WithdrawRace({ outcome }) {
+  const ok = outcome === 'approved';
+  return (
+    <Page>
+      <TeamCard />
+      <Alert tone={ok ? 'warning' : 'info'} title={ok ? '那一筆剛剛已經核准了，不能撤回' : '那一筆剛剛已經審完了'}>
+        {ok ? '你已經加入慈濟基金會。如果還想加入' + TEAM.name + '，可以直接申請，不用撤回。'
+            : '慈濟基金會的申請沒有通過，原因寫在通知裡。現在可以直接申請' + TEAM.name + '。'}
+      </Alert>
+      <Big variant="primary">繼續申請{TEAM.name}</Big>
+      <Big variant="ghost">回到前台</Big>
+    </Page>
+  );
+}
+
+function Notices() {
+  const items = [
+    { icon: 'UserCheck', tone: 'var(--color-fg-success)', title: '你已加入「壯闊台灣」', body: '點這裡到管理平台，從右上角切換到團隊身分。', at: '10/27 18:20', read: false },
+    { icon: 'CircleX', tone: 'var(--color-fg-danger)', title: '加入「壯闊台灣」的申請沒有通過', body: '原因：目前只收已參加過行前說明的志工，下週說明會後再請黃曉芳給你新的邀請。', at: '10/27 18:20', read: false },
+  ];
+  return (
+    <div className="phone">
+      <div style={{ padding: '24px 16px 16px', borderBottom: '1px solid var(--color-border-default)' }}><p style={T.h}>通知</p></div>
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.map((n, i) => (
+          <div key={i} style={{ display: 'flex', gap: 12, padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-subtle)' }}>
+            <span style={{ marginTop: 2 }}><WGIcon n={n.icon} s={20} c={n.tone} /></span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', font: '700 var(--fs-16)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>{n.title}</span>
+              <span style={{ display: 'block', marginTop: 2, font: '400 var(--fs-15)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>{n.body}</span>
+              <span style={{ display: 'block', marginTop: 4, font: '400 var(--fs-12)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>{n.at}</span>
+            </span>
+            <Badge tone="warning" variant="subtle">新</Badge>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <div>
+      <h1 className="board-h">#146 前台「加入團隊」（掃團隊管理員的邀請 QR 進來）</h1>
+      <p className="board-p">登入後，頂部永遠是同一張團隊卡，讓人先確認自己掃到的是哪一隊（登入前後端不給團隊資料）。掃碼也要等管理員核准；掃碼的好處只剩「團隊已經選好」。
+        規則 JOIN-101〜108 寫在這支檔案的註解裡。</p>
+
+      <div className="board">
+        <Frame title="① 還沒登入" note="後端要登入才給邀請內容，所以這時看不到是哪一隊（JOIN-103）。登入／註冊完回到這一頁，才檢查連結能不能用。">
+          <NotLoggedIn />
+        </Frame>
+        <Frame title="② 填表（帳號還沒有手機，要驗證）" note="跟「申請管理權限」同一套：名字、手機必填，手機要驗證。驗證碼欄按了「寄驗證碼」才出現（這裡為了一次看完先畫出來）。">
+          <FormState />
+        </Frame>
+        <Frame title="②' 填表（帳號已有驗證過的手機）" note="手機帶入、唯讀，不用再驗一次。名字帶入可改。帳號有驗證過的電子郵件也帶入唯讀（後端用帳號裡的，不用打的）。被拒絕過的人再掃也是這個畫面（JOIN-109）。">
+          <FormState phoneVerified />
+        </Frame>
+        <Frame title="③ 已送出（可撤回）" note="之後再掃同一個 QR、或從通知點回來，都停在這個狀態。撤回是不起眼的文字連結，放最下面。">
+          <Submitted />
+        </Frame>
+        <Frame title="③' 按了撤回：就地展開確認" note="不用彈窗（可逆）。撤回後回到②，剛剛填的名字、理由還在。">
+          <Submitted confirming />
+        </Frame>
+        <Frame title="④ 已經是這隊成員" note="管理員掃自己發的碼也會看到這個（寫「成員」即可，不分管理員）。被停權的團隊不會走到這裡，會是⑥失效。">
+          <AlreadyMember />
+        </Frame>
+        <Frame title="⑤ 有另一筆申請在審核" note="另一筆可能是加入別的隊，也可能是「申請管理權限」，都寫出是哪一筆。如果那一筆就是申請這一隊，直接顯示③，不是這個畫面。">
+          <OtherPending />
+        </Frame>
+        <Frame title="⑤' 按了撤回：撤回＋改申請一次做完" note="撤回成功就直接進②填表，不用再按一次。">
+          <OtherPending confirming />
+        </Frame>
+        <Frame title="⑥ 連結不能用了" note="過期、不存在、團隊停權，後端都回同一個 404，分不出來 → 一個畫面（JOIN-108）。登入後才會走到這裡。「自己申請加入團隊」打開「申請管理權限」。">
+          <LinkDead />
+        </Frame>
+      </div>
+
+      <h1 className="board-h">補上的畫面（流程圖上原本紅框的 G1〜G8，加上後端要求的「先確認本人」）</h1>
+      <p className="board-p">被拒絕後再掃（原 G4）不用另畫：後端只回審核中的申請，畫面就是②／②'。</p>
+      <div className="board">
+        <Frame title="⑦ 驗證碼不對（原 G1）" note="過期、打錯都用這一句＋「重新寄一次」。寄太多次：「寄太多次了，請 10 分鐘後再試」（分鐘數照後端）。">
+          <FormState codeError />
+        </Frame>
+        <Frame title="⑧ 這支手機已經是別人的帳號（原 G2）" note="不寫是誰的帳號。寄驗證碼停用，改號碼後恢復。">
+          <FormState phoneTaken />
+        </Frame>
+        <Frame title="⑨ 加手機前先確認本人：有密碼的帳號" note="ADR-220。按「寄驗證碼到這支手機」之後才出現。確認好就寄簡訊，回到②打簡訊的碼（所以會有兩組碼）。">
+          <StepUp via="password" />
+        </Frame>
+        <Frame title="⑨' 沒密碼、有電子郵件的帳號" note="碼寄到原本的信箱，寫出寄到哪（遮罩）。">
+          <StepUp via="email" />
+        </Frame>
+        <Frame title="⑨'' 只用 LINE 登入的帳號" note="跳去 LINE 再回來，草稿要留著（#146 已做）。LINE 那邊取消或登錯帳號的文案沿用帳號安全頁⑥。">
+          <StepUp via="line" />
+        </Frame>
+        <Frame title="⑩ 必填沒填（原 G3）" note="上方總結＋各欄紅字，跟「申請管理權限」同一套。一樣要自動捲回最上面（JOIN-112）。">
+          <FormState missing />
+        </Frame>
+        <Frame title="⑪ 送出時邀請已經不能用（原 G5）" note="🔴 最容易漏：不跳去⑥讓人白填。停在表單、說沒送出，主要按鈕換成「改成自己申請」並把名字、理由帶過去。🔒 送出失敗時自動捲回最上面，讓這段提示出現在畫面裡（JOIN-112）。">
+          <FormState inviteDead />
+        </Frame>
+        <Frame title="⑫ 撤回另一筆時，那一筆剛好已經核准（原 G6）" note="不能撤回，但已經加入那一隊，一人可以多隊 → 直接繼續申請這一隊。">
+          <WithdrawRace outcome="approved" />
+        </Frame>
+        <Frame title="⑫' 那一筆剛好被拒絕" note="沒有審核中的申請了，直接繼續。">
+          <WithdrawRace outcome="rejected" />
+        </Frame>
+        <Frame title="⑬ 結果通知：核准／沒通過（原 G7、G8）" note="核准的標題照後端「你已加入「{team}」」。沒通過一定有原因（後端規定拒絕要填理由），照抄管理員寫的。團隊被停權時審核中的申請會被拒絕，原因也是這裡。🔴 只有鈴鐺，還是也發簡訊？待定。">
+          <Notices />
+        </Frame>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
