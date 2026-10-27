@@ -67,8 +67,8 @@ const SITE_NOTICE_TYPES: Partial<
   dedup_ticket_merged: { kind: 'merged', opens: 'ticket' },
   dedup_ticket_updated: { kind: 'merged', opens: 'ticket' },
   // A data check found something wrong with a ticket (backend `ticket_audit.py`), and the notice
-  // names it. To the requester, who can put it right, and to those on its needs, who may be on
-  // their way. Neither says what was wrong: the auditor's note is for staff.
+  // names it. To the requester, that staff are looking into it, and to those on its needs, who may
+  // be on their way. Neither says what was wrong: the auditor's note is for staff.
   ticket_audit_issue: { kind: 'audit-issue', opens: 'ticket' },
   // To the applicant, a team application's answer included.
   role_request_approved: { kind: 'role-approved' },
