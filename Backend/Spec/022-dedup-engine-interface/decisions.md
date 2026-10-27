@@ -610,6 +610,8 @@ UTC 10-26 19:29）；Dan 10-27 定了做法和部署方式。
 
 - `ticket.create_help_request` 拆成 `validate_help_request`（民眾的所有檢查，不寫入）與 `insert_help_request`
   （寫入並 flush，不 commit），跟 ADR-299 拆 `create_ticket` 的方式一樣。民眾的規則一條都不改。
+- 拆完拿掉 `create_help_request`：`app/` 裡沒人再叫它，留著就是一條不比對就建單的公開函式，之後新的入口
+  拿它來用也不會有測試發現（popo #142 review）。
 - `dedup_submission.submit_help_request` 照 `submit_new_ticket` 的流程：`NewTicket`，每件需求是 `task:i`。
 - GraphQL：
   - `HelpRequestTaskInput` 加 `acknowledgedDuplicateOf: String = null`，跟 `CreateTicketTaskDraft` 的同名欄位同義；
@@ -625,4 +627,5 @@ union 上不合法，每一次請求協助都會失敗。所以後端和前台�
 ➖ 後端和前台要綁在一起上線。
 ➖ 被擋時什麼都沒寫，民眾要再送一次。前台要保留表單內容（草稿機制已經會保留）。
 ◾ 測試：`tests/test_graphql/test_create_dedup.py`（真 engine：被擋、帶確認建立）、`tests/test_dedup_submission.py`
-（沒有疑似整份建立、確認只蓋自己那件、確認指向不存在的東西、engine 失敗、驗證不過時不問 engine）。
+（沒有疑似整份建立、確認只蓋自己那件、確認指向不存在的東西、engine 失敗、驗證不過時不問 engine）；
+`tests/test_help_request.py` 的民眾規則改走 `submit_help_request`。

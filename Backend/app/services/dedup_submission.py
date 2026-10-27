@@ -117,9 +117,10 @@ async def submit_help_request(
 ) -> SubmissionCreated | SubmissionHeld:
     """File the site's help request (請求協助), or hold all of it when any need looks like a duplicate.
 
-    `request_fields` are `create_help_request`'s other keyword arguments. Each need may carry
-    `acknowledged_duplicate_of`, as a `createTicket` task does. A held request writes nothing: no
-    ticket, address, need or photo.
+    The only way a help request is filed. `request_fields` are `validate_help_request`'s other
+    keyword arguments. Each need may carry `acknowledged_duplicate_of`, as a `createTicket` task
+    does. A held request writes nothing: no ticket, address, need or photo; a filed one is written
+    in one commit.
     """
     now = datetime.now(UTC)
     needs = [{k: v for k, v in task.items() if k != "acknowledged_duplicate_of"} for task in tasks]

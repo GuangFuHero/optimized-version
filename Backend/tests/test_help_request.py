@@ -1,9 +1,10 @@
 """A citizen asks for help from the public site: one ticket and its needs, filed at once.
 
-Service-level (root conftest): the rules live in `create_help_request`, so that is where they
-are observed. The prototype's form requires at least one need (正典 TM-FEAT-004 AC-01), and a
-half-filed request — a ticket with some of its needs missing — is the failure this function
-exists to rule out.
+Service-level (root conftest), through `submit_help_request`, the only way a help request is
+filed. The real engine finds nothing nearby in an empty database, so a valid request here is
+never held; holding is `test_dedup_submission.py`'s. The prototype's form requires at least one
+need (正典 TM-FEAT-004 AC-01), and a half-filed request — a ticket with some of its needs
+missing — is the failure the one commit exists to rule out.
 """
 
 import os
@@ -22,10 +23,17 @@ from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssi
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TicketTask
-from app.services.ticket import create_help_request
+from app.services.dedup_submission import SubmissionCreated, submit_help_request
 from tests.conftest import acting_as
 
 POINT = {"type": "Point", "coordinates": [121.4235, 23.6725]}
+
+
+async def _file(db, *, actor: User, **fields) -> Tickets:
+    """File a help request; nothing is nearby, so it is filed rather than held."""
+    result = await submit_help_request(db, actor=actor, **fields)
+    assert isinstance(result, SubmissionCreated)
+    return result.entity
 
 
 async def _citizen(db) -> User:
@@ -82,7 +90,7 @@ async def test_a_citizen_files_a_help_request_with_its_needs(db):
     citizen = await _citizen(db)
     citizen_uuid = str(citizen.uuid)
 
-    ticket = await create_help_request(
+    ticket = await _file(
         db,
         actor=citizen,
         geometry=POINT,
@@ -145,7 +153,7 @@ async def test_a_request_without_any_need_is_refused_and_nothing_is_filed(db):
     citizen = await _citizen(db)
 
     with pytest.raises(ValueError, match="^At least one task is required$"):
-        await create_help_request(db, actor=citizen, **_request(tasks=[]))
+        await _file(db, actor=citizen, **_request(tasks=[]))
 
     assert await _tickets_filed(db) == 0
 
@@ -164,7 +172,7 @@ async def test_more_than_twenty_needs_are_refused_and_nothing_is_filed(db):
     citizen = await _citizen(db)
 
     with pytest.raises(ValueError, match="^At most 20 tasks are allowed$"):
-        await create_help_request(db, actor=citizen, **_request(tasks=_needs(21)))
+        await _file(db, actor=citizen, **_request(tasks=_needs(21)))
 
     assert await _tickets_filed(db) == 0
 
@@ -174,7 +182,7 @@ async def test_twenty_needs_are_allowed(db):
     """The limit itself is allowed."""
     citizen = await _citizen(db)
 
-    ticket = await create_help_request(db, actor=citizen, **_request(tasks=_needs(20)))
+    ticket = await _file(db, actor=citizen, **_request(tasks=_needs(20)))
 
     assert len(await _needs_of(db, ticket.uuid)) == 20
 
@@ -219,7 +227,7 @@ async def test_one_bad_need_refuses_the_whole_request(db, bad_need, message):
     citizen = await _citizen(db)
 
     with pytest.raises(ValueError, match=message):
-        await create_help_request(
+        await _file(
             db,
             actor=citizen,
             **_request(tasks=[GOOD_NEED, {"task_description": None, **bad_need}]),
@@ -239,7 +247,7 @@ async def test_a_request_needs_a_title_that_fits(db, title, message):
     citizen = await _citizen(db)
 
     with pytest.raises(ValueError, match=message):
-        await create_help_request(db, actor=citizen, **_request(title=title))
+        await _file(db, actor=citizen, **_request(title=title))
 
     assert await _tickets_filed(db) == 0
 
@@ -255,7 +263,7 @@ async def test_someone_who_may_not_file_tickets_is_refused(db):
     await db.flush()
 
     with pytest.raises(HTTPException) as refused:
-        await create_help_request(db, actor=acting_as(user, role), **_request())
+        await _file(db, actor=acting_as(user, role), **_request())
 
     assert refused.value.status_code == 403
     assert await _tickets_filed(db) == 0
@@ -288,7 +296,7 @@ async def test_a_request_keeps_its_photo_links_in_the_order_given(db):
     citizen_uuid = str(citizen.uuid)
     links = _links(5)
 
-    ticket = await create_help_request(db, actor=citizen, **_request(photo_urls=links))
+    ticket = await _file(db, actor=citizen, **_request(photo_urls=links))
 
     photos = await _photos_of(db, ticket.uuid)
     assert [p.url for p in photos] == links
@@ -300,7 +308,7 @@ async def test_a_photo_link_is_stored_as_checked(db):
     """Stripped as `normalize_photo_url` returns it, and a repeated link kept (TM-IMG-125)."""
     citizen = await _citizen(db)
 
-    ticket = await create_help_request(
+    ticket = await _file(
         db,
         actor=citizen,
         **_request(photo_urls=["  https://duk.tw/a.jpg ", "https://duk.tw/a.jpg"]),
@@ -318,7 +326,7 @@ async def test_a_request_without_photos_is_filed_as_before(db, photo_urls):
     """Photos are optional (「現場照片（選填）」)."""
     citizen = await _citizen(db)
 
-    await create_help_request(db, actor=citizen, **_request(photo_urls=photo_urls))
+    await _file(db, actor=citizen, **_request(photo_urls=photo_urls))
 
     assert await _tickets_filed(db) == 1
     assert await _photos_stored(db) == 0
@@ -339,9 +347,7 @@ async def test_one_bad_photo_link_refuses_the_whole_request(db, bad_link, messag
     citizen = await _citizen(db)
 
     with pytest.raises(ValueError, match=message):
-        await create_help_request(
-            db, actor=citizen, **_request(photo_urls=["https://duk.tw/good.jpg", bad_link])
-        )
+        await _file(db, actor=citizen, **_request(photo_urls=["https://duk.tw/good.jpg", bad_link]))
 
     assert await _tickets_filed(db) == 0
     assert await _photos_stored(db) == 0
@@ -353,7 +359,7 @@ async def test_more_than_ten_photo_links_are_refused(db):
     citizen = await _citizen(db)
 
     with pytest.raises(ValueError, match="^At most 10 photos are allowed$"):
-        await create_help_request(db, actor=citizen, **_request(photo_urls=_links(11)))
+        await _file(db, actor=citizen, **_request(photo_urls=_links(11)))
 
     assert await _tickets_filed(db) == 0
 
@@ -363,6 +369,6 @@ async def test_ten_photo_links_are_allowed(db):
     """The limit itself still files."""
     citizen = await _citizen(db)
 
-    ticket = await create_help_request(db, actor=citizen, **_request(photo_urls=_links(10)))
+    ticket = await _file(db, actor=citizen, **_request(photo_urls=_links(10)))
 
     assert len(await _photos_of(db, ticket.uuid)) == 10

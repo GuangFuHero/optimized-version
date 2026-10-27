@@ -66,7 +66,7 @@ CLOSED_TASK_STATUSES = frozenset({"fulfilled", "canceled"})
 CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 
 # The kinds of help a need can ask for — the values `CreateTicketTaskInput.taskType` documents
-# and `chart_render` labels. Enforced only by `create_help_request`; `create_ticket_task`
+# and `chart_render` labels. Enforced only by `validate_help_request`; `create_ticket_task`
 # still stores whatever it is sent. The site's GraphQL input lists them as `NeedKind`
 # (graphql/tickets/types.py): keep the two in step.
 TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
@@ -344,7 +344,7 @@ async def validate_help_request(
     photo_urls: list[str] | None = None,
     contact_email: str | None = None,
 ) -> HelpRequestFields:
-    """Every check `create_help_request` makes, without writing anything.
+    """Every check the site's help request (「請求協助」) must pass, without writing anything.
 
     The site never asks how urgent a request is: priority is `medium`, and staff adjust it
     afterwards. The ticket's own `task_type` is the first need's, as the admin form sets it. An
@@ -403,8 +403,12 @@ async def insert_help_request(
 ) -> tuple[Tickets, list[TicketTask]]:
     """Write a checked help request and flush: the ticket, its address, needs and photos.
 
-    The caller owns the commit. Photo links (「現場照片（選填）」) become the ticket's photos, read
-    back by `TicketType.photos` and withheld from whoever cannot see the ticket's detail.
+    The caller owns the commit, one for all of it: `create_ticket` followed by one
+    `create_ticket_task` per need commits each step on its own, so a failure part-way would leave
+    a ticket with some of its needs missing and a retry would file a second ticket.
+
+    Photo links (「現場照片（選填）」) become the ticket's photos, read back by `TicketType.photos`
+    and withheld from whoever cannot see the ticket's detail.
     """
     ticket = await insert_ticket(db, actor=actor, fields=fields.ticket)
     creator = str(actor.uuid)
@@ -437,48 +441,6 @@ async def insert_help_request(
             },
         )
     return ticket, needs
-
-
-async def create_help_request(
-    db: AsyncSession,
-    *,
-    actor: User,
-    geometry: dict,
-    title: str,
-    description: str | None,
-    contact_name: str,
-    contact_phone: str | None,
-    secondary_location: dict | None,
-    tasks: list[dict],
-    photo_urls: list[str] | None = None,
-    contact_email: str | None = None,
-) -> Tickets:
-    """File a citizen's request for help: the ticket, every need and photo link, in one commit.
-
-    The public site's 「請求協助」. `create_ticket` followed by one `create_ticket_task` per need
-    commits each step on its own, so a failure part-way leaves a ticket with some of its needs
-    missing and a retry files a second ticket. Here nothing is written unless all of it is.
-
-    No duplicate check: the site's GraphQL path goes through
-    `dedup_submission.submit_help_request`, which runs the same two steps around one.
-    """
-    fields = await validate_help_request(
-        db,
-        actor=actor,
-        geometry=geometry,
-        title=title,
-        description=description,
-        contact_name=contact_name,
-        contact_phone=contact_phone,
-        secondary_location=secondary_location,
-        tasks=tasks,
-        photo_urls=photo_urls,
-        contact_email=contact_email,
-    )
-    ticket, _ = await insert_help_request(db, actor=actor, fields=fields)
-    await db.commit()
-    await db.refresh(ticket)
-    return ticket
 
 
 async def list_my_tickets(db: AsyncSession, *, actor: User) -> list[Tickets]:
