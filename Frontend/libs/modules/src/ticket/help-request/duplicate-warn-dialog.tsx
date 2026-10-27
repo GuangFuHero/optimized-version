@@ -41,10 +41,18 @@ import {
 
 const { color, radius } = designTokens;
 
-/** What sending anyway is called, as the prototype words it for 請求協助, and for 再加一件. */
+/** How the prototype words 請求協助 filing a ticket, and 再加一件 adding to one, which files none. */
 const ACTS = {
-  send: { verb: '送出', busy: '送出中…' },
-  add: { verb: '加上去', busy: '加入中…' },
+  send: {
+    description: '不重複開單，避免造成現場混亂。',
+    verb: '送出',
+    busy: '送出中…',
+  },
+  add: {
+    description: '不重複加需求，避免造成現場混亂。',
+    verb: '加上去',
+    busy: '加入中…',
+  },
 } as const;
 
 function readTicketFields(ticket: GetTicketQuery['ticket']) {
@@ -187,7 +195,8 @@ function SuspectTicketCard({
             lineHeight: 1.5,
           }}
         >
-          要補需求，到那張按「再加一件」。
+          {/* Word for word the button on that ticket, from 請求協助 and 再加一件 alike. */}
+          這張是你開的。要多加，到那張單按「再加一件需要的幫忙」。
         </Typography>
       ) : null}
     </Box>
@@ -215,7 +224,7 @@ interface DuplicateWarnDialogProps {
 
 /**
  * Held as looking like an open need of another ticket (prototype `DuplicateWarnDialog`,
- * `site-actions.jsx:1634-1725` at `0ab95719`): 請求協助, and 再加一件 on a request. It only asks:
+ * `site-actions.jsx:1634-1731` at `11b4d479`): 請求協助, and 再加一件 on a request. It only asks:
  * 確認不重複 is an ordinary button, the only one, and the × goes back to the form — a neighbour may
  * well need the same.
  */
@@ -235,7 +244,7 @@ export function DuplicateWarnDialog({
   // Only on the map, whose zoom the ticket is shown at, unless that is too far out.
   const mapViewport = useContext(SiteMapViewportStoreContext);
   const viewerId = useAuthSession().user?.uuid ?? null;
-  const { verb, busy } = ACTS[act];
+  const { description, verb, busy } = ACTS[act];
 
   const openTicket = (
     event: MouseEvent<HTMLElement>,
@@ -275,7 +284,7 @@ export function DuplicateWarnDialog({
       onClose={onBack}
       // The title says no range: the backend holds up to about 260 m away.
       title="疑似重複的單"
-      description="不重複開單，避免造成現場混亂。"
+      description={description}
       width={480}
       dismissible={!submitting}
       footer={
