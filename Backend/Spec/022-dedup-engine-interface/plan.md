@@ -1194,14 +1194,14 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 
 每一步先寫會失敗的測試，跑一次確認是紅的，再實作。
 
-- [ ] **27.1 重現（紅）**：兩條連線，第一筆在寫入後、commit 前暫停，第二筆跑完整流程。三條路徑（新開單、替別張單加任務、登記站點）都斷言「第二筆被擋、只建立一筆」，現在會失敗。另加對照：先後送出時第二筆被擋（現在就會過）
-- [ ] **27.2 守門 (a)**：台灣範圍（經度 119.3~122.1、緯度 21.8~25.4）固定亂數種子取 2,000 組相距 `AREA_LOCK_MAX_RADIUS_M` 的點對，用 DB 的 h3 函式算格子距離，全部 ≤ 2
-- [ ] **27.3 守門 (b)**：`registry` 的 engine 兩種 kind 的 `radius_m` ≤ `AREA_LOCK_MAX_RADIUS_M`
-- [ ] **27.4 實作鎖**：`lock_area(db, point)` 在 SAVEPOINT 裡設 `lock_timeout`，依 h3 index 由小到大取 7 個 `pg_advisory_xact_lock`；加任務的位置由後端查所屬工單（`ST_PointOnSurface`）。三個進入點在驗證之後、`_score_acknowledged` 之前呼叫 → 27.1 轉綠
-- [ ] **27.5 逾時照常建立**：另一條連線先握住其中一格的鎖不放，送出在約 500 ms 後照常建立、有 warning log；交易沒有被弄壞（後續寫入、commit 正常）
-- [ ] **27.6 鎖會放掉**：commit 後、被提示（hold）後、engine 出錯 rollback 後，另一條連線都能立刻取得同一格的鎖；SAVEPOINT 逾時 rollback 後，已取得的部分鎖也放掉了（實測確認 Postgres 行為，寫進測試）
-- [ ] **27.7 不同區域不互等**：一條連線握住 A 區的鎖，B 區（> 2 km）的送出不等待
-- [ ] **27.8** dedup 相關測試全過；全套測試（`-n 4`）
+- [x] **27.1 重現（紅）**：兩條連線，第一筆在寫入後、commit 前暫停，第二筆跑完整流程。三條路徑（新開單、替別張單加任務、登記站點）都斷言「第二筆被擋、只建立一筆」，現在會失敗。另加對照：先後送出時第二筆被擋（現在就會過）
+- [x] **27.2 守門 (a)**（突變：距離改 2000 m → 最大格子距離 3，測試失敗）：台灣範圍（經度 119.3~122.1、緯度 21.8~25.4）固定亂數種子取 2,000 組相距 `AREA_LOCK_MAX_RADIUS_M` 的點對，用 DB 的 h3 函式算格子距離，全部 ≤ 2
+- [x] **27.3 守門 (b)**：`registry` 的 engine 兩種 kind 的 `radius_m` ≤ `AREA_LOCK_MAX_RADIUS_M`
+- [x] **27.4 實作鎖**：`dedup_area_lock.lock_area_at(db, point)`／`lock_area_of_ticket(db, ticket_uuid)` 在 SAVEPOINT 裡設 `lock_timeout`，依 h3 index 由小到大取 7 個 `pg_advisory_xact_lock`；加任務的位置由後端查所屬工單（`ST_PointOnSurface`）。三個進入點在驗證之後、`_score_acknowledged` 之前呼叫 → 27.1 轉綠
+- [x] **27.5 逾時照常建立**：另一條連線先握住其中一格的鎖不放，送出在約 500 ms 後照常建立、有 warning log；交易沒有被弄壞（後續寫入、commit 正常）
+- [x] **27.6 鎖會放掉**：commit 後、被提示（hold）後、rollback 後（engine 出錯時走的就是整個 rollback，ADR-313），另一條連線都能立刻取得同一格的鎖；SAVEPOINT 逾時 rollback 後，已取得的部分鎖也放掉了（實測確認 Postgres 行為，寫進測試）
+- [x] **27.7 不同區域不互等**：一條連線握住 A 區的鎖，B 區（> 2 km）的送出不等待
+- [x] **27.8** dedup 相關測試全過；全套測試（`-n 4`）：2980 passed
 - [ ] **27.9 Docker 從零完整驗證**：起隔離 stack、migration、seed；打 API 重現 20 筆同時 `createTicket`，結果只建立 1 筆；其他區域的請求正常
 
 ## 交給前端的 API 變更（後端不負責實作）
