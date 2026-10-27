@@ -1202,7 +1202,10 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 - [x] **27.6 鎖會放掉**：commit 後、被提示（hold）後、rollback 後（engine 出錯時走的就是整個 rollback，ADR-313），另一條連線都能立刻取得同一格的鎖；SAVEPOINT 逾時 rollback 後，已取得的部分鎖也放掉了（實測確認 Postgres 行為，寫進測試）
 - [x] **27.7 不同區域不互等**：一條連線握住 A 區的鎖，B 區（> 2 km）的送出不等待
 - [x] **27.8** dedup 相關測試全過；全套測試（`-n 4`）：2980 passed
-- [ ] **27.9 Docker 從零完整驗證**：起隔離 stack、migration、seed；打 API 重現 20 筆同時 `createTicket`，結果只建立 1 筆；其他區域的請求正常
+- [x] **27.9 Docker 從零完整驗證**（`51363de19`，2026-10-27）：`--no-cache` 建 image、隔離 network、alembic 到 head、seed；
+  容器內全套 2980 passed、`test_dedup_area_lock.py` 單獨 9 passed；真 HTTP 同時 20 筆一樣的 `createTicket` → `TicketCreated` 1、`DuplicatesSuspected` 19，
+  最慢 0.83 s；期間的 `/users/me` 200（0.54 s）；DB `tickets` 1、`hint_shown` 20（含之後再送一次）。
+  log 有 9 筆「area lock not granted」：排隊超過 500 ms 的請求放棄等鎖，但那時第一筆已經 commit，所以仍被提示
 
 ## 交給前端的 API 變更（後端不負責實作）
 
