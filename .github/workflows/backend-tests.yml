@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 # A new push to a PR cancels its run still going. Each commit on main gets a group of its own, so
-# every run there finishes: a group keeps one run waiting, and a third push would cancel it.
+# every run there finishes: a shared group holds only one waiting run, and a newer push cancels it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
