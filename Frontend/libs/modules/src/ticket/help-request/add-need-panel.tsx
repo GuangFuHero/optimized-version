@@ -130,7 +130,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
       open={heldOpen}
       tickets={held?.tickets ?? []}
       act="add"
-      // No point to measure from here: the address on each card is the reason to go by.
+      // No point to measure from here: what each card is like is the reason to go by.
       from={null}
       error={heldError}
       submitting={submitting}

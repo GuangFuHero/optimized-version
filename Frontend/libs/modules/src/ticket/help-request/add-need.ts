@@ -48,7 +48,7 @@ export type AddNeedOutcome =
       kind: 'held';
       tickets: SuspectTicket[];
       /**
-       * What 不是同一件，加上去 sends as `acknowledgedDuplicateOf`. Any suspect will do: the backend
+       * What 確認不重複，加上去 sends as `acknowledgedDuplicateOf`. Any suspect will do: the backend
        * then takes the whole need as looked at (`dedup_submission.py` `submit_new_task`).
        */
       acknowledge: string;

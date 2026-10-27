@@ -79,7 +79,7 @@ export function groupSuspectsByTicket(
   return tickets;
 }
 
-/** 請求協助 held: the tickets to show, and what 不是同一件，送出 sends. */
+/** 請求協助 held: the tickets to show, and what 確認不重複，送出 sends. */
 export interface HeldHelpRequest {
   tickets: SuspectTicket[];
   /**
@@ -92,7 +92,7 @@ export interface HeldHelpRequest {
 
 /**
  * `sentNames`: the needs' names as sent, in order (`toHelpRequestInput`'s `tasks`). `acknowledged`:
- * what was sent with them, when held again after 不是同一件，送出. Those needs are kept acknowledged,
+ * what was sent with them, when held again after 確認不重複，送出. Those needs are kept acknowledged,
  * or the next try would be held for them once more, needs taking turns for as long as one is held.
  */
 export function readHeldHelpRequest(
@@ -156,7 +156,7 @@ function readPoint(geometry: unknown): LatLng | null {
 
 /**
  * How far a ticket is from the point being sent, in whole metres: the reason a person can check at
- * a glance (prototype 「距離約 12 公尺」). The backend gives no distance. Null without a point, or
+ * a glance (prototype 「相距 12 公尺」). The backend gives no distance. Null without a point, or
  * when the ticket's is only a cell centre, which could be hundreds of metres off.
  */
 export function distanceToTicketM(

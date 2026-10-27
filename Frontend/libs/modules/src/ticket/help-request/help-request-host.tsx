@@ -301,8 +301,8 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
           onSubmit={(form) => void submit(form)}
         />
       ) : null}
-      {/* Only asks. 回去修改 goes back to the drawer, and sending again checks again; 不是同一件，送出
-          sends it as it was. Neither keeps them here (prototype `site-actions.jsx:2191-2197`). */}
+      {/* Only asks. The × goes back to the drawer, and sending again checks again; 確認不重複，送出
+          sends it as it was. Neither keeps them here (prototype `site-actions.jsx:2243-2254`). */}
       <DuplicateWarnDialog
         open={heldOpen}
         tickets={held?.tickets ?? []}
@@ -347,10 +347,10 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
       />
       <SiteToast
         open={unsentOpen}
-        title="你的求助單還沒送出"
-        description="填好的都還在，按「請求協助」可以接著填。"
+        title="剛才的單還沒送出"
+        description="填的內容都留著。"
         action={{
-          label: '接著填',
+          label: '回去繼續填',
           onClick: () => {
             // The drawer brings back what was typed from the tab, whatever point it opens at.
             openDrawer(null);
