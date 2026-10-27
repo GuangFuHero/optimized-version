@@ -132,7 +132,10 @@ class StationSuggestionMergeType:
     _changes: strawberry.Private[list[SuggestionChangeType]]
     status: str = strawberry.field(description="'applied' or 'revoked'")
     review_note: str | None
-    reviewed_by: str
+    reviewed_by: str | None = strawberry.field(
+        description="UUID of the reviewer; null once their account is gone, as a mock one is after a "
+        "SEED_MOCK run (ADR-393)"
+    )
     revoked_by: str | None
     revoked_at: datetime | None
     created_at: datetime | None
@@ -164,7 +167,7 @@ class StationSuggestionMergeType:
                 for c in m.changes
             ],
             status=m.status, review_note=m.review_note,
-            reviewed_by=str(m.reviewed_by),
+            reviewed_by=str(m.reviewed_by) if m.reviewed_by else None,
             revoked_by=str(m.revoked_by) if m.revoked_by else None,
             revoked_at=m.revoked_at, created_at=m.created_at,
         )

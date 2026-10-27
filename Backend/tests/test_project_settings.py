@@ -276,6 +276,60 @@ async def test_spaces_around_a_30_character_short_name_do_not_count(client, db_s
     assert resp.json()["short_name"] == "長" * 30
 
 
+GUANGFU = {"lat": 23.67, "lng": 121.418, "zoom": 14}
+
+
+async def test_the_map_view_is_set_kept_and_cleared(client, db_session, redis):
+    """ADR-395: sent whole, kept while a PATCH leaves it out, cleared by null."""
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
+    headers = await _auth_header(redis, admin_uuid, role_uuid)
+    unconfigured = await client.get(SETTINGS_URL, headers=headers)
+    await client.patch(SETTINGS_URL, headers=headers, json={"name": "花蓮馬太鞍溪堰塞湖專案"})
+    unset = await client.get(SETTINGS_URL, headers=headers)
+
+    set_ = await client.patch(SETTINGS_URL, headers=headers, json={"map_view": GUANGFU})
+    read = await client.get(SETTINGS_URL, headers=headers)
+    untouched = await client.patch(SETTINGS_URL, headers=headers, json={"disaster_types": ["flood"]})
+    cleared = await client.patch(SETTINGS_URL, headers=headers, json={"map_view": None})
+
+    assert (unconfigured.json()["map_view"], unset.json()["map_view"]) == (None, None)
+    assert set_.status_code == 200, set_.text
+    assert (set_.json()["map_view"], read.json()["map_view"]) == (GUANGFU, GUANGFU)
+    assert untouched.json()["map_view"] == GUANGFU
+    assert cleared.json()["map_view"] is None
+    assert await db_session.scalar(text("SELECT map_zoom FROM project_settings")) is None
+
+
+@pytest.mark.parametrize(
+    "map_view",
+    [
+        {**GUANGFU, "lat": 90.5},
+        {**GUANGFU, "lng": -180.5},
+        {**GUANGFU, "zoom": 6},
+        {**GUANGFU, "zoom": 19},
+        {**GUANGFU, "zoom": 14.5},
+        {"lat": 23.67, "lng": 121.418},
+    ],
+    ids=[
+        "latitude off the globe",
+        "longitude off the globe",
+        "zoomed out past the map",
+        "zoomed in past the map",
+        "a fractional zoom",
+        "no zoom",
+    ],
+)
+async def test_a_map_view_the_site_cannot_open_is_refused(client, db_session, redis, map_view):
+    """The map allows zoom 7 to 18 (rescue-map-canvas); the centre is on the globe; all three are needed."""
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
+    headers = await _auth_header(redis, admin_uuid, role_uuid)
+
+    resp = await client.patch(SETTINGS_URL, headers=headers, json={"name": "花蓮", "map_view": map_view})
+
+    assert resp.status_code == 422, resp.text
+    assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 0
+
+
 async def test_reads_are_refused_without_project_view(client, db_session, redis):
     """Reading the settings requires project.view — not every logged-in user has it."""
     user_uuid = await _make_plain_user(db_session)

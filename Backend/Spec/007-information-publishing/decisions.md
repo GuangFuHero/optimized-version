@@ -1,4 +1,4 @@
-# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309、ADR-335、ADR-363~364）
+# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309、ADR-335、ADR-363~364、ADR-393）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號從 259 起跳，避開 `Spec/018-ticket-disaster-fields/decisions.md` 已佔用但尚未合併的 ADR-244~258。
@@ -10,6 +10,8 @@ ADR-309 是公告（緊急公告）的顯示位置，接在 ADR-308（前台／�
 ADR-335 是公告與行前通知的草稿，接在 repo 目前最大的 ADR-334 之後編號。
 ADR-363 是公告改成每頁一則、發布就取代；361、362 已分給 PR #94 與 #93。
 ADR-364 是行前通知的下架：每個 state 一版上線、發布就取代，接在 ADR-363 之後編號。
+ADR-393 是 mock seed 重跑時保留真人的公告、行前通知（以及站點合併紀錄），源自 PR #125 的 review。它也改到站點
+建議的合併紀錄，但三個欄位裡有兩個在這裡的表上，所以記在這裡。386、387、392 已分給 PR #120、#121、#123。
 
 ---
 
@@ -440,3 +442,54 @@ operation 選的 `order`，在同一個 repo、同一個 PR 就改得完。
   版本自動變回目前版本」）。
 ➖ 被取代和手動下架在資料上分不出來，都是 `inactive`、`updated_by` 是操作的人。
 ◾ 不在範圍：PRD VB-FEAT-001 依災害類型分四個固定段落的內容結構（ADR-274）。
+
+---
+
+### ADR-393 mock seed 重跑時，真人的列留著，mock 帳號審核、發布、最後改過的欄位設成 NULL
+
+**白話**：測試者在 staging 用 mock 帳號審核或發布了真人的東西，下次帶 `SEED_MOCK` 部署時，那筆真人資料不再被刪，
+只把「誰審核的／誰發布的／誰最後改的」清空。
+
+**Context**：`scripts/seed_mock_scenarios.sql` 第 0 節每次都刪掉 mock 帳號（`c…`），連帶刪掉指向它們的列。真人的
+角色申請、站點建議和合併紀錄、行前通知、公告，只要審核人或發布者是 mock 帳號，就整列刪掉。staging 上的測試者常用
+`asuper01`（super_admin）審核和發布，真人的資料就跟著不見。PR #125 的 review（HC）要求改成保留。
+
+有三個欄位原本不能是空的：
+- `station_suggestion_merges.reviewed_by`；
+- `briefings.updated_by`、`announcements.updated_by`（`209c4375c3e1` 加欄位時設成 NOT NULL）。
+
+公告與行前通知的 `updated_by` 不只在編輯時寫：
+- 發布時跟 `published_by` 一起寫成發布者（`announcements_repository.py`、`briefings_repository.py`）；
+- 發布新的一版時，被取代、下架的那一版，`updated_by` 也記成發布者（ADR-363、ADR-364）。
+
+所以只要 mock 帳號發布過一則，真人原本上線的那則就指向它，只放掉 `published_by` 不夠。
+
+**Decision**：
+- **migration `facf37b5c79d`**：三個欄位改成 nullable，model 跟著改成 `Mapped[str | None]`。
+  - NULL 的意思是「做這件事的帳號已經不在了」。
+  - 程式的每條寫入路徑照舊寫入操作者，只有 seed 的清除段會寫 NULL。
+- **seed 第 0 節**：mock 做的（mock 前綴，或建立者是 mock 帳號）照刪。真人的列只是被 mock 帳號碰過的，留著，
+  那個欄位設成 NULL：
+  - 角色申請：`reviewed_by`。
+  - 站點建議：`reviewed_by`。
+  - 合併紀錄：`reviewed_by`（原本就清 `revoked_by`）；只有在 mock 站點上的合併照刪。
+  - 行前通知：`updated_by`、`published_by`；從 mock 範本生成的，`template_uuid` 設 NULL（內容是生成時複製的）。
+  - 公告：`updated_by`、`published_by`。
+- **對象是 mock 團隊的角色申請照刪**：申請本身就是要加入 mock 團隊，而 `ck_role_requests_target` 不允許把
+  `team_uuid` 設成空的。
+- **downgrade**：
+  - 行前通知、公告的 `updated_by` 是 NULL 時，填回作者（`created_by`），跟 `209c4375c3e1` 的回填一樣。
+  - 合併紀錄有 NULL 審核人時直接報錯、印出筆數：沒有人可以填，刪掉又會丟掉那次改了什麼的紀錄。
+- **GraphQL**：`StationSuggestionMergeType.reviewedBy` 改成可以是 null。原本寫 `str(m.reviewed_by)`，NULL 會變成
+  字串 `"None"`。公告與行前通知的 `updater`／`publisher` 本來就是 nullable（`staff_user_ref` 遇到 None 回 None），
+  前台也有「操作者未提供」的 fallback。
+
+**為什麼 `updated_by` 不填回作者**：那樣不用改欄位，但最後修改的人會記錯；草稿的「草稿最近更新」會寫成作者
+（`briefing-history.tsx`）。NULL 誠實，畫面也已經會處理。
+
+**Consequences**：
+➕ 重跑 `SEED_MOCK` 不再刪掉真人的資料。
+➕ 「誰做的」不知道時明說不知道，不會冒名。
+➖ 三個欄位不再由 DB 保證有值；新的讀取程式要當它可能是 NULL。
+◾ 同一支 PR 的 seed 也讓 `asuper01`、`aaudit01` 不隨 seed 重建，密碼改在 VM 上用 `scripts/set_password.py`
+  設（`Backend/DEPLOY.md`）。那是部署設定，不是 schema 決策，不另開 ADR。

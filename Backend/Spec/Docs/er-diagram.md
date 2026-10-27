@@ -317,7 +317,7 @@ users ||..o{ audit_logs : "acted (logical)"
 announcements {
     uuid uuid PK
     uuid created_by FK "FK to users"
-    uuid updated_by FK "FK to users; last to create, edit, activate or deactivate it"
+    uuid updated_by FK "nullable, FK to users; last to create, edit, activate or deactivate it; NULL once that account is gone (mock reseed, ADR-393)"
     timestamp published_at "nullable; NULL = draft (never activated), else when it last went live"
     uuid published_by FK "nullable, FK to users; who last activated it"
     boolean active
@@ -401,7 +401,7 @@ briefings {
     string state "briefing/in_field/debrief, String(50), default briefing"
     string status "draft/published/inactive, String(20), default draft, CHECK"
     uuid created_by FK "FK to users, indexed"
-    uuid updated_by FK "FK to users; last to edit, publish or take it down"
+    uuid updated_by FK "nullable, FK to users; last to edit, publish or take it down; NULL once that account is gone (mock reseed, ADR-393)"
     timestamp published_at "nullable; NULL exactly while status = draft (CHECK)"
     uuid published_by FK "nullable, FK to users"
     timestamp created_at
@@ -434,10 +434,14 @@ project_settings {
     string short_name "nullable, String(30); for the site's top bar, falls back to name (ADR-392)"
     string_array disaster_types "default '{}' — e.g. {landslide,flood}; drives which config rows apply"
     timestamp started_at "nullable"
+    float map_center_lat "nullable; where the site's map opens (ADR-395)"
+    float map_center_lng "nullable"
+    smallint map_zoom "nullable; 7 to 18"
     timestamp created_at
     timestamp updated_at
 }
 %% UNIQUE INDEX uq_project_settings_singleton ON project_settings ((true))
+%% CHECK ck_project_settings_map_view_all_or_none: the three map columns are all set or all NULL
 %% -- single-row invariant on a constant expression: no magic UUID needed
 
 %% ==========================
@@ -680,7 +684,7 @@ station_suggestion_merges {
     jsonb changes "[{target_type, target_uuid, field_name, before, after}] per applied field"
     string review_note "nullable"
     string status "applied/revoked, String(20)"
-    uuid reviewed_by FK "FK to users"
+    uuid reviewed_by FK "nullable, FK to users; always set by a merge, NULL once the reviewer's account is gone (mock reseed, ADR-393)"
     uuid revoked_by FK "nullable, FK to users"
     timestamp revoked_at "nullable"
     timestamp created_at

@@ -9,7 +9,7 @@ and it needs no magic UUID.
 
 from datetime import datetime
 
-from sqlalchemy import ARRAY, DateTime, Index, String, func, text
+from sqlalchemy import ARRAY, CheckConstraint, DateTime, Float, Index, SmallInteger, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, UUIDPKMixin
@@ -22,6 +22,12 @@ class ProjectSettings(Base, UUIDPKMixin):
     __table_args__ = (
         # 單列不變式：一個部署 = 一場（混合型）災害（ADR-090）
         Index("uq_project_settings_singleton", text("(true)"), unique=True),
+        # 地圖起始視角三個值一起有、一起沒有：只有中心沒有 zoom，地圖沒辦法開（ADR-395）
+        CheckConstraint(
+            "(map_center_lat IS NULL) = (map_center_lng IS NULL)"
+            " AND (map_center_lat IS NULL) = (map_zoom IS NULL)",
+            name="ck_project_settings_map_view_all_or_none",
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(100), comment="災害名稱，例如「花蓮 0816」")
@@ -39,6 +45,16 @@ class ProjectSettings(Base, UUIDPKMixin):
     )
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, comment="災害起始時間"
+    )
+    # 前台地圖第一次打開的位置；沒設就用前端自己的預設（ADR-395）
+    map_center_lat: Mapped[float | None] = mapped_column(
+        Float, nullable=True, comment="地圖起始中心的緯度，例如 23.67"
+    )
+    map_center_lng: Mapped[float | None] = mapped_column(
+        Float, nullable=True, comment="地圖起始中心的經度，例如 121.418"
+    )
+    map_zoom: Mapped[int | None] = mapped_column(
+        SmallInteger, nullable=True, comment="地圖起始 zoom，例如 14"
     )
     # TimestampMixin is deliberately not inherited: it also brings `delete_at`, and this row
     # is the deployment's single settings record — it is updated, never soft-deleted (ADR-090,
