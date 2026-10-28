@@ -379,17 +379,19 @@ async def notify_password_set(
     silently — the step-up code proved consent at the time, but this is what the owner sees
     if that code was ever read out to someone. Routed through `_notify` and the `_or_log`
     senders like every other post-commit notification (ADR-162): the identity is already
-    written, so a provider outage must not turn a successful request into a 500.
+    written, so a provider outage must not turn a successful request into a 500. Every
+    contact is told the same time.
     """
+    at = datetime.now(UTC)
     for contact in await contact_repository.list_by_user(db, user_uuid):
         masked = _mask(contact.type, contact.value)
         if contact.type == "email":
-            subject, html, text = build_password_set_email(masked, changed=changed)
+            subject, html, text = build_password_set_email(masked, changed=changed, at=at)
             await _notify(dispatch, _send_email_or_log,
                           email_sender, contact.value, subject, html, text)
         else:
-            await _notify(dispatch, _send_sms_or_log,
-                          sms_sender, contact.value, build_password_set_sms(masked, changed=changed))
+            body = build_password_set_sms(masked, changed=changed, at=at)
+            await _notify(dispatch, _send_sms_or_log, sms_sender, contact.value, body)
 
 
 def _settled(contacts: list[UserContact], now: datetime) -> list[UserContact]:

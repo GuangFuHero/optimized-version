@@ -1,7 +1,9 @@
 """SMS delivery: abstract sender + dev console impl. Real delivery goes through 簡訊王 (kotsms)."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 
@@ -14,6 +16,8 @@ logger = logging.getLogger("app.sms")
 # first approved as 開放文化基金會 (live-verified 2026-08-15) and re-approved as 島嶼守望 in
 # 2026-09. Bodies stay Chinese-only and under 70 chars so each send costs 1 point instead of 2.
 _SENDER_IDENTITY_ZH = "島嶼守望"
+# Every recipient reads a time in a message on a Taiwan clock, whatever zone the server runs in.
+_TAIWAN = ZoneInfo("Asia/Taipei")
 
 
 class SmsSender(Protocol):
@@ -124,10 +128,17 @@ def build_step_up_code_sms(
             "僅能用於這項操作。若非本人請勿提供給任何人。")
 
 
-def build_password_set_sms(masked_value: str, *, changed: bool = False) -> str:
-    """Return the SMS telling the account its password was set or changed."""
-    zh_verb = "已變更" if changed else "已設定"
-    return (f"{_SENDER_IDENTITY_ZH} 您的帳號（{masked_value}）的登入密碼{zh_verb}，所有裝置都已登出。"
+def build_password_set_sms(masked_value: str, *, changed: bool = False, at: datetime | None = None) -> str:
+    """Return the SMS telling the account its password was set or changed.
+
+    A change says when, on a Taiwan clock, and what to do if it was not the owner: 糖's copy (uiux,
+    2026-10-27), shortened to stay one point. `at` is when it changed, now if not given.
+    """
+    if changed:
+        when = (at or datetime.now(UTC)).astimezone(_TAIWAN).strftime("%m/%d %H:%M")
+        return (f"{_SENDER_IDENTITY_ZH} 你的密碼在 {when} 變更了。如果不是你自己改的，"
+                "請到登入頁按「忘記密碼」重設，再到「帳號安全」登出所有裝置。")
+    return (f"{_SENDER_IDENTITY_ZH} 您的帳號（{masked_value}）的登入密碼已設定，所有裝置都已登出。"
             "若非本人操作，請立即以第三方登入進入帳號並變更密碼。")
 
 

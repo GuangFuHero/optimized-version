@@ -192,7 +192,7 @@ async def test_a_reset_tells_every_contact_on_the_account(client, db_session, ca
     assert r.status_code == 204
     assert [(to, "已變更" in subject) for to, subject, _, _ in capture_email.messages[1:]] == [
         ("owner@x.com", True)]
-    assert [(to, "已變更" in body) for to, body in capture_sms.messages] == [("+886912345678", True)]
+    assert [(to, "變更了" in body) for to, body in capture_sms.messages] == [("+886912345678", True)]
 
 
 @pytest.mark.asyncio

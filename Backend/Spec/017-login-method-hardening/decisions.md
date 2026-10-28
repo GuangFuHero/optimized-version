@@ -451,14 +451,27 @@ await identity_repository.delete_identity(db, identity=identity)
 新密碼、撤銷所有 session，但什麼都不寄：只有收到驗證碼的那個聯絡方式知道有人要重設，帳號上的其他
 聯絡方式沒收到任何訊息，收驗證碼的那個也不會知道密碼真的換了。
 
-**Decision**：`reset-password` 撤銷 session 之後呼叫 `notify_password_set(..., changed=True)`，寄的
-就是 `change-password` 那封「您的帳號密碼已變更」，同樣走 BackgroundTasks 加 `_or_log`
-（ADR-162）：密碼已經寫入，寄送失敗不會讓請求變成 500。
+**Decision**：
+
+1. `reset-password` 撤銷 session 之後呼叫 `notify_password_set(..., changed=True)`，寄的就是
+   `change-password` 那則「密碼已變更」，同樣走 BackgroundTasks 加 `_or_log`（ADR-162）：密碼已經寫入，
+   寄送失敗不會讓請求變成 500。
+2. 「密碼已變更」的內容改用糖的文案（Discord #uiux，2026-10-27）：說什麼時候變更（台灣時間），以及不是本人時
+   怎麼做。
+   - email：「你的密碼在 {時間} 變更了。如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設，再到「帳號安全」
+     按「登出所有裝置」。」時間寫 `2026/10/28 14:05`；主旨不變，英文照翻。
+   - 簡訊縮短成一則（70 字內，ADR-237 的成本取捨）：「島嶼守望 你的密碼在 10/28 14:05 變更了。如果不是你自己改的，
+     請到登入頁按「忘記密碼」重設，再到「帳號安全」登出所有裝置。」全文 72 字會拆成兩則。
+   - 同一次變更寄給每個聯絡方式的時間都一樣（`notify_password_set` 取一次）。
+   - 第一次設定密碼的通知（`changed=False`）不變。
 
 **Consequences**：
 ➕ 設定、變更、重設三條路的通知一致。
+➕ 收到的人知道是什麼時候，也知道下一步。
 ➖ 收驗證碼的那個聯絡方式會收到兩則，先是驗證碼、再是「已變更」。`change-password` 也通知每一個
    聯絡方式、不排除任何一個，這裡照做。
+➖ 新文案不再寫出是哪個帳號（原本的遮罩聯絡方式），照糖的文案。
 
 **回歸測試**：`tests/test_forgot_password.py` 的 `test_a_reset_tells_every_contact_on_the_account`
-（信箱和手機都收到「已變更」）。拿掉那個呼叫會紅：`assert [] == [('owner@x.com', True)]`。
+（信箱和手機都收到「變更」）。拿掉那個呼叫會紅：`assert [] == [('owner@x.com', True)]`。文案與時間：
+`tests/test_email_sender.py`、`tests/test_sms_sender.py`（固定時間、台灣時區、一則 70 字內）。

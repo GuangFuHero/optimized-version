@@ -1,5 +1,6 @@
 """Tests for the SMS sender abstraction."""
 import logging
+from datetime import UTC, datetime
 
 import pytest
 
@@ -7,10 +8,13 @@ from app.messaging.kotsms import KotSmsSender, to_kotsms_number
 from app.messaging.sms import (
     ConsoleSmsSender,
     build_password_reset_sms,
+    build_password_set_sms,
     build_sso_notice_sms,
     build_verification_sms,
     get_sms_sender,
 )
+
+CHANGED_AT = datetime(2026, 10, 28, 6, 5, tzinfo=UTC)  # 14:05 in Taiwan
 
 
 @pytest.mark.asyncio
@@ -27,10 +31,19 @@ def test_build_verification_sms_has_code():
     assert "123456" in build_verification_sms("123456")
 
 
+def test_a_changed_password_sms_says_when_in_taiwan_time_and_what_to_do():
+    """糖's copy (uiux, 2026-10-27), shortened to one point; the time is Taiwan's."""
+    assert build_password_set_sms("09****678", changed=True, at=CHANGED_AT) == (
+        "島嶼守望 你的密碼在 10/28 14:05 變更了。如果不是你自己改的，"
+        "請到登入頁按「忘記密碼」重設，再到「帳號安全」登出所有裝置。"
+    )
+
+
 @pytest.mark.parametrize("build", [
     lambda: build_verification_sms("123456"),
     lambda: build_password_reset_sms("123456"),
     build_sso_notice_sms,
+    lambda: build_password_set_sms("09****678", changed=True, at=CHANGED_AT),
 ])
 def test_bodies_fit_one_kotsms_point(build):
     """Every body fits KotSMS's 70-char 1-point bracket and leads with the 實名制 sender identity.
