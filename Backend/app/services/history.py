@@ -11,7 +11,8 @@ see (ADR-130).
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from sqlalchemy import func, literal, select, union_all
+from sqlalchemy import String, and_, func, literal, select, union_all
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -159,9 +160,17 @@ async def fetch_audit_rows(
     Live assignments are returned by both paths, so the union is de-duplicated on the audit
     row's own uuid.
     """
+    # A geometry write that only moved `updated_at` is the stamp a change to a related row left. Left out
+    # here rather than after the cap, so it never pushes real history off the end.
+    without_stamp = AuditLog.old_values.op("-", return_type=JSONB)(literal("updated_at", String))
+    stamp_only = and_(
+        AuditLog.table_name == _GEOMETRIES,
+        AuditLog.action == "UPDATE",
+        without_stamp == AuditLog.new_values.op("-", return_type=JSONB)(literal("updated_at", String)),
+    )
     primary = (
         select(AuditLog)
-        .where(AuditLog.row_id.in_(ids.row_ids))
+        .where(AuditLog.row_id.in_(ids.row_ids), ~stamp_only)
         .order_by(AuditLog.created_at.desc())
         .limit(cap + 1)
     )

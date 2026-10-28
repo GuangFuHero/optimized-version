@@ -15,9 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import active_team
-from app.graphql.scalars import geojson_to_geom
+from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
-from app.models.geo import Station
+from app.models.geo import Station, touch
 from app.models.station_property import CrowdSourcing, StationProperty
 from app.models.team import Team
 from app.repositories.geo_repository import (
@@ -270,7 +270,9 @@ async def update_station(
     if geometry is not None:
         validate_point(geometry)
         await unverify_if_moved(db, str(station.uuid), station.geometry, geometry)
-        obj_in["geometry"] = geojson_to_geom(geometry)
+        # A re-sent point is not a move, and assigning it anyway would count as a change.
+        if point_of(geom_to_geojson(station.geometry)) != point_of(geometry):
+            obj_in["geometry"] = geojson_to_geom(geometry)
     # Only re-stamp on an actual transition. Testing for the key's presence instead
     # meant a client that PUTs the whole form back bumped status_changed_at on every
     # save, and station_freshness_trend reads exactly that column — so an unchanged
@@ -395,8 +397,10 @@ async def create_station_property(
     any station; there is deliberately no ownership/zone check (crowd-sourced facility data).
     """
     await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
-    if not await station_repository.get_by_uuid_active(db, station_uuid):
+    station = await station_repository.get_by_uuid_active(db, station_uuid)
+    if not station:
         raise ValueError("Station not found")
+    touch(station)
     return await station_property_repository.create(
         db,
         obj_in={
@@ -456,6 +460,11 @@ async def update_station_property(
     actor_uid = actor.uuid
     old_value = (prop.quantity, prop.comment)
 
+    # A verdict on the property (pending/verified/rejected) says it was checked, not that it changed.
+    if any(getattr(prop, field) != value for field, value in changes.items() if field != "status") and (
+        station := await station_repository.get_by_uuid_active(db, station_uuid)
+    ):
+        touch(station)
     updated = await station_property_repository.update(db, db_obj=prop, obj_in=changes)
 
     # `comment` cannot change here — UpdateStationPropertyInput has no such field — but it is
