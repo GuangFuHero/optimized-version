@@ -4492,103 +4492,19 @@
       }
     },
     "/api/v1/admin/audit-logs/export": {
-      "get": {
+      "post": {
         "tags": [
           "稽核紀錄"
         ],
         "summary": "匯出稽核紀錄（CSV）",
-        "description": "The same filters as the list, as one CSV file (ADR-414). Super admins only.",
-        "operationId": "export_audit_logs_api_v1_admin_audit_logs_export_get",
+        "description": "The same filters as the list, as one CSV file (ADR-414). Super admins only.\n\nA POST because every export is recorded (ADR-417): a write, so a browser signed in by cookie has\nto send it from one of our pages (ADR-327), and a link on another site cannot start one.",
+        "operationId": "export_audit_logs_api_v1_admin_audit_logs_export_post",
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
         ],
         "parameters": [
-          {
-            "name": "table",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Table"
-            }
-          },
-          {
-            "name": "row_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Row Id"
-            }
-          },
-          {
-            "name": "actor_uuid",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Actor Uuid"
-            }
-          },
-          {
-            "name": "from",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "From"
-            }
-          },
-          {
-            "name": "to",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "To"
-            }
-          },
           {
             "name": "X-WG-Realm",
             "in": "header",
@@ -4606,6 +4522,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditExportRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "The filtered log, newest first",
@@ -4614,10 +4540,10 @@
             }
           },
           "403": {
-            "description": "No audit.export at all (super admins only)"
+            "description": "No audit.export at all (super admins only), or not from one of our pages"
           },
           "422": {
-            "description": "More rows than one file carries; narrow the range"
+            "description": "audit_export_too_large: too many rows; `matched` and `limit` say how many"
           }
         }
       }
@@ -7391,6 +7317,72 @@
         ],
         "title": "AttributionResponse",
         "description": "Schema for map tile source attribution metadata."
+      },
+      "AuditExportRequest": {
+        "properties": {
+          "table": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table"
+          },
+          "row_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Id"
+          },
+          "actor_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Uuid"
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "type": "object",
+        "title": "AuditExportRequest",
+        "description": "The filters of an export, the same as the list's (ADR-414).\n\nAll optional; `from` and `to` bound `created_at`, as on the list."
       },
       "AuditLogItem": {
         "properties": {
