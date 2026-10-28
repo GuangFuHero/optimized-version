@@ -71,6 +71,8 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   const previewImport = usePreviewStationImport();
   const commitImport = useCommitStationImport();
   const busy = previewImport.isPending || commitImport.isPending;
+  // Closing mid-import would unmount the dialog: the import still happens, but its report is lost.
+  const committing = commitImport.isPending;
 
   useEffect(() => {
     return () => window.clearTimeout(pasteTimer.current);
@@ -173,7 +175,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   return (
     <MuiDialog
       open
-      onClose={onClose}
+      onClose={committing ? undefined : onClose}
       maxWidth={false}
       slotProps={{ paper: { sx: { width: 'min(760px, 96vw)', m: 0 } } }}
     >
@@ -197,7 +199,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
         >
           {result ? '匯入完成' : '匯入資源站點'}
         </Typography>
-        <IconButton aria-label="關閉" onClick={onClose}>
+        <IconButton aria-label="關閉" onClick={onClose} disabled={committing}>
           <X size={20} />
         </IconButton>
       </Box>
@@ -417,7 +419,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                   ? `新增 ${summary.create}・更新 ${summary.update}・失敗 ${summary.failedLines}（共 ${preview?.row_count ?? 0} 列）`
                   : ''}
             </Muted>
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={onClose} disabled={committing}>
               取消
             </Button>
             <Button
