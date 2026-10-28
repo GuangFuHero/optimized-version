@@ -608,6 +608,8 @@ function StationCard({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(event) => {
+        // Keys from inside the card, such as Enter on 開啟站點細節, belong to that control.
+        if (event.target !== event.currentTarget) return;
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           onSelect();
