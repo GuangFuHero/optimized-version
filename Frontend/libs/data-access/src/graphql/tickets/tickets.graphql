@@ -176,12 +176,26 @@ query GetTicketTasks(
 
 # 請求協助 (ticket/help-request): the ticket and every need on it in one go — nothing is written
 # unless all of it is. Answered with what the map and the list make their markers of, so the new
-# ticket shows on both without asking the server again.
+# ticket shows on both without asking the server again. Held — nothing written — when a need looks
+# like an open need of another ticket; sent again with `acknowledgedDuplicateOf` on each need held,
+# it is filed anyway.
 mutation CreateHelpRequest($input: CreateHelpRequestInput!) {
   createHelpRequest(input: $input) {
-    ...TicketFields
-    tasks {
-      ...TicketNeedFields
+    __typename
+    ... on TicketCreated {
+      ticket {
+        ...TicketFields
+      }
+      tasks {
+        ...TicketNeedFields
+      }
+    }
+    ... on DuplicatesSuspected {
+      suspects {
+        draftRef
+        relatedUuid
+        relatedTicketUuid
+      }
     }
   }
 }

@@ -309,6 +309,9 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
         "audited_at": _DERIVED_STAMP,
         "audited_by": _FK,
         "audited_content": _AUDITED_CONTENT,
+        # Spec 028: set with the cancellation a dedup resolve writes, which the timeline shows as
+        # the deletion; the merged event on the pair card says which ticket replaced it.
+        "replaced_by_uuid": _FK,
     },
     ("station", "stations"): {
         "uuid": _ID,
@@ -339,6 +342,8 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
         ),
         "is_duplicate": _SCORE,
         "dedup_group_id": _SCORE,
+        # Spec 028: set with the cancellation a dedup resolve writes; see tickets.replaced_by_uuid.
+        "merged_into_uuid": _FK,
     },
     ("ticket", "task_properties"): {
         "uuid": _ID,

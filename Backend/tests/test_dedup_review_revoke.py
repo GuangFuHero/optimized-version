@@ -49,12 +49,14 @@ async def test_a_reviewer_undoes_their_own_verdict_with_review_alone(db, pending
     reviewer = await _actor(db, Perm.AI_DUP_VIEW, Perm.AI_DUP_REVIEW)
     reviewer_uuid = reviewer.uuid
     pair_uuid = await _decided(db, reviewer, pending=pending, verdict=verdict)
-    decided = "confirmed" if verdict == "confirm" else "rejected"
+    # ADR-391: the card reads confirmed_duplicate / not_duplicate; the event keeps confirmed / rejected.
+    decided_status = "confirmed_duplicate" if verdict == "confirm" else "not_duplicate"
+    decided_event = "confirmed" if verdict == "confirm" else "rejected"
 
     item = await dedup_review.revoke(db, actor=reviewer, pair_uuid=pair_uuid)
 
     assert (item.pair.status, item.pair.reviewed_by, item.pair.reviewed_at) == (pending, None, None)
-    assert await _events(db, pair_uuid) == [decided, "verdict_revoked"]
+    assert await _events(db, pair_uuid) == [decided_event, "verdict_revoked"]
     event = (
         await db.execute(
             select(DedupAuditEvent).where(
@@ -63,7 +65,7 @@ async def test_a_reviewer_undoes_their_own_verdict_with_review_alone(db, pending
         )
     ).scalar_one()
     assert (event.actor_uuid, event.source_layer) == (reviewer_uuid, "manual")
-    assert event.before_state == {"status": decided, "reviewed_by": str(reviewer_uuid)}
+    assert event.before_state == {"status": decided_status, "reviewed_by": str(reviewer_uuid)}
     assert event.after_state == {"status": pending}
 
 
@@ -90,7 +92,7 @@ async def test_someone_elses_verdict_needs_ai_duplicate_revoke(db):
 
     assert caught.value.status_code == 403
     db.expire_all()
-    assert (await db.get(DuplicatePair, pair_uuid)).status == "confirmed"
+    assert (await db.get(DuplicatePair, pair_uuid)).status == "confirmed_duplicate"
     assert await _events(db, pair_uuid) == ["confirmed"]
 
 
@@ -150,7 +152,7 @@ async def test_after_a_revoke_the_card_can_be_decided_again(db):
 
     item = await dedup_review.reject(db, actor=reviewer, pair_uuid=pair_uuid, note=None)
 
-    assert item.pair.status == "rejected"
+    assert item.pair.status == "not_duplicate"
     assert await _events(db, pair_uuid) == ["confirmed", "verdict_revoked", "rejected"]
 
 
@@ -175,7 +177,7 @@ async def test_a_missing_card_is_not_found(db, deleted):
     target = uuid_mod.uuid4()
     if deleted:
         a, b = await _two_tasks(db, reviewer)
-        target = (await _pair(db, a, b, status="confirmed", deleted=True)).uuid
+        target = (await _pair(db, a, b, status="confirmed_duplicate", deleted=True)).uuid
     with pytest.raises(DuplicatePairNotFoundError):
         await dedup_review.revoke(db, actor=reviewer, pair_uuid=target)
 
@@ -211,10 +213,10 @@ async def test_a_verdict_with_no_recorded_event_is_not_guessed(db):
     """A card decided outside this module has no before_state to restore: refused, not defaulted."""
     reviewer = await _actor(db, Perm.AI_DUP_REVIEW, Perm.AI_DUP_REVOKE)
     a, b = await _two_tasks(db, reviewer)
-    pair_uuid = (await _pair(db, a, b, status="confirmed")).uuid
+    pair_uuid = (await _pair(db, a, b, status="confirmed_duplicate")).uuid
 
     with pytest.raises(DuplicatePairConflictError, match="No recorded verdict"):
         await dedup_review.revoke(db, actor=reviewer, pair_uuid=pair_uuid)
 
     db.expire_all()
-    assert (await db.get(DuplicatePair, pair_uuid)).status == "confirmed"
+    assert (await db.get(DuplicatePair, pair_uuid)).status == "confirmed_duplicate"

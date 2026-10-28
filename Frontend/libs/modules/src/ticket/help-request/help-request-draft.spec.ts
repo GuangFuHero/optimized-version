@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import type { FilledAddress } from '../address-lookup';
 import {
   clearAllHelpRequestDrafts,
   clearHelpRequestDraft,
   helpRequestDraftKey,
+  holdHelpRequestDraft,
   readHelpRequestDraft,
   writeHelpRequestDraft,
   type DraftStorage,
@@ -77,6 +79,23 @@ function filledForm(): HelpRequestForm {
   };
 }
 
+const looked = (from: FilledAddress['from']): FilledAddress => ({
+  fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+  token: 'token-19',
+  lat: 23.658676,
+  lng: 121.420631,
+  from,
+});
+
+/** A form opened at a point, with the pin's 門牌 filled in and nothing else done. */
+function lookedUpForm(from: FilledAddress['from']): HelpRequestForm {
+  return {
+    ...emptyHelpRequestForm(point('gps')),
+    address: looked(from).fullAddress,
+    addressFilled: looked(from),
+  };
+}
+
 describe('help request draft', () => {
   it('keeps a filled-in form for the person who filled it, and no one else', () => {
     const storage = memoryStorage();
@@ -104,6 +123,86 @@ describe('help request draft', () => {
     );
 
     expect(storage.items.size).toBe(0);
+  });
+
+  it("keeps nothing for a form holding only the pin's 門牌, filled in for it", () => {
+    const storage = memoryStorage();
+
+    writeHelpRequestDraft(storage, 'user-1', lookedUpForm('pin'));
+
+    expect(storage.items.size).toBe(0);
+  });
+
+  it('keeps an address filled in by hand: changed from the lookup, or typed and checked', () => {
+    const forms: HelpRequestForm[] = [
+      { ...lookedUpForm('pin'), address: '糖廠街19號' },
+      lookedUpForm('typed'),
+    ];
+
+    for (const form of forms) {
+      const storage = memoryStorage();
+
+      writeHelpRequestDraft(storage, 'user-1', form);
+
+      expect(readHelpRequestDraft(storage, 'user-1')).toEqual(form);
+    }
+  });
+
+  it("keeps the lookup's token with a draft, so an untouched address still goes with it", () => {
+    const storage = memoryStorage();
+    const form = { ...lookedUpForm('pin'), title: '一樓客廳積泥' };
+
+    writeHelpRequestDraft(storage, 'user-1', form);
+
+    expect(readHelpRequestDraft(storage, 'user-1')?.addressFilled).toEqual(
+      looked('pin'),
+    );
+  });
+
+  it('keeps a line taken back with 改回你打的, so it is not checked again once reopened', () => {
+    const storage = memoryStorage();
+    const form = {
+      ...filledForm(),
+      address: '糖廠街19號',
+      addressKept: '糖廠街19號',
+    };
+
+    writeHelpRequestDraft(storage, 'user-1', form);
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(form);
+  });
+
+  it('reads a draft kept before addresses were looked up as one with none', () => {
+    const storage = memoryStorage();
+    const older: Partial<HelpRequestForm> = filledForm();
+
+    delete older.addressFilled;
+    delete older.addressKept;
+
+    storage.setItem(
+      helpRequestDraftKey('user-1'),
+      JSON.stringify({ v: 1, form: older }),
+    );
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(filledForm());
+  });
+
+  it('drops a lookup of another shape rather than the whole draft: the address is still there', () => {
+    const storage = memoryStorage();
+
+    storage.setItem(
+      helpRequestDraftKey('user-1'),
+      JSON.stringify({
+        v: 1,
+        form: {
+          ...filledForm(),
+          addressFilled: { ...looked('pin'), token: 3 },
+          addressKept: 3,
+        },
+      }),
+    );
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(filledForm());
   });
 
   it('keeps a form with one thing done by hand: a field, a need, a photo or a pin', () => {
@@ -199,5 +298,79 @@ describe('help request draft', () => {
       clearAllHelpRequestDrafts(null);
     }).not.toThrow();
     expect(readHelpRequestDraft(null, 'user-1')).toBeNull();
+  });
+});
+
+describe('holdHelpRequestDraft', () => {
+  /** A tab holding the draft of an earlier opening. */
+  function keptStorage() {
+    const storage = memoryStorage();
+
+    writeHelpRequestDraft(storage, 'user-1', filledForm());
+
+    return storage;
+  }
+
+  const typedAtPoint = (): HelpRequestForm => ({
+    ...emptyHelpRequestForm(point('seed')),
+    title: '路口淹水',
+  });
+
+  it('brings the draft back from 請求協助, and keeps the form from then on, blank or not', () => {
+    const storage = keptStorage();
+    const hold = holdHelpRequestDraft(true);
+
+    expect(hold.read(storage, 'user-1')).toEqual(filledForm());
+
+    hold.write(storage, 'user-1', { ...filledForm(), title: '二樓也積泥' });
+    expect(readHelpRequestDraft(storage, 'user-1')?.title).toBe('二樓也積泥');
+
+    hold.write(storage, 'user-1', emptyHelpRequestForm());
+    expect(storage.items.size).toBe(0);
+  });
+
+  it('lets 取消 drop the draft it brought back', () => {
+    const storage = keptStorage();
+
+    holdHelpRequestDraft(true).discard(storage, 'user-1');
+
+    expect(storage.items.size).toBe(0);
+  });
+
+  it("does not bring it back at a point on the map, and leaves it be while nothing is done: the point, the pin's 門牌 and 取消 included", () => {
+    const storage = keptStorage();
+    const hold = holdHelpRequestDraft(false);
+
+    expect(hold.read(storage, 'user-1')).toBeNull();
+
+    hold.write(storage, 'user-1', emptyHelpRequestForm(point('seed')));
+    hold.write(storage, 'user-1', {
+      ...lookedUpForm('pin'),
+      landmark: point('seed'),
+    });
+    hold.discard(storage, 'user-1');
+
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(filledForm());
+  });
+
+  it('takes the draft over once something is done at the point, and drops it when blank again', () => {
+    const storage = keptStorage();
+    const hold = holdHelpRequestDraft(false);
+
+    hold.write(storage, 'user-1', typedAtPoint());
+    expect(readHelpRequestDraft(storage, 'user-1')).toEqual(typedAtPoint());
+
+    hold.write(storage, 'user-1', emptyHelpRequestForm(point('seed')));
+    expect(storage.items.size).toBe(0);
+  });
+
+  it('lets 取消 drop it once something was done at the point', () => {
+    const storage = keptStorage();
+    const hold = holdHelpRequestDraft(false);
+
+    hold.write(storage, 'user-1', typedAtPoint());
+    hold.discard(storage, 'user-1');
+
+    expect(storage.items.size).toBe(0);
   });
 });

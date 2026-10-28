@@ -10,13 +10,11 @@ import {
   TICKET_STATUS_OPTIONS,
 } from '../ticket/status';
 
-export const SITE_FALLBACK_BASE_LAYER: RescueMapBaseLayer = 'osm-direct';
 export const SITE_FALLBACK_DATA_TYPE: RescueMapDataType = 'station';
 
 export const SITE_BASE_LAYERS: readonly RescueMapBaseLayer[] = [
   'osm-direct',
   'osm',
-  'carto',
   'nasa_gibs',
   'eox',
   'nlsc',

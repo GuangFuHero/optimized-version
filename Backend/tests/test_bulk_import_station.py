@@ -344,6 +344,20 @@ async def test_importing_the_same_file_twice_changes_nothing_the_second_time(db)
 
 
 @pytest.mark.asyncio
+async def test_importing_the_same_file_again_leaves_the_last_update_alone(db):
+    """Nothing in the file changed, its point and dynamic value included, so 「最後更新」 stays put."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("光復國小", capacity="5")])
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+    stamp = (await _station_named(db, "光復國小")).updated_at
+
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+
+    assert (await _station_named(db, "光復國小")).updated_at == stamp
+
+
+@pytest.mark.asyncio
 async def test_a_team_scoped_importer_cannot_update_another_teams_station(db):
     """Import is not a way around the per-row scope check (ADR-110, ADR-285).
 

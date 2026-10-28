@@ -97,14 +97,20 @@ query GetStation($uuid: UUID!) {
   }
 }
 
-query GetClosureAreas(
-  $bounds: BoundsInput
-  $skip: Int = 0
-  $limit: Int = 50
-) {
-  hazardousZones(bounds: $bounds, skip: $skip, limit: $limit) {
+# The public map's areas, all three kinds at once (ADR-311): every 危險區 and 責任區, and the 標示區
+# switched to public. A team zone names its teams (ADR-311 point 8).
+query GetMapAreas($bounds: BoundsInput, $skip: Int = 0, $limit: Int = 50) {
+  areas(bounds: $bounds, skip: $skip, limit: $limit) {
     items {
-      ...ClosureAreaFields
+      uuid
+      type
+      name
+      note
+      geometry
+      assignedTeams {
+        uuid
+        name
+      }
     }
     pageInfo {
       ...PageInfoFields
@@ -115,6 +121,35 @@ query GetClosureAreas(
 query GetClosureArea($uuid: UUID!) {
   hazardousZone(uuid: $uuid) {
     ...ClosureAreaFields
+  }
+}
+
+# The nearest 門牌 to a pin, and a typed line checked, against TGOS. Signed-in callers only, 30 lookups a
+# minute between the two. Fields written out rather than shared in a fragment, which would be masked.
+# How a form uses them: modules `ticket/address-lookup.ts`.
+query ReverseGeocode($lat: Float!, $lng: Float!) {
+  reverseGeocode(lat: $lat, lng: $lng) {
+    status
+    fullAddress
+    lat
+    lng
+    buildingSection
+    floor
+    room
+    addressToken
+  }
+}
+
+query NormalizeAddress($address: String!, $lat: Float, $lng: Float) {
+  normalizeAddress(address: $address, lat: $lat, lng: $lng) {
+    status
+    fullAddress
+    lat
+    lng
+    buildingSection
+    floor
+    room
+    addressToken
   }
 }
 

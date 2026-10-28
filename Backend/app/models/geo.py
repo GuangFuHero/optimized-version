@@ -3,7 +3,19 @@
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, Index, String, false, func, text
+from sqlalchemy import (
+    Boolean,
+    Computed,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    event,
+    false,
+    func,
+    inspect,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -152,3 +164,49 @@ class Station(BaseGeometry):
     __table_args__ = (search_text_index("stations"),)
 
     properties: Mapped[list["StationProperty"]] = relationship(back_populates="station")  # noqa: F821
+
+
+def touch(record: BaseGeometry, at: datetime | None = None) -> None:
+    """Move a station's or ticket's 「最後更新」 (`updated_at`) to `at`, or to the time of the write.
+
+    For a change `stamp_updated_at` cannot see, to a related row, or one that must carry a set time. The
+    database fills a default time in, so `updated_at` reads back only after a refresh.
+    """
+    # clock_timestamp(), not now(): now() is when the transaction began, which a write that waited on
+    # a lock would stamp after a later one.
+    record.updated_at = func.clock_timestamp() if at is None else at
+
+
+def _blank(value) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def edited(record, ignored: frozenset[str] = frozenset()) -> bool:
+    """Whether a column of `record`, other than those in `ignored`, now holds a different value.
+
+    A blank string and NULL read the same, so turning one into the other is not an edit.
+    """
+    state = inspect(record)
+    for attr in state.mapper.column_attrs:
+        history = state.attrs[attr.key].history
+        if attr.key in ignored or not history.has_changes():
+            continue
+        # `deleted` is empty when the old value was never loaded, which counts as a change.
+        if not (history.deleted and all(_blank(value) for value in (*history.deleted, *history.added))):
+            return True
+    return False
+
+
+def stamp_updated_at(_mapper, _connection, target) -> None:
+    """Move `updated_at` when a record's own columns change, unless it was set already in this flush.
+
+    A change to only the subclass's table never writes `base_geometries`, so the column's onupdate
+    alone misses it. Columns named in the model's `not_an_update` do not count.
+    """
+    if inspect(target).attrs.updated_at.history.has_changes():
+        return
+    if edited(target, getattr(target, "not_an_update", frozenset())):
+        target.updated_at = func.clock_timestamp()
+
+
+event.listen(Station, "before_update", stamp_updated_at)

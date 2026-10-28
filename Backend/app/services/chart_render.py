@@ -14,6 +14,7 @@ rejected (e.g. requesting `x=date` on a pie-only metric, or `chart_type=pie` tog
 with `x=date` on a metric that allows both individually but not combined).
 """
 
+import html
 import json
 from functools import partial
 
@@ -32,61 +33,94 @@ from app.services.analytics_common import MAX_DUPLICATE_RANGE_DAYS, AnalyticsInp
 
 _TICKET_CATALOG = {
     "total_tickets": {
-        "label": "任務單總數", "unit": "件", "description": "期間內建立的任務單",
+        "label": "任務單總數",
+        "unit": "件",
+        "description": "期間內建立的任務單",
         "allowed_x": (None, "date", "category"),
-        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "line", "pie"),
     },
     "ongoing_tickets": {
-        "label": "進行中", "unit": "件", "description": "已指派、尚未完成",
+        "label": "進行中",
+        "unit": "件",
+        "description": "已指派、尚未完成",
         "allowed_x": (None, "date", "category"),
-        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "line", "pie"),
     },
     "unassigned_tickets": {
-        "label": "未指派", "unit": "件", "description": "尚無人接手",
+        "label": "未指派",
+        "unit": "件",
+        "description": "尚無人接手",
         "allowed_x": (None, "date", "category"),
-        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "line", "pie"),
     },
     "completed_tickets": {
-        "label": "已完成", "unit": "件", "description": "子任務全部完成",
+        "label": "已完成",
+        "unit": "件",
+        "description": "子任務全部完成",
         "allowed_x": (None, "date", "category"),
-        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "line", "pie"),
     },
     "canceled_tickets": {
-        "label": "已取消", "unit": "件", "description": "重複、誤報或不再需要",
+        "label": "已取消",
+        "unit": "件",
+        "description": "重複、誤報或不再需要",
         "allowed_x": (None, "date", "category"),
-        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "line", "pie"),
     },
     "completion_rate": {
-        "label": "完成率", "unit": "%", "description": "已完成 ÷（總數 − 已取消）",
+        "label": "完成率",
+        "unit": "%",
+        "description": "已完成 ÷（總數 − 已取消）",
         "allowed_x": (None, "date", "category"),
-        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "line"),
     },
     "age_distribution": {
-        "label": "未結案等待時間", "unit": "件", "description": "未完成任務單自建立至今的時長",
+        "label": "未結案等待時間",
+        "unit": "件",
+        "description": "未完成任務單自建立至今的時長",
         "allowed_x": (None,),  # forced shape: always grouped by age bucket internally
-        "default_chart_type": "bar", "allowed_chart_types": ("bar",),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar",),
         "grouping": "age_bucket",  # /data's `x`, since x=None still returns grouped rows
     },
     "time_to_completion": {
-        "label": "處理時長", "unit": "天", "description": "建立到完成的平均與中位數",
+        "label": "處理時長",
+        "unit": "天",
+        "description": "建立到完成的平均與中位數",
         "allowed_x": (None, "category"),
-        "default_chart_type": "bar", "allowed_chart_types": ("bar",),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar",),
     },
     "net_backlog_change": {
-        "label": "積壓變化", "unit": "件", "description": "新增 − 完成 − 取消；大於 0 表示待辦增加",
+        "label": "積壓變化",
+        "unit": "件",
+        "description": "新增 − 完成 − 取消；大於 0 表示待辦增加",
         "allowed_x": ("date",),  # forced shape: always date-grouped
-        "default_chart_type": "line", "allowed_chart_types": ("line", "bar"),
+        "default_chart_type": "line",
+        "allowed_chart_types": ("line", "bar"),
     },
     "task_completion_distribution": {
-        "label": "子任務完成比例", "unit": "項", "description": "以子任務計，非任務單",
+        "label": "子任務完成比例",
+        "unit": "項",
+        "description": "以子任務計，非任務單",
         "allowed_x": (None,),  # forced shape: fixed completed/remaining pie
-        "default_chart_type": "pie", "allowed_chart_types": ("pie",),
+        "default_chart_type": "pie",
+        "allowed_chart_types": ("pie",),
         "grouping": "completion",  # /data's `x`, since x=None still returns grouped rows
     },
     "duplicate_count": {
-        "label": "疑似重複", "unit": "件", "description": "位置、類型、時間相近的任務單",
+        "label": "疑似重複",
+        "unit": "件",
+        "description": "位置、類型、時間相近的任務單",
         "allowed_x": (None, "date", "category"),
-        "default_chart_type": "bar", "allowed_chart_types": ("bar", "pie"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "pie"),
         # Self-join, so cost grows with the rows in range; get_duplicate_count rejects a
         # missing or over-wide range. Published here so the frontend can clamp its date
         # picker rather than discovering the limits through a 400.
@@ -97,22 +131,31 @@ _TICKET_CATALOG = {
 
 _STATION_CATALOG = {
     "station_count": {
-        "label": "站點數", "unit": "站", "description": "已登錄的資源站點",
+        "label": "站點數",
+        "unit": "站",
+        "description": "已登錄的資源站點",
         "allowed_x": (None, "category"),
-        "default_chart_type": "bar", "allowed_chart_types": ("bar", "pie"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "pie"),
     },
     "station_status_count": {
-        "label": "站點狀態", "unit": "站", "description": "營運中／暫停／永久關閉",
+        "label": "站點狀態",
+        "unit": "站",
+        "description": "營運中／暫停／永久關閉",
         # Forced shape, like station_freshness_trend below: ungrouped, "how many stations
         # per status" collapses to one 100% slice repeating station_count. So "category" is
         # the only allowed value and any other `x` falls back to it.
         "allowed_x": ("category",),
-        "default_chart_type": "pie", "allowed_chart_types": ("pie", "bar"),
+        "default_chart_type": "pie",
+        "allowed_chart_types": ("pie", "bar"),
     },
     "station_freshness_trend": {
-        "label": "站點新增與關閉", "unit": "站", "description": "每期新增與關閉的站點數",
+        "label": "站點新增與關閉",
+        "unit": "站",
+        "description": "每期新增與關閉的站點數",
         "allowed_x": ("date",),  # forced shape: always date-grouped
-        "default_chart_type": "line", "allowed_chart_types": ("line", "bar"),
+        "default_chart_type": "line",
+        "allowed_chart_types": ("line", "bar"),
     },
 }
 
@@ -123,9 +166,15 @@ CATALOG = {"tickets": _TICKET_CATALOG, "stations": _STATION_CATALOG}
 # axis order, so 未分類 stays last.
 _CATEGORY_LABEL = {
     "overall": "總計",
-    "rescue": "搜救", "supply": "物資", "medical": "醫療", "hr": "人力",
-    "active": "營運中", "temporarily_closed": "暫停營運", "permanently_closed": "永久關閉",
-    "completed": "已完成", "remaining": "未完成",
+    "rescue": "搜救",
+    "supply": "物資",
+    "medical": "醫療",
+    "hr": "人力",
+    "active": "營運中",
+    "temporarily_closed": "暫停營運",
+    "permanently_closed": "永久關閉",
+    "completed": "已完成",
+    "remaining": "未完成",
     "shelter": "收容所",
     "uncategorized": "未分類",
 }
@@ -259,30 +308,38 @@ def chart_series(domain: str, y: str, data: list[dict]) -> tuple[list, dict[str,
     return x_values, {name: [values[i] for i in order] for name, values in series.items()}
 
 
-def _render_pivoted(
-    x_values: list, series: dict[str, list], chart_type: str, style: ChartStyle
-) -> go.Figure:
+def _render_pivoted(x_values: list, series: dict[str, list], chart_type: str, style: ChartStyle) -> go.Figure:
     """Build a bar, line, or pie figure from chart_series output.
 
     Series colours are not set per trace; they come from layout.colorway (see _layout_for).
     """
     if chart_type == "pie":
         values = next(iter(series.values())) if series else []
-        return go.Figure(go.Pie(
-            labels=x_values, values=values, hole=style.pie_hole,
-            textinfo="percent", textposition="inside",
-            marker={"line": {"color": "#FFFFFF", "width": 2}},
-        ))
+        return go.Figure(
+            go.Pie(
+                labels=x_values,
+                values=values,
+                hole=style.pie_hole,
+                textinfo="percent",
+                textposition="inside",
+                marker={"line": {"color": "#FFFFFF", "width": 2}},
+            )
+        )
     fig = go.Figure()
     if chart_type == "line":
         # A single point has no segment to draw, so show the marker there or the chart is
         # blank (e.g. an ungrouped total or a one-day range).
         mode = "lines+markers" if len(x_values) == 1 else "lines"
         for name, values in series.items():
-            fig.add_trace(go.Scatter(
-                x=x_values, y=values, mode=mode, name=name,
-                line={"width": style.line_width, "shape": style.line_shape, "smoothing": 0.4},
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=x_values,
+                    y=values,
+                    mode=mode,
+                    name=name,
+                    line={"width": style.line_width, "shape": style.line_shape, "smoothing": 0.4},
+                )
+            )
         return fig
     for name, values in series.items():
         fig.add_trace(go.Bar(x=x_values, y=values, name=name))
@@ -294,13 +351,17 @@ def _render_pivoted(
 def _layout_for(style: ChartStyle, chart_type: str) -> dict:
     layout = {
         "template": "plotly_white",
-        "colorway": style.palette, "piecolorway": style.palette,
+        "colorway": style.palette,
+        "piecolorway": style.palette,
         "font": {"family": style.font_family, "size": style.font_size, "color": style.font_color},
         "margin": {
-            "l": style.margin.left, "r": style.margin.right,
-            "t": style.margin.top, "b": style.margin.bottom,
+            "l": style.margin.left,
+            "r": style.margin.right,
+            "t": style.margin.top,
+            "b": style.margin.bottom,
         },
-        "paper_bgcolor": "rgba(0,0,0,0)", "plot_bgcolor": "rgba(0,0,0,0)",
+        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor": "rgba(0,0,0,0)",
         "hovermode": "closest" if chart_type == "pie" else "x unified",
         "xaxis": {"gridcolor": style.grid_color},
         "yaxis": {"gridcolor": style.grid_color, "rangemode": "tozero"},
@@ -313,9 +374,15 @@ def _layout_for(style: ChartStyle, chart_type: str) -> dict:
 
 
 def render_chart(
-    domain: str, y: str, data: list[dict], *,
-    x: str | None, chart_type: str | None,
-    style: ChartStyle | None = None, width: int | None = None, height: int | None = None,
+    domain: str,
+    y: str,
+    data: list[dict],
+    *,
+    x: str | None,
+    chart_type: str | None,
+    style: ChartStyle | None = None,
+    width: int | None = None,
+    height: int | None = None,
     layout_overrides: dict | None = None,
 ) -> dict:
     """Build a styled Plotly figure for `y` and return it as `{"data", "layout", "config"}`.
@@ -325,7 +392,11 @@ def render_chart(
     """
     style = style or ChartStyle()
     resolved_x, resolved_chart_type = resolve(domain, y, x, chart_type)
-    fig = _render_pivoted(*chart_series(domain, y, data), resolved_chart_type, style)
+    x_values, series = chart_series(domain, y, data)
+    # Plotly.js renders a small HTML subset in labels, and categories include free-text station types.
+    # Escaping only the figure keeps /data raw, and our own labels hold none of these characters.
+    x_values = [html.escape(v, quote=False) if isinstance(v, str) else v for v in x_values]
+    fig = _render_pivoted(x_values, series, resolved_chart_type, style)
 
     fig.update_layout(**_layout_for(style, resolved_chart_type))
     fig.update_layout(**_METRIC_LAYOUT.get(y, {}))

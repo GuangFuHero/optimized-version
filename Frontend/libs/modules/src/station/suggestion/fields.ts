@@ -5,7 +5,11 @@
  * `visibility`); the site offers what the public can see and judge.
  */
 
-import type { CreateStationSuggestionInput } from '@rescue-frontend/data-access';
+import {
+  StationOperationalStatus,
+  type CreateStationSuggestionInput,
+  type GetStationForSuggestionQuery,
+} from '@rescue-frontend/data-access';
 
 import { STATION_TYPE_OPTIONS } from '../type-options';
 
@@ -20,16 +24,13 @@ export type StationSuggestionFieldName =
   | 'type'
   | 'supply_status';
 
-/** The station as the form reads it: the values now, and which fields already have a suggestion. */
-export interface StationSuggestionSnapshot {
-  name?: string | null;
-  type?: string | null;
-  description?: string | null;
-  opHour?: string | null;
-  operationalStatus?: string | null;
-  supplyStatus?: string | null;
-  pendingSuggestedFields?: readonly string[] | null;
-}
+/**
+ * The station as the form reads it, as `GetStationForSuggestion` returns it: the values now, and
+ * which fields already have a suggestion.
+ */
+export type StationSuggestionSnapshot = NonNullable<
+  GetStationForSuggestionQuery['station']
+>;
 
 export interface StationSuggestionChoice {
   value: string;
@@ -44,14 +45,17 @@ export interface StationSuggestionField {
   choices?: readonly StationSuggestionChoice[];
   placeholder?: string;
   helper?: string;
+  /** May be sent blank, to clear a value the station has (目前缺少 once nothing is short). */
+  clearable?: true;
   read: (station: StationSuggestionSnapshot) => string;
 }
 
-// The site's words for the three, not the prototype form's 開放中: the detail says 營運中.
+// The site's words for the three, not the prototype form's 開放中: the detail says 營運中. The values
+// are the schema's: one renamed there follows at codegen, one taken out fails typecheck.
 const OPERATIONAL_STATUS_CHOICES: readonly StationSuggestionChoice[] = [
-  { value: 'active', label: '營運中' },
-  { value: 'temporarily_closed', label: '暫停服務' },
-  { value: 'permanently_closed', label: '已關閉' },
+  { value: StationOperationalStatus.Active, label: '營運中' },
+  { value: StationOperationalStatus.TemporarilyClosed, label: '暫停服務' },
+  { value: StationOperationalStatus.PermanentlyClosed, label: '已關閉' },
 ];
 
 /**
@@ -67,7 +71,8 @@ export const STATION_SUGGESTION_FIELDS: readonly StationSuggestionField[] = [
     choices: OPERATIONAL_STATUS_CHOICES,
     helper: '站點現在還開不開？',
     // A station without one is running, as the backend defaults it.
-    read: (station) => station.operationalStatus || 'active',
+    read: (station) =>
+      station.operationalStatus || StationOperationalStatus.Active,
   },
   {
     name: 'op_hour',
@@ -99,12 +104,16 @@ export const STATION_SUGGESTION_FIELDS: readonly StationSuggestionField[] = [
     choices: STATION_TYPE_OPTIONS,
     read: (station) => station.type ?? '',
   },
+  // 目前缺少, not 物資狀況: the backend's field is what the station is short of, and 物資 reads oddly
+  // for a toilet or a shower.
   {
     name: 'supply_status',
-    label: '物資狀況',
+    label: '目前缺少',
     kind: 'text',
-    placeholder: '例：飲用水見底、尿布尚有存量',
-    helper: '缺什麼比有什麼更能驅動行動，優先寫缺的。',
+    placeholder: '例：沐浴乳、毛巾；嬰兒尿布 M、L',
+    helper: '只寫現在缺的東西。都補齊了就清空。',
+    // The backend stores a blank as none at merge, and the detail then drops the block.
+    clearable: true,
     read: (station) => station.supplyStatus ?? '',
   },
 ];
@@ -134,6 +143,22 @@ export function describeSuggestionValue(
   );
 }
 
+/**
+ * 你的建議 as the form shows it: a blank that clears a value says so, any other blank is still to
+ * be filled in.
+ */
+export function describeSuggestedValue(
+  field: StationSuggestionField,
+  current: string,
+  value: string,
+): string {
+  if (value.trim()) {
+    return describeSuggestionValue(field, value);
+  }
+
+  return field.clearable && current.trim() ? '清空（都補齊了）' : '尚未填寫';
+}
+
 export interface StationSuggestionForm {
   field: StationSuggestionFieldName;
   value: string;
@@ -155,8 +180,8 @@ export function startSuggestion(
 
 /**
  * Why the form cannot be sent yet, or null when it can. Nothing to review in a value left as it is,
- * nor in a blank one: a station that is no longer short of anything says so (「目前不缺」), and
- * clearing the line is the back office's to do.
+ * nor in a blank one, but for a field that clears: 目前缺少 is emptied once nothing is short, and
+ * the backend takes the blank.
  */
 export function suggestionProblem(
   station: StationSuggestionSnapshot,
@@ -165,7 +190,7 @@ export function suggestionProblem(
   const field = stationSuggestionField(form.field);
   const value = form.value.trim();
 
-  if (!value) {
+  if (!value && !(field.clearable && field.read(station).trim())) {
     return field.kind === 'choice'
       ? `請選擇${field.label}`
       : `請填寫${field.label}`;
@@ -191,7 +216,7 @@ export function hasPendingSuggestion(
   station: StationSuggestionSnapshot,
   name: StationSuggestionFieldName,
 ): boolean {
-  return station.pendingSuggestedFields?.includes(name) ?? false;
+  return station.pendingSuggestedFields.includes(name);
 }
 
 export function toCreateStationSuggestionInput(
