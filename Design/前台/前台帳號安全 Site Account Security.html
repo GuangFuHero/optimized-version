@@ -209,7 +209,7 @@ function App() {
         <Frame title="① 頁面一進來：只有標題，點開才看到框框" note="乙（只用 LINE 登入、有電子郵件）看到的。甲（有密碼）第一列是「變更密碼」。">
           <Page>
             <Row title="設定登入密碼" desc="設一組密碼，以後也可以用密碼登入" />
-            <Row title="新增電子郵件或手機" desc="一次新增一個" />
+            <Row title="電子郵件和手機" desc="電子郵件：wang@yahoo.com.tw　手機：還沒有" />
             <Row title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台" />
           </Page>
         </Frame>
@@ -222,7 +222,7 @@ function App() {
               <Big variant="primary">設定密碼</Big>
               <Big variant="ghost">取消</Big>
             </Section>
-            <Row title="新增電子郵件或手機" desc="一次新增一個" />
+            <Row title="電子郵件和手機" desc="電子郵件：wang@yahoo.com.tw　手機：還沒有" />
             <Row title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台" />
           </Page>
         </Frame>
@@ -304,8 +304,80 @@ function App() {
         <Frame title="⑦ 只用 LINE、沒有電子郵件或手機：先不能設密碼" note="密碼登入要打電子郵件或手機當帳號，他一個都沒有，設了也登不進來（PM 10-27）。「設定登入密碼」那一列灰字＋說明，不能點開；新增電子郵件或手機照常可以點開，加好之後才能設密碼。">
           <Page>
             <Row title="設定登入密碼" disabled note="要先新增電子郵件或手機，才能設密碼。以後用密碼登入時，就打你新增的電子郵件或手機。" />
-            <Row title="新增電子郵件或手機" desc="一次新增一個" />
+            <Row title="電子郵件和手機" desc="電子郵件：還沒有　手機：還沒有" />
             <Row title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台" />
+          </Page>
+        </Frame>
+      </div>
+
+      <h1 className="board-h">10-28：每個帳號只有一個電子郵件、一個手機 →「電子郵件和手機」，已經有的「更換」、沒有的「新增」</h1>
+      <p className="board-p">後端一個帳號只能有一個電子郵件、一個手機（uq_contact_user_type），已經有的再加會把原本的換掉。
+        所以不叫「新增電子郵件或手機」，改叫「電子郵件和手機」：先看到現在有什麼，每一項旁邊是「更換」或「新增」，不用再選電子郵件／手機。不用改後端。</p>
+      <div className="board">
+        <Frame title="⑧ 一進來" note="第二列直接寫出現在的電子郵件、手機（他自己的，完整顯示）。">
+          <Page>
+            <Row title="設定登入密碼" desc="設一組密碼，以後也可以用密碼登入" />
+            <Row title="電子郵件和手機" desc="電子郵件：wang@yahoo.com.tw　手機：還沒有" />
+            <Row title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台" />
+          </Page>
+        </Frame>
+
+        <Frame title="⑨ 點開「電子郵件和手機」" note="每一項一列：有的寫「更換」，沒有的寫「新增」。按哪一個就是哪一種，不用再選。">
+          <Page>
+            <Section title="電子郵件和手機" desc="每個帳號可以有一個電子郵件、一個手機。">
+              {[['電子郵件', 'wang@yahoo.com.tw', '更換'], ['手機', '還沒有', '新增']].map(([k, v, b]) => (
+                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--color-border-default)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ font: '700 var(--fs-16)/1.4 var(--font-body)' }}>{k}</div>
+                    <div style={{ ...T.p, color: v === '還沒有' ? 'var(--color-fg-neutral-muted)' : T.p.color }}>{v}</div>
+                  </div>
+                  <Button variant="outline" style={{ height: 44, fontSize: 16, minWidth: 88 }}>{b}</Button>
+                </div>
+              ))}
+              <Big variant="ghost">取消</Big>
+            </Section>
+          </Page>
+        </Frame>
+
+        <Frame title="⑩ 按「更換」電子郵件（第 1 步）" note="橘色提醒寫在按鈕上面：換好之後原本的不能再用。有密碼的帳號多一句「以後登入要打新的電子郵件」。按「新增」的流程跟以前一樣，只是標題叫「新增手機」，沒有橘色提醒。">
+          <Page>
+            <Section title="更換電子郵件" desc="為了安全，要先確認是你本人，再輸入新的電子郵件收到的驗證碼，共三步。">
+              <Steps at={0} />
+              <p style={T.p}>現在的電子郵件：<b style={{ color: 'var(--color-fg-neutral-default)' }}>wang@yahoo.com.tw</b></p>
+              <F label="新的電子郵件" placeholder="例：wang@gmail.com" />
+              <Alert tone="warning">換好之後，原本的 wang@yahoo.com.tw 就不能再用。以後登入要打新的電子郵件。</Alert>
+              <Big variant="primary">寄驗證碼</Big>
+              <Big variant="ghost">取消</Big>
+            </Section>
+          </Page>
+        </Frame>
+
+        <Frame title="⑪ 按「沒收到？重新寄一次」，但上一組還有效" note="後端 10 分鐘內不會再寄新的。不要只說「還有效」，要說他可以做什麼。">
+          <Page>
+            <Section title="更換電子郵件">
+              <Steps at={1} />
+              <Alert tone="info">剛剛寄的驗證碼 10 分鐘內都能用，不用重寄。請到 wang@yahoo.com.tw 再找一下，也看看「垃圾郵件」。</Alert>
+              <F label="原本的電子郵件收到的驗證碼" placeholder="6 位數字" />
+              <Big variant="primary">確認</Big>
+              <Big variant="ghost">沒收到？重新寄一次</Big>
+            </Section>
+          </Page>
+        </Frame>
+
+        <Frame title="⑫ 完成" note="寫出換成什麼，綠色；下面的清單也換成新的。">
+          <Page>
+            <Section title="電子郵件和手機">
+              <Alert tone="success">已經把電子郵件換成 wang@gmail.com。</Alert>
+              {[['電子郵件', 'wang@gmail.com', '更換'], ['手機', '還沒有', '新增']].map(([k, v, b]) => (
+                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--color-border-default)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ font: '700 var(--fs-16)/1.4 var(--font-body)' }}>{k}</div>
+                    <div style={{ ...T.p, color: v === '還沒有' ? 'var(--color-fg-neutral-muted)' : T.p.color }}>{v}</div>
+                  </div>
+                  <Button variant="outline" style={{ height: 44, fontSize: 16, minWidth: 88 }}>{b}</Button>
+                </div>
+              ))}
+            </Section>
           </Page>
         </Frame>
       </div>
