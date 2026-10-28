@@ -46,11 +46,16 @@ export function teamNoun(role: RoleRequestRole | null): string {
 /**
  * Said under the identities once one names a team (prototype `site-actions.jsx`; JOIN-101,
  * `Design/前台/docs/加入團隊.md`): an invite picks the team, and its admins still approve (Spec 026).
+ * The identity's word both times: 那個單位 for a government applicant (the designer, 2026-10-28).
  */
 export function inviteHint(role: RoleRequestRole | null): string | null {
-  return teamTypeForRole(role)
-    ? `如果${teamNoun(role)}已經給你邀請碼，掃碼會直接帶到那個團隊，不用自己找；一樣要等管理員核准。`
-    : null;
+  if (!teamTypeForRole(role)) {
+    return null;
+  }
+
+  const noun = teamNoun(role);
+
+  return `如果${noun}已經給你邀請碼，掃碼會直接帶到那個${noun}，不用自己找；一樣要等管理員核准。`;
 }
 
 /**
