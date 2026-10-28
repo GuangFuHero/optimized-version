@@ -20,7 +20,13 @@ import {
   SlidersHorizontal,
   Upload,
 } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
 
 import type { StationCapabilities } from './hooks/use-station-capabilities';
@@ -65,10 +71,17 @@ export function StationToolbar({
   const [box, setBox] = useState(() => initialSearchBox(query));
   // An IME (注音, 倉頡) is mid-word: its keystrokes are not a query yet.
   const composing = useRef(false);
-  const sendQuery = useDebounceCallback((value: string) => {
+  // `useDebounceCallback` starts a new debouncer whenever its callback changes, so the callback
+  // must stay the same across renders: otherwise each keystroke gets its own timer.
+  const latestOnQueryChange = useRef(onQueryChange);
+  useEffect(() => {
+    latestOnQueryChange.current = onQueryChange;
+  });
+  const send = useCallback((value: string) => {
     setBox((current) => ({ ...current, sent: value.trim() }));
-    onQueryChange(value);
-  }, 300);
+    latestOnQueryChange.current(value);
+  }, []);
+  const sendQuery = useDebounceCallback(send, 300);
 
   const followed = followUrl(box, query);
   if (followed !== box) setBox(followed);
