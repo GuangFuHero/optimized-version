@@ -64,13 +64,34 @@ function Page({ children, login }) {
     </div>
   );
 }
+/* 2026-10-27 Sucre：帳號安全改成「點開才看到框框」。
+   🔒 一進來只有一列一列的標題＋一句說明；整列都可以點（不是只有右邊的小箭頭）。
+   🔒 一次只打開一個；打開的那一個標題列右邊變「收起 ︿」，下面才出現欄位與按鈕。
+   🔒 做不到的（例：沒有聯絡方式不能設密碼）：那一列灰字＋說明，不能點開、沒有箭頭。 */
+function Row({ title, desc, disabled, note }) {
+  return (
+    <div style={{ padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-default)',
+      display: 'flex', alignItems: 'center', gap: 12, cursor: disabled ? 'default' : 'pointer',
+      background: disabled ? 'var(--color-bg-neutral-subtle)' : 'var(--color-bg-neutral-default)' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ ...T.sh, color: disabled ? 'var(--color-fg-neutral-muted)' : T.sh.color }}>{title}</div>
+        {desc ? <p style={{ ...T.p, marginTop: 2, fontSize: 'var(--fs-15)' }}>{desc}</p> : null}
+        {note ? <p style={{ ...T.p, marginTop: 6, display: 'flex', gap: 6 }}><span style={{ marginTop: 3 }}><WGIcon n="Info" s={18} c="var(--color-fg-neutral-subtle)" /></span>{note}</p> : null}
+      </div>
+      {disabled ? null : <span style={{ display: 'flex', alignItems: 'center', gap: 2, font: '500 var(--fs-15)/1 var(--font-body)', color: 'var(--color-brand-secondary-default)' }}>打開<WGIcon n="ChevronDown" s={20} c="var(--color-brand-secondary-default)" /></span>}
+    </div>
+  );
+}
 function Section({ title, desc, children }) {
   return (
-    <div style={{ padding: 16, borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border-default)',
+    <div style={{ padding: 16, borderRadius: 'var(--radius-lg)', border: '2px solid var(--color-brand-secondary-default)',
       display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div>
-        <div style={T.sh}>{title}</div>
-        {desc ? <p style={{ ...T.p, marginTop: 4 }}>{desc}</p> : null}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={T.sh}>{title}</div>
+          {desc ? <p style={{ ...T.p, marginTop: 4 }}>{desc}</p> : null}
+        </div>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 2, font: '500 var(--fs-15)/1 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>收起<WGIcon n="ChevronUp" s={20} c="var(--color-fg-neutral-subtle)" /></span>
       </div>
       {children}
     </div>
@@ -185,22 +206,39 @@ function App() {
       <h1 className="board-h">#144 帳號安全：確認是你本人</h1>
       <p className="board-p">全部用中文、不用工程用語；字 16px 起；一次只叫他做一件事。兩組驗證碼的欄位名稱一定要分得出來。</p>
       <div className="board">
-        <Frame title="① 頁面一進來（只用 LINE 登入、有電子郵件）">
+        <Frame title="① 頁面一進來：只有標題，點開才看到框框" note="乙（只用 LINE 登入、有電子郵件）看到的。甲（有密碼）第一列是「變更密碼」。">
+          <Page>
+            <Row title="設定登入密碼" desc="設一組密碼，以後也可以用密碼登入" />
+            <Row title="新增電子郵件或手機" desc="一次新增一個" />
+            <Row title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台" />
+          </Page>
+        </Frame>
+
+        <Frame title="①-1 點「設定登入密碼」" note="只打開這一列，其他維持收起。按「取消」或「收起」就關起來。">
           <Page>
             <Section title="設定登入密碼" desc="你現在是用 LINE 登入。設一組密碼，以後也可以用密碼登入。設好後要重新登入一次。">
               <F label="新密碼" type="password" />
               <F label="再輸入一次新密碼" type="password" />
               <Big variant="primary">設定密碼</Big>
+              <Big variant="ghost">取消</Big>
             </Section>
-            <Section title="新增電子郵件或手機" desc="一次新增一個。為了安全，要先確認是你本人，再輸入新的電子郵件收到的驗證碼，共三步。">
+            <Row title="新增電子郵件或手機" desc="一次新增一個" />
+            <Row title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台" />
+          </Page>
+        </Frame>
+
+        <Frame title="①-2 點「新增電子郵件或手機」（第 1 步）">
+          <Page>
+            <Row title="設定登入密碼" desc="設一組密碼，以後也可以用密碼登入" />
+            <Section title="新增電子郵件或手機" desc="為了安全，要先確認是你本人，再輸入新的電子郵件收到的驗證碼，共三步。">
+              <Steps at={0} />
               <p style={{ ...T.p, fontWeight: 700, color: "var(--color-fg-neutral-default)" }}>要新增哪一種？（選一個）</p>
               <Toggle value="電子郵件" />
               <F label="新的電子郵件" placeholder="例：wang@gmail.com" />
               <Big variant="primary">寄驗證碼</Big>
+              <Big variant="ghost">取消</Big>
             </Section>
-            <Section title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台。">
-              <Big variant="outline">登出所有裝置</Big>
-            </Section>
+            <Row title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台" />
           </Page>
         </Frame>
 
@@ -263,20 +301,11 @@ function App() {
           </Page>
         </Frame>
 
-        <Frame title="⑦ 只用 LINE、沒有電子郵件或手機：先不能設密碼" note="密碼登入要打電子郵件或手機當帳號，他一個都沒有，設了也登不進來（PM 10-27）。密碼欄灰掉、不能輸入，正下方說明；新增電子郵件或手機照常可用，加好之後才能設密碼。（「只用 Google、沒有聯絡方式」正常不會發生：Google 第一次登入一定會存信箱。）">
+        <Frame title="⑦ 只用 LINE、沒有電子郵件或手機：先不能設密碼" note="密碼登入要打電子郵件或手機當帳號，他一個都沒有，設了也登不進來（PM 10-27）。「設定登入密碼」那一列灰字＋說明，不能點開；新增電子郵件或手機照常可以點開，加好之後才能設密碼。">
           <Page>
-            {/* 🔒 灰掉的欄位＋正下方說明；不放按鈕（灰掉的按鈕長輩會一直按）。 */}
-            <Section title="設定登入密碼">
-              <Field label="新密碼"><Input disabled placeholder="" style={{ fontSize: 16, height: 48, opacity: .55, background: 'var(--color-bg-neutral-sunken)' }} /></Field>
-              <p style={{ ...T.p, display: 'flex', gap: 6 }}><span style={{ marginTop: 3 }}><WGIcon n="Info" s={18} c="var(--color-fg-neutral-subtle)" /></span>
-                要先在下面新增電子郵件或手機，才能設密碼。以後用密碼登入時，就打你新增的電子郵件或手機。</p>
-            </Section>
-            <Section title="新增電子郵件或手機" desc="一次新增一個。為了安全，要先確認是你本人，再輸入新的電子郵件收到的驗證碼，共三步。">
-              <p style={{ ...T.p, fontWeight: 700, color: "var(--color-fg-neutral-default)" }}>要新增哪一種？（選一個）</p>
-              <Toggle value="電子郵件" />
-              <F label="新的電子郵件" placeholder="例：wang@gmail.com" />
-              <Big variant="primary">寄驗證碼</Big>
-            </Section>
+            <Row title="設定登入密碼" disabled note="要先新增電子郵件或手機，才能設密碼。以後用密碼登入時，就打你新增的電子郵件或手機。" />
+            <Row title="新增電子郵件或手機" desc="一次新增一個" />
+            <Row title="登出所有裝置" desc="所有手機、電腦都會登出，包含這一台" />
           </Page>
         </Frame>
       </div>

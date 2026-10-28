@@ -452,7 +452,7 @@
                 <Button variant="outline" onClick={() => setConfirmWithdraw(true)}>撤回這筆申請</Button>
                 <div style={{ marginTop: 'var(--space-2)', font: '400 var(--fs-12)/1.6 var(--font-body)',
                   color: 'var(--color-fg-neutral-muted)', textWrap: 'pretty' }}>
-                  如果團隊已經用邀請碼讓你加入，就不需要這筆申請了，可以直接撤回。
+                  如果有團隊給你邀請碼，要先撤回這一筆，才能掃碼申請加入那個團隊。
                 </div>
               </div>
             )}
