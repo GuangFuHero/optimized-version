@@ -21,8 +21,8 @@ class IdentitySummary(BaseModel):
 class UserSearch:
     """What `GET /admin/users` narrows the list by (ADR-412). Every field is optional and they combine.
 
-    `q` is matched against the nickname, and against the phone for those who read real names;
-    phones are stored in E.164 (`+886…`), so the caller sends that form.
+    `q` is matched against the nickname only. Phones, emails and real names are not searched: they
+    are personal data, and a search on them answers "whose number is this" (ADR-412).
     """
 
     q: str | None = None

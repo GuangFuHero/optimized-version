@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, active_team
 from app.core.security import resolve_scope
-from app.models.auth import User, UserContact
+from app.models.auth import User
 from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
 from app.repositories.session_repository import SessionRepository
@@ -76,24 +76,16 @@ class PlatformUserDirectory(UserDirectory):
         super().__init__(db, actor)
         self.redis = redis
         self.search = search or UserSearch()
-        self._searches_phone = False
 
     async def authorize(self) -> None:
         """user.view (super admin, data auditor in the seed)."""
         await require_scope(self.actor, Perm.USER_VIEW, self.db)
 
     def narrow(self, query):
-        """Apply the search. Phones are matched only for those who read real names (ADR-412)."""
+        """Apply the search: `q` against the nickname only, never contact details (ADR-412)."""
         q = (self.search.q or "").strip()
         if q:
-            matches = User.name.icontains(q, autoescape=True)
-            if self._searches_phone:
-                matches = matches | exists().where(
-                    UserContact.user_uuid == User.uuid,
-                    UserContact.type == "phone",
-                    UserContact.value.contains(q, autoescape=True),
-                )
-            query = query.where(matches)
+            query = query.where(User.name.icontains(q, autoescape=True))
         if self.search.platform_role:
             query = query.where(
                 exists()
@@ -110,12 +102,11 @@ class PlatformUserDirectory(UserDirectory):
 
     async def list(self, *, skip: int, limit: int) -> list[AdminUserListItem]:
         """The rows of 成員與權限."""
-        real_name = await self.shows_real_name()
-        self._searches_phone = real_name
         users = await self.accounts(skip=skip, limit=limit)
         user_uuids = [str(u.uuid) for u in users]
         identities = await identities_by_user(self.db, user_uuids)
         sessions_by_user = await session_counts(self.redis, user_uuids)
+        real_name = await self.shows_real_name()
         return [
             AdminUserListItem(
                 uuid=u.uuid,

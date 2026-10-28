@@ -1,7 +1,6 @@
 """Searching and filtering `GET /admin/users` (ADR-412, ADR-413).
 
-`q` matches the nickname for every reader and the phone for those who read real names; the
-phone is stored in E.164, so the frontend sends `+886…`. `platform_role` and `team_uuid` narrow
+`q` matches the nickname only, never a phone, email or real name. `platform_role` and `team_uuid` narrow
 the list to holders of that grant. Rows carry `created_at`.
 """
 
@@ -63,20 +62,11 @@ async def test_q_matches_part_of_the_nickname_ignoring_case(client, db_session, 
 
 
 @pytest.mark.asyncio
-async def test_a_super_admin_finds_a_person_by_part_of_their_phone(client, db_session, redis):
-    """The frontend sends the stored E.164 form; part of it is enough."""
-    await _person(db_session, "小明", phone="+886912345678")
-    await _person(db_session, "小華", phone="+886987654321")
-
-    assert await _names(client, db_session, redis, SUPER_ADMIN, q="+886912") == {"小明"}
-
-
-@pytest.mark.asyncio
-async def test_a_data_auditor_cannot_search_by_phone(client, db_session, redis):
-    """Phones are read only by those who read real names (ADR-412), so they are not searchable either."""
+async def test_q_never_matches_a_phone(client, db_session, redis):
+    """Not even for a super admin: a phone search answers whose number it is (ADR-412)."""
     await _person(db_session, "小明", phone="+886912345678")
 
-    assert await _names(client, db_session, redis, DATA_AUDITOR, q="+886912") == set()
+    assert await _names(client, db_session, redis, SUPER_ADMIN, q="+886912") == set()
 
 
 @pytest.mark.asyncio
