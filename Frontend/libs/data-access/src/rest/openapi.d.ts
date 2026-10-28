@@ -5477,7 +5477,7 @@ export interface operations {
       query?: {
         skip?: number;
         limit?: number;
-        /** @description Part of the nickname, or of the phone (+886…) for super admins */
+        /** @description Part of the nickname */
         q?: string | null;
         /** @description Only holders of this platform role */
         platform_role?: string | null;

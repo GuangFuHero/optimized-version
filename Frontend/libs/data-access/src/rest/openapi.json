@@ -1808,10 +1808,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Part of the nickname, or of the phone (+886…) for super admins",
+              "description": "Part of the nickname",
               "title": "Q"
             },
-            "description": "Part of the nickname, or of the phone (+886…) for super admins"
+            "description": "Part of the nickname"
           },
           {
             "name": "platform_role",
