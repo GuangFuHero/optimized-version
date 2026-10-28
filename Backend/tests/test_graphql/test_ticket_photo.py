@@ -21,7 +21,8 @@ from sqlalchemy import func, select
 from app.core.permissions import Perm
 from app.models.photo import Photo
 from app.models.request import Tickets
-from tests.test_graphql.conftest import auth_header, test_db
+from tests.test_graphql.conftest import auth_header
+from tests.test_graphql.conftest import test_db as _test_db  # aliased so pytest does not collect it
 from tests.test_graphql.test_station_photo import (
     _attach,
     _create_station,
@@ -99,7 +100,7 @@ async def _photo_urls(client, token: str, ticket_uuid: str) -> list[str]:
 
 
 async def _ticket_count() -> int:
-    async with test_db() as db:
+    async with _test_db() as db:
         return (await db.execute(select(func.count()).select_from(Tickets))).scalar_one()
 
 
@@ -204,7 +205,7 @@ async def test_detach_ticket_photo_requires_ticket_edit(client, staff_auth, file
     _, filer_token = filer_auth
     created = await _create_ticket(client, staff_token, photoUrls=["https://a.example/1.jpg"])
     ticket_uuid = created["data"]["createTicket"]["ticket"]["uuid"]
-    async with test_db() as db:
+    async with _test_db() as db:
         photo_uuid = str(
             (await db.execute(select(Photo).where(Photo.ref_uuid == ticket_uuid))).scalar_one().uuid
         )
