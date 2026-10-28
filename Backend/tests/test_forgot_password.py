@@ -151,6 +151,7 @@ async def test_reset_wrong_code_400(client, db_session, capture_email):
         "type": "email", "value": "owner@x.com", "code": "000000",
         "new_password": "newsecret", "salt_frontend": "webtest"})
     assert r.status_code == 400
+    assert len(capture_email.messages) == 1  # only the code: a failed reset tells no one
 
 
 @pytest.mark.asyncio
