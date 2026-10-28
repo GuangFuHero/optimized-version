@@ -8,7 +8,7 @@ import {
   type RowData,
   type TableOptions,
 } from '@tanstack/react-table';
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 import { designTokens } from '../../theme';
 
@@ -36,6 +36,12 @@ export interface DataTableProps<TData extends RowData> {
   density?: DataTableDensity;
   minWidth?: number;
   empty?: ReactNode;
+  /**
+   * A full-width block under a row whose id is in `expandedRowIds`. It is not a row of its own:
+   * it takes no focus and its clicks never reach `onRowClick`.
+   */
+  renderExpanded?: (row: TData) => ReactNode;
+  expandedRowIds?: ReadonlySet<string>;
 }
 
 const ROW_PADDING: Record<DataTableDensity, string> = {
@@ -52,6 +58,8 @@ export function DataTable<TData extends RowData>({
   density = 'regular',
   minWidth,
   empty,
+  renderExpanded,
+  expandedRowIds,
 }: DataTableProps<TData>) {
   const table = useTable({
     features: dataTableFeatures,
@@ -119,44 +127,64 @@ export function DataTable<TData extends RowData>({
 
         {rows.length === 0
           ? empty
-          : rows.map((row) => (
-              <Box
-                key={row.id}
-                role="row"
-                tabIndex={onRowClick ? 0 : undefined}
-                onClick={
-                  onRowClick ? () => onRowClick(row.original) : undefined
-                }
-                onKeyDown={
-                  onRowClick
-                    ? (event) => {
-                        if (event.key === 'Enter') onRowClick(row.original);
-                      }
-                    : undefined
-                }
-                sx={[
-                  {
-                    ...gridSx,
-                    p: ROW_PADDING[density],
-                    cursor: onRowClick ? 'pointer' : 'default',
-                    transition: `background-color ${motion.transition.fast}`,
-                    '&:hover': { bgcolor: color.bg.neutral.subtle },
-                    '&:last-of-type': { borderBottom: 'none' },
-                  },
-                  ...(getRowSx ? [getRowSx(row.original)].flat() : []),
-                ]}
-              >
-                {row.getAllCells().map((cell) => (
+          : rows.map((row) => {
+              const expanded =
+                renderExpanded !== undefined &&
+                (expandedRowIds?.has(row.id) ?? false);
+              return (
+                <Fragment key={row.id}>
                   <Box
-                    key={cell.id}
-                    role="cell"
-                    sx={cellSx(cell.column.columnDef.meta)}
+                    role="row"
+                    tabIndex={onRowClick ? 0 : undefined}
+                    onClick={
+                      onRowClick ? () => onRowClick(row.original) : undefined
+                    }
+                    onKeyDown={
+                      onRowClick
+                        ? (event) => {
+                            if (event.key === 'Enter') onRowClick(row.original);
+                          }
+                        : undefined
+                    }
+                    sx={[
+                      {
+                        ...gridSx,
+                        p: ROW_PADDING[density],
+                        cursor: onRowClick ? 'pointer' : 'default',
+                        transition: `background-color ${motion.transition.fast}`,
+                        '&:hover': { bgcolor: color.bg.neutral.subtle },
+                        '&:last-of-type': { borderBottom: 'none' },
+                      },
+                      ...(expanded ? [{ borderBottom: 'none' }] : []),
+                      ...(getRowSx ? [getRowSx(row.original)].flat() : []),
+                    ]}
                   >
-                    <table.FlexRender cell={cell} />
+                    {row.getAllCells().map((cell) => (
+                      <Box
+                        key={cell.id}
+                        role="cell"
+                        sx={cellSx(cell.column.columnDef.meta)}
+                      >
+                        <table.FlexRender cell={cell} />
+                      </Box>
+                    ))}
                   </Box>
-                ))}
-              </Box>
-            ))}
+                  {expanded ? (
+                    <Box
+                      role="row"
+                      sx={{
+                        p: ROW_PADDING[density],
+                        pt: 0,
+                        borderBottom: `1px solid ${color.border.default}`,
+                        '&:last-of-type': { borderBottom: 'none' },
+                      }}
+                    >
+                      <Box role="cell">{renderExpanded(row.original)}</Box>
+                    </Box>
+                  ) : null}
+                </Fragment>
+              );
+            })}
       </Box>
     </Box>
   );
