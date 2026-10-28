@@ -87,11 +87,11 @@ class PlatformUserDirectory(UserDirectory):
         if q:
             query = query.where(User.name.icontains(q, autoescape=True))
         if self.search.platform_role:
-            query = query.where(
-                exists()
-                .where(UserRoleAssign.user_uuid == User.uuid, UserRoleAssign.team_uuid.is_(None))
-                .where(Role.uuid == UserRoleAssign.role_uuid, Role.name == self.search.platform_role)
-            )
+            query = query.where(_holds_platform_role(self.search.platform_role))
+            if self.search.platform_role == DEFAULT_PLATFORM_ROLE:
+                # Everyone holds `user` (ADR-294), so it means what the list's column shows: nothing
+                # besides it (`platform_role()` below, ADR-412).
+                query = query.where(~_holds_platform_role(DEFAULT_PLATFORM_ROLE, other_than=True))
         if self.search.team_uuid is not None:
             query = query.where(
                 exists().where(
@@ -263,6 +263,16 @@ async def session_counts(redis, user_uuids: list[str]) -> dict[str, int | None]:
         if alive:
             counts[index] += 1
     return dict(zip(user_uuids, counts, strict=True))
+
+
+def _holds_platform_role(role_name: str, *, other_than: bool = False):
+    """EXISTS: the account holds the platform role `role_name` — or, `other_than`, one besides it."""
+    named = Role.name != role_name if other_than else Role.name == role_name
+    return (
+        exists()
+        .where(UserRoleAssign.user_uuid == User.uuid, UserRoleAssign.team_uuid.is_(None))
+        .where(Role.uuid == UserRoleAssign.role_uuid, named)
+    )
 
 
 def platform_role(identities: list[IdentitySummary]) -> str | None:

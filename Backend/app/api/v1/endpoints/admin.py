@@ -57,7 +57,9 @@ async def list_users(
     skip: int = 0,
     limit: int = 100,
     q: str | None = Query(None, max_length=100, description="Part of the nickname"),
-    platform_role: str | None = Query(None, max_length=50, description="Only holders of this platform role"),
+    platform_role: str | None = Query(
+        None, max_length=50, description="As the platform_role column shows; `user`: no other platform role"
+    ),
     team_uuid: UUID | None = Query(None, description="Only those holding a role in this team"),
     db: AsyncSession = Depends(security.get_db),
     redis=Depends(get_redis),

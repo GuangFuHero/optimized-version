@@ -62,11 +62,20 @@ async def test_q_matches_part_of_the_nickname_ignoring_case(client, db_session, 
 
 
 @pytest.mark.asyncio
-async def test_q_never_matches_a_phone(client, db_session, redis):
-    """Not even for a super admin: a phone search answers whose number it is (ADR-412)."""
-    await _person(db_session, "小明", phone="+886912345678")
+@pytest.mark.parametrize(
+    ("contact", "q"),
+    [("phone", "+886912"), ("email", "ming@example"), ("real_name", "王大明")],
+)
+async def test_q_never_matches_personal_details(client, db_session, redis, contact, q):
+    """Not even for a super admin: a search on them answers whose number or address it is (ADR-412)."""
+    person = await _person(db_session, "小明")
+    if contact == "real_name":
+        person.real_name = "王大明"
+    else:
+        value = "+886912345678" if contact == "phone" else "ming@example.com"
+        db_session.add(UserContact(user_uuid=person.uuid, type=contact, value=value, verified=True))
 
-    assert await _names(client, db_session, redis, SUPER_ADMIN, q="+886912") == set()
+    assert await _names(client, db_session, redis, SUPER_ADMIN, q=q) == set()
 
 
 @pytest.mark.asyncio
@@ -90,10 +99,38 @@ async def test_a_blank_q_filters_nothing(client, db_session, redis):
 async def test_platform_role_keeps_its_holders(client, db_session, redis):
     """Only accounts holding that platform grant."""
     auditor = await _person(db_session, "稽核員")
+    await _grant(db_session, auditor, "user")
     await _grant(db_session, auditor, "data_auditor")
-    await _person(db_session, "小明")
+    await _grant(db_session, await _person(db_session, "小明"), "user")
 
     assert await _names(client, db_session, redis, DATA_AUDITOR, platform_role="data_auditor") == {"稽核員"}
+
+
+@pytest.mark.asyncio
+async def test_platform_role_user_means_nothing_more_than_user(client, db_session, redis):
+    """Everyone holds `user` (ADR-294), so it filters as the column shows it.
+
+    That is: those with no other platform role.
+    """
+    auditor = await _person(db_session, "稽核員")
+    await _grant(db_session, auditor, "user")
+    await _grant(db_session, auditor, "data_auditor")
+    await _grant(db_session, await _person(db_session, "小明"), "user")
+
+    assert await _names(client, db_session, redis, DATA_AUDITOR, platform_role="user") == {"小明"}
+
+
+@pytest.mark.asyncio
+async def test_platform_role_user_counts_team_roles_as_no_other(client, db_session, redis):
+    """A team role is not a platform role: a `user` in a team still shows, and filters, as `user`."""
+    team = Team(name="甲隊", type="ngo", status="active")
+    db_session.add(team)
+    await db_session.flush()
+    member = await _person(db_session, "隊員")
+    await _grant(db_session, member, "user")
+    await _grant(db_session, member, "member", team=team)
+
+    assert await _names(client, db_session, redis, DATA_AUDITOR, platform_role="user") == {"隊員"}
 
 
 @pytest.mark.asyncio
