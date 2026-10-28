@@ -25,7 +25,12 @@ import {
   type TicketColumnId,
 } from './model/ticket-columns';
 import { pageOf } from './model/ticket-filters';
-import { AUDIT_BADGES, type TaskRow, type TicketRow } from './model/ticket-row';
+import {
+  AUDIT_BADGES,
+  OPEN_TASK_STATUSES,
+  type TaskRow,
+  type TicketRow,
+} from './model/ticket-row';
 
 const { color, radius, typography } = designTokens;
 
@@ -103,7 +108,9 @@ export function TicketTable({
           </Badge>
         );
       case 'needs': {
-        const open = row.tasks.filter((t) => t.status === 'pending').length;
+        const open = row.tasks.filter((t) =>
+          OPEN_TASK_STATUSES.has(t.status),
+        ).length;
         return <Muted>{`${open}/${row.tasks.length} 項`}</Muted>;
       }
       case 'gap':

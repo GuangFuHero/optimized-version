@@ -64,6 +64,18 @@ describe('validateTicketForm', () => {
     ).toBeUndefined();
   });
 
+  it('counts the title in code points, as the backend does', () => {
+    // Each emoji is one code point but two UTF-16 units.
+    expect(
+      validateTicketForm({ ...filled, title: '🌊'.repeat(200) }, 'create')
+        .title,
+    ).toBeUndefined();
+    expect(
+      validateTicketForm({ ...filled, title: '🌊'.repeat(201) }, 'create')
+        .title,
+    ).toBeTruthy();
+  });
+
   it('requires quantity except for rescue', () => {
     const check = (n: ReturnType<typeof need>) =>
       validateTicketForm({ ...filled, needs: [n] }, 'create');
@@ -183,6 +195,18 @@ describe('acknowledgeSuspects', () => {
       [0, 'old'],
       [1, 'a'],
     ]);
+  });
+});
+
+describe('acknowledgeSuspects on a second hold', () => {
+  it('replaces an earlier acknowledgement for the same need', () => {
+    const first = acknowledgeSuspects(new Map(), [
+      { draftIndex: 0, relatedUuid: 'old', relatedTicketUuid: null },
+    ]);
+    const second = acknowledgeSuspects(first, [
+      { draftIndex: 0, relatedUuid: 'new', relatedTicketUuid: null },
+    ]);
+    expect([...second]).toEqual([[0, 'new']]);
   });
 });
 

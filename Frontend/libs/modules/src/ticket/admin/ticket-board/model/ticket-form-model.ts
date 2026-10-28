@@ -117,7 +117,8 @@ export function validateTicketForm(
   const errors: TicketFormErrors = {};
   const title = values.title.trim();
   if (!title) errors.title = '請填寫標題';
-  else if (title.length > TICKET_TITLE_MAX)
+  // Code points, as the backend counts them: an emoji is one, not two UTF-16 units.
+  else if ([...title].length > TICKET_TITLE_MAX)
     errors.title = `標題最多 ${TICKET_TITLE_MAX} 字`;
   if (values.photoUrls.length > PHOTO_LINK_MAX)
     errors.photoUrls = `照片最多 ${PHOTO_LINK_MAX} 張`;
@@ -186,20 +187,22 @@ export function toCreateTicketInput(
 }
 
 /**
- * The acknowledgements to resend with: one suspect per need (the backend takes one each). A
- * suspect on the ticket itself (`draftIndex` -1) has nothing to acknowledge it on.
+ * The acknowledgements to resend with: one suspect per need (the backend takes one each), the
+ * first of this hold's suspects for it. A new hold for a need replaces an earlier acknowledgement:
+ * the latest suspect is the one the backend is holding on. A suspect on the ticket itself
+ * (`draftIndex` -1) has nothing to acknowledge it on.
  */
 export function acknowledgeSuspects(
   previous: Map<number, string>,
   suspects: DuplicateSuspect[],
 ): Map<number, string> {
-  const next = new Map(previous);
+  const latest = new Map<number, string>();
   for (const suspect of suspects) {
-    if (suspect.draftIndex >= 0 && !next.has(suspect.draftIndex)) {
-      next.set(suspect.draftIndex, suspect.relatedUuid);
+    if (suspect.draftIndex >= 0 && !latest.has(suspect.draftIndex)) {
+      latest.set(suspect.draftIndex, suspect.relatedUuid);
     }
   }
-  return next;
+  return new Map([...previous, ...latest]);
 }
 
 /** `updateTicket`'s input: never the contact or the point, which the edit form can't change. */

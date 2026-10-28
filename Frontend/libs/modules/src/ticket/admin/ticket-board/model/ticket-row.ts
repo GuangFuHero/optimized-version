@@ -30,11 +30,21 @@ export const AUDIT_BADGES: Record<
 /** Shown wherever a ticket has no title. */
 export const UNTITLED_TICKET = '（未命名求助單）';
 
+/**
+ * Need statuses that still take people: the backend's `OPEN_NEED_STATUSES`. `in_progress` is a
+ * legacy status (ADR-293 left old rows unmigrated) and is still open.
+ */
+export const OPEN_TASK_STATUSES: ReadonlySet<string> = new Set([
+  'pending',
+  'in_progress',
+]);
+
 export interface TaskRow {
   uuid: string;
   taskType: string;
   taskName: string;
-  status: 'pending' | 'fulfilled' | 'canceled';
+  /** `in_progress` only on legacy rows. */
+  status: 'pending' | 'in_progress' | 'fulfilled' | 'canceled';
   quantity: number | null;
   assignedCount: number;
   /** People still missing: only an open need with a quantity has one. */
@@ -66,7 +76,7 @@ export interface TicketRow {
 function toTaskRow(task: AdminTaskFieldsFragment): TaskRow {
   const quantity = task.quantity ?? null;
   const gap =
-    task.status === 'pending' && quantity !== null
+    OPEN_TASK_STATUSES.has(task.status) && quantity !== null
       ? Math.max(0, quantity - task.assignedCount)
       : 0;
   return {

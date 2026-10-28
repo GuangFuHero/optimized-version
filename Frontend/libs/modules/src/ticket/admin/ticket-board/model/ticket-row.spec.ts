@@ -11,7 +11,7 @@ const task = (
 ): AdminTaskFieldsFragment => ({
   uuid: 'k1',
   ticketUuid: 't1',
-  taskType: 'supplies',
+  taskType: 'supply',
   taskName: '物資',
   quantity: 5,
   status: 'pending',
@@ -42,6 +42,11 @@ const ticket = (
 describe('toTicketRow', () => {
   it('gives an open need its missing people as gap', () => {
     const row = toTicketRow(ticket({}, [task()]));
+    expect(row.tasks[0].gap).toBe(3);
+  });
+
+  it('counts a legacy in_progress need as open', () => {
+    const row = toTicketRow(ticket({}, [task({ status: 'in_progress' })]));
     expect(row.tasks[0].gap).toBe(3);
   });
 

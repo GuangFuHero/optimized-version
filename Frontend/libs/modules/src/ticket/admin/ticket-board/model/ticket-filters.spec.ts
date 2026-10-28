@@ -66,13 +66,13 @@ describe('ticket filters', () => {
         ...EMPTY_TICKET_FILTERS,
         status: 'pending',
         priority: 'high',
-        taskType: 'supplies',
+        taskType: 'supply',
         audit: 'need_audit',
       }),
     ).toEqual({
       status: 'pending',
       priority: 'high',
-      needType: 'supplies',
+      needType: 'supply',
       auditStatus: 'need_audit',
     });
     expect(toServerVariables(EMPTY_TICKET_FILTERS)).toEqual({});

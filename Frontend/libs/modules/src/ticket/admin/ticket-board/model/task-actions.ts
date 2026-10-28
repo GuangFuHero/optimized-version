@@ -5,12 +5,14 @@
 
 import type { ClaimError } from '../../../needs/claim-error';
 import type { TicketCapabilities } from '../hooks/use-ticket-capabilities';
-import type { TaskRow, TicketStatus } from './ticket-row';
+import {
+  OPEN_TASK_STATUSES,
+  type TaskRow,
+  type TicketStatus,
+} from './ticket-row';
 
 export type TaskAction = 'stop' | 'delete';
 
-/** Need statuses that still take people: the backend's `OPEN_NEED_STATUSES`. */
-const OPEN_NEED_STATUSES = new Set<string>(['pending', 'in_progress']);
 const CLOSED_TICKET_STATUSES = new Set<string>(['completed', 'cancelled']);
 
 /**
@@ -26,7 +28,7 @@ export function taskActionsFor(
   const actions: TaskAction[] = [];
   if (
     caps.canEdit &&
-    OPEN_NEED_STATUSES.has(task.status) &&
+    OPEN_TASK_STATUSES.has(task.status) &&
     !CLOSED_TICKET_STATUSES.has(ticketStatus) &&
     task.assignedCount > 0
   ) {
