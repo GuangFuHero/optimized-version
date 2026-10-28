@@ -338,10 +338,13 @@ const PAGE_HELP = '維護資源站點並審查民眾送來的修改建議';
 export function StationViewSwitch({
   count,
   view,
+  help = PAGE_HELP,
   onChange,
 }: {
   count: number;
   view: StationView;
+  /** The header ?'s one-line explanation; defaults to the station page's. */
+  help?: string;
   onChange: (view: StationView) => void;
 }) {
   const options = [
@@ -352,8 +355,8 @@ export function StationViewSwitch({
     <>
       <Box
         component="span"
-        title={PAGE_HELP}
-        aria-label={PAGE_HELP}
+        title={help}
+        aria-label={help}
         role="img"
         sx={{ display: 'inline-flex', ml: '-8px', cursor: 'help' }}
       >

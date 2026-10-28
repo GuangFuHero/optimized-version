@@ -6,6 +6,11 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
+import { AdminHeaderSlot } from '../../../shell/admin/header';
+import {
+  StationViewSwitch,
+  type StationView,
+} from '../../../station/admin/station-management/station-toolbar';
 import { useTicketCapabilities } from './hooks/use-ticket-capabilities';
 import { useTicketRows } from './hooks/use-ticket-rows';
 import {
@@ -17,12 +22,15 @@ import {
   type TicketFilters,
 } from './model/ticket-filters';
 import { ticketStats } from './model/ticket-stats';
+import { TicketMapView } from './ticket-map-view';
 import { TicketFilterPanel } from './ticket-filter-panel';
 import { TicketStatsStrip } from './ticket-stats-strip';
 import { TicketTable } from './ticket-table';
 import { TicketToolbar } from './ticket-toolbar';
 
 const { color } = designTokens;
+
+const PAGE_HELP = '檢視並處理民眾送來的求助單';
 
 // The station page's frame: 12px 28px 28px around a centred 1200px column.
 const FRAME_GAP = '12px';
@@ -47,6 +55,7 @@ export function TicketBoardPage() {
     [searchParams],
   );
   const filters = useMemo(() => parseTicketFilters(params), [params]);
+  const view: StationView = params.get('view') === 'map' ? 'map' : 'table';
   const page = Number(params.get('page')) || 1;
   const caps = useTicketCapabilities();
   const now = useNow();
@@ -88,65 +97,83 @@ export function TicketBoardPage() {
   const openTicket = (uuid: string | null) => setParam('ticket', uuid);
 
   return (
-    <AdminListPageLayout
-      canvasColor={color.bg.neutral.subtle}
-      header={
-        <Stack
-          sx={{
-            ...SECTION_SX,
-            pt: FRAME_GAP,
-            pb: FRAME_GAP,
-            gap: FRAME_GAP,
-            '& > *': COLUMN_SX,
-          }}
-        >
-          {/* A failed count is unknown, not zero: it shows as loading does. */}
-          <TicketStatsStrip
-            stats={stats}
-            loading={unfiltered.isPending || unfiltered.error != null}
-          />
-          <TicketToolbar
-            caps={caps}
-            query={filters.q}
-            onQueryChange={(q) => setFilters({ ...filters, q })}
-            activeFilterCount={countActiveFilters(filters)}
-            filterOpen={filterOpen}
-            onToggleFilter={() => setFilterOpen((open) => !open)}
-            onClear={() => setFilters(EMPTY_TICKET_FILTERS)}
-            count={rows.length}
-          />
-        </Stack>
-      }
-      filterPanel={
-        filterOpen ? (
-          <Box sx={COLUMN_SX}>
-            <TicketFilterPanel filters={filters} onChange={setFilters} />
-          </Box>
-        ) : undefined
-      }
-      filterPanelSx={{ ...SECTION_SX, pb: FRAME_GAP }}
-      listContainerSx={{ ...SECTION_SX, pb: '28px' }}
-      list={
-        <Box sx={COLUMN_SX}>
-          <TicketTable
-            rows={rows}
-            loading={tickets.isPending}
-            truncated={tickets.truncated}
-            failed={tickets.error != null}
-            retrying={tickets.isFetching}
-            onRetry={() => {
-              void tickets.refetch();
-              if (unfiltered.error != null) void unfiltered.refetch();
+    <>
+      <AdminHeaderSlot>
+        <StationViewSwitch
+          count={rows.length}
+          view={view}
+          help={PAGE_HELP}
+          onChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
+        />
+      </AdminHeaderSlot>
+      <AdminListPageLayout
+        canvasColor={color.bg.neutral.subtle}
+        header={
+          <Stack
+            sx={{
+              ...SECTION_SX,
+              pt: FRAME_GAP,
+              pb: FRAME_GAP,
+              gap: FRAME_GAP,
+              '& > *': COLUMN_SX,
             }}
-            now={now}
-            page={page}
-            onPageChange={(next) =>
-              setParam('page', next > 1 ? String(next) : null)
-            }
-            onOpenTicket={openTicket}
-          />
-        </Box>
-      }
-    />
+          >
+            {/* A failed count is unknown, not zero: it shows as loading does. */}
+            <TicketStatsStrip
+              stats={stats}
+              loading={unfiltered.isPending || unfiltered.error != null}
+            />
+            <TicketToolbar
+              caps={caps}
+              query={filters.q}
+              onQueryChange={(q) => setFilters({ ...filters, q })}
+              activeFilterCount={countActiveFilters(filters)}
+              filterOpen={filterOpen}
+              onToggleFilter={() => setFilterOpen((open) => !open)}
+              onClear={() => setFilters(EMPTY_TICKET_FILTERS)}
+              count={rows.length}
+            />
+          </Stack>
+        }
+        filterPanel={
+          filterOpen ? (
+            <Box sx={COLUMN_SX}>
+              <TicketFilterPanel filters={filters} onChange={setFilters} />
+            </Box>
+          ) : undefined
+        }
+        filterPanelSx={{ ...SECTION_SX, pb: FRAME_GAP }}
+        listContainerSx={{ ...SECTION_SX, pb: '28px' }}
+        list={
+          <Box sx={COLUMN_SX}>
+            {view === 'map' ? (
+              <TicketMapView
+                rows={rows}
+                selectedUuid={params.get('ticket')}
+                onOpenTicket={openTicket}
+              />
+            ) : (
+              <TicketTable
+                rows={rows}
+                loading={tickets.isPending}
+                truncated={tickets.truncated}
+                failed={tickets.error != null}
+                retrying={tickets.isFetching}
+                onRetry={() => {
+                  void tickets.refetch();
+                  if (unfiltered.error != null) void unfiltered.refetch();
+                }}
+                now={now}
+                page={page}
+                onPageChange={(next) =>
+                  setParam('page', next > 1 ? String(next) : null)
+                }
+                onOpenTicket={openTicket}
+              />
+            )}
+          </Box>
+        }
+      />
+    </>
   );
 }
