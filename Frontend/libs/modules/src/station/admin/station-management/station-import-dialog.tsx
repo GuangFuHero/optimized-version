@@ -114,6 +114,8 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   };
 
   const changePasted = (text: string) => {
+    // Drop a preview still in flight, so the result for text that is gone never lands.
+    previewImport.reset();
     setPasted(text);
     setFile(null);
     setPreview(null);
