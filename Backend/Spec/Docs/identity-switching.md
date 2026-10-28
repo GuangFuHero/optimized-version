@@ -181,13 +181,25 @@ UserRoleAssign.team_uuid.is_not_distinct_from(identity.team_uuid)
 
 ---
 
-## 7. 撤銷：三種讓身分作廢的方式
+## 7. 撤銷：讓 session 或身分作廢的方式
 
 | 端點 | 範圍 | 備註 |
 |---|---|---|
 | `POST /auth/logout` | 只有當前 sid | 其他裝置不受影響 |
 | `POST /auth/logout-all` | 該使用者的**每一個** session | 使用者 uuid 取自 **session 記錄**而非 token 的 `sub`——這是撤銷範圍最大的端點，最不該把 uuid 當可信輸入（ADR-223） |
 | `POST /admin/users/{uuid}/revoke-sessions` | 目標使用者的全部 session | 寫一筆 audit row 記錄是誰踢的。Redis 不可用時回 503 而非 500，且訊息不宣稱「一筆都沒撤銷」——撤銷是逐筆進行的，中途失敗時前面幾筆已經沒了（ADR-222） |
+
+### 身分被收回時不登出（Spec 029）
+
+上面是「整個人登出」。另一種情況是**正在用的那個身分**沒了：團隊被暫停、被移出團隊、平台角色被換、角色被撤銷或刪除。
+Spec 029 之前這等於登出（ADR-096 回 401 `identity_revoked`、清 cookie）。現在：
+
+1. 一般請求或 refresh 發現 token（或 session）的身分解析不到 → 先把 **session 的身分改成預設身分**（`default_for_user`）。
+2. 回 401 `identity_reset`，帶 `revoked_identity: {role, team}`，**不清 cookie**；這個請求不執行，refresh 也不 rotate（ADR-402～404）。
+3. 客戶端不帶身分再 refresh 一次，就拿到預設身分的 token。後台請求再由 `X-WG-Realm: admin` 換成他其他的後台身分。
+4. 同一把舊 token 的其他請求只會收到 `access_token_stale`，所以提示只出現一次。
+
+refresh 這條路只認 session 目前那一把 refresh token，名稱也只取自 session 自己的身分（ADR-415）。
 
 ---
 
@@ -201,6 +213,7 @@ UserRoleAssign.team_uuid.is_not_distinct_from(identity.team_uuid)
 | 登入 / 切換 / refresh / logout | `app/api/v1/endpoints/auth/session.py` |
 | session 記錄與 `set_identity` | `app/repositories/session_repository.py` |
 | 身分解析與預設身分 | `app/repositories/active_identity_repository.py` |
+| 身分被收回時改回預設身分（Spec 029） | `app/services/identity_reset.py` |
 | scope 定義與「最寬者勝」 | `app/core/rbac_scopes.py` |
 
 ## 修掉的文件缺陷

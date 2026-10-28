@@ -209,6 +209,8 @@ write: loudly, rather than accepting one it should not.
 
 ### ADR-328 Every 401 a token earns names why: refresh, or signed out
 
+> **Partly superseded 2026-10-28 (Spec 029, ADR-402–404, 415).** A revoked identity now answers `identity_reset`, which clears no cookies: the session is moved to the default identity and a refresh carries on. The backend no longer answers `identity_revoked`.
+
 > **Status: ACCEPTED (2026-10-18).** Chosen by the product owner on 2026-10-16, together with moving sign-in
 > to the backend. Answering an unreachable session store with a 503 instead of signing everyone out was
 > chosen on 2026-10-18, after the frontend's testing showed that stopping Redis for a moment signed every

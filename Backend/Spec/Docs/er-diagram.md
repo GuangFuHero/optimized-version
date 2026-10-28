@@ -345,7 +345,8 @@ users ||--o{ announcements : "last published"
 %%   station_assigned, station_unassigned, station_suggestion_created, dedup_review_pending,
 %%   dedup_task_merged, dedup_task_canceled, dedup_ticket_merged, dedup_ticket_updated,
 %%   dedup_ticket_contact_changed,
-%%   role_request_submitted, role_request_approved, role_request_rejected
+%%   role_request_submitted, role_request_approved, role_request_rejected, team_suspended
+%% (team_suspended goes to everyone in a team a super admin suspends, Spec 029 ADR-405.)
 %% (The five dedup_* after dedup_review_pending are sent once a reviewer resolves a pair card, Spec 028 ADR-379, 389.)
 %% (ticket_task_status_update is gone: a need's status is no longer edited by hand, ADR-293.)
 %% (dedup_flag_ticket / dedup_flag_station are gone: nothing could set is_duplicate, so they never
