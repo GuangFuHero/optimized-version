@@ -132,7 +132,11 @@ export function replaceNotice(
     replaced.type === 'phone' ? CONTACT_NAMES.phone : CONTACT_NAMES.email;
   const notice = `你已經有${name} ${replaced.value}。新增新的${name}後，原本這個會被取代，不能再用。`;
 
-  return signsInWithPassword ? `${notice}以後登入要用新的${name}。` : notice;
+  // A password signs in with an email or a phone (`authenticate_password`), whichever the person
+  // types; only someone who types this kind has to change.
+  return signsInWithPassword
+    ? `${notice}如果你是用${name}登入，以後要改用新的${name}。`
+    : notice;
 }
 
 /** Where the second code went, and, at the moment of finishing, the contact that goes. */
@@ -309,6 +313,7 @@ export function addContactErrorMessage(
     step === 'code' ? '驗證失敗，請稍後再試。' : '新增失敗，請稍後再試。',
     {
       identifier_taken: '這個電子郵件或手機已經是別的帳號在用，請換一個',
+      rate_limited: '嘗試太多次，請稍後再試。',
       code_invalid:
         '驗證碼不正確或已過期，請重新輸入，或按「沒收到？重新寄一次」',
       no_pending_contact: '驗證碼已過期，請按「沒收到？重新寄一次」',

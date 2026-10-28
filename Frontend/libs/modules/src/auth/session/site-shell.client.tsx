@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 
+import { clearApplyDraft } from '../../role-request/use-apply-draft';
 import { clearAllHelpRequestDrafts } from '../../ticket/help-request';
 import {
   isSigningOutHere,
@@ -18,6 +19,7 @@ import { toast } from 'sonner';
 
 import { useAuthSession } from '../../session/auth-session';
 import { SIGN_OUT_FAILED_MESSAGE, signOutHereAsync } from './sign-out';
+import { clearContactDraft } from './use-contact-draft';
 
 export function PortalSiteShell({ children }: { children: ReactNode }) {
   const { status, user } = useAuthSession();
@@ -45,9 +47,13 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
 
   const handleSignOut = () => {
     // The person chose to leave, maybe on a shared device: no half-filled 請求協助 (address,
-    // phone) is left in the tab for whoever uses it next. First, before the backend is asked:
-    // closing a slow tab must not keep it. A session that ended keeps its draft.
-    clearAllHelpRequestDrafts(sessionStorageOrNull());
+    // phone), 申請管理權限 or contact being added is left in the tab for whoever uses it next.
+    // First, before the backend is asked: closing a slow tab must not keep it. A session that
+    // ended keeps its drafts.
+    const storage = sessionStorageOrNull();
+    clearAllHelpRequestDrafts(storage);
+    clearApplyDraft(storage);
+    clearContactDraft(storage);
     void signOutHereAsync().then((outcome) => {
       if (outcome === 'still-signed-in') {
         toast.error(SIGN_OUT_FAILED_MESSAGE);

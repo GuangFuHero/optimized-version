@@ -115,6 +115,7 @@ function SecurityRow({
   summary,
   open,
   blocked,
+  doneNotice,
   onOpen,
   onClose,
   children,
@@ -124,6 +125,8 @@ function SecurityRow({
   open: boolean;
   /** Why the row cannot be used here, shown under it in place of 打開. */
   blocked?: string | null;
+  /** What the row just did, shown under it once it has closed by itself. */
+  doneNotice?: string | null;
   onOpen: () => void;
   onClose: () => void;
   children: React.ReactNode;
@@ -199,6 +202,13 @@ function SecurityRow({
                 取消
               </Button>
             </Stack>
+          ) : null}
+          {!open && doneNotice ? (
+            <Box sx={{ px: 3, pb: 3 }}>
+              <Alert severity="success" sx={ALERT_TEXT}>
+                {doneNotice}
+              </Alert>
+            </Box>
           ) : null}
         </>
       )}
@@ -293,7 +303,12 @@ export function AccountSecurityClient({
     replaces: (type) => replacedContact(contacts, type) !== null,
     onReauth: (draft) => void goProveAtLine('add_contact', draft),
     // `saltIdentity` reads the account's contacts, which the server read before this one was added.
-    onVerified: () => router.refresh(),
+    // Done: the row closes with only what was added under it (Seaweed, #144), and the account's
+    // contacts are read again, the new one among them.
+    onVerified: () => {
+      setOpenRow(null);
+      router.refresh();
+    },
   });
   const resumeContact = contact.resume;
 
@@ -492,6 +507,11 @@ export function AccountSecurityClient({
       resetRow(openRow);
     }
 
+    // What the last addition left under its closed row goes as soon as any row opens.
+    if (openRow !== 'contact') {
+      contact.cancel();
+    }
+
     setOpenRow(row);
   }
 
@@ -670,6 +690,7 @@ export function AccountSecurityClient({
         summary="一次新增一個。"
         open={openRow === 'contact'}
         blocked={googleOnly ? '你是用 Google 登入，暫時不能在這裡新增。' : null}
+        doneNotice={contact.notice}
         onOpen={() => openOnly('contact')}
         onClose={() => closeRow('contact')}
       >
@@ -699,7 +720,8 @@ export function AccountSecurityClient({
                 contact.change({ value: event.target.value })
               }
             />
-            {replacing ? (
+            {/* Only once something is typed: before that nothing is replacing anything (Seaweed, #144). */}
+            {replacing && contact.value.trim() ? (
               <Alert severity="warning" sx={ALERT_TEXT}>
                 {replaceNotice(replacing, signsInWithPassword)}
               </Alert>

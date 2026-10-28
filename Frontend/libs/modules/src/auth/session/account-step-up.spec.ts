@@ -124,7 +124,7 @@ describe('a contact of a kind the account already has', () => {
       '你已經有電子郵件 wang@yahoo.com.tw。新增新的電子郵件後，原本這個會被取代，不能再用。',
     );
     expect(replaceNotice(phone, true)).toBe(
-      '你已經有手機 +886912345678。新增新的手機後，原本這個會被取代，不能再用。以後登入要用新的手機。',
+      '你已經有手機 +886912345678。新增新的手機後，原本這個會被取代，不能再用。如果你是用手機登入，以後要改用新的手機。',
     );
   });
 
@@ -286,6 +286,12 @@ describe('error messages', () => {
     );
     expect(setPasswordErrorMessage(wrong, 'old-code')).toBe(
       '驗證碼不正確或已過期，請重新輸入',
+    );
+  });
+
+  it('says too many tries plainly', () => {
+    expect(addContactErrorMessage(refusal(429, 'rate_limited'), 'send')).toBe(
+      '嘗試太多次，請稍後再試。',
     );
   });
 

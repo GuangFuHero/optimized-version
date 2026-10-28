@@ -27,6 +27,20 @@ export function readSavedContactDraft(value: string): SavedContactDraft | null {
   return savedContactDraftSchema.safeParse(JSON.parse(value)).data ?? null;
 }
 
+/**
+ * On signing out, maybe on a shared device: the contact typed is not left in the tab for whoever uses it
+ * next (`take` already keeps it from another account).
+ */
+export function clearContactDraft(
+  storage: Pick<Storage, 'removeItem'> | null,
+): void {
+  try {
+    storage?.removeItem(CONTACT_DRAFT_KEY);
+  } catch {
+    // Storage the browser refuses holds no draft.
+  }
+}
+
 // Outside the component: the hook makes its reader again whenever it is handed new options.
 const STORAGE_OPTIONS = { deserializer: readSavedContactDraft };
 
