@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   findTeamNamed,
+  inviteHint,
   NEW_TEAM,
   reviewerText,
   teamPickerOptions,
@@ -62,6 +63,22 @@ describe('teamPickerOptions', () => {
       options: [],
       noMatch: true,
     });
+  });
+});
+
+describe('inviteHint', () => {
+  it('says an invite only picks the team, in the words of the identity picked', () => {
+    expect(inviteHint('government')).toBe(
+      '如果單位已經給你邀請碼，掃碼會直接帶到那個團隊，不用自己找；一樣要等管理員核准。',
+    );
+    expect(inviteHint('ngo')).toBe(
+      '如果團隊已經給你邀請碼，掃碼會直接帶到那個團隊，不用自己找；一樣要等管理員核准。',
+    );
+  });
+
+  it('says nothing for an identity that names no team, or before one is picked', () => {
+    expect(inviteHint('data_auditor')).toBeNull();
+    expect(inviteHint(null)).toBeNull();
   });
 });
 
