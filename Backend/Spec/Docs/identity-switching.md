@@ -199,7 +199,7 @@ Spec 029 之前這等於登出（ADR-096 回 401 `identity_revoked`、清 cookie
 3. 客戶端不帶身分再 refresh 一次，就拿到預設身分的 token。後台請求再由 `X-WG-Realm: admin` 換成他其他的後台身分。
 4. 同一把舊 token 的其他請求只會收到 `access_token_stale`，所以提示只出現一次。
 
-refresh 這條路只認 session 目前那一把 refresh token，名稱也只取自 session 自己的身分（ADR-415）。
+refresh 這條路只讓 session 目前那一把 refresh token 改 session，名稱也只取自 session 自己的身分；已經換發過的舊 token 照常交給 `rotate()` 判斷是不是被盜用（ADR-415）。改 session 時 Redis 連不上回 503，不登出。
 
 ---
 

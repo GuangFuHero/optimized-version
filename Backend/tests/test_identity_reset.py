@@ -9,16 +9,19 @@ import uuid
 
 import pytest
 import pytest_asyncio
+from redis.exceptions import RedisError
 from sqlalchemy import delete, select, update
 
 from app.core import auth_cookies
 from app.core.config import settings
 from app.core.identity import encode_act
+from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.models.auth import User
-from app.models.rbac import Role, UserRoleAssign
+from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.team import Team
 from app.repositories.session_repository import SessionRepository
+from tests.conftest import auth_headers_for
 from tests.cookies import cookie_header, cookies_set_by
 
 pytestmark = pytest.mark.asyncio
@@ -260,8 +263,29 @@ async def test_naming_someone_elses_team_reveals_nothing_and_changes_nothing(cli
     assert await member.session_act() == member.act
 
 
-async def test_a_rotated_refresh_token_cannot_move_the_session(client, db_session, member):
-    """An old token reaches neither the session nor any name; rotation still judges it later."""
+async def test_a_rotated_refresh_token_replayed_late_ends_the_session(
+    client, db_session, member, past_the_refresh_grace_period
+):
+    """An old token is judged by rotate(): past the grace period it is a theft signal (ADR-415, ADR-330).
+
+    A revoked identity must not shelter it from that check, nor let it move the session first.
+    """
+    stale = member.refresh
+    rotated = await client.post(BEARER_REFRESH, json={"refresh_token": stale})
+    assert rotated.status_code == 200, rotated.text
+    await _suspend_team_a(db_session, member)
+    past_the_refresh_grace_period()
+
+    response = await client.post(BEARER_REFRESH, json={"refresh_token": stale, "identity": member.act})
+
+    assert (response.status_code, response.json()["code"]) == (401, "refresh_token_invalid")
+    assert await member.repo.get_session(member.sid) is None
+
+
+async def test_a_rotated_refresh_token_within_the_grace_period_lands_on_the_default(
+    client, db_session, member, past_the_refresh_grace_period
+):
+    """Within the grace period it is the same client (ADR-330): it gets the new token, on the default."""
     stale = member.refresh
     rotated = await client.post(BEARER_REFRESH, json={"refresh_token": stale})
     assert rotated.status_code == 200, rotated.text
@@ -269,8 +293,118 @@ async def test_a_rotated_refresh_token_cannot_move_the_session(client, db_sessio
 
     response = await client.post(BEARER_REFRESH, json={"refresh_token": stale, "identity": member.act})
 
-    _assert_reset(response, None, None)
+    assert response.status_code == 200, response.text
+    assert response.json()["refresh_token"] == rotated.json()["refresh_token"]
+    assert response.json()["identity"]["role"] == "user"
+    assert await member.session_act() == member.default_act
+
+
+async def test_a_rotated_refresh_token_keeps_an_identity_that_still_works(
+    client, db_session, member, past_the_refresh_grace_period
+):
+    """A bogus identity named with an old token within the grace period does not move a sound session."""
+    stale = member.refresh
+    rotated = await client.post(BEARER_REFRESH, json={"refresh_token": stale})
+    assert rotated.status_code == 200, rotated.text
+    other = await _another_team(db_session)
+
+    response = await client.post(
+        BEARER_REFRESH,
+        json={"refresh_token": stale, "identity": encode_act(str(member.member_role), other)},
+    )
+
+    assert response.status_code == 200, response.text
     assert await member.session_act() == member.act
+
+
+# --- the session store failing mid-reset ----------------------------------------------------------
+
+
+async def test_an_unreachable_session_store_during_the_reset_is_a_503(
+    client, db_session, member, monkeypatch
+):
+    """As anywhere else the session store fails (ADR-328 point 3): refused, nobody signed out."""
+
+    async def unreachable(self, sid, act):
+        raise RedisError("connection refused")
+
+    await _suspend_team_a(db_session, member)
+    monkeypatch.setattr(SessionRepository, "set_identity", unreachable)
+
+    request = await client.get(ME, headers=member.cookies)
+    refresh = await client.post(BEARER_REFRESH, json={"refresh_token": member.refresh})
+
+    for response in (request, refresh):
+        assert response.status_code == 503, response.text
+        assert response.json()["code"] == "session_store_unavailable"
+    assert cookies_set_by(request) == {}
+
+
+# --- the other ways an identity is taken away, through their real endpoints -------------------
+
+
+async def _boss(db, redis) -> dict:
+    """Headers for an account holding rbac.assign at `all`, as the seed gives super_admin."""
+    role = Role(name="boss", kind="platform")
+    db.add(role)
+    await db.flush()
+    db.add(
+        RolePermissionAssign(
+            role_uuid=role.uuid, permission_uuid=await _permission(db, Perm.RBAC_ASSIGN), scope="all"
+        )
+    )
+    boss = User(name="boss")
+    db.add(boss)
+    await db.flush()
+    ids = (boss.uuid, role.uuid)
+    db.add(UserRoleAssign(user_uuid=ids[0], role_uuid=ids[1]))
+    await db.commit()
+    return await auth_headers_for(redis, *ids)
+
+
+async def _permission(db, perm: Perm):
+    permission = (
+        await db.execute(select(Permission).where(Permission.key == perm.value))
+    ).scalar_one_or_none()
+    if permission is None:
+        permission = Permission(key=perm.value)
+        db.add(permission)
+        await db.flush()
+    return permission.uuid
+
+
+async def test_revoking_the_team_role_through_the_api_resets(client, db_session, redis, member):
+    """`DELETE /admin/users/{uuid}/role/{role_uuid}?team_uuid=…` takes 甲隊's member away."""
+    boss = await _boss(db_session, redis)
+
+    revoked = await client.delete(
+        f"/api/v1/admin/users/{member.user_uuid}/role/{member.member_role}",
+        params={"team_uuid": str(member.a)},
+        headers=boss,
+    )
+    assert revoked.status_code == 204, revoked.text
+
+    _assert_reset(await client.get(ME, headers=member.bearer), "member", "甲隊")
+    assert await member.session_act() == member.default_act
+
+
+async def test_changing_the_platform_role_through_the_api_resets(client, db_session, redis, member):
+    """`POST /admin/users/{uuid}/role` with `user` takes data_auditor away (ADR-294)."""
+    boss = await _boss(db_session, redis)
+    auditor = await _role(db_session, "data_auditor", "platform")
+    db_session.add(UserRoleAssign(user_uuid=member.user_uuid, role_uuid=auditor))
+    await db_session.commit()
+    act = encode_act(str(auditor), None)
+    await member.repo.set_identity(member.sid, act)
+    token = create_access_token({"sub": member.user_uuid}, sid=member.sid, act=act)
+
+    changed = await client.post(
+        f"/api/v1/admin/users/{member.user_uuid}/role", json={"role_name": "user"}, headers=boss
+    )
+    assert changed.status_code == 200, changed.text
+
+    _assert_reset(await client.get(ME, headers={"Authorization": f"Bearer {token}"}), "data_auditor", None)
+    assert await member.session_act() == member.default_act
 
 
 async def test_a_bearer_refresh_without_an_identity_lands_on_the_default(client, db_session, member):

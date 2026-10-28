@@ -60,7 +60,7 @@ ADR-096 否決的是「繼續執行、權限默默變小」，這兩點都避開
 
 ---
 
-## ADR-404：`identity_reset` 不清 cookie，回應帶被收回的身分
+## ADR-404：`identity_reset` 不清 cookie，回應帶被收回的身分；改 session 失敗回 503
 
 **Date**: 2026-10-28　**Status**: Accepted
 
@@ -71,6 +71,9 @@ ADR-096 否決的是「繼續執行、權限默默變小」，這兩點都避開
 - 帶 `WWW-Authenticate: Bearer`，跟其他 401 一致。
 
 **理由**：cookie 要留給下一步的 refresh。前端要知道被收回的是哪個身分，才寫得出有用的提示。
+
+- 改 session 時 Redis 連不上：回 503 `session_store_unavailable`，不清 cookie，跟 ADR-328 第 3 點一致
+  （2026-10-28 code review 補上；第一版會變成 500）。
 
 ---
 
@@ -89,7 +92,7 @@ ADR-096 否決的是「繼續執行、權限默默變小」，這兩點都避開
 
 ---
 
-## ADR-415：refresh 只能用現役 token 改 session，只回 session 自己的身分名稱
+## ADR-415：refresh 只能用現役 token 改 session，只回 session 自己的身分名稱；舊 token 交給 rotate()
 
 **Date**: 2026-10-28　**Status**: Accepted（Popo，10/28 資安檢查後）
 
@@ -107,12 +110,18 @@ main 上同樣的請求只回 `identity_revoked`，不寫入、不帶名稱。
 - **只有 session 自己的身分失效**（呼叫端帶的就是它，或 session 的身分本身解析不到），
   **而且送來的是 session 目前那一把 refresh token**（`SessionRepository.is_current`），才改 session、才回名稱，
   名稱取自 session 的身分。
-- 其他情況（舊 token、呼叫端帶的身分不是 session 的）一律回 `identity_reset`，`revoked_identity` 兩欄都是 `null`，
-  不寫入任何東西。
+- 現役 token、但呼叫端帶的身分不是 session 的：回 `identity_reset`，`revoked_identity` 兩欄都是 `null`，不寫入任何東西。
+- **舊 token（已經換發過）不在這裡回應，交給 `rotate()`**，跟沒有身分失效時完全一樣：
+  寬限期內（ADR-330）拿到第一次換發的新 token，身分是 session 自己的（還在的話）或預設；
+  超過寬限期就判定為重複使用，撤銷整個 session。呼叫端帶的 `identity` 對舊 token 不起作用。
 - 一般請求的路徑不變：名稱取自簽過章的 token，呼叫端改不了。
 
-**理由**：改 session 和回名稱都只發生在「現役 token、session 自己的身分」，攻擊者自己能控制的輸入都碰不到。
-舊 token 留給 `rotate()` 判斷。
+> **2026-10-28 code review 修正**：第一版對舊 token 也直接回 `identity_reset`、不進 `rotate()`，
+> 文件卻寫「留給 `rotate()` 判斷」。實測舊 token 在身分失效期間可以無限次重試，不會觸發被盜偵測
+> （main 上的 `identity_revoked` 也一樣）。改成真的交給 `rotate()`。
+
+**理由**：改 session 和回名稱都只發生在「現役 token、session 自己的身分」，攻擊者自己能控制的輸入都碰不到；
+舊 token 走跟平常一樣的被盜偵測，身分失效不會讓它躲過。
 
 ---
 

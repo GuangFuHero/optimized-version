@@ -7,7 +7,10 @@ is moved to the account's default identity and the caller is told, once, which i
 request itself is refused: nothing is done under an identity the user did not choose.
 """
 
+import logging
+
 from fastapi import status
+from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +19,8 @@ from app.core.identity import decode_act
 from app.models.rbac import Role
 from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
+
+logger = logging.getLogger(__name__)
 
 
 async def revoked_names(db: AsyncSession, act: str | None) -> dict[str, str | None]:
@@ -43,6 +48,8 @@ def identity_reset_error(revoked: dict[str, str | None] | None = None) -> ApiErr
 async def reset_to_default(db: AsyncSession, redis, *, user_uuid: str, sid: str, act: str | None) -> ApiError:
     """Point session `sid` at the account's default identity; return the `identity_reset` to raise.
 
+    Or a 503 `session_store_unavailable` when Redis cannot be written, which signs nobody out.
+
     `act` must be one the caller did not choose freely: the signed token's, or the session's own
     (ADR-415). Its names go back to the client.
 
@@ -54,5 +61,15 @@ async def reset_to_default(db: AsyncSession, redis, *, user_uuid: str, sid: str,
     from app.repositories.session_repository import SessionRepository
 
     default = await active_identity_repository.default_for_user(db, user_uuid)
-    await SessionRepository(redis).set_identity(sid, default.to_claim() if default else None)
+    try:
+        await SessionRepository(redis).set_identity(sid, default.to_claim() if default else None)
+    except RedisError:
+        # As wherever the session store fails (ADR-328 point 3): refused, nobody signed out. The
+        # identity is still gone, so the next request after Redis is back resets it then.
+        logger.exception("could not move session %s to the default identity: Redis is unreachable", sid)
+        return ApiError(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            ErrorCode.SESSION_STORE_UNAVAILABLE,
+            "Session store is unavailable",
+        )
     return identity_reset_error(await revoked_names(db, act))

@@ -122,14 +122,18 @@
 
 **只有 session 自己的身分失效、而且是現役的 refresh token，才會改 session、才會回名稱**（ADR-415）：
 
-| 情況 | 改 session | `revoked_identity` |
-|---|---|---|
-| session 的身分失效，token 是 session 目前那一把 | 改成預設身分 | 那個身分的角色、團隊名稱 |
-| session 的身分失效，token 是已經換發過的舊 token | 不改 | 都是 `null` |
-| session 的身分還在，呼叫端自己帶的 `identity` 失效（或根本是別隊的） | 不改 | 都是 `null` |
+| 情況 | 回應 | 改 session | `revoked_identity` |
+|---|---|---|---|
+| 現役 token，session 的身分失效 | 401 `identity_reset` | 改成預設身分 | 那個身分的角色、團隊名稱 |
+| 現役 token，session 的身分還在，呼叫端自己帶的 `identity` 失效（或根本是別隊的） | 401 `identity_reset` | 不改 | 都是 `null` |
+| 已經換發過的舊 token | 交給 `rotate()`：寬限期內拿到新 token，超過寬限期判定為盜用、撤銷整個 session | 寬限期內：session 的身分還在就保留，失效才改成預設 | — |
 
-舊 token 在 Redis 裡的紀錄要等過期才消失，`rotate()` 才會判斷它是不是被盜用。如果舊 token 也能改 session、
-帶出名稱，拿到舊 token 的人就能把對方的身分改掉、拿任意團隊 uuid 查隊名，而且不會被偵測到（2026-10-28 實測）。
+舊 token 在 Redis 裡的紀錄要等過期才消失。如果舊 token 也能改 session、帶出名稱，拿到舊 token 的人就能把對方的
+身分改掉、拿任意團隊 uuid 查隊名（2026-10-28 實測）。所以舊 token 一律交給 `rotate()`，跟沒有身分失效時一樣判斷
+它是不是被盜用；呼叫端帶的 `identity` 對舊 token 不起作用。
+
+改 session 時如果 Redis 連不上，回 **503 `session_store_unavailable`**，不清 cookie（跟 ADR-328 第 3 點一致）。
+身分仍然是失效的，Redis 恢復後的下一個請求會再走一次這個流程。
 
 ## 3. 團隊暫停通知（ADR-405）
 
@@ -150,6 +154,7 @@
 | code | HTTP | 什麼時候 | 客戶端要做什麼 | 清 cookie |
 |---|---|---|---|---|
 | `identity_reset`（新） | 401 | token 或 session 的身分已失效，session 已改回預設身分 | 丟掉記住的身分 → 不帶身分 refresh → 顯示提示；**不要自動重送原本的請求** | 否 |
+| `session_store_unavailable`（既有） | 503 | 改回預設身分時 Redis 連不上 | 稍後重試，不要當成登出 | 否 |
 | `identity_revoked` | 401 | **後端不再回這個碼**。保留定義，讓舊前端不會壞 | — | 是 |
 
 ## 5. 邊界情況
