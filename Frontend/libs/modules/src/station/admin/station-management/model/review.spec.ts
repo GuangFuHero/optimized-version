@@ -201,6 +201,42 @@ describe('buildReviewFields', () => {
     });
   });
 
+  it('keeps a property conflict when the change may be another resource’s', () => {
+    // Without audit.view the event has no raw rows: this quantity change (3 → 5) may be another
+    // property's, so its `before` matching p1's current 3 says nothing about p1.
+    const events = [
+      {
+        event_type: 'UPDATED',
+        at: '2026-10-20T10:00:00Z',
+        entity: 'station_property',
+        changes: [{ field: 'quantity', before: 3, after: 5 }],
+      },
+    ] as unknown as components['schemas']['HistoryEventResponse'][];
+    expect(
+      buildReviewFields(review, { events, total: events.length })[1],
+    ).toMatchObject({ conflict: true, baseValue: null, currentValue: '3' });
+  });
+
+  it('keeps a conflict when the page may miss an earlier change', () => {
+    // The only change read (10-21) has `before` equal to the live value, but the page stops
+    // short of the suggestion (10-19), so an earlier change may be the first one.
+    const roundTrip = {
+      ...review,
+      station: { ...review.station, opHour: '8-17' },
+    } as unknown as AdminStationReviewQuery;
+    const events = [
+      {
+        event_type: 'UPDATED',
+        at: '2026-10-21T10:00:00Z',
+        entity: 'station',
+        changes: [{ field: 'op_hour', before: '8-17', after: '24h' }],
+      },
+    ] as unknown as components['schemas']['HistoryEventResponse'][];
+    expect(
+      buildReviewFields(roundTrip, { events, total: 150 })[0],
+    ).toMatchObject({ conflict: true, baseValue: null });
+  });
+
   it('keeps a change that hides its values a conflict', () => {
     const hidden = [
       { ...history[0], changes: [{ field: 'op_hour', changed: true }] },

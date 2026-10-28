@@ -222,9 +222,17 @@ export function buildReviewFields(
           firstSuggestedAt,
         )
       : [];
+    // Without raw audit rows a property change may be another resource's, and past the page the
+    // earliest change found may not be the first, so neither can say what the base was.
+    const exact =
+      history !== null &&
+      coversSince(history, firstSuggestedAt) &&
+      (targetType === 'station' || changes.every((event) => event.raw?.length));
     const baseValue =
       conflict === true
-        ? valueBefore(changes, s.fieldName)
+        ? exact
+          ? valueBefore(changes, s.fieldName)
+          : null
         : conflict === false
           ? currentValue
           : null;
