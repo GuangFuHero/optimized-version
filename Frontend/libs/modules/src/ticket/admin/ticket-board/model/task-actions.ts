@@ -136,6 +136,11 @@ export function isForbidden(error: ClaimError): boolean {
   return graphqlMessage(error).startsWith('403:');
 }
 
+/** The audit was refused because the ticket changed after the drawer loaded it. */
+export function isStaleAudit(error: ClaimError): boolean {
+  return graphqlMessage(error) === STALE_AUDIT;
+}
+
 /** What the audit card says when `auditTicket` is refused. */
 export function auditErrorMessage(error: ClaimError): string {
   const message = graphqlMessage(error);

@@ -4,6 +4,7 @@ import type { TicketCapabilities } from '../hooks/use-ticket-capabilities';
 import {
   auditErrorMessage,
   buildNeedInput,
+  isStaleAudit,
   readCreateResult,
   taskActionsFor,
   validateNeedDraft,
@@ -105,6 +106,24 @@ describe('readCreateResult', () => {
     expect(readCreateResult({ __typename: 'TicketTaskCreated' })).toEqual({
       kind: 'created',
     });
+  });
+});
+
+describe('isStaleAudit', () => {
+  it('spots the stale content-hash refusal only', () => {
+    expect(
+      isStaleAudit({
+        graphQLErrors: [
+          {
+            message:
+              'The ticket has changed since it was loaded; reload it and audit again',
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      isStaleAudit({ graphQLErrors: [{ message: '403: Forbidden' }] }),
+    ).toBe(false);
   });
 });
 

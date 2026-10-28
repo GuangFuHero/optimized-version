@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Box, MenuItem, TextField } from '@mui/material';
 import { useCreateTicketTask } from '@rescue-frontend/data-access/admin';
@@ -38,7 +38,14 @@ function addError(error: unknown): string {
  * 再加一項需求 (`ticket.add`): a collapsed button that opens a small form under the ticket's needs.
  * A likely duplicate holds the create back behind `DuplicateNotice` until the user resends it.
  */
-export function AddNeedForm({ ticketUuid }: { ticketUuid: string }) {
+export function AddNeedForm({
+  ticketUuid,
+  onBusyChange,
+}: {
+  ticketUuid: string;
+  /** The create is in flight (or not), as `TicketForm` reports its save. */
+  onBusyChange?(busy: boolean): void;
+}) {
   const createTask = useCreateTicketTask();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<NeedDraft>(EMPTY_DRAFT);
@@ -46,6 +53,10 @@ export function AddNeedForm({ ticketUuid }: { ticketUuid: string }) {
   const [suspects, setSuspects] = useState<DuplicateSuspect[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const submitting = createTask.isPending;
+  useEffect(() => {
+    onBusyChange?.(submitting);
+  }, [submitting, onBusyChange]);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 
   const change = (key: keyof NeedDraft, value: string) => {
     setDraft((current) => ({ ...current, [key]: value }));

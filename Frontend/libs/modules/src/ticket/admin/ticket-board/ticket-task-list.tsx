@@ -42,6 +42,8 @@ const ASSIGNMENT_LABELS: Record<string, string> = {
 interface TicketTaskListProps {
   ticket: DetailTicket;
   caps: TicketCapabilities;
+  /** 再加一項需求 is sending (or not): the drawer holds its close meanwhile. */
+  onAddBusyChange?(busy: boolean): void;
 }
 
 type PendingAction = { kind: 'stop' | 'delete'; task: TaskRow };
@@ -50,7 +52,11 @@ type PendingAction = { kind: 'stop' | 'delete'; task: TaskRow };
  * The ticket's needs and who took them. Each need's ⋯ offers what the identity may do to it
  * (`taskActionsFor`), each behind a confirmation; `ticket.add` adds 再加一項需求 below them.
  */
-export function TicketTaskList({ ticket, caps }: TicketTaskListProps) {
+export function TicketTaskList({
+  ticket,
+  caps,
+  onAddBusyChange,
+}: TicketTaskListProps) {
   // One task model for the board: the detail ticket is a superset of the list's fragment.
   const ticketRow = useMemo(
     () => toTicketRow(ticket as unknown as Parameters<typeof toTicketRow>[0]),
@@ -102,7 +108,9 @@ export function TicketTaskList({ ticket, caps }: TicketTaskListProps) {
           })}
         </Box>
       )}
-      {caps.canAdd ? <AddNeedForm ticketUuid={ticket.uuid} /> : null}
+      {caps.canAdd ? (
+        <AddNeedForm ticketUuid={ticket.uuid} onBusyChange={onAddBusyChange} />
+      ) : null}
       <StopRecruitingConfirm
         open={dialogOpen && pending?.kind === 'stop'}
         task={pending?.kind === 'stop' ? pending.task : null}

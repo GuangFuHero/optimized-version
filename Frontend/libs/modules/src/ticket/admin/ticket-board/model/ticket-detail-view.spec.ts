@@ -41,7 +41,7 @@ describe('adminTicketHref', () => {
 });
 
 describe('ticketDetailState', () => {
-  it('treats a null ticket or an error as missing', () => {
+  it('treats a null ticket as missing', () => {
     expect(
       ticketDetailState({
         isPending: false,
@@ -49,22 +49,35 @@ describe('ticketDetailState', () => {
         data: { ticket: null },
       }),
     ).toBe('missing');
-    expect(ticketDetailState({ isPending: false, error: new Error('x') })).toBe(
-      'missing',
-    );
     expect(ticketDetailState({ isPending: true, error: null })).toBe('loading');
+  });
+
+  it('treats an error with no ticket loaded as failed', () => {
+    expect(ticketDetailState({ isPending: false, error: new Error('x') })).toBe(
+      'failed',
+    );
   });
 
   it('never keeps loading once the query has failed', () => {
     // A failed query with retries left can still report isPending.
     expect(ticketDetailState({ isPending: true, error: new Error('x') })).toBe(
-      'missing',
+      'failed',
     );
   });
 
   it('is ready with a ticket', () => {
     expect(
       ticketDetailState({ isPending: false, error: null, data: { ticket } }),
+    ).toBe('ready');
+  });
+
+  it('stays ready when a background refetch fails with the ticket still loaded', () => {
+    expect(
+      ticketDetailState({
+        isPending: false,
+        error: new Error('network'),
+        data: { ticket },
+      }),
     ).toBe('ready');
   });
 });

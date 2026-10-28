@@ -95,8 +95,12 @@ export function TicketDetailSheet({
     [disasterTypes.data],
   );
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
-  // The edit form is saving: Escape, the backdrop and × wait for it.
-  const [busy, setBusy] = useState(false);
+  // The edit form is saving, a need is being added or a verdict sent: Escape, the backdrop and ×
+  // wait for it.
+  const [formBusy, setFormBusy] = useState(false);
+  const [needBusy, setNeedBusy] = useState(false);
+  const [auditBusy, setAuditBusy] = useState(false);
+  const busy = formBusy || needBusy || auditBusy;
   const close = () => {
     if (!busy) onClose();
   };
@@ -116,7 +120,7 @@ export function TicketDetailSheet({
         ticket={ticket}
         onDone={onEditEnd}
         onCancel={onEditEnd}
-        onBusyChange={setBusy}
+        onBusyChange={setFormBusy}
       />
     );
   } else if (state === 'ready' && ticket) {
@@ -132,7 +136,33 @@ export function TicketDetailSheet({
         onTabChange={setActiveTab}
         onEdit={() => onEdit(ticket.uuid)}
         onDeleted={onDeleted}
+        onNeedBusyChange={setNeedBusy}
+        onAuditBusyChange={setAuditBusy}
       />
+    );
+  } else if (state === 'failed') {
+    content = (
+      <SheetLayout
+        title="載入失敗"
+        closeLabel="關閉求助單詳情"
+        footer={
+          <>
+            <Box sx={{ flex: 1 }} />
+            <Button variant="outline" size="md" onClick={onClose}>
+              關閉
+            </Button>
+            <Button
+              size="md"
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              重試
+            </Button>
+          </>
+        }
+      >
+        <Muted>載入失敗，請重試</Muted>
+      </SheetLayout>
     );
   } else if (state === 'missing') {
     content = (
@@ -181,6 +211,8 @@ function TicketDetailContent({
   onTabChange,
   onEdit,
   onDeleted,
+  onNeedBusyChange,
+  onAuditBusyChange,
 }: {
   ticket: DetailTicket;
   view: TicketDetailView;
@@ -190,6 +222,8 @@ function TicketDetailContent({
   onTabChange: (tab: DetailTab) => void;
   onEdit: () => void;
   onDeleted: (uuid: string) => void;
+  onNeedBusyChange: (busy: boolean) => void;
+  onAuditBusyChange: (busy: boolean) => void;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const priority = getTicketPriorityBadge(ticket.priority);
@@ -264,7 +298,14 @@ function TicketDetailContent({
       {activeTab === 'history' ? (
         <TicketHistoryPanel uuid={ticket.uuid} />
       ) : (
-        <TicketInfo ticket={ticket} view={view} caps={caps} now={now} />
+        <TicketInfo
+          ticket={ticket}
+          view={view}
+          caps={caps}
+          now={now}
+          onNeedBusyChange={onNeedBusyChange}
+          onAuditBusyChange={onAuditBusyChange}
+        />
       )}
       {caps.canDelete ? (
         <DeleteTicketConfirm
@@ -366,11 +407,15 @@ function TicketInfo({
   view,
   caps,
   now,
+  onNeedBusyChange,
+  onAuditBusyChange,
 }: {
   ticket: DetailTicket;
   view: TicketDetailView;
   caps: TicketCapabilities;
   now: Date;
+  onNeedBusyChange: (busy: boolean) => void;
+  onAuditBusyChange: (busy: boolean) => void;
 }) {
   return (
     <Box sx={{ '& > :first-of-type': { borderTop: 'none', pt: 0 } }}>
@@ -433,11 +478,15 @@ function TicketInfo({
       </Block>
       {caps.canAudit && ticket.auditContentHash ? (
         <Block label="審核">
-          <TicketAuditCard ticket={ticket} />
+          <TicketAuditCard ticket={ticket} onBusyChange={onAuditBusyChange} />
         </Block>
       ) : null}
       <Block label="需求">
-        <TicketTaskList ticket={ticket} caps={caps} />
+        <TicketTaskList
+          ticket={ticket}
+          caps={caps}
+          onAddBusyChange={onNeedBusyChange}
+        />
       </Block>
     </Box>
   );

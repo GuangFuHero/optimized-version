@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Box, Typography } from '@mui/material';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useAuditTicket,
   type AuditVerdict,
@@ -17,7 +18,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import type { ClaimError } from '../../needs/claim-error';
-import { auditErrorMessage } from './model/task-actions';
+import { auditErrorMessage, isStaleAudit } from './model/task-actions';
 import type { DetailTicket } from './model/ticket-detail-view';
 import { AUDIT_BADGES, type AuditStatus } from './model/ticket-row';
 
@@ -28,6 +29,8 @@ interface TicketAuditCardProps {
   ticket: DetailTicket;
   /** A verdict went through. */
   onDone?: () => void;
+  /** A verdict is in flight (or not), as `TicketForm` reports its save. */
+  onBusyChange?(busy: boolean): void;
 }
 
 /**
@@ -35,13 +38,22 @@ interface TicketAuditCardProps {
  * the two verdicts. Each is sent with the content hash the drawer loaded, so a ticket edited
  * meanwhile is refused rather than passed unseen.
  */
-export function TicketAuditCard({ ticket, onDone }: TicketAuditCardProps) {
+export function TicketAuditCard({
+  ticket,
+  onDone,
+  onBusyChange,
+}: TicketAuditCardProps) {
   const audit = useAuditTicket();
+  const queryClient = useQueryClient();
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
   const [noteError, setNoteError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const submitting = audit.isPending;
+  useEffect(() => {
+    onBusyChange?.(submitting);
+  }, [submitting, onBusyChange]);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
   const badge = AUDIT_BADGES[ticket.auditStatus as AuditStatus];
   const changes = ticket.changesSinceAudit?.length ?? 0;
 
@@ -64,7 +76,12 @@ export function TicketAuditCard({ ticket, onDone }: TicketAuditCardProps) {
       setNote('');
       onDone?.();
     } catch (caught) {
-      setError(auditErrorMessage(caught as ClaimError));
+      const refusal = caught as ClaimError;
+      setError(auditErrorMessage(refusal));
+      // The ticket changed under the verdict: reload it, so the next try carries the new hash.
+      if (isStaleAudit(refusal)) {
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] });
+      }
     }
   }
 

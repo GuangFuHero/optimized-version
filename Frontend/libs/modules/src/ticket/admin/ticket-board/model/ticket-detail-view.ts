@@ -14,19 +14,22 @@ export function adminTicketHref(uuid: string): string {
   return `/tickets?ticket=${encodeURIComponent(uuid)}`;
 }
 
-export type TicketDetailState = 'loading' | 'missing' | 'ready';
+export type TicketDetailState = 'loading' | 'missing' | 'failed' | 'ready';
 
 /**
- * What the drawer shows for a `useTicket` query. An error is 'missing' even while the query still
- * reports pending (it may be retrying), so the drawer never spins on a failure.
+ * What the drawer shows for a `useTicket` query. A loaded ticket stays 'ready' through a failed
+ * background refetch (TanStack keeps its data), so a network blip never unmounts the drawer or an
+ * edit in progress. With nothing loaded, an error is 'failed' (worth a retry) even while the query
+ * still reports pending, so the drawer never spins on a failure; a null ticket is 'missing'
+ * (not found, or not ours to see).
  */
 export function ticketDetailState(query: {
   isPending: boolean;
   error: unknown;
   data?: { ticket?: unknown | null };
 }): TicketDetailState {
-  if (query.error) return 'missing';
   if (query.data?.ticket) return 'ready';
+  if (query.error) return 'failed';
   return query.isPending ? 'loading' : 'missing';
 }
 
