@@ -22,11 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, active_team
 from app.core.security import resolve_scope
-from app.models.auth import User
+from app.models.auth import User, UserContact
 from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
 from app.repositories.session_repository import SessionRepository
-from app.schemas.admin import AdminUserListItem, IdentitySummary, TeamMemberItem
+from app.schemas.admin import AdminUserListItem, IdentitySummary, TeamMemberItem, UserSearch
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 
@@ -71,22 +71,51 @@ class UserDirectory(ABC):
 class PlatformUserDirectory(UserDirectory):
     """Every account, with every identity it holds and its live sessions (ADR-073, ADR-094)."""
 
-    def __init__(self, db: AsyncSession, actor: User, redis):
-        """Sessions are counted in Redis."""
+    def __init__(self, db: AsyncSession, actor: User, redis, search: UserSearch | None = None):
+        """Sessions are counted in Redis; `search` narrows the list (ADR-412)."""
         super().__init__(db, actor)
         self.redis = redis
+        self.search = search or UserSearch()
+        self._searches_phone = False
 
     async def authorize(self) -> None:
         """user.view (super admin, data auditor in the seed)."""
         await require_scope(self.actor, Perm.USER_VIEW, self.db)
 
+    def narrow(self, query):
+        """Apply the search. Phones are matched only for those who read real names (ADR-412)."""
+        q = (self.search.q or "").strip()
+        if q:
+            matches = User.name.icontains(q, autoescape=True)
+            if self._searches_phone:
+                matches = matches | exists().where(
+                    UserContact.user_uuid == User.uuid,
+                    UserContact.type == "phone",
+                    UserContact.value.contains(q, autoescape=True),
+                )
+            query = query.where(matches)
+        if self.search.platform_role:
+            query = query.where(
+                exists()
+                .where(UserRoleAssign.user_uuid == User.uuid, UserRoleAssign.team_uuid.is_(None))
+                .where(Role.uuid == UserRoleAssign.role_uuid, Role.name == self.search.platform_role)
+            )
+        if self.search.team_uuid is not None:
+            query = query.where(
+                exists().where(
+                    UserRoleAssign.user_uuid == User.uuid, UserRoleAssign.team_uuid == self.search.team_uuid
+                )
+            )
+        return query
+
     async def list(self, *, skip: int, limit: int) -> list[AdminUserListItem]:
         """The rows of 成員與權限."""
+        real_name = await self.shows_real_name()
+        self._searches_phone = real_name
         users = await self.accounts(skip=skip, limit=limit)
         user_uuids = [str(u.uuid) for u in users]
         identities = await identities_by_user(self.db, user_uuids)
         sessions_by_user = await session_counts(self.redis, user_uuids)
-        real_name = await self.shows_real_name()
         return [
             AdminUserListItem(
                 uuid=u.uuid,
@@ -94,6 +123,7 @@ class PlatformUserDirectory(UserDirectory):
                 real_name=u.real_name if real_name else None,
                 platform_role=platform_role(identities.get(str(u.uuid), [])),
                 identities=identities.get(str(u.uuid), []),
+                created_at=u.created_at,
                 last_login_at=u.last_login_at,
                 last_activity_at=u.last_activity_at,
                 active_session_count=sessions_by_user.get(str(u.uuid)),

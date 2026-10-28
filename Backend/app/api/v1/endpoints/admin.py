@@ -32,6 +32,7 @@ from app.schemas.admin import (
     TeamResponse,
     TeamStatusRequest,
     UpdateTeamRequest,
+    UserSearch,
 )
 from app.services import admin as admin_service
 from app.services import project_settings as project_settings_service
@@ -55,6 +56,11 @@ router = APIRouter()
 async def list_users(
     skip: int = 0,
     limit: int = 100,
+    q: str | None = Query(
+        None, max_length=100, description="Part of the nickname, or of the phone (+886…) for super admins"
+    ),
+    platform_role: str | None = Query(None, max_length=50, description="Only holders of this platform role"),
+    team_uuid: UUID | None = Query(None, description="Only those holding a role in this team"),
     db: AsyncSession = Depends(security.get_db),
     redis=Depends(get_redis),
     current_user: User = Depends(security.get_current_user),
@@ -63,9 +69,11 @@ async def list_users(
 
     Feature 010 replaced the single platform/team role pair with the full identity list
     (ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).
-    Both land in the same row. Built by PlatformUserDirectory (Spec/026).
+    Both land in the same row. Built by PlatformUserDirectory (Spec/026). `q`, `platform_role`
+    and `team_uuid` narrow it and combine (ADR-412).
     """
-    return await PlatformUserDirectory(db, current_user, redis).list(skip=skip, limit=limit)
+    search = UserSearch(q=q, platform_role=platform_role, team_uuid=team_uuid)
+    return await PlatformUserDirectory(db, current_user, redis, search).list(skip=skip, limit=limit)
 
 
 @router.get(
