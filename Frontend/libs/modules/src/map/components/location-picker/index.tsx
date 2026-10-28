@@ -14,6 +14,7 @@ import {
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
+import { useEventMapView } from '../../hooks/use-event-map-view';
 import type { PickedPoint } from './types';
 
 export type { PickedPoint };
@@ -105,6 +106,8 @@ export function LocationPicker({
   const mountedRef = useRef(true);
   const initialValueRef = useRef(value);
   const pickedByHandRef = useRef(false);
+  // With no point to open at, the map opens at the event's view, so it waits for it.
+  const eventMapView = useEventMapView();
 
   onChangeRef.current = onChange;
 
@@ -176,7 +179,13 @@ export function LocationPicker({
           bgcolor: color.bg.neutral.sunken,
         }}
       >
-        <LocationPickerCanvas value={value} onPick={handlePick} />
+        {initialValueRef.current || eventMapView.ready ? (
+          <LocationPickerCanvas
+            value={value}
+            onPick={handlePick}
+            startView={eventMapView.view}
+          />
+        ) : null}
         {/* Said while there is a pin too: that it drags is otherwise told nowhere (designer, a004385). */}
         {status === 'locating' ? (
           <HintPill icon={<LocateFixed />}>正在取得目前定位…</HintPill>

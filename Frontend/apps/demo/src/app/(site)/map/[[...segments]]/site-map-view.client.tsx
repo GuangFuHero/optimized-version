@@ -25,6 +25,7 @@ import {
   syncDocumentMetadata,
   useAuthSession,
   useCreatedTicketMarker,
+  useEventMapView,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   useSiteMapRouteState,
@@ -48,7 +49,6 @@ const DEFAULT_MAP_METADATA = {
   title: '救災地圖 - 島嶼守望',
   description: '檢視救災任務與站點資訊。',
 };
-const DEFAULT_CREATE_CENTER: [number, number] = [23.884, 121.0];
 
 // 「＋」 adds stations only: a request for help is filed through 請求協助, from the shell.
 const CREATE_ACCENT = {
@@ -521,6 +521,7 @@ function SiteMapViewportDataLayer({
             ticketDetailOverrides={createTicketDetailOverrides}
             stationDetailSecondaryAction={stationDetailSecondaryAction}
             stationLayout="site"
+            viewMemoryKey="site"
           />
         </Box>
         <MapRequestHelpBar />
@@ -581,8 +582,10 @@ function SiteMapCreatePanels({
 }) {
   const viewportState = useSiteMapViewportState();
   const viewportStore = useSiteMapViewportStore();
+  // Before the map has a position of its own: where it opens with nothing else to go on.
+  const eventMapView = useEventMapView();
   const currentDraftPosition =
-    viewportState.position?.center ?? DEFAULT_CREATE_CENTER;
+    viewportState.position?.center ?? eventMapView.view.center;
 
   const handleDraftLocationChange = useCallback(
     (position: [number, number]) => {

@@ -2589,6 +2589,12 @@ export type AdminCurrentDisasterQuery = {
     __typename?: 'CurrentDisasterType';
     name: string;
     shortName?: string | null;
+    mapView?: {
+      __typename?: 'MapViewType';
+      lat: number;
+      lng: number;
+      zoom: number;
+    } | null;
   } | null;
 };
 
@@ -5313,6 +5319,18 @@ export const AdminCurrentDisasterDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'shortName' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'mapView' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'lat' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'lng' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'zoom' } },
+                    ],
+                  },
+                },
               ],
             },
           },

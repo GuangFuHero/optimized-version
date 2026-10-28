@@ -210,6 +210,7 @@ export function AdminMapPageClient() {
         <Map
           markers={markers}
           showScale
+          viewMemoryKey="mutual-aid"
           onMapClick={handleMapClick}
           renderControls={() =>
             canCreateStation || canCreateTicket ? (

@@ -35,6 +35,7 @@ import type {
   RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapPublicZone,
+  RescueMapView,
   RescueMapViewportStoreSnapshot,
   RescueMapViewportStoreLike,
 } from '../../types';
@@ -61,6 +62,8 @@ interface RescueMapCanvasProps {
   onDraftPointChange?: (point: RescueMapDraftPoint | null) => void;
   /** Floats above the crosshair and goes where it goes. */
   draftPointAction?: ReactNode;
+  /** Where the map came to rest after it moved — see `Map`'s `viewMemoryKey`. */
+  onViewChange?: (view: RescueMapView) => void;
 }
 
 /**
@@ -790,6 +793,7 @@ export function RescueMapCanvas({
   draftPoint,
   onDraftPointChange,
   draftPointAction,
+  onViewChange,
 }: RescueMapCanvasProps) {
   const externalViewportState =
     useSyncExternalStore<RescueMapViewportStoreSnapshot>(
@@ -825,6 +829,7 @@ export function RescueMapCanvas({
   const onMarkerClickRef = useRef(onMarkerClick);
   const onLocationCellClickRef = useRef(onLocationCellClick);
   const onDraftPointChangeRef = useRef(onDraftPointChange);
+  const onViewChangeRef = useRef(onViewChange);
   const initialViewportStateRef = useRef(externalViewportState);
 
   controllerRef.current = controller;
@@ -832,6 +837,7 @@ export function RescueMapCanvas({
   onMarkerClickRef.current = onMarkerClick;
   onLocationCellClickRef.current = onLocationCellClick;
   onDraftPointChangeRef.current = onDraftPointChange;
+  onViewChangeRef.current = onViewChange;
 
   // 地圖實例整個生命週期只建立一次；受控的視角變化由下方 setView 效果套用，
   // 避免位置寫回路由狀態後反過來把整張地圖銷毀重建。
@@ -956,12 +962,23 @@ export function RescueMapCanvas({
       syncViewportStateToController(currentMap, controllerRef.current);
     };
 
+    // Told on the map's own moves, as the prototype's `watchMapLast` is on `moveend`; not on the
+    // first sync below, which only reports where the map opened.
+    const reportViewChange = () => {
+      const center = map.getCenter();
+
+      onViewChangeRef.current?.({
+        center: [center.lat, center.lng],
+        zoom: map.getZoom(),
+      });
+    };
+
     const scheduleViewportSync = () => {
       window.clearTimeout(viewportSyncTimer);
-      viewportSyncTimer = window.setTimeout(
-        syncViewport,
-        VIEWPORT_SYNC_DEBOUNCE_MS,
-      );
+      viewportSyncTimer = window.setTimeout(() => {
+        syncViewport();
+        reportViewChange();
+      }, VIEWPORT_SYNC_DEBOUNCE_MS);
     };
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
