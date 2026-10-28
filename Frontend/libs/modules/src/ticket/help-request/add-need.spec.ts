@@ -81,26 +81,35 @@ describe('toCreateTicketTaskInput', () => {
 
 describe('readAddNeedOutcome', () => {
   it('reads an added need as added', () => {
-    expect(readAddNeedOutcome({ __typename: 'TicketTaskCreated' })).toEqual({
+    expect(
+      readAddNeedOutcome({ __typename: 'TicketTaskCreated' }, '清淤泥'),
+    ).toEqual({
       kind: 'added',
     });
   });
 
-  it('holds one that looks like another ticket’s, one entry per ticket in the order given', () => {
+  it('holds one that looks like another ticket’s, one entry per ticket in the order given, each like the need sent', () => {
     expect(
-      readAddNeedOutcome({
-        __typename: 'DuplicatesSuspected',
-        suspects: [
-          { relatedUuid: 'need-a1', relatedTicketUuid: 'ticket-a' },
-          { relatedUuid: 'need-b1', relatedTicketUuid: 'ticket-b' },
-          { relatedUuid: 'need-a2', relatedTicketUuid: 'ticket-a' },
-        ],
-      }),
+      readAddNeedOutcome(
+        {
+          __typename: 'DuplicatesSuspected',
+          suspects: [
+            { relatedUuid: 'need-a1', relatedTicketUuid: 'ticket-a' },
+            { relatedUuid: 'need-b1', relatedTicketUuid: 'ticket-b' },
+            { relatedUuid: 'need-a2', relatedTicketUuid: 'ticket-a' },
+          ],
+        },
+        '清淤泥',
+      ),
     ).toEqual({
       kind: 'held',
       tickets: [
-        { ticketUuid: 'ticket-a', needUuids: ['need-a1', 'need-a2'] },
-        { ticketUuid: 'ticket-b', needUuids: ['need-b1'] },
+        {
+          ticketUuid: 'ticket-a',
+          needUuids: ['need-a1', 'need-a2'],
+          alike: ['清淤泥'],
+        },
+        { ticketUuid: 'ticket-b', needUuids: ['need-b1'], alike: ['清淤泥'] },
       ],
       acknowledge: 'need-a1',
     });
@@ -108,16 +117,21 @@ describe('readAddNeedOutcome', () => {
 
   it('leaves out a suspect with no ticket to show', () => {
     expect(
-      readAddNeedOutcome({
-        __typename: 'DuplicatesSuspected',
-        suspects: [
-          { relatedUuid: 'need-x', relatedTicketUuid: null },
-          { relatedUuid: 'need-b1', relatedTicketUuid: 'ticket-b' },
-        ],
-      }),
+      readAddNeedOutcome(
+        {
+          __typename: 'DuplicatesSuspected',
+          suspects: [
+            { relatedUuid: 'need-x', relatedTicketUuid: null },
+            { relatedUuid: 'need-b1', relatedTicketUuid: 'ticket-b' },
+          ],
+        },
+        '清淤泥',
+      ),
     ).toEqual({
       kind: 'held',
-      tickets: [{ ticketUuid: 'ticket-b', needUuids: ['need-b1'] }],
+      tickets: [
+        { ticketUuid: 'ticket-b', needUuids: ['need-b1'], alike: ['清淤泥'] },
+      ],
       acknowledge: 'need-x',
     });
   });
