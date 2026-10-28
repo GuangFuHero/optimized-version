@@ -283,7 +283,8 @@ Chinese as Spec 019 does.
 ### Back office — 成員與權限 (super admin)
 
 - **審核佇列**: the same list returns every request; filter with `kind=member|new_team|data_auditor` and
-  `team_uuid`. Approving a new-team application creates the team; the response's `team_uuid` names it.
+  `team_uuid`. Approving a new-team application creates the team; the response's `granted_team_uuid` names it
+  (`team_uuid` stays what was applied for, so it is `null` for a new team).
 - **Teams**: `POST /api/v1/admin/teams/{uuid}/status`. Suspending signs the team's identities out at their
   next request (401) and removes the team from the switcher; restoring brings them back. There is no
   disbanding: to wind a team down, its admin removes the other members (ADMIN-027 Story 4).

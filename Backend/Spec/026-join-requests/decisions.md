@@ -424,3 +424,28 @@ admins also see the real name each one confirmed.
 **Consequences**:
 ➕ A new audience (a work zone's people, say) is one more subclass.
 ➖ `/admin/users` now pages oldest first; before, the order was whatever the database returned.
+
+---
+
+### ADR-411 The review response carries `granted_team_uuid`; `team_uuid` keeps meaning what was applied for
+
+> **Status: ACCEPTED (2026-10-28).** Popo, 2026-10-28, after the frontend reported that approving a new-team
+> application returned no id for the new team.
+
+**In plain words**: after approving a new-team application, the response now says which team was founded, in
+`granted_team_uuid`. `team_uuid` still says which team the applicant asked to join, so it stays `null` for a
+new team.
+
+**Context**: the spec said the approval's `team_uuid` names the new team, but `RoleRequestResponse` copies the
+row, whose `team_uuid` is the team applied for — `null` for a new team, and it cannot be filled: the
+`ck_role_requests_target` CHECK forbids `team_uuid` beside `new_team_name`. The founded team is only in
+`granted_team_uuid` (ADR-350 point 6), which the response left out. The frontend looked the team up by name
+(unique, ADR-352) as a stopgap.
+
+**Decision**: `RoleRequestResponse` — the approve and reject answers and every row of the review list — adds
+`granted_team_uuid`: the team joined, or the one founded; `null` until approved and for a data auditor. The
+spec's back-office note names this field.
+
+**Consequences**:
+➕ The response says both what was asked for and what was handed out, matching the table.
+➖ A client reading the new team from `team_uuid` has to switch fields; none did, since it was always `null`.
