@@ -56,6 +56,7 @@ describe('readSiteNotices', () => {
       dedup_ticket_contact_changed: 'merged',
       dedup_ticket_merged: 'merged',
       dedup_ticket_updated: 'merged',
+      ticket_audit_issue: 'audit-issue',
       role_request_approved: 'role-approved',
       role_request_rejected: 'role-rejected',
     };
@@ -77,7 +78,6 @@ describe('readSiteNotices', () => {
       'station_assigned',
       'station_suggestion_created',
       'dedup_flag_ticket',
-      'ticket_audit_issue',
       'role_request_submitted',
     ].map((type) => row({ uuid: type, type }));
 
@@ -144,6 +144,24 @@ describe('readSiteNotices', () => {
     ]);
 
     expect(deleted.ticketUuid).toBeNull();
+  });
+
+  it('opens the ticket a data check found something wrong with, for the requester to put right', () => {
+    const [issue] = readSiteNotices([
+      row({
+        type: 'ticket_audit_issue',
+        ref_type: 'ticket',
+        ref_uuid: 'checked-ticket',
+        title: '求助單內容待確認：大進村獨居長者物資配送',
+      }),
+    ]);
+
+    expect(issue).toMatchObject({
+      kind: 'audit-issue',
+      title: '求助單內容待確認：大進村獨居長者物資配送',
+      ticketUuid: 'checked-ticket',
+      needUuid: null,
+    });
   });
 });
 
