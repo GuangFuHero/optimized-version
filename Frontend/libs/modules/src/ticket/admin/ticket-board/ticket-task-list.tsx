@@ -1,16 +1,33 @@
 'use client';
 
 import { Box, Typography } from '@mui/material';
-import { Badge, designTokens } from '@rescue-frontend/ui';
-import type { ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useDeleteTicketTask,
+  useStopTaskRecruiting,
+} from '@rescue-frontend/data-access/admin';
+import { Badge, designTokens, Dialog } from '@rescue-frontend/ui';
+import { useMemo, useState, type ReactNode } from 'react';
 
+import {
+  deleteNeedErrorMessage,
+  isNeedAlreadyGone,
+  stopRecruitingErrorMessage,
+  type ClaimError,
+} from '../../needs/claim-error';
+import { describeNeedDeletion } from '../../needs/delete-need';
+import { NeedActionsMenu } from '../../needs/need-actions-menu';
+import type { NeedAction } from '../../needs/need-actions';
 import {
   formatTicketStatusLabel,
   formatTicketTypeLabel,
   getTicketStatusTone,
 } from '../../status';
+import { AddNeedForm } from './add-need-form';
 import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
+import { isForbidden, taskActionsFor } from './model/task-actions';
 import type { DetailTicket } from './model/ticket-detail-view';
+import { toTicketRow, type TaskRow } from './model/ticket-row';
 
 const { color, radius, typography } = designTokens;
 
@@ -24,22 +41,194 @@ const ASSIGNMENT_LABELS: Record<string, string> = {
 
 interface TicketTaskListProps {
   ticket: DetailTicket;
-  /** Unused until the per-need actions arrive (stop recruiting, delete, add a need). */
   caps: TicketCapabilities;
 }
 
-/** The ticket's needs and who took them, read-only. */
-export function TicketTaskList({ ticket }: TicketTaskListProps) {
-  if (ticket.tasks.length === 0) {
-    return <Muted>（尚無需求）</Muted>;
-  }
+type PendingAction = { kind: 'stop' | 'delete'; task: TaskRow };
+
+/**
+ * The ticket's needs and who took them. Each need's ⋯ offers what the identity may do to it
+ * (`taskActionsFor`), each behind a confirmation; `ticket.add` adds 再加一項需求 below them.
+ */
+export function TicketTaskList({ ticket, caps }: TicketTaskListProps) {
+  // One task model for the board: the detail ticket is a superset of the list's fragment.
+  const ticketRow = useMemo(
+    () => toTicketRow(ticket as unknown as Parameters<typeof toTicketRow>[0]),
+    [ticket],
+  );
+  const rows = ticketRow.tasks;
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const request = (kind: PendingAction['kind'], task: TaskRow) => {
+    setPending({ kind, task });
+    setDialogOpen(true);
+  };
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {ticket.tasks.map((task) => (
-        // `actions`: the slot for a need's actions (stop recruiting, delete), none yet.
-        <TaskCard key={task.uuid} task={task} />
-      ))}
-    </Box>
+    <>
+      {ticket.tasks.length === 0 ? (
+        <Muted>（尚無需求）</Muted>
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {ticket.tasks.map((task, index) => {
+            const row = rows[index];
+            const items: NeedAction[] = taskActionsFor(
+              row,
+              ticketRow.status,
+              caps,
+            ).map((action) =>
+              action === 'stop'
+                ? { label: '停止招募', onSelect: () => request('stop', row) }
+                : {
+                    label: '刪除需求',
+                    tone: 'danger',
+                    onSelect: () => request('delete', row),
+                  },
+            );
+            return (
+              <TaskCard
+                key={task.uuid}
+                task={task}
+                actions={
+                  <NeedActionsMenu
+                    needName={task.taskName}
+                    items={items}
+                    sx={{ my: '-8px' }}
+                  />
+                }
+              />
+            );
+          })}
+        </Box>
+      )}
+      {caps.canAdd ? <AddNeedForm ticketUuid={ticket.uuid} /> : null}
+      <StopRecruitingConfirm
+        open={dialogOpen && pending?.kind === 'stop'}
+        task={pending?.kind === 'stop' ? pending.task : null}
+        onClose={() => setDialogOpen(false)}
+      />
+      <DeleteNeedConfirm
+        open={dialogOpen && pending?.kind === 'delete'}
+        task={pending?.kind === 'delete' ? pending.task : null}
+        needs={rows}
+        onClose={() => setDialogOpen(false)}
+      />
+    </>
+  );
+}
+
+interface ConfirmProps {
+  open: boolean;
+  /** Kept while the dialog fades out, so it keeps its content. */
+  task: TaskRow | null;
+  onClose: () => void;
+}
+
+/** 停止招募: the need's list is fixed at the people on it. `Dialog` refuses to close mid-request. */
+function StopRecruitingConfirm({ open, task, onClose }: ConfirmProps) {
+  const stop = useStopTaskRecruiting();
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = async () => {
+    if (!task || stop.isPending) return;
+    setError(null);
+    try {
+      await stop.mutateAsync({ taskUuid: task.uuid });
+      onClose();
+    } catch (caught) {
+      // A refusal usually means the need changed meanwhile: read the ticket again.
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] });
+      setError(stopRecruitingErrorMessage(caught as ClaimError));
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      onConfirm={() => void confirm()}
+      onExited={() => setError(null)}
+      title="停止招募這筆需求？"
+      confirmLabel={stop.isPending ? '停止中…' : '停止招募'}
+      error={error}
+      submitting={stop.isPending}
+    >
+      {task ? (
+        <DialogText>
+          {`「${task.taskName}」停止後不再接受新的承接，名額固定為目前的 ${task.assignedCount} 人。已承接的志工會收到通知、照常前往。這個動作無法復原。`}
+        </DialogText>
+      ) : null}
+    </Dialog>
+  );
+}
+
+/** 刪除需求, with the site's own explanation of what deleting it does. */
+function DeleteNeedConfirm({
+  open,
+  task,
+  needs,
+  onClose,
+}: ConfirmProps & { needs: TaskRow[] }) {
+  const remove = useDeleteTicketTask();
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = async () => {
+    if (!task || remove.isPending) return;
+    setError(null);
+    try {
+      await remove.mutateAsync({ uuid: task.uuid });
+      onClose();
+    } catch (caught) {
+      const refusal = caught as ClaimError;
+      // Gone already, from another tab or with its ticket, is what was asked for.
+      if (isNeedAlreadyGone(refusal)) {
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] });
+        onClose();
+        return;
+      }
+      setError(
+        isForbidden(refusal)
+          ? '你的帳號沒有刪除需求的權限。'
+          : deleteNeedErrorMessage(refusal),
+      );
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      onConfirm={() => void confirm()}
+      onExited={() => setError(null)}
+      title="刪除這筆需求？"
+      confirmLabel={remove.isPending ? '刪除中…' : '刪除'}
+      confirmTone="danger"
+      error={error}
+      submitting={remove.isPending}
+    >
+      {task ? (
+        <DialogText>
+          {`「${task.taskName}」${describeNeedDeletion(task, needs)}`}
+        </DialogText>
+      ) : null}
+    </Dialog>
+  );
+}
+
+function DialogText({ children }: { children: ReactNode }) {
+  return (
+    <Typography
+      sx={{
+        ...typography.body[300],
+        color: color.fg.neutral.muted,
+        lineHeight: 1.6,
+      }}
+    >
+      {children}
+    </Typography>
   );
 }
 

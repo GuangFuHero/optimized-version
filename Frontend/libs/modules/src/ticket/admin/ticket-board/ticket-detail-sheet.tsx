@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { Box, Tab, Typography } from '@mui/material';
 import {
+  useDeleteTicket,
   useDisasterTypes,
   useTicket,
 } from '@rescue-frontend/data-access/admin';
@@ -11,12 +12,22 @@ import {
   Badge,
   Button,
   designTokens,
+  Dialog,
   SheetFrame,
   SheetLayout,
   Tabs,
 } from '@rescue-frontend/ui';
 
 import { FreshnessCell } from '../../../station/admin/station-management/station-cells';
+import {
+  isTicketAlreadyGone,
+  deleteTicketErrorMessage,
+  type ClaimError,
+} from '../../needs/claim-error';
+import {
+  describeTicketDeletion,
+  formatTicketNeedCount,
+} from '../../needs/delete-ticket';
 import { PhotoThumb } from '../../photos';
 import { getTicketPriorityBadge, getTicketStatusTone } from '../../status';
 import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
@@ -26,7 +37,13 @@ import {
   type DetailTicket,
   type TicketDetailView,
 } from './model/ticket-detail-view';
-import { AUDIT_BADGES, type AuditStatus } from './model/ticket-row';
+import { isForbidden } from './model/task-actions';
+import {
+  AUDIT_BADGES,
+  toTicketRow,
+  type AuditStatus,
+} from './model/ticket-row';
+import { TicketAuditCard } from './ticket-audit-card';
 import { TicketHistoryPanel } from './ticket-history-panel';
 import { TicketTaskList } from './ticket-task-list';
 
@@ -61,6 +78,7 @@ export function TicketDetailSheet({
   caps,
   now,
   onClose,
+  onDeleted,
 }: TicketDetailSheetProps) {
   const query = useTicket({ uuid: uuid ?? '' }, { enabled: Boolean(uuid) });
   const disasterTypes = useDisasterTypes();
@@ -82,12 +100,15 @@ export function TicketDetailSheet({
   if (state === 'ready' && ticket) {
     content = (
       <TicketDetailContent
+        // A fresh drawer per ticket: no half-typed need or audit note carried to the next one.
+        key={ticket.uuid}
         ticket={ticket}
         view={toTicketDetailView(ticket, disasterLabels)}
         caps={caps}
         now={now}
         activeTab={caps.canViewHistory ? activeTab : 'info'}
         onTabChange={setActiveTab}
+        onDeleted={onDeleted}
       />
     );
   } else if (state === 'missing') {
@@ -135,6 +156,7 @@ function TicketDetailContent({
   now,
   activeTab,
   onTabChange,
+  onDeleted,
 }: {
   ticket: DetailTicket;
   view: TicketDetailView;
@@ -142,7 +164,9 @@ function TicketDetailContent({
   now: Date;
   activeTab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
+  onDeleted: (uuid: string) => void;
 }) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const priority = getTicketPriorityBadge(ticket.priority);
   const audit = AUDIT_BADGES[ticket.auditStatus as AuditStatus];
 
@@ -151,6 +175,20 @@ function TicketDetailContent({
       eyebrow="求助單"
       title={view.title}
       closeLabel="關閉求助單詳情"
+      footer={
+        caps.canDelete ? (
+          <>
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setDeleteOpen(true)}
+            >
+              刪除求助單
+            </Button>
+            <Box sx={{ flex: 1 }} />
+          </>
+        ) : undefined
+      }
       headerContent={
         <>
           <Box
@@ -192,7 +230,98 @@ function TicketDetailContent({
       ) : (
         <TicketInfo ticket={ticket} view={view} caps={caps} now={now} />
       )}
+      {caps.canDelete ? (
+        <DeleteTicketConfirm
+          open={deleteOpen}
+          ticket={ticket}
+          title={view.title}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={() => {
+            setDeleteOpen(false);
+            onDeleted(ticket.uuid);
+          }}
+        />
+      ) : null}
     </SheetLayout>
+  );
+}
+
+/** 刪除求助單: the ticket with all its needs; the people on them hear. */
+function DeleteTicketConfirm({
+  open,
+  ticket,
+  title,
+  onClose,
+  onDeleted,
+}: {
+  open: boolean;
+  ticket: DetailTicket;
+  title: string;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const remove = useDeleteTicket();
+  const [error, setError] = useState<string | null>(null);
+  const needs = toTicketRow(
+    // The detail ticket is a superset of the list's fragment.
+    ticket as unknown as Parameters<typeof toTicketRow>[0],
+  ).tasks;
+
+  const confirm = async () => {
+    if (remove.isPending) return;
+    setError(null);
+    try {
+      await remove.mutateAsync({ uuid: ticket.uuid });
+      onDeleted();
+    } catch (caught) {
+      const refusal = caught as ClaimError;
+      // Deleted already, from another tab: what was asked for has happened.
+      if (isTicketAlreadyGone(refusal)) {
+        onDeleted();
+        return;
+      }
+      setError(
+        isForbidden(refusal)
+          ? '你的帳號沒有刪除求助單的權限。'
+          : deleteTicketErrorMessage(refusal),
+      );
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      onConfirm={() => void confirm()}
+      onExited={() => setError(null)}
+      title="刪除求助單？"
+      confirmLabel={remove.isPending ? '刪除中…' : '刪除'}
+      confirmTone="danger"
+      error={error}
+      submitting={remove.isPending}
+    >
+      <Box>
+        <Typography
+          sx={{
+            ...typography.body[400],
+            color: color.fg.neutral.default,
+            fontWeight: 600,
+          }}
+        >
+          {title}
+        </Typography>
+        <Muted>{formatTicketNeedCount(needs.length)}</Muted>
+      </Box>
+      <Typography
+        sx={{
+          ...typography.body[300],
+          color: color.fg.neutral.muted,
+          lineHeight: 1.6,
+        }}
+      >
+        {describeTicketDeletion(needs)}
+      </Typography>
+    </Dialog>
   );
 }
 
@@ -266,6 +395,11 @@ function TicketInfo({
           <Muted>（尚無照片）</Muted>
         )}
       </Block>
+      {caps.canAudit && ticket.auditContentHash ? (
+        <Block label="審核">
+          <TicketAuditCard ticket={ticket} />
+        </Block>
+      ) : null}
       <Block label="需求">
         <TicketTaskList ticket={ticket} caps={caps} />
       </Block>
