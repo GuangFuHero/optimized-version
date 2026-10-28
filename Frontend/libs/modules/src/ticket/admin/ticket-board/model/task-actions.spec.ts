@@ -173,6 +173,7 @@ describe('validateNeedDraft', () => {
       taskName: '受困',
       quantity: null,
       taskDescription: null,
+      source: 'official',
     });
   });
 });

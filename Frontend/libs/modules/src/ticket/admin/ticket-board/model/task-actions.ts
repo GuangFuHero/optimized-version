@@ -112,6 +112,8 @@ export function buildNeedInput(ticketUuid: string, draft: NeedDraft) {
     taskName: draft.taskName.trim(),
     quantity: quantity ? Number(quantity) : null,
     taskDescription: draft.description.trim() || null,
+    // Entered by staff from the board: official, as the ticket form's needs are.
+    source: 'official',
   };
 }
 
