@@ -39,6 +39,8 @@ export function TicketExportMenu() {
           toast.success(`已匯出「${formatTicketTypeLabel(taskType)}」求助單`);
           setAnchor(null);
         },
+        // The failure toasts globally; the menu closes so the toolbar isn't left with it open.
+        onError: () => setAnchor(null),
       },
     );
 

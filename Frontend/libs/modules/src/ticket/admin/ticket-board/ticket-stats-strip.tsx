@@ -11,9 +11,15 @@ const { color, radius, typography } = designTokens;
 interface TicketStatsStripProps {
   stats: TicketStats;
   loading: boolean;
+  /** The unfiltered load hit its cap: the counts cover only the first 5,000 tickets. */
+  truncated?: boolean;
 }
 
-export function TicketStatsStrip({ stats, loading }: TicketStatsStripProps) {
+export function TicketStatsStrip({
+  stats,
+  loading,
+  truncated = false,
+}: TicketStatsStripProps) {
   const cards = [
     { key: 'all', label: '全部', count: stats.total },
     ...TICKET_STATUS_OPTIONS.map((option) => ({
@@ -25,21 +31,32 @@ export function TicketStatsStrip({ stats, loading }: TicketStatsStripProps) {
   const warn = stats.gapPeople > 0;
 
   return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${cards.length + 1}, minmax(0, 1fr))`,
-        gap: '12px',
-      }}
-    >
-      {cards.map((card) => (
-        <Tile key={card.key} label={card.label}>
-          {loading ? '—' : card.count}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${cards.length + 1}, minmax(0, 1fr))`,
+          gap: '12px',
+        }}
+      >
+        {cards.map((card) => (
+          <Tile key={card.key} label={card.label}>
+            {loading ? '—' : card.count}
+          </Tile>
+        ))}
+        <Tile label="志工缺口" warn={!loading && warn}>
+          {loading
+            ? '—'
+            : `缺 ${stats.gapPeople} 人 · ${stats.gapNeeds} 項需求`}
         </Tile>
-      ))}
-      <Tile label="志工缺口" warn={!loading && warn}>
-        {loading ? '—' : `缺 ${stats.gapPeople} 人 · ${stats.gapNeeds} 項需求`}
-      </Tile>
+      </Box>
+      {truncated && !loading ? (
+        <Typography
+          sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+        >
+          僅統計前 5,000 張求助單
+        </Typography>
+      ) : null}
     </Box>
   );
 }

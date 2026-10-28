@@ -138,6 +138,7 @@ export function TicketBoardPage() {
             <TicketStatsStrip
               stats={stats}
               loading={unfiltered.isPending || unfiltered.error != null}
+              truncated={unfiltered.truncated}
             />
             <TicketToolbar
               caps={caps}
@@ -173,6 +174,7 @@ export function TicketBoardPage() {
             {view === 'map' ? (
               <TicketMapView
                 rows={rows}
+                truncated={tickets.truncated}
                 selectedUuid={viewedUuid}
                 onOpenTicket={openTicket}
               />

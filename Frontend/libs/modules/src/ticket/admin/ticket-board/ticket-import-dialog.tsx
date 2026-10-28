@@ -72,7 +72,11 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
       {
         onSuccess: (data) => {
           setResult(data);
-          toast.success(`已匯入：新增 ${data.created} 張`);
+          toast.success(
+            data.updated > 0
+              ? `已匯入：新增 ${data.created} 張、更新 ${data.updated} 張`
+              : `已匯入：新增 ${data.created} 張`,
+          );
         },
       },
     );

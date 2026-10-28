@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
-import { Badge, designTokens } from '@rescue-frontend/ui';
+import { Badge, Callout, designTokens } from '@rescue-frontend/ui';
 import { X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -12,12 +12,14 @@ import type {
   RescueMapMarkerItem,
 } from '../../../map/types';
 import { getTicketPriorityBadge } from '../../status';
+import { ticketPriorityLabel } from './model/ticket-detail-view';
 import {
   resolveMapSelection,
   TICKET_PRIORITY_PIN_COLORS,
   toTicketMarker,
 } from './model/ticket-marker';
 import type { TicketPriority, TicketRow } from './model/ticket-row';
+import { TRUNCATED_NOTICE } from './ticket-table';
 
 const { color, radius, shadow, typography } = designTokens;
 
@@ -25,15 +27,14 @@ const MAP_HEIGHT = 560;
 const CLUSTER_MAX_ZOOM = 14;
 const OVERLAY_INSET = 12;
 
-const LEGEND: { priority: TicketPriority; label: string }[] = [
-  { priority: 'critical', label: '緊急' },
-  { priority: 'high', label: '高' },
-  { priority: 'medium', label: '中' },
-  { priority: 'low', label: '低' },
-];
+const LEGEND: { priority: TicketPriority; label: string }[] = (
+  ['critical', 'high', 'medium', 'low'] as const
+).map((priority) => ({ priority, label: ticketPriorityLabel(priority) }));
 
 interface TicketMapViewProps {
   rows: TicketRow[];
+  /** Only the first 5,000 tickets loaded: warned above the map, as the table does. */
+  truncated: boolean;
   selectedUuid: string | null;
   onOpenTicket: (uuid: string) => void;
 }
@@ -41,6 +42,7 @@ interface TicketMapViewProps {
 /** Browse-only: pins by priority; a click on a pin opens the ticket, a click on the map does nothing. */
 export function TicketMapView({
   rows,
+  truncated,
   selectedUuid,
   onOpenTicket,
 }: TicketMapViewProps) {
@@ -55,31 +57,34 @@ export function TicketMapView({
   useFitTickets(leafletMap, markers);
 
   return (
-    <Box
-      sx={{
-        position: 'relative',
-        height: MAP_HEIGHT,
-        overflow: 'hidden',
-        border: `1px solid ${color.border.default}`,
-        borderRadius: `${radius.lg}px`,
-      }}
-    >
-      <Map
-        markers={markers}
-        hideDetailDrawer
-        showZoomControl
-        clusterAppearance="solid"
-        clusterMaxZoom={CLUSTER_MAX_ZOOM}
-        onMapReady={setLeafletMap}
-        renderControls={(controller) => (
-          <SelectionSync
-            controller={controller}
-            rows={rows}
-            onOpen={onOpenTicket}
-          />
-        )}
-      />
-      <PriorityLegend />
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {truncated ? <Callout tone="warning">{TRUNCATED_NOTICE}</Callout> : null}
+      <Box
+        sx={{
+          position: 'relative',
+          height: MAP_HEIGHT,
+          overflow: 'hidden',
+          border: `1px solid ${color.border.default}`,
+          borderRadius: `${radius.lg}px`,
+        }}
+      >
+        <Map
+          markers={markers}
+          hideDetailDrawer
+          showZoomControl
+          clusterAppearance="solid"
+          clusterMaxZoom={CLUSTER_MAX_ZOOM}
+          onMapReady={setLeafletMap}
+          renderControls={(controller) => (
+            <SelectionSync
+              controller={controller}
+              rows={rows}
+              onOpen={onOpenTicket}
+            />
+          )}
+        />
+        <PriorityLegend />
+      </Box>
     </Box>
   );
 }

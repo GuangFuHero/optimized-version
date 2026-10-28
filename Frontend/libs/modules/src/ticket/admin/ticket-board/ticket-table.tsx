@@ -24,6 +24,7 @@ import {
   visibleTicketColumns,
   type TicketColumnId,
 } from './model/ticket-columns';
+import { ticketPriorityLabel } from './model/ticket-detail-view';
 import { pageOf } from './model/ticket-filters';
 import {
   AUDIT_BADGES,
@@ -34,7 +35,8 @@ import {
 
 const { color, radius, typography } = designTokens;
 
-const PRIORITY_TEXT: Record<string, string> = { medium: '中', low: '低' };
+/** The board's one wording for a capped load: the table and the map both show it. */
+export const TRUNCATED_NOTICE = '只載入前 5,000 張求助單，請用篩選縮小範圍。';
 
 export { AUDIT_BADGES };
 
@@ -164,11 +166,7 @@ export function TicketTable({
           </Button>
         </Callout>
       ) : null}
-      {truncated ? (
-        <Callout tone="warning">
-          只載入前 5,000 張求助單，請用篩選縮小範圍。
-        </Callout>
-      ) : null}
+      {truncated ? <Callout tone="warning">{TRUNCATED_NOTICE}</Callout> : null}
       <DataTable
         columns={columns}
         data={paged.items}
@@ -259,7 +257,7 @@ function PriorityCell({ priority }: { priority: string }) {
       </Badge>
     );
   }
-  return <Muted>{PRIORITY_TEXT[priority] ?? '—'}</Muted>;
+  return <Muted>{ticketPriorityLabel(priority)}</Muted>;
 }
 
 function AreaCell({ area }: { area: string }) {

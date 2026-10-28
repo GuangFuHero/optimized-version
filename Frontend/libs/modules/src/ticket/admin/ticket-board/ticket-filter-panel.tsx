@@ -6,18 +6,16 @@ import { designTokens } from '@rescue-frontend/ui';
 
 import { ChipRow } from '../../../station/admin/station-management/station-filter-panel';
 import { formatTicketTypeLabel, TICKET_STATUS_OPTIONS } from '../../status';
+import { ticketPriorityLabel } from './model/ticket-detail-view';
 import type { TicketFilters } from './model/ticket-filters';
 import type { AuditStatus, TicketPriority } from './model/ticket-row';
 import { AUDIT_BADGES } from './ticket-table';
 
 const { color, radius, shadow } = designTokens;
 
-const PRIORITY_OPTIONS: readonly { value: TicketPriority; label: string }[] = [
-  { value: 'critical', label: '最高' },
-  { value: 'high', label: '高' },
-  { value: 'medium', label: '中' },
-  { value: 'low', label: '低' },
-];
+const PRIORITY_OPTIONS: readonly { value: TicketPriority; label: string }[] = (
+  ['critical', 'high', 'medium', 'low'] as const
+).map((value) => ({ value, label: ticketPriorityLabel(value) }));
 
 /** The four need types the backend documents (see formatTicketTypeLabel). */
 const TASK_TYPES = ['rescue', 'supply', 'medical', 'hr'] as const;
