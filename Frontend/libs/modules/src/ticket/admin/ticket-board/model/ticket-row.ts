@@ -1,0 +1,97 @@
+import type {
+  AdminTaskFieldsFragment,
+  AdminTicketFieldsFragment,
+  AuditStatus,
+} from '@rescue-frontend/data-access/admin';
+
+import { stationPoint } from '../../../../station/station-point';
+
+export type { AuditStatus };
+
+export type TicketStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
+
+/** Shown wherever a ticket has no title. */
+export const UNTITLED_TICKET = '（未命名求助單）';
+
+export interface TaskRow {
+  uuid: string;
+  taskType: string;
+  taskName: string;
+  status: 'pending' | 'fulfilled' | 'canceled';
+  quantity: number | null;
+  assignedCount: number;
+  /** People still missing: only an open need with a quantity has one. */
+  gap: number;
+  raw: AdminTaskFieldsFragment;
+}
+
+export interface TicketRow {
+  uuid: string;
+  title: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  auditStatus: AuditStatus;
+  disasterTypes: string[];
+  county: string;
+  town: string;
+  area: string;
+  /** [lat, lng] for Leaflet, or null when the ticket has no point. */
+  position: [number, number] | null;
+  locationCell: string | null;
+  /** The point is a coarse cell, not an exact address. */
+  isCoarse: boolean;
+  updatedAt: string | null;
+  tasks: TaskRow[];
+  volunteerGap: number;
+  raw: AdminTicketFieldsFragment & { tasks: AdminTaskFieldsFragment[] };
+}
+
+function toTaskRow(task: AdminTaskFieldsFragment): TaskRow {
+  const quantity = task.quantity ?? null;
+  const gap =
+    task.status === 'pending' && quantity !== null
+      ? Math.max(0, quantity - task.assignedCount)
+      : 0;
+  return {
+    uuid: task.uuid,
+    taskType: task.taskType,
+    taskName: task.taskName,
+    status: task.status as TaskRow['status'],
+    quantity,
+    assignedCount: task.assignedCount,
+    gap,
+    raw: task,
+  };
+}
+
+export function toTicketRow(
+  ticket: AdminTicketFieldsFragment & { tasks: AdminTaskFieldsFragment[] },
+): TicketRow {
+  const county = ticket.secondaryLocation?.county?.trim() ?? '';
+  const town = ticket.secondaryLocation?.town?.trim() ?? '';
+  const tasks = ticket.tasks.map(toTaskRow);
+  return {
+    uuid: ticket.uuid,
+    title: ticket.title?.trim() || UNTITLED_TICKET,
+    // The schema types these as plain strings; the backend only stores the listed values.
+    status: ticket.status as TicketStatus,
+    priority: ticket.priority as TicketPriority,
+    auditStatus: ticket.auditStatus as AuditStatus,
+    disasterTypes: ticket.disasterTypes,
+    county,
+    town,
+    area: `${county}${town}`,
+    position: stationPoint(ticket.geometry),
+    locationCell: ticket.locationCell ?? null,
+    isCoarse: !!ticket.locationCell,
+    updatedAt: ticket.updatedAt ?? null,
+    tasks,
+    volunteerGap: tasks.reduce((sum, t) => sum + t.gap, 0),
+    raw: ticket,
+  };
+}
