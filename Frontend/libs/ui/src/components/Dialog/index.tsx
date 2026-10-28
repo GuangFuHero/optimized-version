@@ -24,6 +24,7 @@ export interface DialogProps {
   confirmIcon?: ReactNode;
   confirmTone?: 'primary' | 'danger';
   confirmDisabled?: boolean;
+  /** `null` leaves the cancel button out, for a notice whose only answer is to acknowledge it. */
   cancelLabel?: ReactNode;
   error?: ReactNode;
   submitting?: boolean;
@@ -94,14 +95,16 @@ export function Dialog({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pt: 1, pb: 3, gap: 1.5 }}>
-        <Button
-          variant="outline"
-          onClick={onClose}
-          disabled={submitting}
-          sx={{ flex: 1 }}
-        >
-          {cancelLabel}
-        </Button>
+        {cancelLabel === null ? null : (
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={submitting}
+            sx={{ flex: 1 }}
+          >
+            {cancelLabel}
+          </Button>
+        )}
         <Button
           type="submit"
           variant={confirmTone}

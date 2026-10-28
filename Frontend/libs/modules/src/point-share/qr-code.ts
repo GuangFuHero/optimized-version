@@ -4,7 +4,6 @@ import { designTokens } from '@rescue-frontend/ui';
 
 const { color, primitives } = designTokens;
 
-
 qrcodeFactory.stringToBytes = (text: string) =>
   Array.from(new TextEncoder().encode(text));
 
@@ -64,4 +63,53 @@ export function downloadQrSvg(value: string, filename: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * PNG rather than SVG where the code is passed on through LINE, which takes an SVG as a file
+ * rather than a picture. Drawn from the same matrix, quiet zone included — some cameras miss a
+ * code without it. A blob URL, since Chrome often ignores the file name of a `data:` link.
+ */
+export function downloadQrPng(value: string, filename: string, cellSize = 16) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const modules = createQrMatrix(value);
+  const size = (modules.length + QR_QUIET_ZONE * 2) * cellSize;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return;
+  }
+
+  context.fillStyle = color.bg.neutral.default;
+  context.fillRect(0, 0, size, size);
+  context.fillStyle = primitives.color.neutral.black;
+  modules.forEach((row, y) =>
+    row.forEach((dark, x) => {
+      if (dark) {
+        context.fillRect(
+          (x + QR_QUIET_ZONE) * cellSize,
+          (y + QR_QUIET_ZONE) * cellSize,
+          cellSize,
+          cellSize,
+        );
+      }
+    }),
+  );
+
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
 }

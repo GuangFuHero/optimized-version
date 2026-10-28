@@ -254,6 +254,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.0
         version: 5.104.1(react@19.2.5)
+      '@tanstack/react-table':
+        specifier: ^9.2.4
+        version: 9.2.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@urql/next':
         specifier: ^2.0.0
         version: 2.0.0(next@16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0))(react@19.2.5)(urql@5.0.1(@urql/core@6.0.1(graphql@16.13.2))(react@19.2.5))
@@ -282,7 +285,7 @@ importers:
         specifier: ~16.4.2
         version: 16.4.2(@babel/core@7.29.0(supports-color@10.2.2))(@types/node@20.19.9)(babel-plugin-macros@3.1.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
       qrcode-generator:
-        specifier: ^2.0.4
+        specifier: 2.0.4
         version: 2.0.4
       react:
         specifier: ^19.0.0

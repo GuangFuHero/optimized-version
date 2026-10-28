@@ -97,7 +97,9 @@ export const ADMIN_NAV_SECTIONS: readonly {
         href: '/users',
         Icon: UserCog,
         description: '全平台人員與權限',
-        capability: 'user.view',
+        // Super admins only (ADMIN-027: 成員與權限 is super_admin only). Data auditors also hold
+        // user.view, so gating on it would show them a page that only says 沒有權限.
+        capability: 'rbac.assign',
       },
       {
         id: 'audit',

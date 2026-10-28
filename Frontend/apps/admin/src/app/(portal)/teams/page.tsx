@@ -1,3 +1,17 @@
-import { AdminPlaceholderPage } from '@rescue-frontend/modules';
+import type { Metadata } from 'next';
 
-export default AdminPlaceholderPage;
+import { TeamsPage } from '@rescue-frontend/modules';
+
+export const metadata: Metadata = {
+  title: '團隊 - 島嶼守望管理平台',
+  description: '島嶼守望管理平台的團隊與成員名單',
+};
+
+export default function Page() {
+  const siteUrl =
+    process.env.SITE_APP_URL ??
+    (process.env.NODE_ENV === 'development'
+      ? 'http://localhost:3000'
+      : undefined);
+  return <TeamsPage siteUrl={siteUrl} />;
+}
