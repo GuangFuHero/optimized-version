@@ -29,27 +29,6 @@ export interface StationDetailView {
   /** 成立時間 as YYYY-MM-DD (Taipei), or '—'. */
   createdDate: string;
   resources: { id: string; label: string; value: string }[];
-  /** 群眾評分 per resource, only the resources someone has rated. */
-  ratings: { id: string; label: string; counts: RatingCounts }[];
-}
-
-export interface RatingCounts {
-  up: number;
-  neutral: number;
-  down: number;
-}
-
-/** Totals of the crowd's 'up' / 'neutral' / 'down' ratings; any other value is not counted. */
-export function countRatings(
-  ratings: readonly { rating: string }[],
-): RatingCounts {
-  const counts: RatingCounts = { up: 0, neutral: 0, down: 0 };
-  for (const { rating } of ratings) {
-    if (rating === 'up' || rating === 'neutral' || rating === 'down') {
-      counts[rating] += 1;
-    }
-  }
-  return counts;
 }
 
 export function formatStationAddress(station: DetailStation): string {
@@ -148,12 +127,5 @@ export function toStationDetailView(
           : quantity,
       };
     }),
-    ratings: station.properties
-      .filter((property) => property.crowdSourcings.length > 0)
-      .map((property) => ({
-        id: property.uuid,
-        label: property.propertyName,
-        counts: countRatings(property.crowdSourcings),
-      })),
   };
 }

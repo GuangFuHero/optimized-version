@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  countRatings,
   readOnlyCaption,
   toStationDetailView,
   type DetailStation,
@@ -33,14 +32,12 @@ const station = {
       propertyName: '飲用水',
       quantity: 40,
       comment: null,
-      crowdSourcings: [{ rating: 'up' }, { rating: 'up' }, { rating: 'down' }],
     },
     {
       uuid: 'p-2',
       propertyName: '尿布',
       quantity: null,
       comment: '尚有存量',
-      crowdSourcings: [],
     },
   ],
 } as unknown as DetailStation;
@@ -138,24 +135,6 @@ describe('toStationDetailView', () => {
       { id: 'p-1', label: '飲用水', value: '40' },
       { id: 'p-2', label: '尿布', value: '—（尚有存量）' },
     ]);
-  });
-
-  it('totals the crowd ratings of each rated resource', () => {
-    expect(toStationDetailView(station, { canViewPii: true }).ratings).toEqual([
-      { id: 'p-1', label: '飲用水', counts: { up: 2, neutral: 0, down: 1 } },
-    ]);
-  });
-});
-
-describe('countRatings', () => {
-  it('counts up, neutral and down, and skips any other value', () => {
-    expect(
-      countRatings([
-        { rating: 'neutral' },
-        { rating: 'up' },
-        { rating: 'sideways' },
-      ]),
-    ).toEqual({ up: 1, neutral: 1, down: 0 });
   });
 });
 
