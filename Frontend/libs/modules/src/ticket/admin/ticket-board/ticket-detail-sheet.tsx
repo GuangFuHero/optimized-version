@@ -17,6 +17,7 @@ import {
   SheetLayout,
   Tabs,
 } from '@rescue-frontend/ui';
+import { PencilLine } from 'lucide-react';
 
 import { FreshnessCell } from '../../../station/admin/station-management/station-cells';
 import {
@@ -44,20 +45,21 @@ import {
   type AuditStatus,
 } from './model/ticket-row';
 import { TicketAuditCard } from './ticket-audit-card';
+import { TicketForm } from './ticket-form';
 import { TicketHistoryPanel } from './ticket-history-panel';
 import { TicketTaskList } from './ticket-task-list';
 
 const { color, typography } = designTokens;
 
 /** The station drawer's width, so both boards' drawers match. */
-const TICKET_SHEET_WIDTH = 540;
+export const TICKET_SHEET_WIDTH = 540;
 
 type DetailTab = 'info' | 'history';
 
 interface TicketDetailSheetProps {
   /** The ticket to show; null closes the sheet. */
   uuid: string | null;
-  /** Show the ticket's edit form in place of its details (the form is not built yet). */
+  /** Show the ticket's edit form in place of its details. */
   editing: boolean;
   caps: TicketCapabilities;
   now: Date;
@@ -75,9 +77,12 @@ interface TicketDetailSheetProps {
  */
 export function TicketDetailSheet({
   uuid,
+  editing,
   caps,
   now,
   onClose,
+  onEdit,
+  onEditEnd,
   onDeleted,
 }: TicketDetailSheetProps) {
   const query = useTicket({ uuid: uuid ?? '' }, { enabled: Boolean(uuid) });
@@ -90,6 +95,11 @@ export function TicketDetailSheet({
     [disasterTypes.data],
   );
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
+  // The edit form is saving: Escape, the backdrop and × wait for it.
+  const [busy, setBusy] = useState(false);
+  const close = () => {
+    if (!busy) onClose();
+  };
 
   useEffect(() => setActiveTab('info'), [uuid]);
 
@@ -97,7 +107,19 @@ export function TicketDetailSheet({
   const ticket = query.data?.ticket;
 
   let content: ReactNode;
-  if (state === 'ready' && ticket) {
+  if (state === 'ready' && ticket && editing && caps.canEdit) {
+    // 取消 or a save: back to the details, in the same frame.
+    content = (
+      <TicketForm
+        key={ticket.uuid}
+        mode="edit"
+        ticket={ticket}
+        onDone={onEditEnd}
+        onCancel={onEditEnd}
+        onBusyChange={setBusy}
+      />
+    );
+  } else if (state === 'ready' && ticket) {
     content = (
       <TicketDetailContent
         // A fresh drawer per ticket: no half-typed need or audit note carried to the next one.
@@ -108,6 +130,7 @@ export function TicketDetailSheet({
         now={now}
         activeTab={caps.canViewHistory ? activeTab : 'info'}
         onTabChange={setActiveTab}
+        onEdit={() => onEdit(ticket.uuid)}
         onDeleted={onDeleted}
       />
     );
@@ -139,7 +162,7 @@ export function TicketDetailSheet({
   return (
     <SheetFrame
       open={Boolean(uuid)}
-      onClose={onClose}
+      onClose={close}
       width={TICKET_SHEET_WIDTH}
       variant="admin"
       ariaLabel="求助單詳情"
@@ -156,6 +179,7 @@ function TicketDetailContent({
   now,
   activeTab,
   onTabChange,
+  onEdit,
   onDeleted,
 }: {
   ticket: DetailTicket;
@@ -164,6 +188,7 @@ function TicketDetailContent({
   now: Date;
   activeTab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
+  onEdit: () => void;
   onDeleted: (uuid: string) => void;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -176,16 +201,27 @@ function TicketDetailContent({
       title={view.title}
       closeLabel="關閉求助單詳情"
       footer={
-        caps.canDelete ? (
+        caps.canDelete || caps.canEdit ? (
           <>
-            <Button
-              variant="outline"
-              size="md"
-              onClick={() => setDeleteOpen(true)}
-            >
-              刪除求助單
-            </Button>
+            {caps.canDelete ? (
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setDeleteOpen(true)}
+              >
+                刪除求助單
+              </Button>
+            ) : null}
             <Box sx={{ flex: 1 }} />
+            {caps.canEdit ? (
+              <Button
+                size="md"
+                startIcon={<PencilLine size={17} />}
+                onClick={onEdit}
+              >
+                編輯
+              </Button>
+            ) : null}
           </>
         ) : undefined
       }

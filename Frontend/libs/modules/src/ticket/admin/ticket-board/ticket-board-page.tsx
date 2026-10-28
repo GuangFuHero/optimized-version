@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Stack } from '@mui/material';
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, SheetFrame } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -22,9 +22,10 @@ import {
   type TicketFilters,
 } from './model/ticket-filters';
 import { ticketStats } from './model/ticket-stats';
-import { TicketDetailSheet } from './ticket-detail-sheet';
+import { TICKET_SHEET_WIDTH, TicketDetailSheet } from './ticket-detail-sheet';
 import { TicketMapView } from './ticket-map-view';
 import { TicketFilterPanel } from './ticket-filter-panel';
+import { TicketForm } from './ticket-form';
 import { TicketStatsStrip } from './ticket-stats-strip';
 import { TicketTable } from './ticket-table';
 import { TicketToolbar } from './ticket-toolbar';
@@ -99,6 +100,12 @@ export function TicketBoardPage() {
   // Mounted for any ?ticket=, in the current rows or not, so a pasted link always opens.
   const viewedUuid = params.get('ticket');
   const [editingUuid, setEditingUuid] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  // The create form is saving: Escape and the backdrop wait for it.
+  const [createBusy, setCreateBusy] = useState(false);
+  const closeCreate = () => {
+    if (!createBusy) setCreating(false);
+  };
 
   return (
     <>
@@ -136,6 +143,7 @@ export function TicketBoardPage() {
               onToggleFilter={() => setFilterOpen((open) => !open)}
               onClear={() => setFilters(EMPTY_TICKET_FILTERS)}
               count={rows.length}
+              onCreate={caps.canAdd ? () => setCreating(true) : undefined}
             />
           </Stack>
         }
@@ -194,6 +202,25 @@ export function TicketBoardPage() {
           openTicket(null);
         }}
       />
+      <SheetFrame
+        open={creating && caps.canAdd}
+        onClose={closeCreate}
+        width={TICKET_SHEET_WIDTH}
+        variant="admin"
+        ariaLabel="新增求助單"
+      >
+        {creating ? (
+          <TicketForm
+            mode="create"
+            onDone={(uuid) => {
+              setCreating(false);
+              openTicket(uuid);
+            }}
+            onCancel={() => setCreating(false)}
+            onBusyChange={setCreateBusy}
+          />
+        ) : null}
+      </SheetFrame>
     </>
   );
 }

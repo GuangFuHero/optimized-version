@@ -1,0 +1,252 @@
+/**
+ * The board's create and edit form for a ticket: what it holds, what it refuses, and the inputs it
+ * sends. A coordinator types in a request taken by phone, so a new ticket's needs are official.
+ */
+
+import type {
+  CreateTicketInput,
+  SecondaryLocationInput,
+  UpdateTicketInput,
+} from '@rescue-frontend/data-access/admin';
+
+import type { PickedPoint } from '../../../../map/components/location-picker';
+import { stationPoint } from '../../../../station/station-point';
+import { PHOTO_LINK_MAX } from '../../../photos/photo-links';
+import {
+  buildNeedDraftInput,
+  validateNeedDraft,
+  type DuplicateSuspect,
+  type NeedDraft,
+} from './task-actions';
+import type { DetailTicket } from './ticket-detail-view';
+import type { TicketPriority } from './ticket-row';
+
+export interface TicketFormValues {
+  title: string;
+  description: string;
+  priority: TicketPriority;
+  disasterTypes: string[];
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  point: PickedPoint | null;
+  fullAddress: string;
+  floor: string;
+  room: string;
+  photoUrls: string[];
+  needs: NeedDraft[];
+}
+
+export type TicketFormErrors = Partial<
+  Record<keyof TicketFormValues | `needs.${number}.${string}`, string>
+>;
+
+/** `tickets.title` is String(200). */
+export const TICKET_TITLE_MAX = 200;
+/** Needs one create may carry. */
+export const TICKET_NEEDS_MAX = 20;
+
+export const TICKET_PRIORITIES: readonly TicketPriority[] = [
+  'critical',
+  'high',
+  'medium',
+  'low',
+];
+
+export function emptyNeed(): NeedDraft {
+  return { taskType: 'rescue', taskName: '', quantity: '', description: '' };
+}
+
+export function emptyTicketForm(): TicketFormValues {
+  return {
+    title: '',
+    description: '',
+    priority: 'medium',
+    disasterTypes: [],
+    contactName: '',
+    contactPhone: '',
+    contactEmail: '',
+    point: null,
+    fullAddress: '',
+    floor: '',
+    room: '',
+    photoUrls: [],
+    needs: [emptyNeed()],
+  };
+}
+
+const read = (value: string | null | undefined) => value ?? '';
+
+export function ticketFormFromTicket(ticket: DetailTicket): TicketFormValues {
+  const [lat, lng] = stationPoint(ticket.geometry) ?? [];
+  const location = ticket.secondaryLocation;
+  return {
+    title: read(ticket.title),
+    description: read(ticket.description),
+    priority: ticket.priority as TicketPriority,
+    disasterTypes: [...(ticket.disasterTypes ?? [])],
+    contactName: read(ticket.contactName),
+    contactPhone: read(ticket.contactPhone),
+    contactEmail: read(ticket.contactEmail),
+    point: lat == null || lng == null ? null : { lat, lng, source: 'seed' },
+    fullAddress: read(location?.fullAddress),
+    floor: read(location?.floor),
+    room: read(location?.room),
+    photoUrls: ticket.photos.map((photo) => photo.url),
+    needs: [],
+  };
+}
+
+/** A row nothing was typed into: left out, not refused. */
+function untouched(need: NeedDraft): boolean {
+  return (
+    !need.taskName.trim() && !need.quantity.trim() && !need.description.trim()
+  );
+}
+
+/** The rows that go out, in order: their index is the backend's `task:<i>`. */
+function sentNeeds(values: TicketFormValues): NeedDraft[] {
+  return values.needs.filter((need) => !untouched(need));
+}
+
+export function validateTicketForm(
+  values: TicketFormValues,
+  mode: 'create' | 'edit',
+): TicketFormErrors {
+  const errors: TicketFormErrors = {};
+  const title = values.title.trim();
+  if (!title) errors.title = '請填寫標題';
+  else if (title.length > TICKET_TITLE_MAX)
+    errors.title = `標題最多 ${TICKET_TITLE_MAX} 字`;
+  if (values.photoUrls.length > PHOTO_LINK_MAX)
+    errors.photoUrls = `照片最多 ${PHOTO_LINK_MAX} 張`;
+  if (mode === 'edit') return errors;
+
+  if (!values.contactName.trim()) errors.contactName = '請填寫聯絡人';
+  if (!values.point) errors.point = '請在地圖上標記位置';
+  if (values.needs.length > TICKET_NEEDS_MAX) {
+    errors.needs = `需求最多 ${TICKET_NEEDS_MAX} 項`;
+  } else if (sentNeeds(values).length === 0) {
+    errors.needs = '請至少填寫一項需求';
+  }
+  values.needs.forEach((need, index) => {
+    if (untouched(need)) return;
+    const needErrors = validateNeedDraft(need);
+    for (const [key, message] of Object.entries(needErrors)) {
+      errors[`needs.${index}.${key}`] = message;
+    }
+  });
+  return errors;
+}
+
+function secondaryLocation(values: TicketFormValues): SecondaryLocationInput {
+  const location: SecondaryLocationInput = {};
+  for (const key of ['fullAddress', 'floor', 'room'] as const) {
+    const value = values[key].trim();
+    if (value) location[key] = value;
+  }
+  return location;
+}
+
+/**
+ * `createTicket`'s input. `acknowledged` maps a sent need's index to the suspect the user has
+ * confirmed it is not a duplicate of.
+ */
+export function toCreateTicketInput(
+  values: TicketFormValues,
+  acknowledged: Map<number, string> = new Map(),
+): CreateTicketInput {
+  const location = secondaryLocation(values);
+  const optional = (value: string) => value.trim() || undefined;
+  const input: CreateTicketInput = {
+    title: values.title.trim(),
+    description: optional(values.description),
+    priority: values.priority,
+    disasterTypes: values.disasterTypes,
+    contactName: values.contactName.trim(),
+    contactPhone: optional(values.contactPhone),
+    contactEmail: optional(values.contactEmail),
+    geometry: values.point
+      ? { type: 'Point', coordinates: [values.point.lng, values.point.lat] }
+      : undefined,
+    secondaryLocation: Object.keys(location).length ? location : undefined,
+    photoUrls: values.photoUrls,
+    tasks: sentNeeds(values).map((need, index) => {
+      const draft = buildNeedDraftInput(need);
+      const ack = acknowledged.get(index);
+      return ack ? { ...draft, acknowledgedDuplicateOf: ack } : draft;
+    }),
+  };
+  // Blank optional fields stay out, so the backend's defaults apply.
+  for (const key of Object.keys(input) as (keyof CreateTicketInput)[]) {
+    if (input[key] === undefined) delete input[key];
+  }
+  return input;
+}
+
+/**
+ * The acknowledgements to resend with: one suspect per need (the backend takes one each). A
+ * suspect on the ticket itself (`draftIndex` -1) has nothing to acknowledge it on.
+ */
+export function acknowledgeSuspects(
+  previous: Map<number, string>,
+  suspects: DuplicateSuspect[],
+): Map<number, string> {
+  const next = new Map(previous);
+  for (const suspect of suspects) {
+    if (suspect.draftIndex >= 0 && !next.has(suspect.draftIndex)) {
+      next.set(suspect.draftIndex, suspect.relatedUuid);
+    }
+  }
+  return next;
+}
+
+/** `updateTicket`'s input: never the contact or the point, which the edit form can't change. */
+export function toUpdateTicketInput(
+  values: TicketFormValues,
+): UpdateTicketInput {
+  return {
+    title: values.title.trim(),
+    description: values.description.trim() || null,
+    priority: values.priority,
+    disasterTypes: values.disasterTypes,
+    secondaryLocation: secondaryLocation(values),
+  };
+}
+
+/**
+ * Only the members that changed. `secondaryLocation` replaces the whole address, so sending it
+ * untouched could blank parts this form doesn't show.
+ */
+export function changedUpdateInput(
+  values: TicketFormValues,
+  initial: TicketFormValues,
+): UpdateTicketInput {
+  const next = toUpdateTicketInput(values);
+  const before = toUpdateTicketInput(initial);
+  const changed: Record<string, unknown> = {};
+  for (const key of Object.keys(next) as (keyof UpdateTicketInput)[]) {
+    if (JSON.stringify(next[key]) !== JSON.stringify(before[key])) {
+      changed[key] = next[key];
+    }
+  }
+  return changed as UpdateTicketInput;
+}
+
+/**
+ * What to attach and detach to turn `before` into `after`. Links may repeat, so they are counted:
+ * each link kept holds on to one photo, and photos left over are detached.
+ */
+export function photoChanges(
+  before: { uuid: string; url: string }[],
+  after: string[],
+): { attach: string[]; detach: string[] } {
+  const left = [...before];
+  const attach: string[] = [];
+  for (const url of after) {
+    const at = left.findIndex((photo) => photo.url === url);
+    if (at >= 0) left.splice(at, 1);
+    else attach.push(url);
+  }
+  return { attach, detach: left.map((photo) => photo.uuid) };
+}

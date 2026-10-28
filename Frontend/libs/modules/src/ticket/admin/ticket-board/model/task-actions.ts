@@ -103,11 +103,10 @@ export function validateNeedDraft(draft: NeedDraft): NeedDraftErrors {
   return errors;
 }
 
-/** `createTicketTask`'s input for a valid draft. */
-export function buildNeedInput(ticketUuid: string, draft: NeedDraft) {
+/** A valid draft as the backend takes a need, whether on its own or with a new ticket. */
+export function buildNeedDraftInput(draft: NeedDraft) {
   const quantity = draft.quantity.trim();
   return {
-    ticketUuid,
     taskType: draft.taskType,
     taskName: draft.taskName.trim(),
     quantity: quantity ? Number(quantity) : null,
@@ -115,6 +114,11 @@ export function buildNeedInput(ticketUuid: string, draft: NeedDraft) {
     // Entered by staff from the board: official, as the ticket form's needs are.
     source: 'official',
   };
+}
+
+/** `createTicketTask`'s input for a valid draft. */
+export function buildNeedInput(ticketUuid: string, draft: NeedDraft) {
+  return { ticketUuid, ...buildNeedDraftInput(draft) };
 }
 
 const STALE_AUDIT =

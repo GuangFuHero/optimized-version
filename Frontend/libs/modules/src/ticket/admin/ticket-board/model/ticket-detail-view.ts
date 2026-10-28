@@ -57,6 +57,13 @@ const PRIORITY_LABELS: Record<string, string> = {
   low: '低優先',
 };
 
+/** A priority as words: the badge's for the top two, these below them. */
+export function ticketPriorityLabel(priority: string): string {
+  return (
+    getTicketPriorityBadge(priority)?.label ?? PRIORITY_LABELS[priority] ?? '—'
+  );
+}
+
 const text = (value: string | null | undefined) => value?.trim() || null;
 
 function contactOf(ticket: DetailTicket): TicketDetailView['contact'] {
@@ -77,10 +84,7 @@ export function toTicketDetailView(
   return {
     title: text(ticket.title) ?? UNTITLED_TICKET,
     statusLabel: formatTicketStatusLabel(ticket.status),
-    priorityLabel:
-      getTicketPriorityBadge(ticket.priority)?.label ??
-      PRIORITY_LABELS[ticket.priority] ??
-      '—',
+    priorityLabel: ticketPriorityLabel(ticket.priority),
     auditLabel:
       AUDIT_BADGES[ticket.auditStatus as AuditStatus]?.label ??
       ticket.auditStatus,
