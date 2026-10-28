@@ -20,6 +20,7 @@ from app.graphql.tickets.types import (
     CreateTicketResult,
     CreateTicketTaskInput,
     CreateTicketTaskResult,
+    PhotoType,
     TaskAssignmentType,
     TaskPropertyType,
     TicketCreated,
@@ -33,6 +34,7 @@ from app.graphql.tickets.types import (
     UpdateTicketInput,
     UpdateTicketTaskInput,
 )
+from app.services import photo as photo_service
 from app.services import ticket as ticket_service
 from app.services import ticket_audit
 from app.services.dedup_submission import (
@@ -87,6 +89,7 @@ class RequestMutation:
                 else None
             ),
             building_map_uuid=str(input.building_map_uuid) if input.building_map_uuid else None,
+            photo_urls=input.photo_urls,
         )
         if isinstance(result, SubmissionHeld):
             return DuplicatesSuspected.of(result.suspects)
@@ -94,6 +97,34 @@ class RequestMutation:
             ticket=TicketType.from_model(result.entity),
             tasks=[TicketTaskType.from_model(task) for task in result.tasks],
         )
+
+    @strawberry.mutation
+    async def attach_ticket_photo(
+        self, info: strawberry.types.Info, ticket_uuid: UUID, url: str
+    ) -> PhotoType:
+        """Attach a photo link to a ticket. Requires ticket.edit in scope of the ticket.
+
+        The link must be https and at most 500 characters; the platform stores no image.
+        Returns the created PhotoType.
+        """
+        photo = await photo_service.attach_ticket_photo(
+            info.context["db"], actor=require_authenticated(info),
+            ticket_uuid=str(ticket_uuid), url=url,
+        )
+        return PhotoType.from_model(photo)
+
+    @strawberry.mutation
+    async def detach_ticket_photo(self, info: strawberry.types.Info, uuid: UUID) -> bool:
+        """Soft-delete a ticket photo. Returns True on success.
+
+        Requires ticket.edit in scope of the ticket the photo hangs off. Anything that is not an
+        active ticket photo errors as "not found", including a station photo's uuid — both
+        kinds share one table.
+        """
+        await photo_service.detach_ticket_photo(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
+        )
+        return True
 
     @strawberry.mutation
     async def create_help_request(

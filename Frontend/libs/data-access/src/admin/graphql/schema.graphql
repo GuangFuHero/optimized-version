@@ -535,6 +535,11 @@ input CreateTicketInput {
   secondaryLocation: SecondaryLocationInput = null
 
   """
+  Scene photos as https links to images kept elsewhere, at most 10, stored in the order given. Any bad link refuses the whole ticket
+  """
+  photoUrls: [String!] = null
+
+  """
   The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates
   """
   tasks: [CreateTicketTaskDraft!]! = []
@@ -777,6 +782,8 @@ type Mutation {
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
   createTicket(input: CreateTicketInput!): CreateTicketResult!
+  attachTicketPhoto(ticketUuid: UUID!, url: String!): PhotoType!
+  detachTicketPhoto(uuid: UUID!): Boolean!
   createHelpRequest(input: CreateHelpRequestInput!): CreateTicketResult!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!

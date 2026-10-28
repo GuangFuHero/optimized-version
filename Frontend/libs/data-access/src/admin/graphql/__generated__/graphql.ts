@@ -456,6 +456,8 @@ export type CreateTicketInput = {
   immediateDangerReported?: InputMaybe<TriState>;
   /** 災民受困／無法自行離開. Omit when nobody was asked */
   personTrappedReported?: InputMaybe<TriState>;
+  /** Scene photos as https links to images kept elsewhere, at most 10, stored in the order given. Any bad link refuses the whole ticket */
+  photoUrls?: InputMaybe<Array<Scalars['String']['input']>>;
   /** Urgency: 'low' (default), 'medium', 'high', or 'critical' */
   priority?: Scalars['String']['input'];
   /** Street address and space detail for where help is needed. New in feature 018 — before it, only stations could carry one, so the record that most needs a door number had nothing but a map pin */
@@ -635,6 +637,7 @@ export type Mutation = {
   assignTaskActor: TaskAssignmentType;
   assignZoneToTeam: ZoneAssignmentType;
   attachStationPhoto: PhotoType;
+  attachTicketPhoto: PhotoType;
   auditTicket: TicketType;
   createAnnouncement: AnnouncementType;
   createArea: AreaType;
@@ -657,6 +660,7 @@ export type Mutation = {
   deleteTicket: Scalars['Boolean']['output'];
   deleteTicketTask: Scalars['Boolean']['output'];
   detachStationPhoto: Scalars['Boolean']['output'];
+  detachTicketPhoto: Scalars['Boolean']['output'];
   generateBriefing: BriefingType;
   mergeStationSuggestions: StationSuggestionMergeType;
   promoteMarkZone: HazardousZoneType;
@@ -705,6 +709,11 @@ export type MutationAssignZoneToTeamArgs = {
 
 export type MutationAttachStationPhotoArgs = {
   stationUuid: Scalars['UUID']['input'];
+  url: Scalars['String']['input'];
+};
+
+export type MutationAttachTicketPhotoArgs = {
+  ticketUuid: Scalars['UUID']['input'];
   url: Scalars['String']['input'];
 };
 
@@ -798,6 +807,10 @@ export type MutationDeleteTicketTaskArgs = {
 };
 
 export type MutationDetachStationPhotoArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MutationDetachTicketPhotoArgs = {
   uuid: Scalars['UUID']['input'];
 };
 

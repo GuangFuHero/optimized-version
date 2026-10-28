@@ -1241,6 +1241,13 @@ class CreateTicketInput:
             "number had nothing but a map pin"
         ),
     )
+    photo_urls: list[str] | None = strawberry.field(
+        default=None,
+        description=(
+            "Scene photos as https links to images kept elsewhere, at most 10, stored in the "
+            "order given. Any bad link refuses the whole ticket"
+        ),
+    )
     tasks: list[CreateTicketTaskDraft] = strawberry.field(
         default_factory=list,
         description=(

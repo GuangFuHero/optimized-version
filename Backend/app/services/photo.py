@@ -17,6 +17,7 @@ from app.models.geo import touch
 from app.models.photo import Photo
 from app.repositories.geo_repository import station_repository
 from app.repositories.photo_repository import photo_repository
+from app.repositories.tickets_repository import ticket_repository
 from app.services.authz import require_scope
 
 _MAX_URL_LEN = 500  # matches app/models/photo.py: url = mapped_column(String(500))
@@ -149,4 +150,49 @@ async def detach_station_photo(db: AsyncSession, *, actor: User, uuid: str) -> N
             ),
         )
     touch(station)
+    await photo_repository.soft_delete(db, db_obj=photo)
+
+
+async def attach_ticket_photo(
+    db: AsyncSession, *, actor: User, ticket_uuid: str, url: str
+) -> Photo:
+    """Attach a photo link to a ticket.
+
+    Unlike a station's, a ticket's photos are not crowd-sourced: this is a ticket edit, so it
+    needs `ticket.edit` in scope of the ticket. The ticket's own filer attaches theirs through
+    `createTicket` / `createHelpRequest`, which carry the links in the same transaction.
+    """
+    ticket = await ticket_repository.get_by_uuid_active(db, ticket_uuid)
+    if not ticket:
+        raise ValueError("Ticket not found")
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
+    url = normalize_photo_url(url)
+    touch(ticket)
+    return await photo_repository.create(
+        db,
+        obj_in={
+            "ref_uuid": ticket_uuid,
+            "ref_type": "geometry",
+            "url": url,
+            "created_by": str(actor.uuid),
+        },
+    )
+
+
+async def detach_ticket_photo(db: AsyncSession, *, actor: User, uuid: str) -> None:
+    """Soft-delete a ticket photo. Requires `ticket.edit` in scope of the ticket.
+
+    The mirror of `detach_station_photo`: stations and tickets share the photos table and a
+    row does not say which kind owns it, so the photo must hang off an active *ticket* before
+    anything else is decided. A station photo's uuid and an unknown uuid fail with the same
+    message, so the error cannot be used to probe what a uuid belongs to.
+    """
+    photo = await photo_repository.get_by_uuid_active(db, uuid)
+    if not photo or photo.ref_type != "geometry":
+        raise ValueError("Ticket photo not found")
+    ticket = await ticket_repository.get_by_uuid_active(db, photo.ref_uuid)
+    if not ticket:
+        raise ValueError("Ticket photo not found")
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
+    touch(ticket)
     await photo_repository.soft_delete(db, db_obj=photo)

@@ -134,6 +134,7 @@ class TicketFields:
     values: dict
     secondary_location: dict | None
     building_map_uuid: str | None = None
+    photo_links: tuple[str, ...] = ()
 
 
 async def validate_ticket(
@@ -153,6 +154,7 @@ async def validate_ticket(
     immediate_danger_reported: str | None = None,
     secondary_location: dict | None = None,
     building_map_uuid: str | None = None,
+    photo_urls: list[str] | None = None,
 ) -> TicketFields:
     """Checkpoint 1 plus every input check `create_ticket` makes, without writing anything.
 
@@ -161,6 +163,7 @@ async def validate_ticket(
     empty disaster-field form, telling the reporter nothing was asked of them.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
+    photo_links = _checked_photo_links(photo_urls)
     if building_map_uuid:
         geometry, secondary_location = await place_ticket(db, building_map_uuid, geometry, secondary_location)
     if geometry is None:
@@ -197,6 +200,7 @@ async def validate_ticket(
         },
         secondary_location=secondary_location,
         building_map_uuid=building_map_uuid,
+        photo_links=tuple(photo_links),
     )
 
 
@@ -229,6 +233,20 @@ async def insert_ticket(db: AsyncSession, *, actor: User, fields: TicketFields) 
             db,
             obj_in={"ticket_uuid": str(ticket.uuid), "building_map_uuid": fields.building_map_uuid},
         )
+    for position, url in enumerate(fields.photo_links):
+        await photo_repository.add(
+            db,
+            obj_in={
+                # 'geometry': the ticket's base_geometries row, which the photo loader reads.
+                "ref_uuid": str(ticket.uuid),
+                "ref_type": "geometry",
+                "url": url,
+                "created_by": str(actor.uuid),
+                # One transaction means one `now()`, and the loader sorts on created_at, then
+                # uuid (random). A microsecond apart keeps the links in the order given.
+                "created_at": func.now() + timedelta(microseconds=position),
+            },
+        )
     return ticket
 
 
@@ -249,6 +267,7 @@ async def create_ticket(
     immediate_danger_reported: str | None = None,
     secondary_location: dict | None = None,
     building_map_uuid: str | None = None,
+    photo_urls: list[str] | None = None,
 ) -> Tickets:
     """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner).
 
@@ -273,6 +292,7 @@ async def create_ticket(
         immediate_danger_reported=immediate_danger_reported,
         secondary_location=secondary_location,
         building_map_uuid=building_map_uuid,
+        photo_urls=photo_urls,
     )
     ticket = await insert_ticket(db, actor=actor, fields=fields)
     await db.commit()
@@ -323,12 +343,11 @@ class HelpRequestFields:
     """A help request that passed authz and every check but is not written yet.
 
     `ticket` is ready for `insert_ticket`; `needs` are its tasks, in the order the requester
-    listed them; `photo_links` are the links as they will be stored.
+    listed them; its photo links ride on `ticket`.
     """
 
     ticket: TicketFields
     needs: tuple["TaskFields", ...]
-    photo_links: tuple[str, ...]
 
 
 async def validate_help_request(
@@ -382,6 +401,7 @@ async def validate_help_request(
                 "task_type": tasks[0]["task_type"],
             },
             secondary_location=secondary_location,
+            photo_links=tuple(photo_links),
         ),
         needs=tuple(
             TaskFields(
@@ -395,7 +415,6 @@ async def validate_help_request(
             )
             for task in tasks
         ),
-        photo_links=tuple(photo_links),
     )
 
 
@@ -428,19 +447,6 @@ async def insert_help_request(
         )
         for position, need in enumerate(fields.needs)
     ]
-    for position, url in enumerate(fields.photo_links):
-        await photo_repository.add(
-            db,
-            obj_in={
-                # 'geometry': the ticket's base_geometries row, which the photo loader reads.
-                "ref_uuid": str(ticket.uuid),
-                "ref_type": "geometry",
-                "url": url,
-                "created_by": creator,
-                # As for the needs: the loader sorts on created_at, then uuid.
-                "created_at": func.now() + timedelta(microseconds=position),
-            },
-        )
     return ticket, needs
 
 
