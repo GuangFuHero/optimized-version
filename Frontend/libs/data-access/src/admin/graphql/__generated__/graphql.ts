@@ -2577,6 +2577,19 @@ export type AdminDisasterTypesQuery = {
   }>;
 };
 
+export type AdminCurrentDisasterQueryVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type AdminCurrentDisasterQuery = {
+  __typename?: 'Query';
+  currentDisaster?: {
+    __typename?: 'CurrentDisasterType';
+    name: string;
+    shortName?: string | null;
+  } | null;
+};
+
 export type AdminCreateTicketMutationVariables = Exact<{
   input: CreateTicketInput;
 }>;
@@ -5279,6 +5292,35 @@ export const AdminDisasterTypesDocument = {
 } as unknown as DocumentNode<
   AdminDisasterTypesQuery,
   AdminDisasterTypesQueryVariables
+>;
+export const AdminCurrentDisasterDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminCurrentDisaster' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'currentDisaster' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'shortName' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminCurrentDisasterQuery,
+  AdminCurrentDisasterQueryVariables
 >;
 export const AdminCreateTicketDocument = {
   kind: 'Document',

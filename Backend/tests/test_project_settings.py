@@ -42,6 +42,21 @@ async def test_second_row_is_rejected(db):
         await db.commit()
 
 
+@pytest.mark.parametrize(
+    "view",
+    [
+        {"map_center_lat": 121.418, "map_center_lng": 23.67, "map_zoom": 14},
+        {"map_center_lat": 23.67, "map_center_lng": 121.418, "map_zoom": 19},
+    ],
+    ids=["swapped-centre", "zoom-19"],
+)
+async def test_a_view_the_map_cannot_open_is_refused_by_the_table(db, view):
+    """The table holds the API's ranges too, so a row written past the API cannot hand the map a bad view."""
+    db.add(ProjectSettings(name="花蓮 0816", **view))
+    with pytest.raises(IntegrityError):
+        await db.commit()
+
+
 async def test_disaster_types_round_trips_as_a_list(db):
     """Mixed disasters are a set of types on one event, not separate events."""
     db.add(ProjectSettings(name="花蓮 0816", disaster_types=["landslide", "flood"]))

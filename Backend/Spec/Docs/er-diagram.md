@@ -442,6 +442,7 @@ project_settings {
 }
 %% UNIQUE INDEX uq_project_settings_singleton ON project_settings ((true))
 %% CHECK ck_project_settings_map_view_all_or_none: the three map columns are all set or all NULL
+%% CHECK ck_project_settings_map_view_range: lat -90..90, lng -180..180, zoom 7..18 (as the admin API)
 %% -- single-row invariant on a constant expression: no magic UUID needed
 
 %% ==========================

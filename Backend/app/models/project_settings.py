@@ -28,6 +28,12 @@ class ProjectSettings(Base, UUIDPKMixin):
             " AND (map_center_lat IS NULL) = (map_zoom IS NULL)",
             name="ck_project_settings_map_view_all_or_none",
         ),
+        # 跟管理端 API 同一組範圍：用 SQL 寫進來的值也不能是地圖開不了的位置（ADR-395）
+        CheckConstraint(
+            "map_center_lat BETWEEN -90 AND 90 AND map_center_lng BETWEEN -180 AND 180"
+            " AND map_zoom BETWEEN 7 AND 18",
+            name="ck_project_settings_map_view_range",
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(100), comment="災害名稱，例如「花蓮 0816」")

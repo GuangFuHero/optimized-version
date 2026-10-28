@@ -514,8 +514,12 @@ https://app.notion.com/p/405bc24b8353814ebab4d00654e5a6d3 ；欄位、沒設定�
 
 **Decision**：
 
-- **欄位**：`project_settings` 加 `map_center_lat`、`map_center_lng`（double precision）、`map_zoom`（smallint），都可以是 null。
+- **欄位**：`project_settings` 加 `map_center_lat`、`map_center_lng`（double precision）、`map_zoom`（smallint），
+  都可以是 null。
   - CHECK `ck_project_settings_map_view_all_or_none`：三個一起有、一起沒有。只有中心、沒有 zoom，地圖沒辦法開。
+  - CHECK `ck_project_settings_map_view_range`：跟下面 API 的檢查同一組範圍。用 SQL 直接寫進來的值（例如部署後
+    補那一列，或之後改 seed）也不能是經緯度放反、zoom 19 這種地圖開不了的位置（HC 在 #136 review 實測：放反的值
+    會讓管理端 GET／PATCH 回 500，`currentDisaster` 也照樣交給前台）。代價是地圖的 zoom 範圍改了要開 migration。
   - migration `ba24b9c49284` 只加欄位、不搬資料。
   - 不用 PostGIS 的 Point：這是設定值，沒有空間查詢會讀它，前端要的就是兩個數字。
 - **API 包成一個值**：
@@ -541,6 +545,9 @@ https://app.notion.com/p/405bc24b8353814ebab4d00654e5a6d3 ；欄位、沒設定�
 ➕ 換一場災害不用改程式，前台和管理平台的地圖都看同一個設定。
 ➕ 沒人設的部署，地圖照舊開在前端的預設位置。
 ➖ 設定頁還沒做，暫時只能從管理端 API 或 seed 設。
+➖ 清掉的地圖（`PATCH map_view: null`）跟從來沒設過的一樣是三個 null，所以下一次 `SEED_MOCK=true` 會把光復鄉寫回去
+  （popo 在 #136 review 指出）。只影響有跑 mock seed 的部署，那裡的事件本來就是示範用的光復鄉；正式部署不跑 mock seed。
+  要分得出「清掉」和「沒設過」得另加欄位，現在不值得。
 ◾ 前端要做的：
   - 地圖讀取順序是「網址帶的位置 → `mapView` → 全台」，前端常數改成全台；
   - 前台的 schema 快照補 `currentDisaster`。

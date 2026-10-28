@@ -19,6 +19,7 @@ import type {
 import type { SiteRouteState } from '../../route/types';
 import { sessionExpiryFetch } from '../../session/end-expired-session';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
+import { fetchAllAreaPages } from './area-pages';
 import {
   areaOverlaysSignature,
   dedupeMarkersById,
@@ -299,17 +300,15 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
                 LIVE_QUERY_CONTEXT,
               )
               .toPromise(),
-        client
-          .query(
-            GetMapAreasDocument,
-            {
-              bounds,
-              skip: 0,
-              limit: 100,
-            },
-            LIVE_QUERY_CONTEXT,
-          )
-          .toPromise(),
+        fetchAllAreaPages((skip, limit) =>
+          client
+            .query(
+              GetMapAreasDocument,
+              { bounds, skip, limit },
+              LIVE_QUERY_CONTEXT,
+            )
+            .toPromise(),
+        ),
       ]);
 
       if (cancelled || nextRequestId !== requestId) {
@@ -330,7 +329,7 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
             : [],
       });
       const { closureAreas, publicZones } = mapAreasToOverlays(
-        areaResult.data?.areas.items ?? [],
+        areaResult.items,
       );
 
       store.replaceData({
