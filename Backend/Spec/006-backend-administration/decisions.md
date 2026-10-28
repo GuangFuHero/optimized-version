@@ -57,17 +57,22 @@ ADR-308 是所有分支上第一個沒被佔用的號碼（`feat/dedup-engine-in
 
 **Decision**：
 
-1. **`GET /api/v1/admin/audit-logs/export`**，篩選條件跟列表一樣：`table`、`row_id`、`actor_uuid`、`from`、`to`。
+1. **`POST /api/v1/admin/audit-logs/export`**，JSON body 帶篩選條件，跟列表一樣：`table`、`row_id`、`actor_uuid`、`from`、`to`。
    回 `text/csv` 附件，UTF-8 加 BOM（Excel 才讀得懂中文），新的在前。
+   用 POST 而不是 GET：每次匯出都會留紀錄（ADR-417），算是寫入；瀏覽器用 cookie 登入時就要從我們自己的頁面送出（ADR-327），
+   別的網站上的連結不能讓超管「被匯出」一次（2026-10-28 code review）。
 2. **新的權限 `audit.export`**，只給 `super_admin`（範圍 `all`）。**跟 Spec 006 寫的不同**：資料稽核員不能匯出（Popo 10/28 決定）。
    用一個新權限，而不是直接檢查角色名稱，之後要調整可以在 `/admin/rbac` 改。
    既有資料庫由 migration `b5d8e2a41c07` 補上（ADR-055）。
 3. **欄位**：`created_at`、`table_name`、`action`、`row_id`、`actor_uuid`、`actor_name`（操作人暱稱）、`client_ip`、
    `context`、`old_values`、`new_values`。後三個是 JSON 字串。開頭是 `=`、`+`、`-`、`@` 的值會加 `'`，
    避免試算表把它當公式執行（`app/core/tabular.py::write_csv`，ADR-208）。
-4. **一次最多 10,000 筆**。超過回 422，請使用者縮小時間範圍；不截斷，免得有人把一部分當成全部。
+4. **一次最多 10,000 筆**。超過回 422 `audit_export_too_large`，另帶 `matched`（符合幾筆）、`limit`（上限），
+   前端可以顯示「符合 N 筆，一次最多 10,000 筆」，請使用者縮小時間範圍；不截斷，免得有人把一部分當成全部。
+   正式環境的操作紀錄很多，前端呼叫時應該預設帶時間範圍。
 5. **一律是平台視角**（含 IP）。申請人資料的遮罩規則跟畫面一樣：沒有 `role_request.review` 的人看到 `[redacted]`
    （ADR-359 第 5 點）。種子資料的超管都有，只有在 `/admin/rbac` 另外授權時才會遇到。
+6. **時間一律是 UTC**：`created_at` 用 ISO 格式並帶 `+00:00`，檔名也是 UTC。前端交接要說明，Excel 打開看到的時間比台灣時間早 8 小時。
 
 **Consequences**：
 ➕ 超管可以把一段時間的紀錄帶去做外部分析。

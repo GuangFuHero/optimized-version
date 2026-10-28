@@ -3,12 +3,13 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.api_errors import ApiError, ErrorCode
 from app.models.auth import User
-from app.schemas.audit_log import AuditLogItem
+from app.schemas.audit_log import AuditExportRequest, AuditLogItem
 from app.services import audit_log as audit_log_service
 from app.services.audit_log import MAX_PAGE, AuditExportTooLarge, AuditFilters, redact_applicant_details
 
@@ -57,34 +58,38 @@ async def list_audit_logs(
     return items
 
 
-@router.get(
+@router.post(
     "/audit-logs/export",
     response_class=Response,
     summary="匯出稽核紀錄（CSV）",
     responses={
         200: {"content": {"text/csv": {}}, "description": "The filtered log, newest first"},
-        403: {"description": "No audit.export at all (super admins only)"},
-        422: {"description": "More rows than one file carries; narrow the range"},
+        403: {"description": "No audit.export at all (super admins only), or not from one of our pages"},
+        422: {"description": "audit_export_too_large: too many rows; `matched` and `limit` say how many"},
     },
 )
 async def export_audit_logs(
-    table: str | None = None,
-    row_id: UUID | None = None,
-    actor_uuid: UUID | None = None,
-    since: datetime | None = Query(None, alias="from"),
-    until: datetime | None = Query(None, alias="to"),
+    body: AuditExportRequest,
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """The same filters as the list, as one CSV file (ADR-414). Super admins only."""
+    """The same filters as the list, as one CSV file (ADR-414). Super admins only.
+
+    A POST because every export is recorded (ADR-417): a write, so a browser signed in by cookie has
+    to send it from one of our pages (ADR-327), and a link on another site cannot start one.
+    """
+    filters = AuditFilters(
+        table=body.table, row_id=body.row_id, actor_uuid=body.actor_uuid, since=body.since, until=body.until
+    )
     try:
-        content = await audit_log_service.export_audit_logs(
-            db,
-            actor=current_user,
-            filters=AuditFilters(table=table, row_id=row_id, actor_uuid=actor_uuid, since=since, until=until),
-        )
+        content = await audit_log_service.export_audit_logs(db, actor=current_user, filters=filters)
     except AuditExportTooLarge as err:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)) from err
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            ErrorCode.AUDIT_EXPORT_TOO_LARGE,
+            detail=str(err),
+            extra={"matched": err.matched, "limit": err.limit},
+        ) from err
     filename = f"audit-logs-{datetime.now(UTC):%Y%m%d-%H%M%S}.csv"
     return Response(
         content=content,

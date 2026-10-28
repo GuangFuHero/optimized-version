@@ -146,7 +146,13 @@ async def list_audit_logs(
 
 
 class AuditExportTooLarge(ValueError):
-    """More rows than one export carries. REST answers 422."""
+    """More rows than one export carries. REST answers 422 with `matched` and `limit`."""
+
+    def __init__(self, matched: int, limit: int):
+        """Say how many matched and how many one file carries."""
+        super().__init__(f"{matched} changes match; one file carries at most {limit}. Narrow the date range.")
+        self.matched = matched
+        self.limit = limit
 
 
 def _cell(value) -> str:
@@ -172,9 +178,7 @@ async def export_audit_logs(db: AsyncSession, *, actor: User, filters: AuditFilt
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
     count = await db.scalar(_filtered(select(func.count()).select_from(AuditLog), filters))
     if count > MAX_EXPORT_ROWS:
-        raise AuditExportTooLarge(
-            f"{count} changes match; one file carries at most {MAX_EXPORT_ROWS}. Narrow the date range."
-        )
+        raise AuditExportTooLarge(count, MAX_EXPORT_ROWS)
     query = _filtered(select(AuditLog, User.name).outerjoin(User, User.uuid == AuditLog.user_uuid), filters)
     rows = (await db.execute(query.order_by(AuditLog.created_at.desc(), AuditLog.uuid))).all()
     reads_details = await _reads_applicant_details(db, actor)
