@@ -1004,6 +1004,15 @@ BEGIN
   END IF;
 END $$;
 
+-- 8c. 事件設定(ADR-395):前台頂欄的事件名稱、地圖第一次打開的位置(光復鄉市區,原型 site-route.js:201)。
+--     project_settings 是整個部署共用的一列,只補沒人設的:還沒有那一列就建一列;已經有了,只在還沒設地圖時補上,
+--     名稱和別人設的地圖都不動(跟 8b 公告同一個原則)。清除段不碰這一列,它不是 mock 資料。
+INSERT INTO project_settings (uuid, name, short_name, map_center_lat, map_center_lng, map_zoom)
+SELECT gen_random_uuid(), '花蓮馬太鞍溪堰塞湖專案', '花蓮馬太鞍溪', 23.67, 121.418, 14
+ WHERE NOT EXISTS (SELECT 1 FROM project_settings);
+UPDATE project_settings SET map_center_lat = 23.67, map_center_lng = 121.418, map_zoom = 14
+ WHERE map_zoom IS NULL;
+
 -- 9. 角色申請(功能 019):一筆審核中、一筆未通過附回覆,讓抽屜的兩種卡片一登入就看得到。
 --    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。審核人是 1e 的 asuper01。
 INSERT INTO role_requests (uuid, requested_role, reason, contact, status, created_by, created_at, updated_at) VALUES

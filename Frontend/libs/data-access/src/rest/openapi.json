@@ -9483,6 +9483,36 @@
         "title": "LoginMethodOut",
         "description": "One of the caller's login methods.\n\nDeliberately only `provider`: `provider_subject` is the SSO provider's internal\nidentifier and the frontend has no use for it (ADR-089)."
       },
+      "MapView": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lng"
+          },
+          "zoom": {
+            "type": "integer",
+            "maximum": 18.0,
+            "minimum": 7.0,
+            "title": "Zoom"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lng",
+          "zoom"
+        ],
+        "title": "MapView",
+        "description": "Where the site's map opens (ADR-395): all three or none, so it is one value rather than three."
+      },
       "MarkAllReadResponse": {
         "properties": {
           "updated_count": {
@@ -9922,6 +9952,16 @@
             ],
             "title": "Started At"
           },
+          "map_view": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MapView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -9986,6 +10026,16 @@
               }
             ],
             "title": "Started At"
+          },
+          "map_view": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MapView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

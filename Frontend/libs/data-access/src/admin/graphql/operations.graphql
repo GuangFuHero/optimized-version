@@ -345,6 +345,12 @@ query AdminDisasterTypes($includeInactive: Boolean = true) {
     isActive
   }
 }
+query AdminCurrentDisaster {
+  currentDisaster {
+    name
+    shortName
+  }
+}
 mutation AdminCreateTicket($input: CreateTicketInput!) {
   createTicket(input: $input) {
     __typename

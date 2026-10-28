@@ -23,6 +23,7 @@ from app.schemas.admin import (
     AssignRoleRequest,
     AssignRoleResponse,
     CreateTeamRequest,
+    MapView,
     ProjectSettingsResponse,
     ProjectSettingsUpdate,
     TeamMemberItem,
@@ -100,6 +101,11 @@ def _project_settings_response(settings, warnings: tuple[str, ...] = ()) -> Proj
         short_name=settings.short_name,
         disaster_types=list(settings.disaster_types or []),
         started_at=settings.started_at,
+        map_view=(
+            MapView(lat=settings.map_center_lat, lng=settings.map_center_lng, zoom=settings.map_zoom)
+            if settings.map_zoom is not None
+            else None
+        ),
         warnings=list(warnings),
     )
 

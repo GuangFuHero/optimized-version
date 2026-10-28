@@ -14,9 +14,10 @@ on:
 permissions:
   contents: read
 
-# A new push to a PR cancels its run still going; every run on main finishes.
+# A new push to a PR cancels its run still going. Each commit on main gets a group of its own, so
+# every run there finishes: a shared group holds only one waiting run, and a newer push cancels it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -47,11 +48,13 @@ jobs:
           tags: disaster-postgres-h3:ci
           cache-from: type=gha,scope=postgres-h3
           cache-to: type=gha,mode=max,scope=postgres-h3
+      # Thrown away after the job, and the suite rebuilds the schema for every test: no need to
+      # survive a crash. The image's entrypoint hands the -c flags to postgres.
       - name: Start Postgres
         run: >-
           docker run -d --name postgres -p 5432:5432
           -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres
-          disaster-postgres-h3:ci
+          disaster-postgres-h3:ci -c fsync=off -c synchronous_commit=off -c full_page_writes=off
 
       - uses: astral-sh/setup-uv@v6
         with:

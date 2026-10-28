@@ -521,6 +521,8 @@ export type CrowdSourcingType = {
 /** The disaster this deployment responds to, as the public site names it */
 export type CurrentDisasterType = {
   __typename?: 'CurrentDisasterType';
+  /** Where the site's map opens for this disaster; null when unset, so keep the site's own default */
+  mapView?: Maybe<MapViewType>;
   /** Full name, e.g. 花蓮馬太鞍溪堰塞湖專案 */
   name: Scalars['String']['output'];
   /** Short name for tight spots such as the site's top bar, e.g. 花蓮馬太鞍溪; null when unset, so use name */
@@ -605,6 +607,8 @@ export type HazardousZoneType = {
 };
 
 export type HelpRequestTaskInput = {
+  /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   taskDescription?: InputMaybe<Scalars['String']['input']>;
@@ -612,6 +616,17 @@ export type HelpRequestTaskInput = {
   taskName: Scalars['String']['input'];
   /** What the need asks for */
   taskType: NeedKind;
+};
+
+/** Where the site's map opens: a centre and a zoom */
+export type MapViewType = {
+  __typename?: 'MapViewType';
+  /** Latitude of the centre, e.g. 23.67 */
+  lat: Scalars['Float']['output'];
+  /** Longitude of the centre, e.g. 121.418 */
+  lng: Scalars['Float']['output'];
+  /** Zoom level, 7 to 18 as the site's map allows, e.g. 14 */
+  zoom: Scalars['Int']['output'];
 };
 
 export type Mutation = {
@@ -626,7 +641,7 @@ export type Mutation = {
   createBriefingTemplate: BriefingTemplateType;
   createBuildingMap: BuildingMapType;
   createCrowdSourcing: CrowdSourcingType;
-  createHelpRequest: TicketType;
+  createHelpRequest: CreateTicketResult;
   createStation: CreateStationResult;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;
@@ -2562,6 +2577,19 @@ export type AdminDisasterTypesQuery = {
     label: string;
     isActive: boolean;
   }>;
+};
+
+export type AdminCurrentDisasterQueryVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type AdminCurrentDisasterQuery = {
+  __typename?: 'Query';
+  currentDisaster?: {
+    __typename?: 'CurrentDisasterType';
+    name: string;
+    shortName?: string | null;
+  } | null;
 };
 
 export type AdminCreateTicketMutationVariables = Exact<{
@@ -5266,6 +5294,35 @@ export const AdminDisasterTypesDocument = {
 } as unknown as DocumentNode<
   AdminDisasterTypesQuery,
   AdminDisasterTypesQueryVariables
+>;
+export const AdminCurrentDisasterDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminCurrentDisaster' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'currentDisaster' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'shortName' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminCurrentDisasterQuery,
+  AdminCurrentDisasterQueryVariables
 >;
 export const AdminCreateTicketDocument = {
   kind: 'Document',

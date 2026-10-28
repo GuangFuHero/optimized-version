@@ -434,10 +434,15 @@ project_settings {
     string short_name "nullable, String(30); for the site's top bar, falls back to name (ADR-392)"
     string_array disaster_types "default '{}' — e.g. {landslide,flood}; drives which config rows apply"
     timestamp started_at "nullable"
+    float map_center_lat "nullable; where the site's map opens (ADR-395)"
+    float map_center_lng "nullable"
+    smallint map_zoom "nullable; 7 to 18"
     timestamp created_at
     timestamp updated_at
 }
 %% UNIQUE INDEX uq_project_settings_singleton ON project_settings ((true))
+%% CHECK ck_project_settings_map_view_all_or_none: the three map columns are all set or all NULL
+%% CHECK ck_project_settings_map_view_range: lat -90..90, lng -180..180, zoom 7..18 (as the admin API)
 %% -- single-row invariant on a constant expression: no magic UUID needed
 
 %% ==========================

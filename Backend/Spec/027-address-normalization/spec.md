@@ -85,14 +85,14 @@ Frontend                  Backend (GraphQL)         TGOS QueryAddr   TGOS GeoQue
 
 ## Keys and deployment
 
-The four values live only in `.env` files: `Backend/.env` locally, `Backend/.env.tgos` on the VM (which
-`deploy.sh` never rewrites; compose gives it to the backend container alone). See `DEPLOY.md`, "TGOS
-address keys". Empty keys make every lookup `unavailable`; saving still works.
+The four values are in `Backend/.env`. Locally you write them there; on the VM they are in Secret Manager,
+and `deploy.sh` writes them into `.env` on every deploy, as it does the other staging secrets. See
+`DEPLOY.md`, "TGOS address keys". Empty keys make every lookup `unavailable`; saving still works.
 
-| Variable | TGOS service |
-|---|---|
-| `TGOS_ADDR_APP_ID`, `TGOS_ADDR_API_KEY` | 全國門牌位置比對服務 |
-| `TGOS_GEO_APP_ID`, `TGOS_GEO_API_KEY` | 坐標回傳門牌服務 |
+| Variable | Secret on staging | TGOS service |
+|---|---|---|
+| `TGOS_ADDR_APP_ID`, `TGOS_ADDR_API_KEY` | `staging-backend-tgos-addr-app-id`, `-addr-api-key` | 全國門牌位置比對服務 |
+| `TGOS_GEO_APP_ID`, `TGOS_GEO_API_KEY` | `staging-backend-tgos-geo-app-id`, `-geo-api-key` | 坐標回傳門牌服務 |
 
 Measured from staging: QueryAddr ≈ 110 ms, PointQueryNearAddrByBuffer ≈ 200 ms; throughput tops out near
 5 a second, and the quota is 300,000 lookups a month. The client allows 4 requests at once and waits 3 s.

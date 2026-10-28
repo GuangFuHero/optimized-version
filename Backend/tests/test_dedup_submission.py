@@ -24,6 +24,7 @@ from app.dedup_engine.contract import NewStation, NewTask, NewTicket, Suspect, t
 from app.dedup_engine.fast import FastEngine
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.geo import Station
+from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 from app.services import dedup as dedup_service
@@ -31,6 +32,7 @@ from app.services.dedup_submission import (
     SubmissionCreated,
     SubmissionHeld,
     TaskSubmission,
+    submit_help_request,
     submit_new_station,
     submit_new_task,
     submit_new_ticket,
@@ -237,6 +239,89 @@ async def test_a_station_acknowledging_another_station_is_still_held(db, engine,
     assert isinstance(result, SubmissionHeld)
     await db.rollback()
     assert (await _count(db, Station), await _count(db, DuplicatePair)) == (0, 0)
+
+
+# --- help request (請求協助) ---------------------------------------------------------------
+
+
+def _help_request(*names, **overrides) -> dict:
+    """The site's request with one rescue need per name (a rescue may leave out how many)."""
+    fields = {
+        "geometry": POINT,
+        "title": "民生街淹水",
+        "description": None,
+        "contact_name": "王小明",
+        "contact_phone": "0912345678",
+        "secondary_location": None,
+        "tasks": [{"task_type": "rescue", "task_name": name} for name in names],
+        "photo_urls": ["https://duk.tw/flood.jpg"],
+    }
+    return fields | overrides
+
+
+async def test_a_help_request_with_no_suspects_is_filed_whole(db, engine):
+    """Every need in the order listed, its photo, priority medium and the first need's kind."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    result = await submit_help_request(db, actor=actor, **_help_request("抽水", "送水"))
+    assert isinstance(result, SubmissionCreated)
+    facts = (result.entity.priority, result.entity.task_type, [t.task_name for t in result.tasks])
+    await db.rollback()  # committed, not merely flushed
+    assert facts == ("medium", "rescue", ["抽水", "送水"])
+    assert (await _count(db, Tickets), await _count(db, TicketTask), await _count(db, Photo)) == (1, 2, 1)
+    assert await _events(db) == []
+
+
+async def test_an_acknowledged_need_of_a_help_request_does_not_cover_the_others(db, engine):
+    """Need 0 confirmed, need 1 still suspected: held naming need 1 only, and nothing is filed."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    engine.suspects = _suspect_tasks_named("抽水", "送水")
+    request = _help_request("抽水", "送水")
+    request["tasks"][0]["acknowledged_duplicate_of"] = RELATED
+    result = await submit_help_request(db, actor=actor, **request)
+    assert isinstance(result, SubmissionHeld)
+    assert [s.draft_ref for s in result.suspects] == ["task:1"]
+    await db.rollback()
+    assert (await _count(db, Tickets), await _count(db, Photo), await _count(db, DuplicatePair)) == (0, 0, 0)
+
+
+@pytest.mark.parametrize("ack", ["x", str(uuid_mod.uuid4())], ids=["not-a-uuid", "not-what-it-was-shown"])
+async def test_a_help_request_acknowledgement_naming_anything_but_the_hint_still_gets_the_hint(
+    db, engine, ack
+):
+    """As for createTicket: only the entity the engine suspects for that need skips the check (ADR-400)."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    engine.suspects = _suspect_tasks_named("抽水")
+    request = _help_request("抽水")
+    request["tasks"][0]["acknowledged_duplicate_of"] = ack
+    assert isinstance(await submit_help_request(db, actor=actor, **request), SubmissionHeld)
+
+
+async def test_a_help_request_is_filed_when_the_engine_fails(db, engine):
+    """Fail-open."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    engine.fail = True
+    assert isinstance(await submit_help_request(db, actor=actor, **_help_request("抽水")), SubmissionCreated)
+
+
+TWENTY_ONE_NEEDS = [{"task_type": "rescue", "task_name": f"抽水 {n}"} for n in range(21)]
+
+
+@pytest.mark.parametrize(
+    ("perms", "overrides", "error"),
+    [
+        ((), {}, HTTPException),
+        ((Perm.TICKET_ADD,), {"tasks": TWENTY_ONE_NEEDS}, ValueError),
+        ((Perm.TICKET_ADD,), {"photo_urls": ["http://duk.tw/flood.jpg"]}, ValueError),
+    ],
+    ids=["no-permission", "too-many-needs", "bad-photo-link"],
+)
+async def test_a_refused_help_request_fails_before_the_engine_is_asked(db, engine, perms, overrides, error):
+    """The site's own rules run first, so a request that could not be filed learns nothing nearby."""
+    actor = await actor_with(db, *perms)
+    engine.suspects = _suspect_tasks_named("抽水")
+    with pytest.raises(error):
+        await submit_help_request(db, actor=actor, **_help_request("抽水", **overrides))
+    assert engine.check_calls == []
 
 
 # --- task on an existing ticket ------------------------------------------------------------
