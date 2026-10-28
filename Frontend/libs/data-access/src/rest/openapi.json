@@ -3811,8 +3811,8 @@
                     "enum": [
                       "dup_ignored",
                       "suggested",
-                      "confirmed",
-                      "rejected"
+                      "confirmed_duplicate",
+                      "not_duplicate"
                     ],
                     "type": "string"
                   }
@@ -3959,7 +3959,7 @@
           "AI 重複審核"
         ],
         "summary": "Get Duplicate Pair",
-        "description": "One card, its sides and its events, oldest first.",
+        "description": "One card, its sides, its events (oldest first) and its two whole tickets.",
         "operationId": "get_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__get",
         "security": [
           {
@@ -4230,6 +4230,81 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DuplicatePairResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/duplicate-pairs/{pair_uuid}/resolve": {
+      "post": {
+        "tags": [
+          "AI 重複審核"
+        ],
+        "summary": "Resolve Duplicate Pair",
+        "description": "Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-365).\n\n409 when the card is already resolved or decided, a ticket is gone, or either ticket changed\nsince the reviewer read it (send back the detail's `version`s); 422 when the request cannot be\ncarried out as sent.",
+        "operationId": "resolve_duplicate_pair_api_v1_admin_duplicate_pairs__pair_uuid__resolve_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pair_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Pair Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatePairDetail"
                 }
               }
             }
@@ -5559,7 +5634,7 @@
           "地圖圖磚"
         ],
         "summary": "Get Tile",
-        "description": "Proxy a map tile from an upstream source with 7-day Redis caching.\n\n**type** — `satellite` or `road`\n\n**source** — one of:\n- satellite: `nasa_gibs` (image/jpeg), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)\n- road: `osm` (image/png), `carto` (image/png)\n\n**z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)\n\n**layer** — Required only for `source=sinica`. Pass the Sinica layer name\n(e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/\nfor available layers. Ignored for all other sources.\n\nReturns the raw tile image bytes with the upstream Content-Type header.\nOn upstream error, returns a 1×1 transparent PNG.",
+        "description": "Proxy a map tile from an upstream source with 7-day Redis caching.\n\n**type** — `satellite` or `road`\n\n**source** — one of:\n- satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)\n- road: `osm` (image/png), `carto` (image/png)\n\n**z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)\n\n**layer** — Required only for `source=sinica`. Pass the Sinica layer name\n(e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/\nfor available layers. Ignored for all other sources.\n\nReturns the raw tile image bytes with the upstream Content-Type header.\nOn upstream error, returns a 1×1 transparent PNG.",
         "operationId": "get_tile_api_v1_map_tile__type____source___z___x___y__get",
         "parameters": [
           {
@@ -8309,8 +8384,8 @@
             "enum": [
               "dup_ignored",
               "suggested",
-              "confirmed",
-              "rejected"
+              "confirmed_duplicate",
+              "not_duplicate"
             ],
             "title": "Status"
           },
@@ -8426,6 +8501,16 @@
             },
             "type": "array",
             "title": "Events"
+          },
+          "tickets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TicketsForReviewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -8445,10 +8530,11 @@
           "reviewed_at",
           "low",
           "high",
-          "events"
+          "events",
+          "tickets"
         ],
         "title": "DuplicatePairDetail",
-        "description": "One card with every event recorded on it, oldest first."
+        "description": "One card with every event recorded on it, oldest first, and its two whole tickets.\n\n`tickets` is null for a station card, which is not resolved (Spec 028, ADR-377)."
       },
       "DuplicatePairPage": {
         "properties": {
@@ -8493,8 +8579,8 @@
             "enum": [
               "dup_ignored",
               "suggested",
-              "confirmed",
-              "rejected"
+              "confirmed_duplicate",
+              "not_duplicate"
             ],
             "title": "Status"
           },
@@ -9333,6 +9419,36 @@
         "title": "LoginMethodOut",
         "description": "One of the caller's login methods.\n\nDeliberately only `provider`: `provider_subject` is the SSO provider's internal\nidentifier and the frontend has no use for it (ADR-089)."
       },
+      "MapView": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lng"
+          },
+          "zoom": {
+            "type": "integer",
+            "maximum": 18.0,
+            "minimum": 7.0,
+            "title": "Zoom"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lng",
+          "zoom"
+        ],
+        "title": "MapView",
+        "description": "Where the site's map opens (ADR-395): all three or none, so it is one value rather than three."
+      },
       "MarkAllReadResponse": {
         "properties": {
           "updated_count": {
@@ -9684,6 +9800,39 @@
         "title": "Perm",
         "description": "A capability key. Every RBAC check (checkpoint 1) is keyed on one of these."
       },
+      "PhotoForReviewResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "url",
+          "created_at"
+        ],
+        "title": "PhotoForReviewResponse",
+        "description": "One live photo on a ticket (Spec 028, ADR-384)."
+      },
       "ProjectSettingsResponse": {
         "properties": {
           "uuid": {
@@ -9709,6 +9858,17 @@
             ],
             "title": "Name"
           },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
           "disaster_types": {
             "items": {
               "type": "string"
@@ -9727,6 +9887,16 @@
               }
             ],
             "title": "Started At"
+          },
+          "map_view": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MapView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "warnings": {
             "items": {
@@ -9755,6 +9925,18 @@
             ],
             "title": "Name"
           },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
           "disaster_types": {
             "anyOf": [
               {
@@ -9780,11 +9962,82 @@
               }
             ],
             "title": "Started At"
+          },
+          "map_view": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MapView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "title": "ProjectSettingsUpdate",
         "description": "PATCH body: every field optional; omitted fields keep their stored value."
+      },
+      "PropertyForReviewResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "property_name": {
+            "type": "string",
+            "title": "Property Name"
+          },
+          "property_value": {
+            "type": "string",
+            "title": "Property Value"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "property_name",
+          "property_value",
+          "quantity",
+          "status",
+          "comment"
+        ],
+        "title": "PropertyForReviewResponse",
+        "description": "One live item under a need (Spec 028 §2)."
       },
       "RefreshRequest": {
         "properties": {
@@ -9941,6 +10194,495 @@
         ],
         "title": "ResetPasswordRequest",
         "description": "Body to complete a logged-out password reset (new_password already frontend-hashed)."
+      },
+      "ResolvePhoto": {
+        "properties": {
+          "photo": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Photo"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "cancel"
+            ],
+            "title": "Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "photo",
+          "action"
+        ],
+        "title": "ResolvePhoto",
+        "description": "One photo of either ticket: kept on the primary, or cancelled (ADR-384).\n\nA kept photo of the other ticket moves over to the primary."
+      },
+      "ResolvePrimaryTask": {
+        "properties": {
+          "task": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Task"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "cancel"
+            ],
+            "title": "Action"
+          },
+          "absorb": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Absorb"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResolveTaskValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "properties": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ResolveProperty"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Properties"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task",
+          "action"
+        ],
+        "title": "ResolvePrimaryTask",
+        "description": "One need of the primary ticket: kept (absorbing needs of the other ticket) or cancelled."
+      },
+      "ResolveProperty": {
+        "properties": {
+          "property": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Property"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "cancel"
+            ],
+            "title": "Action"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResolvePropertyValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "property",
+          "action"
+        ],
+        "title": "ResolveProperty",
+        "description": "One item of a kept or moved need, or of a need it absorbs (ADR-380)."
+      },
+      "ResolvePropertyValues": {
+        "properties": {
+          "property_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Value"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ResolvePropertyValues",
+        "description": "A kept item's fields to set."
+      },
+      "ResolveRequest": {
+        "properties": {
+          "primary": {
+            "type": "string",
+            "enum": [
+              "low",
+              "high"
+            ],
+            "title": "Primary"
+          },
+          "expected_versions": {
+            "$ref": "#/components/schemas/ResolveVersions"
+          },
+          "ticket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResolveTicketValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "primary_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ResolvePrimaryTask"
+            },
+            "type": "array",
+            "title": "Primary Tasks"
+          },
+          "secondary_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ResolveSecondaryTask"
+            },
+            "type": "array",
+            "title": "Secondary Tasks"
+          },
+          "photos": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ResolvePhoto"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photos"
+          },
+          "disaster_details": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disaster Details"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "primary",
+          "expected_versions",
+          "primary_tasks"
+        ],
+        "title": "ResolveRequest",
+        "description": "Resolve a card: keep `primary`, cancel the other ticket, say what happens to every need."
+      },
+      "ResolveSecondaryTask": {
+        "properties": {
+          "task": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Task"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "move",
+              "cancel"
+            ],
+            "title": "Action"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResolveTaskValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "properties": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ResolveProperty"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Properties"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "task",
+          "action"
+        ],
+        "title": "ResolveSecondaryTask",
+        "description": "One need of the other ticket not absorbed: moved to the primary ticket or cancelled."
+      },
+      "ResolveTaskValues": {
+        "properties": {
+          "task_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Name"
+          },
+          "task_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Description"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ResolveTaskValues",
+        "description": "A kept or moved need's fields to set."
+      },
+      "ResolveTicketValues": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "task_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Type"
+          },
+          "disaster_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disaster Types"
+          },
+          "person_trapped_reported": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "yes",
+                  "no",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Trapped Reported"
+          },
+          "immediate_danger_reported": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "yes",
+                  "no",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Immediate Danger Reported"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Email"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ResolveTicketValues",
+        "description": "The primary ticket's fields to set (Spec 028 §3.2)."
+      },
+      "ResolveVersions": {
+        "properties": {
+          "low": {
+            "type": "string",
+            "title": "Low"
+          },
+          "high": {
+            "type": "string",
+            "title": "High"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "low",
+          "high"
+        ],
+        "title": "ResolveVersions",
+        "description": "The `version` of each side's ticket as the reviewer read it (ADR-374)."
       },
       "RoleGrants": {
         "properties": {
@@ -10528,6 +11270,78 @@
         "title": "SwitchIdentityRequest",
         "description": "Body naming the identity to switch to. Must be one the caller already holds."
       },
+      "TaskForReviewResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type"
+          },
+          "task_name": {
+            "type": "string",
+            "title": "Task Name"
+          },
+          "task_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Description"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "claim_count": {
+            "type": "integer",
+            "title": "Claim Count"
+          },
+          "recruiting_stopped": {
+            "type": "boolean",
+            "title": "Recruiting Stopped"
+          },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyForReviewResponse"
+            },
+            "type": "array",
+            "title": "Properties"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "task_type",
+          "task_name",
+          "task_description",
+          "quantity",
+          "status",
+          "claim_count",
+          "recruiting_stopped",
+          "properties"
+        ],
+        "title": "TaskForReviewResponse",
+        "description": "One live need with its headcount and items (Spec 028 §2)."
+      },
       "TeamMemberItem": {
         "properties": {
           "uuid": {
@@ -10705,6 +11519,208 @@
         "title": "TeamStatusRequest",
         "description": "Body for suspending or restoring a team (Spec/026, ADR-357)."
       },
+      "TicketForReviewResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "priority": {
+            "type": "string",
+            "title": "Priority"
+          },
+          "task_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Type"
+          },
+          "disaster_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Disaster Types"
+          },
+          "person_trapped_reported": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Trapped Reported"
+          },
+          "immediate_danger_reported": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Immediate Danger Reported"
+          },
+          "contact_name": {
+            "type": "string",
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Email"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "audit_status": {
+            "type": "string",
+            "title": "Audit Status"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskForReviewResponse"
+            },
+            "type": "array",
+            "title": "Tasks"
+          },
+          "photos": {
+            "items": {
+              "$ref": "#/components/schemas/PhotoForReviewResponse"
+            },
+            "type": "array",
+            "title": "Photos"
+          },
+          "disaster_details": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Disaster Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "version",
+          "title",
+          "description",
+          "priority",
+          "task_type",
+          "disaster_types",
+          "person_trapped_reported",
+          "immediate_danger_reported",
+          "contact_name",
+          "contact_phone",
+          "contact_email",
+          "longitude",
+          "latitude",
+          "status",
+          "audit_status",
+          "created_by",
+          "created_at",
+          "tasks",
+          "photos",
+          "disaster_details"
+        ],
+        "title": "TicketForReviewResponse",
+        "description": "A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).\n\nSend `version` back unchanged when resolving: it says what the reviewer saw (ADR-374)."
+      },
       "TicketYMetric": {
         "type": "string",
         "enum": [
@@ -10722,6 +11738,37 @@
         ],
         "title": "TicketYMetric",
         "description": "What to measure (the Y axis) for a ticket/task chart — see app/services/ticket_analytics.py."
+      },
+      "TicketsForReviewResponse": {
+        "properties": {
+          "low": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TicketForReviewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "high": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TicketForReviewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "low",
+          "high"
+        ],
+        "title": "TicketsForReviewResponse",
+        "description": "The ticket on each side of the card; null where that ticket is cancelled or deleted."
       },
       "TokenPair": {
         "properties": {

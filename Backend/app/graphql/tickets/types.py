@@ -502,6 +502,13 @@ class HelpRequestTaskInput:
             "People or units needed, at least 1; required except for a 'rescue' need, which may omit it"
         ),
     )
+    acknowledged_duplicate_of: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); "
+            "not checked again"
+        ),
+    )
 
 
 @strawberry.input
@@ -626,7 +633,12 @@ class TicketType:
         ),
     )
     created_at: datetime | None = None
-    updated_at: datetime | None = None
+    updated_at: datetime | None = strawberry.field(
+        default=None,
+        description="When anything visible about this ticket last changed: a field, its address, disaster "
+        "details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only "
+        "when it changes the status; a review verdict never does",
+    )
 
     # Private storage backing the contact_* PII resolvers below (ADR-049) — never exposed
     # directly in the schema, only readable (raw or masked) through the gated resolvers.
@@ -1072,7 +1084,7 @@ class MyTaskAssignmentType:
 
 @strawberry.type
 class TicketCreated:
-    """`createTicket` created the ticket and all its tasks, in the order sent."""
+    """`createTicket` or `createHelpRequest` created the ticket and all its tasks, in the order sent."""
 
     ticket: TicketType
     tasks: list[TicketTaskType]

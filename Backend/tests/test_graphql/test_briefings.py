@@ -53,6 +53,14 @@ mutation($uuid: UUID!) {
 }
 """
 
+TAKE_DOWN = "mutation($uuid: UUID!) { takeDownBriefing(uuid: $uuid) { uuid status } }"
+
+COPY = """
+mutation($source: UUID!) {
+  generateBriefing(input: {sourceBriefingUuid: $source}) { uuid content status }
+}
+"""
+
 GET_BRIEFING = "query($uuid: UUID!) { briefing(uuid: $uuid) { uuid } }"
 
 LIST_BY_STATUS = """
@@ -223,7 +231,7 @@ async def test_draft_stays_private_until_published_then_freezes(client, redis, b
     uuid = gen["data"]["generateBriefing"]["uuid"]
 
     assert _row(await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"}), uuid) is None
-    assert (await _post(client, GET_BRIEFING, {"uuid": uuid})).get("errors")
+    assert (await _post(client, GET_BRIEFING, {"uuid": uuid}))["data"]["briefing"] is None
     edited = await _post(client, UPDATE_CONTENT, {"uuid": uuid, "content": "v1 edited"}, editor_token)
     assert "errors" not in edited, edited
 
@@ -237,9 +245,9 @@ async def test_draft_stays_private_until_published_then_freezes(client, redis, b
     assert pub["data"]["publishBriefing"]["publishedAt"]
 
     again = await _post(client, PUBLISH, {"uuid": uuid}, editor_token)
-    assert "Briefing is already published" in str(again.get("errors"))
+    assert "Only a draft can be published" in str(again.get("errors"))
     frozen = await _post(client, UPDATE_CONTENT, {"uuid": uuid, "content": "v2"}, author_token)
-    assert "Published briefings are read-only" in str(frozen.get("errors"))
+    assert "Only a draft can be edited" in str(frozen.get("errors"))
 
     admin_row = _row(await _post(client, LIST_BY_STATUS, {"status": "ALL"}, author_token), uuid)
     assert admin_row["publisher"]["uuid"] == editor_uuid and admin_row["publisher"]["name"]
@@ -280,3 +288,64 @@ async def test_edit_alone_drafts_but_cannot_publish_or_read_templates(client, re
     assert "errors" not in gen, gen
     uuid = gen["data"]["generateBriefing"]["uuid"]
     assert (await _post(client, PUBLISH, {"uuid": uuid}, editor)).get("errors")
+
+
+@pytest.mark.asyncio
+async def test_publish_replaces_take_down_empties_and_a_copy_starts_a_draft(
+    client, briefing_admin_auth, login_user_auth
+):
+    """Publishing v2 hides v1, taking v2 down leaves nothing public, and v2 is edited through a copy."""
+    _, admin = briefing_admin_auth
+    _, user = login_user_auth
+    v1, v2 = [
+        (await _post(client, GENERATE_CONTENT, {"content": c}, admin))["data"]["generateBriefing"]["uuid"]
+        for c in ("v1", "v2")
+    ]
+    for version in (v1, v2):
+        published = await _post(client, PUBLISH, {"uuid": version}, admin)
+        assert "errors" not in published, published
+    public = await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"})
+    assert _row(public, v1) is None and _row(public, v2)["status"] == "PUBLISHED"
+
+    for caller in (None, user):
+        assert (await _post(client, TAKE_DOWN, {"uuid": v2}, caller)).get("errors")
+    down = await _post(client, TAKE_DOWN, {"uuid": v2}, admin)
+    assert down["data"]["takeDownBriefing"]["status"] == "INACTIVE"
+    assert _row(await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"}), v2) is None
+    for caller in (None, user):
+        assert (await _post(client, GET_BRIEFING, {"uuid": v2}, caller))["data"]["briefing"] is None
+    assert (await _post(client, GET_BRIEFING, {"uuid": v2}, admin))["data"]["briefing"]["uuid"] == v2
+    again = await _post(client, TAKE_DOWN, {"uuid": v2}, admin)
+    assert "Only a published briefing can be taken down" in str(again.get("errors"))
+    edited = await _post(client, UPDATE_CONTENT, {"uuid": v2, "content": "v2 edited"}, admin)
+    assert "Only a draft can be edited" in str(edited.get("errors"))
+
+    copy = await _post(client, COPY, {"source": v2}, admin)
+    assert "errors" not in copy, copy
+    draft = copy["data"]["generateBriefing"]
+    assert draft["uuid"] != v2 and (draft["status"], draft["content"]) == ("DRAFT", "v2")
+    rows = await _post(client, LIST_BY_STATUS, {"status": "ALL"}, admin)
+    assert _row(rows, v1)["status"] == _row(rows, v2)["status"] == "INACTIVE"
+    from_draft = await _post(client, COPY, {"source": draft["uuid"]}, admin)
+    assert "Only a published or inactive briefing can be copied" in str(from_draft.get("errors"))
+
+
+@pytest.mark.asyncio
+async def test_only_a_draft_can_be_deleted(client, briefing_admin_auth):
+    """A live or taken-down version is the record of what was published, so deleting refuses it."""
+    _, admin = briefing_admin_auth
+    gen = await _post(client, GENERATE_CONTENT, {"content": "live"}, admin)
+    uuid = gen["data"]["generateBriefing"]["uuid"]
+    published = await _post(client, PUBLISH, {"uuid": uuid}, admin)
+    assert "errors" not in published, published
+
+    refused = await _post(client, DELETE_BRIEFING, {"uuid": uuid}, admin)
+    assert "Only a draft can be deleted" in str(refused.get("errors"))
+    assert _row(await _post(client, LIST_BY_STATUS, {"status": "PUBLISHED"}), uuid) is not None
+
+    down = await _post(client, TAKE_DOWN, {"uuid": uuid}, admin)
+    assert "errors" not in down, down
+    refused = await _post(client, DELETE_BRIEFING, {"uuid": uuid}, admin)
+    assert "Only a draft can be deleted" in str(refused.get("errors"))
+    rows = await _post(client, LIST_BY_STATUS, {"status": "ALL"}, admin)
+    assert _row(rows, uuid)["status"] == "INACTIVE"

@@ -9,6 +9,7 @@ import type {
 } from '@rescue-frontend/data-access';
 
 import type { PickedPoint } from '../../map/components/location-picker/types';
+import { toAddressInput, type FilledAddress } from '../address-lookup';
 
 export type { PickedPoint };
 
@@ -126,6 +127,10 @@ export interface HelpRequestForm {
   address: string;
   floor: string;
   room: string;
+  /** What a TGOS lookup put in `address`, whose token goes with it while it is unchanged. */
+  addressFilled: FilledAddress | null;
+  /** A line taken back with 改回你打的: kept in a draft too, so not checked again once reopened. */
+  addressKept: string | null;
   /** Whom to ask for at the place — often not the person filing. */
   contactName: string;
   /** A phone number or a LINE ID, as typed. */
@@ -145,6 +150,8 @@ export function emptyHelpRequestForm(
     address: '',
     floor: '',
     room: '',
+    addressFilled: null,
+    addressKept: null,
     contactName: '',
     contactPhone: '',
     needs: [emptyNeed()],
@@ -224,9 +231,14 @@ function readQuantity(value: string): number | null {
   return Math.max(1, Number.parseInt(value, 10) || 1);
 }
 
-/** For a form `findMissingFields` finds complete. */
+/**
+ * For a form `findMissingFields` finds complete. `acknowledged`, once the requester said it is not
+ * the same thing: for each need held, by its place among the needs sent, the suspect to name
+ * (`readHeldHelpRequest`).
+ */
 export function toHelpRequestInput(
   form: HelpRequestForm,
+  acknowledged: Readonly<Record<number, string>> = {},
 ): CreateHelpRequestInput {
   const landmark = form.landmark;
 
@@ -240,16 +252,20 @@ export function toHelpRequestInput(
     geometry: { type: 'Point', coordinates: [landmark.lng, landmark.lat] },
     contactName: form.contactName.trim(),
     contactPhone: textOrNull(form.contactPhone),
-    // The address is one line of free text; the backend parses none of it.
-    secondaryLocation: {
-      landmarkNote: form.address.trim(),
-      floor: textOrNull(form.floor),
-      room: textOrNull(form.room),
-    },
-    tasks: form.needs.flatMap((row) => {
-      const need = toNeedInput(row);
-      return need ? [need] : [];
-    }),
+    // One line, as the lookup filled it in or as typed: the backend splits it, and keeps what it
+    // cannot split as it is.
+    secondaryLocation: toAddressInput(form),
+    tasks: form.needs
+      .flatMap((row) => {
+        const need = toNeedInput(row);
+        return need ? [need] : [];
+      })
+      // By place among the needs sent, not among the rows: a row with no kind chosen is not sent.
+      .map((need, index) =>
+        acknowledged[index]
+          ? { ...need, acknowledgedDuplicateOf: acknowledged[index] }
+          : need,
+      ),
     photoUrls: form.photoUrls,
   };
 }

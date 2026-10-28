@@ -9,7 +9,7 @@ and it needs no magic UUID.
 
 from datetime import datetime
 
-from sqlalchemy import ARRAY, DateTime, Index, String, func, text
+from sqlalchemy import ARRAY, CheckConstraint, DateTime, Float, Index, SmallInteger, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, UUIDPKMixin
@@ -22,16 +22,45 @@ class ProjectSettings(Base, UUIDPKMixin):
     __table_args__ = (
         # 單列不變式：一個部署 = 一場（混合型）災害（ADR-090）
         Index("uq_project_settings_singleton", text("(true)"), unique=True),
+        # 地圖起始視角三個值一起有、一起沒有：只有中心沒有 zoom，地圖沒辦法開（ADR-395）
+        CheckConstraint(
+            "(map_center_lat IS NULL) = (map_center_lng IS NULL)"
+            " AND (map_center_lat IS NULL) = (map_zoom IS NULL)",
+            name="ck_project_settings_map_view_all_or_none",
+        ),
+        # 跟管理端 API 同一組範圍：用 SQL 寫進來的值也不能是地圖開不了的位置（ADR-395）
+        CheckConstraint(
+            "map_center_lat BETWEEN -90 AND 90 AND map_center_lng BETWEEN -180 AND 180"
+            " AND map_zoom BETWEEN 7 AND 18",
+            name="ck_project_settings_map_view_range",
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(100), comment="災害名稱，例如「花蓮 0816」")
+    # 前台頂欄、後台側欄放不下全名時用；沒填就用 name（ADR-392）
+    short_name: Mapped[str | None] = mapped_column(
+        String(30), nullable=True, comment="災害簡稱，例如「花蓮馬太鞍溪」；沒填用 name"
+    )
     # 空陣列 = 尚未設定，動態欄位一律啟用（沿用 station_type='all' 的慣例）
     disaster_types: Mapped[list[str]] = mapped_column(
-        ARRAY(String), server_default=text("'{}'"), default=list, nullable=False,
+        ARRAY(String),
+        server_default=text("'{}'"),
+        default=list,
+        nullable=False,
         comment="這場災害的型別集合，例如 {landslide,flood}",
     )
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, comment="災害起始時間"
+    )
+    # 前台地圖第一次打開的位置；沒設就用前端自己的預設（ADR-395）
+    map_center_lat: Mapped[float | None] = mapped_column(
+        Float, nullable=True, comment="地圖起始中心的緯度，例如 23.67"
+    )
+    map_center_lng: Mapped[float | None] = mapped_column(
+        Float, nullable=True, comment="地圖起始中心的經度，例如 121.418"
+    )
+    map_zoom: Mapped[int | None] = mapped_column(
+        SmallInteger, nullable=True, comment="地圖起始 zoom，例如 14"
     )
     # TimestampMixin is deliberately not inherited: it also brings `delete_at`, and this row
     # is the deployment's single settings record — it is updated, never soft-deleted (ADR-090,
@@ -40,6 +69,8 @@ class ProjectSettings(Base, UUIDPKMixin):
         DateTime(timezone=True), server_default=func.now(), comment="建立時間"
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
         comment="最後更新時間",
     )

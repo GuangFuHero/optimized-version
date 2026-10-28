@@ -1,10 +1,10 @@
 import {
   SITE_BASE_LAYERS,
   SITE_DATA_TYPES,
-  SITE_FALLBACK_BASE_LAYER,
   SITE_FALLBACK_DATA_TYPE,
   normalizeSiteSubDataTypes,
 } from './constants';
+import type { ReturnQuery } from './return-query';
 import type {
   RescueMapBaseLayer,
   RescueMapDataType,
@@ -12,10 +12,8 @@ import type {
   SiteRouteState,
 } from './types';
 
-/** 提供 `get(name)` 的查詢字串來源，相容 URLSearchParams 與 Next.js 的唯讀版本。 */
-export interface SiteQuerySource {
-  get(name: string): string | null;
-}
+/** 提供 `get(name)` 的查詢字串來源，相容 URLSearchParams 與 Next.js 的唯讀版本（同 `return-query.ts`）。 */
+export type SiteQuerySource = ReturnQuery;
 
 function decodeSegment(value: string | undefined): string | undefined {
   if (!value) {
@@ -42,7 +40,16 @@ function parseBaseLayer(
     return decoded as RescueMapBaseLayer;
   }
 
-  return SITE_FALLBACK_BASE_LAYER;
+  // 網站已經不提供的底圖（例如 CARTO）選不到了，就跟沒寫底圖的連結一樣，照看的人自己的偏好。
+  return undefined;
+}
+
+function isDataTypeSegment(value: string | undefined): boolean {
+  const decoded = decodeSegment(value);
+
+  return Boolean(
+    decoded && SITE_DATA_TYPES.includes(decoded as RescueMapDataType),
+  );
 }
 
 function parseDataType(value: string | undefined): RescueMapDataType {
@@ -186,8 +193,10 @@ function derivePositionFromBbox(
 /**
  * 解析前台路由片段與查詢字串為共用的 {@link SiteRouteState}。
  *
- * - `map` 片段：`[baseLayer, dataType, subDataTypes]`
+ * - `map` 片段：`[baseLayer?, dataType, subDataTypes]`
  * - `list` 片段：`[dataType, subDataTypes]`
+ *
+ * 底圖段是選填的。底圖和資料類型的名稱不重疊，所以第一段是資料類型，就代表連結沒有指定底圖。
  */
 export function parseSiteRouteState(
   module: SiteModule,
@@ -209,9 +218,12 @@ export function parseSiteRouteState(
       : viewportSegment
         ? segments.slice(0, -1)
         : [...segments];
+  const mapSegments = isDataTypeSegment(routeSegments[0])
+    ? [undefined, ...routeSegments]
+    : routeSegments;
   const [baseLayerSegment, dataTypeSegment, subDataTypeSegment] =
     module === 'map'
-      ? routeSegments
+      ? mapSegments
       : ([undefined, routeSegments[0], routeSegments[1]] as const);
 
   const search = query.get('search')?.trim();

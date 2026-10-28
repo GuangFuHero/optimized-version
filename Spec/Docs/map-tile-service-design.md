@@ -61,7 +61,7 @@ Static config mapping `(type, source)` to upstream URL template:
 
 | source | URL template | Image format | Special headers |
 |---|---|---|---|
-| `nasa_gibs` | `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg` | `image/jpeg` | none |
+| `nasa_gibs` | `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/HLS_S30_Nadir_BRDF_Adjusted_Reflectance/default/{date}/GoogleMapsCompatible_Level12/{z}/{y}/{x}.png` | `image/png` | none |
 | `eox` | `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg` | `image/jpeg` | none |
 | `nlsc` | `https://wmts.nlsc.gov.tw/wmts/PHOTO_MIX/default/EPSG:3857/{z}/{y}/{x}` | `image/png` | `Referer: https://maps.nlsc.gov.tw/` |
 | `sinica` | `https://gis.sinica.edu.tw/tileserver/file-exists.php?img={layer}/{z}/{x}/{y}` | `image/png` | none |
@@ -70,6 +70,8 @@ Static config mapping `(type, source)` to upstream URL template:
 
 > Note: `nlsc` requires a `Referer` header — set this in `tile_proxy.py` per-source config, not in the route handler.  
 > Note: `sinica` ToS is unconfirmed — confirm before production use.  
+> Note: `nasa_gibs` is HLS Sentinel-2 (30 m, native max z12). `{date}` is the second-newest date listed in GIBS's `.../GoogleMapsCompatible_Level12/all/all.xml` (the newest is often still empty, and the list has gaps that GIBS answers with 404), cached in Redis (`tile:nasa_gibs:date`) for an hour and included in the tile cache key. Each day is one satellite pass, so it can be cloudy and is blank outside the swath. Its tiles are cached for 1 day instead of 7, since the date moves daily and older copies are never read again, and requests past z12 return the blank tile without asking GIBS.  
+> Note: `carto` now needs an API key (`?key=`); without one every tile is an "API KEY REQUIRED" image, so the frontend marks it unavailable.  
 > Note: `{layer}` in the `sinica` URL template is substituted from the `?layer=` query param at request time.
 
 ---
@@ -84,11 +86,11 @@ All sources use a single unified key format:
 tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}
 ```
 
-`{sorted_params}` is a comma-separated string of `key=value` pairs sorted alphabetically by key. When no query params are provided, `{sorted_params}` is `_`.
+`{sorted_params}` is a comma-separated string of `key=value` pairs sorted alphabetically by key. When no query params are provided, `{sorted_params}` is `_`. `nasa_gibs` adds its resolved `date` as a param.
 
 Examples:
 ```
-tile:nasa_gibs:satellite:_:10:123:456
+tile:nasa_gibs:satellite:date=2026-10-21:10:123:456
 tile:eox:satellite:_:10:123:456
 tile:sinica:satellite:layer=EARTH:10:123:456
 tile:sinica:satellite:layer=EARTH,style=default:10:123:456
@@ -104,7 +106,7 @@ Sorting params before building the key ensures `layer=EARTH,style=default` and `
 ### Cache Miss
 1. Look up upstream URL template, substitute `{z}`, `{x}`, `{y}` (and `{layer}` for sinica)
 2. Fetch upstream with `httpx` (async), timeout 10s, include any required headers
-3. On success: store in Redis hash, set TTL 604800s (7 days), return tile
+3. On success: store in Redis hash, set the source's TTL (604800s, or 86400s for `nasa_gibs`), return tile
 4. On error (timeout, 4xx, 5xx): return **blank tile** (1×1 transparent PNG)
 
 ### Redis Down
@@ -122,12 +124,12 @@ Each tile is stored as a Redis hash using the unified key format:
 
 ```
 HSET tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}  data <bytes>  ct "image/jpeg"
-EXPIRE tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}  604800
+EXPIRE tile:{source}:{type}:{sorted_params}:{z}:{x}:{y}  604800   # 86400 for nasa_gibs
 ```
 
 `{sorted_params}` is `_` when no query params are provided.
 
-TTL: **7 days (604800 seconds)**  
+TTL: **7 days (604800 seconds)**; `nasa_gibs` **1 day (86400 seconds)**  
 Eviction policy: `allkeys-lru` (least-recently-used tiles evicted when memory cap reached)
 
 ---
@@ -160,7 +162,7 @@ Returns structured metadata for a given `type`/`source` combination. Used by the
 
 | source | name | attribution_text | license | commercial_use | requires_logo | logo_url |
 |---|---|---|---|---|---|---|
-| `nasa_gibs` | NASA GIBS | `Imagery provided by NASA's Global Imagery Browse Services (GIBS), part of NASA's ESDIS` | US Gov Open Data | true | false | null |
+| `nasa_gibs` | NASA GIBS | `Imagery provided by NASA's Global Imagery Browse Services (GIBS), part of NASA's ESDIS (HLS, contains modified Copernicus Sentinel data)` | US Gov Open Data | true | false | null |
 | `eox` | Sentinel-2 Cloudless by EOX | `Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)` | CC BY-NC-SA 4.0 | false | false | null |
 | `nlsc` | 內政部國土測繪中心 | `© 內政部國土測繪中心` | Taiwan Gov | false | false | null |
 | `sinica` | 中央研究院 | `© 中央研究院` | Academic (unconfirmed) | false | false | null |

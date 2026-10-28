@@ -317,7 +317,7 @@ users ||..o{ audit_logs : "acted (logical)"
 announcements {
     uuid uuid PK
     uuid created_by FK "FK to users"
-    uuid updated_by FK "FK to users; last to create, edit, activate or deactivate it"
+    uuid updated_by FK "nullable, FK to users; last to create, edit, activate or deactivate it; NULL once that account is gone (mock reseed, ADR-393)"
     timestamp published_at "nullable; NULL = draft (never activated), else when it last went live"
     uuid published_by FK "nullable, FK to users; who last activated it"
     boolean active
@@ -343,7 +343,10 @@ users ||--o{ announcements : "last published"
 %%   ticket_task_moderation_update, task_assignment_created, task_assignment_removed, task_claimed,
 %%   task_full, task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
 %%   station_assigned, station_unassigned, station_suggestion_created, dedup_review_pending,
+%%   dedup_task_merged, dedup_task_canceled, dedup_ticket_merged, dedup_ticket_updated,
+%%   dedup_ticket_contact_changed,
 %%   role_request_submitted, role_request_approved, role_request_rejected
+%% (The five dedup_* after dedup_review_pending are sent once a reviewer resolves a pair card, Spec 028 ADR-379, 389.)
 %% (ticket_task_status_update is gone: a need's status is no longer edited by hand, ADR-293.)
 %% (dedup_flag_ticket / dedup_flag_station are gone: nothing could set is_duplicate, so they never
 %%  fired. dedup_review_pending replaces them, one per submission that leaves pair cards, ADR-345.)
@@ -396,16 +399,18 @@ briefings {
     text content
     jsonb tags "string array, server_default '[]'"
     string state "briefing/in_field/debrief, String(50), default briefing"
+    string status "draft/published/inactive, String(20), default draft, CHECK"
     uuid created_by FK "FK to users, indexed"
-    uuid updated_by FK "FK to users; last to edit or publish it"
-    timestamp published_at "nullable; NULL = draft, read-only once set"
+    uuid updated_by FK "nullable, FK to users; last to edit, publish or take it down; NULL once that account is gone (mock reseed, ADR-393)"
+    timestamp published_at "nullable; NULL exactly while status = draft (CHECK)"
     uuid published_by FK "nullable, FK to users"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
 }
-%% Each row is one version: the newest published row per state is the current one, and a
-%% state may hold several drafts at once.
+%% Each row is one version, and only a draft is editable. A state may hold several drafts but at
+%% most one published (live) row: UNIQUE (state) WHERE status = 'published' AND delete_at IS NULL.
+%% Publishing takes the live row down to inactive; so does takeDownBriefing, with no replacement.
 %% template_uuid is nullable because a briefing may be ad-hoc, and content/tags/state are
 %% COPIED at generation time rather than joined — so deleting or editing a template never
 %% rewrites briefings already sent out.
@@ -414,7 +419,6 @@ briefings {
 briefing_templates ||--o{ briefings : "generated from"
 users ||--o{ briefings : "authors"
 users ||--o{ briefings : "last updated"
-users ||--o{ briefings : "published"
 users |o--o{ briefings : "published"
 %% ==========================
 %% 4. Project Settings (the deployment's single global settings row, ADR-090)
@@ -427,12 +431,18 @@ users |o--o{ briefings : "published"
 project_settings {
     uuid uuid PK
     string name "disaster name, e.g. 花蓮 0816"
+    string short_name "nullable, String(30); for the site's top bar, falls back to name (ADR-392)"
     string_array disaster_types "default '{}' — e.g. {landslide,flood}; drives which config rows apply"
     timestamp started_at "nullable"
+    float map_center_lat "nullable; where the site's map opens (ADR-395)"
+    float map_center_lng "nullable"
+    smallint map_zoom "nullable; 7 to 18"
     timestamp created_at
     timestamp updated_at
 }
 %% UNIQUE INDEX uq_project_settings_singleton ON project_settings ((true))
+%% CHECK ck_project_settings_map_view_all_or_none: the three map columns are all set or all NULL
+%% CHECK ck_project_settings_map_view_range: lat -90..90, lng -180..180, zoom 7..18 (as the admin API)
 %% -- single-row invariant on a constant expression: no magic UUID needed
 
 %% ==========================
@@ -675,7 +685,7 @@ station_suggestion_merges {
     jsonb changes "[{target_type, target_uuid, field_name, before, after}] per applied field"
     string review_note "nullable"
     string status "applied/revoked, String(20)"
-    uuid reviewed_by FK "FK to users"
+    uuid reviewed_by FK "nullable, FK to users; always set by a merge, NULL once the reviewer's account is gone (mock reseed, ADR-393)"
     uuid revoked_by FK "nullable, FK to users"
     timestamp revoked_at "nullable"
     timestamp created_at
@@ -767,6 +777,7 @@ tickets {
     string_array disaster_types "default '{}', references disaster_types.key by string; stored sorted+deduped (ADR-246)"
     string person_trapped_reported "nullable, String(20), yes/no/unknown — reporter's answer, NOT a medical judgement"
     string immediate_danger_reported "nullable, String(20), yes/no/unknown — NOT a triage grade"
+    uuid replaced_by_uuid FK "nullable FK to tickets: the ticket a dedup resolve cancelled this one into (Spec 028, ADR-372)"
     string search_text "GENERATED ALWAYS AS title + left(description, 500), STORED"
 }
 %% INDEX: ix_tickets_search_text_trgm USING gin (search_text gin_trgm_ops)
@@ -838,6 +849,7 @@ ticket_tasks {
     string progress_note "nullable"
     boolean is_duplicate
     string dedup_group_id "nullable"
+    uuid merged_into_uuid FK "nullable FK to ticket_tasks: the need a dedup resolve folded this one into (Spec 028, ADR-372)"
     uuid created_by FK
     timestamp completed_at "nullable, set when status enters 'fulfilled' and cleared when it leaves"
     timestamp canceled_at "nullable, set when status enters 'canceled' and cleared when it leaves"
@@ -981,7 +993,7 @@ duplicate_pairs {
     text method "fast_rule / slow_vector / slow_hybrid / manual"
     text engine_version "nullable only when method = manual, e.g. fast-v4"
     text source_layer "fast / slow / manual / system"
-    text status "dup_ignored / suggested / confirmed / rejected"
+    text status "dup_ignored / suggested / confirmed_duplicate / not_duplicate (renamed from confirmed / rejected, ADR-391; event types keep the old names)"
     jsonb reason "nullable"
     text hint_outcome "nullable, ignored_hint / accepted_hint"
     boolean rescan_needed "default false"

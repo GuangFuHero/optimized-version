@@ -201,6 +201,7 @@ export const BriefingState = {
 export type BriefingState = (typeof BriefingState)[keyof typeof BriefingState];
 export const BriefingStatus = {
   Draft: 'DRAFT',
+  Inactive: 'INACTIVE',
   Published: 'PUBLISHED',
 } as const;
 
@@ -517,6 +518,17 @@ export type CrowdSourcingType = {
   uuid: Scalars['UUID']['output'];
 };
 
+/** The disaster this deployment responds to, as the public site names it */
+export type CurrentDisasterType = {
+  __typename?: 'CurrentDisasterType';
+  /** Where the site's map opens for this disaster; null when unset, so keep the site's own default */
+  mapView?: Maybe<MapViewType>;
+  /** Full name, e.g. 花蓮馬太鞍溪堰塞湖專案 */
+  name: Scalars['String']['output'];
+  /** Short name for tight spots such as the site's top bar, e.g. 花蓮馬太鞍溪; null when unset, so use name */
+  shortName?: Maybe<Scalars['String']['output']>;
+};
+
 export type DisasterTypeType = {
   __typename?: 'DisasterTypeType';
   /** False retires the type: no new writes, existing ones readable */
@@ -556,11 +568,13 @@ export const FieldDataType = {
 
 export type FieldDataType = (typeof FieldDataType)[keyof typeof FieldDataType];
 export type GenerateBriefingInput = {
-  /** Override content; defaults to the template's content */
+  /** Override content; defaults to the template's or source briefing's */
   content?: InputMaybe<Scalars['String']['input']>;
-  /** Override phase; defaults to the template's state */
+  /** Briefing to copy, template link included, so a published one is edited as a new draft */
+  sourceBriefingUuid?: InputMaybe<Scalars['UUID']['input']>;
+  /** Override phase; defaults to the template's or source briefing's */
   state?: InputMaybe<BriefingState>;
-  /** Override tags; defaults to the template's tags */
+  /** Override tags; defaults to the template's or source briefing's */
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
   /** Source template UUID; null for an ad-hoc briefing */
   templateUuid?: InputMaybe<Scalars['UUID']['input']>;
@@ -593,6 +607,8 @@ export type HazardousZoneType = {
 };
 
 export type HelpRequestTaskInput = {
+  /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   taskDescription?: InputMaybe<Scalars['String']['input']>;
@@ -600,6 +616,17 @@ export type HelpRequestTaskInput = {
   taskName: Scalars['String']['input'];
   /** What the need asks for */
   taskType: NeedKind;
+};
+
+/** Where the site's map opens: a centre and a zoom */
+export type MapViewType = {
+  __typename?: 'MapViewType';
+  /** Latitude of the centre, e.g. 23.67 */
+  lat: Scalars['Float']['output'];
+  /** Longitude of the centre, e.g. 121.418 */
+  lng: Scalars['Float']['output'];
+  /** Zoom level, 7 to 18 as the site's map allows, e.g. 14 */
+  zoom: Scalars['Int']['output'];
 };
 
 export type Mutation = {
@@ -614,7 +641,7 @@ export type Mutation = {
   createBriefingTemplate: BriefingTemplateType;
   createBuildingMap: BuildingMapType;
   createCrowdSourcing: CrowdSourcingType;
-  createHelpRequest: TicketType;
+  createHelpRequest: CreateTicketResult;
   createStation: CreateStationResult;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;
@@ -640,6 +667,7 @@ export type Mutation = {
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
   stopRecruiting: TicketTaskType;
   submitRoleRequest: RoleRequestType;
+  takeDownBriefing: BriefingType;
   unassignStation: StationType;
   unassignTaskActor: Scalars['Boolean']['output'];
   updateAnnouncement: AnnouncementType;
@@ -818,6 +846,10 @@ export type MutationSubmitRoleRequestArgs = {
   input: SubmitRoleRequestInput;
 };
 
+export type MutationTakeDownBriefingArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
 export type MutationUnassignStationArgs = {
   stationUuid: Scalars['UUID']['input'];
 };
@@ -970,6 +1002,8 @@ export type Query = {
   buildingMap?: Maybe<BuildingMapType>;
   buildingMapTickets: Array<TicketType>;
   buildingMaps: BuildingMapConnection;
+  /** The deployment's disaster, readable without signing in; null until first configured */
+  currentDisaster?: Maybe<CurrentDisasterType>;
   disasterTypes: Array<DisasterTypeType>;
   hazardousZone?: Maybe<HazardousZoneType>;
   hazardousZones: HazardousZoneConnection;
@@ -1364,7 +1398,8 @@ export type StationSuggestionMergeType = {
   changes: Array<SuggestionChangeType>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   reviewNote?: Maybe<Scalars['String']['output']>;
-  reviewedBy: Scalars['String']['output'];
+  /** UUID of the reviewer; null once their account is gone, as a mock one is after a SEED_MOCK run (ADR-393) */
+  reviewedBy?: Maybe<Scalars['String']['output']>;
   revokedAt?: Maybe<Scalars['DateTime']['output']>;
   revokedBy?: Maybe<Scalars['String']['output']>;
   stationUuid: Scalars['String']['output'];
@@ -1449,6 +1484,7 @@ export type StationType = {
   supplyStatusUpdatedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: Maybe<Scalars['String']['output']>;
+  /** When anything about this station last changed: any field, property, photo or team assignment, or an approved or revoked suggestion. A pending or rejected suggestion, or a verdict on a property (pending, verified, rejected), leaves it as is */
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
   /** Review state: 'unverified', 'ai_verified', or 'human_verified' */
@@ -1780,6 +1816,7 @@ export type TicketType = {
   tasks: Array<TicketTaskType>;
   /** Short subject line describing the request */
   title: Scalars['String']['output'];
+  /** When anything visible about this ticket last changed: a field, its address, disaster details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only when it changes the status; a review verdict never does */
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };
@@ -2381,9 +2418,38 @@ export type AdminAnnouncementsQuery = {
   }>;
 };
 
+export type AdminBriefingFieldsFragment = {
+  __typename?: 'BriefingType';
+  uuid: string;
+  templateUuid?: string | null;
+  content: string;
+  tags: Array<string>;
+  state: string;
+  status: BriefingStatus;
+  publishedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  creator?: {
+    __typename?: 'UserRefType';
+    uuid: string;
+    name?: string | null;
+  } | null;
+  updater?: {
+    __typename?: 'UserRefType';
+    uuid: string;
+    name?: string | null;
+  } | null;
+  publisher?: {
+    __typename?: 'UserRefType';
+    uuid: string;
+    name?: string | null;
+  } | null;
+};
+
 export type AdminBriefingsQueryVariables = Exact<{
   state?: InputMaybe<BriefingState>;
   tag?: InputMaybe<Scalars['String']['input']>;
+  status?: BriefingStatusFilter;
 }>;
 
 export type AdminBriefingsQuery = {
@@ -2395,8 +2461,25 @@ export type AdminBriefingsQuery = {
     content: string;
     tags: Array<string>;
     state: string;
+    status: BriefingStatus;
+    publishedAt?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    creator?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    updater?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    publisher?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
   }>;
 };
 
@@ -2498,6 +2581,19 @@ export type AdminDisasterTypesQuery = {
     label: string;
     isActive: boolean;
   }>;
+};
+
+export type AdminCurrentDisasterQueryVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type AdminCurrentDisasterQuery = {
+  __typename?: 'Query';
+  currentDisaster?: {
+    __typename?: 'CurrentDisasterType';
+    name: string;
+    shortName?: string | null;
+  } | null;
 };
 
 export type AdminCreateTicketMutationVariables = Exact<{
@@ -3041,6 +3137,25 @@ export type AdminGenerateBriefingMutation = {
     content: string;
     tags: Array<string>;
     state: string;
+    status: BriefingStatus;
+    publishedAt?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    creator?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    updater?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    publisher?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
   };
 };
 
@@ -3054,9 +3169,99 @@ export type AdminUpdateBriefingMutation = {
   updateBriefing: {
     __typename?: 'BriefingType';
     uuid: string;
+    templateUuid?: string | null;
     content: string;
     tags: Array<string>;
     state: string;
+    status: BriefingStatus;
+    publishedAt?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    creator?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    updater?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    publisher?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+  };
+};
+
+export type AdminPublishBriefingMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type AdminPublishBriefingMutation = {
+  __typename?: 'Mutation';
+  publishBriefing: {
+    __typename?: 'BriefingType';
+    uuid: string;
+    templateUuid?: string | null;
+    content: string;
+    tags: Array<string>;
+    state: string;
+    status: BriefingStatus;
+    publishedAt?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    creator?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    updater?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    publisher?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+  };
+};
+
+export type AdminTakeDownBriefingMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type AdminTakeDownBriefingMutation = {
+  __typename?: 'Mutation';
+  takeDownBriefing: {
+    __typename?: 'BriefingType';
+    uuid: string;
+    templateUuid?: string | null;
+    content: string;
+    tags: Array<string>;
+    state: string;
+    status: BriefingStatus;
+    publishedAt?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    creator?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    updater?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
+    publisher?: {
+      __typename?: 'UserRefType';
+      uuid: string;
+      name?: string | null;
+    } | null;
   };
 };
 
@@ -3335,6 +3540,66 @@ export const AdminStationFieldsFragmentDoc = {
     },
   ],
 } as unknown as DocumentNode<AdminStationFieldsFragment, unknown>;
+export const AdminBriefingFieldsFragmentDoc = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'AdminBriefingFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'BriefingType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'templateUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'state' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'creator' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'updater' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'publisher' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<AdminBriefingFieldsFragment, unknown>;
 export const AdminTicketsDocument = {
   kind: 'Document',
   definitions: [
@@ -4524,6 +4789,21 @@ export const AdminBriefingsDocument = {
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'tag' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'status' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'BriefingStatusFilter' },
+            },
+          },
+          defaultValue: { kind: 'EnumValue', value: 'PUBLISHED' },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -4548,20 +4828,77 @@ export const AdminBriefingsDocument = {
                   name: { kind: 'Name', value: 'tag' },
                 },
               },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'status' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'status' },
+                },
+              },
             ],
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'templateUuid' },
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'AdminBriefingFields' },
                 },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'AdminBriefingFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'BriefingType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'templateUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'state' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'creator' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'updater' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'publisher' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
               ],
             },
           },
@@ -4961,6 +5298,35 @@ export const AdminDisasterTypesDocument = {
 } as unknown as DocumentNode<
   AdminDisasterTypesQuery,
   AdminDisasterTypesQueryVariables
+>;
+export const AdminCurrentDisasterDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminCurrentDisaster' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'currentDisaster' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'shortName' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminCurrentDisasterQuery,
+  AdminCurrentDisasterQueryVariables
 >;
 export const AdminCreateTicketDocument = {
   kind: 'Document',
@@ -7062,14 +7428,65 @@ export const AdminGenerateBriefingDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'templateUuid' },
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'AdminBriefingFields' },
                 },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'state' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'AdminBriefingFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'BriefingType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'templateUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'state' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'creator' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'updater' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'publisher' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
               ],
             },
           },
@@ -7139,10 +7556,65 @@ export const AdminUpdateBriefingDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'AdminBriefingFields' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'AdminBriefingFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'BriefingType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'templateUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'state' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'creator' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'content' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'state' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'updater' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'publisher' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
               ],
             },
           },
@@ -7153,6 +7625,218 @@ export const AdminUpdateBriefingDocument = {
 } as unknown as DocumentNode<
   AdminUpdateBriefingMutation,
   AdminUpdateBriefingMutationVariables
+>;
+export const AdminPublishBriefingDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminPublishBriefing' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'publishBriefing' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'AdminBriefingFields' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'AdminBriefingFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'BriefingType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'templateUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'state' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'creator' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'updater' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'publisher' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminPublishBriefingMutation,
+  AdminPublishBriefingMutationVariables
+>;
+export const AdminTakeDownBriefingDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminTakeDownBriefing' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'takeDownBriefing' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'AdminBriefingFields' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'AdminBriefingFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'BriefingType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'templateUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'content' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'state' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'publishedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'creator' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'updater' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'publisher' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminTakeDownBriefingMutation,
+  AdminTakeDownBriefingMutationVariables
 >;
 export const AdminDeleteBriefingDocument = {
   kind: 'Document',

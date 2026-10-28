@@ -36,7 +36,6 @@ export {
   SITE_BASE_LAYERS,
   SITE_DATA_TYPE_LABELS,
   SITE_DATA_TYPES,
-  SITE_FALLBACK_BASE_LAYER,
   SITE_FALLBACK_DATA_TYPE,
   SITE_MODULES,
   SITE_SUB_DATA_TYPE_OPTIONS,
@@ -117,6 +116,7 @@ export {
 } from './session/end-expired-session';
 export { SessionExpiredNotice } from './session/session-expired-notice';
 export { AuthSessionProvider, useAuthSession } from './session/auth-session';
+export { BriefingsPage } from './briefing/admin/briefings-page';
 
 export {
   SiteActionDrawer,
@@ -137,6 +137,6 @@ export { NeedClaimProvider } from './ticket/needs';
 export type { ReloadedTicket } from './ticket/needs';
 export {
   clearAllHelpRequestDrafts,
-  MapRequestHelpButton,
+  MapRequestHelpBar,
   PlaceHereAction,
 } from './ticket/help-request';

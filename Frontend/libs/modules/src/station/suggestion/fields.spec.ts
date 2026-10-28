@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   STATION_SUGGESTION_FIELDS,
+  describeSuggestedValue,
   describeSuggestionValue,
   hasPendingSuggestion,
   startSuggestion,
@@ -12,6 +13,7 @@ import {
 } from './fields';
 
 const STATION: StationSuggestionSnapshot = {
+  uuid: 'f0000000-0000-4000-8000-000000000001',
   name: '光復國小收容所',
   type: 'shelter',
   description: '體育館正門',
@@ -31,6 +33,14 @@ describe('STATION_SUGGESTION_FIELDS', () => {
       'type',
       'supply_status',
     ]);
+  });
+
+  it('names the supply line for what it holds, 目前缺少, and says to clear it once nothing is short', () => {
+    expect(stationSuggestionField('supply_status')).toMatchObject({
+      label: '目前缺少',
+      placeholder: '例：沐浴乳、毛巾；嬰兒尿布 M、L',
+      helper: '只寫現在缺的東西。都補齊了就清空。',
+    });
   });
 
   it("names a station's status in the site's words, and takes the backend's values", () => {
@@ -53,10 +63,16 @@ describe('startSuggestion', () => {
   });
 
   it('reads a station without a status as running, and a missing value as empty', () => {
-    expect(startSuggestion({}, 'operational_status').value).toBe('active');
-    expect(startSuggestion({ supplyStatus: null }, 'supply_status').value).toBe(
-      '',
-    );
+    expect(
+      startSuggestion(
+        { ...STATION, operationalStatus: '' },
+        'operational_status',
+      ).value,
+    ).toBe('active');
+    expect(
+      startSuggestion({ ...STATION, supplyStatus: null }, 'supply_status')
+        .value,
+    ).toBe('');
   });
 });
 
@@ -114,17 +130,29 @@ describe('suggestionProblem', () => {
     ).toBe('和目前一樣，改了才能送出');
   });
 
-  it('holds back a blank, a supply status included', () => {
+  it('sends a blank 目前缺少 that clears the line, once nothing is short', () => {
     expect(
       suggestionProblem(STATION, {
         field: 'supply_status',
         value: '   ',
         note: '',
       }),
-    ).toBe('請填寫物資狀況');
+    ).toBeNull();
+  });
+
+  it('holds back any other blank, and a 目前缺少 with no line to clear', () => {
+    expect(
+      suggestionProblem(
+        { ...STATION, supplyStatus: null },
+        { field: 'supply_status', value: '', note: '' },
+      ),
+    ).toBe('請填寫目前缺少');
     expect(
       suggestionProblem(STATION, { field: 'type', value: '', note: '' }),
     ).toBe('請選擇站點類型');
+    expect(
+      suggestionProblem(STATION, { field: 'op_hour', value: ' ', note: '' }),
+    ).toBe('請填寫服務時間');
   });
 
   it('holds back text past what the backend takes', () => {
@@ -145,11 +173,41 @@ describe('suggestionProblem', () => {
   });
 });
 
+describe('describeSuggestedValue', () => {
+  it('says a blank 目前缺少 clears the line, and that any other blank is still to fill', () => {
+    const supply = stationSuggestionField('supply_status');
+
+    expect(describeSuggestedValue(supply, '飲用水見底', ' ')).toBe(
+      '清空（都補齊了）',
+    );
+    expect(describeSuggestedValue(supply, '', '')).toBe('尚未填寫');
+    expect(
+      describeSuggestedValue(
+        stationSuggestionField('op_hour'),
+        '08:00-18:00',
+        '',
+      ),
+    ).toBe('尚未填寫');
+    expect(
+      describeSuggestedValue(
+        stationSuggestionField('operational_status'),
+        'active',
+        'temporarily_closed',
+      ),
+    ).toBe('暫停服務');
+  });
+});
+
 describe('hasPendingSuggestion', () => {
   it('knows which fields already wait for review', () => {
     expect(hasPendingSuggestion(STATION, 'op_hour')).toBe(true);
     expect(hasPendingSuggestion(STATION, 'supply_status')).toBe(false);
-    expect(hasPendingSuggestion({}, 'op_hour')).toBe(false);
+    expect(
+      hasPendingSuggestion(
+        { ...STATION, pendingSuggestedFields: [] },
+        'op_hour',
+      ),
+    ).toBe(false);
   });
 });
 
@@ -175,5 +233,15 @@ describe('toCreateStationSuggestionInput', () => {
         note: ' 路過看到 ',
       }).comment,
     ).toBe('路過看到');
+  });
+
+  it('sends a cleared 目前缺少 as an empty value, which the backend stores as none', () => {
+    expect(
+      toCreateStationSuggestionInput('station-1', {
+        field: 'supply_status',
+        value: '  ',
+        note: '',
+      }).newValue,
+    ).toBe('');
   });
 });

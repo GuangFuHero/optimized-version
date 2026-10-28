@@ -1,4 +1,4 @@
-# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309、ADR-335、ADR-363）
+# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309、ADR-335、ADR-363~364、ADR-393）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號從 259 起跳，避開 `Spec/018-ticket-disaster-fields/decisions.md` 已佔用但尚未合併的 ADR-244~258。
@@ -9,6 +9,9 @@ ADR-275 源自 PR #48 第二輪 review——決策本身與行前通知無關，
 ADR-309 是公告（緊急公告）的顯示位置，接在 ADR-308（前台／後台用語，Spec 006）之後編號。
 ADR-335 是公告與行前通知的草稿，接在 repo 目前最大的 ADR-334 之後編號。
 ADR-363 是公告改成每頁一則、發布就取代；361、362 已分給 PR #94 與 #93。
+ADR-364 是行前通知的下架：每個 state 一版上線、發布就取代，接在 ADR-363 之後編號。
+ADR-393 是 mock seed 重跑時保留真人的公告、行前通知（以及站點合併紀錄），源自 PR #125 的 review。它也改到站點
+建議的合併紀錄，但三個欄位裡有兩個在這裡的表上，所以記在這裡。386、387、392 已分給 PR #120、#121、#123。
 
 ---
 
@@ -275,7 +278,7 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
                      └ publishBriefing                                 （第一次 true 就是發布）
 ```
 
-- 草稿用 `published_at IS NULL` 表示，不另開 status 欄位；GraphQL 的 `status` 由它推出來，兩者不會不一致，
+- 草稿用 `published_at IS NULL` 表示，不另開 status 欄位（**行前通知已被 ADR-364 改成 `status` 欄位**）；GraphQL 的 `status` 由它推出來，兩者不會不一致，
   而且是 enum（`BriefingStatus`、`AnnouncementStatus`），前端拼錯值會在型別檢查時被抓到。
   兩張表都有 `published_by`（誰按了發布；公告是最近一次上線的人，下線不清掉）和 `updated_by`（最後一個改動的人，NOT NULL）。
 - **行前通知**：`generateBriefing` 一律產生草稿，同一個 `state` 可以同時有多份草稿。`updateBriefing` 只改得動
@@ -304,7 +307,7 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 
 **Consequences**：
 ➕ 公開頁面拿不到草稿：前台的請求以 `user` 身分執行，`user` 沒有 `.edit`。
-➕ 刪掉目前版本，上一個已發布版本自動變回目前版本。
+➕ 刪掉目前版本，上一個已發布版本自動變回目前版本。**已被 ADR-364 推翻**：發布就取代，舊版已下架；只有草稿刪得掉。
 ➖ 從較舊版本開的草稿一樣能發布並成為目前版本；要不要警告由前端決定。
 ➖ 已上線公告的修改沒有草稿，存下去就公開，所以只有 `.edit` 的人改不動已上線的公告。
 ➖ 目前只有 `super_admin` 持有 `.edit` 與 `.publish`，所以權限調整實際上沒有人因此得到或失去權限。
@@ -373,3 +376,120 @@ operation 選的 `order`，在同一個 repo、同一個 PR 就改得完。
 ➖ 前台的 GraphQL 快照（`Frontend/libs/data-access/src/graphql/schema.graphql`）不是從後端匯出的，仍列著
   `moveAnnouncement` 與 `order`。前台目前沒有 operation 讀公告，要用之前先更新快照。
 ◾ 不在範圍：50 字上限、到期、政府單位發布。
+
+---
+
+### ADR-364 行前通知可以下架：每個 state 一版上線、發布就取代，下架後複製成新草稿再改
+
+**白話**：每個階段（行前／現場／回程後）前台最多一版。發布新版本，舊版自動下架；也可以直接下架目前這版，
+前台就完全沒有行前資訊。下架的版本不能改，要改就複製成一份新草稿。
+
+**Context**：後台的行前資訊頁要有「下架」。ADR-335 之後一列一版、發布後唯讀，沒有退回草稿的路；就算刪掉
+目前版本，上一個已發布版本也會變回目前版本，前台不會變空。舊版也一直公開。前端提出加一個下架狀態、把下架的
+列也回給前台由前端藏起來；但那樣內容仍然公開，任何人直接打 API 都讀得到。
+
+**Decision**：
+
+```
+動作                       v1         v2         v3         前台顯示
+發布 v1                    published                        v1
+發布 v2                    inactive   published             v2
+下架 v2                    inactive   inactive              （空）
+從 v2 複製出 v3            inactive   inactive   draft      （空）
+發布 v3                    inactive   inactive   published  v3
+```
+
+- **`status` 欄位**：`briefings.status` 是 `draft`／`published`／`inactive`（`String(20)` + CHECK，同
+  `role_requests.status`）。`published_at` 留著記發布時間、清單也用它排序，另一條 CHECK
+  `(status = 'draft') = (published_at IS NULL)` 讓兩者不會不一致。`inactive` 和公告同一個字：上線過、現在不在
+  前台。不另開 `taken_down_at`／`taken_down_by`：已發布的列唯讀，之後唯一的改動就是不再上線，所以 `inactive` 列的
+  `updated_at`／`updated_by` 就是誰、何時讓它不再上線（手動下架，或發布了取代它的版本）。
+- **發布就取代**：`publishBriefing` 在同一個 transaction 裡，先把同一個 `state` 上線中的列改成 `inactive`
+  （`updated_by` 記成發布者）並 flush，再讓這列上線。先拿 advisory lock（`briefings.live`），同時發布的兩個人會
+  排隊，後發的取代先發的。資料層防線是 partial unique index `uq_briefings_live_per_state`
+  （`(state) WHERE status = 'published' AND delete_at IS NULL`）。
+- **下架**：`takeDownBriefing(uuid)` 把上線中的列改成 `inactive`，權限與公告下線一樣要 `pre_departure.edit`。
+  不是上線中的列會回 `Only a published briefing can be taken down`。
+- **只有草稿刪得掉**：`deleteBriefing` 鎖住那列再檢查，不是草稿就回 `Only a draft can be deleted`。上線過的每一版
+  都留著當發布紀錄，從這些列數出來的版本號也不會倒退；要讓一版離開前台就下架。鎖住那列，和同時進來的發布才會排隊，不會刪到剛上線的版本。
+- **再編輯**：`generateBriefing(input: {sourceBriefingUuid})` 把那一版的 `content`、`tags`、`state` 與
+  `templateUuid` 複製成新草稿，原本那列不動。來源只能是 `published` 或 `inactive`：草稿本來就能直接改，
+  拿來複製會回 `Only a published or inactive briefing can be copied`。輸入另外給的 `content`／`tags`／`state`
+  仍然覆蓋複製來的值；`templateUuid` 和 `sourceBriefingUuid` 不能同時給。讀得到任何狀態的 briefing 只要
+  `pre_departure.edit`，所以複製不像 template 另外要 `.publish`。
+- **前台**：`briefings(status: PUBLISHED)` 與 `briefing(uuid)` 只公開上線中的列；`inactive` 和草稿一樣要
+  `pre_departure.edit`。`status: ALL` 列出三種。沒有 `.edit` 的人用 `briefing(uuid)` 讀草稿或 `inactive` 的列
+  會拿到 `null`，跟 UUID 不存在一樣，不再回權限錯誤：拿著舊連結的人看到的是「已經沒有了」，也看不出那列還在。
+- **錯誤訊息**：發布或修改非草稿的列，改成 `Only a draft can be published`／`Only a draft can be edited`，
+  取代原本的 `Briefing is already published`／`Published briefings are read-only`，`inactive` 的列讀起來才對。
+- **migration `da152a6a9d7c`**：已發布的列先全部標成 `inactive`，再把每個 `state` 最新、未軟刪的那列標回
+  `published`，結果等於依發布時間一版一版重新發布；草稿維持 `draft`。downgrade 先軟刪 `inactive` 的列，因為
+  舊 schema 會把每一列已發布的 briefing 都公開列出，被下架的內容會回到前台。
+
+**為什麼由後端過濾，不把下架的列回給前台**：下架的意思是內容不再公開。回給前台再由前端藏，只是畫面上看不到。
+
+**為什麼下架的列不直接退回草稿**：每一版發布後唯讀，才保得住「當時發布了什麼」。退回草稿再改，就把那一版的
+紀錄改掉了。
+
+**為什麼複製由後端做**：前端傳 `content`／`tags`／`state` 給既有的 `generateBriefing` 也做得到，但
+`templateUuid` 要一起帶就得另外有 `.publish`，複製出來的內容也要靠前端逐欄抄對。後端複製只多一個欄位、十幾行。
+
+**Consequences**：
+➕ 「每個 state 最多一版公開」由 DB 擋，不只靠應用程式。
+➕ 前台不用改，照舊取每個 state 的第一筆 `PUBLISHED`，沒有就顯示空狀態。
+➖ 舊版不再公開，只有編輯者看得到。
+➖ 上線中的版本不能刪，只能下架，下架後前台變空，不會再退回上一版（推翻 ADR-335 的「刪掉目前版本，上一個已發布
+  版本自動變回目前版本」）。
+➖ 被取代和手動下架在資料上分不出來，都是 `inactive`、`updated_by` 是操作的人。
+◾ 不在範圍：PRD VB-FEAT-001 依災害類型分四個固定段落的內容結構（ADR-274）。
+
+---
+
+### ADR-393 mock seed 重跑時，真人的列留著，mock 帳號審核、發布、最後改過的欄位設成 NULL
+
+**白話**：測試者在 staging 用 mock 帳號審核或發布了真人的東西，下次帶 `SEED_MOCK` 部署時，那筆真人資料不再被刪，
+只把「誰審核的／誰發布的／誰最後改的」清空。
+
+**Context**：`scripts/seed_mock_scenarios.sql` 第 0 節每次都刪掉 mock 帳號（`c…`），連帶刪掉指向它們的列。真人的
+角色申請、站點建議和合併紀錄、行前通知、公告，只要審核人或發布者是 mock 帳號，就整列刪掉。staging 上的測試者常用
+`asuper01`（super_admin）審核和發布，真人的資料就跟著不見。PR #125 的 review（HC）要求改成保留。
+
+有三個欄位原本不能是空的：
+- `station_suggestion_merges.reviewed_by`；
+- `briefings.updated_by`、`announcements.updated_by`（`209c4375c3e1` 加欄位時設成 NOT NULL）。
+
+公告與行前通知的 `updated_by` 不只在編輯時寫：
+- 發布時跟 `published_by` 一起寫成發布者（`announcements_repository.py`、`briefings_repository.py`）；
+- 發布新的一版時，被取代、下架的那一版，`updated_by` 也記成發布者（ADR-363、ADR-364）。
+
+所以只要 mock 帳號發布過一則，真人原本上線的那則就指向它，只放掉 `published_by` 不夠。
+
+**Decision**：
+- **migration `facf37b5c79d`**：三個欄位改成 nullable，model 跟著改成 `Mapped[str | None]`。
+  - NULL 的意思是「做這件事的帳號已經不在了」。
+  - 程式的每條寫入路徑照舊寫入操作者，只有 seed 的清除段會寫 NULL。
+- **seed 第 0 節**：mock 做的（mock 前綴，或建立者是 mock 帳號）照刪。真人的列只是被 mock 帳號碰過的，留著，
+  那個欄位設成 NULL：
+  - 角色申請：`reviewed_by`。
+  - 站點建議：`reviewed_by`。
+  - 合併紀錄：`reviewed_by`（原本就清 `revoked_by`）；只有在 mock 站點上的合併照刪。
+  - 行前通知：`updated_by`、`published_by`；從 mock 範本生成的，`template_uuid` 設 NULL（內容是生成時複製的）。
+  - 公告：`updated_by`、`published_by`。
+- **對象是 mock 團隊的角色申請照刪**：申請本身就是要加入 mock 團隊，而 `ck_role_requests_target` 不允許把
+  `team_uuid` 設成空的。
+- **downgrade**：
+  - 行前通知、公告的 `updated_by` 是 NULL 時，填回作者（`created_by`），跟 `209c4375c3e1` 的回填一樣。
+  - 合併紀錄有 NULL 審核人時直接報錯、印出筆數：沒有人可以填，刪掉又會丟掉那次改了什麼的紀錄。
+- **GraphQL**：`StationSuggestionMergeType.reviewedBy` 改成可以是 null。原本寫 `str(m.reviewed_by)`，NULL 會變成
+  字串 `"None"`。公告與行前通知的 `updater`／`publisher` 本來就是 nullable（`staff_user_ref` 遇到 None 回 None），
+  前台也有「操作者未提供」的 fallback。
+
+**為什麼 `updated_by` 不填回作者**：那樣不用改欄位，但最後修改的人會記錯；草稿的「草稿最近更新」會寫成作者
+（`briefing-history.tsx`）。NULL 誠實，畫面也已經會處理。
+
+**Consequences**：
+➕ 重跑 `SEED_MOCK` 不再刪掉真人的資料。
+➕ 「誰做的」不知道時明說不知道，不會冒名。
+➖ 三個欄位不再由 DB 保證有值；新的讀取程式要當它可能是 NULL。
+◾ 同一支 PR 的 seed 也讓 `asuper01`、`aaudit01` 不隨 seed 重建，密碼改在 VM 上用 `scripts/set_password.py`
+  設（`Backend/DEPLOY.md`）。那是部署設定，不是 schema 決策，不另開 ADR。

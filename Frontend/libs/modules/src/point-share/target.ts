@@ -10,7 +10,7 @@ import {
   type GetTicketQuery,
 } from '@rescue-frontend/data-access';
 
-import { SITE_FALLBACK_BASE_LAYER, SITE_FALLBACK_DATA_TYPE } from '../route/constants';
+import { parseSiteRouteState } from '../route/parse';
 import { createSiteHref } from '../route/serialize';
 import type { SiteModule, SiteRouteState } from '../route/types';
 import { readOpHour } from '../station/availability';
@@ -96,18 +96,14 @@ function buildRouteStateFromRoute({
   segments: readonly string[];
   selectedMarkerId?: string;
 }): SiteRouteState {
-  const dataTypeSegment = module === 'map' ? segments[1] : segments[0];
+  // The map's own reading, so a link without a base layer still gives the right data type.
+  const { baseLayer, dataType } = parseSiteRouteState(
+    module,
+    segments,
+    new URLSearchParams(),
+  );
 
-  return {
-    baseLayer:
-      module === 'map'
-        ? (segments[0] as SiteRouteState['baseLayer'])
-        : undefined,
-    dataType:
-      (dataTypeSegment as SiteRouteState['dataType']) ?? SITE_FALLBACK_DATA_TYPE,
-    selectedMarkerId,
-    subDataTypes: [],
-  };
+  return { baseLayer, dataType, selectedMarkerId, subDataTypes: [] };
 }
 
 async function fetchPointShareMarker({
@@ -159,7 +155,6 @@ export function createPointShareTarget({
 }): PointShareTarget {
   const href = createSiteHref(module, {
     ...state,
-    baseLayer: state.baseLayer ?? SITE_FALLBACK_BASE_LAYER,
     dataType: resolveDataType(marker),
     subDataTypes: [],
     selectedMarkerId: marker.id,

@@ -1,12 +1,16 @@
 /**
  * The site's inbox (prototype `site-notify.jsx`): only what is about the viewer — someone coming to
  * a need they filed, a change to a need they said they would go to, a duplicate review folding their
- * ticket or need into another, and the answer to their own application. The prototype has no notice
- * for the duplicate review. A site-wide announcement is sent to every account too, but it has the
- * banner, and the back office's notices wait for its own bell (C-2: an inbox mixed with broadcasts
- * dulls both).
+ * ticket or need into another, a data check questioning a ticket they filed or are going to, and the
+ * answer to their own application. The prototype has no notice for the duplicate review or the data
+ * check. A site-wide announcement is sent to every account too, but it has the banner, and the back
+ * office's notices wait for its own bell (C-2: an inbox mixed with broadcasts dulls both).
  */
 
+import type {
+  MyTaskAssignmentsQuery,
+  MyTicketsQuery,
+} from '@rescue-frontend/data-access';
 import type { components } from '@rescue-frontend/data-access/openapi';
 
 import { formatTaiwanTime } from '../time';
@@ -21,6 +25,7 @@ export type SiteNoticeKind =
   | 'need-full'
   | 'called-off'
   | 'merged'
+  | 'audit-issue'
   | 'role-approved'
   | 'role-rejected';
 
@@ -56,21 +61,24 @@ const SITE_NOTICE_TYPES: Partial<
   dedup_task_merged: { kind: 'merged', opens: 'ticket' },
   // To the volunteer: their need was cancelled, and the ticket kept handles it now.
   dedup_task_canceled: { kind: 'called-off', opens: 'ticket' },
+  // To the volunteers already on the ticket kept: its contact changed, and they still go.
+  dedup_ticket_contact_changed: { kind: 'merged', opens: 'ticket' },
   // To the requester whose ticket was folded in, and to the one whose ticket took it in.
   dedup_ticket_merged: { kind: 'merged', opens: 'ticket' },
   dedup_ticket_updated: { kind: 'merged', opens: 'ticket' },
+  // A data check found something wrong with a ticket (backend `ticket_audit.py`), and the notice
+  // names it. To the requester, that staff are looking into it, and to those on its needs, who may
+  // be on their way. Neither says what was wrong: the auditor's note is for staff.
+  ticket_audit_issue: { kind: 'audit-issue', opens: 'ticket' },
   // To the applicant, a team application's answer included.
   role_request_approved: { kind: 'role-approved' },
   role_request_rejected: { kind: 'role-rejected' },
 };
 
-/** A notice as the drawer shows it. */
-export interface SiteNotice {
-  uuid: string;
+/** A notice as the drawer shows it: four of the row's fields as they come, the rest the site's own. */
+export interface SiteNotice
+  extends Pick<NotificationRow, 'uuid' | 'title' | 'body' | 'read'> {
   kind: SiteNoticeKind;
-  title: string;
-  body: string;
-  read: boolean;
   /** 「10/21 14:05」, or null for a notice with no time on it. */
   at: string | null;
   /** The need whose ticket a click opens, found on the viewer's lists (`ticketOfNeed`). */
@@ -110,13 +118,23 @@ export function readSiteNotices(
   });
 }
 
-/** What 我的任務 reads (`MyTickets`, `MyTaskAssignments`), as far as finding a need's ticket goes. */
+type FiledTicket = MyTicketsQuery['myTickets'][number];
+type Claim = MyTaskAssignmentsQuery['myTaskAssignments'][number];
+
+/**
+ * What 我的任務 reads (`MyTickets`, `MyTaskAssignments`), as far as finding a need's ticket goes:
+ * only the uuids, so a caller need not have the rest of either query.
+ */
 export interface ViewerNeedLists {
-  requests: ReadonlyArray<{
-    uuid: string;
-    tasks: ReadonlyArray<{ uuid: string }>;
+  requests: ReadonlyArray<
+    Pick<FiledTicket, 'uuid'> & {
+      tasks: ReadonlyArray<Pick<FiledTicket['tasks'][number], 'uuid'>>;
+    }
+  >;
+  claims: ReadonlyArray<{
+    task: Pick<Claim['task'], 'uuid'>;
+    ticket: Pick<Claim['ticket'], 'uuid'>;
   }>;
-  claims: ReadonlyArray<{ task: { uuid: string }; ticket: { uuid: string } }>;
 }
 
 /**

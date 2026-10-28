@@ -285,6 +285,27 @@ export function useDisasterTypes(
   });
 }
 
+// Public (ADR-392), so the site reads it too. Under `settings`, so saving the settings reads it
+// again. Quiet: a name that does not load leaves the platform's, which is no error to report.
+export const currentDisasterQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'settings', 'currentDisaster'],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminCurrentDisasterDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData),
+    meta: { quietErrors: true },
+  });
+
+export function useCurrentDisaster(options: AdminQueryOptions = {}) {
+  return useQuery({ ...currentDisasterQuery(), enabled: options.enabled });
+}
+
 export function useCreateTicket() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -655,6 +676,32 @@ export function useUpdateBriefing() {
     mutationFn: (variables: documents.AdminUpdateBriefingMutationVariables) =>
       adminGraphqlClient
         .mutation(documents.AdminUpdateBriefingDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
+  });
+}
+
+export function usePublishBriefing() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminPublishBriefingMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminPublishBriefingDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
+  });
+}
+
+export function useTakeDownBriefing() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminTakeDownBriefingMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminTakeDownBriefingDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
     onSuccess: () =>

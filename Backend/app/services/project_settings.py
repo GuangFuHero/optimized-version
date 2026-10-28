@@ -61,6 +61,9 @@ async def update_project_settings(
 
     A saved `disaster_types` label that no configured field is scoped to comes back as a
     warning (ADR-169) — see `_unmatched_disaster_types`.
+
+    `map_view` arrives as one value, `{lat, lng, zoom}` or None, and is stored in three columns
+    (ADR-395); None clears all three.
     """
     await require_scope(actor, Perm.PROJECT_EDIT, db)
     current = await project_settings_repository.get_singleton(db)
@@ -68,6 +71,13 @@ async def update_project_settings(
         raise ProjectSettingsValidationError(
             "第一次設定必須提供 name（災害名稱）"
         )
+    if "map_view" in values:
+        view = values["map_view"] or {}
+        values = {key: value for key, value in values.items() if key != "map_view"} | {
+            "map_center_lat": view.get("lat"),
+            "map_center_lng": view.get("lng"),
+            "map_zoom": view.get("zoom"),
+        }
     if "disaster_types" in values:
         # Feature 018 closed the vocabulary, so an unknown label is now rejected outright;
         # `_unmatched_disaster_types` below still catches the other case, a real type no field

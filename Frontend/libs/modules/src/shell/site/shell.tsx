@@ -235,7 +235,7 @@ export function SiteShell({
         <RoleRequestReturn onReturn={reopenRoleRequest} />
       </Suspense>
 
-      {/* The map has its own, clear of its 「＋」 (`MapRequestHelpButton`). */}
+      {/* The map has its own, a bar under it (`MapRequestHelpBar`). */}
       {pathname.startsWith('/map') ? null : <MobileRequestHelpFab />}
 
       {/* Inside the route providers: once a ticket is filed it turns the page to it. */}
