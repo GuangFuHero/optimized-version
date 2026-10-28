@@ -4,6 +4,7 @@
  */
 
 import type {
+  AccessStatus,
   CreateTicketInput,
   SecondaryLocationInput,
   UpdateTicketInput,
@@ -215,22 +216,66 @@ export function toUpdateTicketInput(
 }
 
 /**
- * Only the members that changed. `secondaryLocation` replaces the whole address, so sending it
- * untouched could blank parts this form doesn't show.
+ * A coarse ticket (`locationCell` set) is one the viewer may not see in detail: the backend hands
+ * it back with no description, photos or address, so the form must not write those over the real
+ * ones.
+ */
+export function isCoarseTicket(ticket: DetailTicket): boolean {
+  return Boolean(ticket.locationCell);
+}
+
+/** The address members this form doesn't show, carried over when it resends the address. */
+const CARRIED_LOCATION_FIELDS = [
+  'locationType',
+  'buildingSection',
+  'spaceDescription',
+  'victimSpace',
+  'accessStatus',
+  'landmarkNote',
+  'poleId',
+  'poleType',
+  'poleNote',
+] as const;
+
+function carriedLocation(ticket: DetailTicket): SecondaryLocationInput {
+  const carried: Record<string, string> = {};
+  for (const key of CARRIED_LOCATION_FIELDS) {
+    const value = ticket.secondaryLocation?.[key];
+    if (value) carried[key] = value;
+  }
+  return carried as SecondaryLocationInput & { accessStatus?: AccessStatus };
+}
+
+/**
+ * Only the members that changed. `secondaryLocation` replaces the whole address, so it goes only
+ * when edited, and then with every member this form doesn't show carried over from `ticket`.
  */
 export function changedUpdateInput(
   values: TicketFormValues,
   initial: TicketFormValues,
+  ticket: DetailTicket,
 ): UpdateTicketInput {
   const next = toUpdateTicketInput(values);
   const before = toUpdateTicketInput(initial);
-  const changed: Record<string, unknown> = {};
+  const changed: UpdateTicketInput = {};
   for (const key of Object.keys(next) as (keyof UpdateTicketInput)[]) {
     if (JSON.stringify(next[key]) !== JSON.stringify(before[key])) {
-      changed[key] = next[key];
+      Object.assign(changed, { [key]: next[key] });
     }
   }
-  return changed as UpdateTicketInput;
+  if (isCoarseTicket(ticket)) {
+    // What this viewer saw was blanked by the backend, not the ticket's own.
+    delete changed.description;
+    delete changed.secondaryLocation;
+  }
+  if (changed.secondaryLocation) {
+    // Without an addressToken the backend stores an edited address as unverified (accepted limit).
+    changed.secondaryLocation = {
+      ...carriedLocation(ticket),
+      ...changed.secondaryLocation,
+    };
+  }
+  return changed;
 }
 
 /**

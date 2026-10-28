@@ -211,12 +211,68 @@ describe('toUpdateTicketInput', () => {
     });
   });
 
+  const stored = {
+    uuid: 't-1',
+    locationCell: null,
+    secondaryLocation: {
+      fullAddress: '中正路12號',
+      floor: '2F',
+      room: null,
+      locationType: 'address',
+      buildingSection: 'A棟',
+      victimSpace: '主臥衣櫃',
+      accessStatus: 'restricted',
+      landmarkNote: null,
+      spaceDescription: null,
+      poleId: null,
+      poleType: null,
+      poleNote: null,
+    },
+  } as unknown as DetailTicket;
+  const coarse = {
+    ...stored,
+    locationCell: '8a4b1',
+    secondaryLocation: null,
+  } as unknown as DetailTicket;
+
   it('sends only what changed', () => {
     const changed = { ...filled, priority: 'critical' as const };
-    expect(changedUpdateInput(changed, filled)).toEqual({
+    expect(changedUpdateInput(changed, filled, stored)).toEqual({
       priority: 'critical',
     });
-    expect(changedUpdateInput(filled, filled)).toEqual({});
+    expect(changedUpdateInput(filled, filled, stored)).toEqual({});
+  });
+
+  it('keeps the address members the form does not show when the address is edited', () => {
+    const before = { ...filled, fullAddress: '中正路12號', floor: '2F' };
+    const input = changedUpdateInput(
+      { ...before, floor: '3F' },
+      before,
+      stored,
+    );
+    expect(input.secondaryLocation).toEqual({
+      fullAddress: '中正路12號',
+      floor: '3F',
+      locationType: 'address',
+      buildingSection: 'A棟',
+      victimSpace: '主臥衣櫃',
+      accessStatus: 'restricted',
+    });
+  });
+
+  it('never sends the description or address of a coarse ticket', () => {
+    const before = { ...filled, description: '' };
+    const input = changedUpdateInput(
+      {
+        ...before,
+        description: '新的說明',
+        fullAddress: '別的地址',
+        priority: 'high',
+      },
+      before,
+      coarse,
+    );
+    expect(input).toEqual({ priority: 'high' });
   });
 });
 

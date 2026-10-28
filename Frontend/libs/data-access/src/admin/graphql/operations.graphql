@@ -145,6 +145,14 @@ query AdminTicket($uuid: UUID!) {
       floor
       room
       landmarkNote
+      locationType
+      buildingSection
+      spaceDescription
+      victimSpace
+      accessStatus
+      poleId
+      poleType
+      poleNote
     }
     photos {
       uuid

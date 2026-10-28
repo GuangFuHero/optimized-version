@@ -2297,6 +2297,14 @@ export type AdminTicketQuery = {
       floor?: string | null;
       room?: string | null;
       landmarkNote?: string | null;
+      locationType: string;
+      buildingSection?: string | null;
+      spaceDescription?: string | null;
+      victimSpace?: string | null;
+      accessStatus?: string | null;
+      poleId?: string | null;
+      poleType?: string | null;
+      poleNote?: string | null;
     } | null;
     photos: Array<{
       __typename?: 'PhotoType';
@@ -4496,6 +4504,38 @@ export const AdminTicketDocument = {
                       {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'landmarkNote' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'locationType' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'buildingSection' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'spaceDescription' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'victimSpace' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'accessStatus' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'poleId' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'poleType' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'poleNote' },
                       },
                     ],
                   },

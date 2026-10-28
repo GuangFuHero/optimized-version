@@ -46,6 +46,7 @@ import {
   changedUpdateInput,
   emptyNeed,
   emptyTicketForm,
+  isCoarseTicket,
   photoChanges,
   TICKET_NEEDS_MAX,
   TICKET_PRIORITIES,
@@ -91,6 +92,7 @@ function saveError(error: unknown, mode: 'create' | 'edit'): string {
 export function TicketForm(props: TicketFormProps) {
   const { mode, onDone, onCancel, onBusyChange } = props;
   const ticket = props.mode === 'edit' ? props.ticket : null;
+  const coarse = ticket ? isCoarseTicket(ticket) : false;
   const formId = useId();
   const [values, setValues] = useState<TicketFormValues>(() =>
     ticket ? ticketFormFromTicket(ticket) : emptyTicketForm(),
@@ -187,16 +189,16 @@ export function TicketForm(props: TicketFormProps) {
   }
 
   async function save(current: DetailTicket) {
-    const input = changedUpdateInput(values, saved.current.values);
-    const landmarkNote = current.secondaryLocation?.landmarkNote;
-    // The address is replaced whole: keep the 地標補充 this form doesn't show.
-    if (input.secondaryLocation && landmarkNote) {
-      input.secondaryLocation = { ...input.secondaryLocation, landmarkNote };
-    }
+    const input = changedUpdateInput(values, saved.current.values, current);
     if (Object.keys(input).length > 0) {
       await updateTicket.mutateAsync({ uuid: current.uuid, input });
     }
     saved.current.values = values;
+    // A coarse ticket's photos came back empty: a diff against them would be no diff at all.
+    if (isCoarseTicket(current)) {
+      onDone(current.uuid);
+      return;
+    }
 
     const { attach, detach } = photoChanges(
       saved.current.photos,
@@ -317,13 +319,17 @@ export function TicketForm(props: TicketFormProps) {
               </MenuItem>
             ))}
           </TextField>
-          <TextInput
-            label="說明"
-            multiline
-            minRows={2}
-            value={values.description}
-            onChange={(event) => set('description', event.target.value)}
-          />
+          {coarse ? (
+            <Muted>你沒有檢視詳細資料的權限，無法編輯說明與照片</Muted>
+          ) : (
+            <TextInput
+              label="說明"
+              multiline
+              minRows={2}
+              value={values.description}
+              onChange={(event) => set('description', event.target.value)}
+            />
+          )}
         </Section>
 
         {mode === 'create' ? (
@@ -374,7 +380,7 @@ export function TicketForm(props: TicketFormProps) {
               <Muted>建立後無法修改地圖位置</Muted>
             </>
           )}
-          {ticket?.locationCell ? (
+          {coarse ? (
             // A coarse ticket hides its address from this viewer: blank fields saved over it
             // would replace the real one.
             <Muted>約略位置（無檢視詳細位置權限），無法修改地址</Muted>
@@ -408,15 +414,19 @@ export function TicketForm(props: TicketFormProps) {
           )}
         </Section>
 
-        <Section title="現場照片">
-          <PhotoLinkEditor
-            label="現場照片"
-            hint="選填，貼上圖片網址"
-            value={values.photoUrls}
-            onChange={(next) => set('photoUrls', next)}
-          />
-          {errors.photoUrls ? <ErrorText>{errors.photoUrls}</ErrorText> : null}
-        </Section>
+        {coarse ? null : (
+          <Section title="現場照片">
+            <PhotoLinkEditor
+              label="現場照片"
+              hint="選填，貼上圖片網址"
+              value={values.photoUrls}
+              onChange={(next) => set('photoUrls', next)}
+            />
+            {errors.photoUrls ? (
+              <ErrorText>{errors.photoUrls}</ErrorText>
+            ) : null}
+          </Section>
+        )}
 
         {mode === 'create' ? (
           <Section title="需求">
