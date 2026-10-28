@@ -8,7 +8,6 @@ import {
   DataTable,
   designTokens,
   ListPagination,
-  type BadgeTone,
   type DataTableProps,
 } from '@rescue-frontend/ui';
 import { ChevronDown, ChevronRight, MapPin, SearchX } from 'lucide-react';
@@ -26,21 +25,13 @@ import {
   type TicketColumnId,
 } from './model/ticket-columns';
 import { pageOf } from './model/ticket-filters';
-import type { AuditStatus, TaskRow, TicketRow } from './model/ticket-row';
+import { AUDIT_BADGES, type TaskRow, type TicketRow } from './model/ticket-row';
 
 const { color, radius, typography } = designTokens;
 
 const PRIORITY_TEXT: Record<string, string> = { medium: '中', low: '低' };
 
-export const AUDIT_BADGES: Record<
-  AuditStatus,
-  { label: string; tone: BadgeTone }
-> = {
-  no_audit: { label: '免審核', tone: 'neutral' },
-  need_audit: { label: '待審核', tone: 'warning' },
-  audited: { label: '已審核', tone: 'success' },
-  audit_issue: { label: '有問題', tone: 'danger' },
-};
+export { AUDIT_BADGES };
 
 interface TicketTableProps {
   rows: readonly TicketRow[];

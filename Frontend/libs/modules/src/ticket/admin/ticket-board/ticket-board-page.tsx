@@ -22,6 +22,7 @@ import {
   type TicketFilters,
 } from './model/ticket-filters';
 import { ticketStats } from './model/ticket-stats';
+import { TicketDetailSheet } from './ticket-detail-sheet';
 import { TicketMapView } from './ticket-map-view';
 import { TicketFilterPanel } from './ticket-filter-panel';
 import { TicketStatsStrip } from './ticket-stats-strip';
@@ -95,6 +96,9 @@ export function TicketBoardPage() {
   const stats = useMemo(() => ticketStats(unfiltered.rows), [unfiltered.rows]);
   // The ticket on view lives in the URL (?ticket=<uuid>) so links can open it.
   const openTicket = (uuid: string | null) => setParam('ticket', uuid);
+  // Mounted for any ?ticket=, in the current rows or not, so a pasted link always opens.
+  const viewedUuid = params.get('ticket');
+  const [editingUuid, setEditingUuid] = useState<string | null>(null);
 
   return (
     <>
@@ -149,7 +153,7 @@ export function TicketBoardPage() {
             {view === 'map' ? (
               <TicketMapView
                 rows={rows}
-                selectedUuid={params.get('ticket')}
+                selectedUuid={viewedUuid}
                 onOpenTicket={openTicket}
               />
             ) : (
@@ -173,6 +177,22 @@ export function TicketBoardPage() {
             )}
           </Box>
         }
+      />
+      <TicketDetailSheet
+        uuid={viewedUuid}
+        editing={editingUuid !== null && editingUuid === viewedUuid}
+        caps={caps}
+        now={now}
+        onClose={() => {
+          setEditingUuid(null);
+          openTicket(null);
+        }}
+        onEdit={setEditingUuid}
+        onEditEnd={() => setEditingUuid(null)}
+        onDeleted={() => {
+          setEditingUuid(null);
+          openTicket(null);
+        }}
       />
     </>
   );

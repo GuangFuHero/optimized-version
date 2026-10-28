@@ -3,6 +3,7 @@ import type {
   AdminTicketFieldsFragment,
   AuditStatus,
 } from '@rescue-frontend/data-access/admin';
+import type { BadgeTone } from '@rescue-frontend/ui';
 
 import { stationPoint } from '../../../../station/station-point';
 
@@ -14,6 +15,17 @@ export type TicketStatus =
   | 'completed'
   | 'cancelled';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
+
+/** A ticket's audit state as the board badges it. */
+export const AUDIT_BADGES: Record<
+  AuditStatus,
+  { label: string; tone: BadgeTone }
+> = {
+  no_audit: { label: '免審核', tone: 'neutral' },
+  need_audit: { label: '待審核', tone: 'warning' },
+  audited: { label: '已審核', tone: 'success' },
+  audit_issue: { label: '有問題', tone: 'danger' },
+};
 
 /** Shown wherever a ticket has no title. */
 export const UNTITLED_TICKET = '（未命名求助單）';
