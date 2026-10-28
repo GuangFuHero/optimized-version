@@ -21,7 +21,6 @@ export function useStationCapabilities() {
     canAssign: has('station.assign'),
     canImport: has('station.import'),
     canExport: has('station.export'),
-    canViewPii: has('station.view_pii'),
     canViewTeams: has('team.view'),
   };
 }

@@ -77,7 +77,6 @@ export function StationDetailSheet({
     content = (
       <StationForm
         target={{ mode: 'edit', uuid }}
-        canViewPii={caps.canViewPii}
         onClose={onEditEnd}
         onSaved={onEditEnd}
       >

@@ -59,8 +59,6 @@ export interface StationFormView {
 
 export interface StationFormProps {
   target: StationFormTarget;
-  /** Whether the viewer holds `station.view_pii`. Without it, editing can't touch contact fields. */
-  canViewPii?: boolean;
   /** Save a new station as official: `/stations` and the admin map, not the public map. */
   official?: boolean;
   /** Dismisses the form: 取消, or a submit with nothing changed. */
@@ -75,11 +73,7 @@ export interface StationFormProps {
  * The one form for creating and editing a station, shared by `/stations` and the maps. It renders
  * no frame of its own: `children` lays out what it hands over in a sheet, a drawer or a panel.
  */
-export function StationForm({
-  target,
-  canViewPii = true,
-  ...props
-}: StationFormProps) {
+export function StationForm({ target, ...props }: StationFormProps) {
   if (target.mode === 'create') {
     return (
       <LoadedStationForm
@@ -90,23 +84,12 @@ export function StationForm({
       />
     );
   }
-  return (
-    <EditStationForm
-      key={target.uuid}
-      {...props}
-      uuid={target.uuid}
-      canViewPii={canViewPii}
-    />
-  );
+  return <EditStationForm key={target.uuid} {...props} uuid={target.uuid} />;
 }
 
-type FormProps = Omit<StationFormProps, 'target' | 'canViewPii'>;
+type FormProps = Omit<StationFormProps, 'target'>;
 
-function EditStationForm({
-  uuid,
-  canViewPii,
-  ...props
-}: FormProps & { uuid: string; canViewPii: boolean }) {
+function EditStationForm({ uuid, ...props }: FormProps & { uuid: string }) {
   const formId = useId();
   const query = useStation({ uuid });
   const station = query.data?.station;
@@ -139,7 +122,9 @@ function EditStationForm({
       uuid={uuid}
       typeLabel={getStationTypeLabel(station.type)}
       initial={stationToForm(station)}
-      contactLocked={!canViewPii}
+      // The station's own PII scope, as its details mask contact: the page-wide capability may
+      // reach further than this station.
+      contactLocked={!station.viewerCanViewPii}
     />
   );
 }
