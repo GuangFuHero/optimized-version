@@ -1827,10 +1827,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only holders of this platform role",
+              "description": "As the platform_role column shows; `user`: no other platform role",
               "title": "Platform Role"
             },
-            "description": "Only holders of this platform role"
+            "description": "As the platform_role column shows; `user`: no other platform role"
           },
           {
             "name": "team_uuid",

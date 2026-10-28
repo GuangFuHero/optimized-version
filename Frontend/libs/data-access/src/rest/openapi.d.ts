@@ -5479,7 +5479,7 @@ export interface operations {
         limit?: number;
         /** @description Part of the nickname */
         q?: string | null;
-        /** @description Only holders of this platform role */
+        /** @description As the platform_role column shows; `user`: no other platform role */
         platform_role?: string | null;
         /** @description Only those holding a role in this team */
         team_uuid?: string | null;
