@@ -1339,6 +1339,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/audit-logs/export': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 匯出稽核紀錄（CSV）
+     * @description The same filters as the list, as one CSV file (ADR-414). Super admins only.
+     */
+    get: operations['export_audit_logs_api_v1_admin_audit_logs_export_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/admin/teams/{team_uuid}/invites': {
     parameters: {
       query?: never;
@@ -3390,6 +3410,7 @@ export interface components {
       | 'pre_departure.delete'
       | 'audit.view'
       | 'team.audit.view'
+      | 'audit.export'
       | 'rbac.view'
       | 'rbac.assign'
       | 'rbac.edit';
@@ -6785,6 +6806,48 @@ export interface operations {
         content: {
           'application/json': components['schemas']['HTTPValidationError'];
         };
+      };
+    };
+  };
+  export_audit_logs_api_v1_admin_audit_logs_export_get: {
+    parameters: {
+      query?: {
+        table?: string | null;
+        row_id?: string | null;
+        actor_uuid?: string | null;
+        from?: string | null;
+        to?: string | null;
+      };
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The filtered log, newest first */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/csv': unknown;
+        };
+      };
+      /** @description No audit.export at all (super admins only) */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description More rows than one file carries; narrow the range */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
