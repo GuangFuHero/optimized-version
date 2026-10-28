@@ -199,8 +199,9 @@ function secondaryLocation(
 }
 
 /**
- * A station created from the admin portal is official (decided 2026-10-15); one from the public
- * map leaves `source` out, so the backend's `user` default applies.
+ * A station created from the admin portal is official (decided 2026-10-15). The public site can't
+ * create stations, so `official` is what `/stations` and the admin map ask for; without it `source`
+ * is left out and the backend's default applies.
  */
 export function buildCreateInput(
   form: StationFormState,

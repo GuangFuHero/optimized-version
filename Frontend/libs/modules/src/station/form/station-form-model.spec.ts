@@ -48,7 +48,7 @@ describe('station form', () => {
     expect(buildCreateInput(filled, { official: true }).source).toBe(
       'official',
     );
-    // The public map leaves `source` out, so the backend's `user` default applies.
+    // Without it `source` is left out, so the backend's default applies.
     expect(buildCreateInput(filled)).not.toHaveProperty('source');
   });
 

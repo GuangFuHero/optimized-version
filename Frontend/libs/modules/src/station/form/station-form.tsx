@@ -59,7 +59,7 @@ export interface StationFormView {
 
 export interface StationFormProps {
   target: StationFormTarget;
-  /** Save a new station as official: `/stations` and the admin map, not the public map. */
+  /** Save a new station as official, as `/stations` and the admin map do. */
   official?: boolean;
   /** Dismisses the form: 取消, or a submit with nothing changed. */
   onClose: () => void;

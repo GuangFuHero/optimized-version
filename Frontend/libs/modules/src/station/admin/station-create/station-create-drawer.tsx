@@ -13,7 +13,7 @@ interface StationCreateDrawerProps {
   onCreatedMarker?: (marker: RescueMapMarkerItem) => void;
   initialPosition?: [number, number] | null;
   onLocationChange?: (position: [number, number]) => void;
-  /** Save the new station as official: the admin map does, the public map doesn't. */
+  /** Save the new station as official, as the admin map does. */
   official?: boolean;
 }
 
