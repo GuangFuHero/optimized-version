@@ -1022,6 +1022,11 @@ type RoleRequestType {
 
   """The existing team a member request asks to join"""
   team: RoleRequestTeam
+
+  """
+  The team approval handed out: the one joined, or the one a new-team application founded
+  """
+  grantedTeam: RoleRequestTeam
 }
 
 input SecondaryLocationInput {
