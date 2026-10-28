@@ -16,6 +16,7 @@ pytestmark = pytest.mark.asyncio
 
 CURRENT_DISASTER = "query { currentDisaster { name } }"
 WITH_SHORT_NAME = "query { currentDisaster { name shortName } }"
+WITH_MAP_VIEW = "query { currentDisaster { name mapView { lat lng zoom } } }"
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -57,6 +58,29 @@ async def test_the_short_name_is_what_the_top_bar_writes(client):
 
     assert named == {"name": "花蓮馬太鞍溪堰塞湖專案", "shortName": "花蓮馬太鞍溪"}
     assert unnamed == {"name": "花蓮 0816", "shortName": None}
+
+
+async def test_a_guest_reads_where_the_map_opens(client):
+    """ADR-395: the site's map opens on the disaster, before anyone signs in."""
+    await _configure(
+        name="花蓮馬太鞍溪堰塞湖專案",
+        disaster_types=[],
+        map_center_lat=23.67,
+        map_center_lng=121.418,
+        map_zoom=14,
+    )
+
+    assert (await _query(client, WITH_MAP_VIEW))["currentDisaster"] == {
+        "name": "花蓮馬太鞍溪堰塞湖專案",
+        "mapView": {"lat": 23.67, "lng": 121.418, "zoom": 14},
+    }
+
+
+async def test_without_a_view_the_site_opens_its_map_where_it_always_did(client):
+    """Null rather than a made-up centre, so the site can tell nobody set one and keeps its own default."""
+    await _configure(name="花蓮 0816", disaster_types=[])
+
+    assert (await _query(client, WITH_MAP_VIEW))["currentDisaster"] == {"name": "花蓮 0816", "mapView": None}
 
 
 async def test_an_unconfigured_deployment_has_no_current_disaster(client):

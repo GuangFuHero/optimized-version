@@ -1,4 +1,4 @@
-# Project Settings & Account Activity — ADR 全集（ADR-090~095、164~173、ADR-392）
+# Project Settings & Account Activity — ADR 全集（ADR-090~095、164~173、ADR-392、ADR-395）
 
 **Date**: 2026-08-16
 **Feature**: 013-project-settings-activity
@@ -495,3 +495,59 @@ KeyError: 'b7e4c1a90d52'
 ➕ 公開的只有名稱；管理端那支的權限沒有放寬。
 ➖ 設定頁還沒做，簡稱暫時只能從管理端 API 設。
 ◾ 後台側欄（`shell/admin/sidebar.tsx`）也可以改讀 `currentDisaster`，不必等 `project.view`；不在這次範圍。
+
+### ADR-395 地圖第一次打開的位置跟著事件設定走（`map_view`）
+
+**白話**：地圖第一次打開時停在哪裡，改由後台的事件設定決定，換一場災害不用改程式。沒設定時後端回 null，前端顯示全台。
+
+**Date**: 2026-10-27（Carol 10-26 在 Discord #uiux 選 B，記在 Notion 票
+https://app.notion.com/p/405bc24b8353814ebab4d00654e5a6d3 ；欄位、沒設定時回什麼、seed 三件由 Dan 10-27 定）
+
+**Context**：
+- 前台地圖的起始位置寫死在前端：`RESCUE_MAP_INITIAL_VIEW`，[23.884, 121.0]、zoom 13
+  （`Frontend/libs/modules/src/map/constants.ts`）。換一場災害就要改程式。
+- 糖的設計 MAP-VIEW-101～103（`Design/前台/js/shared/wg-bridge.js`，sucrelindesign `37604452`）：
+  - 設定頁「這次災害」多一列地圖預設位置，只有超管能改；
+  - 前台地圖、後台的互助地圖、任務管理、資源站點地圖打開時都停在這裡；
+  - 沒設定顯示全台；不用手機定位當預設；
+  - 示範事件是光復鄉 [23.67, 121.418]、zoom 14。
+
+**Decision**：
+
+- **欄位**：`project_settings` 加 `map_center_lat`、`map_center_lng`（double precision）、`map_zoom`（smallint），
+  都可以是 null。
+  - CHECK `ck_project_settings_map_view_all_or_none`：三個一起有、一起沒有。只有中心、沒有 zoom，地圖沒辦法開。
+  - CHECK `ck_project_settings_map_view_range`：跟下面 API 的檢查同一組範圍。用 SQL 直接寫進來的值（例如部署後
+    補那一列，或之後改 seed）也不能是經緯度放反、zoom 19 這種地圖開不了的位置（HC 在 #136 review 實測：放反的值
+    會讓管理端 GET／PATCH 回 500，`currentDisaster` 也照樣交給前台）。代價是地圖的 zoom 範圍改了要開 migration。
+  - migration `ba24b9c49284` 只加欄位、不搬資料。
+  - 不用 PostGIS 的 Point：這是設定值，沒有空間查詢會讀它，前端要的就是兩個數字。
+- **API 包成一個值**：
+  - GraphQL：`currentDisaster.mapView { lat lng zoom }`；
+  - 管理端 REST：`map_view: {lat, lng, zoom}` 或 null；
+  - `PATCH` 沒送就不動，送 null 就清掉，送物件時三個都要給。
+  - 用具名的 `lat`／`lng`，不用陣列：GeoJSON 是 [經, 緯]，Leaflet 是 [緯, 經]，陣列遲早有人放反。
+- **檢查**：緯度 −90～90、經度 −180～180、zoom 整數 7～18，跟前台主地圖的 `minZoom`／`maxZoom` 一樣
+  （`rescue-map-canvas/index.tsx`）。不符就回 422。
+- **沒設定回 null，後端不給預設值**：
+  - 預設值只放在前端一處，前端也分得出「有人設在這裡」和「沒人設」。
+  - 沒設定時顯示全台（MAP-VIEW-102），這是前端的常數。
+- **公開，不檢查權限**：`mapView` 跟名稱一起放在 `currentDisaster`。
+  - 它只說地圖從哪裡打開，地圖上的站點、任務單本來就公開。
+  - 這是把 ADR-392「公開的只有名稱」往外放一格。`project.view` 照舊不放進 `PUBLIC_PERMS`；`disaster_types`、
+    `started_at` 照舊只從管理端讀。
+  - 改設定照舊要 `project.edit`。
+- **mock seed 第 8c 節只補沒人設的**：
+  - 表裡還沒有那一列：建一列，名稱「花蓮馬太鞍溪堰塞湖專案」、簡稱「花蓮馬太鞍溪」，地圖光復鄉 [23.67, 121.418]、zoom 14；
+  - 已經有了：只在還沒設地圖時補上，名稱和別人設的地圖都不動。
+  - 跟第 8b 節公告同一個原則：`project_settings` 是整個部署共用的一列，不像 mock 資料有前綴可以分。
+
+➕ 換一場災害不用改程式，前台和管理平台的地圖都看同一個設定。
+➕ 沒人設的部署，地圖照舊開在前端的預設位置。
+➖ 設定頁還沒做，暫時只能從管理端 API 或 seed 設。
+➖ 清掉的地圖（`PATCH map_view: null`）跟從來沒設過的一樣是三個 null，所以下一次 `SEED_MOCK=true` 會把光復鄉寫回去
+  （popo 在 #136 review 指出）。只影響有跑 mock seed 的部署，那裡的事件本來就是示範用的光復鄉；正式部署不跑 mock seed。
+  要分得出「清掉」和「沒設過」得另加欄位，現在不值得。
+◾ 前端要做的：
+  - 地圖讀取順序是「網址帶的位置 → `mapView` → 全台」，前端常數改成全台；
+  - 前台的 schema 快照補 `currentDisaster`。
