@@ -117,6 +117,7 @@ async def test_the_response_names_the_team_a_new_team_application_founded(db):
 
 @pytest.mark.asyncio
 async def test_the_response_names_the_team_a_member_request_joined(db):
+    """A member request's granted team is the one it asked to join."""
     await _team_roles(db)
     team = await _team(db)
     team_uuid = team.uuid

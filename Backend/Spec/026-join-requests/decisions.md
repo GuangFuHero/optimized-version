@@ -449,3 +449,24 @@ spec's back-office note names this field.
 **Consequences**:
 ➕ The response says both what was asked for and what was handed out, matching the table.
 ➖ A client reading the new team from `team_uuid` has to switch fields; none did, since it was always `null`.
+
+---
+
+### ADR-418 The applicant's own view names the granted team too
+
+> **Status: ACCEPTED (2026-10-28).** Popo, 2026-10-28, in the code review of ADR-411.
+
+**In plain words**: when applicants look at their own applications (GraphQL `myRoleRequests`), an approved one
+now also says which team approval handed out — the team joined, or the one a new-team application founded.
+
+**Context**: ADR-411 fixed the back office's REST answer. `RoleRequestType`, the applicant's view, had the same
+gap: its `team` resolves `team_uuid` only, so a founded team was nowhere in it, though the applicant just
+became its `admin` (ADR-350 point 6).
+
+**Decision**: `RoleRequestType.grantedTeam: RoleRequestTeam` (uuid, name, type), resolved from
+`granted_team_uuid` the way `team` is from `team_uuid`; `null` until approved and for a data auditor. The
+applicant reads it because it is theirs; nothing else about the team is shown (ADR-357 point 5).
+
+**Consequences**:
+➕ "My applications" can link to the team an approval founded.
+➖ One more lookup per approved application listed; an applicant has a handful at most.

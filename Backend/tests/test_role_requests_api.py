@@ -14,6 +14,7 @@ from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.role_request import RoleRequest
+from app.models.team import Team
 from tests.conftest import auth_headers_for
 from tests.test_site_realm import FILE, HELP_REQUEST, SITE
 
@@ -220,3 +221,33 @@ async def test_an_approved_applicant_carries_on_with_the_token_they_have(
     assert me.status_code == 200, me.text
     assert {identity["role"] for identity in me.json()["identities"]} == {"user", "data_auditor"}
     assert "errors" not in filed.json(), filed.json()
+
+
+@pytest.mark.asyncio
+async def test_approving_a_new_team_names_it_in_the_answer_and_the_list(client, db_session, redis):
+    """ADR-411: `granted_team_uuid` is the founded team, in the approve answer and in the review list."""
+    applicant_uuid, _ = await _account(db_session, "王小明", "user")
+    for name in ("admin", "member"):
+        db_session.add(Role(name=name, kind="team"))
+    request = RoleRequest(
+        requested_role="ngo",
+        reason=REASON,
+        new_team_name="光復青年志工隊",
+        applicant_name="王小明",
+        status="pending",
+        created_by=applicant_uuid,
+    )
+    db_session.add(request)
+    await db_session.flush()
+    request_uuid = str(request.uuid)
+    await db_session.commit()
+    headers = await _reviewer_headers(db_session, redis)
+
+    approved = await client.post(f"{URL}/{request_uuid}/approve", json={}, headers=headers)
+    listed = await client.get(URL, params={"status": "approved"}, headers=headers)
+
+    assert approved.status_code == 200, approved.text
+    team_uuid = await db_session.scalar(select(Team.uuid).where(Team.name == "光復青年志工隊"))
+    assert (approved.json()["team_uuid"], approved.json()["granted_team_uuid"]) == (None, str(team_uuid))
+    [row] = listed.json()
+    assert (row["uuid"], row["granted_team_uuid"]) == (request_uuid, str(team_uuid))
