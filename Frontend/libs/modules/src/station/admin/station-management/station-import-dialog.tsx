@@ -230,6 +230,8 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                     value={option.value}
                     label={option.label}
                     active={stationType === option.value}
+                    // A preview still running would land after the switch cleared its file.
+                    disabled={busy}
                     onSelect={() => chooseType(option.value)}
                   />
                 ))}
@@ -436,11 +438,13 @@ function TypeChip({
   value,
   label,
   active,
+  disabled,
   onSelect,
 }: {
   value: string;
   label: string;
   active: boolean;
+  disabled: boolean;
   onSelect: () => void;
 }) {
   const Icon = getStationTypeIcon(value);
@@ -449,6 +453,7 @@ function TypeChip({
       role="radio"
       aria-checked={active}
       onClick={onSelect}
+      disabled={disabled}
       disableRipple
       sx={{
         ...typography.label[400],
@@ -471,6 +476,7 @@ function TypeChip({
           outline: `${focusRing.width}px solid ${focusRing.color}`,
           outlineOffset: `${focusRing.offset}px`,
         },
+        '&.Mui-disabled': { color: color.fg.disable },
       }}
     >
       <Icon sx={{ fontSize: 16 }} aria-hidden />
