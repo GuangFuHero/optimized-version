@@ -120,7 +120,7 @@ export function StationFilterPanel({
   );
 }
 
-function ChipRow<T extends string>({
+export function ChipRow<T extends string>({
   label,
   value,
   options,

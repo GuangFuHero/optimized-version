@@ -135,6 +135,7 @@ export {
 } from './station';
 
 export {
+  TicketBoardPage,
   TicketCreateDrawer,
   TicketDetailDrawer,
   createTaskMatchTicketDetailOverrides,
