@@ -1,7 +1,7 @@
 """super admins export the audit log: register audit.export and grant it (ADR-414)
 
 Revision ID: b5d8e2a41c07
-Revises: facf37b5c79d
+Revises: ba24b9c49284
 Create Date: 2026-10-28 12:00:00.000000
 
 The RBAC seed writes the grant on a new database, but an existing database only sees the seed when
@@ -17,7 +17,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b5d8e2a41c07"
-down_revision: str | Sequence[str] | None = "facf37b5c79d"
+down_revision: str | Sequence[str] | None = "ba24b9c49284"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

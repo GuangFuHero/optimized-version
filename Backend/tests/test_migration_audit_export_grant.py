@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 
-# main's head this migration chains off (ADR-393, nullable actor columns).
-_BEFORE = "facf37b5c79d"
+# main's head this migration chains off (ADR-395, project_settings map view).
+_BEFORE = "ba24b9c49284"
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
