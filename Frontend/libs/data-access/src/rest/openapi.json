@@ -1766,7 +1766,7 @@
           "管理員 API"
         ],
         "summary": "List Users",
-        "description": "List users with every identity they hold, plus last login/activity and live sessions.\n\nFeature 010 replaced the single platform/team role pair with the full identity list\n(ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).\nBoth land in the same row. Built by PlatformUserDirectory (Spec/026).",
+        "description": "List users with every identity they hold, plus last login/activity and live sessions.\n\nFeature 010 replaced the single platform/team role pair with the full identity list\n(ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).\nBoth land in the same row. Built by PlatformUserDirectory (Spec/026). `q`, `platform_role`\nand `team_uuid` narrow it and combine (ADR-412).",
         "operationId": "list_users_api_v1_admin_users_get",
         "security": [
           {
@@ -1793,6 +1793,63 @@
               "default": 100,
               "title": "Limit"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the nickname, or of the phone (+886…) for super admins",
+              "title": "Q"
+            },
+            "description": "Part of the nickname, or of the phone (+886…) for super admins"
+          },
+          {
+            "name": "platform_role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 50
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only holders of this platform role",
+              "title": "Platform Role"
+            },
+            "description": "Only holders of this platform role"
+          },
+          {
+            "name": "team_uuid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only those holding a role in this team",
+              "title": "Team Uuid"
+            },
+            "description": "Only those holding a role in this team"
           },
           {
             "name": "X-WG-Realm",
@@ -7066,6 +7123,18 @@
             },
             "type": "array",
             "title": "Identities"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
           },
           "last_login_at": {
             "anyOf": [
