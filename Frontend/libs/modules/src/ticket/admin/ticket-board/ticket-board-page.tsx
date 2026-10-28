@@ -100,7 +100,11 @@ export function TicketBoardPage() {
             '& > *': COLUMN_SX,
           }}
         >
-          <TicketStatsStrip stats={stats} loading={unfiltered.isPending} />
+          {/* A failed count is unknown, not zero: it shows as loading does. */}
+          <TicketStatsStrip
+            stats={stats}
+            loading={unfiltered.isPending || unfiltered.error != null}
+          />
           <TicketToolbar
             caps={caps}
             query={filters.q}
@@ -128,6 +132,12 @@ export function TicketBoardPage() {
             rows={rows}
             loading={tickets.isPending}
             truncated={tickets.truncated}
+            failed={tickets.error != null}
+            retrying={tickets.isFetching}
+            onRetry={() => {
+              void tickets.refetch();
+              if (unfiltered.error != null) void unfiltered.refetch();
+            }}
             now={now}
             page={page}
             onPageChange={(next) =>

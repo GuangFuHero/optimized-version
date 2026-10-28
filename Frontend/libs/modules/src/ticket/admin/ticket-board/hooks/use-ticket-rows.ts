@@ -19,5 +19,7 @@ export function useTicketRows(
     truncated: query.data?.truncated ?? false,
     isPending: query.isPending,
     error: query.error as unknown,
+    isFetching: query.isFetching,
+    refetch: query.refetch,
   };
 }

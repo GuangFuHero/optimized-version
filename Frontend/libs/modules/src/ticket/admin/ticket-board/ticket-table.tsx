@@ -3,6 +3,7 @@
 import { Box, IconButton, Typography } from '@mui/material';
 import {
   Badge,
+  Button,
   Callout,
   DataTable,
   designTokens,
@@ -45,6 +46,10 @@ interface TicketTableProps {
   rows: readonly TicketRow[];
   loading: boolean;
   truncated: boolean;
+  /** The tickets did not load: an error with 重試, never 「沒有符合條件」. */
+  failed: boolean;
+  retrying: boolean;
+  onRetry: () => void;
   now: Date;
   page: number;
   onPageChange: (page: number) => void;
@@ -55,6 +60,9 @@ export function TicketTable({
   rows,
   loading,
   truncated,
+  failed,
+  retrying,
+  onRetry,
   now,
   page,
   onPageChange,
@@ -75,13 +83,14 @@ export function TicketTable({
   const renderCell = (id: TicketColumnId, row: TicketRow): ReactNode => {
     switch (id) {
       case 'expand':
-        return (
+        // No tasks, no toggle: an empty cell keeps the column's width, and a click there opens
+        // the row as anywhere else on it does.
+        return row.tasks.length > 0 ? (
           <ExpandToggle
             expanded={expandedIds.has(row.uuid)}
-            disabled={row.tasks.length === 0}
             onToggle={() => toggle(row.uuid)}
           />
-        );
+        ) : null;
       case 'priority':
         return <PriorityCell priority={row.priority} />;
       case 'title':
@@ -144,6 +153,19 @@ export function TicketTable({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {failed ? (
+        <Callout tone="danger">
+          無法載入求助單，請稍後再試
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={retrying}
+            onClick={onRetry}
+          >
+            重試
+          </Button>
+        </Callout>
+      ) : null}
       {truncated ? (
         <Callout tone="warning">
           只載入前 5,000 張求助單，請用篩選縮小範圍。
@@ -159,9 +181,13 @@ export function TicketTable({
         density="compact"
         minWidth={1080}
         empty={
-          <Box sx={{ p: loading ? 4 : '64px 24px', textAlign: 'center' }}>
+          <Box
+            sx={{ p: loading || failed ? 4 : '64px 24px', textAlign: 'center' }}
+          >
             {loading ? (
               <Muted>載入中…</Muted>
+            ) : failed ? (
+              <Muted>—</Muted>
             ) : (
               <Box
                 sx={{
@@ -202,11 +228,9 @@ export function TicketTable({
 /** Toggles the row's tasks; its clicks and Enter stay in the cell so the row does not open. */
 function ExpandToggle({
   expanded,
-  disabled,
   onToggle,
 }: {
   expanded: boolean;
-  disabled: boolean;
   onToggle: () => void;
 }) {
   const stop = (event: SyntheticEvent) => event.stopPropagation();
@@ -214,7 +238,6 @@ function ExpandToggle({
   return (
     <IconButton
       size="small"
-      disabled={disabled}
       aria-label={expanded ? '收合需求' : '展開需求'}
       aria-expanded={expanded}
       onClick={(event) => {
