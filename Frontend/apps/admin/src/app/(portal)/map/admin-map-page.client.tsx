@@ -228,6 +228,7 @@ export function AdminMapPageClient() {
 
       <StationCreateDrawer
         open={stationDrawerOpen}
+        official
         onClose={() => {
           setStationDrawerOpen(false);
           resetCreateFlow();

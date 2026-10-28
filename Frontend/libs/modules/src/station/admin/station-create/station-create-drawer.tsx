@@ -13,6 +13,8 @@ interface StationCreateDrawerProps {
   onCreatedMarker?: (marker: RescueMapMarkerItem) => void;
   initialPosition?: [number, number] | null;
   onLocationChange?: (position: [number, number]) => void;
+  /** Save the new station as official: the admin map does, the public map doesn't. */
+  official?: boolean;
 }
 
 /** Creating a station from a map: the shared station form, answering with a marker for the map. */
@@ -22,12 +24,14 @@ export function StationCreateDrawer({
   onCreatedMarker,
   initialPosition,
   onLocationChange,
+  official,
 }: StationCreateDrawerProps) {
   return (
     <StationFormDrawer
       target={open ? { mode: 'create', position: initialPosition } : null}
       onClose={onClose}
       onLocationChange={onLocationChange}
+      official={official}
       onSaved={(station) => {
         const marker = toCreatedStationMarker(station);
         if (marker) onCreatedMarker?.(marker);

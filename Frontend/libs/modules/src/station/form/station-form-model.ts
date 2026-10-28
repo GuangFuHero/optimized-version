@@ -198,15 +198,21 @@ function secondaryLocation(
   };
 }
 
-/** Every station created from the admin portal is official (decided 2026-10-15). */
-export function buildCreateInput(form: StationFormState): CreateStationInput {
+/**
+ * A station created from the admin portal is official (decided 2026-10-15); one from the public
+ * map leaves `source` out, so the backend's `user` default applies.
+ */
+export function buildCreateInput(
+  form: StationFormState,
+  { official = false }: { official?: boolean } = {},
+): CreateStationInput {
   const location = secondaryLocation(form);
   return {
     ...filledFields(form, TEXT_FIELDS),
     ...(location ? { secondaryLocation: location } : {}),
     geometry: point(form),
     operationalStatus: form.operationalStatus,
-    source: 'official',
+    ...(official ? { source: 'official' } : {}),
     visibility: 'public',
   } as CreateStationInput;
 }

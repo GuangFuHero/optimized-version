@@ -34,15 +34,22 @@ describe('station form', () => {
     expect(validateStationForm(filled)).toEqual({});
   });
 
-  it('creates an official station with a [lng, lat] point', () => {
+  it('creates a station with a [lng, lat] point', () => {
     expect(buildCreateInput(filled)).toMatchObject({
       name: '光復加水站',
       type: 'water',
-      source: 'official',
       visibility: 'public',
       operationalStatus: 'active',
       geometry: { type: 'Point', coordinates: [121.42, 23.67] },
     });
+  });
+
+  it('asks for an official station only when the caller says so', () => {
+    expect(buildCreateInput(filled, { official: true }).source).toBe(
+      'official',
+    );
+    // The public map leaves `source` out, so the backend's `user` default applies.
+    expect(buildCreateInput(filled)).not.toHaveProperty('source');
   });
 
   it('leaves blank optional fields out of the create input', () => {

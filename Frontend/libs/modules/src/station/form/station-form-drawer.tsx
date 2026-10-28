@@ -69,7 +69,7 @@ export function StationFormLayout({
   /** The header's close button; the frame's own `onClose` when left out. */
   onClose?: () => void;
 }) {
-  const { mode, pin } = view;
+  const { mode, pin, official } = view;
 
   return (
     <SheetLayout
@@ -89,7 +89,7 @@ export function StationFormLayout({
             >
               儲存後自動記錄操作者與時間戳
               {/* The banner says it unless it is showing the map's coordinates instead. */}
-              {mode === 'create' && pin ? (
+              {official && pin ? (
                 <>
                   <br />
                   後台新增的站點會標示為官方
@@ -117,7 +117,7 @@ export function StationFormLayout({
         ) : undefined
       }
     >
-      {mode === 'create' ? (
+      {mode === 'create' && (pin || official) ? (
         <CreateBanner>
           {pin
             ? `座標已由地圖帶入：${formatCoordinate(pin[0])}, ${formatCoordinate(pin[1])}`

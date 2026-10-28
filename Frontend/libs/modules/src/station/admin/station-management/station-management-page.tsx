@@ -251,6 +251,7 @@ export function StationManagementPage() {
       <StationFormDrawer
         variant="admin"
         target={formTarget?.mode === 'create' ? formTarget : null}
+        official
         canViewPii={caps.canViewPii}
         onClose={() => setFormTarget(null)}
         onSaved={(station) => {

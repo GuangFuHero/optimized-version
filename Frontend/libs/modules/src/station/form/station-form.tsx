@@ -53,12 +53,16 @@ export interface StationFormView {
   close: () => void;
   /** The map pin a new station starts from. */
   pin: Position | null;
+  /** A new station is saved as official: the frame says so. */
+  official: boolean;
 }
 
 export interface StationFormProps {
   target: StationFormTarget;
   /** Whether the viewer holds `station.view_pii`. Without it, editing can't touch contact fields. */
   canViewPii?: boolean;
+  /** Save a new station as official: `/stations` and the admin map, not the public map. */
+  official?: boolean;
   /** Dismisses the form: 取消, or a submit with nothing changed. */
   onClose: () => void;
   onSaved?: (station: AdminStationFieldsFragment) => void;
@@ -123,6 +127,7 @@ function EditStationForm({
       submitting: false,
       close: props.onClose,
       pin: null,
+      official: false,
     });
   }
 
@@ -147,7 +152,15 @@ type LoadedStationFormProps = FormProps & {
   );
 
 function LoadedStationForm(props: LoadedStationFormProps) {
-  const { mode, initial, onClose, onSaved, onLocationChange, children } = props;
+  const {
+    mode,
+    initial,
+    official = false,
+    onClose,
+    onSaved,
+    onLocationChange,
+    children,
+  } = props;
   const formId = useId();
   const [form, setForm] = useState(initial);
   const [errors, setErrors] = useState<StationFormErrors>({});
@@ -194,7 +207,7 @@ function LoadedStationForm(props: LoadedStationFormProps) {
 
   async function create(acknowledgedDuplicateOf?: string) {
     const { createStation: result } = await createStation.mutateAsync({
-      input: buildCreateInput(form),
+      input: buildCreateInput(form, { official }),
       acknowledgedDuplicateOf,
     });
     if (result.__typename === 'DuplicatesSuspected') {
@@ -292,5 +305,6 @@ function LoadedStationForm(props: LoadedStationFormProps) {
     submitting,
     close,
     pin: position,
+    official: mode === 'create' && official,
   });
 }
