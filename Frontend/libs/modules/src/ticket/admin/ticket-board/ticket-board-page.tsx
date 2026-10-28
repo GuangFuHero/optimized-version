@@ -3,6 +3,7 @@
 import { Box, Stack } from '@mui/material';
 import { designTokens, SheetFrame } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
@@ -28,6 +29,9 @@ import { TicketFilterPanel } from './ticket-filter-panel';
 import { TicketForm } from './ticket-form';
 import { TicketStatsStrip } from './ticket-stats-strip';
 import { TicketTable } from './ticket-table';
+import { ToolbarButton } from '../../../station/admin/station-management/toolbar-button';
+import { TicketExportMenu } from './ticket-export-menu';
+import { TicketImportDialog } from './ticket-import-dialog';
 import { TicketToolbar } from './ticket-toolbar';
 
 const { color } = designTokens;
@@ -101,6 +105,7 @@ export function TicketBoardPage() {
   const viewedUuid = params.get('ticket');
   const [editingUuid, setEditingUuid] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   // The create form is saving: Escape and the backdrop wait for it.
   const [createBusy, setCreateBusy] = useState(false);
   const closeCreate = () => {
@@ -144,6 +149,13 @@ export function TicketBoardPage() {
               onClear={() => setFilters(EMPTY_TICKET_FILTERS)}
               count={rows.length}
               onCreate={caps.canAdd ? () => setCreating(true) : undefined}
+              exportControl={<TicketExportMenu />}
+              importControl={
+                <ToolbarButton onClick={() => setImportOpen(true)}>
+                  <Upload size={16} />
+                  匯入
+                </ToolbarButton>
+              }
             />
           </Stack>
         }
@@ -186,6 +198,9 @@ export function TicketBoardPage() {
           </Box>
         }
       />
+      {caps.canImport && importOpen ? (
+        <TicketImportDialog onClose={() => setImportOpen(false)} />
+      ) : null}
       <TicketDetailSheet
         uuid={viewedUuid}
         editing={editingUuid !== null && editingUuid === viewedUuid}
