@@ -1,7 +1,9 @@
 """GraphQL surface of 請求協助.
 
 The rules — what is filed, what is refused — are pinned at the service layer in
-tests/test_help_request.py; these only prove the mutation is wired to them.
+tests/test_help_request.py; these only prove the mutation is wired to them. The GraphQL suite's
+engine never suspects anything, so every request here is filed; holding one is in
+test_create_dedup.py.
 """
 
 import pytest
@@ -13,9 +15,13 @@ from tests.test_graphql.conftest import _create_user_with_role, auth_header
 FILE = """
 mutation($input: CreateHelpRequestInput!) {
   createHelpRequest(input: $input) {
-    title priority contactName contactPhone
-    secondaryLocation { landmarkNote floor room }
-    tasks { taskName taskType quantity }
+    ... on TicketCreated {
+      ticket {
+        title priority contactName contactPhone
+        secondaryLocation { landmarkNote floor room }
+      }
+      tasks { taskName taskType quantity }
+    }
   }
 }
 """
@@ -44,11 +50,13 @@ async def test_a_citizen_files_a_help_request_through_graphql(client, redis):
 
     assert "errors" not in res.json(), res.json()
     assert res.json()["data"]["createHelpRequest"] == {
-        "title": "一樓客廳積泥需要幫忙清",
-        "priority": "medium",
-        "contactName": "王阿嬤",
-        "contactPhone": "0912345678",
-        "secondaryLocation": {"landmarkNote": "花蓮縣光復鄉中山路100號", "floor": "1", "room": "2"},
+        "ticket": {
+            "title": "一樓客廳積泥需要幫忙清",
+            "priority": "medium",
+            "contactName": "王阿嬤",
+            "contactPhone": "0912345678",
+            "secondaryLocation": {"landmarkNote": "花蓮縣光復鄉中山路100號", "floor": "1", "room": "2"},
+        },
         "tasks": [{"taskName": "清淤人力", "taskType": "hr", "quantity": 3}],
     }
 
@@ -142,7 +150,7 @@ async def test_the_needs_come_back_in_the_order_they_were_listed(client, redis):
 
 FILE_WITH_PHOTOS = """
 mutation($input: CreateHelpRequestInput!) {
-  createHelpRequest(input: $input) { photos { url } }
+  createHelpRequest(input: $input) { ... on TicketCreated { ticket { photos { url } } } }
 }
 """
 
@@ -160,7 +168,7 @@ async def test_photo_links_filed_with_a_request_come_back_as_its_photos(client, 
     )
 
     assert "errors" not in res.json(), res.json()
-    assert res.json()["data"]["createHelpRequest"]["photos"] == [{"url": link} for link in links]
+    assert res.json()["data"]["createHelpRequest"]["ticket"]["photos"] == [{"url": link} for link in links]
 
 
 @pytest.mark.asyncio
