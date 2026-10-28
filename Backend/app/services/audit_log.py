@@ -6,20 +6,36 @@ requests, invites and zone assignments. Not what members did while acting as the
 the history timeline's, under its own capabilities.
 """
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, literal_column, or_, select
+from sqlalchemy import and_, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, active_team
 from app.core.security import resolve_scope
+from app.core.tabular import write_csv
 from app.models.audit import TEAM_UUID_OF_ROW, AuditLog
 from app.models.auth import User
 
 MAX_PAGE = 100
+# The most rows one export carries (ADR-414). More is refused rather than cut short.
+MAX_EXPORT_ROWS = 10_000
+EXPORT_COLUMNS = (
+    "created_at",
+    "table_name",
+    "action",
+    "row_id",
+    "actor_uuid",
+    "actor_name",
+    "client_ip",
+    "context",
+    "old_values",
+    "new_values",
+)
 
 # Personal data a data auditor holds audit.view at `all` for but must not read (ADR-359 point 5):
 # what an applicant sent and the name a reviewer confirmed (ADR-287 point 7, ADR-355 point 5), and
@@ -88,14 +104,8 @@ class AuditPage:
     reads_applicant_details: bool
 
 
-async def list_audit_logs(
-    db: AsyncSession, *, actor: User, filters: AuditFilters, limit: int, offset: int
-) -> AuditPage:
-    """Newest first."""
-    team_uuid = await _team_reach(db, actor)
-    query = select(AuditLog)
-    if team_uuid is not None:
-        query = query.where(_about_team(team_uuid))
+def _filtered(query, filters: AuditFilters):
+    """`query` over AuditLog narrowed by what the caller asked for."""
     if filters.table is not None:
         query = query.where(AuditLog.table_name == filters.table)
     if filters.row_id is not None:
@@ -106,14 +116,84 @@ async def list_audit_logs(
         query = query.where(AuditLog.created_at >= filters.since)
     if filters.until is not None:
         query = query.where(AuditLog.created_at < filters.until)
+    return query
+
+
+async def _reads_applicant_details(db: AsyncSession, actor: User) -> bool:
+    """Whether the platform view shows what only reviewers read (ADR-359 point 5)."""
+    return await resolve_scope(actor, Perm.ROLE_REQUEST_REVIEW, db) != Scope.NONE
+
+
+async def list_audit_logs(
+    db: AsyncSession, *, actor: User, filters: AuditFilters, limit: int, offset: int
+) -> AuditPage:
+    """Newest first."""
+    team_uuid = await _team_reach(db, actor)
+    query = _filtered(select(AuditLog), filters)
+    if team_uuid is not None:
+        query = query.where(_about_team(team_uuid))
     rows = await db.execute(
         query.order_by(AuditLog.created_at.desc(), AuditLog.uuid).offset(offset).limit(min(limit, MAX_PAGE))
     )
-    reads_details = team_uuid is not None or (
-        await resolve_scope(actor, Perm.ROLE_REQUEST_REVIEW, db) != Scope.NONE
-    )
+    reads_details = team_uuid is not None or await _reads_applicant_details(db, actor)
     return AuditPage(
         rows=list(rows.scalars().all()),
         platform_view=team_uuid is None,
         reads_applicant_details=reads_details,
     )
+
+
+class AuditExportTooLarge(ValueError):
+    """More rows than one export carries. REST answers 422."""
+
+
+def _cell(value) -> str:
+    """One CSV cell: JSON for the stored values, ISO for times, '' for nothing."""
+    if value is None:
+        return ""
+    if isinstance(value, dict | list):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+async def export_audit_logs(db: AsyncSession, *, actor: User, filters: AuditFilters) -> bytes:
+    """The filtered log as CSV, newest first (ADR-414). audit.export at `all`, else 403.
+
+    Always the platform view, with the IP. Applicant details are masked exactly as on screen for
+    a holder without role_request.review, which the seed never makes but /admin/rbac could.
+    """
+    if await resolve_scope(actor, Perm.AUDIT_EXPORT, db) != Scope.ALL:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
+    count = await db.scalar(_filtered(select(func.count()).select_from(AuditLog), filters))
+    if count > MAX_EXPORT_ROWS:
+        raise AuditExportTooLarge(
+            f"{count} changes match; one file carries at most {MAX_EXPORT_ROWS}. Narrow the date range."
+        )
+    query = _filtered(select(AuditLog, User.name).outerjoin(User, User.uuid == AuditLog.user_uuid), filters)
+    rows = (await db.execute(query.order_by(AuditLog.created_at.desc(), AuditLog.uuid))).all()
+    reads_details = await _reads_applicant_details(db, actor)
+    return write_csv(
+        EXPORT_COLUMNS, [_export_row(row, actor_name, reads_details) for row, actor_name in rows]
+    )
+
+
+def _export_row(row: AuditLog, actor_name: str | None, reads_details: bool) -> dict[str, str]:
+    old, new = row.old_values, row.new_values
+    if not reads_details:
+        old = redact_applicant_details(row.table_name, old)
+        new = redact_applicant_details(row.table_name, new)
+    values = {
+        "created_at": row.created_at,
+        "table_name": row.table_name,
+        "action": row.action,
+        "row_id": row.row_id,
+        "actor_uuid": row.user_uuid,
+        "actor_name": actor_name,
+        "client_ip": row.client_ip,
+        "context": row.context,
+        "old_values": old,
+        "new_values": new,
+    }
+    return {key: _cell(value) for key, value in values.items()}

@@ -42,3 +42,34 @@ ADR-308 是所有分支上第一個沒被佔用的號碼（`feat/dedup-engine-in
 ➖ 舊文件仍留著 "Backend Administration" 與 `(site)`。改目錄名會打斷連結；Next.js 的 route group 不會
   出現在網址上，改名沒有實際收益。
 ➖ 要分清 public site 與 public capability，得靠寫的人自己寫完整，沒有工具擋。
+
+---
+
+### ADR-414 操作紀錄匯出 CSV，只給超管
+
+**白話**：超管可以把操作紀錄（稽核紀錄）照目前的篩選條件下載成一個 CSV 檔。資料稽核員和團隊管理員只能在畫面上看，不能匯出。
+
+**Date**: 2026-10-28（Popo，前端 10/28 提問第 5 項）
+
+**Context**：Spec 006 User Story 的第 3 個情境寫「auditor 按 Export Logs 產生 CSV」。
+目前只有 `GET /api/v1/admin/audit-logs`，每頁最多 100 筆（ADR-358）；前端先把匯出按鈕拿掉了。
+`audit.view`（看全部）在種子資料裡有超管和資料稽核員，`team.audit.view`（看自己隊）有團隊管理員。
+
+**Decision**：
+
+1. **`GET /api/v1/admin/audit-logs/export`**，篩選條件跟列表一樣：`table`、`row_id`、`actor_uuid`、`from`、`to`。
+   回 `text/csv` 附件，UTF-8 加 BOM（Excel 才讀得懂中文），新的在前。
+2. **新的權限 `audit.export`**，只給 `super_admin`（範圍 `all`）。**跟 Spec 006 寫的不同**：資料稽核員不能匯出（Popo 10/28 決定）。
+   用一個新權限，而不是直接檢查角色名稱，之後要調整可以在 `/admin/rbac` 改。
+   既有資料庫由 migration `b5d8e2a41c07` 補上（ADR-055）。
+3. **欄位**：`created_at`、`table_name`、`action`、`row_id`、`actor_uuid`、`actor_name`（操作人暱稱）、`client_ip`、
+   `context`、`old_values`、`new_values`。後三個是 JSON 字串。開頭是 `=`、`+`、`-`、`@` 的值會加 `'`，
+   避免試算表把它當公式執行（`app/core/tabular.py::write_csv`，ADR-208）。
+4. **一次最多 10,000 筆**。超過回 422，請使用者縮小時間範圍；不截斷，免得有人把一部分當成全部。
+5. **一律是平台視角**（含 IP）。申請人資料的遮罩規則跟畫面一樣：沒有 `role_request.review` 的人看到 `[redacted]`
+   （ADR-359 第 5 點）。種子資料的超管都有，只有在 `/admin/rbac` 另外授權時才會遇到。
+
+**Consequences**：
+➕ 超管可以把一段時間的紀錄帶去做外部分析。
+➖ 超過 10,000 筆要分段下載。
+➖ 資料稽核員要匯出得先在 `/admin/rbac` 授權 `audit.export`。
