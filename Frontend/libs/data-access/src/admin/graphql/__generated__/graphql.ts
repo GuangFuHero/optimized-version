@@ -2095,6 +2095,13 @@ export type AdminTicketFieldsFragment = {
   createdBy?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  disasterTypes: Array<string>;
+  locationCell?: string | null;
+  secondaryLocation?: {
+    __typename?: 'SecondaryLocationType';
+    county?: string | null;
+    town?: string | null;
+  } | null;
 };
 
 export type AdminTaskFieldsFragment = {
@@ -2110,10 +2117,13 @@ export type AdminTaskFieldsFragment = {
   source: string;
   createdAt?: string | null;
   updatedAt?: string | null;
+  assignedCount: number;
+  recruitingStoppedAt?: string | null;
   assignments: Array<{
     __typename?: 'TaskAssignmentType';
     uuid: string;
     actorUuid: string;
+    actorName?: string | null;
     role?: string | null;
     status: string;
     assignedAt?: string | null;
@@ -2167,6 +2177,8 @@ export type AdminTicketsQueryVariables = Exact<{
   status?: InputMaybe<Scalars['String']['input']>;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
+  needType?: InputMaybe<Scalars['String']['input']>;
+  auditStatus?: InputMaybe<AuditStatus>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
@@ -2191,6 +2203,8 @@ export type AdminTicketsQuery = {
       createdBy?: string | null;
       createdAt?: string | null;
       updatedAt?: string | null;
+      disasterTypes: Array<string>;
+      locationCell?: string | null;
       tasks: Array<{
         __typename?: 'TicketTaskType';
         uuid: string;
@@ -2204,16 +2218,24 @@ export type AdminTicketsQuery = {
         source: string;
         createdAt?: string | null;
         updatedAt?: string | null;
+        assignedCount: number;
+        recruitingStoppedAt?: string | null;
         assignments: Array<{
           __typename?: 'TaskAssignmentType';
           uuid: string;
           actorUuid: string;
+          actorName?: string | null;
           role?: string | null;
           status: string;
           assignedAt?: string | null;
           updatedAt?: string | null;
         }>;
       }>;
+      secondaryLocation?: {
+        __typename?: 'SecondaryLocationType';
+        county?: string | null;
+        town?: string | null;
+      } | null;
     }>;
     pageInfo: {
       __typename?: 'PageInfo';
@@ -2232,6 +2254,9 @@ export type AdminTicketQuery = {
   __typename?: 'Query';
   ticket?: {
     __typename?: 'TicketType';
+    auditNote?: string | null;
+    auditedAt?: string | null;
+    auditContentHash?: string | null;
     uuid: string;
     title: string;
     description?: string | null;
@@ -2246,6 +2271,16 @@ export type AdminTicketQuery = {
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    disasterTypes: Array<string>;
+    locationCell?: string | null;
+    changesSinceAudit?: Array<{
+      __typename?: 'TicketAuditChangeType';
+      entity: string;
+      entityUuid: string;
+      field: string;
+      auditedValue?: unknown | null;
+      currentValue?: unknown | null;
+    }> | null;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
       fullAddress?: string | null;
@@ -2282,6 +2317,8 @@ export type AdminTicketQuery = {
       source: string;
       createdAt?: string | null;
       updatedAt?: string | null;
+      assignedCount: number;
+      recruitingStoppedAt?: string | null;
       properties: Array<{
         __typename?: 'TaskPropertyType';
         uuid: string;
@@ -2295,6 +2332,7 @@ export type AdminTicketQuery = {
         __typename?: 'TaskAssignmentType';
         uuid: string;
         actorUuid: string;
+        actorName?: string | null;
         role?: string | null;
         status: string;
         assignedAt?: string | null;
@@ -2333,10 +2371,13 @@ export type AdminTicketTasksQuery = {
     source: string;
     createdAt?: string | null;
     updatedAt?: string | null;
+    assignedCount: number;
+    recruitingStoppedAt?: string | null;
     assignments: Array<{
       __typename?: 'TaskAssignmentType';
       uuid: string;
       actorUuid: string;
+      actorName?: string | null;
       role?: string | null;
       status: string;
       assignedAt?: string | null;
@@ -2811,7 +2852,16 @@ export type AdminCreateTicketMutationVariables = Exact<{
 export type AdminCreateTicketMutation = {
   __typename?: 'Mutation';
   createTicket:
-    | { __typename: 'DuplicatesSuspected' }
+    | {
+        __typename: 'DuplicatesSuspected';
+        suspects: Array<{
+          __typename?: 'DuplicateSuspect';
+          draftRef: string;
+          relatedKind: string;
+          relatedUuid: string;
+          relatedTicketUuid?: string | null;
+        }>;
+      }
     | {
         __typename: 'TicketCreated';
         ticket: {
@@ -2830,6 +2880,13 @@ export type AdminCreateTicketMutation = {
           createdBy?: string | null;
           createdAt?: string | null;
           updatedAt?: string | null;
+          disasterTypes: Array<string>;
+          locationCell?: string | null;
+          secondaryLocation?: {
+            __typename?: 'SecondaryLocationType';
+            county?: string | null;
+            town?: string | null;
+          } | null;
         };
       };
 };
@@ -2857,6 +2914,13 @@ export type AdminUpdateTicketMutation = {
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    disasterTypes: Array<string>;
+    locationCell?: string | null;
+    secondaryLocation?: {
+      __typename?: 'SecondaryLocationType';
+      county?: string | null;
+      town?: string | null;
+    } | null;
   };
 };
 
@@ -2894,6 +2958,13 @@ export type AdminAuditTicketMutation = {
     createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
+    disasterTypes: Array<string>;
+    locationCell?: string | null;
+    secondaryLocation?: {
+      __typename?: 'SecondaryLocationType';
+      county?: string | null;
+      town?: string | null;
+    } | null;
   };
 };
 
@@ -2914,12 +2985,22 @@ export type AdminSetTicketDisasterDetailsMutation = {
 
 export type AdminCreateTicketTaskMutationVariables = Exact<{
   input: CreateTicketTaskInput;
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 export type AdminCreateTicketTaskMutation = {
   __typename?: 'Mutation';
   createTicketTask:
-    | { __typename: 'DuplicatesSuspected' }
+    | {
+        __typename: 'DuplicatesSuspected';
+        suspects: Array<{
+          __typename?: 'DuplicateSuspect';
+          draftRef: string;
+          relatedKind: string;
+          relatedUuid: string;
+          relatedTicketUuid?: string | null;
+        }>;
+      }
     | {
         __typename: 'TicketTaskCreated';
         task: {
@@ -2935,10 +3016,13 @@ export type AdminCreateTicketTaskMutation = {
           source: string;
           createdAt?: string | null;
           updatedAt?: string | null;
+          assignedCount: number;
+          recruitingStoppedAt?: string | null;
           assignments: Array<{
             __typename?: 'TaskAssignmentType';
             uuid: string;
             actorUuid: string;
+            actorName?: string | null;
             role?: string | null;
             status: string;
             assignedAt?: string | null;
@@ -2968,10 +3052,13 @@ export type AdminUpdateTicketTaskMutation = {
     source: string;
     createdAt?: string | null;
     updatedAt?: string | null;
+    assignedCount: number;
+    recruitingStoppedAt?: string | null;
     assignments: Array<{
       __typename?: 'TaskAssignmentType';
       uuid: string;
       actorUuid: string;
+      actorName?: string | null;
       role?: string | null;
       status: string;
       assignedAt?: string | null;
@@ -3015,6 +3102,73 @@ export type AdminUpdateTaskAssignmentMutation = {
     status: string;
     updatedAt?: string | null;
   };
+};
+
+export type AdminStopRecruitingMutationVariables = Exact<{
+  taskUuid: Scalars['UUID']['input'];
+}>;
+
+export type AdminStopRecruitingMutation = {
+  __typename?: 'Mutation';
+  stopRecruiting: {
+    __typename?: 'TicketTaskType';
+    uuid: string;
+    ticketUuid: string;
+    taskType: string;
+    taskName: string;
+    taskDescription?: string | null;
+    quantity?: number | null;
+    status: string;
+    progressNote?: string | null;
+    source: string;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    assignedCount: number;
+    recruitingStoppedAt?: string | null;
+    assignments: Array<{
+      __typename?: 'TaskAssignmentType';
+      uuid: string;
+      actorUuid: string;
+      actorName?: string | null;
+      role?: string | null;
+      status: string;
+      assignedAt?: string | null;
+      updatedAt?: string | null;
+    }>;
+  };
+};
+
+export type AdminDeleteTicketTaskMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type AdminDeleteTicketTaskMutation = {
+  __typename?: 'Mutation';
+  deleteTicketTask: boolean;
+};
+
+export type AdminAttachTicketPhotoMutationVariables = Exact<{
+  ticketUuid: Scalars['UUID']['input'];
+  url: Scalars['String']['input'];
+}>;
+
+export type AdminAttachTicketPhotoMutation = {
+  __typename?: 'Mutation';
+  attachTicketPhoto: {
+    __typename?: 'PhotoType';
+    uuid: string;
+    url: string;
+    createdAt?: string | null;
+  };
+};
+
+export type AdminDetachTicketPhotoMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type AdminDetachTicketPhotoMutation = {
+  __typename?: 'Mutation';
+  detachTicketPhoto: boolean;
 };
 
 export type AdminUnassignTaskActorMutationVariables = Exact<{
@@ -3731,6 +3885,19 @@ export const AdminTicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+              ],
+            },
+          },
         ],
       },
     },
@@ -3760,6 +3927,11 @@ export const AdminTaskFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'recruitingStoppedAt' },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignments' },
@@ -3768,6 +3940,7 @@ export const AdminTaskFieldsFragmentDoc = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'actorName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'role' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
@@ -3958,6 +4131,25 @@ export const AdminTicketsDocument = {
         },
         {
           kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'needType' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'auditStatus' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'AuditStatus' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           defaultValue: { kind: 'IntValue', value: '0' },
@@ -4007,6 +4199,22 @@ export const AdminTicketsDocument = {
                 kind: 'Argument',
                 name: { kind: 'Name', value: 'q' },
                 value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'needType' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'needType' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'auditStatus' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'auditStatus' },
+                },
               },
               {
                 kind: 'Argument',
@@ -4097,6 +4305,19 @@ export const AdminTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+              ],
+            },
+          },
         ],
       },
     },
@@ -4121,6 +4342,11 @@ export const AdminTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'recruitingStoppedAt' },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignments' },
@@ -4129,6 +4355,7 @@ export const AdminTicketsDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'actorName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'role' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
@@ -4196,6 +4423,38 @@ export const AdminTicketDocument = {
                 {
                   kind: 'FragmentSpread',
                   name: { kind: 'Name', value: 'AdminTicketFields' },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'auditNote' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'auditedAt' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'auditContentHash' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'changesSinceAudit' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'entity' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'entityUuid' },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'field' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'auditedValue' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'currentValue' },
+                      },
+                    ],
+                  },
                 },
                 {
                   kind: 'Field',
@@ -4347,6 +4606,19 @@ export const AdminTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+              ],
+            },
+          },
         ],
       },
     },
@@ -4371,6 +4643,11 @@ export const AdminTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'recruitingStoppedAt' },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignments' },
@@ -4379,6 +4656,7 @@ export const AdminTicketDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'actorName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'role' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
@@ -4521,6 +4799,11 @@ export const AdminTicketTasksDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'recruitingStoppedAt' },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignments' },
@@ -4529,6 +4812,7 @@ export const AdminTicketTasksDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'actorName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'role' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
@@ -6120,6 +6404,46 @@ export const AdminCreateTicketDocument = {
                     ],
                   },
                 },
+                {
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'DuplicatesSuspected' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspects' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'draftRef' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedKind' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedUuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: {
+                                kind: 'Name',
+                                value: 'relatedTicketUuid',
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
               ],
             },
           },
@@ -6150,6 +6474,19 @@ export const AdminCreateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+              ],
+            },
+          },
         ],
       },
     },
@@ -6250,6 +6587,19 @@ export const AdminUpdateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+              ],
+            },
+          },
         ],
       },
     },
@@ -6427,6 +6777,19 @@ export const AdminAuditTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'secondaryLocation' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+              ],
+            },
+          },
         ],
       },
     },
@@ -6538,6 +6901,14 @@ export const AdminCreateTicketTaskDocument = {
             },
           },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -6552,6 +6923,14 @@ export const AdminCreateTicketTaskDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'input' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
                 },
               },
             ],
@@ -6577,6 +6956,46 @@ export const AdminCreateTicketTaskDocument = {
                             {
                               kind: 'FragmentSpread',
                               name: { kind: 'Name', value: 'AdminTaskFields' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'DuplicatesSuspected' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspects' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'draftRef' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedKind' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedUuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: {
+                                kind: 'Name',
+                                value: 'relatedTicketUuid',
+                              },
                             },
                           ],
                         },
@@ -6611,6 +7030,11 @@ export const AdminCreateTicketTaskDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'recruitingStoppedAt' },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignments' },
@@ -6619,6 +7043,7 @@ export const AdminCreateTicketTaskDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'actorName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'role' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
@@ -6723,6 +7148,11 @@ export const AdminUpdateTicketTaskDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'recruitingStoppedAt' },
+          },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'assignments' },
@@ -6731,6 +7161,7 @@ export const AdminUpdateTicketTaskDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'actorName' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'role' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
@@ -6905,6 +7336,261 @@ export const AdminUpdateTaskAssignmentDocument = {
 } as unknown as DocumentNode<
   AdminUpdateTaskAssignmentMutation,
   AdminUpdateTaskAssignmentMutationVariables
+>;
+export const AdminStopRecruitingDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminStopRecruiting' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'taskUuid' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'stopRecruiting' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'taskUuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'taskUuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'AdminTaskFields' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'AdminTaskFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketTaskType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'ticketUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskDescription' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'recruitingStoppedAt' },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'assignments' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'actorUuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'actorName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'role' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'assignedAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminStopRecruitingMutation,
+  AdminStopRecruitingMutationVariables
+>;
+export const AdminDeleteTicketTaskDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminDeleteTicketTask' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'deleteTicketTask' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminDeleteTicketTaskMutation,
+  AdminDeleteTicketTaskMutationVariables
+>;
+export const AdminAttachTicketPhotoDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminAttachTicketPhoto' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'ticketUuid' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'url' } },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'attachTicketPhoto' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'ticketUuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'ticketUuid' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'url' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'url' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'url' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminAttachTicketPhotoMutation,
+  AdminAttachTicketPhotoMutationVariables
+>;
+export const AdminDetachTicketPhotoDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminDetachTicketPhoto' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'detachTicketPhoto' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminDetachTicketPhotoMutation,
+  AdminDetachTicketPhotoMutationVariables
 >;
 export const AdminUnassignTaskActorDocument = {
   kind: 'Document',

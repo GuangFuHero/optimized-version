@@ -35,6 +35,42 @@ export function useTickets(
   return useQuery({ ...ticketsQuery(variables), enabled: options.enabled });
 }
 
+export type AllTicketsQueryVariables = Omit<
+  documents.AdminTicketsQueryVariables,
+  'skip' | 'limit'
+>;
+
+/** Every ticket matching `variables`, read page by page up to the collector's cap. */
+export const allTicketsQuery = (variables: AllTicketsQueryVariables = {}) =>
+  queryOptions({
+    queryKey: ['admin', 'tickets', 'all', variables],
+    queryFn: ({ signal }) =>
+      collectAllPages(
+        async (skip, limit) => {
+          const data = await adminGraphqlClient
+            .query(
+              documents.AdminTicketsDocument,
+              { ...variables, skip, limit },
+              { fetchOptions: { credentials: 'include', signal } },
+            )
+            .toPromise()
+            .then(graphqlResponseData);
+          return {
+            items: data.tickets.items,
+            hasNextPage: data.tickets.pageInfo.hasNextPage,
+          };
+        },
+        { pageSize: 200 },
+      ),
+  });
+
+export function useAllTickets(
+  variables: AllTicketsQueryVariables = {},
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({ ...allTicketsQuery(variables), enabled: options.enabled });
+}
+
 export const ticketQuery = (variables: documents.AdminTicketQueryVariables) =>
   queryOptions({
     queryKey: ['admin', 'tickets', 'ticket', variables],
@@ -494,6 +530,58 @@ export function useCreateTicketTask() {
     mutationFn: (variables: documents.AdminCreateTicketTaskMutationVariables) =>
       adminGraphqlClient
         .mutation(documents.AdminCreateTicketTaskDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+  });
+}
+
+export function useStopTaskRecruiting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminStopRecruitingMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminStopRecruitingDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+  });
+}
+
+export function useDeleteTicketTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminDeleteTicketTaskMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminDeleteTicketTaskDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+  });
+}
+
+export function useAttachTicketPhoto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminAttachTicketPhotoMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminAttachTicketPhotoDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+  });
+}
+
+export function useDetachTicketPhoto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminDetachTicketPhotoMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminDetachTicketPhotoDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
     onSuccess: () =>

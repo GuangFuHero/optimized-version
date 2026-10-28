@@ -18,6 +18,12 @@ fragment AdminTicketFields on TicketType {
   createdBy
   createdAt
   updatedAt
+  disasterTypes
+  locationCell
+  secondaryLocation {
+    county
+    town
+  }
 }
 fragment AdminTaskFields on TicketTaskType {
   uuid
@@ -31,9 +37,12 @@ fragment AdminTaskFields on TicketTaskType {
   source
   createdAt
   updatedAt
+  assignedCount
+  recruitingStoppedAt
   assignments {
     uuid
     actorUuid
+    actorName
     role
     status
     assignedAt
@@ -82,6 +91,8 @@ query AdminTickets(
   $status: String
   $priority: String
   $q: String
+  $needType: String
+  $auditStatus: AuditStatus
   $skip: Int = 0
   $limit: Int = 50
 ) {
@@ -90,6 +101,8 @@ query AdminTickets(
     status: $status
     priority: $priority
     q: $q
+    needType: $needType
+    auditStatus: $auditStatus
     skip: $skip
     limit: $limit
   ) {
@@ -107,6 +120,16 @@ query AdminTickets(
 query AdminTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...AdminTicketFields
+    auditNote
+    auditedAt
+    auditContentHash
+    changesSinceAudit {
+      entity
+      entityUuid
+      field
+      auditedValue
+      currentValue
+    }
     secondaryLocation {
       fullAddress
       county
@@ -423,6 +446,14 @@ mutation AdminCreateTicket($input: CreateTicketInput!) {
         ...AdminTicketFields
       }
     }
+    ... on DuplicatesSuspected {
+      suspects {
+        draftRef
+        relatedKind
+        relatedUuid
+        relatedTicketUuid
+      }
+    }
   }
 }
 mutation AdminUpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
@@ -458,12 +489,26 @@ mutation AdminSetTicketDisasterDetails(
     value
   }
 }
-mutation AdminCreateTicketTask($input: CreateTicketTaskInput!) {
-  createTicketTask(input: $input) {
+mutation AdminCreateTicketTask(
+  $input: CreateTicketTaskInput!
+  $acknowledgedDuplicateOf: String
+) {
+  createTicketTask(
+    input: $input
+    acknowledgedDuplicateOf: $acknowledgedDuplicateOf
+  ) {
     __typename
     ... on TicketTaskCreated {
       task {
         ...AdminTaskFields
+      }
+    }
+    ... on DuplicatesSuspected {
+      suspects {
+        draftRef
+        relatedKind
+        relatedUuid
+        relatedTicketUuid
       }
     }
   }
@@ -499,6 +544,24 @@ mutation AdminUpdateTaskAssignment(
     status
     updatedAt
   }
+}
+mutation AdminStopRecruiting($taskUuid: UUID!) {
+  stopRecruiting(taskUuid: $taskUuid) {
+    ...AdminTaskFields
+  }
+}
+mutation AdminDeleteTicketTask($uuid: UUID!) {
+  deleteTicketTask(uuid: $uuid)
+}
+mutation AdminAttachTicketPhoto($ticketUuid: UUID!, $url: String!) {
+  attachTicketPhoto(ticketUuid: $ticketUuid, url: $url) {
+    uuid
+    url
+    createdAt
+  }
+}
+mutation AdminDetachTicketPhoto($uuid: UUID!) {
+  detachTicketPhoto(uuid: $uuid)
 }
 mutation AdminUnassignTaskActor($uuid: UUID!) {
   unassignTaskActor(uuid: $uuid)
