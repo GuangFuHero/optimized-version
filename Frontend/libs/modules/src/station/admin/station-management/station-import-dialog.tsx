@@ -396,9 +396,6 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                 {preview.errors.length > 0 ? (
                   <ErrorList errors={preview.errors} />
                 ) : null}
-                <Callout tone="warning">
-                  可能重複的會送進「AI 重複審核」，不會在這裡擋下。
-                </Callout>
               </Step>
             ) : null}
           </Box>
