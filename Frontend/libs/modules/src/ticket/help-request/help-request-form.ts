@@ -231,9 +231,14 @@ function readQuantity(value: string): number | null {
   return Math.max(1, Number.parseInt(value, 10) || 1);
 }
 
-/** For a form `findMissingFields` finds complete. */
+/**
+ * For a form `findMissingFields` finds complete. `acknowledged`, once the requester said it is not
+ * the same thing: for each need held, by its place among the needs sent, the suspect to name
+ * (`readHeldHelpRequest`).
+ */
 export function toHelpRequestInput(
   form: HelpRequestForm,
+  acknowledged: Readonly<Record<number, string>> = {},
 ): CreateHelpRequestInput {
   const landmark = form.landmark;
 
@@ -250,10 +255,17 @@ export function toHelpRequestInput(
     // One line, as the lookup filled it in or as typed: the backend splits it, and keeps what it
     // cannot split as it is.
     secondaryLocation: toAddressInput(form),
-    tasks: form.needs.flatMap((row) => {
-      const need = toNeedInput(row);
-      return need ? [need] : [];
-    }),
+    tasks: form.needs
+      .flatMap((row) => {
+        const need = toNeedInput(row);
+        return need ? [need] : [];
+      })
+      // By place among the needs sent, not among the rows: a row with no kind chosen is not sent.
+      .map((need, index) =>
+        acknowledged[index]
+          ? { ...need, acknowledgedDuplicateOf: acknowledged[index] }
+          : need,
+      ),
     photoUrls: form.photoUrls,
   };
 }
