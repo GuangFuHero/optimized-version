@@ -9,7 +9,7 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import { designTokens, type BadgeTone } from '@rescue-frontend/ui';
 import { Check, ChevronsUpDown } from 'lucide-react';
-import { useState, type MouseEvent, type ReactNode } from 'react';
+import { useState, type ReactNode, type SyntheticEvent } from 'react';
 import { toast } from 'sonner';
 
 import type { StationRow } from './model/station-row';
@@ -90,7 +90,8 @@ function CellMenu({
   children: (close: () => void) => ReactNode;
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const stop = (event: MouseEvent) => event.stopPropagation();
+  // The row opens the station drawer on click and on Enter; menu events bubble out of the portal.
+  const stop = (event: SyntheticEvent) => event.stopPropagation();
   return (
     <>
       <ButtonBase
@@ -100,6 +101,7 @@ function CellMenu({
           event.stopPropagation();
           setAnchor(event.currentTarget);
         }}
+        onKeyDown={stop}
         sx={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -120,6 +122,7 @@ function CellMenu({
         open={Boolean(anchor)}
         onClose={() => setAnchor(null)}
         onClick={stop}
+        onKeyDown={stop}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         slotProps={{
