@@ -84,7 +84,7 @@ on_failure() {
 gen_env() {     # .env is a deploy-time artifact: compose interpolation + container env share it (S7)
     log "generating .env from Secret Manager"
     local secret_key pg_pw smtp_key kotsms_user kotsms_pw oauth_google_secret oauth_line_secret
-    local tunnel_token
+    local tunnel_token tgos_addr_app_id tgos_addr_api_key tgos_geo_app_id tgos_geo_api_key
     secret_key=$(gcloud secrets versions access latest --secret=staging-backend-jwt-signing-key)
     pg_pw=$(gcloud secrets versions access latest --secret=staging-backend-postgres-password)
     smtp_key=$(gcloud secrets versions access latest --secret=staging-backend-smtp2go-api-key)
@@ -93,6 +93,11 @@ gen_env() {     # .env is a deploy-time artifact: compose interpolation + contai
     # The backend runs the Google and LINE sign-in (ADR-331).
     oauth_google_secret=$(gcloud secrets versions access latest --secret=staging-backend-google-client-secret)
     oauth_line_secret=$(gcloud secrets versions access latest --secret=staging-backend-line-channel-secret)
+    # The two TGOS address services' keys (Spec/027). TGOS takes them from the VM's registered IP alone.
+    tgos_addr_app_id=$(gcloud secrets versions access latest --secret=staging-backend-tgos-addr-app-id)
+    tgos_addr_api_key=$(gcloud secrets versions access latest --secret=staging-backend-tgos-addr-api-key)
+    tgos_geo_app_id=$(gcloud secrets versions access latest --secret=staging-backend-tgos-geo-app-id)
+    tgos_geo_api_key=$(gcloud secrets versions access latest --secret=staging-backend-tgos-geo-api-key)
     # The Cloudflare Tunnel's token, for the cloudflared container. The Next apps hold no secret.
     tunnel_token=$(gcloud secrets versions access latest --secret=staging-cloudflared-tunnel-token)
     # Backend values are embedded unquoted in the .env AND the asyncpg DSN URL: restrict to a charset
@@ -106,11 +111,15 @@ gen_env() {     # .env is a deploy-time artifact: compose interpolation + contai
         || { printf 'ERROR: smtp2go key has .env-unsafe characters\n' >&2; false; }
     [[ "$kotsms_user" =~ ^[A-Za-z0-9_-]+$ && "$kotsms_pw" =~ ^[A-Za-z0-9_-]+$ ]] \
         || { printf 'ERROR: a kotsms credential has .env-unsafe characters\n' >&2; false; }
-    # The OAuth secrets and the tunnel token go into plain KEY=value (not a URL), so only
+    # The OAuth secrets, the TGOS keys and the tunnel token go into plain KEY=value (not a URL), so only
     # newlines would corrupt the dotenv file — they may legitimately contain + / = and are fine unquoted.
     for v in "$oauth_google_secret" "$oauth_line_secret"; do
         [[ -n "$v" && "$v" != *$'\n'* ]] \
             || { printf 'ERROR: a backend OAuth secret is empty or multi-line\n' >&2; false; }
+    done
+    for v in "$tgos_addr_app_id" "$tgos_addr_api_key" "$tgos_geo_app_id" "$tgos_geo_api_key"; do
+        [[ -n "$v" && "$v" != *$'\n'* ]] \
+            || { printf 'ERROR: a TGOS key is empty or multi-line\n' >&2; false; }
     done
     [[ -n "$tunnel_token" && "$tunnel_token" != *$'\n'* ]] \
         || { printf 'ERROR: the tunnel token is empty or multi-line\n' >&2; false; }
@@ -135,6 +144,10 @@ gen_env() {     # .env is a deploy-time artifact: compose interpolation + contai
         printf 'KOTSMS_PASSWORD=%s\n' "$kotsms_pw"
         printf 'GOOGLE_CLIENT_SECRET=%s\n' "$oauth_google_secret"
         printf 'LINE_CHANNEL_SECRET=%s\n' "$oauth_line_secret"
+        printf 'TGOS_ADDR_APP_ID=%s\n' "$tgos_addr_app_id"
+        printf 'TGOS_ADDR_API_KEY=%s\n' "$tgos_addr_api_key"
+        printf 'TGOS_GEO_APP_ID=%s\n' "$tgos_geo_app_id"
+        printf 'TGOS_GEO_API_KEY=%s\n' "$tgos_geo_api_key"
         cat scripts/deploy-config.staging.env
     } > .env
     {
@@ -163,7 +176,6 @@ main() {
     gcloud auth list --filter=status:ACTIVE --format='value(account)' | grep -q . \
         || die "no active gcloud identity (VM service account?)"
     [ -z "$(git status --porcelain)" ] || die "git working tree not clean"
-    [[ -f .env.tgos ]] || printf 'WARNING: .env.tgos missing; address lookups will answer "unavailable"\n' >&2
     local app
     for app in "${NEXT_APP_LIST[@]}"; do
         [[ "$app" == frontend || "$app" == admin ]] || die "NEXT_APPS takes frontend and admin, not '$app'"

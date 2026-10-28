@@ -96,7 +96,8 @@ export function SiteListRow({
               bgcolor: isStation
                 ? color.brand.secondary.default
                 : color.bg.primary.default,
-              color: isStation ? color.fg.onSecondary : color.fg.onPrimary,
+              // A white icon on the blue, as on the map's station pins (designer, 2026-10-25).
+              color: isStation ? color.fg.inverse : color.fg.onPrimary,
             }}
           >
             {/* Named for a screen reader: the badge on the right no longer says the type. */}

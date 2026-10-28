@@ -35,7 +35,13 @@ from app.graphql.tickets.types import (
 )
 from app.services import ticket as ticket_service
 from app.services import ticket_audit
-from app.services.dedup_submission import SubmissionHeld, TaskSubmission, submit_new_task, submit_new_ticket
+from app.services.dedup_submission import (
+    SubmissionHeld,
+    TaskSubmission,
+    submit_help_request,
+    submit_new_task,
+    submit_new_ticket,
+)
 
 
 @strawberry.type
@@ -92,13 +98,18 @@ class RequestMutation:
     @strawberry.mutation
     async def create_help_request(
         self, info: strawberry.types.Info, input: CreateHelpRequestInput
-    ) -> TicketType:
+    ) -> CreateTicketResult:
         """File a citizen's request for help, its needs and photo links in one transaction (請求協助).
 
         Requires ticket.add. Nothing is written unless every need and photo link is valid; see
-        app/services/ticket.py::create_help_request for the rules.
+        app/services/ticket.py::validate_help_request for the rules.
+
+        Two-phase, as `createTicket`: if any need looks like an open task nearby, nothing is filed
+        and `DuplicatesSuspected` lists each suspect (`draftRef` "task:i" is the i-th need). Send
+        the request again with `acknowledgedDuplicateOf` on each need confirmed not to be a
+        duplicate. A failing duplicate check never blocks.
         """
-        ticket = await ticket_service.create_help_request(
+        result = await submit_help_request(
             info.context["db"],
             actor=require_authenticated(info),
             geometry=input.geometry,
@@ -118,12 +129,18 @@ class RequestMutation:
                     "task_name": task.task_name,
                     "task_description": task.task_description,
                     "quantity": task.quantity,
+                    "acknowledged_duplicate_of": task.acknowledged_duplicate_of,
                 }
                 for task in input.tasks
             ],
             photo_urls=input.photo_urls,
         )
-        return TicketType.from_model(ticket)
+        if isinstance(result, SubmissionHeld):
+            return DuplicatesSuspected.of(result.suspects)
+        return TicketCreated(
+            ticket=TicketType.from_model(result.entity),
+            tasks=[TicketTaskType.from_model(task) for task in result.tasks],
+        )
 
     @strawberry.mutation
     async def update_ticket(

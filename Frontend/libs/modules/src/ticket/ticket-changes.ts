@@ -11,8 +11,15 @@ const channel = new EventTarget();
 const TICKET_CHANGED = 'ticket-changed';
 const TICKET_CREATED = 'ticket-created';
 
-/** A ticket just filed, as `createHelpRequest` answers: its fields and its needs. */
-export type CreatedTicket = CreateHelpRequestMutation['createHelpRequest'];
+type TicketFiled = Extract<
+  CreateHelpRequestMutation['createHelpRequest'],
+  { __typename: 'TicketCreated' }
+>;
+
+/** A ticket just filed, as `createHelpRequest` answers when it files one: its fields and its needs. */
+export type CreatedTicket = TicketFiled['ticket'] & {
+  tasks: TicketFiled['tasks'];
+};
 
 export function announceTicketChanged(ticketUuid: string): void {
   channel.dispatchEvent(

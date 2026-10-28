@@ -75,7 +75,7 @@ gcloud secrets versions access latest --secret=staging-backend-postgres-password
 | Published ports | Backend `:8000`; Postgres on **loopback only** (`127.0.0.1:5432`, for SSH-tunnel inspection); Redis internal-only |
 | GCP firewall | Only 22/SSH open. **8000 is NOT open** — access via SSH tunnel until a firewall rule (or Caddy/HTTPS) is added for the frontend |
 | External IP | Static `34.80.0.121` (reserved as `wanguard-prod-external-ip`). 簡訊王 and TGOS only accept API calls from this registered IP — releasing it breaks SMS (`statuscode=k`) and address lookups. Still connect via `gcloud compute ssh` |
-| Secrets | GCP Secret Manager: `staging-backend-{jwt-signing-key,postgres-password,smtp2go-api-key,kotsms-username,kotsms-password,google-client-secret,line-channel-secret}`, `staging-cloudflared-tunnel-token`. The Next apps hold no secret. `staging-frontend-{nextauth-secret,google-client-secret,line-client-secret}` are read by nothing once the back office has deployed (see [Deploying the back office](#deploying-the-back-office)) |
+| Secrets | GCP Secret Manager: `staging-backend-{jwt-signing-key,postgres-password,smtp2go-api-key,kotsms-username,kotsms-password,google-client-secret,line-channel-secret,tgos-addr-app-id,tgos-addr-api-key,tgos-geo-app-id,tgos-geo-api-key}`, `staging-cloudflared-tunnel-token`. The Next apps hold no secret. `staging-frontend-{nextauth-secret,google-client-secret,line-client-secret}` are read by nothing once the back office has deployed (see [Deploying the back office](#deploying-the-back-office)) |
 | SMS | 簡訊王 (KotSMS), `SMS_PROVIDER=kotsms` written by `gen_env`. Messages are signed 島嶼守望, the 實名制 identity the account is approved for; a mismatch is dropped by the carrier while the API still answers `statuscode=1`. **Takes two deploys to switch on**: a running `deploy.sh` keeps the `gen_env` it parsed before checkout, so the first deploy that ships the KotSMS lines still writes the old `.env` (SMS stays on `console`); the next deploy writes them |
 | Backups | `gs://wanguard-250923-db-backups` |
 | Swap | 2 GB `/swapfile`, `vm.swappiness=10` — prevents the OOM killer hitting Postgres during image builds. With the stack idle, about 1 GB of it was in use on 2026-10-23, so the two Next apps build one at a time |
@@ -422,33 +422,53 @@ database rebuilt from empty needs the password set again; until then the two acc
 
 ---
 
-## TGOS address keys (`.env.tgos`)
+## TGOS address keys
 
-The backend looks addresses up in two TGOS services, each with its own APPID and API KEY. These four
-values live **only** in `Backend/.env.tgos` on the VM: not in Secret Manager, GitHub, the repo or this
-doc. `deploy.sh` rewrites `.env` on every deploy but never touches `.env.tgos`, and compose hands it to
-the `backend` container alone.
+The backend looks addresses up in two TGOS services, each with its own APPID and API KEY. The four values
+are in Secret Manager with the other staging secrets, readable by the VM's service account (so from any
+shell on the VM) and by project owners. `gen_env` writes them into `.env` on every deploy, so the `backend`
+container has them (and `retention`, which shares `.env`); the Next apps and the tunnel do not. A deploy
+stops at step 4 if one of them is empty or holds a line break, as it does for the OAuth secrets.
 
-| Variable | Value | TGOS service |
+| Variable | Secret | TGOS service |
 |---|---|---|
-| `TGOS_ADDR_APP_ID` / `TGOS_ADDR_API_KEY` | that service's APPID / API KEY | 全國門牌位置比對服務 |
-| `TGOS_GEO_APP_ID` / `TGOS_GEO_API_KEY` | that service's APPID / API KEY | 坐標回傳門牌服務 |
+| `TGOS_ADDR_APP_ID` / `TGOS_ADDR_API_KEY` | `staging-backend-tgos-addr-app-id` / `-addr-api-key` | 全國門牌位置比對服務 |
+| `TGOS_GEO_APP_ID` / `TGOS_GEO_API_KEY` | `staging-backend-tgos-geo-app-id` / `-geo-api-key` | 坐標回傳門牌服務 |
 
-One-time setup, then after any key change:
+After a key change, add the new version and deploy, then check the backend has all four:
 
 ```bash
-cd /opt/wanguard/Backend && umask 177 && nano .env.tgos   # the four KEY=value lines, values unquoted
-ls -l .env.tgos                                           # expect -rw-------
-./scripts/deploy.sh                                       # recreates the backend with them
+# read -rs takes the key without echoing it or leaving it in the shell history
+read -rs v && printf '%s' "$v" \
+  | gcloud secrets versions add staging-backend-tgos-addr-api-key --data-file=- && unset v
+cd /opt/wanguard/Backend && ./scripts/deploy.sh
 docker compose -f docker-compose.staging.yml exec backend python -c \
   "from app.core.config import settings as s; print(all([s.TGOS_ADDR_APP_ID, s.TGOS_ADDR_API_KEY, s.TGOS_GEO_APP_ID, s.TGOS_GEO_API_KEY]))"
 ```
 
-The last line prints `True` without showing any value. Without the file the deploy still succeeds (the
-preflight prints a warning) and every lookup answers `unavailable`; saving an address still works.
+The last line prints `True` without showing any value. With the keys missing, every lookup answers
+`unavailable`; saving an address still works.
 
 TGOS accepts the keys from the registered IP above only. A new IP needs TGOS's IP change form, stamped
 with the organisation's seal (用印), and then new keys.
+
+### Moving the keys off `.env.tgos` (once)
+
+Until this change the keys sat in a hand-written `Backend/.env.tgos` on the VM, which compose gave to the
+backend. The change edits `gen_env`, and a running `deploy.sh` keeps the `gen_env` it parsed before
+checkout (see SMS in Environment facts):
+
+1. **Before deploying**, create the four `staging-backend-tgos-*` secrets with the values in `.env.tgos`,
+   and give the VM's service account read access to each (see One-time setup below). The second run stops
+   at step 4 without them. On staging they were created on 2026-10-26;
+   `gcloud secrets list --filter='name~staging-backend-tgos'` lists all four.
+2. **Run `deploy.sh` twice in a row.** The first run already has the new compose file, which no longer reads
+   `.env.tgos`, but still writes a `.env` without the keys: until the second run finishes, every lookup
+   answers `unavailable`. The second run writes them. Only `.env` changes between the two, so the second can
+   be `NEXT_APPS= ./scripts/deploy.sh`, which skips both Next builds and shortens that window; the first run
+   has already built both apps from the same ref.
+3. Check for `True` as above.
+4. Delete the old file: `rm /opt/wanguard/Backend/.env.tgos`.
 
 ---
 
@@ -462,6 +482,7 @@ printf '%s' '<new-value>' | gcloud secrets versions add staging-backend-smtp2go-
 #  until the deploy that carries the new secret version — add the version and deploy right away)
 # (a Google or LINE client secret reissued in its console: add the new version to
 #  staging-backend-google-client-secret or staging-backend-line-channel-secret, then deploy)
+# (a TGOS key reissued: add the new version to its staging-backend-tgos-* secret, then deploy)
 
 # DB password: the postgres volume is already initialized, so changing the secret alone does NOT
 # change the actual DB password. Do both, in this order:
@@ -489,12 +510,19 @@ printf '%s' '<kotsms-password>' | gcloud secrets create staging-backend-kotsms-p
 # Google and LINE sign-in (ADR-331): the OAuth client's secret, and the LINE Login channel's secret
 printf '%s' '<google-secret>' | gcloud secrets create staging-backend-google-client-secret --data-file=-
 printf '%s' '<line-secret>' | gcloud secrets create staging-backend-line-channel-secret --data-file=-
+# TGOS address lookups (added 2026-10-26): each service's APPID and API KEY
+printf '%s' '<addr-app-id>' | gcloud secrets create staging-backend-tgos-addr-app-id --data-file=-
+printf '%s' '<addr-api-key>' | gcloud secrets create staging-backend-tgos-addr-api-key --data-file=-
+printf '%s' '<geo-app-id>' | gcloud secrets create staging-backend-tgos-geo-app-id --data-file=-
+printf '%s' '<geo-api-key>' | gcloud secrets create staging-backend-tgos-geo-api-key --data-file=-
 
 # Grant the VM's service account read access (least privilege: one binding per secret). The
 # staging-cloudflared-tunnel-token secret needs the same binding.
 for s in staging-backend-postgres-password staging-backend-jwt-signing-key \
          staging-backend-smtp2go-api-key staging-backend-kotsms-username staging-backend-kotsms-password \
-         staging-backend-google-client-secret staging-backend-line-channel-secret; do
+         staging-backend-google-client-secret staging-backend-line-channel-secret \
+         staging-backend-tgos-addr-app-id staging-backend-tgos-addr-api-key \
+         staging-backend-tgos-geo-app-id staging-backend-tgos-geo-api-key; do
   gcloud secrets add-iam-policy-binding $s \
     --member="serviceAccount:<vm-service-account-email>" \
     --role="roles/secretmanager.secretAccessor"

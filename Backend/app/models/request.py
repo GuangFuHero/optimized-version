@@ -2,11 +2,11 @@
 
 from datetime import datetime
 
-from sqlalchemy import ARRAY, CheckConstraint, Computed, DateTime, ForeignKey, String, text
+from sqlalchemy import ARRAY, CheckConstraint, Computed, DateTime, ForeignKey, String, event, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.geo import BaseGeometry
+from app.models.geo import BaseGeometry, stamp_updated_at
 from app.models.search import (
     plain,
     search_text_expression,
@@ -89,6 +89,9 @@ class Tickets(BaseGeometry):
         "polymorphic_identity": "request",
     }
 
+    # A review verdict, given or voided, is not a change to the ticket, so it never moves updated_at.
+    not_an_update = frozenset({"audit_status", "audit_note", "audited_at", "audited_by", "audited_content"})
+
     # The title on its own: what a caller without ticket.view_detail searches (ADR-281).
     __table_args__ = (
         search_text_index("tickets"),
@@ -103,3 +106,6 @@ class Tickets(BaseGeometry):
             name="ck_tickets_audit_issue_note",
         ),
     )
+
+
+event.listen(Tickets, "before_update", stamp_updated_at)

@@ -598,6 +598,8 @@ export type HazardousZoneType = {
 };
 
 export type HelpRequestTaskInput = {
+  /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   taskDescription?: InputMaybe<Scalars['String']['input']>;
@@ -619,7 +621,7 @@ export type Mutation = {
   createBriefingTemplate: BriefingTemplateType;
   createBuildingMap: BuildingMapType;
   createCrowdSourcing: CrowdSourcingType;
-  createHelpRequest: TicketType;
+  createHelpRequest: CreateTicketResult;
   createStation: CreateStationResult;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;
@@ -2540,16 +2542,29 @@ export type CreateHelpRequestMutationVariables = Exact<{
 
 export type CreateHelpRequestMutation = {
   __typename?: 'Mutation';
-  createHelpRequest: {
-    __typename?: 'TicketType';
-    tasks: Array<
-      { __typename?: 'TicketTaskType' } & {
-        ' $fragmentRefs'?: {
-          TicketNeedFieldsFragment: TicketNeedFieldsFragment;
-        };
+  createHelpRequest:
+    | {
+        __typename: 'DuplicatesSuspected';
+        suspects: Array<{
+          __typename?: 'DuplicateSuspect';
+          draftRef: string;
+          relatedUuid: string;
+          relatedTicketUuid?: string | null;
+        }>;
       }
-    >;
-  } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } };
+    | {
+        __typename: 'TicketCreated';
+        ticket: { __typename?: 'TicketType' } & {
+          ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
+        };
+        tasks: Array<
+          { __typename?: 'TicketTaskType' } & {
+            ' $fragmentRefs'?: {
+              TicketNeedFieldsFragment: TicketNeedFieldsFragment;
+            };
+          }
+        >;
+      };
 };
 
 export type UpdateTicketMutationVariables = Exact<{
@@ -5240,19 +5255,77 @@ export const CreateHelpRequestDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
                 {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'TicketFields' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'tasks' },
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'TicketCreated' },
+                  },
                   selectionSet: {
                     kind: 'SelectionSet',
                     selections: [
                       {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'TicketNeedFields' },
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'ticket' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'FragmentSpread',
+                              name: { kind: 'Name', value: 'TicketFields' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'tasks' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'FragmentSpread',
+                              name: { kind: 'Name', value: 'TicketNeedFields' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'DuplicatesSuspected' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspects' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'draftRef' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedUuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: {
+                                kind: 'Name',
+                                value: 'relatedTicketUuid',
+                              },
+                            },
+                          ],
+                        },
                       },
                     ],
                   },

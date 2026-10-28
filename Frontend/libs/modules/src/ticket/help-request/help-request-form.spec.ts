@@ -276,6 +276,29 @@ describe('toHelpRequestInput', () => {
     ]);
   });
 
+  it('names the suspect on each need held, by its place among the needs sent, not among the rows', () => {
+    const input = toHelpRequestInput(
+      filledForm({
+        needs: [
+          emptyNeed(),
+          { need: 'cleanup', name: '清淤泥', quantity: '2' },
+          { need: 'supplies', name: '晚餐便當', quantity: '3' },
+        ],
+      }),
+      { 1: 'need-b1' },
+    );
+
+    expect(input.tasks).toEqual([
+      { taskType: 'hr', taskName: '清淤泥', quantity: 2 },
+      {
+        taskType: 'supply',
+        taskName: '晚餐便當',
+        quantity: 3,
+        acknowledgedDuplicateOf: 'need-b1',
+      },
+    ]);
+  });
+
   it('names a need by its choice when no description was typed', () => {
     const input = toHelpRequestInput(
       filledForm({ needs: [{ need: 'care', name: '  ', quantity: '1' }] }),

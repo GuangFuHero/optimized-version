@@ -1,6 +1,39 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { normalizeLayerPreferences } from './use-rescue-map-controller';
+import {
+  normalizeLayerPreferences,
+  readLayerPreferences,
+  writeLayerPreferences,
+} from './use-rescue-map-controller';
+
+describe('layer preferences where the browser blocks site data', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Blocking site data makes the browser throw on any touch of `window.localStorage`.
+  function blockSiteData() {
+    vi.stubGlobal('window', {
+      get localStorage(): Storage {
+        throw new Error('SecurityError: access is denied for this document');
+      },
+    });
+  }
+
+  it('reads no preferred layer, so the map falls back to its default', () => {
+    blockSiteData();
+
+    expect(readLayerPreferences().baseLayer).toBeUndefined();
+  });
+
+  it('saves a picked layer nowhere, without failing', () => {
+    blockSiteData();
+
+    expect(() =>
+      writeLayerPreferences(normalizeLayerPreferences({ baseLayer: 'nlsc' })),
+    ).not.toThrow();
+  });
+});
 
 describe('normalizeLayerPreferences', () => {
   it('turns on 責任區與標示區 for preferences saved before it existed', () => {
