@@ -1,5 +1,9 @@
 import { designTokens } from '@rescue-frontend/ui';
 
+import {
+  isLocationCellId,
+  locationCellId,
+} from '../../../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../../../map/types';
 import type { TicketPriority, TicketRow } from './ticket-row';
 
@@ -43,4 +47,29 @@ export function toTicketMarker(
     },
     tooltip: { title: row.title, subtitle: row.area },
   };
+}
+
+export type MapSelection =
+  | { kind: 'ticket'; uuid: string }
+  | { kind: 'cell'; uuids: string[] };
+
+/**
+ * What a map selection stands for. A coarse ticket is drawn as its H3 cell (`cell:<h3>`), shared
+ * with its neighbours, so a cell id is not a ticket uuid.
+ */
+export function resolveMapSelection(
+  id: string,
+  rows: readonly TicketRow[],
+): MapSelection | null {
+  if (rows.some((row) => row.uuid === id)) return { kind: 'ticket', uuid: id };
+  if (!isLocationCellId(id)) return null;
+  const uuids = rows
+    .filter(
+      (row) => row.locationCell && locationCellId(row.locationCell) === id,
+    )
+    .map((row) => row.uuid);
+  if (uuids.length === 0) return null;
+  return uuids.length === 1
+    ? { kind: 'ticket', uuid: uuids[0] }
+    : { kind: 'cell', uuids };
 }

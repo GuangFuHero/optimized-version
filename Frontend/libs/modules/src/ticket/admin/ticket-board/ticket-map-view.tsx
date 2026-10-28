@@ -1,7 +1,8 @@
 'use client';
 
-import { Box, Typography } from '@mui/material';
-import { designTokens } from '@rescue-frontend/ui';
+import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
+import { Badge, designTokens } from '@rescue-frontend/ui';
+import { X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -10,7 +11,9 @@ import type {
   RescueMapControllerValue,
   RescueMapMarkerItem,
 } from '../../../map/types';
+import { getTicketPriorityBadge } from '../../status';
 import {
+  resolveMapSelection,
   TICKET_PRIORITY_PIN_COLORS,
   toTicketMarker,
 } from './model/ticket-marker';
@@ -69,7 +72,11 @@ export function TicketMapView({
         clusterMaxZoom={CLUSTER_MAX_ZOOM}
         onMapReady={setLeafletMap}
         renderControls={(controller) => (
-          <SelectionSync controller={controller} onOpen={onOpenTicket} />
+          <SelectionSync
+            controller={controller}
+            rows={rows}
+            onOpen={onOpenTicket}
+          />
         )}
       />
       <PriorityLegend />
@@ -100,21 +107,134 @@ function useFitTickets(
   }, [map, pointsKey]);
 }
 
-/** A picked pin opens its ticket; the selection is cleared so the same pin can be picked again. */
+/**
+ * A picked pin opens its ticket. A picked cell with several tickets lists them to choose from.
+ * The map's selection is cleared either way so the same pin or cell can be picked again.
+ */
 function SelectionSync({
   controller,
+  rows,
   onOpen,
 }: {
   controller: RescueMapControllerValue;
+  rows: readonly TicketRow[];
   onOpen: (uuid: string) => void;
 }) {
   const { selectedMarkerId, setSelectedMarkerId } = controller;
+  const [cellUuids, setCellUuids] = useState<string[] | null>(null);
   useEffect(() => {
     if (!selectedMarkerId) return;
-    onOpen(selectedMarkerId);
+    const selection = resolveMapSelection(selectedMarkerId, rows);
+    if (selection?.kind === 'ticket') {
+      onOpen(selection.uuid);
+      setCellUuids(null);
+    } else if (selection?.kind === 'cell') {
+      setCellUuids(selection.uuids);
+    }
     setSelectedMarkerId(undefined);
-  }, [selectedMarkerId, onOpen, setSelectedMarkerId]);
-  return null;
+  }, [selectedMarkerId, rows, onOpen, setSelectedMarkerId]);
+
+  const listed = cellUuids
+    ? rows.filter((row) => cellUuids.includes(row.uuid))
+    : [];
+  if (listed.length === 0) return null;
+  return (
+    <CellTicketList
+      rows={listed}
+      onPick={onOpen}
+      onClose={() => setCellUuids(null)}
+    />
+  );
+}
+
+function CellTicketList({
+  rows,
+  onPick,
+  onClose,
+}: {
+  rows: TicketRow[];
+  onPick: (uuid: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Box
+      role="region"
+      aria-label="此區求助單"
+      sx={{
+        position: 'absolute',
+        zIndex: 600,
+        top: OVERLAY_INSET,
+        right: OVERLAY_INSET,
+        width: 276,
+        maxWidth: `calc(100% - ${OVERLAY_INSET * 2}px)`,
+        maxHeight: 320,
+        display: 'flex',
+        flexDirection: 'column',
+        borderRadius: `${radius.md}px`,
+        border: `1px solid ${color.border.default}`,
+        boxShadow: shadow.lg,
+        bgcolor: color.bg.neutral.default,
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          p: '10px 14px',
+        }}
+      >
+        <Typography sx={{ ...typography.label[500], flex: 1 }}>
+          此區有 {rows.length} 張求助單
+        </Typography>
+        <IconButton
+          aria-label="關閉"
+          onClick={onClose}
+          size="small"
+          sx={{ width: 24, height: 24, p: 0, color: color.fg.neutral.muted }}
+        >
+          <X size={14} />
+        </IconButton>
+      </Box>
+      <Box
+        component="ul"
+        sx={{ m: 0, p: 0, listStyle: 'none', overflowY: 'auto' }}
+      >
+        {rows.map((row) => {
+          const badge = getTicketPriorityBadge(row.priority);
+          return (
+            <Box component="li" key={row.uuid}>
+              <ButtonBase
+                onClick={() => onPick(row.uuid)}
+                sx={{
+                  width: '100%',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  p: '8px 14px',
+                  textAlign: 'left',
+                  borderTop: `1px solid ${color.border.default}`,
+                  '&:hover': { bgcolor: color.bg.neutral.subtle },
+                }}
+              >
+                <Typography
+                  noWrap
+                  sx={{ ...typography.label[400], minWidth: 0 }}
+                >
+                  {row.title}
+                </Typography>
+                {badge ? (
+                  <Badge tone={badge.tone} variant={badge.variant}>
+                    {badge.label}
+                  </Badge>
+                ) : null}
+              </ButtonBase>
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  );
 }
 
 function PriorityLegend() {
