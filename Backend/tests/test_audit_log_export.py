@@ -5,8 +5,10 @@ import io
 import json
 
 import pytest
+from sqlalchemy import select
 
 from app.core.permissions import Perm
+from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.rbac import UserRoleAssign
 from app.services import audit_log as audit_log_service
@@ -142,3 +144,39 @@ def test_the_seed_gives_audit_export_to_super_admin_only():
     """No other role, the data auditor included, holds it."""
     holders = {role["name"] for role in ROLES_DATA if Perm.AUDIT_EXPORT in role["permissions"]}
     assert holders == {"super_admin"}
+
+
+async def _exports(db) -> list[AuditLog]:
+    db.expire_all()
+    return list((await db.execute(select(AuditLog).where(AuditLog.action == "EXPORT"))).scalars())
+
+
+@pytest.mark.asyncio
+async def test_each_download_is_recorded(client, db_session, redis):
+    """Who exported, with which filters and how many rows: the file leaves no other trace (ADR-417)."""
+    db_session.add_all([_row("teams", new={"n": 1}), _row("users", new={"n": 2})])
+    headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+
+    response = await client.get(URL, params={"table": "teams"}, headers=headers)
+
+    assert response.status_code == 200
+    [record] = await _exports(db_session)
+    boss = await db_session.scalar(select(User.uuid).where(User.name == "boss"))
+    assert (record.table_name, record.user_uuid) == ("audit_logs", boss)
+    assert record.new_values == {
+        "rows": 1,
+        "filters": {"table": "teams", "row_id": None, "actor_uuid": None, "from": None, "to": None},
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_refused_download_records_nothing(client, db_session, redis, monkeypatch):
+    """No file left the building: neither a 403 nor an over-the-cap 422 is an export."""
+    monkeypatch.setattr(audit_log_service, "MAX_EXPORT_ROWS", 0)
+    db_session.add(_row("teams", new={"n": 1}))
+    boss = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
+    auditor = await _reader(db_session, redis, "auditor", Perm.AUDIT_VIEW)
+
+    assert (await client.get(URL, headers=boss)).status_code == 422
+    assert (await client.get(URL, headers=auditor)).status_code == 403
+    assert await _exports(db_session) == []

@@ -7,6 +7,7 @@ the history timeline's, under its own capabilities.
 """
 
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -14,6 +15,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.context import request_client_ip, request_identity
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, active_team
 from app.core.security import resolve_scope
@@ -161,6 +163,8 @@ def _cell(value) -> str:
 async def export_audit_logs(db: AsyncSession, *, actor: User, filters: AuditFilters) -> bytes:
     """The filtered log as CSV, newest first (ADR-414). audit.export at `all`, else 403.
 
+    Each file handed out is recorded (ADR-417); a refused one is not.
+
     Always the platform view, with the IP. Applicant details are masked exactly as on screen for
     a holder without role_request.review, which the seed never makes but /admin/rbac could.
     """
@@ -174,9 +178,42 @@ async def export_audit_logs(db: AsyncSession, *, actor: User, filters: AuditFilt
     query = _filtered(select(AuditLog, User.name).outerjoin(User, User.uuid == AuditLog.user_uuid), filters)
     rows = (await db.execute(query.order_by(AuditLog.created_at.desc(), AuditLog.uuid))).all()
     reads_details = await _reads_applicant_details(db, actor)
-    return write_csv(
+    content = write_csv(
         EXPORT_COLUMNS, [_export_row(row, actor_name, reads_details) for row, actor_name in rows]
     )
+    # After the file is built: recording it commits, which expires the rows just written out.
+    await _record_export(db, actor_uuid=actor.uuid, filters=filters, rows=len(rows))
+    return content
+
+
+async def _record_export(db: AsyncSession, *, actor_uuid, filters: AuditFilters, rows: int) -> None:
+    """Write who exported what (ADR-417): a download touches no table, so no trigger records it.
+
+    Shaped like the session-kick row (ADR-191): `action` is EXPORT, not a DML verb, so it is never
+    counted as a change; `row_id` is a fresh id for this one export.
+    """
+    identity = request_identity.get()
+    db.add(
+        AuditLog(
+            table_name="audit_logs",
+            action="EXPORT",
+            row_id=uuid.uuid4(),
+            new_values={
+                "rows": rows,
+                "filters": {
+                    "table": filters.table,
+                    "row_id": _cell(filters.row_id) or None,
+                    "actor_uuid": _cell(filters.actor_uuid) or None,
+                    "from": _cell(filters.since) or None,
+                    "to": _cell(filters.until) or None,
+                },
+            },
+            user_uuid=actor_uuid,
+            client_ip=request_client_ip.get(),
+            context=json.loads(identity) if identity else None,
+        )
+    )
+    await db.commit()
 
 
 def _export_row(row: AuditLog, actor_name: str | None, reads_details: bool) -> dict[str, str]:
