@@ -23,7 +23,8 @@ import {
 import type { ReactNode } from 'react';
 
 import { getStationTypeIcon, type StationTypeValue } from '../../type-options';
-import { FreshnessCell, StatusBadge } from './station-cells';
+import { FreshnessCell } from '../../../admin/shared/freshness-cell';
+import { StatusBadge } from './station-cells';
 import type { StationRow } from './model/station-row';
 
 const { color, radius, typography } = designTokens;

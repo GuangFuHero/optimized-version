@@ -27,7 +27,8 @@ import {
   type DetailStation,
   type StationDetailView,
 } from './model/station-detail-view';
-import { FreshnessCell, StatusBadge } from './station-cells';
+import { FreshnessCell } from '../../../admin/shared/freshness-cell';
+import { StatusBadge } from './station-cells';
 import {
   StationHistoryPanel,
   useLoadedStationVersion,

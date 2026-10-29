@@ -32,8 +32,10 @@ import {
 import {
   downloadBase64,
   downloadBlob,
-  importFieldLabel,
   importSummary,
+} from '../../../admin/shared/model/bulk-import';
+import {
+  importFieldLabel,
   mergeMapping,
   STATION_IMPORT_FIELDS,
   stationImportTemplate,

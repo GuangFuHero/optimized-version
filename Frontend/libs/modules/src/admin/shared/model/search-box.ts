@@ -1,6 +1,6 @@
 /**
  * The search box's text against the URL's `?q=`. `draft` is what the box shows, `sent` the last
- * query it sent (trimmed, as `writeStationFilters` writes it) and `seen` the last `?q=` it saw.
+ * query it sent (trimmed, as the page writes `?q=`) and `seen` the last `?q=` it saw.
  */
 export interface SearchBox {
   draft: string;

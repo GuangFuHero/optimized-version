@@ -6,8 +6,8 @@ import { Download } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { downloadBlob } from '../../../station/admin/station-management/model/import';
-import { ToolbarButton } from '../../../station/admin/station-management/toolbar-button';
+import { downloadBlob } from '../../../admin/shared/model/bulk-import';
+import { ToolbarButton } from '../../../admin/shared/toolbar-button';
 import { formatTicketTypeLabel } from '../../status';
 import {
   TICKET_EXPORT_TYPES,

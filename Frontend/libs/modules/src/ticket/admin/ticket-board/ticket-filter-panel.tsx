@@ -4,7 +4,7 @@ import { Box } from '@mui/material';
 import { useDisasterTypes } from '@rescue-frontend/data-access/admin';
 import { designTokens } from '@rescue-frontend/ui';
 
-import { ChipRow } from '../../../station/admin/station-management/station-filter-panel';
+import { ChipRow } from '../../../admin/shared/chip-row';
 import { formatTicketTypeLabel, TICKET_STATUS_OPTIONS } from '../../status';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
 import type { TicketFilters } from './model/ticket-filters';

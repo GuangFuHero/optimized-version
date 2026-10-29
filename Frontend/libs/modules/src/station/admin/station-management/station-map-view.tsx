@@ -31,7 +31,8 @@ import {
   toStationMarker,
 } from './model/station-marker';
 import type { StationRow } from './model/station-row';
-import { FreshnessCell, StatusBadge } from './station-cells';
+import { FreshnessCell } from '../../../admin/shared/freshness-cell';
+import { StatusBadge } from './station-cells';
 import { StationEmptyState } from './station-table';
 
 const { color, radius, shadow, spacing, typography } = designTokens;

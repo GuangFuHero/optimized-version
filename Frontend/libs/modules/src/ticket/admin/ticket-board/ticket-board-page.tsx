@@ -8,11 +8,10 @@ import { Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
+import { ToolbarButton } from '../../../admin/shared/toolbar-button';
+import { useNow } from '../../../admin/shared/use-now';
+import { ViewSwitch, type BoardView } from '../../../admin/shared/view-switch';
 import { AdminHeaderSlot } from '../../../shell/admin/header';
-import {
-  StationViewSwitch,
-  type StationView,
-} from '../../../station/admin/station-management/station-toolbar';
 import { useTicketCapabilities } from './hooks/use-ticket-capabilities';
 import { useTicketRows } from './hooks/use-ticket-rows';
 import {
@@ -31,7 +30,6 @@ import { TicketMapView } from './ticket-map-view';
 import { TicketFilterPanel } from './ticket-filter-panel';
 import { TicketStatsStrip } from './ticket-stats-strip';
 import { TicketTable } from './ticket-table';
-import { ToolbarButton } from '../../../station/admin/station-management/toolbar-button';
 import { TicketExportMenu } from './ticket-export-menu';
 import { TicketImportDialog } from './ticket-import-dialog';
 import { TicketToolbar } from './ticket-toolbar';
@@ -45,15 +43,6 @@ const FRAME_GAP = '12px';
 const SECTION_SX = { px: '28px' };
 const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
 
-function useNow(intervalMs = 60_000) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-  return now;
-}
-
 export function TicketBoardPage() {
   const router = useRouter();
   const pathname = usePathname() ?? '/tickets';
@@ -63,7 +52,7 @@ export function TicketBoardPage() {
     [searchParams],
   );
   const filters = useMemo(() => parseTicketFilters(params), [params]);
-  const view: StationView = params.get('view') === 'map' ? 'map' : 'table';
+  const view: BoardView = params.get('view') === 'map' ? 'map' : 'table';
   const page = Number(params.get('page')) || 1;
   const caps = useTicketCapabilities();
   const now = useNow();
@@ -130,7 +119,7 @@ export function TicketBoardPage() {
   return (
     <>
       <AdminHeaderSlot>
-        <StationViewSwitch
+        <ViewSwitch
           count={count}
           view={view}
           help={PAGE_HELP}

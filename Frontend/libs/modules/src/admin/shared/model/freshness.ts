@@ -1,4 +1,4 @@
-import { timeAgo } from '../../../../time';
+import { timeAgo } from '../../../time';
 
 export type FreshnessLevel = 'fresh' | 'stale' | 'expired' | 'unknown';
 

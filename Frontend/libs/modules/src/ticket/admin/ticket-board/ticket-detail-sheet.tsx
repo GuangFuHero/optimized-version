@@ -19,7 +19,7 @@ import {
 } from '@rescue-frontend/ui';
 import { PencilLine } from 'lucide-react';
 
-import { FreshnessCell } from '../../../station/admin/station-management/station-cells';
+import { FreshnessCell } from '../../../admin/shared/freshness-cell';
 import {
   isTicketAlreadyGone,
   deleteTicketErrorMessage,

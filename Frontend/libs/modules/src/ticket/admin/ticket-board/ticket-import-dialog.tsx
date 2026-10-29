@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import {
   downloadBase64,
   importSummary,
-} from '../../../station/admin/station-management/model/import';
+} from '../../../admin/shared/model/bulk-import';
 import { formatTicketTypeLabel } from '../../status';
 import { TICKET_EXPORT_TYPES } from './model/ticket-export';
 

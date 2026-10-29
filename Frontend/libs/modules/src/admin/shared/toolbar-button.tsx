@@ -6,7 +6,7 @@ import type { ComponentProps } from 'react';
 
 const { color, radius, typography } = designTokens;
 
-/** The toolbar's outlined secondary actions (篩選, 審查, 匯入, 匯出): quieter than the brand outline. */
+/** An admin toolbar's outlined secondary actions (篩選, 審查, 匯入, 匯出): quieter than the brand outline. */
 export function ToolbarButton({
   sx,
   ...rest

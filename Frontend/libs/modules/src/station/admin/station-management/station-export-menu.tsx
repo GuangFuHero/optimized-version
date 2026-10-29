@@ -22,12 +22,9 @@ import {
   getStationTypeLabel,
   STATION_TYPE_OPTIONS,
 } from '../../type-options';
+import { downloadBlob } from '../../../admin/shared/model/bulk-import';
 import { useStationRows } from './hooks/use-station-rows';
-import {
-  countExportableByType,
-  downloadBlob,
-  exportFilename,
-} from './model/import';
+import { countExportableByType, exportFilename } from './model/import';
 import { EMPTY_FILTERS } from './model/station-filters';
 
 const { color, focusRing, radius, shadow, typography } = designTokens;

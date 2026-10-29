@@ -13,7 +13,7 @@ import {
 import { ChevronDown, ChevronRight, MapPin, SearchX } from 'lucide-react';
 import { useState, type ReactNode, type SyntheticEvent } from 'react';
 
-import { FreshnessCell } from '../../../station/admin/station-management/station-cells';
+import { FreshnessCell } from '../../../admin/shared/freshness-cell';
 import {
   formatTicketStatusLabel,
   formatTicketTypeLabel,
