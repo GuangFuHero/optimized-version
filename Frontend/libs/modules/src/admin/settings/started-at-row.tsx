@@ -128,7 +128,7 @@ export function StartedAtRow({
   return (
     <SettingsRow
       label="起始時間"
-      help="災害發生的時間，不是平台上線的時間。側邊欄的「第 N 天」從這裡算。"
+      help="災害發生的時間（台灣時間），不是平台上線的時間。側邊欄的「第 N 天」從這裡算。"
     >
       <Stack
         direction="row"

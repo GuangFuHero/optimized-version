@@ -7,6 +7,7 @@ import {
   canRemoveDisasterType,
   disasterTypeLabel,
   fieldCountFor,
+  formatStartedAt,
   fromDateTimeLocal,
   nameProblem,
   startedAtProblem,
@@ -75,6 +76,13 @@ describe('起始時間', () => {
     expect(toDateTimeLocal(null)).toBe('');
     expect(toDateTimeLocal(undefined)).toBe('');
     expect(toDateTimeLocal('not a date')).toBe('');
+  });
+
+  it('writes the start as the other admin pages write a time, in Taiwan time', () => {
+    expect(formatStartedAt('2026-10-03T22:30:00.000Z')).toBe(
+      '2026/10/04 06:30',
+    );
+    expect(formatStartedAt('not a date')).toBe('');
   });
 });
 

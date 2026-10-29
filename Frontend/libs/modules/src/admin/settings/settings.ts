@@ -1,4 +1,5 @@
 import {
+  formatTaiwanDateTime,
   fromTaiwanDateTimeLocal,
   toTaiwanDateTimeLocal,
 } from '../../time/taiwan-time';
@@ -61,7 +62,7 @@ export function startedAtProblem(value: string, now: Date): string | null {
 }
 
 export function formatStartedAt(iso: string): string {
-  return toDateTimeLocal(iso).replace('T', ' ');
+  return formatTaiwanDateTime(iso) ?? '';
 }
 
 interface DisasterTypeEntry {
