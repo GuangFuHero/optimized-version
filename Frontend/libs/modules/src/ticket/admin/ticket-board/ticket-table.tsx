@@ -32,6 +32,7 @@ import type { SpaceListRow } from '../space/space-analysis';
 import { SpacePill, SpaceTag, StateBadge } from '../space/space-badges';
 import { spaceTicketTag, type TaggedSpace } from '../space/space-ticket-tag';
 import {
+  TICKET_TABLE_MIN_WIDTH,
   visibleTicketColumns,
   type TicketColumnId,
 } from './model/ticket-columns';
@@ -213,10 +214,10 @@ export function TicketTable({
           </Button>
         </Callout>
       ) : null}
-      {/* No minWidth: the table never scrolls sideways (TM-FS-102); its cells cut instead. */}
       <DataTable
         columns={columns}
         data={data}
+        minWidth={TICKET_TABLE_MIN_WIDTH}
         getRowId={(row) => (isSpaceRow(row) ? `space:${row.id}` : row.uuid)}
         onRowClick={(row) =>
           isSpaceRow(row) ? onOpenSpace?.(row.id) : onOpenTicket(row.uuid)
