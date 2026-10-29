@@ -30,12 +30,14 @@ import {
   type SpaceListRow,
   type SpaceTicket,
 } from './space-analysis';
+import type { SpaceHouseholdTarget } from './household-input';
 
 /**
  * What the signed-in identity may do with spaces, from the backend's capability list — never the
  * role's name, so a change to the RBAC table shows without a code change (Carol, 2026-10-26).
- * Opening a space shares 新增責任區's capability. The backend also wants a gov team, which the
- * capability list doesn't say: anyone else holding it gets the backend's refusal on save.
+ * Opening a space shares 新增責任區's capability. It also wants an active gov team (or a
+ * platform identity); the list already leaves `work_zone.*` out for anyone else (backend
+ * `authz.capabilities`), so they don't see the button.
  */
 export function useSpaceCapabilities() {
   const { data } = useCurrentUser();
@@ -134,6 +136,29 @@ export function useSpace(uuid: string | null) {
     isLoading: building.isPending || tickets.isPending,
     error: building.error ?? tickets.error ?? null,
   };
+}
+
+/**
+ * The space a household ticket is filed in, for its edit form: the floor stays one of the
+ * building's and the address stays the building's. `loading` while it is fetched; `target` stays
+ * null for a ticket in no space, or one whose building has gone.
+ */
+export function useHouseholdSpace(buildingMapUuid: string | null | undefined) {
+  const building = useBuildingMap({ uuid: buildingMapUuid ?? '' });
+  const found = building.data?.buildingMap ?? null;
+  const target = useMemo<SpaceHouseholdTarget | null>(
+    () =>
+      found
+        ? {
+            uuid: found.uuid,
+            name: found.name,
+            floorLabels: found.floors.map((floor) => floor.label),
+          }
+        : null,
+    [found],
+  );
+  // A disabled query stays pending: only a ticket in a space waits for one.
+  return { target, loading: Boolean(buildingMapUuid) && building.isPending };
 }
 
 /**

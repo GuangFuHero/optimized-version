@@ -67,12 +67,10 @@ export function emptyNeed(): NeedDraft {
 
 /**
  * A blank create form, pinned at `seed` when the form opens from a point picked on a map: the pin's
- * address lookup runs for it as for any other pin. `floor` starts a household in a space on the
- * floor it was added from (在這一層新增).
+ * address lookup runs for it as for any other pin.
  */
 export function emptyTicketForm(
   seed: { lat: number; lng: number } | null = null,
-  floor = '',
 ): TicketFormValues {
   return {
     title: '',
@@ -85,7 +83,7 @@ export function emptyTicketForm(
     point: seed ? { lat: seed.lat, lng: seed.lng, source: 'seed' } : null,
     fullAddress: '',
     addressToken: '',
-    floor,
+    floor: '',
     room: '',
     photoUrls: [],
     needs: [emptyNeed()],

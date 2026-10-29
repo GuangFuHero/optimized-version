@@ -64,10 +64,10 @@ export interface SpaceDetailSheetProps {
   /** A ticket card was clicked: the page opens its own ticket drawer over this sheet. */
   onOpenTicket?: (ticketUuid: string) => void;
   /**
-   * 新增一戶: the page opens its own ticket form for a household in this space, on `floor` when one
-   * was picked. Without it the action doesn't show.
+   * 新增一戶: the page opens its own ticket form for a household in this space. Without it the
+   * action doesn't show.
    */
-  onAddHousehold?: (space: SpaceHouseholdTarget, floor?: string) => void;
+  onAddHousehold?: (space: SpaceHouseholdTarget) => void;
   onDeleted?: () => void;
 }
 

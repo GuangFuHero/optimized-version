@@ -35,8 +35,11 @@ import { LocationPicker } from '../../../map/components/location-picker';
 import type { ClaimError } from '../../needs/claim-error';
 import { filledInputSx } from '../../../station/form/station-form-fields';
 import { PhotoLinkEditor } from '../../photos';
-import { orderFloors } from '../space/floors';
-import type { SpaceHouseholdTarget } from '../space/household-input';
+import {
+  householdFloorChoice,
+  type SpaceHouseholdTarget,
+} from '../space/household-input';
+import { useHouseholdSpace } from '../space/use-space-data';
 import { DuplicateNotice } from './duplicate-notice';
 import {
   isForbidden,
@@ -82,8 +85,6 @@ export type TicketFormProps = (
        * the form asks only its floor (one of the space's, or unknown) and 戶別.
        */
       space?: SpaceHouseholdTarget;
-      /** The floor 在這一層新增 was pressed on. */
-      initialFloor?: string;
       /** The ticket just created, before `onDone`. */
       onCreated?(ticket: AdminTicketFieldsFragment): void;
     }
@@ -119,12 +120,16 @@ export function TicketForm(props: TicketFormProps) {
   const { mode, onDone, onCancel, onBusyChange } = props;
   const ticket = props.mode === 'edit' ? props.ticket : null;
   const space = props.mode === 'create' ? props.space : undefined;
+  // Editing a household keeps it in its building: its floor one of the building's, its address
+  // the building's. Creating one is handed the space.
+  const editSpace = useHouseholdSpace(ticket?.buildingMapUuid);
+  const household = space ?? editSpace.target ?? undefined;
   const coarse = ticket ? isCoarseTicket(ticket) : false;
   const formId = useId();
   const [values, setValues] = useState<TicketFormValues>(() =>
     props.mode === 'edit'
       ? ticketFormFromTicket(props.ticket)
-      : emptyTicketForm(props.initialPoint, props.initialFloor),
+      : emptyTicketForm(props.initialPoint),
   );
   const [errors, setErrors] = useState<TicketFormErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -327,18 +332,20 @@ export function TicketForm(props: TicketFormProps) {
             error={errors.title}
             onChange={(event) => set('title', event.target.value)}
           />
-          {space ? (
+          {coarse ? (
+            // A coarse ticket hides its address from this viewer: blank fields saved over it
+            // would replace the real one.
+            <Muted>約略位置（無檢視詳細位置權限），無法修改地址</Muted>
+          ) : household ? (
             <HouseholdLocation
-              space={space}
+              space={household}
               floor={values.floor}
               room={values.room}
               onFloorChange={(floor) => set('floor', floor)}
               onRoomChange={(room) => set('room', room)}
             />
-          ) : coarse ? (
-            // A coarse ticket hides its address from this viewer: blank fields saved over it
-            // would replace the real one.
-            <Muted>約略位置（無檢視詳細位置權限），無法修改地址</Muted>
+          ) : editSpace.loading ? (
+            <Muted>正在載入這一棟的樓層…</Muted>
           ) : (
             <Box
               sx={{
@@ -368,7 +375,7 @@ export function TicketForm(props: TicketFormProps) {
               />
             </Box>
           )}
-          {space ? null : (
+          {household || editSpace.loading ? null : (
             <FieldBlock
               label="地標"
               required={mode === 'create'}
@@ -754,7 +761,8 @@ function NeedRow({
 
 /**
  * Where a household in a space is (BE-036 point 3): the space gives the point and the address, so
- * only the floor, from the space's own floors or unknown, and a free-text 戶別 (302、早餐店).
+ * only the floor, from the space's own floors or unknown, and a free-text 戶別 (302、早餐店). On
+ * edit a stored floor the building lacks stays as it was (`householdFloorChoice`).
  */
 function HouseholdLocation({
   space,
@@ -769,7 +777,7 @@ function HouseholdLocation({
   onFloorChange: (floor: string) => void;
   onRoomChange: (room: string) => void;
 }) {
-  const floors = orderFloors(space.floorLabels);
+  const choice = householdFloorChoice(floor, space.floorLabels);
   return (
     <>
       <Muted>{`🏢 ${space.name}：位置與地址用這一棟的`}</Muted>
@@ -785,7 +793,7 @@ function HouseholdLocation({
           fullWidth
           size="small"
           label="樓層"
-          value={floors.includes(floor) ? floor : ''}
+          value={choice.value}
           onChange={(event) => onFloorChange(event.target.value)}
           slotProps={{
             select: { displayEmpty: true },
@@ -793,7 +801,7 @@ function HouseholdLocation({
           }}
         >
           <MenuItem value="">不知道在幾樓</MenuItem>
-          {floors.map((label) => (
+          {choice.options.map((label) => (
             <MenuItem key={label} value={label}>
               {label}
             </MenuItem>

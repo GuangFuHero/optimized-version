@@ -13,9 +13,8 @@ export interface TicketCreateSheetProps {
   open: boolean;
   /** A point picked on a map: the form's pin starts there and its address is looked up. */
   initialPoint?: { lat: number; lng: number } | null;
-  /** 新增一戶: a household in this space, on `initialFloor` when one was picked. */
+  /** 新增一戶: a household in this space. */
   space?: SpaceHouseholdTarget;
-  initialFloor?: string;
   onClose(): void;
   /** The ticket just created; the sheet closes itself after. */
   onCreated?(ticket: AdminTicketFieldsFragment): void;
@@ -29,7 +28,6 @@ export function TicketCreateSheet({
   open,
   initialPoint,
   space,
-  initialFloor,
   onClose,
   onCreated,
 }: TicketCreateSheetProps) {
@@ -53,7 +51,6 @@ export function TicketCreateSheet({
           mode="create"
           initialPoint={initialPoint}
           space={space}
-          initialFloor={initialFloor}
           onCreated={onCreated}
           onDone={onClose}
           onCancel={onClose}

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { householdActionsShown, householdLocation } from './household-input';
+import {
+  householdActionsShown,
+  householdFloorChoice,
+  householdLocation,
+} from './household-input';
 
 describe('householdLocation', () => {
   it('files under the building without a point of its own', () => {
@@ -38,5 +42,27 @@ describe('householdActionsShown', () => {
     expect(
       householdActionsShown({ canAddTicket: false, hasHandler: true }),
     ).toBe(false);
+  });
+});
+
+describe('householdFloorChoice', () => {
+  const labels = ['RF', '2F', '1F', 'B1'];
+
+  it('offers the building floors in screen order, the stored floor read as one of them', () => {
+    expect(householdFloorChoice('2樓', labels)).toEqual({
+      value: '2F',
+      options: ['B1', '1F', '2F', 'RF'],
+    });
+  });
+
+  it('keeps a floor the building lacks as its own option, rather than turning it into unknown', () => {
+    expect(householdFloorChoice('9F', labels)).toEqual({
+      value: '9F',
+      options: ['B1', '1F', '2F', 'RF', '9F'],
+    });
+  });
+
+  it('reads no floor as unknown', () => {
+    expect(householdFloorChoice(null, labels).value).toBe('');
   });
 });

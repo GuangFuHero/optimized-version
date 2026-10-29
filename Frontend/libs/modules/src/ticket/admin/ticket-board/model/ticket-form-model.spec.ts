@@ -202,11 +202,6 @@ describe('a household in a space (BE-036)', () => {
     room: ' A ',
   };
 
-  it('opens on the floor it was asked for', () => {
-    expect(emptyTicketForm(null, '3F').floor).toBe('3F');
-    expect(emptyTicketForm().floor).toBe('');
-  });
-
   it('needs no point: the space has one', () => {
     expect(
       validateTicketForm(household, 'create', space).point,

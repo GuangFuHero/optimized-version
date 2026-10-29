@@ -168,11 +168,8 @@ export function TicketBoardPage() {
     (uuid: string | null) => setParam('space', uuid),
     [setParam],
   );
-  // 新增一戶 / 在這一層新增: the board's own create form, for a household in that space.
-  const [household, setHousehold] = useState<{
-    space: SpaceHouseholdTarget;
-    floor?: string;
-  } | null>(null);
+  // 新增一戶: the board's own create form, for a household in that space.
+  const [household, setHousehold] = useState<SpaceHouseholdTarget | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   // 刪除任務 from a row's ⋯: the drawer's own confirm, for that row's ticket.
   const [deleting, setDeleting] = useState<TicketRow | null>(null);
@@ -274,7 +271,7 @@ export function TicketBoardPage() {
         uuid={viewedSpace}
         onClose={() => openSpace(null)}
         onOpenTicket={openTicket}
-        onAddHousehold={(space, floor) => setHousehold({ space, floor })}
+        onAddHousehold={setHousehold}
       />
       {caps.canImport && importOpen ? (
         <TicketImportDialog onClose={() => setImportOpen(false)} />
@@ -312,8 +309,7 @@ export function TicketBoardPage() {
       ) : null}
       <TicketCreateSheet
         open={(creating || household !== null) && caps.canAdd}
-        space={household?.space}
-        initialFloor={household?.floor}
+        space={household ?? undefined}
         onClose={() => {
           setCreating(false);
           setHousehold(null);
