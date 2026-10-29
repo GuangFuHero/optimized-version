@@ -2262,6 +2262,19 @@ export type AdminTicketsQuery = {
       viewerCanDelete: boolean;
       viewerCanAudit: boolean;
       viewerCanViewHistory: boolean;
+      secondaryLocation?: {
+        __typename?: 'SecondaryLocationType';
+        fullAddress?: string | null;
+        landmarkNote?: string | null;
+        county?: string | null;
+        town?: string | null;
+      } | null;
+      photos: Array<{ __typename?: 'PhotoType'; uuid: string }>;
+      responsibleTeams: Array<{
+        __typename?: 'AssignedTeamType';
+        uuid: string;
+        name: string;
+      }>;
       tasks: Array<{
         __typename?: 'TicketTaskType';
         uuid: string;
@@ -2288,11 +2301,6 @@ export type AdminTicketsQuery = {
           updatedAt?: string | null;
         }>;
       }>;
-      secondaryLocation?: {
-        __typename?: 'SecondaryLocationType';
-        county?: string | null;
-        town?: string | null;
-      } | null;
     }>;
     pageInfo: {
       __typename?: 'PageInfo';
@@ -4434,6 +4442,53 @@ export const AdminTicketsDocument = {
                       {
                         kind: 'FragmentSpread',
                         name: { kind: 'Name', value: 'AdminTicketFields' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'secondaryLocation' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'fullAddress' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'landmarkNote' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'photos' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'responsibleTeams' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'name' },
+                            },
+                          ],
+                        },
                       },
                       {
                         kind: 'Field',

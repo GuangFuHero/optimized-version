@@ -116,6 +116,18 @@ query AdminTickets(
   ) {
     items {
       ...AdminTicketFields
+      # The board's row: the street line under the title, the 照片 count and the 指派 Team cell.
+      secondaryLocation {
+        fullAddress
+        landmarkNote
+      }
+      photos {
+        uuid
+      }
+      responsibleTeams {
+        uuid
+        name
+      }
       tasks {
         ...AdminTaskFields
       }
