@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 
 # The revision this one chains off, and this one.
-_BEFORE = "ba24b9c49284"
+_BEFORE = "b5d8e2a41c07"
 _AFTER = "f563197f1f3c"
 
 _DB_NAME = f"{TEST_DB_URL.rsplit('/', 1)[-1]}_previous_value"

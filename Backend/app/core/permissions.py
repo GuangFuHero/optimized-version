@@ -150,6 +150,9 @@ class Perm(StrEnum):
     # than `audit.view` at `team`: every audit.view holder already reads all data and all PII,
     # which ADR-130's RAW tier rests on, and a team admin does not.
     TEAM_AUDIT_VIEW = "team.audit.view"
+    # ADR-414: downloading the whole log as CSV. Super admins only; reading it (audit.view) is not
+    # enough, so the data auditor reads the log on screen but does not carry it away in bulk.
+    AUDIT_EXPORT = "audit.export"
 
     # RBAC self-management (Super Admin only)
     RBAC_VIEW = "rbac.view"

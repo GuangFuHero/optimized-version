@@ -279,7 +279,7 @@ export function RoleRequestDrawer({
                 撤回這筆申請
               </Button>
               {/* Not 「團隊已經用邀請碼讓你加入」 any more: a scan is an application too, and only one
-                  waits at a time (Spec 026), so this one goes first. */}
+                  waits at a time (Spec 026), so this one goes first. Worded by the designer. */}
               <Typography
                 sx={{
                   mt: 1,
@@ -289,7 +289,7 @@ export function RoleRequestDrawer({
                   textWrap: 'pretty',
                 }}
               >
-                如果有團隊給你邀請碼，要先撤回這一筆，才能掃碼改申請那個團隊。
+                如果有團隊給你邀請碼，要先撤回這一筆，才能掃碼申請加入那個團隊。
               </Typography>
             </Box>
           )}
