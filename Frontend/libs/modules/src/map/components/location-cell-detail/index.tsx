@@ -3,14 +3,27 @@
 import { Hexagon } from 'lucide-react';
 
 import { Box, ButtonBase, IconButton, Stack, Typography } from '@mui/material';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../../../shell/site/site-badge';
 import { TicketPriorityBadge } from '../../../ticket/priority-badge';
 import { getTicketStatusTone } from '../../../ticket/status';
-import { describeLocationCellSpan } from '../../location-cells';
-import type { RescueMapLocationCell } from '../../types';
+import {
+  describeLocationCellSpan,
+  LOCATION_CELL_MEMBERS_PAGE_SIZE,
+} from '../../location-cells';
+import type {
+  LocationCellMembersLoader,
+  RescueMapLocationCell,
+  RescueMapMarkerItem,
+} from '../../types';
 import { LocationPrivacyNotice } from '../location-privacy-notice';
 
 const { color, radius, spacing } = designTokens;
@@ -18,9 +31,83 @@ const CloseIcon = Icons.close;
 
 interface LocationCellDetailProps {
   cell: RescueMapLocationCell;
+  /** Reads the tickets of a cell that came counted, without them; not given, its own are listed. */
+  loadMembers?: LocationCellMembersLoader;
   isAuthenticated: boolean;
   onClose: () => void;
   onSelectMember: (markerId: string) => void;
+}
+
+interface CellMembers {
+  members: readonly RescueMapMarkerItem[];
+  hasMore: boolean;
+  status: 'loading' | 'idle' | 'error';
+}
+
+/**
+ * The cell's tickets: its own, or with `loadMembers`, read a page at a time from the first. A page
+ * that comes back after the panel has closed is dropped.
+ */
+function useCellMembers(
+  cell: RescueMapLocationCell,
+  loadMembers: LocationCellMembersLoader | undefined,
+): CellMembers & { loadMore: () => void; retry: () => void } {
+  const [state, setState] = useState<CellMembers>(() =>
+    loadMembers
+      ? { members: [], hasMore: false, status: 'loading' }
+      : { members: cell.members, hasMore: false, status: 'idle' },
+  );
+  const mountedRef = useRef(true);
+  const membersRef = useRef(state.members);
+  membersRef.current = state.members;
+
+  const load = useCallback(
+    async (skip: number) => {
+      if (!loadMembers) {
+        return;
+      }
+
+      setState((current) => ({ ...current, status: 'loading' }));
+
+      try {
+        const page = await loadMembers(cell.cell, skip);
+
+        if (mountedRef.current) {
+          setState((current) => ({
+            members:
+              skip === 0 ? page.members : [...current.members, ...page.members],
+            hasMore: page.hasMore,
+            status: 'idle',
+          }));
+        }
+      } catch {
+        if (mountedRef.current) {
+          setState((current) => ({ ...current, status: 'error' }));
+        }
+      }
+    },
+    [cell.cell, loadMembers],
+  );
+
+  useEffect(() => {
+    mountedRef.current = true;
+    void load(0);
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [load]);
+
+  const own: CellMembers = {
+    members: cell.members,
+    hasMore: false,
+    status: 'idle',
+  };
+  // Both go on from what is already listed: a failed first page from the start, a failed later
+  // one from where the list ends.
+  const next = () => void load(membersRef.current.length);
+
+  return { ...(loadMembers ? state : own), loadMore: next, retry: next };
 }
 
 /**
@@ -32,10 +119,16 @@ interface LocationCellDetailProps {
  */
 export function LocationCellDetail({
   cell,
+  loadMembers,
   isAuthenticated,
   onClose,
   onSelectMember,
 }: LocationCellDetailProps) {
+  const { members, hasMore, status, loadMore, retry } = useCellMembers(
+    cell,
+    loadMembers,
+  );
+
   return (
     <Box
       component="aside"
@@ -100,7 +193,7 @@ export function LocationCellDetail({
               color: color.fg.neutral.default,
             }}
           >
-            這個區塊有 {cell.members.length} 筆求助
+            這個區塊有 {cell.count} 筆求助
           </Typography>
           <Typography
             sx={{
@@ -132,7 +225,7 @@ export function LocationCellDetail({
           pb: `${spacing[6]}px`,
         }}
       >
-        {cell.members.map((member) => (
+        {members.map((member) => (
           <ButtonBase
             key={member.id}
             onClick={() => onSelectMember(member.id)}
@@ -180,7 +273,69 @@ export function LocationCellDetail({
             </Typography>
           </ButtonBase>
         ))}
+        <CellMembersFooter
+          status={status}
+          hasMore={hasMore}
+          onLoadMore={loadMore}
+          onRetry={retry}
+        />
       </Stack>
     </Box>
   );
+}
+
+/** Under the list: still reading, failed, or more to show. Nothing once every ticket is listed. */
+function CellMembersFooter({
+  status,
+  hasMore,
+  onLoadMore,
+  onRetry,
+}: {
+  status: CellMembers['status'];
+  hasMore: boolean;
+  onLoadMore: () => void;
+  onRetry: () => void;
+}) {
+  if (status === 'loading') {
+    return (
+      <Typography
+        role="status"
+        sx={{
+          py: 1,
+          textAlign: 'center',
+          fontSize: displayTextSize[13],
+          color: color.fg.neutral.muted,
+        }}
+      >
+        載入中...
+      </Typography>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <Stack sx={{ alignItems: 'center', gap: 1, py: 1 }}>
+        <Typography
+          role="alert"
+          sx={{ fontSize: displayTextSize[13], color: color.fg.neutral.subtle }}
+        >
+          讀不到這個區塊的求助，請再試一次。
+        </Typography>
+        <Button variant="outline" size="sm" onClick={onRetry}>
+          再試一次
+        </Button>
+      </Stack>
+    );
+  }
+
+  return hasMore ? (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onLoadMore}
+      sx={{ alignSelf: 'center' }}
+    >
+      再顯示 {LOCATION_CELL_MEMBERS_PAGE_SIZE} 筆
+    </Button>
+  ) : null;
 }

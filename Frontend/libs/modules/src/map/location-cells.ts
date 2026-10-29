@@ -22,6 +22,9 @@ import type { RescueMapLocationCell, RescueMapMarkerItem } from './types';
 
 export const LOCATION_CELL_ID_PREFIX = 'cell:';
 
+/** 打開後端數好的格子時，一次讀幾筆：跟地圖一次抓的張數一樣（`tickets` 的上限）。 */
+export const LOCATION_CELL_MEMBERS_PAGE_SIZE = 200;
+
 export function locationCellId(cell: string): string {
   return `${LOCATION_CELL_ID_PREFIX}${cell}`;
 }
@@ -61,23 +64,29 @@ export function buildLocationCells(
     variant: members.some((member) => member.variant === 'urgent-ticket')
       ? 'urgent-ticket'
       : 'in-progress',
+    count: members.length,
     members,
   }));
 }
 
 /**
- * `id` 是否仍指得到詳情抽屜能顯示的東西：一個 marker，或某張概略單所在的格子。
- * 資料刷新後用來判斷要不要清掉選取 —— 只比對 marker id 的話，選到格子會立刻被清掉。
+ * `id` 是否仍指得到詳情抽屜能顯示的東西：一個 marker，或某張概略單所在的格子，或後端數過的格子
+ * （`cells`，格子裡的單不一定在這一頁 markers 裡）。資料刷新後用來判斷要不要清掉選取 —— 只比對
+ * marker id 的話，選到格子會立刻被清掉。
  */
 export function hasRescueMapDetailItem(
   markers: readonly RescueMapMarkerItem[],
   id: string,
+  cells: readonly RescueMapLocationCell[] = [],
 ): boolean {
-  return markers.some(
-    (marker) =>
-      marker.id === id ||
-      (isCoarseTicket(marker) &&
-        locationCellId(marker.locationCell ?? '') === id),
+  return (
+    cells.some((cell) => cell.id === id) ||
+    markers.some(
+      (marker) =>
+        marker.id === id ||
+        (isCoarseTicket(marker) &&
+          locationCellId(marker.locationCell ?? '') === id),
+    )
   );
 }
 

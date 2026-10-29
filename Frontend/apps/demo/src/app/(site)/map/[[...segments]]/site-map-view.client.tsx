@@ -11,6 +11,7 @@ import {
   dedupeMarkersById,
   hasRescueMapDetailItem,
   Map,
+  MapCellsNotice,
   MapRequestHelpBar,
   NeedClaimProvider,
   PlaceHereAction,
@@ -18,6 +19,7 @@ import {
   SiteMapControls,
   syncDocumentMetadata,
   useAuthSession,
+  useCellMembersLoader,
   useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
@@ -139,8 +141,24 @@ function SiteMapViewportDataLayer({
   // dropped here, or it would stand in for the fetched one it was waiting for.
   const [goneTicketIds, setGoneTicketIds] = useState<readonly string[]>([]);
 
+  // The tickets listed in an opened cell, which come one cell at a time rather than with the
+  // view: picking one selects it by id, so the map has to hold it. A cell's tickets are not drawn
+  // as pins; the cell stands for them.
+  const [cellMembers, setCellMembers] = useState<
+    readonly RescueMapMarkerItem[]
+  >([]);
+  const keepCellMembers = useCallback(
+    (members: readonly RescueMapMarkerItem[]) =>
+      setCellMembers((current) => dedupeMarkersById([...members, ...current])),
+    [],
+  );
+  const loadCellMembers = useCellMembersLoader(
+    baseRouteState.subDataTypes,
+    keepCellMembers,
+  );
+
   // A ticket made here stays on the map until the view fetches it too; from then on the fetched
-  // one, being fresher, is the one shown.
+  // one, being fresher, is the one shown. So for a ticket read with its cell.
   const visibleMarkers = useMemo(
     () =>
       dedupeMarkersById([
@@ -148,8 +166,9 @@ function SiteMapViewportDataLayer({
         ...createdMarkers.filter(
           (marker) => !goneTicketIds.includes(marker.id),
         ),
+        ...cellMembers.filter((marker) => !goneTicketIds.includes(marker.id)),
       ]),
-    [createdMarkers, goneTicketIds, liveDataSnapshot.markers],
+    [cellMembers, createdMarkers, goneTicketIds, liveDataSnapshot.markers],
   );
 
   const createCurrentPointShareTarget = useCallback(
@@ -195,10 +214,12 @@ function SiteMapViewportDataLayer({
       return;
     }
 
-    // A guest's location cell is selectable too, and is not a marker of its own.
+    // A guest's location cell is selectable too, and is not a marker of its own; one the backend
+    // counted may have none of its tickets in the page.
     const hasSelectedMarker = hasRescueMapDetailItem(
       visibleMarkers,
       baseRouteState.selectedMarkerId,
+      liveDataSnapshot.cells,
     );
 
     if (hasSelectedMarker) {
@@ -211,6 +232,7 @@ function SiteMapViewportDataLayer({
     });
   }, [
     baseRouteState.selectedMarkerId,
+    liveDataSnapshot.cells,
     liveDataSnapshot.hasFetchedOnce,
     liveDataSnapshot.isFetching,
     mergedRouteState,
@@ -276,9 +298,11 @@ function SiteMapViewportDataLayer({
           gridTemplateRows: 'minmax(0, 1fr) auto',
         }}
       >
-        <Box sx={{ minHeight: 0 }}>
+        <Box sx={{ minHeight: 0, position: 'relative' }}>
           <Map
             markers={visibleMarkers}
+            locationCells={liveDataSnapshot.cells}
+            loadLocationCellMembers={loadCellMembers}
             closureAreas={liveDataSnapshot.closureAreas}
             publicZones={liveDataSnapshot.publicZones}
             routeState={baseRouteState}
@@ -296,6 +320,9 @@ function SiteMapViewportDataLayer({
             stationLayout="site"
             viewMemoryKey="site"
           />
+          {liveDataSnapshot.cellsNotice ? (
+            <MapCellsNotice message={liveDataSnapshot.cellsNotice} />
+          ) : null}
         </Box>
         <MapRequestHelpBar />
       </Box>
