@@ -1,10 +1,7 @@
 'use client';
 
 import { Box, Stack } from '@mui/material';
-import {
-  useTicketsExtent,
-  useTicketStats,
-} from '@rescue-frontend/data-access/admin';
+import { useTicketsExtent } from '@rescue-frontend/data-access/admin';
 import { designTokens } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -28,13 +25,11 @@ import {
   writeTicketFilters,
   type TicketFilters,
 } from './model/ticket-filters';
-import { toTicketStats } from './model/ticket-stats';
 import { TicketCreateSheet } from './ticket-create-sheet';
 import type { TicketRow } from './model/ticket-row';
 import { DeleteTicketConfirm, TicketDetailSheet } from './ticket-detail-sheet';
 import { TicketMapView } from './ticket-map-view';
 import { TicketFilterPanel } from './ticket-filter-panel';
-import { TicketStatsStrip } from './ticket-stats-strip';
 import { TicketTable } from './ticket-table';
 import { TicketExportMenu } from './ticket-export-menu';
 import { TicketImportDialog } from './ticket-import-dialog';
@@ -121,12 +116,6 @@ export function TicketBoardPage() {
     pageCount,
     setParam,
   ]);
-  // The stats strip counts the whole board in the caller's scope, whatever the filters.
-  const statsQuery = useTicketStats();
-  const stats = useMemo(
-    () => (statsQuery.data ? toTicketStats(statsQuery.data.ticketStats) : null),
-    [statsQuery.data],
-  );
   // The ticket on view lives in the URL (?ticket=<uuid>) so links can open it.
   const openTicket = useCallback(
     (uuid: string | null) => setParam('ticket', uuid),
@@ -162,8 +151,6 @@ export function TicketBoardPage() {
               '& > *': COLUMN_SX,
             }}
           >
-            {/* A failed count is unknown, not zero: it shows as loading does. */}
-            <TicketStatsStrip stats={stats} />
             <TicketToolbar
               caps={caps}
               query={filters.q}
@@ -203,10 +190,7 @@ export function TicketBoardPage() {
                 failed={tickets.error != null}
                 unfiltered={listsEveryTicket(filters)}
                 retrying={tickets.isFetching}
-                onRetry={() => {
-                  void tickets.refetch();
-                  if (statsQuery.error != null) void statsQuery.refetch();
-                }}
+                onRetry={() => void tickets.refetch()}
                 now={now}
                 page={Math.min(page, pageCount)}
                 pageCount={pageCount}

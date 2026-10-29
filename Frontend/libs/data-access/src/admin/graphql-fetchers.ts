@@ -14,7 +14,7 @@ import * as documents from './graphql/__generated__/graphql';
 import { ticketKeys, ticketWriteKeys } from './ticket-query-keys';
 
 /**
- * After a ticket write: refetch the lists, the stats and that ticket's sheet where they are on
+ * After a ticket write: refetch the lists and that ticket's sheet where they are on
  * screen; anything else is only marked stale, never reloaded now.
  */
 export function invalidateTicketWrite(
@@ -130,25 +130,6 @@ export function useTicketsExtent(
     ...ticketsExtentQuery(variables),
     enabled: options.enabled,
   });
-}
-
-/** The board's counts over every ticket the caller may list, whatever the filters. */
-export const ticketStatsQuery = () =>
-  queryOptions({
-    queryKey: ticketKeys.stats(),
-    queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(
-          documents.AdminTicketStatsDocument,
-          {},
-          { fetchOptions: { credentials: 'include', signal } },
-        )
-        .toPromise()
-        .then(graphqlResponseData),
-  });
-
-export function useTicketStats(options: AdminQueryOptions = {}) {
-  return useQuery({ ...ticketStatsQuery(), enabled: options.enabled });
 }
 
 export const ticketQuery = (variables: documents.AdminTicketQueryVariables) =>

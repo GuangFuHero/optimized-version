@@ -3,7 +3,6 @@ import {
   ticketQuery,
   ticketsExtentQuery,
   ticketsQuery,
-  ticketStatsQuery,
   ticketWriteKeys,
 } from '@rescue-frontend/data-access/admin';
 import { partialMatchKey } from '@tanstack/react-query';
@@ -15,11 +14,10 @@ const hits = (keys: unknown[][], queryKey: readonly unknown[]) =>
 describe('ticket write invalidation', () => {
   const keys = ticketWriteKeys('t-1');
 
-  it('makes the lists and the stats stale', () => {
+  it('makes the lists stale', () => {
     expect(hits(keys, ticketsQuery({ skip: 50, limit: 50 }).queryKey)).toBe(
       true,
     );
-    expect(hits(keys, ticketStatsQuery().queryKey)).toBe(true);
   });
 
   it("makes the map's pins and the filters' extent stale", () => {
