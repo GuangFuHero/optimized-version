@@ -36,7 +36,7 @@ import {
   importSummary,
 } from '../../../admin/shared/model/bulk-import';
 import { NEED_KIND_ICONS } from './need-kind-icons';
-import { ticketExportFilename } from './model/ticket-export';
+import { ticketImportTemplateFilename } from './model/ticket-export';
 import {
   IMPORT_NEED_TYPES,
   pastedCsvFile,
@@ -55,7 +55,8 @@ const PASTE_PREVIEW_DEBOUNCE_MS = 600;
 /**
  * 匯入任務單 (ADMIN-025 MVP 6; the ticket design has none, so it follows the station import,
  * `station-v2/station-import.jsx`): 1 · the need type the file holds, 2 · the file, chosen or
- * pasted as CSV text, with that type's template (its 匯出), then the preview and 確認匯入.
+ * pasted as CSV text, with that type's template (its export's header row), then the preview and
+ * 確認匯入.
  */
 export function TicketImportDialog({ onClose }: { onClose: () => void }) {
   const [taskType, setTaskType] = useState<NeedType | null>(null);
@@ -122,16 +123,18 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
     setPreview(null);
   };
 
+  // The export's header row alone (`template`): that type's columns, with no one's tickets in it.
   const downloadTemplate = () => {
     if (!taskType) return;
     exportTemplate.mutate(
-      { params: { query: { task_type: taskType, format: 'csv' } } },
+      {
+        params: {
+          query: { task_type: taskType, format: 'csv', template: true },
+        },
+      },
       {
         onSuccess: (blob) => {
-          downloadBlob(
-            blob as Blob,
-            ticketExportFilename(taskType, 'csv', new Date()),
-          );
+          downloadBlob(blob as Blob, ticketImportTemplateFilename(taskType));
           toast.success(`已下載「${needTypeLabel(taskType)}」範本`);
         },
       },
@@ -251,7 +254,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
                     variant="outline"
                     size="sm"
                     startIcon={<Download size={15} />}
-                    title={pickFirst ?? '「匯出」這一種需求的 CSV，當作範本'}
+                    title={pickFirst ?? '只有這一種需求的欄位名稱，沒有資料'}
                     onClick={downloadTemplate}
                     disabled={!taskType || exportTemplate.isPending}
                   >
