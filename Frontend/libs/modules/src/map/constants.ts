@@ -26,12 +26,16 @@ const { color, primitives } = designTokens;
 const TERRAIN_PREVIEW = `linear-gradient(135deg, ${primitives.color.green[500]} 0%, ${primitives.color.green[700]} 100%)`;
 const STREET_PREVIEW = `linear-gradient(135deg, ${color.bg.neutral.sunken} 0%, ${color.border.default} 100%)`;
 
-export const RESCUE_MAP_INITIAL_VIEW: {
+/**
+ * Where a map opens when the disaster has no map view set: all of Taiwan, never a hard-coded township
+ * (prototype `wg-bridge.js` MAP-VIEW-102).
+ */
+export const MAP_VIEW_TAIWAN: {
   center: [number, number];
   zoom: number;
 } = {
-  center: [23.884, 121.0],
-  zoom: 13,
+  center: [23.65, 120.95],
+  zoom: 7,
 };
 
 export const RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH = 352;

@@ -153,14 +153,24 @@ async def _set_password(client, token: str, proof: str | None = None):
     )
 
 
-async def test_a_first_password_asks_the_person_to_prove_it_at_line(client, db_session, redis):
-    """The same gate as a first contact (ADR-215), so the same answer."""
+async def test_a_first_password_is_refused_before_anything_is_proved_at_line(client, db_session, redis):
+    """With no email or phone to sign in with, a password could never be used (ADR-401)."""
     user_uuid, _ = await _line_only(db_session, redis)
 
     response = await _set_password(client, await token_for(redis, user_uuid))
 
-    assert response.status_code == 422, response.text
-    assert (response.json()["code"], response.json()["providers"]) == ("step_up_reauth_required", ["line"])
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "password_needs_contact"
+
+
+async def test_a_step_up_for_a_first_password_is_not_offered_at_line(client, db_session, redis):
+    """A first password is proved by the account's contact or refused, so never at the provider (ADR-401)."""
+    user_uuid, _ = await _line_only(db_session, redis)
+
+    started = await _start_step_up(client, await token_for(redis, user_uuid), action="set_password")
+
+    _back_on_the_page(started, step_up_error="oauth_request_invalid")
+    assert cookies_set_by(started) == {}
 
 
 async def test_linking_a_provider_asks_the_person_to_prove_it_at_line(client, db_session, redis):
@@ -476,27 +486,15 @@ async def test_a_proof_lets_one_request_through(client, db_session, redis, excha
 
 
 async def test_a_proof_is_for_the_action_it_was_asked_for(client, db_session, redis, exchanger):
-    """Proved for a password: adding a contact still asks, as a code is bound to its action (ADR-164)."""
+    """Proved for linking: adding a contact still asks, as a code is bound to its action (ADR-164)."""
     user_uuid, _ = await _line_only(db_session, redis)
     token = await token_for(redis, user_uuid)
-    back = await _step_up_at_line(client, exchanger, token, action="set_password")
+    back = await _step_up_at_line(client, exchanger, token, action="link_identity")
     _back_on_the_page(back, step_up="ok")
 
     response = await _add_phone(client, token, _proof_handed_over(back))
 
     assert response.json()["code"] == "step_up_reauth_required"
-
-
-async def test_once_proved_at_line_a_first_password_is_set(client, db_session, redis, exchanger):
-    """The same proof, asked for this action, lets the first password through."""
-    user_uuid, _ = await _line_only(db_session, redis)
-    token = await token_for(redis, user_uuid)
-    back = await _step_up_at_line(client, exchanger, token, action="set_password")
-    _back_on_the_page(back, step_up="ok")
-
-    response = await _set_password(client, token, _proof_handed_over(back))
-
-    assert response.status_code == 204, response.text
 
 
 async def test_a_proof_is_for_the_session_that_asked_for_it(client, db_session, redis, exchanger):
