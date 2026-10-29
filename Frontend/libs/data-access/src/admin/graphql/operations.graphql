@@ -170,6 +170,7 @@ query AdminTicketMapPins(
       status
       priority
       locationCell
+      buildingMapUuid
       secondaryLocation {
         county
         town

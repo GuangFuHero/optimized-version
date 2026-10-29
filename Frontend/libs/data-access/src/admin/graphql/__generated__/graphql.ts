@@ -2344,6 +2344,7 @@ export type AdminTicketMapPinsQuery = {
       status: string;
       priority: string;
       locationCell?: string | null;
+      buildingMapUuid?: string | null;
       secondaryLocation?: {
         __typename?: 'SecondaryLocationType';
         county?: string | null;
@@ -5165,6 +5166,10 @@ export const AdminTicketMapPinsDocument = {
                       {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'locationCell' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'buildingMapUuid' },
                       },
                       {
                         kind: 'Field',

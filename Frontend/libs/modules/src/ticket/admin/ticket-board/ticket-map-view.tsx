@@ -41,6 +41,15 @@ import {
 } from './model/ticket-marker';
 import { ticketAddressLine, type TicketPin } from './model/ticket-row';
 import { PriorityCell, StatusCell } from './ticket-table';
+import type { SpaceListRow } from '../space/space-analysis';
+import {
+  pinnedTickets,
+  SPACE_LEGEND_LABEL,
+  SPACE_PIN_EMPTY,
+  spaceIdOfMarker,
+  toSpaceMarker,
+} from '../space/space-map';
+import { SpaceMapCard } from '../space/space-map-card';
 
 const { color, radius, shadow, typography } = designTokens;
 
@@ -63,7 +72,12 @@ interface TicketMapViewProps {
   filters: TicketFilters;
   selectedUuid: string | null;
   onOpenTicket: (uuid: string) => void;
+  /** The spaces the filters let through: one square pin each (BE-036). */
+  spaces?: readonly SpaceListRow[];
+  onOpenSpace?: (uuid: string) => void;
 }
+
+const NO_SPACES: readonly SpaceListRow[] = [];
 
 /**
  * Browse-only: the loaded tickets listed beside pins by priority; a click on a list item or a pin
@@ -75,6 +89,8 @@ export function TicketMapView({
   filters,
   selectedUuid,
   onOpenTicket,
+  spaces = NO_SPACES,
+  onOpenSpace,
 }: TicketMapViewProps) {
   const [leafletMap, setLeafletMap] = useState<LeafletMap | null>(null);
   const framing = useFrameMatching(leafletMap, filters, selectedUuid);
@@ -86,14 +102,22 @@ export function TicketMapView({
   );
   const tickets = useTicketPins(variables, { enabled: viewport !== null });
   const rows = tickets.pins;
-  // Built once per load; a selection change swaps only the marker whose look changes.
-  const rowMarkers = useMemo(
-    () =>
-      rows
+  // Built once per load; a selection change swaps only the marker whose look changes. A ticket in
+  // a space draws no pin of its own: it shares the space's square one.
+  const rowMarkers = useMemo(() => {
+    const spaceMarkers = spaces
+      .map((space) => toSpaceMarker(space))
+      .filter((m): m is RescueMapMarkerItem => m !== null);
+    const pinnedSpaceIds = new Set(
+      spaceMarkers.map((m) => spaceIdOfMarker(m.id) ?? ''),
+    );
+    return [
+      ...pinnedTickets(rows, pinnedSpaceIds)
         .map((row) => toTicketMarker(row))
         .filter((m): m is RescueMapMarkerItem => m !== null),
-    [rows],
-  );
+      ...spaceMarkers,
+    ];
+  }, [rows, spaces]);
   const markers = useMemo(
     () => rowMarkers.map((m) => withMarkerSelected(m, m.id === selectedUuid)),
     [rowMarkers, selectedUuid],
@@ -172,11 +196,13 @@ export function TicketMapView({
               <SelectionSync
                 controller={controller}
                 rows={rows}
+                spaces={spaces}
                 onOpen={onOpenTicket}
+                onOpenSpace={onOpenSpace}
               />
             )}
           />
-          <PriorityLegend />
+          <PriorityLegend withSpaces={spaces.length > 0} />
         </Box>
       </Box>
     </Box>
@@ -314,32 +340,60 @@ function useMapViewport(map: LeafletMap | null): MapViewport | null {
 }
 
 /**
- * A picked pin opens its ticket. A picked cell with several tickets lists them to choose from.
- * The map's selection is cleared either way so the same pin or cell can be picked again.
+ * A picked pin opens its ticket. A picked cell with several tickets lists them to choose from; a
+ * picked space shows its card, whose 「看各樓層」 opens its floors. The map's selection is cleared
+ * either way so the same pin or cell can be picked again.
  */
 function SelectionSync({
   controller,
   rows,
+  spaces,
   onOpen,
+  onOpenSpace,
 }: {
   controller: RescueMapControllerValue;
   rows: readonly TicketPin[];
+  spaces: readonly SpaceListRow[];
   onOpen: (uuid: string) => void;
+  onOpenSpace?: (uuid: string) => void;
 }) {
   const { selectedMarkerId, setSelectedMarkerId } = controller;
   const [cellUuids, setCellUuids] = useState<string[] | null>(null);
+  const [spaceId, setSpaceId] = useState<string | null>(null);
   useEffect(() => {
     if (!selectedMarkerId) return;
+    const pickedSpace = spaceIdOfMarker(selectedMarkerId);
+    if (pickedSpace) {
+      setSpaceId(pickedSpace);
+      setCellUuids(null);
+      setSelectedMarkerId(undefined);
+      return;
+    }
     const selection = resolveMapSelection(selectedMarkerId, rows);
     if (selection?.kind === 'ticket') {
       onOpen(selection.uuid);
       setCellUuids(null);
+      setSpaceId(null);
     } else if (selection?.kind === 'cell') {
       setCellUuids(selection.uuids);
+      setSpaceId(null);
     }
     setSelectedMarkerId(undefined);
   }, [selectedMarkerId, rows, onOpen, setSelectedMarkerId]);
 
+  const space = spaceId ? spaces.find((row) => row.id === spaceId) : undefined;
+  if (space) {
+    return (
+      <SpaceMapCard
+        row={space}
+        onOpenFloors={(id) => {
+          setSpaceId(null);
+          onOpenSpace?.(id);
+        }}
+        onClose={() => setSpaceId(null)}
+      />
+    );
+  }
   const listed = cellUuids
     ? rows.filter((row) => cellUuids.includes(row.uuid))
     : [];
@@ -602,7 +656,7 @@ function CellTicketList({
   );
 }
 
-function PriorityLegend() {
+function PriorityLegend({ withSpaces }: { withSpaces: boolean }) {
   return (
     <Box
       component="ul"
@@ -661,6 +715,31 @@ function PriorityLegend() {
           </Typography>
         </Box>
       ))}
+      {withSpaces ? (
+        <Box
+          component="li"
+          sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          <Box
+            component="span"
+            sx={{
+              width: 13,
+              height: 13,
+              borderRadius: '3px',
+              bgcolor: SPACE_PIN_EMPTY,
+            }}
+          />
+          <Typography
+            component="span"
+            sx={{
+              ...typography.label[300],
+              color: color.fg.neutral.subtle,
+            }}
+          >
+            {SPACE_LEGEND_LABEL}
+          </Typography>
+        </Box>
+      ) : null}
     </Box>
   );
 }

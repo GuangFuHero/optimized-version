@@ -28,6 +28,9 @@ import { Muted } from '../../../admin/shared/muted';
 import { NeedActionsMenu } from '../../needs/need-actions-menu';
 import type { NeedAction } from '../../needs/need-actions';
 import { formatTicketStatusLabel } from '../../status';
+import { FLOOR_STATE_LABEL, type SpaceListRow } from '../space/space-analysis';
+import { FLOOR_STATE_TONE } from '../space/space-map';
+import { spaceTicketTag, type TaggedSpace } from '../space/space-ticket-tag';
 import {
   visibleTicketColumns,
   type TicketColumnId,
@@ -47,6 +50,15 @@ const { color, radius, typography } = designTokens;
 
 /** Needs shown as chips before the rest fold into +N; the whole list is on hover. */
 const CHIP_LIMIT = 3;
+
+/** A row of the board: a ticket, or a 開啟空間 space listed beside them (BE-036). */
+type BoardRow = TicketRow | SpaceListRow;
+
+const isSpaceRow = (row: BoardRow): row is SpaceListRow =>
+  'kind' in row && row.kind === 'space';
+
+const NO_SPACES: readonly SpaceListRow[] = [];
+const NO_TAGS: ReadonlyMap<string, TaggedSpace> = new Map();
 
 interface TicketTableProps {
   /** The page on view, as the server cut it. */
@@ -70,6 +82,14 @@ interface TicketTableProps {
   onDeleteTicket: (row: TicketRow) => void;
   /** 新增任務 in the empty board; unset when the viewer may not add. */
   onCreate?: () => void;
+  /**
+   * The spaces the filters let through, in order. The tickets come paged and sorted by the
+   * server, so the spaces sit above them on the first page.
+   */
+  spaces?: readonly SpaceListRow[];
+  /** Every loaded space, for the 「🏢 名稱 · 3F」 tag on a ticket filed in one. */
+  spaceTags?: ReadonlyMap<string, TaggedSpace>;
+  onOpenSpace?: (uuid: string) => void;
 }
 
 export function TicketTable({
@@ -86,13 +106,21 @@ export function TicketTable({
   onOpenTicket,
   onDeleteTicket,
   onCreate,
+  spaces = NO_SPACES,
+  spaceTags = NO_TAGS,
+  onOpenSpace,
 }: TicketTableProps) {
-  const renderCell = (id: TicketColumnId, row: TicketRow): ReactNode => {
+  const renderCell = (id: TicketColumnId, row: BoardRow): ReactNode =>
+    isSpaceRow(row) ? renderSpaceCell(id, row) : renderTicketCell(id, row);
+
+  const renderTicketCell = (id: TicketColumnId, row: TicketRow): ReactNode => {
     switch (id) {
       case 'priority':
         return <PriorityCell priority={row.priority} />;
       case 'ticket':
-        return <TicketCell row={row} />;
+        return (
+          <TicketCell row={row} tag={spaceTicketTag(row.raw, spaceTags)} />
+        );
       case 'needs':
         return <NeedsCell tasks={row.tasks} />;
       case 'updated':
@@ -112,7 +140,61 @@ export function TicketTable({
     }
   };
 
-  const columns: DataTableProps<TicketRow>['columns'] =
+  const renderSpaceCell = (
+    id: TicketColumnId,
+    row: SpaceListRow,
+  ): ReactNode => {
+    switch (id) {
+      case 'priority':
+        return row.priority ? (
+          <PriorityCell priority={row.priority} />
+        ) : (
+          <Muted cell>—</Muted>
+        );
+      case 'ticket':
+        return <SpaceCell row={row} />;
+      case 'needs':
+        return (
+          <Box sx={{ minWidth: 0 }}>
+            <CutText
+              title={row.summary}
+              sx={{ color: color.fg.neutral.subtle }}
+            >
+              {row.summary}
+            </CutText>
+            {row.volunteerGap > 0 ? (
+              <Typography
+                noWrap
+                sx={{ ...typography.label[300], color: color.fg.warning }}
+              >
+                缺 {row.volunteerGap} 人
+              </Typography>
+            ) : null}
+          </Box>
+        );
+      case 'updated':
+        return row.updatedAt ? (
+          <FreshnessCell updatedAt={row.updatedAt} now={now} />
+        ) : (
+          <Muted cell>—</Muted>
+        );
+      case 'status':
+        return (
+          <Badge tone={FLOOR_STATE_TONE[row.status]}>
+            {FLOOR_STATE_LABEL[row.status]}
+          </Badge>
+        );
+      case 'team':
+        return <Muted cell>—</Muted>;
+      case 'menu':
+        return null;
+    }
+  };
+
+  const data: readonly BoardRow[] =
+    page === 1 && spaces.length ? [...spaces, ...rows] : rows;
+
+  const columns: DataTableProps<BoardRow>['columns'] =
     visibleTicketColumns().map((column) => ({
       id: column.id,
       header: column.label,
@@ -138,9 +220,11 @@ export function TicketTable({
       {/* No minWidth: the table never scrolls sideways (TM-FS-102); its cells cut instead. */}
       <DataTable
         columns={columns}
-        data={rows}
-        getRowId={(row) => row.uuid}
-        onRowClick={(row) => onOpenTicket(row.uuid)}
+        data={data}
+        getRowId={(row) => (isSpaceRow(row) ? `space:${row.id}` : row.uuid)}
+        onRowClick={(row) =>
+          isSpaceRow(row) ? onOpenSpace?.(row.id) : onOpenTicket(row.uuid)
+        }
         empty={
           loading || failed ? (
             <Box sx={{ p: 4, textAlign: 'center' }}>
@@ -230,8 +314,11 @@ export function PriorityCell({ priority }: { priority: string }) {
   );
 }
 
-/** 任務: the photo count (never the images), the title, and the street line under it. */
-function TicketCell({ row }: { row: TicketRow }) {
+/**
+ * 任務: the photo count (never the images), the title with its space's 「🏢 名稱 · 3F」 when it
+ * was filed in one, and the street line under it.
+ */
+function TicketCell({ row, tag }: { row: TicketRow; tag: string | null }) {
   const address = ticketAddressLine(row);
   return (
     <Box sx={{ minWidth: 0 }}>
@@ -257,14 +344,46 @@ function TicketCell({ row }: { row: TicketRow }) {
           {row.photoCount}
         </Box>
       ) : null}
-      <Typography
-        noWrap
-        title={row.title}
-        sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+      <Box
+        sx={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}
       >
-        {row.title}
-      </Typography>
+        <Typography
+          noWrap
+          title={row.title}
+          sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+        >
+          {row.title}
+        </Typography>
+        {tag ? (
+          <CutText title={tag} sx={{ flexShrink: 0 }}>
+            {tag}
+          </CutText>
+        ) : null}
+      </Box>
       <CutText title={address}>{address}</CutText>
+    </Box>
+  );
+}
+
+/** A space's 任務 cell: 🏢 空間 and its name, the address under them. */
+function SpaceCell({ row }: { row: SpaceListRow }) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Box
+        sx={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}
+      >
+        <Badge tone="secondary">🏢 空間</Badge>
+        <Typography
+          noWrap
+          title={row.name}
+          sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+        >
+          {row.name}
+        </Typography>
+      </Box>
+      {row.address ? (
+        <CutText title={row.address}>{row.address}</CutText>
+      ) : null}
     </Box>
   );
 }

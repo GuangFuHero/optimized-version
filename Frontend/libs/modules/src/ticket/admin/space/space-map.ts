@@ -61,3 +61,16 @@ export function toSpaceMarker(row: SpaceListRow): RescueMapMarkerItem | null {
       : { title: row.name },
   };
 }
+
+/**
+ * The tickets that keep a pin of their own: all but those in a space whose square pin is on the
+ * map. One whose space isn't loaded keeps its pin, so it never drops off the map.
+ */
+export function pinnedTickets<T extends { buildingMapUuid: string | null }>(
+  rows: readonly T[],
+  pinnedSpaceIds: ReadonlySet<string>,
+): T[] {
+  return rows.filter(
+    (row) => !row.buildingMapUuid || !pinnedSpaceIds.has(row.buildingMapUuid),
+  );
+}

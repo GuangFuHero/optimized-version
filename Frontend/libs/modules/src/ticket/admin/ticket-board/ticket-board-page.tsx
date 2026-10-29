@@ -34,6 +34,12 @@ import { TicketTable } from './ticket-table';
 import { TicketExportMenu } from './ticket-export-menu';
 import { TicketImportDialog } from './ticket-import-dialog';
 import { TicketToolbar } from './ticket-toolbar';
+import type { SpaceHouseholdTarget } from '../space/household-input';
+import { OpenSpaceButton } from '../space/open-space-button';
+import { visibleSpaceRows } from '../space/space-board';
+import { SpaceDetailSheet } from '../space/space-detail-sheet';
+import type { TaggedSpace } from '../space/space-ticket-tag';
+import { useSpaces } from '../space/use-space-data';
 
 const { color } = designTokens;
 
@@ -125,6 +131,37 @@ export function TicketBoardPage() {
   const viewedUuid = params.get('ticket');
   const [editingUuid, setEditingUuid] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+
+  // 開啟空間 (BE-036): every space, listed and pinned beside the tickets the filters let through.
+  const spaceData = useSpaces();
+  const spaceRows = useMemo(
+    () => visibleSpaceRows(spaceData.spaces, filters),
+    [spaceData.spaces, filters],
+  );
+  const spaceTags = useMemo(
+    () =>
+      new Map<string, TaggedSpace>(
+        spaceData.spaces.map((space) => [
+          space.building.uuid,
+          {
+            name: space.building.name,
+            floorLabels: space.building.floors.map((floor) => floor.label),
+          },
+        ]),
+      ),
+    [spaceData.spaces],
+  );
+  // The space on view lives in the URL too (?space=<uuid>); a ticket opened from it sits on top.
+  const viewedSpace = params.get('space');
+  const openSpace = useCallback(
+    (uuid: string | null) => setParam('space', uuid),
+    [setParam],
+  );
+  // 新增一戶 / 在這一層新增: the board's own create form, for a household in that space.
+  const [household, setHousehold] = useState<{
+    space: SpaceHouseholdTarget;
+    floor?: string;
+  } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   // 刪除任務 from a row's ⋯: the drawer's own confirm, for that row's ticket.
   const [deleting, setDeleting] = useState<TicketRow | null>(null);
@@ -160,6 +197,8 @@ export function TicketBoardPage() {
               onToggleFilter={() => setFilterOpen((open) => !open)}
               onClear={() => setFilters(EMPTY_TICKET_FILTERS)}
               count={count}
+              spaceCount={spaceRows.length}
+              spaceControl={<OpenSpaceButton />}
               onCreate={caps.canAdd ? () => setCreating(true) : undefined}
               onImport={() => setImportOpen(true)}
               exportControl={<TicketExportMenu />}
@@ -182,6 +221,8 @@ export function TicketBoardPage() {
                 filters={filters}
                 selectedUuid={viewedUuid}
                 onOpenTicket={openTicket}
+                spaces={spaceRows}
+                onOpenSpace={openSpace}
               />
             ) : (
               <TicketTable
@@ -200,10 +241,21 @@ export function TicketBoardPage() {
                 onOpenTicket={openTicket}
                 onDeleteTicket={setDeleting}
                 onCreate={caps.canAdd ? () => setCreating(true) : undefined}
+                spaces={spaceRows}
+                spaceTags={spaceTags}
+                onOpenSpace={openSpace}
               />
             )}
           </Box>
         }
+      />
+      {/* Before the ticket sheets, so a ticket opened from a space stacks over it and Esc closes
+          only the ticket (design §開啟空間 6). */}
+      <SpaceDetailSheet
+        uuid={viewedSpace}
+        onClose={() => openSpace(null)}
+        onOpenTicket={openTicket}
+        onAddHousehold={(space, floor) => setHousehold({ space, floor })}
       />
       {caps.canImport && importOpen ? (
         <TicketImportDialog onClose={() => setImportOpen(false)} />
@@ -240,9 +292,16 @@ export function TicketBoardPage() {
         />
       ) : null}
       <TicketCreateSheet
-        open={creating && caps.canAdd}
-        onClose={() => setCreating(false)}
-        onCreated={(ticket) => openTicket(ticket.uuid)}
+        open={(creating || household !== null) && caps.canAdd}
+        space={household?.space}
+        initialFloor={household?.floor}
+        onClose={() => {
+          setCreating(false);
+          setHousehold(null);
+        }}
+        // A household closes back to its space's floors, which refresh with it; the board's own
+        // 新增任務 opens the ticket it made.
+        onCreated={household ? undefined : (ticket) => openTicket(ticket.uuid)}
       />
     </>
   );

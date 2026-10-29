@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TICKET_PRIORITY_PIN_COLORS } from '../ticket-board/model/ticket-marker';
 import type { SpaceListRow } from './space-analysis';
 import {
+  pinnedTickets,
   SPACE_PIN_EMPTY,
   spaceIdOfMarker,
   spacePinColor,
@@ -66,5 +67,21 @@ describe('toSpaceMarker', () => {
     expect(marker?.id).not.toBe('s1');
     expect(spaceIdOfMarker(marker?.id ?? '')).toBe('s1');
     expect(spaceIdOfMarker('s1')).toBeNull();
+  });
+});
+
+describe('pinnedTickets', () => {
+  const t = (uuid: string, buildingMapUuid: string | null) => ({
+    uuid,
+    buildingMapUuid,
+  });
+
+  it('drops a ticket whose space has its own pin, keeps the rest', () => {
+    const rows = [t('a', null), t('b', 's1'), t('c', 's2')];
+
+    expect(pinnedTickets(rows, new Set(['s1'])).map((r) => r.uuid)).toEqual([
+      'a',
+      'c',
+    ]);
   });
 });

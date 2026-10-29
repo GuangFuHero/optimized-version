@@ -95,6 +95,8 @@ export interface TicketRow {
   /** [lat, lng] for Leaflet, or null when the ticket has no point. */
   position: [number, number] | null;
   locationCell: string | null;
+  /** The 開啟空間 space it was filed in (BE-036); null outside one, or to a viewer without detail. */
+  buildingMapUuid: string | null;
   /** The point is a coarse cell, not an exact address. */
   isCoarse: boolean;
   updatedAt: string | null;
@@ -146,6 +148,7 @@ export type TicketPin = Pick<
   | 'locationCell'
   | 'isCoarse'
   | 'address'
+  | 'buildingMapUuid'
 >;
 
 type TicketPinFields = AdminTicketMapPinsQuery['tickets']['items'][number];
@@ -164,6 +167,7 @@ export function toTicketPin(ticket: TicketPinFields): TicketPin {
     locationCell: ticket.locationCell ?? null,
     isCoarse: !!ticket.locationCell,
     address: formatTicketStreet(ticket.secondaryLocation),
+    buildingMapUuid: ticket.buildingMapUuid ?? null,
   };
 }
 

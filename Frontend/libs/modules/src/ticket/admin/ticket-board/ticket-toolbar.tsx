@@ -7,6 +7,7 @@ import { useState, type ReactNode } from 'react';
 
 import { ToolbarButton } from '../../../admin/shared/toolbar-button';
 import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
+import { boardCountLine } from '../space/board-count';
 import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
 import { searchHint } from './model/ticket-filters';
 
@@ -22,6 +23,10 @@ interface TicketToolbarProps {
   onClear: () => void;
   /** Matching tickets; null while unknown (loading, or failed). */
   count: number | null;
+  /** The spaces listed with the tickets, counted after them: 「13 筆任務 · 1 個空間」. */
+  spaceCount?: number;
+  /** 開啟空間 (BE-036); it decides itself whether the viewer may see it. */
+  spaceControl?: ReactNode;
   /** 新增任務; the button shows only when the viewer may add and this is set. */
   onCreate?: () => void;
   /** 匯入任務單; offered only when the viewer may import. */
@@ -43,6 +48,8 @@ export function TicketToolbar({
   onToggleFilter,
   onClear,
   count,
+  spaceCount = 0,
+  spaceControl,
   onCreate,
   onImport,
   exportControl,
@@ -78,10 +85,11 @@ export function TicketToolbar({
           ml: 'auto',
         }}
       >
-        {count ?? '—'} 筆任務
+        {count === null ? '— 筆任務' : boardCountLine(count, spaceCount)}
       </Typography>
 
       {caps.canExport ? exportControl : null}
+      {spaceControl}
 
       {canCreate ? (
         <CreateSplitButton
