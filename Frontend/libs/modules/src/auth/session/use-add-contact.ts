@@ -21,7 +21,6 @@ import {
   contactAddedText,
   lineProofExpired,
   lineReturnError,
-  OLD_CODE_STILL_PENDING,
   readStepUpRequired,
   type AccountStepUpReturn,
   type AddContactStep,
@@ -52,6 +51,8 @@ interface AddContactOptions {
   saltIdentity: string | null;
   /** Whether the account already has one of this kind, which the new one replaces (`replacedContact`). */
   replaces: (type: AuthIdentityType) => boolean;
+  /** What to say when the first code is still good, by where it went (`oldCodeStillPending`). */
+  stillPending: (type: AuthIdentityType) => string;
   /** Only LINE can prove it is them (ADR-361): keep the contact and go to LINE. */
   onReauth: (draft: ContactDraft) => void;
   /** The contact is on the account now. */
@@ -59,13 +60,15 @@ interface AddContactOptions {
 }
 
 /**
- * 新增電子郵件或手機, with the proof the account can give first: 申請管理權限's phone check
- * (`role-request/use-phone-verification.ts`) for an email or a phone. `POST /auth/contacts` → `/verify`.
+ * 電子郵件和手機: 更換 the one the account has of a kind, or 新增 one it has not, with the proof the account
+ * can give first: 申請管理權限's phone check (`role-request/use-phone-verification.ts`) for an email or a
+ * phone. `POST /auth/contacts` → `/verify`.
  */
 export function useAddContact({
   hasPassword,
   saltIdentity,
   replaces,
+  stillPending,
   onReauth,
   onVerified,
 }: AddContactOptions) {
@@ -79,6 +82,8 @@ export function useAddContact({
   // every render.
   const onReauthRef = useRef(onReauth);
   onReauthRef.current = onReauth;
+  const stillPendingRef = useRef(stillPending);
+  stillPendingRef.current = stillPending;
 
   const fail = (message: string) => setProblem({ message, tone: 'error' });
 
@@ -130,7 +135,7 @@ export function useAddContact({
             if (resending) {
               setNotice(
                 ask.kind === 'old-code' && ask.pending
-                  ? OLD_CODE_STILL_PENDING
+                  ? stillPendingRef.current(draft.type)
                   : '驗證碼已經重新寄出。',
               );
             }

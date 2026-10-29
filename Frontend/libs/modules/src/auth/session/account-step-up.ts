@@ -123,20 +123,32 @@ export function replacedContact(
   return contacts.find((contact) => contact.type === type) ?? null;
 }
 
-/** Which contact goes, with its address — the person's own, from `/users/me` — before anything is sent. */
+/**
+ * 更換's warning, over its first button (design A1, 10-28): the contact that goes, with its address — the
+ * person's own, from `/users/me`. 新增 has none.
+ */
 export function replaceNotice(
   replaced: Pick<AccountContact, 'type' | 'value'>,
   signsInWithPassword: boolean,
 ): string {
   const name =
     replaced.type === 'phone' ? CONTACT_NAMES.phone : CONTACT_NAMES.email;
-  const notice = `你已經有${name} ${replaced.value}。新增新的${name}後，原本這個會被取代，不能再用。`;
+  const notice = `換好之後，原本的 ${replaced.value} 就不能再用。`;
 
   // A password signs in with an email or a phone (`authenticate_password`), whichever the person
-  // types; only someone who types this kind has to change.
+  // types; only someone who types this kind has to change (Seaweed, #144).
   return signsInWithPassword
-    ? `${notice}如果你是用${name}登入，以後要改用新的${name}。`
+    ? `${notice}如果你是用${name}登入，以後登入要打新的${name}。`
     : notice;
+}
+
+/** The row's line while closed: the account's email and phone, its own, in full. */
+export function contactsSummary(contacts: readonly AccountContact[]): string {
+  const valueOf = (type: AuthIdentityType) =>
+    replacedContact(contacts, type)?.value ?? '還沒有';
+
+  // A full-width space between the two, as the design writes it.
+  return `電子郵件：${valueOf('email')}\u3000手機：${valueOf('phone')}`;
 }
 
 /** Where the second code went, and, at the moment of finishing, the contact that goes. */
@@ -158,8 +170,8 @@ export function contactAddedText(
   replaced: boolean,
 ): string {
   return replaced
-    ? `已把${CONTACT_NAMES[type]}換成 ${value}。`
-    : `已新增${CONTACT_NAMES[type]} ${value}。`;
+    ? `已經把${CONTACT_NAMES[type]}換成 ${value}。`
+    : `已經新增${CONTACT_NAMES[type]} ${value}。`;
 }
 
 /**
@@ -185,7 +197,7 @@ export function originalContactName(
   return '電子郵件或手機';
 }
 
-/** 新增電子郵件或手機's three steps, by the kind being added. */
+/** 更換 or 新增's three steps, by the kind. */
 export function addContactSteps(type: AuthIdentityType): readonly string[] {
   const name = CONTACT_NAMES[type];
 
@@ -204,10 +216,16 @@ export function oldCodeSentText(name: string, pending: boolean): string {
 
 /**
  * 沒收到？重新寄一次 on the first code: the backend sends another only once the one out has run out
- * (ADR-165, `OTP_TTL_SECONDS`), so the person is told to look again.
+ * (ADR-165, `OTP_TTL_SECONDS`), so the person is told where to look again (design A1, 10-28). No address:
+ * the backend does not give it.
  */
-export const OLD_CODE_STILL_PENDING =
-  '剛剛寄的驗證碼 10 分鐘內都能用，請再找找看。過了 10 分鐘還沒收到，再按一次就會重新寄。';
+export function oldCodeStillPending(name: string): string {
+  const look = `剛剛寄的驗證碼 10 分鐘內都能用，不用重寄。請到你原本的${name}再找一下`;
+
+  return name === CONTACT_NAMES.phone
+    ? `${look}。`
+    : `${look}，也看看「垃圾郵件」。`;
+}
 
 const RESUME_KEY = 'resume';
 const STEP_UP_KEY = 'step_up';

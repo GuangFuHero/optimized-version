@@ -21,7 +21,12 @@ import { ApiError } from '@rescue-frontend/data-access';
 import { designTokens } from '@rescue-frontend/ui';
 
 import { continueSignedOut } from '../../session/end-expired-session';
-import { authHref, newPasswordProblem, newPasswordText } from '../login';
+import {
+  authHref,
+  newPasswordProblem,
+  newPasswordText,
+  type AuthIdentityType,
+} from '../login';
 import {
   changePasswordAsync,
   getCurrentUserAsync,
@@ -33,7 +38,7 @@ import {
   createHashedCredentialAsync,
   resolveHashedCredentialAsync,
 } from '../login/credentials';
-import { ContactTypeChoice, StepDots } from './account-security-controls';
+import { StepDots } from './account-security-controls';
 import {
   hasPassword,
   loginMethodsText,
@@ -47,9 +52,10 @@ import {
   buildAccountStepUpHref,
   cannotProveHere,
   contactName,
+  contactsSummary,
   newCodeSentText,
-  OLD_CODE_STILL_PENDING,
   oldCodeSentText,
+  oldCodeStillPending,
   originalContactName,
   readAccountStepUpReturn,
   readStepUpRequired,
@@ -115,7 +121,6 @@ function SecurityRow({
   summary,
   open,
   blocked,
-  doneNotice,
   onOpen,
   onClose,
   children,
@@ -125,8 +130,6 @@ function SecurityRow({
   open: boolean;
   /** Why the row cannot be used here, shown under it in place of 打開. */
   blocked?: string | null;
-  /** What the row just did, shown under it once it has closed by itself. */
-  doneNotice?: string | null;
   onOpen: () => void;
   onClose: () => void;
   children: React.ReactNode;
@@ -203,13 +206,6 @@ function SecurityRow({
               </Button>
             </Stack>
           ) : null}
-          {!open && doneNotice ? (
-            <Box sx={{ px: 3, pb: 3 }}>
-              <Alert severity="success" sx={ALERT_TEXT}>
-                {doneNotice}
-              </Alert>
-            </Box>
-          ) : null}
         </>
       )}
     </Card>
@@ -271,6 +267,8 @@ export function AccountSecurityClient({
   const [contactCode, setContactCode] = useState('');
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
   const [openRow, setOpenRow] = useState<SecurityRowKey | null>(null);
+  // Which contact 電子郵件和手機 is changing — its 更換 or 新增 pressed — or null for the list.
+  const [contactKind, setContactKind] = useState<AuthIdentityType | null>(null);
 
   const { keep: keepContactDraft, take: takeContactDraft } =
     useContactDraft(userId);
@@ -301,12 +299,13 @@ export function AccountSecurityClient({
     hasPassword: signsInWithPassword,
     saltIdentity,
     replaces: (type) => replacedContact(contacts, type) !== null,
+    stillPending: (type) =>
+      oldCodeStillPending(originalContactName(contacts, type)),
     onReauth: (draft) => void goProveAtLine('add_contact', draft),
-    // `saltIdentity` reads the account's contacts, which the server read before this one was added.
-    // Done: the row closes with only what was added under it (Seaweed, #144), and the account's
-    // contacts are read again, the new one among them.
+    // Done: back to the list, with what was done over it (design ⑫) and no warning about it (Seaweed,
+    // #144). The account's contacts are read again, the new one among them.
     onVerified: () => {
-      setOpenRow(null);
+      setContactKind(null);
       router.refresh();
     },
   });
@@ -353,6 +352,7 @@ export function AccountSecurityClient({
 
     if (draft) {
       setOpenRow('contact');
+      setContactKind(draft.type);
       resumeContact(draft, back.stepUp);
     }
   }, [resumeContact, takeContactDraft]);
@@ -457,7 +457,9 @@ export function AccountSecurityClient({
         if (ask.kind === 'old-code') {
           if (resending) {
             setSetPasswordNotice(
-              ask.pending ? OLD_CODE_STILL_PENDING : '驗證碼已經重新寄出。',
+              ask.pending
+                ? oldCodeStillPending(originalContactName(contacts))
+                : '驗證碼已經重新寄出。',
             );
           } else {
             setSetPasswordCode('');
@@ -499,17 +501,13 @@ export function AccountSecurityClient({
       setSetPasswordNotice(undefined);
     } else if (row === 'contact') {
       contact.cancel();
+      setContactKind(null);
     }
   }
 
   function openOnly(row: SecurityRowKey) {
     if (openRow && openRow !== row) {
       resetRow(openRow);
-    }
-
-    // What the last addition left under its closed row goes as soon as any row opens.
-    if (openRow !== 'contact') {
-      contact.cancel();
     }
 
     setOpenRow(row);
@@ -532,12 +530,20 @@ export function AccountSecurityClient({
   }
 
   const setPasswordOriginal = originalContactName(contacts);
-  const newName = contactName(contact.type);
   const contactOriginal = originalContactName(contacts, contact.type);
-  // The account's own email or phone of the kind being added, which the new one takes the place of.
-  const replacing = replacedContact(contacts, contact.type);
+  // The account's own email or phone of the kind being changed: 更換 replaces it, 新增 has none.
+  const replacing = contactKind ? replacedContact(contacts, contactKind) : null;
   const contactStep =
     contact.stage.kind === 'enter' ? 0 : contact.stage.kind === 'code' ? 2 : 1;
+  const contactRowOpen = openRow === 'contact';
+  const contactTitle = contactKind
+    ? `${replacing ? '更換' : '新增'}${contactName(contactKind)}`
+    : '電子郵件和手機';
+  const contactLine = !contactRowOpen
+    ? contactsSummary(contacts)
+    : contactKind
+      ? `為了安全，要先確認是你本人，再輸入新的${contactName(contactKind)}收到的驗證碼，共三步。`
+      : '每個帳號可以有一個電子郵件、一個手機。';
 
   return (
     <Stack spacing={3}>
@@ -686,42 +692,97 @@ export function AccountSecurityClient({
       )}
 
       <SecurityRow
-        title="新增電子郵件或手機"
-        summary="一次新增一個。"
-        open={openRow === 'contact'}
+        title={contactTitle}
+        summary={contactLine}
+        open={contactRowOpen}
         blocked={googleOnly ? '你是用 Google 登入，暫時不能在這裡新增。' : null}
-        doneNotice={contact.notice}
         onOpen={() => openOnly('contact')}
         onClose={() => closeRow('contact')}
       >
-        {contact.stage.kind === 'enter' ? (
+        {contactKind ? (
+          <StepDots steps={addContactSteps(contactKind)} at={contactStep} />
+        ) : (
           <>
-            <Typography sx={BODY_TEXT}>
-              {`為了安全，要先確認是你本人，再輸入新的${newName}收到的驗證碼，共三步。`}
-            </Typography>
-            <Typography
-              sx={{ fontSize: 16, fontWeight: 700, color: '#241B19' }}
-            >
-              要新增哪一種？（選一個）
-            </Typography>
-            <ContactTypeChoice
-              value={contact.type}
-              onChange={(type) => contact.change({ type })}
-            />
+            {/* What was just done, over the list it changed (design ⑫). */}
+            {contact.notice ? (
+              <Alert severity="success" sx={ALERT_TEXT}>
+                {contact.notice}
+              </Alert>
+            ) : null}
+            {(['email', 'phone'] as const).map((type) => {
+              const held = replacedContact(contacts, type);
+
+              return (
+                <Stack
+                  key={type}
+                  direction="row"
+                  spacing={1.5}
+                  sx={{
+                    alignItems: 'center',
+                    py: 1.5,
+                    borderTop: `1px solid ${ROW_BORDER}`,
+                  }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography
+                      sx={{ fontSize: 16, fontWeight: 700, color: '#241B19' }}
+                    >
+                      {contactName(type)}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        ...BODY_TEXT,
+                        color: held ? BODY_TEXT.color : GREYED,
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {held?.value ?? '還沒有'}
+                    </Typography>
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    sx={{ minHeight: 44, minWidth: 88, fontSize: 16 }}
+                    onClick={() => {
+                      setContactKind(type);
+                      contact.change({ type, value: '' });
+                    }}
+                  >
+                    {held ? '更換' : '新增'}
+                  </Button>
+                </Stack>
+              );
+            })}
+          </>
+        )}
+
+        {contactKind && contact.stage.kind === 'enter' ? (
+          <>
+            {replacing ? (
+              <Typography sx={BODY_TEXT}>
+                現在的{contactName(contactKind)}：
+                <Box
+                  component="b"
+                  sx={{ color: '#241B19', overflowWrap: 'anywhere' }}
+                >
+                  {replacing.value}
+                </Box>
+              </Typography>
+            ) : null}
             <TextField
-              label={contact.type === 'email' ? '新的電子郵件' : '新的手機號碼'}
+              label={contactKind === 'email' ? '新的電子郵件' : '新的手機號碼'}
               placeholder={
-                contact.type === 'email'
+                contactKind === 'email'
                   ? '例：wang@gmail.com'
                   : '例：0912345678'
               }
+              autoFocus
               value={contact.value}
               onChange={(event) =>
                 contact.change({ value: event.target.value })
               }
             />
-            {/* Only once something is typed: before that nothing is replacing anything (Seaweed, #144). */}
-            {replacing && contact.value.trim() ? (
+            {/* 更換 only, over its button (design ⑩); 新增 replaces nothing. */}
+            {replacing ? (
               <Alert severity="warning" sx={ALERT_TEXT}>
                 {replaceNotice(replacing, signsInWithPassword)}
               </Alert>
@@ -735,9 +796,7 @@ export function AccountSecurityClient({
               寄驗證碼
             </Button>
           </>
-        ) : (
-          <StepDots steps={addContactSteps(contact.type)} at={contactStep} />
-        )}
+        ) : null}
 
         {contact.stage.kind === 'password' ? (
           <>
@@ -846,7 +905,7 @@ export function AccountSecurityClient({
                 void contact.verify(contactCode);
               }}
             >
-              完成新增
+              {replacing ? '完成更換' : '完成新增'}
             </Button>
             <Button
               variant="text"
@@ -862,11 +921,8 @@ export function AccountSecurityClient({
         ) : null}
 
         <ProblemAlert problem={contact.problem} />
-        {contact.notice ? (
-          <Alert
-            severity={contact.stage.kind === 'enter' ? 'success' : 'info'}
-            sx={ALERT_TEXT}
-          >
+        {contactKind && contact.notice ? (
+          <Alert severity="info" sx={ALERT_TEXT}>
             {contact.notice}
           </Alert>
         ) : null}

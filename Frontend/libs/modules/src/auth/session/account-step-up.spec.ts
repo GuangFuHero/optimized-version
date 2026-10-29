@@ -8,10 +8,12 @@ import {
   buildAccountStepUpHref,
   cannotProveHere,
   contactAddedText,
+  contactsSummary,
   lineProofExpired,
   lineReturnError,
   newCodeSentText,
   oldCodeSentText,
+  oldCodeStillPending,
   originalContactName,
   readAccountStepUpReturn,
   readStepUpRequired,
@@ -121,10 +123,11 @@ describe('a contact of a kind the account already has', () => {
 
   it('is named with its address before anything is sent', () => {
     expect(replaceNotice(email, false)).toBe(
-      '你已經有電子郵件 wang@yahoo.com.tw。新增新的電子郵件後，原本這個會被取代，不能再用。',
+      '換好之後，原本的 wang@yahoo.com.tw 就不能再用。',
     );
+    // Only someone who signs in with this kind has to change: a password signs in with either.
     expect(replaceNotice(phone, true)).toBe(
-      '你已經有手機 +886912345678。新增新的手機後，原本這個會被取代，不能再用。如果你是用手機登入，以後要改用新的手機。',
+      '換好之後，原本的 +886912345678 就不能再用。如果你是用手機登入，以後登入要打新的手機。',
     );
   });
 
@@ -139,10 +142,32 @@ describe('a contact of a kind the account already has', () => {
 
   it('is said to be replaced once it is done', () => {
     expect(contactAddedText('email', 'new@gmail.com', false)).toBe(
-      '已新增電子郵件 new@gmail.com。',
+      '已經新增電子郵件 new@gmail.com。',
     );
     expect(contactAddedText('email', 'new@gmail.com', true)).toBe(
-      '已把電子郵件換成 new@gmail.com。',
+      '已經把電子郵件換成 new@gmail.com。',
+    );
+  });
+});
+
+describe('contactsSummary', () => {
+  it('names the email and the phone the account has, or says there is none yet', () => {
+    expect(
+      contactsSummary([
+        { type: 'email', value: 'wang@yahoo.com.tw', verified: true },
+      ]),
+    ).toBe('電子郵件：wang@yahoo.com.tw　手機：還沒有');
+    expect(contactsSummary([])).toBe('電子郵件：還沒有　手機：還沒有');
+  });
+});
+
+describe('oldCodeStillPending', () => {
+  it('says the first code is still good and where to look again, the spam folder for an email', () => {
+    expect(oldCodeStillPending('電子郵件')).toBe(
+      '剛剛寄的驗證碼 10 分鐘內都能用，不用重寄。請到你原本的電子郵件再找一下，也看看「垃圾郵件」。',
+    );
+    expect(oldCodeStillPending('手機')).toBe(
+      '剛剛寄的驗證碼 10 分鐘內都能用，不用重寄。請到你原本的手機再找一下。',
     );
   });
 });
