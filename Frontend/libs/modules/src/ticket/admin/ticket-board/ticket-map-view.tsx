@@ -6,7 +6,7 @@ import {
   useTicketsExtent,
 } from '@rescue-frontend/data-access/admin';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
-import { ChevronRight, X } from 'lucide-react';
+import { Building2, ChevronRight, X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
@@ -45,7 +45,6 @@ import type { SpaceListRow } from '../space/space-analysis';
 import {
   pinnedTickets,
   SPACE_LEGEND_LABEL,
-  SPACE_PIN_EMPTY,
   spaceIdOfMarker,
   toSpaceMarker,
 } from '../space/space-map';
@@ -716,29 +715,41 @@ function PriorityLegend({ withSpaces }: { withSpaces: boolean }) {
         </Box>
       ))}
       {withSpaces ? (
-        <Box
-          component="li"
-          sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-        >
+        <>
           <Box
-            component="span"
-            sx={{
-              width: 13,
-              height: 13,
-              borderRadius: '3px',
-              bgcolor: SPACE_PIN_EMPTY,
-            }}
+            component="li"
+            aria-hidden
+            sx={{ height: '1px', my: '1px', bgcolor: color.border.default }}
           />
-          <Typography
-            component="span"
-            sx={{
-              ...typography.label[300],
-              color: color.fg.neutral.subtle,
-            }}
+          <Box
+            component="li"
+            sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            {SPACE_LEGEND_LABEL}
-          </Typography>
-        </Box>
+            <Box
+              component="span"
+              sx={{
+                width: 15,
+                height: 15,
+                borderRadius: `${radius.sm}px`,
+                bgcolor: color.fg.neutral.muted,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Building2 size={10} color={color.bg.neutral.default} />
+            </Box>
+            <Typography
+              component="span"
+              sx={{
+                ...typography.label[300],
+                color: color.fg.neutral.subtle,
+              }}
+            >
+              {SPACE_LEGEND_LABEL}
+            </Typography>
+          </Box>
+        </>
       ) : null}
     </Box>
   );

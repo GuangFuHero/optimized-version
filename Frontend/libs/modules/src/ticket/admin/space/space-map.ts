@@ -4,19 +4,9 @@
  * The tickets inside a space draw no pin of their own: they share its point.
  */
 
-import type { BadgeTone } from '@rescue-frontend/ui';
-
 import type { RescueMapMarkerItem } from '../../../map/types';
 import { TICKET_PRIORITY_PIN_COLORS } from '../ticket-board/model/ticket-marker';
-import type { FloorState, SpaceListRow, SpacePriority } from './space-analysis';
-
-/** A space's state as a badge, on the list row and the map card. */
-export const FLOOR_STATE_TONE: Record<FloorState, BadgeTone> = {
-  need: 'danger',
-  progress: 'warning',
-  done: 'success',
-  empty: 'neutral',
-};
+import type { SpaceListRow, SpacePriority } from './space-analysis';
 
 /** A space with no ticket that counts. */
 export const SPACE_PIN_EMPTY = '#64748B';

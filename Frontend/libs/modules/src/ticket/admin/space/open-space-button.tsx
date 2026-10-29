@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { MapPinPlus } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 
 import { ToolbarButton } from '../../../admin/shared/toolbar-button';
 import { SpaceFormDrawer } from './space-form-drawer';
@@ -25,7 +25,7 @@ export function OpenSpaceButton({
   return (
     <>
       <ToolbarButton onClick={() => setOpen(true)}>
-        <MapPinPlus size={17} />
+        <Building2 size={17} />
         開啟空間
       </ToolbarButton>
       <SpaceFormDrawer

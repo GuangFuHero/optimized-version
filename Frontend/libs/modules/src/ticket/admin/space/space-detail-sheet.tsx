@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Box, ButtonBase, Typography } from '@mui/material';
 import { useDeleteBuildingMap } from '@rescue-frontend/data-access/admin';
@@ -14,7 +14,7 @@ import {
   SheetFrame,
   SheetLayout,
 } from '@rescue-frontend/ui';
-import { Layers, PencilLine, Plus, Trash2 } from 'lucide-react';
+import { Building2, Layers, PenLine, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Muted } from '../../../admin/shared/muted';
@@ -25,12 +25,16 @@ import {
   type SpaceHouseholdTarget,
 } from './household-input';
 import {
+  fillLabel,
+  floorsCaption,
+  floorState,
   FLOOR_STATE_LABEL,
   type FloorState,
   type SpaceFloor,
   type SpaceTicket,
 } from './space-analysis';
-import { SpaceEditLayout } from './space-form-drawer';
+import { floorStateColor, StateBadge } from './space-badges';
+import { SpaceFormDrawer } from './space-form-drawer';
 import { deleteKeepsText, ticketsCut } from './space-partial';
 import {
   useSpace,
@@ -40,16 +44,8 @@ import {
 
 const { color, radius, typography } = designTokens;
 
-/** The prototype's `TKDrawer` width, the same as the station sheet. */
-const SPACE_SHEET_WIDTH = 540;
-
-/** The prototype's dots and text colours per state (`tk-space.jsx` `STATE`). */
-const STATE_COLOR: Record<FloorState, { dot: string; fg: string }> = {
-  need: { dot: color.fg.danger, fg: color.fg.danger },
-  progress: { dot: color.fg.warning, fg: color.fg.warning },
-  done: { dot: color.fg.success, fg: color.fg.success },
-  empty: { dot: color.border.default, fg: color.fg.neutral.muted },
-};
+/** The prototype's `SpaceDetail` drawer is 640 wide (`tk-space.jsx`). */
+const SPACE_SHEET_WIDTH = 640;
 
 /** 「N 層還需要幫忙」 and the rest, in the prototype's order. */
 const TILE_ORDER: readonly FloorState[] = ['need', 'progress', 'done', 'empty'];
@@ -68,17 +64,17 @@ export interface SpaceDetailSheetProps {
   /** A ticket card was clicked: the page opens its own ticket drawer over this sheet. */
   onOpenTicket?: (ticketUuid: string) => void;
   /**
-   * 新增一戶 / 在這一層新增: the page opens its own ticket form for a household in this space, on
-   * `floor` when one was picked. Without it neither action shows.
+   * 新增一戶: the page opens its own ticket form for a household in this space, on `floor` when one
+   * was picked. Without it the action doesn't show.
    */
   onAddHousehold?: (space: SpaceHouseholdTarget, floor?: string) => void;
   onDeleted?: () => void;
 }
 
 /**
- * 看各樓層 (BE-036 point 4): a space floor by floor, with what each floor still needs, from the
- * designer's `SpaceDetail` (`Design/後台/js/admin/ticket/tk-space.jsx`). Editing swaps the form in
- * place, as `/stations` does; a ticket opened from here sits over it, so Esc closes only that.
+ * 看各樓層 (BE-036 point 4): a space floor by floor, with what each floor still needs, as the
+ * designer's `SpaceDetail` (`Design/後台/js/admin/ticket/tk-space.jsx`). 編輯 opens its modal over
+ * this sheet; a ticket opened from here sits over it too, so Esc closes only that.
  */
 export function SpaceDetailSheet({
   uuid,
@@ -90,79 +86,65 @@ export function SpaceDetailSheet({
   const { space, isLoading, error } = useSpace(uuid);
   const caps = useSpaceCapabilities();
   const [editing, setEditing] = useState(false);
-  // An edit is saving: Escape and the backdrop wait for it.
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => setEditing(false), [uuid]);
 
-  let content: ReactNode;
-  if (space && editing) {
-    content = (
-      <SpaceEditLayout
-        building={space.building}
-        tickets={space.tickets}
-        onClose={() => setEditing(false)}
-        onBusyChange={setBusy}
-      />
-    );
-  } else if (space) {
-    content = (
-      <SpaceDetailContent
-        space={space}
-        canEdit={caps.canEdit}
-        canDelete={caps.canDelete}
-        onEdit={() => setEditing(true)}
-        onOpenTicket={onOpenTicket}
-        onAddHousehold={
-          onAddHousehold &&
-          householdActionsShown({
-            canAddTicket: caps.canAddTicket,
-            hasHandler: Boolean(onAddHousehold),
-          })
-            ? (floor?: string) =>
-                onAddHousehold(
-                  {
+  return (
+    <SheetFrame
+      open={Boolean(uuid)}
+      onClose={onClose}
+      width={SPACE_SHEET_WIDTH}
+      variant="admin"
+      ariaLabel="看各樓層"
+    >
+      {space ? (
+        <SpaceDetailContent
+          space={space}
+          canEdit={caps.canEdit}
+          canDelete={caps.canDelete}
+          onEdit={() => setEditing(true)}
+          onOpenTicket={onOpenTicket}
+          onAddHousehold={
+            onAddHousehold &&
+            householdActionsShown({
+              canAddTicket: caps.canAddTicket,
+              hasHandler: true,
+            })
+              ? () =>
+                  onAddHousehold({
                     uuid: space.building.uuid,
                     name: space.building.name,
                     floorLabels: space.building.floors.map(
                       (floor) => floor.label,
                     ),
-                  },
-                  floor,
-                )
-            : undefined
-        }
-        onDeleted={() => {
-          onClose();
-          onDeleted?.();
-        }}
-      />
-    );
-  } else {
-    content = (
-      <SheetLayout title="看各樓層" closeLabel="關閉看各樓層">
-        {isLoading ? null : (
-          <Muted>
-            {error
-              ? '這一棟的資料載入失敗。'
-              : '找不到這一棟，可能已經被刪除。'}
-          </Muted>
-        )}
-      </SheetLayout>
-    );
-  }
-
-  return (
-    <SheetFrame
-      open={Boolean(uuid)}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
-      width={SPACE_SHEET_WIDTH}
-      variant="admin"
-      ariaLabel="看各樓層"
-    >
-      {content}
+                  })
+              : undefined
+          }
+          onDeleted={() => {
+            onClose();
+            onDeleted?.();
+          }}
+        />
+      ) : (
+        <SheetLayout title="看各樓層" closeLabel="關閉看各樓層">
+          {isLoading ? null : (
+            <Muted>
+              {error
+                ? '這一棟的資料載入失敗。'
+                : '找不到這一棟，可能已經被刪除。'}
+            </Muted>
+          )}
+        </SheetLayout>
+      )}
+      {space ? (
+        <SpaceFormDrawer
+          mode="edit"
+          open={editing}
+          onClose={() => setEditing(false)}
+          building={space.building}
+          tickets={space.tickets}
+        />
+      ) : null}
     </SheetFrame>
   );
 }
@@ -181,8 +163,8 @@ function SpaceDetailContent({
   canDelete: boolean;
   onEdit: () => void;
   onOpenTicket?: (ticketUuid: string) => void;
-  /** Set only when the household actions show. */
-  onAddHousehold?: (floor?: string) => void;
+  /** Set only when 新增一戶 shows. */
+  onAddHousehold?: () => void;
   onDeleted: () => void;
 }) {
   const { building, analysis } = space;
@@ -213,53 +195,63 @@ function SpaceDetailContent({
 
   return (
     <SheetLayout
-      title={`🏢 ${building.name}`}
+      title={
+        <Box
+          component="span"
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+        >
+          <Building2
+            size={20}
+            color={color.fg.neutral.subtle}
+            style={{ flexShrink: 0 }}
+          />
+          {building.name}
+        </Box>
+      }
+      // The prototype sets the address state off with a full-width space (U+3000).
       subtitle={
-        address ? (
-          <>
-            {address}
-            {addressStatus ? ` · ${addressStatus}` : null}
-          </>
-        ) : undefined
+        address
+          ? `${address}${addressStatus ? `\u3000${addressStatus}` : ''}`
+          : undefined
       }
       closeLabel="關閉看各樓層"
-      actions={
-        onAddHousehold ? (
-          <Button
-            variant="outline"
-            size="sm"
-            startIcon={<Plus size={15} />}
-            onClick={() => onAddHousehold()}
-          >
-            新增一戶
-          </Button>
-        ) : undefined
-      }
       footer={
-        <>
-          {canDelete ? (
-            <Button
-              variant="ghost"
-              size="md"
-              startIcon={<Trash2 size={16} />}
-              onClick={() => setConfirming(true)}
-              sx={{ color: color.fg.danger }}
-            >
-              刪除空間
-            </Button>
-          ) : null}
-          <Box sx={{ flex: 1 }} />
-          {canEdit ? (
-            <Button
-              variant="outline"
-              size="md"
-              startIcon={<PencilLine size={16} />}
-              onClick={onEdit}
-            >
-              編輯
-            </Button>
-          ) : null}
-        </>
+        canDelete || canEdit || onAddHousehold ? (
+          <>
+            {canDelete ? (
+              <Button
+                variant="ghost"
+                size="md"
+                startIcon={<Trash2 size={16} />}
+                onClick={() => setConfirming(true)}
+                sx={{ color: color.fg.danger }}
+              >
+                刪除空間
+              </Button>
+            ) : null}
+            <Box sx={{ flex: 1 }} />
+            {onAddHousehold ? (
+              <Button
+                variant="outline"
+                size="md"
+                startIcon={<Plus size={16} />}
+                onClick={onAddHousehold}
+              >
+                新增一戶
+              </Button>
+            ) : null}
+            {canEdit ? (
+              <Button
+                variant="outline"
+                size="md"
+                startIcon={<PenLine size={16} />}
+                onClick={onEdit}
+              >
+                編輯
+              </Button>
+            ) : null}
+          </>
+        ) : undefined
       }
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -269,6 +261,38 @@ function SpaceDetailContent({
           </Callout>
         ) : null}
         <StateTiles counts={analysis.counts} />
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Typography
+            sx={{ ...typography.label[500], color: color.fg.neutral.default }}
+          >
+            各樓層
+          </Typography>
+          <Typography
+            sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+          >
+            {floorsCaption(analysis)}
+          </Typography>
+          {hiddenCount > 0 && withTickets.length > 0 ? (
+            <ButtonBase
+              onClick={() => setShowAll((all) => !all)}
+              sx={{
+                ml: 'auto',
+                height: 28,
+                px: '12px',
+                borderRadius: `${radius.full}px`,
+                border: `1px solid ${color.border.default}`,
+                ...typography.label[300],
+                color: color.fg.neutral.default,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {showAll
+                ? '只看有任務單的樓層'
+                : `顯示全部 ${analysis.floors.length} 層`}
+            </ButtonBase>
+          ) : null}
+        </Box>
 
         {count === 0 ? (
           <EmptyState
@@ -283,64 +307,49 @@ function SpaceDetailContent({
             }
           />
         ) : (
-          <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Box>
+            {shownFloors.map((floor) => (
+              <FloorRow
+                key={floor.label}
+                floor={floor}
+                onOpenTicket={onOpenTicket}
+              />
+            ))}
+            {!showAll && hiddenCount > 0 ? (
               <Typography
                 sx={{
-                  ...typography.label[500],
-                  color: color.fg.neutral.default,
-                  flex: 1,
+                  ...typography.data[300],
+                  color: color.fg.neutral.muted,
+                  py: '10px',
+                  borderTop: `1px solid ${color.border.default}`,
                 }}
               >
-                各樓層
+                {`其他 ${hiddenCount} 層沒有任務單`}
               </Typography>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAll((all) => !all)}
-              >
-                {showAll
-                  ? '只看有任務單的樓層'
-                  : `顯示全部 ${analysis.floors.length} 層`}
-              </Button>
-            </Box>
-
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {shownFloors.map((floor) => (
+            ) : null}
+            {analysis.noFloor.length ? (
+              <>
                 <FloorRow
-                  key={floor.label}
-                  floor={floor}
+                  floor={{
+                    label: '？',
+                    state: floorState(analysis.noFloor),
+                    tickets: analysis.noFloor,
+                  }}
                   onOpenTicket={onOpenTicket}
-                  onAdd={
-                    onAddHousehold
-                      ? () => onAddHousehold(floor.label)
-                      : undefined
-                  }
                 />
-              ))}
-              {!showAll && hiddenCount > 0 ? (
-                <Muted>{`其他 ${hiddenCount} 層沒有任務單`}</Muted>
-              ) : null}
-              {analysis.noFloor.length ? (
-                <>
-                  <FloorRow
-                    floor={{
-                      label: '？',
-                      state: 'need',
-                      tickets: analysis.noFloor,
-                    }}
-                    stateLabel={null}
-                    onOpenTicket={onOpenTicket}
-                  />
-                  <Muted>「？」＝通報的人不知道在幾樓（後端允許不填）</Muted>
-                </>
-              ) : null}
-            </Box>
-
+                <Typography
+                  sx={{
+                    ...typography.data[300],
+                    color: color.fg.neutral.muted,
+                    mt: '-4px',
+                  }}
+                >
+                  「？」＝通報的人不知道在幾樓（後端允許不填）
+                </Typography>
+              </>
+            ) : null}
             {analysis.offList.length ? (
-              <Box
-                sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
-              >
+              <Box sx={{ mt: '8px' }}>
                 <Callout tone="warning">
                   <strong>{`${analysis.offList.length} 張單的樓層不在這棟的樓層裡`}</strong>
                   <br />
@@ -348,20 +357,29 @@ function SpaceDetailContent({
                   {analysis.offList
                     .map(
                       (ticket) =>
-                        `#${ticket.propertyName}（單上寫的是 ${writtenFloor(ticket)}）`,
+                        `#${ticket.propertyName}（${writtenFloor(ticket)}）`,
                     )
                     .join('、')}
                 </Callout>
-                {analysis.offList.map((ticket) => (
-                  <TicketCard
-                    key={ticket.uuid}
-                    ticket={ticket}
-                    onOpen={onOpenTicket}
-                  />
-                ))}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    mt: '8px',
+                  }}
+                >
+                  {analysis.offList.map((ticket) => (
+                    <MiniTicket
+                      key={ticket.uuid}
+                      ticket={ticket}
+                      onOpen={onOpenTicket}
+                    />
+                  ))}
+                </Box>
               </Box>
             ) : null}
-          </>
+          </Box>
         )}
       </Box>
 
@@ -386,6 +404,7 @@ function writtenFloor(ticket: SpaceTicket): string {
   return matchFloor(ticket.secondaryLocation?.floor, []).raw;
 }
 
+/** The four counts on top; 還需要幫忙 turns pink when any floor needs help. */
 function StateTiles({ counts }: { counts: Record<FloorState, number> }) {
   return (
     <Box
@@ -396,29 +415,28 @@ function StateTiles({ counts }: { counts: Record<FloorState, number> }) {
       }}
     >
       {TILE_ORDER.map((state) => {
-        const alarm = state === 'need' && counts.need > 0;
+        const n = counts[state];
         return (
           <Box
             key={state}
             sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '2px',
               p: '10px 12px',
               borderRadius: `${radius.md}px`,
               border: `1px solid ${color.border.default}`,
-              bgcolor: alarm
-                ? color.bg.danger.subtle
-                : color.bg.neutral.default,
+              bgcolor:
+                state === 'need' && n
+                  ? color.bg.danger.subtle
+                  : color.bg.neutral.default,
             }}
           >
             <Typography
               sx={{
-                ...typography.heading[600],
-                color: alarm ? color.fg.danger : color.fg.neutral.default,
+                ...typography.heading[700],
+                fontSize: 22,
+                color: n ? floorStateColor(state) : color.fg.neutral.muted,
               }}
             >
-              {counts[state]}
+              {n}
             </Typography>
             <Typography
               sx={{ ...typography.data[300], color: color.fg.neutral.subtle }}
@@ -434,16 +452,10 @@ function StateTiles({ counts }: { counts: Record<FloorState, number> }) {
 
 function FloorRow({
   floor,
-  stateLabel,
   onOpenTicket,
-  onAdd,
 }: {
   floor: SpaceFloor;
-  /** Null for the 「？」 row: it isn't a floor, so it has no state of its own. */
-  stateLabel?: null;
   onOpenTicket?: (ticketUuid: string) => void;
-  /** 在這一層新增: a household's needs on this floor. */
-  onAdd?: () => void;
 }) {
   return (
     <Box
@@ -451,25 +463,28 @@ function FloorRow({
         display: 'grid',
         gridTemplateColumns: '56px minmax(0, 1fr)',
         gap: '12px',
-        p: '10px 12px',
-        borderRadius: `${radius.md}px`,
-        border: `1px solid ${color.border.default}`,
+        py: '10px',
+        borderTop: `1px solid ${color.border.default}`,
       }}
     >
-      <Box>
-        <Typography
-          sx={{ ...typography.label[500], color: color.fg.neutral.default }}
-        >
-          {floor.label}
-        </Typography>
+      <Typography
+        component="div"
+        sx={{ ...typography.label[500], color: color.fg.neutral.default }}
+      >
+        {floor.label}
         {floor.label === 'RF' ? (
           <Typography
-            sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+            component="span"
+            sx={{
+              display: 'block',
+              ...typography.data[300],
+              color: color.fg.neutral.muted,
+            }}
           >
             頂樓
           </Typography>
         ) : null}
-      </Box>
+      </Typography>
       <Box
         sx={{
           display: 'flex',
@@ -478,64 +493,17 @@ function FloorRow({
           minWidth: 0,
         }}
       >
-        {stateLabel === null && !onAdd ? null : (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {stateLabel === null ? null : <StateBadge state={floor.state} />}
-            <Box sx={{ flex: 1 }} />
-            {onAdd ? (
-              <Button variant="ghost" size="sm" onClick={onAdd}>
-                在這一層新增
-              </Button>
-            ) : null}
-          </Box>
-        )}
+        <StateBadge state={floor.state} />
         {floor.tickets.map((ticket) => (
-          <TicketCard key={ticket.uuid} ticket={ticket} onOpen={onOpenTicket} />
+          <MiniTicket key={ticket.uuid} ticket={ticket} onOpen={onOpenTicket} />
         ))}
       </Box>
     </Box>
   );
 }
 
-function StateBadge({ state }: { state: FloorState }) {
-  const { dot, fg } = STATE_COLOR[state];
-  return (
-    <Box
-      component="span"
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        ...typography.data[300],
-        fontWeight: 600,
-        color: fg,
-      }}
-    >
-      <Box
-        component="span"
-        sx={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          bgcolor: dot,
-          flexShrink: 0,
-        }}
-      />
-      {FLOOR_STATE_LABEL[state]}
-    </Box>
-  );
-}
-
-/** 承接進度: people on the ticket's needs against what they asked for, where they asked. */
-function takenLabel(ticket: SpaceTicket): string | null {
-  const counted = ticket.tasks.filter((task) => task.quantity != null);
-  if (!counted.length) return null;
-  const taken = counted.reduce((sum, task) => sum + task.assignedCount, 0);
-  const wanted = counted.reduce((sum, task) => sum + (task.quantity ?? 0), 0);
-  return `${taken}/${wanted} 人`;
-}
-
-function TicketCard({
+/** One ticket on a floor (`tk-space.jsx` `MiniTicket`); a click opens its detail. */
+function MiniTicket({
   ticket,
   onOpen,
 }: {
@@ -543,25 +511,25 @@ function TicketCard({
   onOpen?: (ticketUuid: string) => void;
 }) {
   const room = ticket.secondaryLocation?.room?.trim();
-  const taken = takenLabel(ticket);
+  const fill = fillLabel(ticket.tasks);
 
   return (
     <ButtonBase
       onClick={() => onOpen?.(ticket.uuid)}
       disabled={!onOpen}
       sx={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        display: 'flex',
         alignItems: 'center',
-        gap: '8px',
-        p: '8px 10px',
-        borderRadius: `${radius.sm}px`,
-        bgcolor: color.bg.neutral.subtle,
-        textAlign: 'left',
+        gap: '10px',
         width: '100%',
+        p: '8px 10px',
+        textAlign: 'left',
+        borderRadius: `${radius.md}px`,
+        border: `1px solid ${color.border.default}`,
+        bgcolor: color.bg.neutral.default,
       }}
     >
-      <Box sx={{ minWidth: 0 }}>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography
           sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
         >
@@ -569,18 +537,20 @@ function TicketCard({
         </Typography>
         <Typography
           noWrap
-          sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+          sx={{ ...typography.label[300], color: color.fg.neutral.default }}
         >
           {ticket.title}
         </Typography>
-        {taken ? (
-          <Typography
-            sx={{ ...typography.data[300], color: color.fg.neutral.subtle }}
-          >
-            {`承接 ${taken}`}
-          </Typography>
-        ) : null}
       </Box>
+      <Typography
+        sx={{
+          ...typography.data[300],
+          whiteSpace: 'nowrap',
+          color: fill.open ? color.fg.danger : color.fg.neutral.muted,
+        }}
+      >
+        {fill.label}
+      </Typography>
       <Badge tone={getTicketStatusTone(ticket.status)}>
         {formatTicketStatusLabel(ticket.status)}
       </Badge>

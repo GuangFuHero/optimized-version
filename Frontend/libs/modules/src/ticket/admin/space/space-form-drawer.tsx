@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { Box, TextField, Typography } from '@mui/material';
 import {
@@ -8,14 +8,8 @@ import {
   useUpdateBuildingMap,
   type AdminBuildingMapFieldsFragment,
 } from '@rescue-frontend/data-access/admin';
-import {
-  Button,
-  Callout,
-  designTokens,
-  SheetFrame,
-  SheetLayout,
-} from '@rescue-frontend/ui';
-import { Check, LoaderCircle } from 'lucide-react';
+import { Button, Callout, designTokens, Modal } from '@rescue-frontend/ui';
+import { LoaderCircle, MapPinPlus, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -60,8 +54,9 @@ import {
 
 const { color, typography } = designTokens;
 
-/** The prototype's 新增地點 modal is 600 wide (`tk-building.jsx`); the edit modal 520. */
-const SPACE_FORM_WIDTH = 600;
+/** The prototype's 開啟空間 modal is 600 wide (`tk-building.jsx`); 編輯空間 is 520 (`tk-space.jsx`). */
+const CREATE_WIDTH = 600;
+const EDIT_WIDTH = 520;
 
 export type SpaceFormDrawerProps =
   | {
@@ -80,59 +75,34 @@ export type SpaceFormDrawerProps =
 
 /**
  * 開啟空間 and 編輯空間 (BE-036): the designer's `BuildingSetupModal` and `SpaceEditModal`
- * (`Design/後台/js/admin/ticket/tk-building.jsx`, `tk-space.jsx`) in an admin sheet. Mounted only
- * while open, so each opening starts from a clean form.
+ * (`Design/後台/js/admin/ticket/tk-building.jsx`, `tk-space.jsx`), as modals. Mounted only while
+ * open, so each opening starts from a clean form; while it saves, Escape, the backdrop and ✕ wait.
  */
 export function SpaceFormDrawer(props: SpaceFormDrawerProps) {
-  // The form is saving: Escape and the backdrop wait for it, so its error isn't lost.
-  const [busy, setBusy] = useState(false);
   if (!props.open) return null;
-  const title = props.mode === 'create' ? '開啟空間' : '編輯空間';
-
-  return (
-    <SheetFrame
-      open
-      onClose={() => {
-        if (!busy) props.onClose();
-      }}
-      width={SPACE_FORM_WIDTH}
-      variant="admin"
-      ariaLabel={title}
-    >
-      {props.mode === 'create' ? (
-        <CreateSpaceForm
-          onClose={props.onClose}
-          onCreated={props.onCreated}
-          onBusyChange={setBusy}
-        />
-      ) : (
-        <SpaceEditLayout
-          building={props.building}
-          tickets={props.tickets}
-          onClose={props.onClose}
-          onBusyChange={setBusy}
-        />
-      )}
-    </SheetFrame>
+  return props.mode === 'create' ? (
+    <CreateSpaceForm onClose={props.onClose} onCreated={props.onCreated} />
+  ) : (
+    <SpaceEditForm
+      building={props.building}
+      tickets={props.tickets}
+      onClose={props.onClose}
+    />
   );
 }
 
 function CreateSpaceForm({
   onClose,
   onCreated,
-  onBusyChange,
 }: {
   onClose: () => void;
   onCreated?: (uuid: string) => void;
-  onBusyChange?: (busy: boolean) => void;
 }) {
-  const formId = useId();
   const [values, setValues] = useState<SpaceFormValues>(emptySpaceForm);
   const [touched, setTouched] = useState(false);
   const [check, setCheck] = useState<AddressCheck | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const create = useCreateBuildingMap();
-  useBusyReport(create.isPending, onBusyChange);
   const { spaces } = useSpaces();
 
   const pinLookup = useSpacePinLookup(values.pin);
@@ -190,27 +160,25 @@ function CreateSpaceForm({
   };
 
   return (
-    <SheetLayout
-      title="開啟空間"
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!create.isPending}
+      width={CREATE_WIDTH}
+      title={<ModalTitle icon={<MapPinPlus size={20} />}>開啟空間</ModalTitle>}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
       footer={
         <FormFooter
-          formId={formId}
           submitLabel="建立"
           submitting={create.isPending}
           onCancel={onClose}
         />
       }
     >
-      <Box
-        component="form"
-        id={formId}
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-        sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-      >
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <Labeled
           label="位置"
           required
@@ -295,23 +263,19 @@ function CreateSpaceForm({
 
         {submitError ? <Callout tone="danger">{submitError}</Callout> : null}
       </Box>
-    </SheetLayout>
+    </Modal>
   );
 }
 
-/** Its holder must refuse Escape and the backdrop while `onBusyChange` says it is saving. */
-export function SpaceEditLayout({
+function SpaceEditForm({
   building,
   tickets,
   onClose,
-  onBusyChange,
 }: {
   building: AdminBuildingMapFieldsFragment;
   tickets: readonly SpaceTicket[];
   onClose: () => void;
-  onBusyChange?: (busy: boolean) => void;
 }) {
-  const formId = useId();
   const [values, setValues] = useState<SpaceFormValues>(() => ({
     ...emptySpaceForm(),
     address: building.secondaryLocation?.fullAddress ?? '',
@@ -321,7 +285,6 @@ export function SpaceEditLayout({
   }));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const update = useUpdateBuildingMap();
-  useBusyReport(update.isPending, onBusyChange);
 
   const set = <K extends keyof SpaceFormValues>(
     key: K,
@@ -365,11 +328,18 @@ export function SpaceEditLayout({
   };
 
   return (
-    <SheetLayout
-      title="編輯空間"
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!update.isPending}
+      width={EDIT_WIDTH}
+      title={<ModalTitle icon={<PenLine size={20} />}>編輯空間</ModalTitle>}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
       footer={
         <FormFooter
-          formId={formId}
           submitLabel="儲存"
           submitting={update.isPending}
           disabled={Object.keys(errors).length > 0}
@@ -377,16 +347,7 @@ export function SpaceEditLayout({
         />
       }
     >
-      <Box
-        component="form"
-        id={formId}
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-        sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-      >
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <NameField
           values={values}
           error={errors.name}
@@ -427,7 +388,24 @@ export function SpaceEditLayout({
 
         {submitError ? <Callout tone="danger">{submitError}</Callout> : null}
       </Box>
-    </SheetLayout>
+    </Modal>
+  );
+}
+
+function ModalTitle({ icon, children }: { icon: ReactNode; children: string }) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        '& > svg': { color: color.fg.neutral.subtle, flexShrink: 0 },
+      }}
+    >
+      {icon}
+      {children}
+    </Box>
   );
 }
 
@@ -598,14 +576,13 @@ function AddressNoteLine({
   );
 }
 
+/** 取消 and the primary action, as the prototype's modal footers have them. */
 function FormFooter({
-  formId,
   submitLabel,
   submitting,
   disabled = false,
   onCancel,
 }: {
-  formId: string;
   submitLabel: string;
   submitting: boolean;
   disabled?: boolean;
@@ -622,13 +599,7 @@ function FormFooter({
       >
         取消
       </Button>
-      <Button
-        type="submit"
-        form={formId}
-        size="md"
-        startIcon={<Check size={18} />}
-        disabled={submitting || disabled}
-      >
+      <Button type="submit" size="md" disabled={submitting || disabled}>
         {submitLabel}
       </Button>
     </>
@@ -641,15 +612,4 @@ function ErrorText({ children }: { children: ReactNode }) {
       {children}
     </Typography>
   );
-}
-
-/** Tells the sheet holding a form when its save starts and ends, and that it ended on unmount. */
-function useBusyReport(
-  busy: boolean,
-  onBusyChange: ((busy: boolean) => void) | undefined,
-) {
-  useEffect(() => {
-    onBusyChange?.(busy);
-  }, [busy, onBusyChange]);
-  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 }

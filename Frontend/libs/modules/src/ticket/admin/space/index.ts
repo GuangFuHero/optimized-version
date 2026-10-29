@@ -28,7 +28,6 @@ export { orderFloors } from './floors';
 export { boardCountLine } from './board-count';
 export { SpaceMapCard } from './space-map-card';
 export {
-  FLOOR_STATE_TONE,
   SPACE_LEGEND_LABEL,
   SPACE_PIN_EMPTY,
   spaceIdOfMarker,

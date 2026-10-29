@@ -28,8 +28,8 @@ import { Muted } from '../../../admin/shared/muted';
 import { NeedActionsMenu } from '../../needs/need-actions-menu';
 import type { NeedAction } from '../../needs/need-actions';
 import { formatTicketStatusLabel } from '../../status';
-import { FLOOR_STATE_LABEL, type SpaceListRow } from '../space/space-analysis';
-import { FLOOR_STATE_TONE } from '../space/space-map';
+import type { SpaceListRow } from '../space/space-analysis';
+import { SpacePill, SpaceTag, StateBadge } from '../space/space-badges';
 import { spaceTicketTag, type TaggedSpace } from '../space/space-ticket-tag';
 import {
   visibleTicketColumns,
@@ -179,11 +179,7 @@ export function TicketTable({
           <Muted cell>—</Muted>
         );
       case 'status':
-        return (
-          <Badge tone={FLOOR_STATE_TONE[row.status]}>
-            {FLOOR_STATE_LABEL[row.status]}
-          </Badge>
-        );
+        return <StateBadge state={row.status} />;
       case 'team':
         return <Muted cell>—</Muted>;
       case 'menu':
@@ -354,33 +350,29 @@ function TicketCell({ row, tag }: { row: TicketRow; tag: string | null }) {
         >
           {row.title}
         </Typography>
-        {tag ? (
-          <CutText title={tag} sx={{ flexShrink: 0 }}>
-            {tag}
-          </CutText>
-        ) : null}
+        {tag ? <SpacePill title={tag}>{tag}</SpacePill> : null}
       </Box>
       <CutText title={address}>{address}</CutText>
     </Box>
   );
 }
 
-/** A space's 任務 cell: 🏢 空間 and its name, the address under them. */
+/** A space's 任務 cell, as the prototype's SpaceRow: 空間 above the name, the address under it. */
 function SpaceCell({ row }: { row: SpaceListRow }) {
   return (
     <Box sx={{ minWidth: 0 }}>
-      <Box
-        sx={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}
+      <SpaceTag />
+      <Typography
+        noWrap
+        title={row.name}
+        sx={{
+          ...typography.label[400],
+          color: color.fg.neutral.default,
+          mt: '2px',
+        }}
       >
-        <Badge tone="secondary">🏢 空間</Badge>
-        <Typography
-          noWrap
-          title={row.name}
-          sx={{ ...typography.label[400], color: color.fg.neutral.default }}
-        >
-          {row.name}
-        </Typography>
-      </Box>
+        {row.name}
+      </Typography>
       {row.address ? (
         <CutText title={row.address}>{row.address}</CutText>
       ) : null}

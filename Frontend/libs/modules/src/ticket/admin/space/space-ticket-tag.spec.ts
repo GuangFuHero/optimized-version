@@ -16,23 +16,23 @@ const filed = (
 
 describe('spaceTicketTag', () => {
   it('names the space and the floor, in the building’s own spelling', () => {
-    expect(spaceTicketTag(filed('3'), spaces)).toBe('🏢 林森61 · 3F');
-    expect(spaceTicketTag(filed('頂樓'), spaces)).toBe('🏢 林森61 · RF');
+    expect(spaceTicketTag(filed('3'), spaces)).toBe('林森61 · 3F');
+    expect(spaceTicketTag(filed('頂樓'), spaces)).toBe('林森61 · RF');
   });
 
   it('names the space alone when the floor is unknown', () => {
-    expect(spaceTicketTag(filed(null), spaces)).toBe('🏢 林森61');
-    expect(spaceTicketTag(filed('  '), spaces)).toBe('🏢 林森61');
+    expect(spaceTicketTag(filed(null), spaces)).toBe('林森61');
+    expect(spaceTicketTag(filed('  '), spaces)).toBe('林森61');
     expect(
       spaceTicketTag(
         { buildingMapUuid: 's1', secondaryLocation: null },
         spaces,
       ),
-    ).toBe('🏢 林森61');
+    ).toBe('林森61');
   });
 
   it('keeps a floor the building no longer has, as written', () => {
-    expect(spaceTicketTag(filed(' 9F '), spaces)).toBe('🏢 林森61 · 9F');
+    expect(spaceTicketTag(filed(' 9F '), spaces)).toBe('林森61 · 9F');
   });
 
   it('tags nothing outside a space, or in one not loaded', () => {
