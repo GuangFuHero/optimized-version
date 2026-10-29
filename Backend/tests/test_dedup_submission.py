@@ -463,6 +463,92 @@ async def test_station_acknowledgement_that_is_not_a_uuid_is_held(db, engine, no
     assert await _count(db, Station) == 0
 
 
+# --- one check a submission --------------------------------------------------------------
+
+
+def _suspect_water_or_the_station(submission) -> list[Suspect]:
+    """A stub `check`: the station, or each task called 送水, looks like RELATED."""
+    if isinstance(submission, NewStation):
+        return [Suspect("station", "station", RELATED, 0.97, {})]
+    return _suspect_tasks_named("送水")(submission)
+
+
+async def _ticket_filed_anyway(db, actor):
+    return await submit_new_ticket(db, actor=actor, tasks=[_task("送水", ack=RELATED)], **_ticket())
+
+
+async def _help_request_filed_anyway(db, actor):
+    request = _help_request("送水")
+    request["tasks"][0]["acknowledged_duplicate_of"] = RELATED
+    return await submit_help_request(db, actor=actor, **request)
+
+
+async def _task_filed_anyway(db, actor):
+    ticket_uuid = await _existing_ticket(db, actor)
+    return await submit_new_task(db, actor=actor, ticket_uuid=ticket_uuid, task=_task("送水", ack=RELATED))
+
+
+async def _station_filed_anyway(db, actor):
+    return await submit_new_station(db, actor=actor, acknowledged_duplicate_of=RELATED, **_station())
+
+
+@pytest.mark.parametrize(
+    ("perms", "file_anyway"),
+    [
+        ((Perm.TICKET_ADD,), _ticket_filed_anyway),
+        ((Perm.TICKET_ADD,), _help_request_filed_anyway),
+        ((Perm.TICKET_ADD, Perm.TICKET_EDIT), _task_filed_anyway),
+        ((Perm.STATION_ADD,), _station_filed_anyway),
+    ],
+    ids=["ticket", "help-request", "task", "station"],
+)
+async def test_a_submission_filed_anyway_asks_the_engine_once(db, engine, perms, file_anyway):
+    """The check that bears the acknowledgement out also decides the hold (ADR-400).
+
+    So a submission holding #140's area lock asks the engine once, filed anyway or not.
+    """
+    actor = await actor_with(db, *perms)
+    engine.suspects = _suspect_water_or_the_station
+
+    result = await file_anyway(db, actor)
+
+    assert (type(result), len(engine.check_calls)) == (SubmissionCreated, 1)
+
+
+async def test_when_the_check_fails_on_the_second_send_it_is_filed_as_it_stands(db, engine):
+    """Not asked again: the acknowledged task is carded unscored and the other one isn't held.
+
+    As a batch import stops asking after the engine first fails (ADR-398). Both drafts were compared
+    when the first send was held.
+    """
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    ticket_uuid = await _existing_ticket(db, actor)
+    water = TicketTask(ticket_uuid=ticket_uuid, task_type="rescue", task_name="送水", created_by=actor.uuid)
+    db.add(water)
+    await db.flush()
+    related = str(water.uuid)
+    await db.commit()
+    await db.refresh(actor)
+    answers = iter([RuntimeError("engine exploded")])
+
+    def fails_once(submission):
+        failure = next(answers, None)
+        if failure is not None:
+            raise failure
+        return _suspect_tasks_named("送水", "抽水")(submission)
+
+    engine.suspects = fails_once
+
+    result = await submit_new_ticket(
+        db, actor=actor, tasks=[_task("送水", ack=related), _task("抽水")], **_ticket()
+    )
+
+    assert (type(result), len(engine.check_calls)) == (SubmissionCreated, 1)
+    await db.rollback()
+    pair = (await db.execute(select(DuplicatePair))).scalar_one()
+    assert (pair.similarity, related in {str(pair.low_uuid), str(pair.high_uuid)}) == (None, True)
+
+
 # --- the real engine ---------------------------------------------------------------------
 
 
