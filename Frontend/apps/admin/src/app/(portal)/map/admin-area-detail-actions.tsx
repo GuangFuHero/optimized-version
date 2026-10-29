@@ -21,6 +21,9 @@ import {
   countNameCharacters,
   type AreaTeamOption,
 } from './admin-area-draw-panels';
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, typography } = designTokens;
 
 /** What an admin may do to an area, and how. Absent for someone who may only look. */
 export interface AreaActions {
@@ -58,9 +61,11 @@ export function AreaConfirmDialog({
 }) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontSize: 16, fontWeight: 800 }}>{title}</DialogTitle>
+      <DialogTitle sx={{ ...typography.label[500] }}>{title}</DialogTitle>
       <DialogContent>
-        <Typography sx={{ fontSize: 14, lineHeight: 1.7 }}>{body}</Typography>
+        <Typography sx={{ ...typography.body[300], lineHeight: 1.7 }}>
+          {body}
+        </Typography>
       </DialogContent>
       <DialogActions>
         <Button variant="outlined" onClick={onClose}>
@@ -97,7 +102,13 @@ export function AreaTeamsSection({
 
   return (
     <Stack spacing={1}>
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#564337' }}>
+      <Typography
+        sx={{
+          ...typography.label[300],
+          fontWeight: 700,
+          color: color.fg.neutral.subtle,
+        }}
+      >
         負責單位
       </Typography>
       {assigned.map((team) => (
@@ -107,7 +118,7 @@ export function AreaTeamsSection({
           spacing={1}
           sx={{ alignItems: 'center' }}
         >
-          <Typography sx={{ flex: 1, fontSize: 14, fontWeight: 700 }}>
+          <Typography sx={{ flex: 1, ...typography.label[400] }}>
             {team.name}
           </Typography>
           {canChange && team.uuid ? (
@@ -123,7 +134,9 @@ export function AreaTeamsSection({
         </Stack>
       ))}
       {canChange && assigned.length <= 1 ? (
-        <Typography sx={{ fontSize: 12, color: '#564337' }}>
+        <Typography
+          sx={{ ...typography.label[300], color: color.fg.neutral.subtle }}
+        >
           責任區至少要有一個團隊，最後一個不能移除。要移除請刪除這個區域。
         </Typography>
       ) : null}
@@ -249,7 +262,7 @@ export function AreaDetailFooter({
           gap: 1,
           px: 2.25,
           py: 1.5,
-          borderTop: '1px solid #DCC1B1',
+          borderTop: `1px solid ${color.border.default}`,
         }}
       >
         {actions.canDelete ? (

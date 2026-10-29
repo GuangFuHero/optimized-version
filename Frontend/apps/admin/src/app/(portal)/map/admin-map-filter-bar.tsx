@@ -19,6 +19,9 @@ import {
   toggleValue,
   type AdminMapFilters,
 } from '@rescue-frontend/modules';
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, radius, shadow, typography } = designTokens;
 
 function Chip({
   on,
@@ -39,12 +42,12 @@ function Chip({
         gap: 0.625,
         px: 1.25,
         py: 0.5,
-        borderRadius: 999,
-        border: `1px solid ${on ? '#E3791E' : '#DCC1B1'}`,
-        bgcolor: on ? '#FFF1E5' : '#fff',
-        fontSize: 12,
+        borderRadius: `${radius.full}px`,
+        border: `1px solid ${on ? color.brand.primary.default : color.border.default}`,
+        bgcolor: on ? color.bg.primary.subtle : color.bg.neutral.default,
+        ...typography.label[300],
         fontWeight: on ? 700 : 400,
-        color: on ? '#151C22' : '#564337',
+        color: on ? color.fg.neutral.default : color.fg.neutral.subtle,
       }}
     >
       {dot ? (
@@ -73,7 +76,13 @@ function Row({
 }) {
   return (
     <Stack spacing={0.75}>
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#564337' }}>
+      <Typography
+        sx={{
+          ...typography.label[300],
+          fontWeight: 700,
+          color: color.fg.neutral.subtle,
+        }}
+      >
         {label}
       </Typography>
       <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
@@ -128,10 +137,10 @@ export function AdminMapFilterBar({
       sx={{
         width: open ? 344 : 'auto',
         maxWidth: 'calc(100vw - 56px)',
-        borderRadius: 3,
-        border: '1px solid #DCC1B1',
-        bgcolor: '#F6FAFF',
-        boxShadow: '0 4px 14px rgba(21, 28, 34, 0.1)',
+        borderRadius: `${radius.md}px`,
+        border: `1px solid ${color.border.default}`,
+        bgcolor: color.bg.neutral.subtle,
+        boxShadow: shadow.md,
         overflow: 'hidden',
       }}
     >
@@ -142,13 +151,18 @@ export function AdminMapFilterBar({
       >
         <Box
           component={MapPin}
-          sx={{ width: 15, height: 15, color: '#8A7466', flexShrink: 0 }}
+          sx={{
+            width: 15,
+            height: 15,
+            color: color.fg.neutral.muted,
+            flexShrink: 0,
+          }}
         />
-        <Typography sx={{ fontSize: 14, whiteSpace: 'nowrap' }}>
+        <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
           {filters.layers.tickets ? `${shownTickets} 張任務單` : '任務單已隱藏'}
         </Typography>
-        <Typography sx={{ color: '#DCC1B1' }}>·</Typography>
-        <Typography sx={{ fontSize: 14, whiteSpace: 'nowrap' }}>
+        <Typography sx={{ color: color.border.default }}>·</Typography>
+        <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
           {filters.layers.stations ? `${shownStations} 個站點` : '站點已隱藏'}
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -157,7 +171,11 @@ export function AdminMapFilterBar({
             onClick={() =>
               onChange({ ...DEFAULT_ADMIN_MAP_FILTERS, layers: filters.layers })
             }
-            sx={{ fontSize: 12, textDecoration: 'underline', color: '#564337' }}
+            sx={{
+              ...typography.label[300],
+              textDecoration: 'underline',
+              color: color.fg.neutral.subtle,
+            }}
           >
             清除
           </ButtonBase>
@@ -168,9 +186,10 @@ export function AdminMapFilterBar({
           aria-expanded={open}
           sx={{
             gap: 0.5,
-            fontSize: 12,
+            ...typography.label[300],
             fontWeight: 700,
-            color: active > 0 ? '#B35A00' : '#564337',
+            color:
+              active > 0 ? color.brand.primary.subtle : color.fg.neutral.subtle,
             opacity: disabled ? 0.4 : 1,
           }}
         >
@@ -187,11 +206,17 @@ export function AdminMapFilterBar({
           sx={{
             px: 1.5,
             py: 0.75,
-            bgcolor: '#FFF6E5',
-            borderTop: '1px solid #DCC1B1',
+            bgcolor: color.bg.warning.subtle,
+            borderTop: `1px solid ${color.border.default}`,
           }}
         >
-          <Typography sx={{ fontSize: 12, lineHeight: 1.6, color: '#564337' }}>
+          <Typography
+            sx={{
+              ...typography.label[300],
+              lineHeight: 1.6,
+              color: color.fg.neutral.subtle,
+            }}
+          >
             篩選只影響<b>看到什麼</b>。區域清單與區域裡的數量一律算全部。
           </Typography>
         </Box>
@@ -203,7 +228,7 @@ export function AdminMapFilterBar({
             p: 1.5,
             maxHeight: 420,
             overflowY: 'auto',
-            borderTop: '1px solid #DCC1B1',
+            borderTop: `1px solid ${color.border.default}`,
           }}
         >
           <Row label="圖層">

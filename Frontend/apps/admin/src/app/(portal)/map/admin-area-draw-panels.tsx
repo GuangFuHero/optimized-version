@@ -17,10 +17,14 @@ import { useState } from 'react';
 import {
   AREA_KIND_LABELS,
   AREA_LABEL_NAME_MAX,
-  PUBLIC_ZONE_COLORS,
   type AreaContents,
   type RescueMapAreaKind,
 } from '@rescue-frontend/modules';
+import { designTokens } from '@rescue-frontend/ui';
+
+import { AreaSwatch } from './area-swatch';
+
+const { color, radius, typography } = designTokens;
 
 // More than this many tickets in one area asks for a second look before it is saved (MAP-ZD-125).
 export const HIGH_VOLUME_TICKETS = 100;
@@ -83,27 +87,6 @@ const NAME_PLACEHOLDERS: Record<RescueMapAreaKind, string> = {
   mark_zone: '例：糖廠志工休息區',
 };
 
-function Swatch({ kind }: { kind: RescueMapAreaKind }) {
-  return (
-    <Box
-      sx={{
-        width: 14,
-        height: 14,
-        mt: '3px',
-        borderRadius: '3px',
-        flexShrink: 0,
-        ...(kind === 'hazardous_zone'
-          ? {
-              background:
-                'repeating-linear-gradient(135deg, #F57C00 0 3px, #fff 3px 6px)',
-              border: '1px solid #F57C00',
-            }
-          : { bgcolor: PUBLIC_ZONE_COLORS[kind] }),
-      }}
-    />
-  );
-}
-
 function Steps({ at }: { at: 1 | 2 }) {
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 1.25 }}>
@@ -120,7 +103,9 @@ function Steps({ at }: { at: 1 | 2 }) {
             sx={{ alignItems: 'center' }}
           >
             {index > 0 ? (
-              <Box sx={{ width: 18, height: '1px', bgcolor: '#DCC1B1' }} />
+              <Box
+                sx={{ width: 18, height: '1px', bgcolor: color.border.default }}
+              />
             ) : null}
             <Box
               sx={{
@@ -129,10 +114,16 @@ function Steps({ at }: { at: 1 | 2 }) {
                 width: 20,
                 height: 20,
                 borderRadius: '50%',
-                fontSize: 11,
+                ...typography.label[300],
                 fontWeight: 700,
-                bgcolor: on || done ? '#E3791E' : '#E8EEF5',
-                color: on || done ? '#fff' : '#564337',
+                bgcolor:
+                  on || done
+                    ? color.brand.primary.default
+                    : color.bg.neutral.sunken,
+                color:
+                  on || done
+                    ? color.bg.neutral.default
+                    : color.fg.neutral.subtle,
               }}
             >
               {done ? (
@@ -143,9 +134,9 @@ function Steps({ at }: { at: 1 | 2 }) {
             </Box>
             <Typography
               sx={{
-                fontSize: 12,
+                ...typography.label[300],
                 fontWeight: on ? 700 : 400,
-                color: on ? '#151C22' : '#564337',
+                color: on ? color.fg.neutral.default : color.fg.neutral.subtle,
               }}
             >
               {label}
@@ -172,24 +163,40 @@ function Frame({
 }) {
   return (
     <Stack sx={{ flex: 1, minHeight: 0 }}>
-      <Box sx={{ px: 2.25, py: 1.75, borderBottom: '1px solid #DCC1B1' }}>
+      <Box
+        sx={{
+          px: 2.25,
+          py: 1.75,
+          borderBottom: `1px solid ${color.border.default}`,
+        }}
+      >
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           {onBack ? (
             <ButtonBase
               onClick={onBack}
               aria-label="回到畫範圍"
-              sx={{ width: 32, height: 32, ml: -1, borderRadius: 2 }}
+              sx={{
+                width: 32,
+                height: 32,
+                ml: -1,
+                borderRadius: `${radius.sm}px`,
+              }}
             >
               <Box component={ArrowLeft} sx={{ width: 18, height: 18 }} />
             </ButtonBase>
           ) : null}
-          <Typography sx={{ flex: 1, fontSize: 16, fontWeight: 800 }}>
+          <Typography sx={{ flex: 1, ...typography.label[500] }}>
             圈選新區域
           </Typography>
           <ButtonBase
             onClick={onClose}
             aria-label="關閉（Esc）"
-            sx={{ width: 32, height: 32, mr: -1, borderRadius: 2 }}
+            sx={{
+              width: 32,
+              height: 32,
+              mr: -1,
+              borderRadius: `${radius.sm}px`,
+            }}
           >
             <Box component={X} sx={{ width: 18, height: 18 }} />
           </ButtonBase>
@@ -209,7 +216,7 @@ function Frame({
           alignItems: 'center',
           px: 2.25,
           py: 1.5,
-          borderTop: '1px solid #DCC1B1',
+          borderTop: `1px solid ${color.border.default}`,
         }}
       >
         {footer}
@@ -259,7 +266,7 @@ export function AdminAreaDrawPanel({
           <Button
             onClick={onUndoCorner}
             disabled={cornerCount === 0}
-            sx={{ color: '#151C22', fontWeight: 700 }}
+            sx={{ color: color.fg.neutral.default, fontWeight: 700 }}
           >
             退回一點
           </Button>
@@ -273,43 +280,56 @@ export function AdminAreaDrawPanel({
         </>
       }
     >
-      <Typography sx={{ fontSize: 13, lineHeight: 1.7 }}>{hint}</Typography>
+      <Typography sx={{ ...typography.body[300], lineHeight: 1.7 }}>
+        {hint}
+      </Typography>
       <Box
         sx={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
           gap: 1.5,
           p: 1.75,
-          borderRadius: 3,
-          border: '1px solid #DCC1B1',
-          bgcolor: '#fff',
+          borderRadius: `${radius.md}px`,
+          border: `1px solid ${color.border.default}`,
+          bgcolor: color.bg.neutral.default,
         }}
       >
         {stats.map(([label, value]) => (
           <Box key={label}>
             <Typography
-              sx={{ fontSize: 12, fontWeight: 700, color: '#564337' }}
+              sx={{
+                ...typography.label[300],
+                fontWeight: 700,
+                color: color.fg.neutral.subtle,
+              }}
             >
               {label}
             </Typography>
-            <Typography sx={{ fontSize: 22, fontWeight: 700 }}>
-              {value}
-            </Typography>
+            <Typography sx={{ ...typography.heading[600] }}>{value}</Typography>
           </Box>
         ))}
       </Box>
       {crosses ? (
-        <Typography role="alert" sx={{ fontSize: 13, color: '#B3261E' }}>
+        <Typography
+          role="alert"
+          sx={{ ...typography.body[300], color: color.fg.danger }}
+        >
           邊線交叉了，這樣的範圍不能儲存。請按「退回一點」，或換個方式圈。
         </Typography>
       ) : null}
       {contents.tickets > HIGH_VOLUME_TICKETS ? (
-        <Typography sx={{ fontSize: 13, color: '#9A5B00' }}>
+        <Typography sx={{ ...typography.body[300], color: color.fg.warning }}>
           這個範圍內有 {contents.tickets} 張任務單，比一般的區域多很多。
           確認範圍沒有圈太大再繼續。
         </Typography>
       ) : null}
-      <Typography sx={{ fontSize: 12, lineHeight: 1.8, color: '#564337' }}>
+      <Typography
+        sx={{
+          ...typography.label[300],
+          lineHeight: 1.8,
+          color: color.fg.neutral.subtle,
+        }}
+      >
         點地圖加轉角 · Backspace 退回一點 · Enter 完成範圍 · Esc 取消
       </Typography>
     </Frame>
@@ -373,7 +393,13 @@ export function AdminAreaFormPanel({
         </>
       }
     >
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#564337' }}>
+      <Typography
+        sx={{
+          ...typography.label[300],
+          fontWeight: 700,
+          color: color.fg.neutral.subtle,
+        }}
+      >
         這一區是做什麼的？
       </Typography>
       <Stack spacing={1} role="radiogroup" aria-label="區域類型">
@@ -389,22 +415,29 @@ export function AdminAreaFormPanel({
               px: 1.5,
               py: 1.25,
               textAlign: 'left',
-              borderRadius: 3,
+              borderRadius: `${radius.md}px`,
               border: `${kind === option ? 2 : 1}px solid ${
-                kind === option ? '#E3791E' : '#DCC1B1'
+                kind === option
+                  ? color.brand.primary.default
+                  : color.border.default
               }`,
-              bgcolor: kind === option ? '#FFF1E5' : '#fff',
+              bgcolor:
+                kind === option
+                  ? color.bg.primary.subtle
+                  : color.bg.neutral.default,
             }}
           >
-            <Swatch kind={option} />
+            <AreaSwatch kind={option} sx={{ mt: '3px' }} />
             <Box>
-              <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+              <Typography sx={{ ...typography.label[400] }}>
                 {AREA_KIND_LABELS[option]}
               </Typography>
-              <Typography sx={{ fontSize: 13, lineHeight: 1.6 }}>
+              <Typography sx={{ ...typography.body[300], lineHeight: 1.6 }}>
                 {KIND_CARDS[option].description}
               </Typography>
-              <Typography sx={{ fontSize: 12, color: '#8A7466' }}>
+              <Typography
+                sx={{ ...typography.label[300], color: color.fg.neutral.muted }}
+              >
                 {KIND_CARDS[option].example}
               </Typography>
             </Box>
@@ -468,11 +501,16 @@ export function AdminAreaFormPanel({
                   onChange={(event) => set('isPublic', event.target.checked)}
                   slotProps={{ input: { 'aria-label': '前台可見' } }}
                 />
-                <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+                <Typography sx={{ ...typography.label[400] }}>
                   前台可見
                 </Typography>
               </Stack>
-              <Typography sx={{ fontSize: 12, color: '#564337' }}>
+              <Typography
+                sx={{
+                  ...typography.label[300],
+                  color: color.fg.neutral.subtle,
+                }}
+              >
                 {values.isPublic
                   ? '民眾與志工在前台地圖看得到這一區的名稱、範圍與備註。'
                   : '只有後台看得到。'}

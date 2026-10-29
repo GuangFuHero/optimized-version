@@ -879,11 +879,11 @@ function syncLocationCellLayer({
 
 /** A corner of a boundary being changed: a white dot with a dark rim, big enough to grab. */
 function createEditCornerIcon(invalid: boolean): L.DivIcon {
-  const stroke = invalid ? '#D32F2F' : '#151C22';
+  const stroke = invalid ? color.bg.danger.default : color.fg.neutral.default;
 
   return L.divIcon({
     className: 'rescue-map-edit-corner',
-    html: `<span style="display:block;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid ${stroke};box-sizing:border-box;cursor:move"></span>`,
+    html: `<span style="display:block;width:16px;height:16px;border-radius:50%;background:${color.bg.neutral.default};border:3px solid ${stroke};box-sizing:border-box;cursor:move"></span>`,
     iconSize: [16, 16],
     iconAnchor: [8, 8],
   });
@@ -893,7 +893,7 @@ function createEditCornerIcon(invalid: boolean): L.DivIcon {
 function createEditMidpointIcon(): L.DivIcon {
   return L.divIcon({
     className: 'rescue-map-edit-midpoint',
-    html: '<span style="display:flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#fff;border:1.5px solid #64748B;color:#64748B;font:700 11px/1 sans-serif;box-sizing:border-box;cursor:copy">+</span>',
+    html: `<span style="display:flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${color.bg.neutral.default};border:1.5px solid ${color.fg.neutral.muted};color:${color.fg.neutral.muted};font:700 11px/1 sans-serif;box-sizing:border-box;cursor:copy">+</span>`,
     iconSize: [14, 14],
     iconAnchor: [7, 7],
   });
@@ -1460,7 +1460,9 @@ export function RescueMapCanvas({
       return;
     }
 
-    const stroke = draftArea.invalid ? '#D32F2F' : '#151C22';
+    const stroke = draftArea.invalid
+      ? color.bg.danger.default
+      : color.fg.neutral.default;
     const layer = L.layerGroup();
 
     if (draftArea.points.length >= 3) {
@@ -1487,7 +1489,7 @@ export function RescueMapCanvas({
         radius: 6,
         color: stroke,
         weight: 3,
-        fillColor: '#fff',
+        fillColor: color.bg.neutral.default,
         fillOpacity: 1,
       }).addTo(layer);
     });
@@ -1513,7 +1515,7 @@ export function RescueMapCanvas({
     }
 
     const { points, invalid, onChange } = editArea;
-    const stroke = invalid ? '#D32F2F' : '#151C22';
+    const stroke = invalid ? color.bg.danger.default : color.fg.neutral.default;
     const layer = L.layerGroup();
     const corners = points.map((point): [number, number] => [...point]);
     const outline = L.polygon(corners, {

@@ -13,8 +13,8 @@ import {
 import { useEffect, useRef, useState } from 'react';
 
 import {
+  ADMIN_MAP_PRIORITIES,
   AREA_KIND_LABELS,
-  PUBLIC_ZONE_COLORS,
   type AreaContents,
   type RescueMapAreaKind,
   type RescueMapClosureArea,
@@ -28,6 +28,10 @@ import {
   AreaTeamsSection,
   type AreaActions,
 } from './admin-area-detail-actions';
+import { AreaSwatch } from './area-swatch';
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, radius, typography } = designTokens;
 
 /** One area as the list shows it: any of the three kinds, with what lies inside it. */
 export interface AdminAreaListItem {
@@ -86,27 +90,6 @@ export function toAdminAreaListItems({
   ];
 }
 
-function Swatch({ kind }: { kind: RescueMapAreaKind }) {
-  return (
-    <Box
-      sx={{
-        width: 14,
-        height: 14,
-        mt: '3px',
-        borderRadius: '3px',
-        flexShrink: 0,
-        ...(kind === 'hazardous_zone'
-          ? {
-              background:
-                'repeating-linear-gradient(135deg, #F57C00 0 3px, #fff 3px 6px)',
-              border: '1px solid #F57C00',
-            }
-          : { bgcolor: PUBLIC_ZONE_COLORS[kind] }),
-      }}
-    />
-  );
-}
-
 function summaryOf(item: AdminAreaListItem) {
   const inside = `區內 ${item.contents.tickets} 張任務單、${item.contents.stations} 個站點`;
 
@@ -144,33 +127,44 @@ function AreaRow({
         gap: 1.25,
         px: 1.5,
         py: 1.375,
-        borderRadius: 3,
-        border: `1px solid ${selected ? '#E3791E' : '#DCC1B1'}`,
-        bgcolor: selected ? '#FFF1E5' : '#fff',
+        borderRadius: `${radius.md}px`,
+        border: `1px solid ${selected ? color.brand.primary.default : color.border.default}`,
+        bgcolor: selected ? color.bg.primary.subtle : color.bg.neutral.default,
       }}
     >
-      <Swatch kind={item.kind} />
+      <AreaSwatch kind={item.kind} sx={{ mt: '3px' }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
           <Typography
             noWrap
-            sx={{ fontSize: 14, fontWeight: 700, color: '#151C22' }}
+            sx={{ ...typography.label[400], color: color.fg.neutral.default }}
           >
             {item.name ?? '（未命名）'}
           </Typography>
           <Box
             component={item.isPublic ? Eye : EyeOff}
             aria-label={item.isPublic ? '前台可見' : '只有後台看得到'}
-            sx={{ width: 14, height: 14, flexShrink: 0, color: '#564337' }}
+            sx={{
+              width: 14,
+              height: 14,
+              flexShrink: 0,
+              color: color.fg.neutral.subtle,
+            }}
           />
         </Stack>
-        <Typography sx={{ mt: 0.25, fontSize: 12, color: '#564337' }}>
+        <Typography
+          sx={{
+            mt: 0.25,
+            ...typography.label[300],
+            color: color.fg.neutral.subtle,
+          }}
+        >
           {summaryOf(item)}
         </Typography>
       </Box>
       <Box
         component={ChevronRight}
-        sx={{ width: 16, height: 16, mt: '2px', color: '#8A7466' }}
+        sx={{ width: 16, height: 16, mt: '2px', color: color.fg.neutral.muted }}
       />
     </ButtonBase>
   );
@@ -203,22 +197,24 @@ function EmptyState({ canDraw }: { canDraw: boolean }) {
           width: 48,
           height: 48,
           borderRadius: '50%',
-          bgcolor: '#E8EEF5',
-          color: '#564337',
+          bgcolor: color.bg.neutral.sunken,
+          color: color.fg.neutral.subtle,
         }}
       >
         <Box component={MapPinned} sx={{ width: 24, height: 24 }} />
       </Box>
-      <Typography sx={{ fontSize: 15, fontWeight: 700, color: '#151C22' }}>
+      <Typography
+        sx={{ ...typography.label[500], color: color.fg.neutral.default }}
+      >
         還沒有圈選任何區域
       </Typography>
       <Typography
         sx={{
           maxWidth: 280,
           textAlign: 'center',
-          fontSize: 12,
+          ...typography.label[300],
           lineHeight: 1.7,
-          color: '#564337',
+          color: color.fg.neutral.subtle,
         }}
       >
         {canDraw
@@ -234,28 +230,34 @@ function EmptyState({ canDraw }: { canDraw: boolean }) {
             sx={{
               px: 1.5,
               py: 1.25,
-              borderRadius: 3,
-              border: '1px solid #DCC1B1',
-              bgcolor: '#fff',
+              borderRadius: `${radius.md}px`,
+              border: `1px solid ${color.border.default}`,
+              bgcolor: color.bg.neutral.default,
             }}
           >
-            <Swatch kind={kind} />
+            <AreaSwatch kind={kind} sx={{ mt: '3px' }} />
             <Box>
-              <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+              <Typography sx={{ ...typography.label[400] }}>
                 {AREA_KIND_LABELS[kind]}
                 <Box
                   component="span"
                   sx={{
                     ml: 0.75,
-                    fontSize: 12,
+                    ...typography.label[300],
                     fontWeight: 400,
-                    color: '#564337',
+                    color: color.fg.neutral.subtle,
                   }}
                 >
                   {KIND_HINTS[kind].hint}
                 </Box>
               </Typography>
-              <Typography sx={{ mt: 0.25, fontSize: 12, color: '#8A7466' }}>
+              <Typography
+                sx={{
+                  mt: 0.25,
+                  ...typography.label[300],
+                  color: color.fg.neutral.muted,
+                }}
+              >
                 {KIND_HINTS[kind].example}
               </Typography>
             </Box>
@@ -290,11 +292,25 @@ export function AdminAreaListPanel({
 }) {
   return (
     <Stack aria-label="區域清單" sx={{ flex: 1, minHeight: 0 }}>
-      <Box sx={{ px: 2.25, py: 1.75, borderBottom: '1px solid #DCC1B1' }}>
-        <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#151C22' }}>
+      <Box
+        sx={{
+          px: 2.25,
+          py: 1.75,
+          borderBottom: `1px solid ${color.border.default}`,
+        }}
+      >
+        <Typography
+          sx={{ ...typography.label[500], color: color.fg.neutral.default }}
+        >
           區域 {items.length}
         </Typography>
-        <Typography sx={{ mt: 0.5, fontSize: 12, color: '#564337' }}>
+        <Typography
+          sx={{
+            mt: 0.5,
+            ...typography.label[300],
+            color: color.fg.neutral.subtle,
+          }}
+        >
           數量只算目前地圖畫面內已載入的任務單與站點。
         </Typography>
       </Box>
@@ -303,7 +319,7 @@ export function AdminAreaListPanel({
         sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}
       >
         {hasError ? (
-          <Typography sx={{ fontSize: 13, color: '#B3261E' }}>
+          <Typography sx={{ ...typography.body[300], color: color.fg.danger }}>
             區域載入失敗，請重新整理。
           </Typography>
         ) : null}
@@ -317,7 +333,11 @@ export function AdminAreaListPanel({
           return (
             <Stack key={kind} spacing={1}>
               <Typography
-                sx={{ fontSize: 12, fontWeight: 700, color: '#564337' }}
+                sx={{
+                  ...typography.label[300],
+                  fontWeight: 700,
+                  color: color.fg.neutral.subtle,
+                }}
               >
                 {AREA_KIND_LABELS[kind]}（{group.length}）
               </Typography>
@@ -343,7 +363,7 @@ export function AdminAreaListPanel({
             justifyContent: 'flex-end',
             px: 2.25,
             py: 1.5,
-            borderTop: '1px solid #DCC1B1',
+            borderTop: `1px solid ${color.border.default}`,
           }}
         >
           <Button variant="contained" onClick={onStartDraw}>
@@ -355,13 +375,10 @@ export function AdminAreaListPanel({
   );
 }
 
-// The priority colours of the markers on the map (prototype `map-filter.jsx`).
-const PRIORITY_COLORS: Record<string, string> = {
-  critical: '#D32F2F',
-  high: '#F57C00',
-  medium: '#2592B9',
-  low: '#64748B',
-};
+// A ticket's priority colour, as its pin on the map and the filter have it.
+const PRIORITY_COLORS: Record<string, string> = Object.fromEntries(
+  ADMIN_MAP_PRIORITIES.map((priority) => [priority.value, priority.color]),
+);
 
 const VISIBILITY_NOTES: Record<RescueMapAreaKind, string> = {
   hazardous_zone:
@@ -390,7 +407,13 @@ function DetailSection({
 }) {
   return (
     <Stack spacing={1}>
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#564337' }}>
+      <Typography
+        sx={{
+          ...typography.label[300],
+          fontWeight: 700,
+          color: color.fg.neutral.subtle,
+        }}
+      >
         {title}
       </Typography>
       {children}
@@ -429,20 +452,29 @@ export function AdminAreaDetailPanel({
           alignItems: 'center',
           px: 2,
           py: 1.5,
-          borderBottom: '1px solid #DCC1B1',
+          borderBottom: `1px solid ${color.border.default}`,
         }}
       >
         <ButtonBase
           onClick={onBack}
           aria-label="返回區域清單"
-          sx={{ width: 32, height: 32, borderRadius: 2, color: '#564337' }}
+          sx={{
+            width: 32,
+            height: 32,
+            borderRadius: `${radius.sm}px`,
+            color: color.fg.neutral.subtle,
+          }}
         >
           <Box component={ArrowLeft} sx={{ width: 18, height: 18 }} />
         </ButtonBase>
-        <Swatch kind={item.kind} />
+        <AreaSwatch kind={item.kind} sx={{ mt: '3px' }} />
         <Typography
           noWrap
-          sx={{ flex: 1, fontSize: 16, fontWeight: 800, color: '#151C22' }}
+          sx={{
+            flex: 1,
+            ...typography.label[500],
+            color: color.fg.neutral.default,
+          }}
         >
           {item.name ?? '（未命名）'}
         </Typography>
@@ -450,11 +482,11 @@ export function AdminAreaDetailPanel({
           sx={{
             px: 1,
             py: 0.25,
-            borderRadius: 999,
-            bgcolor: '#FFF1E5',
-            fontSize: 12,
+            borderRadius: `${radius.full}px`,
+            bgcolor: color.bg.primary.subtle,
+            ...typography.label[300],
             fontWeight: 700,
-            color: '#7A3E00',
+            color: color.fg.warning,
           }}
         >
           {AREA_KIND_LABELS[item.kind]}
@@ -474,7 +506,7 @@ export function AdminAreaDetailPanel({
             }}
           />
         ) : item.note ? (
-          <Typography sx={{ fontSize: 14, lineHeight: 1.7 }}>
+          <Typography sx={{ ...typography.body[300], lineHeight: 1.7 }}>
             {item.note}
           </Typography>
         ) : null}
@@ -484,7 +516,11 @@ export function AdminAreaDetailPanel({
         <Stack
           direction="row"
           spacing={4}
-          sx={{ p: 1.5, borderRadius: 3, border: '1px solid #DCC1B1' }}
+          sx={{
+            p: 1.5,
+            borderRadius: `${radius.md}px`,
+            border: `1px solid ${color.border.default}`,
+          }}
         >
           {[
             ['區內任務單', item.contents.tickets],
@@ -492,11 +528,15 @@ export function AdminAreaDetailPanel({
           ].map(([label, count]) => (
             <Box key={label}>
               <Typography
-                sx={{ fontSize: 12, fontWeight: 700, color: '#564337' }}
+                sx={{
+                  ...typography.label[300],
+                  fontWeight: 700,
+                  color: color.fg.neutral.subtle,
+                }}
               >
                 {label}
               </Typography>
-              <Typography sx={{ fontSize: 22, fontWeight: 700 }}>
+              <Typography sx={{ ...typography.heading[600] }}>
                 {count}
               </Typography>
             </Box>
@@ -512,7 +552,7 @@ export function AdminAreaDetailPanel({
                 }
                 slotProps={{ input: { 'aria-label': '前台可見' } }}
               />
-              <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+              <Typography sx={{ ...typography.label[400] }}>
                 前台可見
               </Typography>
             </Stack>
@@ -522,18 +562,26 @@ export function AdminAreaDetailPanel({
                 component={item.isPublic ? Eye : EyeOff}
                 sx={{ width: 16, height: 16 }}
               />
-              <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+              <Typography sx={{ ...typography.label[400] }}>
                 {item.isPublic ? '公開到前台' : '只有後台'}
               </Typography>
             </Stack>
           )}
-          <Typography sx={{ fontSize: 12, lineHeight: 1.65, color: '#564337' }}>
+          <Typography
+            sx={{
+              ...typography.label[300],
+              lineHeight: 1.65,
+              color: color.fg.neutral.subtle,
+            }}
+          >
             {visibilityNote(item)}
           </Typography>
         </DetailSection>
         <DetailSection title={`區內任務單（${tickets.length}）`}>
           {tickets.length === 0 ? (
-            <Typography sx={{ fontSize: 13, color: '#564337' }}>
+            <Typography
+              sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
+            >
               目前畫面內這一區沒有任務單。
             </Typography>
           ) : (
@@ -550,10 +598,10 @@ export function AdminAreaDetailPanel({
                       py: 1.25,
                       textAlign: 'left',
                       justifyContent: 'flex-start',
-                      borderBottom: '1px solid #EBDDD2',
+                      borderBottom: `1px solid ${color.border.subtle}`,
                       bgcolor:
                         ticket.id === selectedTicketId
-                          ? '#FFF1E5'
+                          ? color.bg.primary.subtle
                           : 'transparent',
                     }}
                   >
@@ -565,14 +613,21 @@ export function AdminAreaDetailPanel({
                         flexShrink: 0,
                         bgcolor:
                           PRIORITY_COLORS[ticket.ticketMeta?.priority ?? ''] ??
-                          '#64748B',
+                          color.fg.neutral.muted,
                       }}
                     />
-                    <Typography noWrap sx={{ flex: 1, fontSize: 14 }}>
+                    <Typography
+                      noWrap
+                      sx={{ flex: 1, ...typography.body[300] }}
+                    >
                       {ticket.title}
                     </Typography>
                     <Typography
-                      sx={{ fontSize: 12, color: '#564337', flexShrink: 0 }}
+                      sx={{
+                        ...typography.label[300],
+                        color: color.fg.neutral.subtle,
+                        flexShrink: 0,
+                      }}
                     >
                       {ticket.label}
                     </Typography>

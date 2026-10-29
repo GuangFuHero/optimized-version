@@ -1,3 +1,5 @@
+import { designTokens } from '@rescue-frontend/ui';
+
 import {
   normalizeStationType,
   STATION_TYPE_OPTIONS,
@@ -5,12 +7,14 @@ import {
 import { matchesTicketStatusSelection } from '../../ticket/status';
 import type { RescueMapMarkerItem } from '../types';
 
+const { color } = designTokens;
+
 /** The four priorities of a ticket, with the colour of its pin (prototype `map-filter.jsx`). */
 export const ADMIN_MAP_PRIORITIES = [
-  { value: 'critical', label: '生命危急', color: '#D32F2F' },
-  { value: 'high', label: '緊急', color: '#F57C00' },
-  { value: 'medium', label: '一般', color: '#2592B9' },
-  { value: 'low', label: '低', color: '#64748B' },
+  { value: 'critical', label: '生命危急', color: color.bg.danger.default },
+  { value: 'high', label: '緊急', color: color.bg.warning.default },
+  { value: 'medium', label: '一般', color: color.bg.info.default },
+  { value: 'low', label: '低', color: color.fg.neutral.muted },
 ] as const;
 
 export const ADMIN_MAP_STATUSES = [

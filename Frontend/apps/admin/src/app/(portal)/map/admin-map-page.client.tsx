@@ -56,6 +56,9 @@ import {
   AdminAreaListPanel,
   toAdminAreaListItems,
 } from './admin-area-list-panel';
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color } = designTokens;
 
 // 危險區 has no status in the UI (Carol: skip it; areas can be edited and deleted directly, so no
 // open/closed state is needed). The backend still refuses a blank one, and nothing reads it, so this
@@ -739,8 +742,8 @@ export function AdminMapPageClient() {
               position: { tablet: 'sticky' },
               top: 0,
               height: { tablet: '100dvh' },
-              borderLeft: { tablet: '1px solid #DCC1B1' },
-              bgcolor: '#F6FAFF',
+              borderLeft: { tablet: `1px solid ${color.border.default}` },
+              bgcolor: color.bg.neutral.subtle,
             }}
           >
             {drawStep === 'drawing' ? (
