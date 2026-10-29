@@ -61,7 +61,8 @@ ADR-308 是所有分支上第一個沒被佔用的號碼（`feat/dedup-engine-in
    回 `text/csv` 附件，UTF-8 加 BOM（Excel 才讀得懂中文），新的在前。
    用 POST 而不是 GET：每次匯出都會留紀錄（ADR-417），算是寫入；瀏覽器用 cookie 登入時就要從我們自己的頁面送出（ADR-327），
    別的網站上的連結不能讓超管「被匯出」一次（2026-10-28 code review）。
-2. **新的權限 `audit.export`**，只給 `super_admin`（範圍 `all`）。**跟 Spec 006 寫的不同**：資料稽核員不能匯出（Popo 10/28 決定）。
+2. **新的權限 `audit.export`**，只給 `super_admin`（範圍 `all`）。**跟 Spec 006 寫的不同**：資料稽核員不能匯出
+   （Popo 10/28 回覆前端提問清單第 5 項時決定；理由：匯出的紀錄資訊相當敏感，檔案帶出去之後就管不到）。
    用一個新權限，而不是直接檢查角色名稱，之後要調整可以在 `/admin/rbac` 改。
    既有資料庫由 migration `b5d8e2a41c07` 補上（ADR-055）。
 3. **欄位**：`created_at`、`table_name`、`action`、`row_id`、`actor_uuid`、`actor_name`（操作人暱稱）、`client_ip`、
