@@ -9,10 +9,12 @@ terms nobody can be found by:
 - **Who** is a role only: the requester, a volunteer, staff or the system. No name, no uuid.
 - **A claim** is a count: one more volunteer for 清淤泥, now 2 of 5 (the prototype's own wording).
 - **What changed** is told whenever a field moved (Carol, 2026-10-29), but in values only for the
-  public tier of `history_fields.py`. The rest is told as having changed, without the values, to
-  everyone: the description, the place, the contact details, the triage answers, a need's progress
-  note and its details. Only the data check is not told, nor the ticket's own status, which the events
-  of its needs already tell.
+  public tier of `history_fields.py`, less the free text. The rest is told as having changed, without
+  the values, to everyone: the title, the description, the place, the contact details, the triage
+  answers, and a need's name, description, progress note and details. A title or a name once held a
+  phone number as easily as a description does, and an edit that took it out must not leave it here;
+  so a need is named in every event by the name it has now. Only the data check is not told, nor the
+  ticket's own status, which the events of its needs already tell (`_NOT_TOLD`).
   `resolve_visibility` is deliberately not used: a plain account holds `ticket.view_pii` at `all`
   (ADR-286), so under it anyone signed in would read the requester's name and phone here.
 
@@ -53,15 +55,17 @@ _TASKS = "ticket_tasks"
 _ASSIGNMENTS = "task_assignments"
 _PROPERTIES = "task_properties"
 
-# Fields told with their values: the public tier of history_fields.py, less the ticket's own status
-# (worked out from its needs, whose events already say it), the data check (ADR-421 point 4) and a
-# need's source (set when it is filed, and never written again).
-_TICKET_FIELDS = ("title", "priority", "task_type", "disaster_types")
-_NEED_FIELDS = ("task_name", "quantity", "task_type")
-# Told as having changed, without the values, column by the name it is told under: the detail tier
-# (ADR-284), and the contact details and triage answers, which no reader here may see (ADR-286).
-# The three contact columns are one change.
+# Fields told with their values: the public tier of history_fields.py that is not free text. A guard test
+# (test_history_public.py) holds every column history_fields.py classifies to one of these, a fact below,
+# or `_NOT_TOLD`, so a column added or demoted there forces a decision here.
+_TICKET_FIELDS = ("priority", "task_type", "disaster_types")
+_NEED_FIELDS = ("quantity", "task_type")
+# Told as having changed, without the values, column by the name it is told under: free text, whose old
+# values may hold what an edit took out (ADR-421 point 4); the detail tier (ADR-284); and the contact
+# details and triage answers, which no reader here may see (ADR-286). The three contact columns are one
+# change.
 _TICKET_FACTS = {
+    "title": "title",
     "description": "description",
     "contact_name": "contact",
     "contact_email": "contact",
@@ -69,9 +73,21 @@ _TICKET_FACTS = {
     "person_trapped_reported": "person_trapped",
     "immediate_danger_reported": "immediate_danger",
 }
-_NEED_FACTS = {"task_description": "description", "progress_note": "progress_note"}
+_NEED_FACTS = {"task_name": "name", "task_description": "description", "progress_note": "progress_note"}
 # A need's details: rows of name, value and quantity, told as one change to the need.
 _PROPERTY_COLUMNS = ("property_name", "property_value", "quantity", "status", "comment")
+# What history_fields.py classifies and this leaves out, and why.
+_NOT_TOLD = {
+    _TICKETS: {
+        "status": "worked out from its needs, whose events already tell it",
+        "audit_status": "the data check is staff's (ADR-421 point 4)",
+        "audit_note": "the data check is staff's (ADR-421 point 4)",
+    },
+    _TASKS: {
+        "status": "told as the event's kind: filled, stopped, reopened or removed",
+        "source": "set when the need is filed, and never written again",
+    },
+}
 
 _OPEN = "pending"
 _FILLED = "fulfilled"
@@ -85,10 +101,6 @@ class _Need:
     name: str | None = None
     required: int | None = None
     claims: set[str] = field(default_factory=set)
-
-    def view(self) -> dict:
-        """The need as the public timeline shows it."""
-        return {"name": self.name, "matched": len(self.claims), "required": self.required}
 
 
 @dataclass(frozen=True)
@@ -160,9 +172,16 @@ class _Replay:
         self.requester_uuid = requester_uuid
         self.needs: dict[str, _Need] = defaultdict(_Need)
         self.events: list[dict] = []
+        self._unnamed: list[tuple[dict, str]] = []
+
+    def named(self) -> list[dict]:
+        """The events told, oldest first, each need named as it is now (ADR-421 point 4)."""
+        for view, uuid in self._unnamed:
+            view["name"] = self.needs[uuid].name
+        return self.events
 
     def transaction(self, at, rows: list[AuditLog]) -> None:
-        """Apply one transaction's rows, then tell what it did, with the needs as they stand after it.
+        """Apply one transaction's rows, then tell what it did, with the headcounts as they stand after it.
 
         `rows` come in telling order (`_TABLE_ORDER`). Everything it did to the ticket itself is one event,
         however many of its tables one save wrote.
@@ -171,8 +190,10 @@ class _Replay:
             self._apply(row)
         created = next((r for r in rows if r.table_name == _TICKETS and r.action == "INSERT"), None)
         if created is not None:
-            filed = dict.fromkeys(str(r.row_id) for r in rows if r.table_name == _TASKS)
-            self._tell(at, created, TICKET_CREATED, needs=[self.needs[uuid].view() for uuid in filed])
+            # By uuid: the site lists a ticket's needs by `created_at`, then `uuid`, and needs filed together
+            # share `created_at`.
+            filed = sorted({str(r.row_id) for r in rows if r.table_name == _TASKS})
+            self._tell(at, created, TICKET_CREATED, needs=[self._view(uuid) for uuid in filed])
             return
         ticket_rows = [r for r in rows if r.table_name in _TICKET_TABLES]
         changes = {c["field"]: c for row in ticket_rows for c in self._ticket_changes(row)}
@@ -184,13 +205,27 @@ class _Replay:
             for r in rows
             if r.table_name == _PROPERTIES and _details_moved(r)
         }
+        # A claim or release that fills or reopens its need does so in the same transaction.
+        claims = {str(_values(r).get("task_uuid")): r for r in rows if r.table_name == _ASSIGNMENTS}
         for row in rows:
             if row.table_name == _ASSIGNMENTS:
                 self._tell_claim(at, row)
             elif row.table_name == _TASKS:
-                self._tell_need(at, row, details=details.pop(str(row.row_id), None) is not None)
+                self._tell_need(
+                    at,
+                    row,
+                    details=details.pop(str(row.row_id), None) is not None,
+                    claim=claims.get(str(row.row_id)),
+                )
         for need, row in details.items():
-            self._tell(at, row, NEED_UPDATED, need=self.needs[need].view(), changes=[_fact("properties")])
+            self._tell(at, row, NEED_UPDATED, need=self._view(need), changes=[_fact("properties")])
+
+    def _view(self, uuid: str) -> dict:
+        """A need as an event shows it: the headcount then, and a name `named` writes in at the end."""
+        need = self.needs[uuid]
+        view = {"name": None, "matched": len(need.claims), "required": need.required}
+        self._unnamed.append((view, uuid))
+        return view
 
     def _apply(self, row: AuditLog) -> None:
         if row.table_name == _TASKS:
@@ -222,18 +257,21 @@ class _Replay:
         # A status or role moved in place is a volunteer's own progress, not told (ADR-421 point 2).
         kind = {"INSERT": VOLUNTEER_JOINED, "DELETE": VOLUNTEER_LEFT}.get(row.action)
         if kind is not None:
-            self._tell(at, row, kind, need=self.needs[str(_values(row).get("task_uuid"))].view())
+            self._tell(at, row, kind, need=self._view(str(_values(row).get("task_uuid"))))
 
-    def _tell_need(self, at, row: AuditLog, *, details: bool) -> None:
-        need = self.needs[str(row.row_id)].view()
+    def _tell_need(self, at, row: AuditLog, *, details: bool, claim: AuditLog | None) -> None:
+        need = self._view(str(row.row_id))
         if row.action == "INSERT":
             # Its details came with it.
             self._tell(at, row, NEED_ADDED, need=need)
             return
         kind = _need_status_kind(row)
         if kind is not None:
-            # Stopping recruiting also lowers the headcount to whoever is coming; the stop says it all.
-            self._tell(at, row, kind, need=need)
+            # Stopping recruiting also lowers the headcount to whoever is coming; the stop says it all. Filled
+            # or reopened by a claim or a release, it was done by whoever claimed or released: the need's own
+            # row is not an assignment, and alone would read as staff's.
+            by_claim = claim is not None and kind in (NEED_FILLED, NEED_REOPENED)
+            self._tell(at, claim if by_claim else row, kind, need=need)
             return
         changes = _value_changes(row, _NEED_FIELDS, _NEED_FACTS) + ([_fact("properties")] if details else [])
         if changes:
@@ -271,18 +309,20 @@ def tell(rows: list[AuditLog], *, requester_uuid: str) -> list[dict]:
     for at in sorted(by_transaction):
         ordered = sorted(by_transaction[at], key=lambda r: _TABLE_ORDER.get(r.table_name, len(_TABLE_ORDER)))
         replay.transaction(at, ordered)
-    return list(reversed(replay.events))
+    return list(reversed(replay.named()))
 
 
-async def load_public_timeline(db: AsyncSession, *, uuid: str, limit: int, offset: int) -> PublicTimeline:
-    """One page of a live ticket's public timeline; ValueError when there is no such ticket.
+async def load_public_timeline(
+    db: AsyncSession, *, uuid: str, limit: int, offset: int
+) -> PublicTimeline | None:
+    """One page of a live ticket's public timeline; None when there is no such ticket.
 
     No caller is asked for: the board is public (ADR-027), and this tells nothing that depends on who reads
     it. A deleted ticket is not found, as on the site.
     """
     ticket = await ticket_repository.get_by_uuid_active(db, uuid)
     if ticket is None:
-        raise ValueError("ticket not found")
+        return None
     ids = await history.resolve_scope_ids(db, entity=history.TICKET, uuid=uuid)
     rows, truncated = await history.fetch_audit_rows(db, ids=ids)
     events = tell(rows, requester_uuid=str(ticket.created_by))

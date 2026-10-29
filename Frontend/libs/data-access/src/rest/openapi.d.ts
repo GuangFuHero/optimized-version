@@ -3516,7 +3516,7 @@ export interface components {
       needs?: components['schemas']['PublicNeedResponse'][] | null;
       /**
        * Changes
-       * @description 改了什麼。說明、地點、聯絡方式、受困／危險、進度備註、需求細項只有 changed=true；檢核不列（ADR-421）
+       * @description 改了什麼。標題、說明、地點、聯絡方式、受困／危險、需求名稱、進度備註、需求細項只有 changed=true；檢核不列（ADR-421）
        */
       changes?: components['schemas']['ChangeResponse'][];
     };
@@ -3536,10 +3536,13 @@ export interface components {
     };
     /**
      * PublicNeedResponse
-     * @description A need as it stood right after the event: its name and how many are coming of how many asked.
+     * @description A need in an event: its name as it is now, and how many were coming of how many asked right after.
      */
     PublicNeedResponse: {
-      /** Name */
+      /**
+       * Name
+       * @description 需求現在的名稱（不是當時的，ADR-421）
+       */
       name: string | null;
       /**
        * Matched

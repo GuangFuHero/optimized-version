@@ -68,9 +68,9 @@ class HistoryResponse(BaseModel):
 
 
 class PublicNeedResponse(BaseModel):
-    """A need as it stood right after the event: its name and how many are coming of how many asked."""
+    """A need in an event: its name as it is now, and how many were coming of how many asked right after."""
 
-    name: str | None
+    name: str | None = Field(description="需求現在的名稱（不是當時的，ADR-421）")
     matched: int = Field(description="已承接人數")
     required: int | None = Field(description="需要人數；沒填為 null")
 
@@ -91,8 +91,8 @@ class PublicHistoryEventResponse(BaseModel):
     changes: list[ChangeResponse] = Field(
         default_factory=list,
         description=(
-            "改了什麼。說明、地點、聯絡方式、受困／危險、進度備註、需求細項只有 changed=true；"
-            "檢核不列（ADR-421）"
+            "改了什麼。標題、說明、地點、聯絡方式、受困／危險、需求名稱、進度備註、需求細項只有 "
+            "changed=true；檢核不列（ADR-421）"
         ),
     )
 

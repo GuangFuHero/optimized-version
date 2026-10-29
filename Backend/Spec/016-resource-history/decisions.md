@@ -725,6 +725,7 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
 **Date**: 2026-10-28（使用者在協調者分頁決定做，後端、前台都交給 e；Carol 的 6 題在 Discord #uiux 問）。
 2026-10-29 Carol 在 #uiux 回覆，改第 2、4 點：欄位有改動都要列，包括聯絡方式；協調人員只寫「協調人員」，
 責任區的負責團隊在單的詳情上看得到就好，紀錄裡不寫。
+2026-10-29 PR #161 code review 後，使用者在協調者分頁定：標題、需求名稱也只說改了，事件裡的需求名稱一律用現在的（第 4 點）。
 
 **Context**：
 
@@ -740,19 +741,25 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
    回應對每個人都一樣，所以不讀呼叫者。
 2. **人只寫角色**：`requester`（操作者就是建單者）、`volunteer`（自己報名或釋出）、`staff`（其他登入的人）、
    `system`（沒有操作者，ADR-136）。不給 uuid、暱稱，也不寫團隊名稱（Carol 第 7 題）。
+   報名或釋出讓需求湊齊、重新開放時，後端在同一筆交易裡改需求的狀態；需求那一列不是承接列，所以
+   `need_filled`、`need_reopened` 用同一筆交易裡那件需求的承接列判斷角色，跟報名、釋出那一筆一樣。
 3. **承接只寫人數**：報名、釋出各一筆，附那件需求的名稱和事件之後的「已承接／需要」人數，從頭重播稽核紀錄算出來。
    承接狀態的變更（出發、完成）不列：人少的時候，那就等於某個志工的行蹤。
 4. **欄位有改動就列**（Carol 第 6 題）：
-   - 照給值：工單的 `title`、`priority`、`task_type`、`disaster_types`；需求的 `task_name`、`quantity`、`task_type`
-     （ADR-130 的公開層）。
+   - 照給值：工單的 `priority`、`task_type`、`disaster_types`；需求的 `quantity`、`task_type`（ADR-130 的公開層，
+     不含自由填寫的字）。
    - 只說改了、不給值，對每個人都一樣：
-     - 工單：說明、地點（地址、座標，合成一個 `location`）、聯絡方式（姓名／電話／email 合成一個 `contact`）、
-       受困與危險兩題（`person_trapped`、`immediate_danger`）。
-     - 需求：說明、進度備註（`progress_note`）、細項（`task_properties` 的增、改、刪，合成一個 `properties`）。
-       同一次存檔改到需求本身和它的細項，是同一筆 `need_updated`。
+     - 工單：標題（`title`）、說明、地點（地址、座標，合成一個 `location`）、聯絡方式（姓名／電話／email 合成一個
+       `contact`）、受困與危險兩題（`person_trapped`、`immediate_danger`）。
+     - 需求：名稱（`name`）、說明、進度備註（`progress_note`）、細項（`task_properties` 的增、改、刪，合成一個
+       `properties`）。同一次存檔改到需求本身和它的細項，是同一筆 `need_updated`。
+   - **標題和需求名稱是自由填寫的字**：舊的標題、名稱裡可能有後來刪掉的姓名、電話，給了改前的值，刪掉也還看得到。
+     所以只說改了；每筆事件附的需求名稱也一律用現在的名稱，人數照舊用當時的。現在的標題、名稱本來就在單上看得到。
    - 不列：資料檢核（`audit_status`、`audit_note`：檢核員標「有問題」，原因只給工作人員看；Carol 2026-10-29 同意，
      資料檢核員先只處理重複，內容檢核排到 11/01 之後）、
      工單自己的 `status`（由需求推得，需求的事件已經說了）、需求的 `source`（建立時定了，沒有地方再改它）。
+   - 員工時間軸的欄位分級（`history_fields.py`）每一欄都要歸到上面其中一類：`test_history_public.py` 的
+     `test_every_column_the_staff_timeline_classifies_is_told_or_left_out_on_purpose` 守著，那邊加欄位或降級就會紅。
    - **PII 不用 `resolve_visibility`**：一般帳號的 `ticket.view_pii` 是 `all`（ADR-286），照它解鎖，任何登入的人
      都會在這裡讀到建單者的姓名和電話。單筆查詢的聯絡方式另外還要 `view_history` 或承接，這裡沒有那層。
      所以聯絡方式改了，對誰都只說改了。`test_history_public.py` 的
@@ -763,7 +770,8 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
    - 停止招募和湊齊人在稽核紀錄裡都是 `status` 變 `fulfilled`，看 `recruiting_stopped_at` 有沒有被填來分
      （這欄在員工的時間軸裡排除，ADR-143）。
    - 同一筆交易是同一件事（ADR-134）：建單連同它的需求是一筆 `ticket_created`；一次存檔改到工單的幾張表，是一筆
-     `ticket_updated`。
+     `ticket_updated`。`ticket_created` 的需求照 uuid 排：站上列需求是依 `created_at`、`uuid`，同時建的需求
+     `created_at` 相同。
    - 刪除、還原工單不列：刪掉的單本來就查不到。
 
 **Consequences**：

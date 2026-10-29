@@ -17,6 +17,8 @@ from app.models.audit import AuditLog
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TaskProperty, TicketTask
+from app.services import history_public
+from app.services.history_fields import FIELD_TIERS, Tier
 from tests.test_history_endpoints import _auth, _user_with
 
 URL = "/api/v1/history/tickets/{}/public"
@@ -130,7 +132,7 @@ async def test_a_guest_reads_what_happened_and_nobody_s_name(client, db_session,
                 "UPDATE",
                 by=owner,
                 minute=2,
-                old={"title": "民宅清淤"},
+                old={"title": f"民宅清淤 {PHONE}"},
                 new={"title": "民宅一樓清淤"},
             ),
         ]
@@ -146,12 +148,11 @@ async def test_a_guest_reads_what_happened_and_nobody_s_name(client, db_session,
         ("volunteer_joined", "volunteer"),
         ("ticket_created", "requester"),
     ]
-    assert events[0]["changes"] == [
-        {"field": "title", "before": "民宅清淤", "after": "民宅一樓清淤", "changed": None}
-    ]
+    # Free text: an old title may hold what the edit took out.
+    assert events[0]["changes"] == [{"field": "title", "before": None, "after": None, "changed": True}]
     assert events[1]["need"] == {"name": "清淤泥", "matched": 1, "required": 5}
     assert events[2]["needs"] == [{"name": "清淤泥", "matched": 0, "required": 5}]
-    for secret in (owner, volunteer, "建單的人", "去幫忙的人"):
+    for secret in (owner, volunteer, "建單的人", "去幫忙的人", PHONE, "民宅一樓清淤"):
         assert secret not in resp.text
 
 
@@ -249,12 +250,13 @@ async def test_stopping_recruiting_is_told_apart_from_filling_up(client, db_sess
 
     events = (await client.get(URL.format(ticket))).json()["data"]
 
-    assert [(e["kind"], e["need"]["name"]) for e in events] == [
-        ("need_stopped", "清淤泥"),
-        # The claim and the need it filled are one transaction; newest first, the outcome reads on top.
-        ("need_filled", "搬家具"),
-        ("volunteer_joined", "搬家具"),
-        ("need_added", "搬家具"),
+    assert [(e["kind"], e["need"]["name"], e["actor_role"]) for e in events] == [
+        ("need_stopped", "清淤泥", "requester"),
+        # The claim and the need it filled are one transaction; newest first, the outcome reads on top,
+        # done by the volunteer who claimed, not by staff for want of an assignment row of its own.
+        ("need_filled", "搬家具", "volunteer"),
+        ("volunteer_joined", "搬家具", "volunteer"),
+        ("need_added", "搬家具", "requester"),
     ]
     assert events[1]["need"] == {"name": "搬家具", "matched": 1, "required": 1}
 
@@ -295,12 +297,96 @@ async def test_a_volunteer_giving_a_place_back_reopens_the_need(client, db_sessi
 
     events = (await client.get(URL.format(ticket))).json()["data"]
 
-    assert [(e["kind"], e["need"] and e["need"]["matched"]) for e in events] == [
-        ("need_reopened", 0),
-        ("volunteer_left", 0),
-        ("volunteer_joined", 1),
-        ("ticket_created", None),
+    assert [(e["kind"], e["need"] and e["need"]["matched"], e["actor_role"]) for e in events] == [
+        ("need_reopened", 0, "volunteer"),
+        ("volunteer_left", 0, "volunteer"),
+        ("volunteer_joined", 1, "volunteer"),
+        ("ticket_created", None, "requester"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_renamed_need_is_named_as_it_is_now_in_every_event(client, db_session, redis):
+    """A need's name is free text: its rename is told without values, and earlier events take the new name.
+
+    Headcounts stay those of the time.
+    """
+    owner = await _user_with(db_session, redis, "建單者")
+    volunteer = await _user_with(db_session, redis, "志工")
+    ticket = await _ticket(db_session, owner)
+    need = await _need(db_session, ticket, owner)
+    old_name = f"清淤泥 找王小姐 {PHONE}"
+    db_session.add_all(
+        [
+            _row(ticket, "tickets", "INSERT", by=owner, new={"uuid": ticket, "title": "民宅清淤"}),
+            _row(
+                need,
+                "ticket_tasks",
+                "INSERT",
+                by=owner,
+                new={"uuid": need, "task_name": old_name, "quantity": 5, "status": "pending"},
+            ),
+            _claim(need, volunteer, minute=1),
+            _row(
+                need,
+                "ticket_tasks",
+                "UPDATE",
+                by=owner,
+                minute=2,
+                old={"task_name": old_name},
+                new={"task_name": "清淤泥"},
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    resp = await client.get(URL.format(ticket))
+
+    renamed, joined, created = resp.json()["data"]
+    assert renamed["changes"] == [{"field": "name", "before": None, "after": None, "changed": True}]
+    assert renamed["need"] == {"name": "清淤泥", "matched": 1, "required": 5}
+    assert joined["need"] == {"name": "清淤泥", "matched": 1, "required": 5}
+    assert created["needs"] == [{"name": "清淤泥", "matched": 0, "required": 5}]
+    for secret in (PHONE, CONTACT):
+        assert secret not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_the_needs_a_ticket_is_filed_with_come_in_the_site_s_order(client, db_session, redis):
+    """By uuid, as the site lists needs filed together (`created_at`, then `uuid`), not as fetched."""
+    owner = await _user_with(db_session, redis, "建單者")
+    ticket = await _ticket(db_session, owner)
+    needs = {await _need(db_session, ticket, owner, name=name): name for name in ("搬家具", "清淤泥", "送水")}
+    filed = [
+        _row(uuid, "ticket_tasks", "INSERT", by=owner, new={"uuid": uuid, "task_name": name, "quantity": 1})
+        for uuid, name in needs.items()
+    ]
+    db_session.add_all([_row(ticket, "tickets", "INSERT", by=owner, new={"uuid": ticket}), *filed])
+    await db_session.commit()
+
+    [created] = (await client.get(URL.format(ticket))).json()["data"]
+
+    assert [need["name"] for need in created["needs"]] == [needs[uuid] for uuid in sorted(needs)]
+
+
+def test_every_column_the_staff_timeline_classifies_is_told_or_left_out_on_purpose():
+    """A column history_fields.py adds or demotes forces a decision here, rather than going public or silent.
+
+    Each is told with its value (public tier only), told as changed, or left out with a reason (`_NOT_TOLD`).
+    """
+    told = {
+        "tickets": (history_public._TICKET_FIELDS, history_public._TICKET_FACTS),
+        "ticket_tasks": (history_public._NEED_FIELDS, history_public._NEED_FACTS),
+        "task_properties": ((), dict.fromkeys(history_public._PROPERTY_COLUMNS, "properties")),
+    }
+    for table, (values, facts) in told.items():
+        tiers = FIELD_TIERS[("ticket", table)]
+        not_told = history_public._NOT_TOLD.get(table, {})
+        for column in tiers:
+            assert (column in values) + (column in facts) + (column in not_told) == 1, (table, column)
+        for column in values:
+            assert tiers[column].tier == Tier.PUBLIC, (table, column)
+        assert set(values) | set(facts) | set(not_told) <= set(tiers), table
 
 
 @pytest.mark.asyncio

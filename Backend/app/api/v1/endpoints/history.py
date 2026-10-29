@@ -94,10 +94,10 @@ async def ticket_public_history(
     claimed a need is a count, who acted is a role, and a change to the contact details is told
     without them.
     """
-    try:
-        result = await history_public.load_public_timeline(db, uuid=str(uuid), limit=limit, offset=offset)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    result = await history_public.load_public_timeline(db, uuid=str(uuid), limit=limit, offset=offset)
+    if result is None:
+        # Only a ticket that is not there: any other error stays a 500, its message kept from a guest.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ticket not found")
 
     return PublicHistoryResponse(
         data=result.events,
