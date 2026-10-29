@@ -40,22 +40,22 @@ describe('siteBrandName', () => {
   });
 
   it('leaves the name blank while the event loads', () => {
-    expect(siteBrandName(undefined, { pending: true })).toEqual({
+    expect(siteBrandName(undefined, { loading: true })).toEqual({
       label: '',
       fullName: null,
     });
   });
 
-  it('blanks the name only while there is no answer yet', () => {
-    expect(
-      siteBrandName(
-        { name: '花蓮馬太鞍溪堰塞湖專案', shortName: '花蓮馬太鞍溪' },
-        { pending: true },
-      ),
-    ).toEqual({ label: '花蓮馬太鞍溪', fullName: '花蓮馬太鞍溪堰塞湖專案' });
-    expect(siteBrandName(null, { pending: true })).toEqual({
+  it('keeps the platform’s name while the read is held back offline, which is not loading', () => {
+    expect(siteBrandName(undefined, { loading: false })).toEqual({
       label: PLATFORM_NAME,
       fullName: null,
     });
+  });
+
+  it('shows the platform’s name once the read has waited too long, as a map stops waiting', () => {
+    expect(
+      siteBrandName(undefined, { loading: true, waitedOut: true }),
+    ).toEqual({ label: PLATFORM_NAME, fullName: null });
   });
 });

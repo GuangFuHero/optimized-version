@@ -12,17 +12,22 @@ interface CurrentDisaster {
  * the same way (`wg-event.js` `wgEventShortName`), so one person crossing over sees one system. Until
  * the event is set, or when it cannot be read, the platform's name stays (`前台視覺對齊.md` §3).
  *
- * While the first answer is `pending` the name is blank: the platform's name first and the event's a
- * moment later would read as two names, and push the badge and the search box along when it swaps.
+ * While the event is `loading` the name is blank: the platform's name first and the event's a moment
+ * later would read as two names. The platform's name shows, as a map opens as if the event could not
+ * be read, when the read is held back because the browser is offline (it is then not loading), or is
+ * still out once `waitedOut` (`EVENT_MAP_VIEW_WAIT_MS`). An answer that comes later still names the event.
  */
 export function siteBrandName(
   disaster: CurrentDisaster | null | undefined,
-  { pending = false }: { pending?: boolean } = {},
+  {
+    loading = false,
+    waitedOut = false,
+  }: { loading?: boolean; waitedOut?: boolean } = {},
 ): {
   label: string;
   fullName: string | null;
 } {
-  if (disaster === undefined && pending) {
+  if (loading && !waitedOut) {
     return { label: '', fullName: null };
   }
 
