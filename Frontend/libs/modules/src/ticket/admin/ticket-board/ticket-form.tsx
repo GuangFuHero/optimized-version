@@ -384,10 +384,12 @@ export function TicketForm(props: TicketFormProps) {
             >
               {mode === 'create' ? (
                 <>
+                  {/* The coordinator is rarely at the scene: their own location is no 地標. */}
                   <LocationPicker
                     value={values.point}
                     onChange={(point) => set('point', point)}
                     invalid={Boolean(errors.point)}
+                    autoLocate={false}
                   />
                   {errors.point ? <ErrorText>{errors.point}</ErrorText> : null}
                 </>
