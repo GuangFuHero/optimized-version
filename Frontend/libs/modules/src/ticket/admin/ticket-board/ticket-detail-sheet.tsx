@@ -21,12 +21,7 @@ import {
   SheetLayout,
   Tabs,
 } from '@rescue-frontend/ui';
-import {
-  ChevronDown,
-  ChevronRight,
-  CircleHelp,
-  PencilLine,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, PencilLine } from 'lucide-react';
 
 import { Muted } from '../../../admin/shared/muted';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
@@ -496,10 +491,6 @@ function TicketInfo({
       </Section>
 
       <Section title="現場災況" collapsible>
-        <PendingNote
-          title="欄位定義待確認"
-          note="以下欄位名稱與選項為版型示意，尚未對應消防署／INSARAG 或各單位現行表單。上線前需由權責單位提供正式欄位清單。"
-        />
         <InfoRow label="災害類型">
           {view.disasterLabels.length ? (
             view.disasterLabels.join('、')
@@ -752,59 +743,6 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
         }}
       >
         {children}
-      </Box>
-    </Box>
-  );
-}
-
-/** The prototype's 「資料待確認」 note: a dashed box with a question mark. */
-function PendingNote({ title, note }: { title: string; note: string }) {
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '8px',
-        p: '10px 12px',
-        borderRadius: `${radius.md}px`,
-        border: `1px dashed ${color.border.default}`,
-        bgcolor: color.bg.neutral.subtle,
-      }}
-    >
-      <Box
-        sx={{
-          mt: '2px',
-          flexShrink: 0,
-          color: color.fg.neutral.muted,
-          display: 'flex',
-        }}
-      >
-        <CircleHelp size={15} />
-      </Box>
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '2px',
-          minWidth: 0,
-        }}
-      >
-        <Typography
-          component="span"
-          sx={{
-            ...typography.label[300],
-            fontWeight: 700,
-            color: color.fg.neutral.subtle,
-          }}
-        >
-          {title}
-        </Typography>
-        <Typography
-          component="span"
-          sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
-        >
-          {note}
-        </Typography>
       </Box>
     </Box>
   );
