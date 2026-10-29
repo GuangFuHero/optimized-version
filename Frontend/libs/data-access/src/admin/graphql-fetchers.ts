@@ -283,6 +283,100 @@ export function useReverseGeocode(
   });
 }
 
+/**
+ * A typed address line checked against TGOS, with the pin when there is one. Never kept: a token
+ * lasts a day, and an `unavailable` kept here would answer a later check of the same line.
+ */
+export const normalizeAddressQuery = (
+  variables: documents.AdminNormalizeAddressQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'address', 'normalizeAddress', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminNormalizeAddressDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+    staleTime: 0,
+    gcTime: 0,
+  });
+
+/** Buildings opened as spaces (BE-036). Their tickets come from `buildingMapTicketsQuery`. */
+export const buildingMapsQuery = (
+  variables: documents.AdminBuildingMapsQueryVariables = {},
+) =>
+  queryOptions({
+    queryKey: ['admin', 'buildingMaps', 'list', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminBuildingMapsDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useBuildingMaps(
+  variables: documents.AdminBuildingMapsQueryVariables = {},
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...buildingMapsQuery(variables),
+    enabled: options.enabled,
+  });
+}
+
+export const buildingMapQuery = (
+  variables: documents.AdminBuildingMapQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'buildingMaps', 'one', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminBuildingMapDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useBuildingMap(
+  variables: documents.AdminBuildingMapQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...buildingMapQuery(variables),
+    enabled: Boolean(variables.uuid) && options.enabled !== false,
+  });
+}
+
+/** Under `buildingMaps`, so changing a building or filing a ticket under it refreshes its floors. */
+export const buildingMapTicketsQuery = (
+  variables: documents.AdminBuildingMapTicketsQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'buildingMaps', 'tickets', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminBuildingMapTicketsDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useBuildingMapTickets(
+  variables: documents.AdminBuildingMapTicketsQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...buildingMapTicketsQuery(variables),
+    enabled: Boolean(variables.buildingMapUuid) && options.enabled !== false,
+  });
+}
+
 /** Under `teams`, so a team change refreshes the picker along with the team list. */
 export const assignableStationTeamsQuery = () =>
   queryOptions({
@@ -746,6 +840,55 @@ export function useDeleteStation() {
         .then(graphqlResponseData),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
+  });
+}
+
+export function useCreateBuildingMap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminCreateBuildingMapMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminCreateBuildingMapDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'buildingMaps'] }),
+  });
+}
+
+export function useUpdateBuildingMap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminUpdateBuildingMapMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminUpdateBuildingMapDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'buildingMaps'] }),
+  });
+}
+
+/** The building's tickets stay, unlinked from it, so the ticket list is refreshed too. */
+export function useDeleteBuildingMap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminDeleteBuildingMapMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminDeleteBuildingMapDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'buildingMaps'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+      ]),
   });
 }
 

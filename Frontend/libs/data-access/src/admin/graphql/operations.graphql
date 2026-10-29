@@ -377,6 +377,9 @@ query AdminReverseGeocode($lat: Float!, $lng: Float!) {
     floor
     room
     addressToken
+    lat
+    lng
+    buildingSection
   }
 }
 query AdminStationReview($uuid: UUID!) {
@@ -904,4 +907,87 @@ mutation AdminAssignZoneToTeam($input: ZoneTeamAssignmentInput!) {
 }
 mutation AdminRemoveZoneFromTeam($input: ZoneTeamAssignmentInput!) {
   removeZoneFromTeam(input: $input)
+}
+fragment AdminBuildingMapFields on BuildingMapType {
+  uuid
+  name
+  geometry
+  floorsAboveGround
+  floorsBelowGround
+  createdAt
+  updatedAt
+  floors {
+    label
+  }
+  secondaryLocation {
+    fullAddress
+    normalizationStatus
+  }
+}
+fragment AdminSpaceTicketFields on TicketType {
+  uuid
+  propertyName
+  title
+  status
+  priority
+  updatedAt
+  secondaryLocation {
+    floor
+    room
+  }
+  tasks {
+    uuid
+    status
+    quantity
+    assignedCount
+  }
+}
+query AdminBuildingMaps(
+  $bounds: BoundsInput
+  $skip: Int! = 0
+  $limit: Int! = 200
+) {
+  buildingMaps(bounds: $bounds, skip: $skip, limit: $limit) {
+    items {
+      ...AdminBuildingMapFields
+    }
+    pageInfo {
+      ...AdminPageInfo
+    }
+  }
+}
+query AdminBuildingMap($uuid: UUID!) {
+  buildingMap(uuid: $uuid) {
+    ...AdminBuildingMapFields
+  }
+}
+query AdminBuildingMapTickets($buildingMapUuid: UUID!, $limit: Int! = 200) {
+  buildingMapTickets(buildingMapUuid: $buildingMapUuid, limit: $limit) {
+    ...AdminSpaceTicketFields
+  }
+}
+query AdminNormalizeAddress($address: String!, $lat: Float, $lng: Float) {
+  normalizeAddress(address: $address, lat: $lat, lng: $lng) {
+    status
+    fullAddress
+    addressToken
+    lat
+    lng
+    buildingSection
+    floor
+    room
+  }
+}
+mutation AdminCreateBuildingMap($input: CreateBuildingMapInput!) {
+  createBuildingMap(input: $input) {
+    ...AdminBuildingMapFields
+  }
+}
+mutation AdminUpdateBuildingMap($uuid: UUID!, $input: UpdateBuildingMapInput!) {
+  updateBuildingMap(uuid: $uuid, input: $input) {
+    ...AdminBuildingMapFields
+  }
+}
+mutation AdminDeleteBuildingMap($uuid: UUID!) {
+  deleteBuildingMap(uuid: $uuid)
 }
