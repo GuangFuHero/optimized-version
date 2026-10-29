@@ -837,6 +837,36 @@ export function useCreateArea() {
   });
 }
 
+export function useUpdateArea() {
+  return useMutation({
+    mutationFn: (variables: documents.AdminUpdateAreaMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminUpdateAreaDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+}
+
+export function useDeleteArea() {
+  return useMutation({
+    mutationFn: (variables: documents.AdminDeleteAreaMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminDeleteAreaDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+}
+
+export function usePromoteMarkZone() {
+  return useMutation({
+    mutationFn: (variables: documents.AdminPromoteMarkZoneMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminPromoteMarkZoneDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+}
+
 export function useAssignZoneToTeam() {
   const queryClient = useQueryClient();
   return useMutation({

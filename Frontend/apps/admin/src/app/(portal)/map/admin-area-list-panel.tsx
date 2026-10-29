@@ -2,8 +2,15 @@
 
 import { ArrowLeft, ChevronRight, Eye, EyeOff, MapPinned } from 'lucide-react';
 
-import { Box, Button, ButtonBase, Stack, Typography } from '@mui/material';
-import { useEffect, useRef } from 'react';
+import {
+  Box,
+  Button,
+  ButtonBase,
+  Stack,
+  Switch,
+  Typography,
+} from '@mui/material';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   AREA_KIND_LABELS,
@@ -15,6 +22,13 @@ import {
   type RescueMapPublicZone,
 } from '@rescue-frontend/modules';
 
+import {
+  AreaDetailFooter,
+  AreaEditForm,
+  AreaTeamsSection,
+  type AreaActions,
+} from './admin-area-detail-actions';
+
 /** One area as the list shows it: any of the three kinds, with what lies inside it. */
 export interface AdminAreaListItem {
   id: string;
@@ -22,6 +36,7 @@ export interface AdminAreaListItem {
   name: string | null;
   note: string | null;
   teams: readonly string[];
+  teamUuids: readonly string[];
   /** Whether the public map shows it; always true except for a 標示區. */
   isPublic: boolean;
   contents: AreaContents;
@@ -51,6 +66,7 @@ export function toAdminAreaListItems({
         name: area.name,
         note: area.comment ?? null,
         teams: [],
+        teamUuids: [],
         isPublic: true,
         contents: countContents(area),
       }),
@@ -62,6 +78,7 @@ export function toAdminAreaListItems({
         name: zone.name,
         note: zone.comment ?? null,
         teams: zone.teams,
+        teamUuids: zone.teamUuids ?? [],
         isPublic: zone.isPublic !== false,
         contents: countContents(zone),
       }),
@@ -389,15 +406,20 @@ export function AdminAreaDetailPanel({
   item,
   tickets,
   selectedTicketId,
+  actions,
   onBack,
   onSelectTicket,
 }: {
   item: AdminAreaListItem;
   tickets: readonly RescueMapMarkerItem[];
   selectedTicketId: string | undefined;
+  /** What this viewer may do to the area; none for one who may only look. */
+  actions?: AreaActions;
   onBack: () => void;
   onSelectTicket: (ticket: RescueMapMarkerItem) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+
   return (
     <Stack sx={{ flex: 1, minHeight: 0 }}>
       <Stack
@@ -442,17 +464,22 @@ export function AdminAreaDetailPanel({
         spacing={2.25}
         sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}
       >
-        {item.note ? (
+        {editing && actions ? (
+          <AreaEditForm
+            item={item}
+            onCancel={() => setEditing(false)}
+            onSave={(changes) => {
+              setEditing(false);
+              actions.onSave(changes);
+            }}
+          />
+        ) : item.note ? (
           <Typography sx={{ fontSize: 14, lineHeight: 1.7 }}>
             {item.note}
           </Typography>
         ) : null}
-        {item.teams.length > 0 ? (
-          <DetailSection title="負責單位">
-            <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
-              {item.teams.join('、')}
-            </Typography>
-          </DetailSection>
+        {item.kind === 'team_zone' ? (
+          <AreaTeamsSection item={item} actions={actions} />
         ) : null}
         <Stack
           direction="row"
@@ -476,15 +503,30 @@ export function AdminAreaDetailPanel({
           ))}
         </Stack>
         <DetailSection title="顯示範圍">
-          <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-            <Box
-              component={item.isPublic ? Eye : EyeOff}
-              sx={{ width: 16, height: 16 }}
-            />
-            <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
-              {item.isPublic ? '公開到前台' : '只有後台'}
-            </Typography>
-          </Stack>
+          {item.kind === 'mark_zone' && actions?.canEdit ? (
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Switch
+                checked={item.isPublic}
+                onChange={(event) =>
+                  actions.onTogglePublic(event.target.checked)
+                }
+                slotProps={{ input: { 'aria-label': '前台可見' } }}
+              />
+              <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+                前台可見
+              </Typography>
+            </Stack>
+          ) : (
+            <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+              <Box
+                component={item.isPublic ? Eye : EyeOff}
+                sx={{ width: 16, height: 16 }}
+              />
+              <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+                {item.isPublic ? '公開到前台' : '只有後台'}
+              </Typography>
+            </Stack>
+          )}
           <Typography sx={{ fontSize: 12, lineHeight: 1.65, color: '#564337' }}>
             {visibilityNote(item)}
           </Typography>
@@ -541,6 +583,14 @@ export function AdminAreaDetailPanel({
           )}
         </DetailSection>
       </Stack>
+      {actions ? (
+        <AreaDetailFooter
+          item={item}
+          actions={actions}
+          editing={editing}
+          onEdit={() => setEditing(true)}
+        />
+      ) : null}
     </Stack>
   );
 }

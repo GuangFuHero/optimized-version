@@ -3,13 +3,20 @@
 import { ClipboardList, X, MapPin } from 'lucide-react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { holdRequest } from './hold-request';
+
 import {
+  useAssignZoneToTeam,
   useCapability,
   useCreateArea,
+  useDeleteArea,
+  usePromoteMarkZone,
+  useRemoveZoneFromTeam,
   useTeams,
+  useUpdateArea,
 } from '@rescue-frontend/data-access/admin';
 import {
   AREA_KIND_LABELS,
@@ -32,6 +39,7 @@ import {
   type RescueMapRouteState,
 } from '@rescue-frontend/modules';
 
+import type { AreaActions } from './admin-area-detail-actions';
 import {
   AdminAreaDrawPanel,
   AdminAreaFormPanel,
@@ -46,8 +54,6 @@ import {
 
 type CreateMode = 'idle' | 'station' | 'ticket';
 
-// How long a created area can still be taken back, which is how long its request is held.
-const UNDO_MS = 5000;
 // Until the choices are settled with the backend; see `submitArea`.
 const DEFAULT_HAZARD_STATUS = 'dangerous';
 
@@ -235,36 +241,66 @@ export function AdminMapPageClient() {
   );
   const areas = useAdminMapAreas({ enabled: canViewZones });
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  // What is shown ahead of the backend while a change waits its 5 seconds: a deleted area is gone,
+  // a team added or removed is already so.
+  const [hiddenAreaIds, setHiddenAreaIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  const [teamOverrides, setTeamOverrides] = useState<
+    Record<string, { names: string[]; uuids: string[] }>
+  >({});
+  const visibleClosureAreas = useMemo(
+    () => areas.closureAreas.filter((area) => !hiddenAreaIds.has(area.id)),
+    [areas.closureAreas, hiddenAreaIds],
+  );
+  const visiblePublicZones = useMemo(
+    () =>
+      areas.publicZones
+        .filter((zone) => !hiddenAreaIds.has(zone.id))
+        .map((zone) => {
+          const override = teamOverrides[zone.id];
+
+          return override
+            ? { ...zone, teams: override.names, teamUuids: override.uuids }
+            : zone;
+        }),
+    [areas.publicZones, hiddenAreaIds, teamOverrides],
+  );
+  // A fresh answer from the backend has the changes in it: what was shown ahead is not needed.
+  useEffect(() => {
+    setHiddenAreaIds(new Set());
+    setTeamOverrides({});
+  }, [areas.closureAreas, areas.publicZones]);
   const closureAreas = useMemo(
     () =>
-      areas.closureAreas.map((area) => ({
+      visibleClosureAreas.map((area) => ({
         ...area,
         highlighted: area.id === selectedAreaId,
       })),
-    [areas.closureAreas, selectedAreaId],
+    [visibleClosureAreas, selectedAreaId],
   );
   const publicZones = useMemo(
     () =>
-      areas.publicZones.map((zone) => ({
+      visiblePublicZones.map((zone) => ({
         ...zone,
         highlighted: zone.id === selectedAreaId,
       })),
-    [areas.publicZones, selectedAreaId],
+    [visiblePublicZones, selectedAreaId],
   );
   // No API counts what lies in an area, so the list counts the markers the map has loaded.
   const areaListItems = useMemo(
     () =>
       toAdminAreaListItems({
-        closureAreas: areas.closureAreas,
-        publicZones: areas.publicZones,
+        closureAreas: visibleClosureAreas,
+        publicZones: visiblePublicZones,
         countContents: (area) => countInsideArea(area, markers),
       }),
-    [areas.closureAreas, areas.publicZones, markers],
+    [visibleClosureAreas, visiblePublicZones, markers],
   );
   const selectedAreaItem =
     areaListItems.find((item) => item.id === selectedAreaId) ?? null;
   const selectedAreaTickets = useMemo(() => {
-    const area = [...areas.closureAreas, ...areas.publicZones].find(
+    const area = [...visibleClosureAreas, ...visiblePublicZones].find(
       (candidate) => candidate.id === selectedAreaId,
     );
 
@@ -274,7 +310,7 @@ export function AdminMapPageClient() {
             marker.detailType === 'ticket' && isInArea(marker.position, area),
         )
       : [];
-  }, [areas.closureAreas, areas.publicZones, markers, selectedAreaId]);
+  }, [visibleClosureAreas, visiblePublicZones, markers, selectedAreaId]);
   const handleBackToAreaList = useCallback(() => {
     setSelectedAreaId(null);
     setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
@@ -313,7 +349,7 @@ export function AdminMapPageClient() {
   }, [handleBackToAreaList, selectedAreaId]);
   const handleSelectArea = useCallback(
     (areaId: string) => {
-      const area = [...areas.closureAreas, ...areas.publicZones].find(
+      const area = [...visibleClosureAreas, ...visiblePublicZones].find(
         (candidate) => candidate.id === areaId,
       );
       const view = area ? viewOfArea(area) : null;
@@ -327,7 +363,7 @@ export function AdminMapPageClient() {
         });
       }
     },
-    [areas.closureAreas, areas.publicZones, viewportStore],
+    [visibleClosureAreas, visiblePublicZones, viewportStore],
   );
   // Drawing a new area: first its corners, then what it is.
   const canDraw = useCapability('work_zone.add').data ?? false;
@@ -395,7 +431,6 @@ export function AdminMapPageClient() {
   }, [cancelDrawing, canFinishOutline, drawStep, undoCorner]);
   // The request waits 5 seconds, since there is no way to take a created area back: pressing
   // 復原 within them sends nothing, and puts the form back as it was.
-  const heldRequest = useRef<number | null>(null);
   const submitArea = useCallback(
     (values: AreaFormValues) => {
       if (!values.kind) {
@@ -429,40 +464,165 @@ export function AdminMapPageClient() {
       setDrawPoints([]);
       setFormValues(EMPTY_AREA_FORM);
 
-      const send = async () => {
-        heldRequest.current = null;
+      holdRequest({
+        message: `已建立${label}`,
+        onUndo: backToForm,
+        send: async () => {
+          try {
+            const created = await createArea.mutateAsync({ input });
 
-        try {
-          const created = await createArea.mutateAsync({ input });
-
-          setHeldPoints(null);
-          areas.reload();
-          setSelectedAreaId(created.createArea.uuid);
-          toast.success(`已建立${label}`);
-        } catch (error) {
-          backToForm();
-          toast.error(areaErrorMessage(error));
-        }
-      };
-
-      heldRequest.current = window.setTimeout(() => void send(), UNDO_MS);
-      toast(`已建立${label}`, {
-        duration: UNDO_MS,
-        action: {
-          label: '復原',
-          onClick: () => {
-            if (heldRequest.current !== null) {
-              window.clearTimeout(heldRequest.current);
-              heldRequest.current = null;
-            }
-
+            setHeldPoints(null);
+            areas.reload();
+            setSelectedAreaId(created.createArea.uuid);
+            toast.success(`已建立${label}`);
+          } catch (error) {
             backToForm();
-          },
+            toast.error(areaErrorMessage(error));
+          }
         },
       });
     },
     [areas, createArea, drawPoints],
   );
+  // The rest of what an admin does to an area (FE-021 items 5-9), for those who may.
+  const canEditZone = useCapability('work_zone.edit').data ?? false;
+  const canDeleteZone = useCapability('work_zone.delete').data ?? false;
+  const canAssignZone = useCapability('work_zone.assign').data ?? false;
+  const updateArea = useUpdateArea();
+  const deleteArea = useDeleteArea();
+  const promoteMarkZone = usePromoteMarkZone();
+  const assignZoneToTeam = useAssignZoneToTeam();
+  const removeZoneFromTeam = useRemoveZoneFromTeam();
+  const areaActions = useMemo<AreaActions | undefined>(() => {
+    const area = areaListItems.find((item) => item.id === selectedAreaId);
+
+    if (!area || !(canEditZone || canDeleteZone || canAssignZone)) {
+      return undefined;
+    }
+
+    const fail = (error: unknown) => {
+      toast.error(areaErrorMessage(error));
+      areas.reload();
+    };
+    const label = `${AREA_KIND_LABELS[area.kind]}「${area.name ?? ''}」`;
+    const changeTeams = (
+      next: { names: string[]; uuids: string[] },
+      message: string,
+      send: () => Promise<unknown>,
+    ) => {
+      setTeamOverrides((current) => ({ ...current, [area.id]: next }));
+      holdRequest({
+        message,
+        onUndo: () =>
+          setTeamOverrides((current) => {
+            const { [area.id]: _undone, ...rest } = current;
+
+            return rest;
+          }),
+        send: () =>
+          send().then(
+            () => areas.reload(),
+            (error: unknown) => fail(error),
+          ),
+      });
+    };
+
+    return {
+      canEdit: canEditZone,
+      canDelete: canDeleteZone,
+      canAssign: canAssignZone,
+      teamOptions: activeTeams,
+      onTogglePublic: (isPublic) =>
+        void updateArea
+          .mutateAsync({ uuid: area.id, input: { isPublic } })
+          .then(() => areas.reload(), fail),
+      onSave: (changes) =>
+        void updateArea
+          .mutateAsync({ uuid: area.id, input: changes })
+          .then(() => {
+            areas.reload();
+            toast.success(`已更新${label}`);
+          }, fail),
+      onPromote: () =>
+        void promoteMarkZone
+          .mutateAsync({
+            uuid: area.id,
+            input: { status: DEFAULT_HAZARD_STATUS },
+          })
+          .then(() => {
+            areas.reload();
+            toast.success(`${label}已升為危險區`);
+          }, fail),
+      onDelete: () => {
+        setHiddenAreaIds((current) => new Set(current).add(area.id));
+        setSelectedAreaId(null);
+        holdRequest({
+          message: `已刪除${label}`,
+          onUndo: () =>
+            setHiddenAreaIds((current) => {
+              const next = new Set(current);
+              next.delete(area.id);
+
+              return next;
+            }),
+          send: () =>
+            deleteArea.mutateAsync({ uuid: area.id }).then(
+              () => areas.reload(),
+              (error: unknown) => fail(error),
+            ),
+        });
+      },
+      onAddTeam: (teamUuid) => {
+        const team = activeTeams.find(
+          (candidate) => candidate.uuid === teamUuid,
+        );
+
+        if (!team) {
+          return;
+        }
+
+        changeTeams(
+          {
+            names: [...area.teams, team.name],
+            uuids: [...area.teamUuids, team.uuid],
+          },
+          `已把${label}交給 ${team.name}`,
+          () =>
+            assignZoneToTeam.mutateAsync({
+              input: { zoneUuid: area.id, teamUuid },
+            }),
+        );
+      },
+      onRemoveTeam: (teamUuid) => {
+        const index = area.teamUuids.indexOf(teamUuid);
+
+        changeTeams(
+          {
+            names: area.teams.filter((_, i) => i !== index),
+            uuids: area.teamUuids.filter((_, i) => i !== index),
+          },
+          `已移除${label}的 ${area.teams[index] ?? '團隊'}`,
+          () =>
+            removeZoneFromTeam.mutateAsync({
+              input: { zoneUuid: area.id, teamUuid },
+            }),
+        );
+      },
+    };
+  }, [
+    activeTeams,
+    areaListItems,
+    areas,
+    assignZoneToTeam,
+    canAssignZone,
+    canDeleteZone,
+    canEditZone,
+    deleteArea,
+    promoteMarkZone,
+    removeZoneFromTeam,
+    selectedAreaId,
+    updateArea,
+  ]);
   const [createMode, setCreateMode] = useState<CreateMode>('idle');
   const [pendingPosition, setPendingPosition] = useState<
     [number, number] | null
@@ -604,6 +764,7 @@ export function AdminMapPageClient() {
                 item={selectedAreaItem}
                 tickets={selectedAreaTickets}
                 selectedTicketId={routeState.selectedMarkerId}
+                actions={areaActions}
                 onBack={handleBackToAreaList}
                 onSelectTicket={handleSelectAreaTicket}
               />

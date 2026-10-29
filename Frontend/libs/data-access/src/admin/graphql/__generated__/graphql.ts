@@ -3381,6 +3381,41 @@ export type AdminCreateAreaMutation = {
   };
 };
 
+export type AdminUpdateAreaMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+  input: UpdateAreaInput;
+}>;
+
+export type AdminUpdateAreaMutation = {
+  __typename?: 'Mutation';
+  updateArea: {
+    __typename?: 'AreaType';
+    uuid: string;
+    name?: string | null;
+    note?: string | null;
+    isPublic: boolean;
+  };
+};
+
+export type AdminDeleteAreaMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type AdminDeleteAreaMutation = {
+  __typename?: 'Mutation';
+  deleteArea: boolean;
+};
+
+export type AdminPromoteMarkZoneMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+  input: PromoteMarkZoneInput;
+}>;
+
+export type AdminPromoteMarkZoneMutation = {
+  __typename?: 'Mutation';
+  promoteMarkZone: { __typename?: 'HazardousZoneType'; uuid: string };
+};
+
 export type AdminAssignZoneToTeamMutationVariables = Exact<{
   input: ZoneTeamAssignmentInput;
 }>;
@@ -8393,6 +8428,191 @@ export const AdminCreateAreaDocument = {
 } as unknown as DocumentNode<
   AdminCreateAreaMutation,
   AdminCreateAreaMutationVariables
+>;
+export const AdminUpdateAreaDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminUpdateArea' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'input' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'UpdateAreaInput' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'updateArea' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'input' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'note' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'isPublic' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminUpdateAreaMutation,
+  AdminUpdateAreaMutationVariables
+>;
+export const AdminDeleteAreaDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminDeleteArea' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'deleteArea' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminDeleteAreaMutation,
+  AdminDeleteAreaMutationVariables
+>;
+export const AdminPromoteMarkZoneDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminPromoteMarkZone' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'input' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'PromoteMarkZoneInput' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'promoteMarkZone' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'input' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminPromoteMarkZoneMutation,
+  AdminPromoteMarkZoneMutationVariables
 >;
 export const AdminAssignZoneToTeamDocument = {
   kind: 'Document',

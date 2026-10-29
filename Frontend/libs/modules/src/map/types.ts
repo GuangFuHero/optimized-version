@@ -135,6 +135,8 @@ export interface RescueMapPublicZone extends RescueMapArea {
   kind: 'team_zone' | 'mark_zone';
   /** The teams a 責任區 is assigned to, public since ADR-311's 10-11 revision; none for a 標示區. */
   teams: readonly string[];
+  /** The same teams by uuid, in the same order, for the admin 互助地圖 to add and remove them by. */
+  teamUuids?: readonly string[];
   /**
    * False for a 標示區 the public map does not show. Only the admin 互助地圖 asks for those
    * (`includePrivate`), and draws them dashed.
