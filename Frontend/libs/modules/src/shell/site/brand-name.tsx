@@ -3,9 +3,11 @@
 import { Typography, type SxProps, type Theme } from '@mui/material';
 import { useEffect, useState } from 'react';
 
-import { useCurrentDisaster } from '@rescue-frontend/data-access/admin';
+import {
+  CURRENT_DISASTER_WAIT_MS,
+  useCurrentDisaster,
+} from '@rescue-frontend/data-access/admin';
 
-import { EVENT_MAP_VIEW_WAIT_MS } from '../../map/hooks/use-event-map-view';
 import { siteBrandName } from './event-name';
 
 /** The name beside the logo (`siteBrandName`), cut short with an ellipsis where it has no room. */
@@ -22,7 +24,7 @@ export function SiteBrandName({ sx }: { sx?: SxProps<Theme> }) {
 
     const timer = window.setTimeout(
       () => setWaitedOut(true),
-      EVENT_MAP_VIEW_WAIT_MS,
+      CURRENT_DISASTER_WAIT_MS,
     );
 
     return () => window.clearTimeout(timer);
