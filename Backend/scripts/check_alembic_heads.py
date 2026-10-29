@@ -4,7 +4,7 @@ Two PRs that add a migration on the same parent are each fine alone, but once bo
 `alembic upgrade head` refuses to run ("Multiple head revisions"). This reads the revision ids
 straight from the migration sources instead of going through alembic's `ScriptDirectory`, which
 imports every migration and so needs geoalchemy2 and the app on the path: here nothing is
-installed, no database is involved, and no code from the PR is executed.
+installed, no database is involved, and no migration is imported or run.
 
 Usage: python scripts/check_alembic_heads.py [versions_dir]
 """
@@ -20,7 +20,7 @@ DEFAULT_VERSIONS_DIR = Path(__file__).resolve().parents[1] / "alembic" / "versio
 def _read_revisions(path: Path) -> tuple[str, tuple[str, ...]]:
     """Return (revision, down_revisions) from a migration's top-level assignments."""
     values: dict[str, object] = {}
-    for node in ast.parse(path.read_text()).body:
+    for node in ast.parse(path.read_text(encoding="utf-8"), filename=str(path)).body:
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value:
             name, value = node.target.id, node.value
         elif isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
@@ -28,7 +28,10 @@ def _read_revisions(path: Path) -> tuple[str, tuple[str, ...]]:
         else:
             continue
         if name in ("revision", "down_revision"):
-            values[name] = ast.literal_eval(value)
+            try:
+                values[name] = ast.literal_eval(value)
+            except ValueError:
+                raise ValueError(f"{path.name}: `{name}` is not a plain string, tuple or None") from None
 
     revision = values.get("revision")
     if not isinstance(revision, str) or "down_revision" not in values:
@@ -43,12 +46,17 @@ def find_heads(versions_dir: Path) -> dict[str, Path]:
     """Map each head revision to its file: the revisions no other migration descends from."""
     files: dict[str, Path] = {}
     parents: set[str] = set()
-    for path in sorted(versions_dir.glob("*.py")):
+    # alembic skips __init__.py in a versions folder.
+    for path in sorted(p for p in versions_dir.glob("*.py") if p.name != "__init__.py"):
         revision, down = _read_revisions(path)
         if revision in files:
             raise ValueError(f"{revision} is declared by both {files[revision].name} and {path.name}")
         files[revision] = path
         parents.update(down)
+    if not files:
+        raise ValueError(f"no migrations in {versions_dir}")
+    if missing := parents - files.keys():
+        raise ValueError(f"down_revision names an unknown revision: {', '.join(sorted(missing))}")
     return {revision: path for revision, path in files.items() if revision not in parents}
 
 
