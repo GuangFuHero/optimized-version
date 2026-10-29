@@ -197,6 +197,7 @@ pool    = settled or [最舊的那一個]      # 全新帳號的第一週仍然�
 | 未知 provider → 404 | 218 | `test_an_unknown_provider_is_404` |
 | 改密碼通知帳號 | 218 | `test_changing_a_password_notifies_the_account` |
 | 忘記密碼重設後通知帳號每一個聯絡方式 | 399 | `test_forgot_password.py::test_a_reset_tells_every_contact_on_the_account` |
+| 同一組驗證碼只能用一次，同時送也只有一個通過（四種碼共用） | 399 | `test_forgot_password.py::test_a_reset_code_works_once_even_when_sent_at_the_same_time` |
 | 只有 session 不能加聯絡方式再走密碼重設（路徑 C） | 220 | `test_a_session_cannot_attach_a_contact_and_reset_the_password_through_it` |
 | 擁有者仍能新增第二種聯絡方式 | 220 | `test_the_owner_can_still_add_a_second_contact_type` |
 | SSO-only 帳號在既有管道上證明新增 | 220 | `test_an_sso_only_account_proves_the_add_on_its_existing_channel` |

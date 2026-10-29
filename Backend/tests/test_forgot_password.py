@@ -50,10 +50,14 @@ async def test_a_reset_code_works_once_even_when_sent_at_the_same_time(redis):
         return v
 
     repo.redis.get = gated_get
-    results = await asyncio.gather(
-        *[repo.consume_password_reset(type_="email", value="a@x.com", code=code) for _ in range(3)]
-    )
-    repo.redis.get = orig_get
+    try:
+        # A read that skips `get` would leave the others at the barrier: fail rather than hang.
+        async with asyncio.timeout(5):
+            results = await asyncio.gather(
+                *[repo.consume_password_reset(type_="email", value="a@x.com", code=code) for _ in range(3)]
+            )
+    finally:
+        repo.redis.get = orig_get
 
     assert [r is not None for r in results].count(True) == 1
 
