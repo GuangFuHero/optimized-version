@@ -139,6 +139,16 @@ const ADD_NEED_WORDS: RefusalWords = {
   fallback: '加不上去，請稍後再試一次。',
 };
 
+/** `update_ticket_task`'s refusals — a coordinator's 進度備註 on a need. */
+const PROGRESS_NOTE_WORDS: RefusalWords = {
+  refusals: {
+    // Deleted meanwhile, from another tab or with its ticket.
+    'Ticket task not found': '找不到這筆需求，可能已經被刪除。',
+  },
+  forbidden: '你的帳號沒有編輯這張單的權限。',
+  fallback: '進度備註沒有存到，請稍後再試一次。',
+};
+
 /**
  * `delete_ticket_task`'s and `delete_ticket`'s refusals — a requester's 「刪除這筆需求」 and
  * 「刪除整張單」. The one refusal of their own, the thing deleted already, is no failure to them:
@@ -188,6 +198,10 @@ export function addNeedErrorMessage(error: ClaimError): string {
  */
 export function isNeedAlreadyGone(error: ClaimError): boolean {
   return error.graphQLErrors?.[0]?.message === 'Ticket task not found';
+}
+
+export function progressNoteErrorMessage(error: ClaimError): string {
+  return refusalMessage(error, PROGRESS_NOTE_WORDS);
 }
 
 export function deleteNeedErrorMessage(error: ClaimError): string {

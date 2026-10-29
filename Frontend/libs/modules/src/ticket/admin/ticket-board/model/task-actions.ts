@@ -123,6 +123,18 @@ export function buildNeedInput(ticketUuid: string, draft: NeedDraft) {
   return { ticketUuid, ...buildNeedDraftInput(draft) };
 }
 
+/**
+ * `updateTicketTask`'s input for a need's 進度備註 as typed, trimmed; an emptied note is cleared
+ * with null. Null when it reads as the stored note already, so there is nothing to send.
+ */
+export function progressNoteInput(
+  current: string | null,
+  draft: string,
+): { progressNote: string | null } | null {
+  const next = draft.trim() || null;
+  return next === (current?.trim() || null) ? null : { progressNote: next };
+}
+
 const STALE_AUDIT =
   'The ticket has changed since it was loaded; reload it and audit again';
 const AUDIT_NOTE_REQUIRED =

@@ -36,6 +36,7 @@ import {
 import { describeNeedDeletion } from '../../needs/delete-need';
 import type { NeedAction } from '../../needs/need-actions';
 import { AddNeedForm } from './add-need-form';
+import { ProgressNote } from './progress-note';
 import {
   assignPickerOptions,
   canAssignNeed,
@@ -74,8 +75,8 @@ interface PickerTeam {
 interface TicketTaskListProps {
   ticket: DetailTicket;
   /**
-   * A write here is in flight (or none is): 再加一項需求, 指派承接, removing someone, 停止招募 or
-   * 刪除需求. The drawer holds its close meanwhile.
+   * A write here is in flight (or none is): 再加一項需求, 指派承接, removing someone, 進度備註,
+   * 停止招募 or 刪除需求. The drawer holds its close meanwhile.
    */
   onBusyChange?(busy: boolean): void;
 }
@@ -89,8 +90,8 @@ type PendingAction =
  * where it stands and offers only what the backend lets the identity do to it (`taskActionsFor`:
  * 停止招募, 刪除需求), never a status to set (BE-034); each behind a confirmation. Where the need's
  * `viewerCanAssign` allows and it has room, 指派承接 adds a member of the caller's team; a place's
- * `viewerCanUnassign` offers × to take that person off. `ticket.edit` on the ticket adds
- * 再加一項需求 below them.
+ * `viewerCanUnassign` offers × to take that person off. `ticket.edit` on the ticket writes each
+ * need's 進度備註 and adds 再加一項需求 below them.
  */
 export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
   const busyFor = useBusyKeys(onBusyChange);
@@ -146,6 +147,7 @@ export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
                 canAssign={canAssignNeed(task, ticket.status)}
                 team={team}
                 assignmentsHidden={!ticket.viewerCanViewHistory}
+                canEditNote={ticket.viewerCanEdit}
                 statusMenu={
                   <NeedStatusMenu
                     needName={task.taskName}
@@ -157,6 +159,7 @@ export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
                   request({ kind: 'unassign', task: row, assignment })
                 }
                 onAssignBusyChange={busyFor(`assign:${task.uuid}`)}
+                onNoteBusyChange={busyFor(`note:${task.uuid}`)}
               />
             );
           })}
@@ -479,9 +482,11 @@ function TaskCard({
   canAssign,
   team,
   assignmentsHidden,
+  canEditNote,
   statusMenu,
   onRemove,
   onAssignBusyChange,
+  onNoteBusyChange,
 }: {
   ticketUuid: string;
   task: DetailTask;
@@ -490,10 +495,14 @@ function TaskCard({
   team: PickerTeam | null;
   /** No ticket.view_history here: `assignments` arrives empty though `assignedCount` is public. */
   assignmentsHidden: boolean;
+  /** `ticket.edit` on the ticket: its 進度備註 may be written. */
+  canEditNote: boolean;
   statusMenu: ReactNode;
   onRemove: (assignment: DetailAssignment) => void;
   /** 指派承接 is sending (or not). */
   onAssignBusyChange: (busy: boolean) => void;
+  /** 進度備註 is saving (or not). */
+  onNoteBusyChange: (busy: boolean) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const KindIcon = NEED_KIND_ICONS[task.taskType] ?? Circle;
@@ -604,6 +613,12 @@ function TaskCard({
           onBusyChange={onAssignBusyChange}
         />
       ) : null}
+      <ProgressNote
+        taskUuid={task.uuid}
+        note={task.progressNote ?? null}
+        canEdit={canEditNote}
+        onBusyChange={onNoteBusyChange}
+      />
     </Box>
   );
 }

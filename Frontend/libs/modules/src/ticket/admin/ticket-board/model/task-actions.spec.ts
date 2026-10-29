@@ -4,6 +4,7 @@ import {
   auditErrorMessage,
   buildNeedInput,
   isStaleAudit,
+  progressNoteInput,
   readCreateResult,
   taskActionsFor,
   type TicketTaskPerms,
@@ -196,5 +197,24 @@ describe('validateNeedDraft', () => {
       quantity: null,
       taskDescription: null,
     });
+  });
+});
+
+describe('progressNoteInput', () => {
+  it('sends the note trimmed', () => {
+    expect(progressNoteInput(null, '  3F 已清空，待確認 B1  ')).toEqual({
+      progressNote: '3F 已清空，待確認 B1',
+    });
+  });
+
+  it('clears the note with null when it is emptied', () => {
+    expect(progressNoteInput('舊的備註', '   ')).toEqual({
+      progressNote: null,
+    });
+  });
+
+  it('sends nothing when the note is unchanged', () => {
+    expect(progressNoteInput('已送達', ' 已送達 ')).toBeNull();
+    expect(progressNoteInput(null, '')).toBeNull();
   });
 });

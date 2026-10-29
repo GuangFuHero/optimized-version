@@ -9,6 +9,7 @@ import {
   isAssignmentAlreadyGone,
   isNeedAlreadyGone,
   isTicketAlreadyGone,
+  progressNoteErrorMessage,
   releaseErrorMessage,
   stopRecruitingErrorMessage,
   unassignErrorMessage,
@@ -303,5 +304,22 @@ describe('unassignErrorMessage and isAssignmentAlreadyGone', () => {
       true,
     );
     expect(isAssignmentAlreadyGone(refused('Task is full'))).toBe(false);
+  });
+});
+
+describe('progressNoteErrorMessage', () => {
+  it('says the need is gone, or that the account may not edit it', () => {
+    expect(progressNoteErrorMessage(refused('Ticket task not found'))).toBe(
+      '找不到這筆需求，可能已經被刪除。',
+    );
+    expect(progressNoteErrorMessage(refused('403: Permission Denied.'))).toBe(
+      '你的帳號沒有編輯這張單的權限。',
+    );
+  });
+
+  it('falls back to a plain failure', () => {
+    expect(progressNoteErrorMessage(refused('Unexpected error.'))).toBe(
+      '進度備註沒有存到，請稍後再試一次。',
+    );
   });
 });
