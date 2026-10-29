@@ -1,4 +1,4 @@
-# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-387）
+# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/016-resource-history/decisions.md`（ADR-243 為目前全 repo 最大值）。
@@ -581,6 +581,7 @@ class docstring，並在 `unit` / `label` / `hint` / `enumOptions` 每一個欄�
 |---|---|
 | `TicketType.geometry` | 所在 H3 格子的中心點（ADR-283） |
 | `secondaryLocation` | `null`（原本看 `ticket.view_pii`，ADR-268） |
+| `buildingMapUuid` | `null`（ADR-386） |
 | `description`、`reviewNote`、`createdBy` | `null` |
 | `photos` | `[]` |
 | task 的 `taskDescription`、`progressNote`、`reviewNote`、`createdBy` | `null` |
@@ -713,6 +714,29 @@ floor 是 RF、nF、Bn     → 往下驗 room
 ➖ 管理員在通報者填表時縮減樓層或刪掉區域，送出會被拒，通報者要重選。機率低，接受。
 ➖ 夾層（1.5F、M）不在標籤內：通報者選相鄰樓層，在 `victimSpace` 補充。
 ◾ `updateTicket` 不重驗樓層與區域；建物改配置或搬點，既有的單保留自己的那份副本。
+
+### ADR-386 單上看得到它建在哪一棟（`buildingMapUuid`），跟精確位置同一道邊界
+
+**白話**：登入的人讀單時，看得到這張單建在哪一棟建物底下；訪客看不到。建物刪了，單就不再指向它。
+
+**Context**：前台要把同一棟的單合成一個建物標記，任務詳情要有「查看整棟」（BE-036 第 5 點）。對照表
+`building_map_ticket_map` 從 ADR-310 就有，但 GraphQL 只有建單的輸入 `CreateTicketInput.buildingMapUuid`：
+`buildingMapTickets` 能從建物列出單，讀一張單卻看不出它屬於哪一棟。
+
+**Decision**：
+
+- `TicketType.buildingMapUuid: UUID`，可為 null。只給 uuid：建物本身公開，前端用 `buildingMap(uuid)` 另外抓。
+- 由 `ticket.view_detail` 把關，跟 `geometry`、`secondaryLocation` 同一個判斷（ADR-281），沒有就回 null。
+  建在建物底下的單，點就是建物的點（ADR-310），說出是哪一棟就等於說出精確位置。
+- 建物軟刪後回 null，`buildingMapTickets` 也不再列出它的單：刪建物時單留著，但不再屬於那棟。
+- loader `building_map_by_ticket`，一個 request 一句 `IN (...)`。先判斷權限再查，訪客讀一頁單不會多查。
+- 不加 `tickets(buildingMapUuid:)` 篩選：前端用不到；從建物找單用 `buildingMapTickets`，那裡已經只回看得到
+  細節的列。
+- 順帶：`buildingMapTickets` 的 `limit` 比照 `tickets`，最多 `TICKET_LIST_MAX_LIMIT`（200）。
+
+➕ 回 `TicketType` 的地方（list、single、mutation 回傳）都由同一個 resolver 給，不用逐支改。
+➖ 建物刪了以後，原本在裡面的單看不出曾經屬於哪一棟；對照表的列還在，要查得直接查 DB。
+◾ 民眾的 `createHelpRequest` 建進建物：Carol 10-25 說 V1 要做，另開一支 PR。
 
 ### ADR-387 格子的筆數由後端算（`ticketCells`），一格的單用 `tickets(locationCell:)` 列
 

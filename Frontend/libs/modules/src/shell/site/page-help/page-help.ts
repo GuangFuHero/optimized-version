@@ -18,7 +18,7 @@ export interface PageHelp {
 
 /**
  * The designer's drafts (`wg-help.jsx:101-115`), read against the site as it is and approved by the
- * team on 2026-10-01: 在這裡新增 and 「＋」 came after the drafts, and a guest is kept from a
+ * team on 2026-10-01: 在這裡新增 came after the drafts, and a guest is kept from a
  * ticket's address and photos as well as its point (backend ADR-281), on the list too.
  * 回報站點資訊有誤 is the station detail's 修改建議.
  */
@@ -30,7 +30,6 @@ export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
       '切換「站點」與「任務」，點圖示看詳細資訊',
       '需要幫忙時，按「請求協助」；也可以先點地圖上的位置，再按「在這裡新增」',
       '登入後可以承接任務，或回報站點資訊有誤',
-      '登入後也可以按地圖上的「＋」新增站點',
     ],
     note: '沒有登入時，任務的位置會用格子顯示，也看不到地址與照片，保護求助者的隱私。',
   },
