@@ -687,6 +687,7 @@ export function AdminMapPageClient() {
             onRouteStateChange={handleRouteStateChange}
             viewportStore={viewportStore}
             showScale
+            viewMemoryKey="mutual-aid"
             onMapClick={handleMapClick}
             draftArea={draftArea}
             editArea={editArea}

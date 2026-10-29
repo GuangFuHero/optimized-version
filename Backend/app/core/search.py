@@ -58,13 +58,17 @@ class SearchQueryError(ValueError):
     """
 
 
-class SearchTimeoutError(ValueError):
-    """Raised when a search statement exceeds SEARCH_STATEMENT_TIMEOUT_MS.
+class StatementTimeoutError(ValueError):
+    """Raised when a statement under statement_ceiling exceeds SEARCH_STATEMENT_TIMEOUT_MS.
 
     Same ValueError-based contract as SearchQueryError, and load-bearing for the same
-    reason (see there): the caller is told the search was too expensive rather than seeing
+    reason (see there): the caller is told the read was too expensive rather than seeing
     a raw driver error, which would leak SQL state into the API response.
     """
+
+
+class SearchTimeoutError(StatementTimeoutError):
+    """Raised when a search statement exceeds SEARCH_STATEMENT_TIMEOUT_MS."""
 
 
 def _is_statement_timeout(exc: DBAPIError) -> bool:
@@ -111,6 +115,20 @@ async def search_timeout(db, term: str | None):
     if term is None:
         yield
         return
+    async with statement_ceiling(
+        db, refusal="搜尋耗時過長已中止，請改用更明確的關鍵字", error=SearchTimeoutError
+    ):
+        yield
+
+
+@asynccontextmanager
+async def statement_ceiling(db, *, refusal: str, error: type[StatementTimeoutError] = StatementTimeoutError):
+    """The window search_timeout opens, for any read a guest can make expensive (ADR-387).
+
+    Everything search_timeout's docstring says about scope, restoring and nesting holds here: it
+    is the same window, sharing the same depth count on the session. A statement cancelled by
+    the ceiling raises `error`, worded `refusal` plus the ceiling in seconds.
+    """
     depth = getattr(db, _DEPTH_ATTR, 0)
     setattr(db, _DEPTH_ATTR, depth + 1)
     is_outermost = depth == 0
@@ -134,9 +152,7 @@ async def search_timeout(db, term: str | None):
                 # the caller needs to see.
                 with suppress(DBAPIError):
                     await _apply_statement_timeout(db)
-            raise SearchTimeoutError(
-                f"搜尋耗時過長已中止，請改用更明確的關鍵字（上限 {SEARCH_STATEMENT_TIMEOUT_MS // 1000} 秒）"
-            ) from exc
+            raise error(f"{refusal}（上限 {SEARCH_STATEMENT_TIMEOUT_MS // 1000} 秒）") from exc
         raise
     finally:
         setattr(db, _DEPTH_ATTR, getattr(db, _DEPTH_ATTR, 1) - 1)
@@ -240,4 +256,3 @@ def matches(column, pattern: str):
     the escaping in like_pattern() actually take effect.
     """
     return column.ilike(pattern, escape=_ESCAPE_CHAR)
-

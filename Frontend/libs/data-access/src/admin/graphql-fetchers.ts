@@ -400,7 +400,8 @@ export function useDisasterTypes(
 }
 
 // Public (ADR-392), so the site reads it too. Under `settings`, so saving the settings reads it
-// again. Quiet: a name that does not load leaves the platform's, which is no error to report.
+// again. Quiet: a name that does not load leaves the platform's, and a map view that does not load
+// opens the maps on all of Taiwan (ADR-395); neither is an error to report.
 export const currentDisasterQuery = () =>
   queryOptions({
     queryKey: ['admin', 'settings', 'currentDisaster'],

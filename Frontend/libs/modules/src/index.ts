@@ -127,6 +127,8 @@ export {
   resolvePointShareTargetFromRoute,
   resolvePointShareTargetFromState,
   SITE_LIST_METADATA,
+  SITE_OPEN_GRAPH,
+  SITE_SHARE_CARD,
   syncDocumentMetadata,
 } from './point-share';
 export type {
@@ -136,6 +138,7 @@ export type {
 } from './point-share';
 
 export { AnnouncementPage } from './admin/announcement';
+export { SettingsPage } from './admin/settings/settings-page';
 export { BackOfficePlaceholder } from './role-request';
 export {
   AdminErrorPage,

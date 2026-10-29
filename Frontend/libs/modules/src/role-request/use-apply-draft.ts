@@ -35,6 +35,20 @@ export function readSavedApplyDraft(value: string): SavedApplyDraft | null {
   return savedApplyDraftSchema.safeParse(JSON.parse(value)).data ?? null;
 }
 
+/**
+ * On signing out, maybe on a shared device: the name and phone typed are not left in the tab for whoever
+ * uses it next (the account inside already keeps them from another one).
+ */
+export function clearApplyDraft(
+  storage: Pick<Storage, 'removeItem'> | null,
+): void {
+  try {
+    storage?.removeItem(APPLY_DRAFT_KEY);
+  } catch {
+    // Storage the browser refuses holds no draft.
+  }
+}
+
 // Outside the component: the hook makes its reader again whenever it is handed new options.
 const STORAGE_OPTIONS = { deserializer: readSavedApplyDraft };
 

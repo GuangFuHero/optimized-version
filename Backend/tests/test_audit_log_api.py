@@ -234,3 +234,19 @@ async def test_login_contacts_are_masked_for_data_auditors(client, db_session, r
     response = await client.get(URL, headers=world.headers[who], params={"table": "user_contacts"})
 
     assert [item["new_values"]["value"] for item in response.json()] == [expected]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("who", ["A admin", "auditor", "super"])
+async def test_an_invite_link_token_is_masked_for_every_reader(client, db_session, redis, who):
+    """ADR-431: no reader needs a live invite token, and each could use it to file join requests."""
+    world = await World().build(db_session, redis)
+    team_uuid = await db_session.scalar(select(Team.uuid).where(Team.name == "A"))
+    db_session.add(_row("team_invites", new={"token": "live-token", "team_uuid": str(team_uuid)}))
+    await db_session.commit()
+
+    response = await client.get(URL, headers=world.headers[who], params={"table": "team_invites"})
+
+    tokens = [item["new_values"].get("token") for item in response.json()]
+    assert "live-token" not in tokens
+    assert "[redacted]" in tokens
