@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import {
+  choiceGate,
   describeSuspect,
   fileAll,
   type FiledRows,
@@ -16,6 +17,16 @@ import {
 const { color, focusRing, radius, typography } = designTokens;
 
 type Suspect = components['schemas']['SuspectedRowResponse'];
+
+// 上一筆／下一筆 stay focusable at the ends, so a keyboard user's focus does not drop out of the
+// card; they only look and act disabled.
+const ENDS_LOOK_DISABLED = {
+  '&[aria-disabled="true"]': {
+    color: color.fg.disable,
+    cursor: 'default',
+    '&:hover': { bgcolor: 'transparent', transform: 'none' },
+  },
+};
 
 /**
  * The rows that look like a station already there, one at a time in line order, as Carol asked for
@@ -34,6 +45,7 @@ export function ImportSuspectsStep({
   onChange: (filed: FiledRows) => void;
 }) {
   const [at, setAt] = useState(0);
+  const [acceptsChoice] = useState(() => choiceGate());
   // A new preview may bring fewer suspects than the one on view.
   const index = Math.min(at, suspects.length - 1);
   const current = suspects[index];
@@ -41,8 +53,12 @@ export function ImportSuspectsStep({
 
   const isFiled = filed[current.line] === current.related_uuid;
   const described = describeSuspect(current);
+  const atFirst = index === 0;
+  const atLast = index === suspects.length - 1;
 
   const choose = (file: boolean) => {
+    // The next row moves in under the same buttons: a double click or a held key must not decide it.
+    if (!acceptsChoice(Date.now())) return;
     const next = { ...filed };
     if (file) next[current.line] = current.related_uuid;
     else delete next[current.line];
@@ -69,7 +85,10 @@ export function ImportSuspectsStep({
             },
           }}
         >
+          {/* Read out when a choice moves the card on, or a screen reader would not know the row changed. */}
           <Box
+            aria-live="polite"
+            aria-atomic="true"
             sx={{
               p: '12px 14px',
               bgcolor: color.bg.neutral.subtle,
@@ -162,6 +181,7 @@ export function ImportSuspectsStep({
             size="sm"
             variant={isFiled ? 'outline' : 'primary'}
             aria-pressed={!isFiled}
+            aria-label={`第 ${current.line} 列：不建立`}
             disabled={disabled}
             onClick={() => choose(false)}
           >
@@ -171,6 +191,7 @@ export function ImportSuspectsStep({
             size="sm"
             variant={isFiled ? 'primary' : 'outline'}
             aria-pressed={isFiled}
+            aria-label={`第 ${current.line} 列：仍要建立`}
             disabled={disabled}
             onClick={() => choose(true)}
           >
@@ -181,8 +202,11 @@ export function ImportSuspectsStep({
             size="sm"
             variant="ghost"
             startIcon={<ChevronLeft size={15} />}
-            disabled={index === 0}
-            onClick={() => setAt(index - 1)}
+            aria-disabled={atFirst}
+            onClick={() => {
+              if (!atFirst) setAt(index - 1);
+            }}
+            sx={ENDS_LOOK_DISABLED}
           >
             上一筆
           </Button>
@@ -190,8 +214,11 @@ export function ImportSuspectsStep({
             size="sm"
             variant="ghost"
             endIcon={<ChevronRight size={15} />}
-            disabled={index === suspects.length - 1}
-            onClick={() => setAt(index + 1)}
+            aria-disabled={atLast}
+            onClick={() => {
+              if (!atLast) setAt(index + 1);
+            }}
+            sx={ENDS_LOOK_DISABLED}
           >
             下一筆
           </Button>

@@ -2,6 +2,7 @@ import type { components } from '@rescue-frontend/data-access/openapi';
 import { describe, expect, it } from 'vitest';
 
 import {
+  choiceGate,
   decisionsField,
   describeSuspect,
   fileAll,
@@ -105,5 +106,30 @@ describe('decisionsField', () => {
 
   it('leaves the field out when no row is filed anyway', () => {
     expect(decisionsField({})).toBeUndefined();
+  });
+});
+
+describe('choiceGate', () => {
+  it('lets a choice through, but not a second click right after it', () => {
+    const accepts = choiceGate();
+
+    expect([accepts(0), accepts(150)]).toEqual([true, false]);
+  });
+
+  it('takes only the first of a held key, however long it is held', () => {
+    const accepts = choiceGate();
+    // A held Enter repeats about every 30 ms after the first press.
+    const repeats = Array.from({ length: 40 }, (_, i) => accepts(i * 30));
+
+    expect(repeats.filter(Boolean)).toHaveLength(1);
+    expect(repeats[0]).toBe(true);
+  });
+
+  it('takes the next choice once the hand has paused', () => {
+    const accepts = choiceGate();
+    accepts(0);
+    accepts(200);
+
+    expect(accepts(700)).toBe(true);
   });
 });

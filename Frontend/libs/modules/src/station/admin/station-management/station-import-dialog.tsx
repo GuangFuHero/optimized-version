@@ -322,6 +322,8 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                   aria-label="貼上 CSV 內容"
                   placeholder="也可以直接貼上 CSV 內容（第一列是欄位名稱）"
                   value={pasted}
+                  // Typing clears the preview and the choices the commit in flight reports against.
+                  disabled={committing}
                   onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
                     changePasted(e.target.value)
                   }
@@ -433,7 +435,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                   </>
                 }
               >
-                {preview.dedup_checked ? null : (
+                {preview.dedup_checked === false ? (
                   <Callout tone="warning">
                     這次沒有比對重複：比對服務沒有回應。新增的列可能跟現有的站點重複。
                     <Box sx={{ mt: '8px' }}>
@@ -447,7 +449,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                       </Button>
                     </Box>
                   </Callout>
-                )}
+                ) : null}
                 {summary.update > 0 ? (
                   <Muted>
                     「更新」是站名＋縣市＋鄉鎮對到既有的站點；只會改說明、開放時間、level、comment、公開範圍和位置（經緯度），空白的格子不動。站名與地址建立後不能用匯入改。
@@ -484,13 +486,15 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
           <Box
             sx={{
               display: 'flex',
+              flexWrap: 'wrap',
               alignItems: 'center',
               gap: '10px',
               p: '14px 22px',
               borderTop: `1px solid ${color.border.default}`,
             }}
           >
-            <Muted sx={{ flex: 1 }}>
+            {/* Up to five counts: on a narrow screen they take a line of their own above the buttons. */}
+            <Muted sx={{ flex: '1 1 240px' }}>
               {/* Comparing a crowded file can add about 20 s each way (uiux 2026-10-27, Q16). */}
               {committing
                 ? '匯入、比對中…'
@@ -615,11 +619,11 @@ function ImportResult({
         {result.created > 0 ? (
           <Muted>新增的站點請到現場確認營運狀態，並補上聯絡人與電話。</Muted>
         ) : null}
-        {result.dedup_checked ? null : (
+        {result.dedup_checked === false ? (
           <Callout tone="warning">
             這次沒有比對重複，新增的站點可能跟現有的重複。
           </Callout>
-        )}
+        ) : null}
         {result.suspected > 0 ? (
           <Callout tone="warning">
             {result.suspected}{' '}

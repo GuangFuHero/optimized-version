@@ -96,3 +96,23 @@ export function decisionsField(filed: FiledRows): string | undefined {
     .sort((a, b) => a.line - b.line);
   return decisions.length > 0 ? JSON.stringify(decisions) : undefined;
 }
+
+/** How long after one press a second counts as the same gesture: a double click, a held key. */
+const CHOICE_SETTLE_MS = 400;
+
+/**
+ * Whether a press on 不建立／仍要建立 counts, given when it happened. A choice moves the card on to
+ * the next row under the same buttons, so a double click or a held Enter would decide a row the
+ * importer never saw. Every press restarts the wait, taken or not, so a held key decides one row
+ * however long it is held.
+ */
+export function choiceGate(
+  settleMs = CHOICE_SETTLE_MS,
+): (now: number) => boolean {
+  let last = Number.NEGATIVE_INFINITY;
+  return (now) => {
+    const accepted = now - last >= settleMs;
+    last = now;
+    return accepted;
+  };
+}
