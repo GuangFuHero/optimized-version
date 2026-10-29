@@ -24,15 +24,19 @@
  *                  ticket 欄位、values（task_name、quantity…）、disaster_details 帶使用者挑的值
  *                另一張單由後端整張取消（ADR-371）
  *   DUP-BE-410 🔒 欄位**有什麼列什麼，不可以寫死**（見 ddFieldsFor）。兩張都沒填的欄位不列
- *   DUP-BE-404 🔒 值只能從兩張挑，不能自己打新內容 —— 只有數量例外：
- *   DUP-BE-422 🔒 數量可以自己填（後端 values.quantity）；不能少於合併後的承接人數（ADR-370），少於就擋下
+ *   DUP-BE-432 🔒 比對畫面分左右：左邊「比對」（A、B 並排，點一格＝把這個值帶到右邊）、右邊「合併後的任務單」。
+ *                右邊每一格都可以**直接改**（地址、需求種類除外：後端這一版不能改地址 ADR-367；只能併同類型 ADR-370）。
+ *                改過的標「已修改」，可以「還原」回左邊選的值。取代 DUP-BE-404「只能挑」與 DUP-BE-422「數量另外一列自己填」。
+ *                理由：比對後可能發現兩邊都不對，或審核員有系統外的消息（電話、現場），出來的單要符合真實情況；
+ *                合併完再去任務管理找那張單改更不合理。**沒有「修改原因」欄**（後端只有整筆的 note，DUP-BE-427）
+ *                數量仍不能少於合併後的承接人數（ADR-370）、搜救以外不能空，不符就擋下
  *   DUP-BE-423 🔒 兩邊已承接的志工都留在合併後的需求繼續承接（ADR-369），不是釋出
  *   DUP-BE-427 🔒 送出時可以寫備註（選填，≤1000 字，後端 note）
  *
  * ── 送出 ───────────────────────────────────────────────────
  *   DUP-BE-401 🔒 送出後不能復原、不能拆回（ADR-376），沒有「五秒反悔」
  *   DUP-BE-402 🔒 按「合併」「不是重複」「確認重複」都先跳確認視窗，按「確認…，送出」才寫入
- *   DUP-BE-413 🔒 合併的確認視窗是**合併後那張單的預覽**，只給看結果，不標「來自哪一張」（🚨 版面設計端先定）
+ *   DUP-BE-413 🔒 送出前看得到合併後那張單：就是比對畫面右邊那一半，一直都在（DUP-BE-432）；確認視窗只列送出後會發生什麼
  *   🔒 打開後有一張被改過 → 送出時擋下、請使用者重新載入（後端 expected_versions 對不上回 409，ADR-374）
  *   ⚠️ 待審期間被改到不像了 → 自動移出佇列，在「已處理」標「內容變更，自動移出」（後端還沒有這個機制）
  *
@@ -52,7 +56,7 @@
  *    `?demo=1` 只是給工程師看畫面，正式版不要做。
  */
 (function () {
-  const KEY = "wg.dedup.v5"; // localStorage 只是原型存處理結果用；正式版不存 // v3：10/29 加 props；v4：10/29 第二輪改成一對、加其他需求與照片
+  const KEY = "wg.dedup.v6"; // localStorage 只是原型存處理結果用；正式版不存
 
   // 🔒 DUP-BE-411：來源**不顯示、不篩選**，只留在資料上給「不是重複」的通知用（source === "create"）
   window.DD_SOURCE = {
@@ -86,15 +90,18 @@
   // scope：值放在哪裡。task＝需求的欄、taskProp＝需求的設定欄位、ticket／station＝單本身的欄、ticketProp／stationProp＝單本身的設定欄位
   // fixed：不能挑（DUP-BE-426：地址這一版不能改）
   const TASK_COLS = [
-    { scope: "task",   key: "kind",     label: "需求種類", fmt: kindLabel },
+    { scope: "task",   key: "kind",     label: "需求種類", fmt: kindLabel, locked: true },   // 後端只能併同類型（ADR-370），不能改
     { scope: "task",   key: "name",     label: "需求名稱" },
-    { scope: "task",   key: "quantity", label: "數量", typeIn: true },   // DUP-BE-422：數量可以自己填
+    { scope: "task",   key: "quantity", label: "數量", number: true },
+    // 需求說明（後端 ticket_tasks.task_description → resolve 的 values.task_description）。
+    // 跟任務單的「描述」是兩個不同欄位：描述講整張單，需求說明講這一筆需求
+    { scope: "task",   key: "desc",     label: "需求說明", long: true },
   ];
   const TICKET_COLS = [
     { scope: "ticket", key: "ticketTitle", label: "標題" },
-    { scope: "ticket", key: "desc",     label: "描述" },
+    { scope: "ticket", key: "desc",     label: "描述", long: true },
     { scope: "ticket", key: "contact",  label: "聯絡人" },
-    { scope: "ticket", key: "priority", label: "優先級", fmt: prioLabel },
+    { scope: "ticket", key: "priority", label: "優先級", fmt: prioLabel, options: () => Object.keys(window.TK_PRIORITY || {}).map((k) => [k, prioLabel(k)]) },
     // DUP-BE-431：挑哪一張的地址，那一張就是送給後端的 primary（地址這一版後端不能改，只能跟著 primary）
     { scope: "ticket", key: "address",  label: "地址", primary: true },
   ];
@@ -127,7 +134,7 @@
     return keys.map((k) => {
       const scopes = items.map(cfgScopeOf);
       const cfg = cfgs.find((c) => c.kind === cfgKind && c.key === k && (cfgKind === "disaster" || scopes.indexOf(c.scope) >= 0));
-      return { scope, key: k, label: (cfg && cfg.label) || k, fmt: fmtProp(cfg), order: cfg ? (cfg.order || 0) : 9999, prop: true, inactive: !!(cfg && cfg.active === false) };
+      return { scope, key: k, label: (cfg && cfg.label) || k, fmt: fmtProp(cfg), order: cfg ? (cfg.order || 0) : 9999, prop: true, inactive: !!(cfg && cfg.active === false), cfg: cfg || null };
     }).sort((a, b) => a.order - b.order);
   }
 
@@ -211,14 +218,14 @@
             createdAt: "10/10 07:17", updatedAt: "10/10 07:17",
             address: "光復鄉大進街12號", contact: "陳先生 0912-xxx-208", desc: "一樓淤泥約 50 公分，家具泡水。", priority: "medium",
             props: { water_depth: 50, power_status: "停電" },
-            task: { kind: "hr", name: "清淤人力", quantity: 6, claimed: 3, props: { cleanup_type: "淤泥", tools: ["鏟子", "推車"] } },
+            task: { kind: "hr", name: "清淤人力", quantity: 6, claimed: 3, desc: "一樓客廳與廚房，要能搬重物", props: { cleanup_type: "淤泥", tools: ["鏟子", "推車"] } },
             others: [{ id: "T-2101-2", kind: "supply", name: "推車", quantity: 2, claimed: 0 }],
             photos: [{ id: "p1", label: "一樓客廳" }, { id: "p2", label: "門口" }] },
           { key: "b", ticketId: "T-2108", ticketTitle: "大進街12號 需要人幫忙清泥", team: "壯闊台灣", owner: "陳太太",
             createdAt: "10/10 08:42", updatedAt: "10/10 08:42",
             address: "光復鄉大進街12號", contact: "陳太太 0921-xxx-771", desc: "一樓積泥約 50 公分，需要鏟子，家裡只有兩個老人。", priority: "high",
             props: { water_depth: 50, road_access: "正常" },
-            task: { kind: "hr", name: "清泥人力", quantity: 4, claimed: 1, props: { cleanup_type: "淤泥", tools: ["鏟子"], skills: ["體力活"] } },
+            task: { kind: "hr", name: "清泥人力", quantity: 4, claimed: 1, desc: "早上 9 點前到，家裡有長輩", props: { cleanup_type: "淤泥", tools: ["鏟子"], skills: ["體力活"] } },
             others: [{ id: "T-2108-2", kind: "supply", name: "飲用水", quantity: 2, claimed: 0 }, { id: "T-2108-3", kind: "supply", name: "成人尿布", quantity: 1, claimed: 1 }],
             photos: [{ id: "p3", label: "廚房" }] },
         ],
@@ -237,7 +244,7 @@
             createdAt: "10/10 03:02", updatedAt: "10/10 03:02",
             address: "光復鄉大平村活動中心旁", contact: "王小姐 LINE: wang_hl", desc: "活動中心的人很多，水不夠，晚上很冷。", priority: "medium",
             props: {},
-            task: { kind: "supply", name: "飲用水（箱）", quantity: 30, claimed: 0, props: { item_name: "瓶裝水（一箱 24 瓶）" } },
+            task: { kind: "supply", name: "飲用水（箱）", quantity: 30, claimed: 0, desc: "送到活動中心側門", props: { item_name: "瓶裝水（一箱 24 瓶）" } },
             others: [{ id: "T-2090-2", kind: "supply", name: "毛毯", quantity: 40, claimed: 0 }],
             photos: [{ id: "p4", label: "活動中心外" }] },
         ],

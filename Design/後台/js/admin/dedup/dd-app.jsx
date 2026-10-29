@@ -18,7 +18,7 @@
  *   - 處理完自動跳到下一對待處理；最後一對處理完回清單
  *   - 「只看有差異的欄位」開關；值相同的列合成一格寫「兩張相同」
  *   - 其他需求、照片預設全勾（沒勾就取消，預設勾比較不會漏）
- *   - 數量「自己填」旁邊提示兩邊加起來是多少，但不預設加總（同一件事報兩次時加總會變兩倍）
+ *   - 右邊數量旁邊提示兩邊加起來是多少，但不預設加總（同一件事報兩次時加總會變兩倍）
  *   - 每一列預設用 primary（ddPrimary）那張的值；那張沒填、另一張有填，就預設用另一張的（不然那個值就不見了）
  *
  * 🔒 text/babel 腳本不要用物件 rest 解構（09-27 的 _excluded 撞名事故）。
@@ -31,7 +31,6 @@
   const subtle = { color: "var(--color-fg-neutral-subtle)" };
   const LABEL_W = 132;   // 比對表左邊欄位名稱的寬度
   const COL_W = 300;     // 每一張最少的寬度
-  const TYPED = "__typed";   // DUP-BE-422：數量選「自己填」
 
   const nowText = () => {
     const d = new Date(); const p = (n) => String(n).padStart(2, "0");
@@ -66,11 +65,34 @@
     });
     return p;
   }
-  // 合併後的數量（DUP-BE-422）
-  const finalQty = (g, picks, qtyText) => {
-    if (picks[QTY] === TYPED) return qtyText === "" || qtyText == null ? "" : Number(qtyText);
-    const it = g.items.find((x) => x.key === picks[QTY]);
-    return it ? it.task.quantity : "";
+  // ── DUP-BE-432：右邊「合併後的任務單」的值 ＝ 改過的（edits）優先，沒改就用左邊選的那張 ──
+  //   edits 存的是輸入框裡的字串；轉回資料型別在 fromText()
+  const isArr = (f, v) => Array.isArray(v) || (f.cfg && f.cfg.dataType === "multi_select");
+  const isNum = (f) => f.number || (f.cfg && f.cfg.dataType === "number");
+  function toText(f, v) {
+    if (v == null) return "";
+    if (Array.isArray(v)) return v.join("、");
+    return String(v);
+  }
+  function fromText(f, text, picked) {
+    if (text == null) return picked;
+    const t = String(text).trim();
+    if (t === "") return isArr(f, picked) ? [] : "";
+    if (isArr(f, picked)) return t.split(/[、,，]/).map((x) => x.trim()).filter(Boolean);
+    if (isNum(f)) return isNaN(Number(t)) ? t : Number(t);
+    return text;
+  }
+  // 一個欄位在合併後的值
+  function resultOf(g, kept, picks, edits, f) {
+    const src = f.primary ? g.items.find((x) => x.key === kept) : (g.items.find((x) => x.key === picks[fid(f)]) || g.items.find((x) => x.key === kept));
+    const picked = window.ddRead(src, f);
+    if (f.primary || f.locked) return picked;
+    return fromText(f, (edits || {})[fid(f)], picked);
+  }
+  const isEdited = (g, kept, picks, edits, f) => {
+    if (!edits || edits[fid(f)] == null || f.primary || f.locked) return false;
+    const src = g.items.find((x) => x.key === picks[fid(f)]) || g.items.find((x) => x.key === kept);
+    return toText(f, window.ddRead(src, f)) !== String(edits[fid(f)]);
   };
 
   function Chip({ icon, children, tone }) {
@@ -275,11 +297,12 @@
           </React.Fragment>
         );
       }
-      const isQty = f.typeIn;
-      if (same && diffOnly && !(isQty && picks[QTY] === TYPED)) { hiddenSame += 1; return null; }
-      const cells = same && !isQty ? <SameCell v={show(f, vals[0])} /> : items.map((it, i) => {
+      if (same && diffOnly) { hiddenSame += 1; return null; }
+      const edited = isEdited(g, kept, picks, props.edits, f);
+      const cells = same ? <SameCell v={show(f, vals[0])} tail={edited ? "兩張相同 · 右邊已修改" : null} /> : items.map((it, i) => {
         // DUP-BE-431：地址挑哪一張，那一張就是 primary
-        const chosen = f.primary ? kept === it.key : picks[id] === it.key;
+        // DUP-BE-432：右邊改過的欄位，左邊兩格都不打勾（點任一格＝放棄修改、改用這一格）
+        const chosen = !edited && (f.primary ? kept === it.key : picks[id] === it.key);
         const pick = () => (f.primary ? props.onKeep(it.key) : props.onPick(id, it.key));
         return (
           <button key={it.key} type="button" disabled={!canEdit} onClick={pick} data-dd-cell={id + "=" + it.key}
@@ -295,35 +318,6 @@
         <React.Fragment key={id}>
           <FieldLabel f={f} />
           {cells}
-          {isQty && canEdit && qtyTypeIn()}
-        </React.Fragment>
-      );
-    };
-
-    // DUP-BE-422：數量可以自己填；不能少於合併後的承接人數（後端 ADR-370）
-    // 用函式呼叫，不要寫成 <QtyTypeIn />：每次 render 都是新元件，輸入框會掉焦點
-    const qtyTypeIn = () => {
-      const typed = picks[QTY] === TYPED;
-      const sum = items.reduce((s, it) => s + (Number(it.task.quantity) || 0), 0);
-      const claimed = items.reduce((s, it) => s + (it.task.claimed || 0), 0);
-      const fx = window.ddMergeEffects(g, { kept, qty: finalQty(g, picks, props.qtyText) });
-      return (
-        <React.Fragment>
-          <div className="dd-label"></div>
-          <div style={{ gridColumn: `2 / span ${n}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "2px 0 4px" }} data-dd-qty>
-            <div role="radio" aria-checked={typed} className="dd-pick" onClick={() => props.onPick(QTY, TYPED)} data-dd-cell={QTY + "=" + TYPED}
-              style={{ border: "1px solid " + (typed ? "var(--color-bg-primary)" : "var(--color-border-default)"), background: typed ? "var(--color-bg-primary-subtle)" : "var(--color-bg-neutral-default)", cursor: "pointer", alignItems: "center" }}>
-              <Radio on={typed} />
-              <span>自己填</span>
-              <input type="number" min="0" value={props.qtyText} data-dd-qty-input
-                onFocus={() => props.onPick(QTY, TYPED)} onClick={(e) => e.stopPropagation()}
-                onChange={(e) => { props.onPick(QTY, TYPED); props.onQty(e.target.value); }}
-                style={{ width: 84, height: 28, padding: "0 8px", borderRadius: "var(--radius-sm, 6px)", border: "1px solid var(--color-border-default)", font: "var(--font-body-300)" }} />
-            </div>
-            <span style={{ font: "var(--font-data-300)", ...muted }}>兩張加起來是 {sum}{claimed ? ` · 合併後有 ${claimed} 位志工承接，數量不能少於 ${claimed}` : ""}</span>
-            {fx.qtyTooSmall && <span style={{ font: "var(--font-label-300)", color: "var(--color-fg-danger)" }} data-dd-qty-error>數量少於承接人數，不能送出</span>}
-            {typed && fx.qtyMissing && <span style={{ font: "var(--font-label-300)", color: "var(--color-fg-danger)" }}>請填數量</span>}
-          </div>
         </React.Fragment>
       );
     };
@@ -405,9 +399,9 @@
 
           {ticket ? (
             <React.Fragment>
-              <Section id="ticket" title="合併後的任務單" note={canEdit ? "兩張會合成一張，每一列點選要用哪一個" : "唯讀"} />
+              <Section id="ticket" title="任務單的欄位" note={canEdit ? "點一格，就把那個值帶到右邊的合併結果" : "唯讀"} />
               {ticketRows}
-              <Section id="task" title="重複的需求 → 合併成一筆" note={canEdit ? "每一列點選要用哪一個；數量也可以自己填" : "唯讀"} />
+              <Section id="task" title="重複的需求" note={canEdit ? "會合併成一筆；點一格帶到右邊" : "唯讀"} />
               {taskRows}
               {(otherRows.length > 0 || photoRows.length > 0) && (
                 <Section id="rest" title="其他需求與照片" note={canEdit ? "勾的會放進合併後的任務單，沒勾的取消" : "唯讀"} />
@@ -436,10 +430,10 @@
   // 合併後的後果：完整清單（確認視窗）＋一句短摘要（動作列）。DUP-BE-430：不講保留哪一張、搬到哪
   function effectLines(g, plan, picks) {
     const e = window.ddMergeEffects(g, plan);
-    const nameSrc = picks["task:name"] && picks["task:name"] !== TYPED ? g.items.find((x) => x.key === picks["task:name"]) : e.kept;
     const lines = [];
-    lines.push(`兩張任務單合成上面這一張`);
-    lines.push(`重複的需求合併成一筆「${(nameSrc || e.kept).task.name}」，數量 ${plan.qty === "" ? "（未填）" : plan.qty}`);
+    lines.push(`兩張任務單合成你在右邊看到的那一張`);
+    lines.push(`重複的需求合併成一筆「${plan.taskName}」，數量 ${plan.qty === "" ? "（未填）" : plan.qty}`);
+    if ((plan.edited || []).length) lines.push(`你改過的欄位：${plan.edited.join("、")}（開單的人會收到「平台人員已協助更新」）`);
     if (e.included.length) lines.push(`其他需求放進來：${e.included.map((t) => `「${t.name}」`).join("、")}`);
     if (e.dropped.length) lines.push(`沒勾的需求取消：${e.dropped.map((t) => `「${t.name}」`).join("、")}`);
     if (e.volunteersStay) lines.push(`${e.volunteersStay} 位已承接的志工繼續承接，會收到通知`);
@@ -554,10 +548,13 @@
               </Alert>
             )}
 
-            <div style={{ flex: 1, minHeight: 0, display: "flex", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)", background: "var(--color-bg-neutral-default)", overflow: "hidden" }}>
-              <CompareTable g={g} kept={props.plan.kept} picks={props.picks} qtyText={props.qtyText} needOff={props.plan.needOff} photoOff={props.plan.photoOff}
-                canEdit={!!editable} diffOnly={props.diffOnly}
-                onKeep={props.onKeep} onPick={props.onPick} onQty={props.onQty} onNeed={props.onNeed} onPhoto={props.onPhoto} />
+            <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)", background: "var(--color-bg-neutral-default)", overflow: "hidden" }}>
+                <CompareTable g={g} kept={props.plan.kept} picks={props.picks} edits={props.edits} needOff={props.plan.needOff} photoOff={props.plan.photoOff}
+                  canEdit={!!editable} diffOnly={props.diffOnly}
+                  onKeep={props.onKeep} onPick={props.onPick} onNeed={props.onNeed} onPhoto={props.onPhoto} />
+              </div>
+              {ticket && <ResultPanel g={g} plan={props.plan} picks={props.picks} edits={props.edits} canEdit={!!editable} onEdit={props.onEdit} />}
             </div>
 
             <div style={{ flexShrink: 0, position: "relative", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)", padding: "10px 14px", display: "flex", alignItems: "center", gap: 14, background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-sm)" }} data-dd-actions>
@@ -606,58 +603,92 @@
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  // DUP-BE-413：合併後那張單的預覽。DUP-BE-430：只給看結果，不標來自哪一張
+  // DUP-BE-432：右邊「合併後的任務單」—— 一直看得到結果，每一格可以直接改
+  //   地址、需求種類不能改（只顯示）。改過的標「已修改」＋「還原」
+  //   不給使用者看是哪一張被保留（DUP-BE-430）
   // ════════════════════════════════════════════════════════════════════════
-  function MergePreview({ g, plan, picks }) {
+  function ResultField({ g, plan, picks, edits, f, canEdit, onEdit }) {
+    const id = fid(f);
+    const kept = plan.kept;
+    const src = f.primary ? g.items.find((x) => x.key === kept) : (g.items.find((x) => x.key === picks[id]) || g.items.find((x) => x.key === kept));
+    const picked = window.ddRead(src, f);
+    const fixed = f.primary || f.locked || !canEdit;
+    const text = edits && edits[id] != null ? String(edits[id]) : toText(f, picked);
+    const edited = isEdited(g, kept, picks, edits, f);
+    const opts = f.options ? f.options() : (f.cfg && f.cfg.dataType === "single_select" && (f.cfg.options || []).length ? f.cfg.options.map((o) => [o, o]) : null);
+    const box = { width: "100%", boxSizing: "border-box", padding: "6px 8px", borderRadius: "var(--radius-sm, 6px)", font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)",
+      border: "1px solid " + (edited ? "var(--color-fg-warning)" : "var(--color-border-default)"), background: "var(--color-bg-neutral-default)" };
+    let input;
+    if (fixed) input = <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)", padding: "6px 0", whiteSpace: "pre-wrap" }}>{show(f, picked)}</span>;
+    else if (opts) input = (
+      <select value={text} onChange={(e) => onEdit(id, e.target.value)} style={box} data-dd-result-input={id}>
+        {text !== "" && !opts.some((o) => o[0] === text) && <option value={text}>{text}</option>}
+        {text === "" && <option value="">（未填）</option>}
+        {opts.map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}
+      </select>
+    );
+    else if (f.long) input = <textarea value={text} rows={Math.min(5, Math.max(2, Math.ceil(text.length / 22)))} onChange={(e) => onEdit(id, e.target.value)} style={Object.assign({ resize: "vertical" }, box)} data-dd-result-input={id} />;
+    else input = <input type={isNum(f) ? "number" : "text"} min={isNum(f) ? 0 : undefined} value={text} onChange={(e) => onEdit(id, e.target.value)} style={box} data-dd-result-input={id}
+      placeholder={isArr(f, picked) ? "用「、」分開" : ""} />;
+    return (
+      <div data-dd-result-field={id} style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 0", borderTop: "1px solid var(--color-border-subtle, var(--color-bg-neutral-sunken))" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 20 }}>
+          <span style={{ font: "var(--font-label-300)", ...subtle }}>{f.label}</span>
+          {f.primary && canEdit && <span style={{ font: "var(--font-data-300)", ...muted }}>· 在左邊選</span>}
+          {edited && <Chip tone="warning">已修改</Chip>}
+          <span style={{ flex: 1 }}></span>
+          {edited && <button type="button" className="tk-chipbtn" onClick={() => onEdit(id, null)} data-dd-result-revert={id}>還原</button>}
+        </div>
+        {input}
+        {f.key === "quantity" && f.scope === "task" && plan.qtyHint}
+      </div>
+    );
+  }
+
+  function ResultPanel({ g, plan, picks, edits, canEdit, onEdit }) {
     const F = fieldsOf(g);
     const e = window.ddMergeEffects(g, plan);
-    const keptIt = e.kept;
-    const srcOf = (f) => (f.primary ? keptIt : g.items.find((x) => x.key === picks[fid(f)]) || keptIt);
-    const val = (f) => (f.typeIn && picks[QTY] === TYPED ? plan.qty : window.ddRead(srcOf(f), f));
-    const Row = ({ f }) => (
-      <div data-dd-preview-field={fid(f)} style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: 10, padding: "7px 0", borderTop: "1px solid var(--color-border-subtle, var(--color-bg-neutral-sunken))" }}>
-        <span style={{ font: "var(--font-label-300)", ...subtle }}>{f.label}</span>
-        <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{show(f, val(f))}</span>
-      </div>
+    const sum = g.items.reduce((s, it) => s + (Number(it.task.quantity) || 0), 0);
+    // 數量：DUP-BE-422 不能少於承接人數
+    const qtyHint = (
+      <span style={{ font: "var(--font-data-300)", color: e.qtyTooSmall || e.qtyMissing ? "var(--color-fg-danger)" : "var(--color-fg-neutral-muted)" }} data-dd-qty-hint>
+        {e.qtyMissing ? "請填數量" : e.qtyTooSmall ? `不能少於承接人數 ${e.claimedTotal}` : `兩張加起來是 ${sum}${e.claimedTotal ? ` · ${e.claimedTotal} 位志工承接，不能少於 ${e.claimedTotal}` : ""}`}
+      </span>
     );
-    const titleF = F.ticket.find((f) => f.key === "ticketTitle");
-    const Need = ({ t }) => (
-      <div style={{ padding: "8px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)", font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)" }}>
-        {t.name} ×{t.quantity}<span style={{ font: "var(--font-data-300)", ...muted }}> · {kindLabel(t.kind)}{t.claimed ? ` · ${t.claimed} 位志工承接` : ""}</span>
-      </div>
-    );
+    const p2 = Object.assign({}, plan, { qtyHint });
+    const field = (f) => <ResultField key={fid(f)} g={g} plan={p2} picks={picks} edits={edits} f={f} canEdit={canEdit} onEdit={onEdit} />;
     return (
-      <div style={{ border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-lg, 12px)", background: "var(--color-bg-neutral-default)", overflow: "hidden" }} data-dd-preview>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border-default)" }}>
-          <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>{titleF ? show(titleF, val(titleF)) : keptIt.ticketTitle}</span>
+      <aside data-dd-result style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0,
+        border: "1px solid var(--color-bg-primary)", borderRadius: "var(--radius-lg, 12px)", background: "var(--color-bg-neutral-default)", overflow: "hidden" }}>
+        <div style={{ padding: "10px 16px", background: "var(--color-bg-primary-subtle)", borderBottom: "1px solid var(--color-border-default)", display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon n="Merge" s={16} c="var(--color-bg-primary)" />
+          <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>合併後的任務單</span>
+          <span style={{ font: "var(--font-data-300)", ...muted }}>{canEdit ? "可以直接改" : ""}</span>
         </div>
-        <div style={{ padding: "4px 16px 4px" }}>{F.ticket.filter((f) => f.key !== "ticketTitle").map((f) => <Row key={fid(f)} f={f} />)}</div>
-        <div style={{ padding: "8px 16px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-          <span style={{ font: "var(--font-label-300)", ...subtle }}>需求</span>
-          <div data-dd-preview-task style={{ border: "1px solid var(--color-bg-primary)", background: "var(--color-bg-primary-subtle)", borderRadius: "var(--radius-md)", padding: "6px 12px 4px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0 4px", flexWrap: "wrap" }}>
-              <Icon n="Merge" s={14} c="var(--color-bg-primary)" />
-              <span style={{ font: "var(--font-label-300)", color: "var(--color-fg-neutral-default)" }}>合併的這一筆</span>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 16px 16px" }}>
+          {F.ticket.map(field)}
+          <div style={{ margin: "12px 0 0", padding: "4px 12px 6px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-bg-primary)", background: "var(--color-bg-primary-subtle)" }} data-dd-result-task>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0 2px" }}>
+              <span style={{ font: "var(--font-label-300)", color: "var(--color-fg-neutral-default)" }}>合併的這一筆需求</span>
               {e.claimedTotal > 0 && <span style={{ font: "var(--font-data-300)", ...muted }}>· {e.claimedTotal} 位志工承接</span>}
             </div>
-            {F.task.map((f) => <Row key={fid(f)} f={f} />)}
+            {F.task.map(field)}
           </div>
-          {e.included.map((t) => <Need key={t.id} t={t} />)}
-        </div>
-        {e.photosIn.length > 0 && (
-          <div style={{ padding: "0 16px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-            <span style={{ font: "var(--font-label-300)", ...subtle }}>照片 {e.photosIn.length} 張</span>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {e.photosIn.map((p) => (
-                <div key={p.id} style={{ width: 96, height: 64, borderRadius: "var(--radius-sm, 6px)", background: "var(--color-bg-neutral-sunken)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}>
-                  <Icon n="Image" s={16} c="var(--color-fg-neutral-muted)" />
-                  <span style={{ font: "var(--font-data-300)", ...muted }}>{p.label}</span>
+          {(e.included.length > 0 || e.dropped.length > 0) && (
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ font: "var(--font-label-300)", ...subtle }}>其他需求 {e.included.length} 項 <span style={{ font: "var(--font-data-300)", ...muted }}>· 在左邊勾選</span></span>
+              {e.included.map((t) => (
+                <div key={t.id} style={{ padding: "6px 10px", borderRadius: "var(--radius-sm, 6px)", border: "1px solid var(--color-border-default)", font: "var(--font-body-300)" }}>
+                  {t.name} ×{t.quantity}<span style={{ font: "var(--font-data-300)", ...muted }}> · {kindLabel(t.kind)}{t.claimed ? ` · ${t.claimed} 位志工承接` : ""}</span>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-      </div>
+          )}
+          {(e.photosIn.length + e.photosDropped) > 0 && (
+            <div style={{ marginTop: 12, font: "var(--font-label-300)", ...subtle }}>照片 {e.photosIn.length} 張 <span style={{ font: "var(--font-data-300)", ...muted }}>· 在左邊勾選</span></div>
+          )}
+        </div>
+      </aside>
     );
   }
 
@@ -674,7 +705,7 @@
     const blocked = isMerge && (fx.e.qtyTooSmall || fx.e.qtyMissing)
       ? (fx.e.qtyMissing ? "合併後的數量沒有填。" : `合併後的數量 ${plan.qty} 少於承接人數 ${fx.e.claimedTotal}，請回去改。`) : null;
     const title = isMerge ? "確認合併這兩張單？" : mode === "confirm" ? "確認這兩個站點是重複的？" : `確認這兩${g.kind === "station" ? "個站點" : "張單"}不是重複？`;
-    const sub = isMerge ? "下面是合併後那張單的樣子。送出後不能復原，也不能拆回，請先確認內容都對了。"
+    const sub = isMerge ? "合併後的任務單就是你在右邊看到的那一張。送出後不能復原，也不能拆回。"
       : mode === "confirm" ? "只記下判定，兩個站點都不會變。站點合併後端還沒做，之後做好再處理。送出後不能復原。"
       : "送出後不能復原。這一對不會再提示，除非之後有人把它們改到相似。";
     return (
@@ -682,22 +713,15 @@
         style={{ position: "fixed", left: 0, right: 0, bottom: 0, top: "var(--wg-banner-bottom, 0px)", zIndex: 900,
           display: "grid", placeItems: "center", padding: 24, background: "rgba(15,23,42,0.45)" }}
         onMouseDown={(e) => { if (e.target === e.currentTarget) onBack(); }}>
-        <div style={{ width: isMerge ? "min(720px, 100%)" : "min(600px, 100%)", maxHeight: "88vh", display: "flex", flexDirection: "column",
+        <div style={{ width: "min(600px, 100%)", maxHeight: "88vh", display: "flex", flexDirection: "column",
           background: "var(--color-bg-neutral-default)", borderRadius: "var(--radius-xl, 16px)", boxShadow: "var(--shadow-lg)", overflow: "hidden" }}>
           <div style={{ padding: "18px 24px 12px", borderBottom: "1px solid var(--color-border-default)" }}>
             <div className="wg-h600" style={{ fontSize: 19 }}>{title}</div>
             <div style={{ marginTop: 4, font: "var(--font-body-300)", ...subtle }}>{sub}</div>
           </div>
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 24px", display: "flex", flexDirection: "column", gap: 16, background: isMerge ? "var(--color-bg-neutral-subtle)" : undefined }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 24px", display: "flex", flexDirection: "column", gap: 16, }}>
             {isMerge ? (
               <React.Fragment>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-dd-confirm-values>
-                  <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ font: "var(--font-label-400)" }}>合併後的單子（預覽）</span>
-                    <span style={{ font: "var(--font-data-300)", ...muted }}>確認這就是你要的任務單</span>
-                  </span>
-                  <MergePreview g={g} plan={plan} picks={picks} />
-                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }} data-dd-confirm-effects>
                   <span style={{ font: "var(--font-label-400)" }}>送出後會發生</span>
                   {fx.lines.map((l, i) => <span key={i} style={{ font: "var(--font-body-300)", ...subtle }}>· {l}</span>)}
@@ -744,8 +768,8 @@
     const [sort, setSort] = React.useState("score");
     const [openId, setOpenId] = React.useState(readHash);
     const [kept, setKept] = React.useState({});       // groupId → key
-    const [picks, setPicks] = React.useState({});     // groupId → {欄位id: key | TYPED}
-    const [qty, setQty] = React.useState({});         // groupId → 自己填的數量（字串）
+    const [picks, setPicks] = React.useState({});     // groupId → {欄位id: 選哪一張的 key}
+    const [edits, setEdits] = React.useState({});     // groupId → {欄位id: 右邊輸入框的字串}（DUP-BE-432）
     const [needOff, setNeedOff] = React.useState({});    // groupId → {需求id: true＝沒勾}（DUP-BE-430）
     const [photoOff, setPhotoOff] = React.useState({});  // groupId → {照片id: true＝沒勾}
     const [diffOnly, setDiffOnly] = React.useState(false);
@@ -793,13 +817,19 @@
     const current = openId ? scoped.find((g) => g.id === openId) || null : null;
 
     // ── 比對畫面的狀態 ──
-    let curKept = null, curPicks = {}, curQty = "", plan = null, can = { can: false }, editable = false;
+    let curKept = null, curPicks = {}, curEdits = {}, plan = null, can = { can: false }, editable = false;
     if (current) {
       curKept = kept[current.id] || defaultKept(current.items);
       if (current.kind === "ticket") {
         curPicks = Object.assign(picksFor(current), picks[current.id] || {});
-        curQty = qty[current.id] == null ? "" : qty[current.id];
-        plan = { kept: curKept, qty: finalQty(current, curPicks, curQty), needOff: needOff[current.id] || {}, photoOff: photoOff[current.id] || {} };
+        curEdits = edits[current.id] || {};
+        const F0 = fieldsOf(current);
+        const values = {};
+        F0.ticket.concat(F0.task).forEach((f) => { values[fid(f)] = resultOf(current, curKept, curPicks, curEdits, f); });
+        const q = values[QTY];
+        plan = { kept: curKept, values, qty: q == null ? "" : q, taskName: values["task:name"],
+          edited: F0.ticket.concat(F0.task).filter((f) => isEdited(current, curKept, curPicks, curEdits, f)).map((f) => f.label),
+          needOff: needOff[current.id] || {}, photoOff: photoOff[current.id] || {} };
       } else {
         plan = { kept: curKept };
       }
@@ -809,7 +839,9 @@
     const upd = (setter, field, val) => setter((s) => Object.assign({}, s, { [current.id]: Object.assign({}, s[current.id] || {}, { [field]: val }) }));
     // DUP-BE-431：挑地址＝換 primary；其他欄位不動
     const setKeep = (key) => setKept(Object.assign({}, kept, { [current.id]: key }));
-    const setPick = (field, key) => upd(setPicks, field, key);
+    // 左邊點一格＝改用那一格的值，右邊那一格的修改就放棄
+    const setPick = (field, key) => { upd(setPicks, field, key); upd(setEdits, field, null); };
+    const setEdit = (field, text) => upd(setEdits, field, text);
 
     const idx = current ? list.findIndex((g) => g.id === current.id) : -1;
     const pos = idx >= 0 ? [idx + 1, list.length] : null;
@@ -845,12 +877,11 @@
       if (e.qtyTooSmall || e.qtyMissing) return;
       const at = nowText();
       const F = fieldsOf(g);
-      const srcOf = (f) => g.items.find((x) => x.key === curPicks[fid(f)]) || e.kept;
       let k = e.kept;
       // 正式版：這裡組 resolve 的 request（primary＝k；primary 的其他需求 勾＝keep／沒勾＝cancel；另一張的 勾＝move／沒勾＝cancel；
       //         另一張的重複需求 absorb 進 primary 的重複需求；照片 勾＝keep／沒勾＝cancel）—— DUP-BE-431
-      F.ticket.filter((f) => !f.primary).concat(F.task).forEach((f) => { if (!(f.typeIn && curPicks[QTY] === TYPED)) k = window.ddWrite(k, f, window.ddRead(srcOf(f), f)); });
-      k = window.ddWrite(k, { scope: "task", key: "quantity" }, plan.qty);
+      // DUP-BE-432：每個欄位寫入右邊看到的值（改過的優先）
+      F.ticket.filter((f) => !f.primary).concat(F.task).forEach((f) => { k = window.ddWrite(k, f, plan.values[fid(f)]); });
       const strip = (x) => { const o = Object.assign({}, x); delete o.from; return o; };
       k = Object.assign({}, k, {
         updatedAt: at,
@@ -862,7 +893,11 @@
       const items = g.items.map((it) => (it.key === k.key ? k : o));
       const history = [], notices = [];
       history.push(`${k.ticketId}：與 ${o.ticketId} 合併，重複的需求合併成「${k.task.name}」數量 ${plan.qty}（${persona.name}，${at}）`);
-      F.ticket.concat(F.task).forEach((f) => { if (!f.primary && !f.typeIn && curPicks[fid(f)] === o.key) history.push(`${k.ticketId}：${f.label}改用 ${o.ticketId} 的「${window.ddShow(f, window.ddRead(o, f))}」`); });
+      F.ticket.concat(F.task).forEach((f) => {
+        if (f.primary) return;
+        if (isEdited(g, curKept, curPicks, curEdits, f)) history.push(`${k.ticketId}：${f.label}改為「${window.ddShow(f, plan.values[fid(f)])}」（審核時修改）`);
+        else if (curPicks[fid(f)] === o.key) history.push(`${k.ticketId}：${f.label}改用 ${o.ticketId} 的「${window.ddShow(f, window.ddRead(o, f))}」`);
+      });
       e.included.filter((t) => t.from === o.key).forEach((t) => history.push(`${o.ticketId} 的「${t.name}」移到 ${k.ticketId}`));
       e.dropped.forEach((t) => history.push(`「${t.name}」取消`));
       history.push(`${o.ticketId}：整張取消，已併入 ${k.ticketId}（${persona.name}，${at}）`);
@@ -898,12 +933,11 @@
     if (current) {
       return (
         <div style={{ height: "100%", minHeight: 560 }} data-dd-root>
-          <CompareView key={current.id} g={current} plan={plan} picks={curPicks} qtyText={curQty}
+          <CompareView key={current.id} g={current} plan={plan} picks={curPicks} edits={curEdits} onEdit={setEdit}
             can={can} editable={editable} stale={stale === current.id}
             diffOnly={diffOnly} setDiffOnly={setDiffOnly}
             pos={pos} onPrev={prevId ? () => go(prevId) : null} onNext={nextId ? () => go(nextId) : null}
             onBack={() => go(null)} onKeep={setKeep} onPick={setPick}
-            onQty={(v) => setQty(Object.assign({}, qty, { [current.id]: v }))}
             onNeed={(id, on) => upd(setNeedOff, id, !on)} onPhoto={(id, on) => upd(setPhotoOff, id, !on)}
             onReload={reload} onMerge={askMerge} onSeparate={() => setConfirm("separate")} onConfirmDup={() => setConfirm("confirm")} />
           {confirm && editable && (
