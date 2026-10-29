@@ -787,6 +787,8 @@ Dan 2026-10-27 決定：官方一律看 `source`，其餘照 HC 的建議改，�
       `source = 'official'`，或舊的 `is_official` 是 true。
     - `is_official` 只有 seed 寫過，app 不寫它。篩選不看它；之後 3NF 那支（F1）會讓它跟著 `source`。
     - mock seed 的 17 個官方站點，`source` 從 `gov` 改成 `official`，篩選和標示在 staging 重灌 seed 後一致。
+    - 變更紀錄跟著改：沒有登入者的建立事件，`source` 是 `official` 時，操作者的 `kind` 是 `official`，跟 `gov`、
+      `ngo` 一樣，不會變成籠統的 `system`（016/ADR-137）。HC 2026-10-29 在 #129 問，Dan 2026-10-30 決定。
   - `createdAfter`／`createdBefore`、`updatedAfter`／`updatedBefore`：半開區間 `[after, before)`，相鄰的兩段不會
     重複算到同一個站點。成立第幾週、新鮮度門檻（24 小時／72 小時）都是前端的顯示規則，由前端算出時間點再傳進來。
   - `orderBy: StationOrder`：`DEFAULT` 是現在的順序（搜尋時依相關度，然後最新建立的在前）；
