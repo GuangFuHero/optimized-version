@@ -43,7 +43,7 @@ from app.services.geo_validation import (
     validate_point,
 )
 from app.services.notification_service import NotificationService
-from app.services.photo import normalize_photo_url
+from app.services.photo import TICKET_PHOTO_MAX, normalize_photo_url
 from app.services.ticket_audit import lock_ticket, void_stale_verdict
 from app.services.ticket_status import recompute_ticket_status
 
@@ -81,8 +81,9 @@ QUANTITY_OPTIONAL_TASK_TYPES = frozenset({"rescue"})
 TICKET_TITLE_MAX_LENGTH = 200
 TASK_NAME_MAX_LENGTH = 200
 # Photo links a citizen may file with a request — the site's own limit, the same number its
-# form stops at (the prototype's TK_PHOTO_MAX in wg-photos.jsx).
-HELP_REQUEST_PHOTO_MAX = 10
+# form stops at (the prototype's TK_PHOTO_MAX in wg-photos.jsx). A ticket's cap, so attaching
+# them one at a time stops there too (attach_ticket_photo).
+HELP_REQUEST_PHOTO_MAX = TICKET_PHOTO_MAX
 # Needs a request may be filed with at once. The prototype sets no limit; without one, a single
 # request could file thousands. Needs added later, one 「再加一件」 at a time, are not counted.
 HELP_REQUEST_NEED_MAX = 20

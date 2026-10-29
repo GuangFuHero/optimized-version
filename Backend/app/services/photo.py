@@ -9,6 +9,7 @@ failures are raised as ValueError.
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -19,8 +20,12 @@ from app.repositories.geo_repository import station_repository
 from app.repositories.photo_repository import photo_repository
 from app.repositories.tickets_repository import ticket_repository
 from app.services.authz import require_scope
+from app.services.ticket_audit import lock_ticket
 
 _MAX_URL_LEN = 500  # matches app/models/photo.py: url = mapped_column(String(500))
+# Photos a ticket may hold: the site's limit, which a help request is filed with at most
+# (HELP_REQUEST_PHOTO_MAX in app/services/ticket.py is this number).
+TICKET_PHOTO_MAX = 10
 
 
 def normalize_photo_url(url: str) -> str:
@@ -165,6 +170,15 @@ async def attach_ticket_photo(db: AsyncSession, *, actor: User, ticket_uuid: str
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
     url = normalize_photo_url(url)
+    # Locked before counting, so two attaches at once cannot both see the ninth and file an eleventh.
+    await lock_ticket(db, ticket_uuid)
+    held = await db.scalar(
+        select(func.count())
+        .select_from(Photo)
+        .where(Photo.ref_type == "geometry", Photo.ref_uuid == ticket_uuid, Photo.delete_at.is_(None))
+    )
+    if held >= TICKET_PHOTO_MAX:
+        raise ValueError(f"At most {TICKET_PHOTO_MAX} photos are allowed")
     touch(ticket)
     return await photo_repository.create(
         db,
