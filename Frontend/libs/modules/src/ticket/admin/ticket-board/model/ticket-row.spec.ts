@@ -44,7 +44,7 @@ const ticket = (
 });
 
 describe('toTicketRow', () => {
-  it('carries the ticket\'s own permission flags on raw', () => {
+  it("carries the ticket's own permission flags on raw", () => {
     const row = toTicketRow(
       ticket({ viewerCanEdit: false, viewerCanDelete: true }),
     );

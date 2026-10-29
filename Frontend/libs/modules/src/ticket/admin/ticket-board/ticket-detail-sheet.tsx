@@ -295,7 +295,7 @@ function TicketDetailContent({
         <TicketInfo
           ticket={ticket}
           view={view}
-            now={now}
+          now={now}
           onNeedBusyChange={onNeedBusyChange}
           onAuditBusyChange={onAuditBusyChange}
         />
@@ -473,10 +473,7 @@ function TicketInfo({
         </Block>
       ) : null}
       <Block label="需求">
-        <TicketTaskList
-          ticket={ticket}
-            onAddBusyChange={onNeedBusyChange}
-        />
+        <TicketTaskList ticket={ticket} onAddBusyChange={onNeedBusyChange} />
       </Block>
     </Box>
   );
