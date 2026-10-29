@@ -1,4 +1,4 @@
-"""Where a station or a task came from is the backend's call, by the identity that made it (ADR-438).
+"""Where a station or a task came from is the backend's call, by the identity that made it.
 
 Made in the back office, it is `official`; made on the site, `user`. What the form sends is not read:
 the site and the back office share a form, and the identity is what the request actually acts as.
@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.core.permissions import Perm
 from app.models.geo import Station
+from app.models.rbac import Role, UserRoleAssign
 from app.models.ticket_task import TicketTask
 from tests.test_graphql.conftest import (
     _create_user_with_grants,
@@ -50,14 +51,14 @@ mutation($input: CreateTicketTaskInput!) {
 
 
 async def _site_identity(redis) -> str:
-    """A citizen's token: the platform `user` role, the site's identity (ADR-290)."""
+    """A citizen's token: the platform `user` role, the site's identity."""
     await _ensure_platform_role("user", CITIZEN_GRANTS)
     _, token = await _create_user_with_role(redis, "user")
     return token
 
 
 async def _back_office_identity(redis) -> str:
-    """A back-office token: any identity but `user` (ADR-329)."""
+    """A back-office token: any identity but `user`."""
     grants = [(Perm.STATION_ADD, "all"), (Perm.TICKET_ADD, "all"), (Perm.TICKET_EDIT, "all")]
     _, token = await _create_user_with_grants(redis, grants)
     return token
@@ -90,7 +91,7 @@ async def test_a_station_made_on_the_site_is_the_users_whatever_it_sends(client,
 
 @pytest.mark.parametrize("sent", [{"source": "user"}, {}], ids=["sends-user", "sends-nothing"])
 async def test_a_station_made_in_the_back_office_is_official_whatever_it_sends(client, redis, sent):
-    """Carol, 2026-10-28: everything made in the back office is official, a team member's too."""
+    """Everything made in the back office is official, a team member's too."""
     token = await _back_office_identity(redis)
     station = _station(name=f"後台站-{random.random()}", **sent)
 
@@ -101,7 +102,7 @@ async def test_a_station_made_in_the_back_office_is_official_whatever_it_sends(c
 
 
 async def test_the_back_office_marker_does_not_make_a_citizen_official(client, redis):
-    """A citizen sending the back office's realm is refused before anything is made (ADR-329)."""
+    """A citizen sending the back office's realm is refused before anything is made."""
     token = await _site_identity(redis)
     station = _station(name=f"冒充站-{random.random()}")
 
@@ -109,6 +110,22 @@ async def test_the_back_office_marker_does_not_make_a_citizen_official(client, r
 
     assert resp.status_code == 403, resp.text
     assert await _stored_source(station["name"]) == []
+
+
+async def test_a_back_office_account_on_the_site_makes_the_users(client, redis):
+    """Holding a back-office identity and the site's `user`, a request in the site's realm makes `user`."""
+    await _ensure_platform_role("user", CITIZEN_GRANTS)
+    grants = [(Perm.STATION_ADD, "all"), (Perm.TICKET_ADD, "all"), (Perm.TICKET_EDIT, "all")]
+    user_uuid, token = await _create_user_with_grants(redis, grants)
+    async with db_ctx() as db:
+        site = await db.scalar(select(Role).where(Role.name == "user"))
+        db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=site.uuid))
+    station = _station(name=f"雙身份站-{random.random()}", source="official")
+
+    body = (await _create(client, token, station, headers={"X-WG-Realm": "site"})).json()
+
+    assert body["data"]["createStation"]["station"]["source"] == "user", body
+    assert await _stored_source(station["name"]) == ["user"]
 
 
 async def _post(client, token, query, variables) -> dict:
@@ -161,7 +178,7 @@ async def test_tasks_made_on_the_site_are_the_users_whatever_they_send(client, r
 
 
 async def test_tasks_made_in_the_back_office_are_official_whatever_they_send(client, redis):
-    """The same two paths from a back-office identity (Dan, 2026-10-28: tasks follow stations)."""
+    """The same two paths from a back-office identity: tasks follow the stations' rule."""
     tasks = await _file_and_add(client, await _back_office_identity(redis), sent="user")
 
     assert await _task_sources(tasks) == ["official", "official"]
