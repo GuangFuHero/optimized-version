@@ -58,7 +58,11 @@ class BulkPreviewResponse(BaseModel):
         default_factory=list, description="設定裡有、但這種檔案存不下的動態欄位（ADR-118）"
     )
     suspected: int = Field(
-        default=0, description="疑似重複的列數；送出時沒確認就不建立，不算在 to_create、to_update 裡"
+        default=0,
+        description=(
+            "疑似重複的列數，不含跟著它的後續列（見 suspects 的 followers）；送出時沒確認就不建立，"
+            "這些列和後續列都不算在 to_create、to_update 裡"
+        ),
     )
     suspects: list[SuspectedRowResponse] = Field(
         default_factory=list, description="每個疑似重複一筆，照列號排（ADR-398）"
@@ -113,7 +117,11 @@ class BulkImportResponse(BaseModel):
         description="主資料已寫入、但後續步驟因權限失敗的列號——這幾列處於半完成狀態",
     )
     suspected: int = Field(
-        default=0, description="疑似重複、沒確認所以沒建立的列數。不算在 failed 裡，但在錯誤報告裡"
+        default=0,
+        description=(
+            "疑似重複、沒確認所以沒建立的列數，不含跟著它沒建立的後續列（見 suspects 的 followers）。"
+            "不算在 failed 裡，但在錯誤報告裡"
+        ),
     )
     suspects: list[SuspectedRowResponse] = Field(
         default_factory=list, description="沒建立的疑似重複列，形狀同預覽（ADR-398）"

@@ -2264,7 +2264,7 @@ export interface components {
       partial_rows?: number[];
       /**
        * Suspected
-       * @description 疑似重複、沒確認所以沒建立的列數。不算在 failed 裡，但在錯誤報告裡
+       * @description 疑似重複、沒確認所以沒建立的列數，不含跟著它沒建立的後續列（見 suspects 的 followers）。不算在 failed 裡，但在錯誤報告裡
        * @default 0
        */
       suspected: number;
@@ -2320,7 +2320,7 @@ export interface components {
       }[];
       /**
        * Suspected
-       * @description 疑似重複的列數；送出時沒確認就不建立，不算在 to_create、to_update 裡
+       * @description 疑似重複的列數，不含跟著它的後續列（見 suspects 的 followers）；送出時沒確認就不建立，這些列和後續列都不算在 to_create、to_update 裡
        * @default 0
        */
       suspected: number;

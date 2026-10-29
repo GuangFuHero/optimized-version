@@ -72,6 +72,10 @@ PREVIEW_ROWS = 20
 _DEFAULT_PROPERTY_TYPE = "supply"
 _DEFAULT_WEIGHTING = 1.0
 
+# Where an import's hints and pair cards say they came in (ADR-398): an importer works from someone
+# else's list, so filing a row anyway means less than it does from someone on the spot.
+_DEDUP_ENTRY = "bulk_import"
+
 
 logger = logging.getLogger(__name__)
 
@@ -646,11 +650,21 @@ async def _write_task(
 async def _card(
     db: AsyncSession, *, actor: User, pair: dedup_service.AcknowledgedPair | None, created_uuid: str
 ) -> None:
-    """Card the pair the importer filed anyway, against what its row created. Does not commit."""
-    if pair is not None:
-        await dedup_service.record_pair_ignored(
-            db, pair=pair, created_uuid=created_uuid, actor_uuid=str(actor.uuid)
+    """Card the pair the importer filed anyway, against what its row created. Does not commit.
+
+    The row was shown its hint in the preview, so the hint is recorded as shown first, as a single
+    create records it on the submission it held (ADR-303). An unscored pair had no hint to show.
+    """
+    if pair is None:
+        return
+    actor_uuid = str(actor.uuid)
+    if pair.suspect is not None:
+        await dedup_service.record_suspect_shown(
+            db, suspect=pair.suspect, actor_uuid=actor_uuid, entry=_DEDUP_ENTRY
         )
+    await dedup_service.record_pair_ignored(
+        db, pair=pair, created_uuid=created_uuid, actor_uuid=actor_uuid, entry=_DEDUP_ENTRY
+    )
 
 
 def _new_ticket(columns, row: dict[str, str], task_type: str) -> dict:
@@ -961,7 +975,9 @@ async def _hold(
     for plan in plans:
         suspect = comparison.suspects.get(plan.line)
         if suspect is not None:
-            await dedup_service.record_suspect_shown(db, suspect=suspect, actor_uuid=actor_uuid)
+            await dedup_service.record_suspect_shown(
+                db, suspect=suspect, actor_uuid=actor_uuid, entry=_DEDUP_ENTRY
+            )
             held[plan.index] = [_error(plan.line, "-", _held_message(shown.get(plan.line)))]
         elif plan.line in following:
             message = f"同一張單的第 {following[plan.line]} 列疑似重複，未建立，這一列跟著未建立"

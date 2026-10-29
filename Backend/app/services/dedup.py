@@ -96,8 +96,14 @@ async def try_check_submission(
     return _usable(suspects, acknowledged)
 
 
-async def record_suspect_shown(db: AsyncSession, *, suspect: Suspect, actor_uuid: str) -> None:
-    """Audit that a hint was shown and nothing was created. Does not commit."""
+async def record_suspect_shown(
+    db: AsyncSession, *, suspect: Suspect, actor_uuid: str, entry: str | None = None
+) -> None:
+    """Audit that a hint was shown. Does not commit.
+
+    A single create writes this when it holds the draft. A batch import writes it for every suspected
+    row it showed in the preview, the ones filed anyway too, with `entry` (ADR-398).
+    """
     await dedup_audit_event_repository.add(
         db,
         obj_in={
@@ -106,6 +112,7 @@ async def record_suspect_shown(db: AsyncSession, *, suspect: Suspect, actor_uuid
             "primary_uuid": suspect.related_uuid,
             "actor_uuid": actor_uuid,
             "source_layer": "fast",
+            "decision_reason": entry,
             "evidence": _suspect_evidence(suspect),
             "engine_version": get_engine().version,
         },
@@ -203,9 +210,13 @@ async def unchecked_pairs(db: AsyncSession, named: Mapping[str, str]) -> list[Ac
 
 
 async def record_pair_ignored(
-    db: AsyncSession, *, pair: AcknowledgedPair, created_uuid: str, actor_uuid: str
+    db: AsyncSession, *, pair: AcknowledgedPair, created_uuid: str, actor_uuid: str, entry: str | None = None
 ) -> DuplicatePair:
-    """Card `pair` against `created_uuid`, the entity made from its draft. Does not commit."""
+    """Card `pair` against `created_uuid`, the entity made from its draft. Does not commit.
+
+    `entry` goes on the card as `reason.entry` when the draft did not come from a single create, so
+    the review queue and the slow layer can tell an import's cards apart (ADR-398).
+    """
     suspect = pair.suspect
     card = await _ignore_pair(
         db,
@@ -214,6 +225,7 @@ async def record_pair_ignored(
         similarity=None if suspect is None else suspect.similarity,
         evidence=None if suspect is None else dict(suspect.evidence),
         engine_version=pair.engine_version,
+        reason=None if entry is None else {"entry": entry},
     )
     await dedup_audit_event_repository.add(
         db,
@@ -241,11 +253,12 @@ async def _ignore_pair(
     similarity: float | None,
     evidence: dict | None,
     engine_version: str,
+    reason: dict | None = None,
 ) -> DuplicatePair:
     """Create the pair's card as dup_ignored, or flip the live one in place.
 
-    An existing card keeps the evidence of the verdict that made it; only its status moves, so
-    the slow layer re-scans it.
+    An existing card keeps the evidence and reason of the verdict that made it; only its status
+    moves, so the slow layer re-scans it.
     """
     low_uuid, high_uuid = sorted(uuids)  # satisfies CHECK (low_uuid < high_uuid)
     existing = await duplicate_pair_repository.get_active_by_entities(
@@ -266,6 +279,7 @@ async def _ignore_pair(
             "high_uuid": high_uuid,
             "similarity": None if similarity is None else Decimal(f"{similarity:.4f}"),
             "evidence": evidence,
+            "reason": reason,
             "method": "fast_rule",
             "engine_version": engine_version,
             "source_layer": "fast",

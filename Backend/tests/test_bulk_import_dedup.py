@@ -246,13 +246,22 @@ async def test_an_undecided_suspected_row_is_not_created_and_goes_into_the_repor
     (held,) = _report_rows(outcome)
     assert held["name"] == "光復國民小學"
     assert "疑似重複，未建立：很像「光復國小」，相距約 0 公尺" in held["error"]
-    events = (await db.execute(select(DedupAuditEvent.event_type, DedupAuditEvent.primary_uuid))).all()
-    assert [(event, str(uuid)) for event, uuid in events] == [("hint_shown", school)]
+    events = (
+        await db.execute(
+            select(DedupAuditEvent.event_type, DedupAuditEvent.primary_uuid, DedupAuditEvent.decision_reason)
+        )
+    ).all()
+    assert [(event, str(uuid), why) for event, uuid, why in events] == [("hint_shown", school, "bulk_import")]
 
 
 @pytest.mark.asyncio
 async def test_rows_filed_anyway_are_created_and_carded_and_reviewers_hear_once(db, engine, notifications):
-    """`acknowledged_duplicate_of` as on createStation: no second check, a dup_ignored card each."""
+    """`acknowledged_duplicate_of` as on createStation: no second check, a dup_ignored card each.
+
+    Each row was shown its hint in the preview, so it is recorded as shown and then ignored, as a single
+    create records it across its two submissions (ADR-303). The cards and the hints say they came from
+    an import.
+    """
     actor = await _station_importer(db)
     school = await _existing_station(db, actor, "光復國小")
     church = await _existing_station(db, actor, "光復教會")
@@ -268,18 +277,21 @@ async def test_rows_filed_anyway_are_created_and_carded_and_reviewers_hear_once(
 
     assert (outcome.created, outcome.suspected, outcome.error_report) == (2, 0, None)
     created = {name: uuid for uuid, name in (await db.execute(select(Station.uuid, Station.name))).all()}
-    cards = (
-        await db.execute(select(DuplicatePair.low_uuid, DuplicatePair.high_uuid, DuplicatePair.status))
-    ).all()
-    assert sorted((sorted([str(low), str(high)]), status) for low, high, status in cards) == sorted(
+    card = DuplicatePair
+    cards = (await db.execute(select(card.low_uuid, card.high_uuid, card.status, card.reason))).all()
+    pairs = sorted((sorted([str(low), str(high)]), status, reason) for low, high, status, reason in cards)
+    assert pairs == sorted(
         [
-            (sorted([str(created["光復國民小學"]), school]), "dup_ignored"),
-            (sorted([str(created["光復長老教會"]), church]), "dup_ignored"),
+            (sorted([str(created["光復國民小學"]), school]), "dup_ignored", {"entry": "bulk_import"}),
+            (sorted([str(created["光復長老教會"]), church]), "dup_ignored", {"entry": "bulk_import"}),
         ]
     )
-    assert sorted((await db.execute(select(DedupAuditEvent.event_type))).scalars()) == [
-        "ignored_by_submitter",
-        "ignored_by_submitter",
+    events = (await db.execute(select(DedupAuditEvent.event_type, DedupAuditEvent.decision_reason))).all()
+    assert sorted(events) == [
+        ("hint_shown", "bulk_import"),
+        ("hint_shown", "bulk_import"),
+        ("ignored_by_submitter", "ignored_hint"),
+        ("ignored_by_submitter", "ignored_hint"),
     ]
     assert [n["title"] for n in notifications if n["event_type"] == "dedup_review_pending"] == [
         "疑似重複待審核：2 筆"
@@ -357,7 +369,8 @@ async def test_with_the_real_engine_a_station_like_one_already_there_is_held_unt
 async def test_with_the_real_engine_two_alike_rows_of_one_file_both_land(db, monkeypatch):
     """The file is compared before any row is written, so row 3 is not held by row 2 (ADR-398).
 
-    The test above is what shows the engine would hold this pair.
+    The test above is what shows the engine would hold this pair. Nothing cards it either, so it does
+    not reach the review queue.
     """
     monkeypatch.setattr(registry, "_ENGINE", FastEngine())
     actor = await _station_importer(db)
@@ -366,6 +379,7 @@ async def test_with_the_real_engine_two_alike_rows_of_one_file_both_land(db, mon
     outcome = await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
 
     assert (outcome.created, outcome.suspected) == (2, 0)
+    assert await _count(db, DuplicatePair) == 0
 
 
 # --- tickets -------------------------------------------------------------------------------
@@ -616,8 +630,10 @@ async def test_tasks_filed_anyway_are_created_and_carded(db, engine, notificatio
     assert (outcome.created, outcome.updated, outcome.suspected) == (1, 2, 0)
     assert await _task_names(db, "中正路受困") == ["救人", "送水"]
     assert await _task_names(db, "民生街淹水") == ["抽水", "清淤"]
-    cards = (await db.execute(select(DuplicatePair.entity_kind, DuplicatePair.status))).all()
-    assert sorted(cards) == [("ticket_task", "dup_ignored"), ("ticket_task", "dup_ignored")]
+    cards = (
+        await db.execute(select(DuplicatePair.entity_kind, DuplicatePair.status, DuplicatePair.reason))
+    ).all()
+    assert cards == [("ticket_task", "dup_ignored", {"entry": "bulk_import"})] * 2
     assert [n["title"] for n in notifications if n["event_type"] == "dedup_review_pending"] == [
         "疑似重複待審核：2 筆"
     ]
