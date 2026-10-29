@@ -363,3 +363,90 @@ async def test_tickets_extent_is_empty_when_nothing_matches(client, redis):
         "minLng": None,
         "maxLng": None,
     }
+
+
+ASSIGN_RIGHTS = """
+query($t: UUID!) {
+    ticket(uuid: $t) {
+        tasks { taskName viewerCanAssign assignments { actorUuid viewerCanUnassign } }
+    }
+}
+"""
+
+
+async def _need_by(ticket: str, created_by: str, name: str, assignees=()) -> str:
+    """Insert one need on `ticket` filed by `created_by`, with `assignees` on it."""
+    async with gql_conftest.test_db() as db:
+        task = TicketTask(
+            ticket_uuid=ticket,
+            task_type="hr",
+            task_name=name,
+            quantity=5,
+            status="pending",
+            source="user",
+            created_by=created_by,
+        )
+        db.add(task)
+        await db.flush()
+        for actor in assignees:
+            db.add(TaskAssignment(task_uuid=str(task.uuid), actor_uuid=actor))
+        await db.flush()
+        return str(task.uuid)
+
+
+@pytest.mark.asyncio
+async def test_viewer_can_assign_follows_the_need_as_assigning_someone_else_does(client, redis):
+    """`own` is the need's creator, not the ticket's; `all` reaches every need; none reaches none.
+
+    Removal is the assignment's own check: at `own`, only the caller's own place.
+    """
+    reads = [(Perm.TICKET_VIEW, "all"), (Perm.TICKET_VIEW_HISTORY, "all")]
+    own_uuid, own_token = await _create_user_with_grants(redis, [*reads, (Perm.TICKET_ASSIGN, "own")])
+    _, all_token = await _create_user_with_grants(redis, [*reads, (Perm.TICKET_ASSIGN, "all")])
+    _, none_token = await _create_user_with_grants(redis, reads)
+    other = await _user("other")
+    ticket = await _ticket(other, "assign rights")
+    await _need_by(ticket, own_uuid, "mine", assignees=[own_uuid, other])
+    await _need_by(ticket, other, "theirs", assignees=[other])
+
+    def rights(data):
+        return {
+            t["taskName"]: (t["viewerCanAssign"], sorted(a["viewerCanUnassign"] for a in t["assignments"]))
+            for t in data["ticket"]["tasks"]
+        }
+
+    assert rights(await _gql(client, own_token, ASSIGN_RIGHTS, {"t": ticket})) == {
+        "mine": (True, [False, True]),
+        "theirs": (False, [False]),
+    }
+    assert rights(await _gql(client, all_token, ASSIGN_RIGHTS, {"t": ticket})) == {
+        "mine": (True, [True, True]),
+        "theirs": (True, [True]),
+    }
+    assert rights(await _gql(client, none_token, ASSIGN_RIGHTS, {"t": ticket})) == {
+        "mine": (False, [False, False]),
+        "theirs": (False, [False]),
+    }
+
+
+@pytest.mark.asyncio
+async def test_viewer_can_assign_at_zone_follows_where_the_ticket_is(client, redis, team_assigned_to_zone):
+    """At `zone`, a need borrows its ticket's place: inside the team's zone, yes; outside, no."""
+    _, token = await _make_zone_scoped_editor(redis, team_assigned_to_zone, (Perm.TICKET_ASSIGN,))
+    async with gql_conftest.test_db() as db:
+        role_uuid = await db.scalar(
+            select(UserRoleAssign.role_uuid).where(UserRoleAssign.team_uuid == team_assigned_to_zone)
+        )
+        for perm in (Perm.TICKET_VIEW, Perm.TICKET_VIEW_HISTORY):
+            permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
+            db.add(RolePermissionAssign(role_uuid=role_uuid, permission_uuid=permission.uuid, scope="all"))
+    author = await _user()
+    inside = await _ticket(author, "in", point=(INSIDE_ZONE_POINT.x, INSIDE_ZONE_POINT.y))
+    outside = await _ticket(author, "out", point=(OUTSIDE_ZONE_POINT.x, OUTSIDE_ZONE_POINT.y))
+    await _need_by(inside, author, "in", assignees=[author])
+    await _need_by(outside, author, "out", assignees=[author])
+
+    for ticket, expected in ((inside, True), (outside, False)):
+        task = (await _gql(client, token, ASSIGN_RIGHTS, {"t": ticket}))["ticket"]["tasks"][0]
+        assert task["viewerCanAssign"] is expected
+        assert [a["viewerCanUnassign"] for a in task["assignments"]] == [expected]

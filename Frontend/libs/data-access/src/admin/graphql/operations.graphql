@@ -215,6 +215,10 @@ query AdminTicketStats {
 query AdminTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...AdminTicketFields
+    responsibleTeams {
+      uuid
+      name
+    }
     auditNote
     auditedAt
     auditContentHash
@@ -256,6 +260,12 @@ query AdminTicket($uuid: UUID!) {
     }
     tasks {
       ...AdminTaskFields
+      # The drawer's 指派承接 and its × on each person: ticket.assign on this need, and on each place.
+      viewerCanAssign
+      assignments {
+        uuid
+        viewerCanUnassign
+      }
       properties {
         uuid
         propertyName

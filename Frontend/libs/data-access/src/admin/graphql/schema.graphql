@@ -1558,6 +1558,11 @@ type TaskAssignmentType {
   Display name of the assigned person. Null to a caller without ticket.view_history on the parent ticket, unless the assignment is their own
   """
   actorName: String
+
+  """
+  Whether the caller holds ticket.assign over this assignment, so a page offers to remove the person only where unassignTaskActor would be allowed: `own` is the assignee themselves, `zone` the need's ticket in the caller's team zones
+  """
+  viewerCanUnassign: Boolean!
 }
 
 type TaskPropertyConfigType {
@@ -1849,6 +1854,11 @@ type TicketTaskType {
   UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket
   """
   createdBy: String
+
+  """
+  Whether the caller holds ticket.assign over this need as assigning someone else to it is checked, so a page offers 指派承接 only where it would be allowed: `own` is the need's creator, `zone` its ticket in the caller's team zones. Room on the need is not part of it
+  """
+  viewerCanAssign: Boolean!
   properties: [TaskPropertyType!]!
 
   """

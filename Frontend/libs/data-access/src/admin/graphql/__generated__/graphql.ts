@@ -1612,6 +1612,8 @@ export type TaskAssignmentType = {
   /** Timestamp when the status was last changed */
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
+  /** Whether the caller holds ticket.assign over this assignment, so a page offers to remove the person only where unassignTaskActor would be allowed: `own` is the assignee themselves, `zone` the need's ticket in the caller's team zones */
+  viewerCanUnassign: Scalars['Boolean']['output'];
 };
 
 export type TaskPropertyConfigType = {
@@ -1843,6 +1845,8 @@ export type TicketTaskType = {
   ticketUuid: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
+  /** Whether the caller holds ticket.assign over this need as assigning someone else to it is checked, so a page offers 指派承接 only where it would be allowed: `own` is the need's creator, `zone` its ticket in the caller's team zones. Room on the need is not part of it */
+  viewerCanAssign: Scalars['Boolean']['output'];
 };
 
 export type TicketType = {
@@ -2414,6 +2418,11 @@ export type AdminTicketQuery = {
     viewerCanDelete: boolean;
     viewerCanAudit: boolean;
     viewerCanViewHistory: boolean;
+    responsibleTeams: Array<{
+      __typename?: 'AssignedTeamType';
+      uuid: string;
+      name: string;
+    }>;
     changesSinceAudit?: Array<{
       __typename?: 'TicketAuditChangeType';
       entity: string;
@@ -2455,6 +2464,7 @@ export type AdminTicketQuery = {
     }>;
     tasks: Array<{
       __typename?: 'TicketTaskType';
+      viewerCanAssign: boolean;
       uuid: string;
       ticketUuid: string;
       taskType: string;
@@ -2468,6 +2478,17 @@ export type AdminTicketQuery = {
       updatedAt?: string | null;
       assignedCount: number;
       recruitingStoppedAt?: string | null;
+      assignments: Array<{
+        __typename?: 'TaskAssignmentType';
+        uuid: string;
+        viewerCanUnassign: boolean;
+        actorUuid: string;
+        actorName?: string | null;
+        role?: string | null;
+        status: string;
+        assignedAt?: string | null;
+        updatedAt?: string | null;
+      }>;
       properties: Array<{
         __typename?: 'TaskPropertyType';
         uuid: string;
@@ -2476,16 +2497,6 @@ export type AdminTicketQuery = {
         quantity?: number | null;
         status?: string | null;
         comment?: string | null;
-      }>;
-      assignments: Array<{
-        __typename?: 'TaskAssignmentType';
-        uuid: string;
-        actorUuid: string;
-        actorName?: string | null;
-        role?: string | null;
-        status: string;
-        assignedAt?: string | null;
-        updatedAt?: string | null;
       }>;
     }>;
     disasterDetails: Array<{
@@ -5082,6 +5093,17 @@ export const AdminTicketDocument = {
                   kind: 'FragmentSpread',
                   name: { kind: 'Name', value: 'AdminTicketFields' },
                 },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'responsibleTeams' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                    ],
+                  },
+                },
                 { kind: 'Field', name: { kind: 'Name', value: 'auditNote' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'auditedAt' } },
                 {
@@ -5214,6 +5236,30 @@ export const AdminTicketDocument = {
                       {
                         kind: 'FragmentSpread',
                         name: { kind: 'Name', value: 'AdminTaskFields' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'viewerCanAssign' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'assignments' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: {
+                                kind: 'Name',
+                                value: 'viewerCanUnassign',
+                              },
+                            },
+                          ],
+                        },
                       },
                       {
                         kind: 'Field',

@@ -67,6 +67,34 @@ export function useTeams(options: AdminQueryOptions = {}) {
   return useQuery({ ...teamsQuery(), enabled: options.enabled });
 }
 
+export type TeamMember = components['schemas']['TeamMemberItem'];
+
+/**
+ * One team's members and their role in it (`team.member.view` covering the team); another team
+ * answers 404. The first 500, the backend's cap for one page.
+ */
+export const teamMembersQuery = (teamUuid: string) =>
+  queryOptions({
+    queryKey: ['admin', 'teams', 'TeamMembers', { teamUuid }],
+    queryFn: ({ signal }): Promise<TeamMember[]> =>
+      adminRestClient
+        .GET('/api/v1/admin/teams/{team_uuid}/members', {
+          params: { path: { team_uuid: teamUuid }, query: { limit: 500 } },
+          signal,
+        })
+        .then(responseData),
+  });
+
+export function useTeamMembers(
+  teamUuid: string | null | undefined,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...teamMembersQuery(teamUuid ?? ''),
+    enabled: Boolean(teamUuid) && options.enabled !== false,
+  });
+}
+
 export type ProjectSettings = components['schemas']['ProjectSettingsResponse'];
 
 export const projectSettingsQuery = () =>

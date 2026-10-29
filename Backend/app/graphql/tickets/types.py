@@ -361,6 +361,22 @@ class TaskAssignmentType:
                 return None
         return await info.context["loaders"]["user_name_by_uuid"].load(self.actor_uuid)
 
+    @strawberry.field(
+        description=(
+            "Whether the caller holds ticket.assign over this assignment, so a page offers to "
+            "remove the person only where unassignTaskActor would be allowed: `own` is the "
+            "assignee themselves, `zone` the need's ticket in the caller's team zones"
+        )
+    )
+    async def viewer_can_unassign(self, info: strawberry.types.Info) -> bool:
+        """The check unassign_task_actor makes (_assignment_scope_target), without raising."""
+        ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
+        if ticket_uuid is None:
+            return False
+        return await _decide_ticket_scope(
+            info, Perm.TICKET_ASSIGN, str(ticket_uuid), SimpleNamespace(created_by=str(self.actor_uuid))
+        )
+
     @classmethod
     def from_model(cls, m) -> "TaskAssignmentType":
         """Build from a SQLAlchemy model instance."""
@@ -456,6 +472,20 @@ class TicketTaskType:
     async def created_by(self, info: strawberry.types.Info) -> str | None:
         """Return the author's uuid, or null when the caller is out of detail scope."""
         return self._created_by_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Whether the caller holds ticket.assign over this need as assigning someone else to "
+            "it is checked, so a page offers 指派承接 only where it would be allowed: `own` is "
+            "the need's creator, `zone` its ticket in the caller's team zones. Room on the need "
+            "is not part of it"
+        )
+    )
+    async def viewer_can_assign(self, info: strawberry.types.Info) -> bool:
+        """The check assign_task_actor makes for someone else (_task_scope_target), without raising."""
+        return await _decide_ticket_scope(
+            info, Perm.TICKET_ASSIGN, str(self.ticket_uuid), SimpleNamespace(created_by=self._created_by_raw)
+        )
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list[TaskPropertyType]:
