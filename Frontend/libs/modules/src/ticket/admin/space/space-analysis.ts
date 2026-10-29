@@ -137,19 +137,18 @@ export function analyzeSpace(
 
 /**
  * A ticket's 承接進度 on a floor card, as the prototype's `fillState` reads it: needs nobody took
- * first, then needs on their way, then done. `open` is the untaken count, red on the card.
+ * first, then needs on their way, then done. `open` is the untaken count, red on the card. A
+ * stopped need is left out, as the board's `needProgress` does, so it never holds a household at 在途.
  */
 export function fillLabel(
   tasks: readonly { status: string; assignedCount: number }[],
 ): { open: number; label: string } {
-  const total = tasks.length;
+  const live = tasks.filter((task) => task.status !== 'canceled');
+  const total = live.length;
   if (!total) return { open: 0, label: '尚無需求' };
-  const done = tasks.filter((task) => task.status === 'fulfilled').length;
-  const open = tasks.filter(
-    (task) =>
-      task.assignedCount === 0 &&
-      task.status !== 'fulfilled' &&
-      task.status !== 'canceled',
+  const done = live.filter((task) => task.status === 'fulfilled').length;
+  const open = live.filter(
+    (task) => task.assignedCount === 0 && task.status !== 'fulfilled',
   ).length;
   if (open) return { open, label: `待承接 ${open}／${total}` };
   if (done < total) return { open: 0, label: `在途 ${total - done}／${total}` };

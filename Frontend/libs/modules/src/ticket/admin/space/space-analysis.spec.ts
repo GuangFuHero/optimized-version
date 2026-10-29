@@ -465,7 +465,10 @@ describe("fillLabel (the prototype's fillState)", () => {
         task({ status: 'canceled', assignedCount: 0 }),
         task({ status: 'fulfilled' }),
       ]),
-    ).toEqual({ open: 0, label: '在途 1／2' });
+    ).toEqual({ open: 0, label: '1/1 完成' });
+    expect(fillLabel([task({ status: 'canceled', assignedCount: 0 })])).toEqual(
+      { open: 0, label: '尚無需求' },
+    );
   });
 
   it('says so when there are no needs', () => {
