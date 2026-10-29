@@ -297,7 +297,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
               <TextInput
                 multiline
                 minRows={3}
-                aria-label="貼上 CSV 內容"
+                inputProps={{ 'aria-label': '貼上 CSV 內容' }}
                 placeholder={
                   pickFirst ?? '也可以直接貼上 CSV 內容（第一列是欄位名稱）'
                 }
