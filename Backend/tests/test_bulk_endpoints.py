@@ -351,6 +351,18 @@ async def test_a_malformed_mapping_is_a_400(client, db_session, redis):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["mapping", "decisions", "declined"])
+async def test_json_too_deep_to_read_is_a_400(client, db_session, redis, field):
+    """A value the parser cannot read is malformed like any other, not a server error."""
+    headers = await _importer(db_session, redis)
+
+    resp = await _commit(client, headers, [_row("光復國小")], **{field: "[" * 100_000})
+
+    assert resp.status_code == 400
+    assert "JSON" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_a_mapping_that_is_not_an_object_is_a_400(client, db_session, redis):
     """The mapping has to be an object of header pairs."""
     headers = await _importer(db_session, redis)

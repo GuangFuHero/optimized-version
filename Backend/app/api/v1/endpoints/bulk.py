@@ -101,7 +101,7 @@ def _parse_mapping(raw: str | None) -> dict[str, str]:
         return {}
     try:
         mapping = json.loads(raw)
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, RecursionError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="mapping 不是合法的 JSON"
         ) from exc
@@ -123,7 +123,7 @@ def _parse_decisions(raw: str | None) -> dict[int, str]:
         return {}
     try:
         decisions = json.loads(raw)
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, RecursionError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="decisions 不是合法的 JSON"
         ) from exc
@@ -160,7 +160,7 @@ def _parse_declined(raw: str | None, decisions: dict[int, str]) -> frozenset[int
         return frozenset()
     try:
         declined = json.loads(raw)
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, RecursionError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="declined 不是合法的 JSON"
         ) from exc
