@@ -45,7 +45,12 @@ import {
   type ListedTicket,
 } from './ticket-list-rules';
 
-import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  RowAction,
+  safeAreaBottom,
+} from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -408,10 +413,7 @@ export function SiteListView() {
             px: { mobile: 2, tablet: 3 },
             pt: 2,
             // On a phone the last card scrolls clear of the floating 請求協助 (52px, 16px up).
-            pb: {
-              mobile: 'calc(84px + env(safe-area-inset-bottom, 0px))',
-              tablet: 2,
-            },
+            pb: { mobile: safeAreaBottom(84), tablet: 2 },
           }}
         >
           {searchTooShort ? (
