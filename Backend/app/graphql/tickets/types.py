@@ -493,7 +493,11 @@ class CreateTicketTaskInput:
             "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the task decides it (ADR-438)",
+        deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
+    )
     route_uuid: UUID | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
     )
@@ -1145,7 +1149,11 @@ class CreateTicketTaskDraft:
     task_name: str
     task_description: str | None = None
     quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the task decides it (ADR-438)",
+        deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
+    )
     route_uuid: UUID | None = None
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,

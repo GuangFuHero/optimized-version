@@ -389,7 +389,10 @@ export type CreateStationInput = {
   operationalStatus?: StationOperationalStatus;
   /** Optional secondary address or pole location to attach to this station */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
-  /** Data origin: 'user' (default) or 'official' */
+  /**
+   * Not read: the identity making the station decides it (ADR-438)
+   * @deprecated The backend sets `source` from the identity making the station; leave it out
+   */
   source?: Scalars['String']['input'];
   /** Optional public line on what the station is short of */
   supplyStatus?: InputMaybe<Scalars['String']['input']>;
@@ -475,7 +478,10 @@ export type CreateTicketTaskDraft = {
   /** Number of people or units needed */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
-  /** Origin: 'user' (default) or 'official' */
+  /**
+   * Not read: the identity making the task decides it (ADR-438)
+   * @deprecated The backend sets `source` from the identity making the task; leave it out
+   */
   source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   taskName: Scalars['String']['input'];
@@ -488,7 +494,10 @@ export type CreateTicketTaskInput = {
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
-  /** Origin: 'user' (default) or 'official' */
+  /**
+   * Not read: the identity making the task decides it (ADR-438)
+   * @deprecated The backend sets `source` from the identity making the task; leave it out
+   */
   source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   taskName: Scalars['String']['input'];

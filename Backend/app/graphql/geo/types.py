@@ -535,7 +535,11 @@ class CreateStationInput:
     op_hour: str | None = strawberry.field(default=None, description="Operating hours in free-text format")
     level: int = strawberry.field(default=0, description="Importance level for map rendering (0 = default)")
     comment: str | None = None
-    source: str = strawberry.field(default="user", description="Data origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the station decides it (ADR-438)",
+        deprecation_reason="The backend sets `source` from the identity making the station; leave it out",
+    )
     visibility: Visibility = strawberry.field(
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",

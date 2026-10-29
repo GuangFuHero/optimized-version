@@ -368,9 +368,8 @@ async def _write_station(
             op_hour=fixed.get("op_hour"),
             level=fixed.get("level") or 0,
             comment=fixed.get("comment"),
-            # Bulk import is admin-only, and an admin-created station is official (ADMIN-026),
-            # so `source` is an export-only column (bulk_columns.py).
-            source="official",
+            # No `source`: the importer's identity decides it, and only the back office imports, so it
+            # is official (ADR-438). The file's `source` column is export-only (bulk_columns.py).
             visibility=fixed.get("visibility") or "public",
             secondary_location={"location_type": "address", **address} if address else None,
         )
@@ -572,7 +571,6 @@ async def _write_task(
         task_name=task_name,
         task_description=creating.get("task_description"),
         quantity=creating.get("task_quantity"),
-        source="import",
         route_uuid=None,
     )
     return str(task.uuid)

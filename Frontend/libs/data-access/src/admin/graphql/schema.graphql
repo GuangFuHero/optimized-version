@@ -413,8 +413,8 @@ input CreateStationInput {
   level: Int! = 0
   comment: String = null
 
-  """Data origin: 'user' (default) or 'official'"""
-  source: String! = "user"
+  """Not read: the identity making the station decides it (ADR-438)"""
+  source: String! = "user" @deprecated(reason: "The backend sets `source` from the identity making the station; leave it out")
 
   """Visibility: 'public' (default), 'restricted', or 'internal'"""
   visibility: Visibility! = public
@@ -551,8 +551,8 @@ input CreateTicketTaskDraft {
   """Number of people or units needed"""
   quantity: Int = null
 
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
+  """Not read: the identity making the task decides it (ADR-438)"""
+  source: String! = "user" @deprecated(reason: "The backend sets `source` from the identity making the task; leave it out")
   routeUuid: UUID = null
 
   """
@@ -575,8 +575,8 @@ input CreateTicketTaskInput {
   """
   quantity: Int = null
 
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
+  """Not read: the identity making the task decides it (ADR-438)"""
+  source: String! = "user" @deprecated(reason: "The backend sets `source` from the identity making the task; leave it out")
 
   """Optional UUID of an associated route"""
   routeUuid: UUID = null
