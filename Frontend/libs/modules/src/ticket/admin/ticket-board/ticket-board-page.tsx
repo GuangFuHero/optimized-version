@@ -137,16 +137,8 @@ export function TicketBoardPage() {
   const [editingUuid, setEditingUuid] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  // 刪除任務單 from a row's ⋯: the drawer's own confirm, for that row's ticket.
+  // 刪除任務 from a row's ⋯: the drawer's own confirm, for that row's ticket.
   const [deleting, setDeleting] = useState<TicketRow | null>(null);
-  // 編輯任務單 from a row's ⋯: the drawer, opened on that ticket, in its edit form.
-  const editTicket = useCallback(
-    (uuid: string) => {
-      setEditingUuid(uuid);
-      openTicket(uuid);
-    },
-    [openTicket],
-  );
 
   return (
     <>
@@ -222,7 +214,6 @@ export function TicketBoardPage() {
                   setParam('page', next > 1 ? String(next) : null)
                 }
                 onOpenTicket={openTicket}
-                onEditTicket={editTicket}
                 onDeleteTicket={setDeleting}
                 onCreate={caps.canAdd ? () => setCreating(true) : undefined}
               />

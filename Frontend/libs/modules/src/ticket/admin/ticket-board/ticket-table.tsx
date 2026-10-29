@@ -15,8 +15,11 @@ import {
   CircleDashed,
   ClipboardList,
   Image as ImageIcon,
+  PanelRightOpen,
   Plus,
   SearchX,
+  Trash2,
+  UserPlus,
 } from 'lucide-react';
 import type { ReactNode, SyntheticEvent } from 'react';
 
@@ -63,8 +66,6 @@ interface TicketTableProps {
   pageCount: number;
   onPageChange: (page: number) => void;
   onOpenTicket: (uuid: string) => void;
-  /** 編輯任務單 from a row's ⋯; offered only where the ticket's `viewerCanEdit` allows. */
-  onEditTicket: (uuid: string) => void;
   /** 刪除任務單 from a row's ⋯; offered only where the ticket's `viewerCanDelete` allows. */
   onDeleteTicket: (row: TicketRow) => void;
   /** 新增任務 in the empty board; unset when the viewer may not add. */
@@ -83,7 +84,6 @@ export function TicketTable({
   pageCount,
   onPageChange,
   onOpenTicket,
-  onEditTicket,
   onDeleteTicket,
   onCreate,
 }: TicketTableProps) {
@@ -106,7 +106,6 @@ export function TicketTable({
           <RowMenu
             row={row}
             onOpen={() => onOpenTicket(row.uuid)}
-            onEdit={() => onEditTicket(row.uuid)}
             onDelete={() => onDeleteTicket(row)}
           />
         );
@@ -456,27 +455,38 @@ function TeamCell({ row }: { row: TicketRow }) {
 }
 
 /**
- * The row's ⋯: what the viewer may do to this one ticket, by its own `viewerCan*` flags. Its
+ * The row's ⋯: view, 指派 Team (not open yet), and delete where the ticket's `viewerCanDelete` allows. Its
  * clicks stay in the cell (the menu is portalled, but React bubbles through it) so the row does
  * not open under it.
  */
 function RowMenu({
   row,
   onOpen,
-  onEdit,
   onDelete,
 }: {
   row: TicketRow;
   onOpen: () => void;
-  onEdit: () => void;
   onDelete: () => void;
 }) {
-  const items: NeedAction[] = [{ label: '開啟', onSelect: onOpen }];
-  if (row.raw.viewerCanEdit) {
-    items.push({ label: '編輯任務單', onSelect: onEdit });
-  }
+  const items: NeedAction[] = [
+    { label: '檢視任務', icon: <PanelRightOpen size={16} />, onSelect: onOpen },
+    {
+      // The backend has no ticket–team assignment yet (ADR-049): drawn as the design does, not wired.
+      label: '指派 Team',
+      icon: <UserPlus size={16} />,
+      onSelect: () => undefined,
+      disabled: true,
+      hint: '尚未開放',
+    },
+  ];
   if (row.raw.viewerCanDelete) {
-    items.push({ label: '刪除任務單', onSelect: onDelete, tone: 'danger' });
+    items.push({
+      label: '刪除任務',
+      icon: <Trash2 size={16} />,
+      onSelect: onDelete,
+      tone: 'danger',
+      dividerBefore: true,
+    });
   }
   const stop = (event: SyntheticEvent) => event.stopPropagation();
   return (
