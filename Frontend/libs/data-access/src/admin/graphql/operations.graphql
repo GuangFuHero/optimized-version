@@ -206,6 +206,17 @@ query AdminTicketsExtent(
     maxLng
   }
 }
+query AdminTicketStats {
+  ticketStats {
+    total
+    pending
+    inProgress
+    completed
+    cancelled
+    gapPeople
+    gapNeeds
+  }
+}
 query AdminTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...AdminTicketFields

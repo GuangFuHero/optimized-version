@@ -2378,6 +2378,22 @@ export type AdminTicketsExtentQuery = {
   };
 };
 
+export type AdminTicketStatsQueryVariables = Exact<{ [key: string]: never }>;
+
+export type AdminTicketStatsQuery = {
+  __typename?: 'Query';
+  ticketStats: {
+    __typename?: 'TicketStatsType';
+    total: number;
+    pending: number;
+    inProgress: number;
+    completed: number;
+    cancelled: number;
+    gapPeople: number;
+    gapNeeds: number;
+  };
+};
+
 export type AdminTicketQueryVariables = Exact<{
   uuid: Scalars['UUID']['input'];
 }>;
@@ -5351,6 +5367,40 @@ export const AdminTicketsExtentDocument = {
 } as unknown as DocumentNode<
   AdminTicketsExtentQuery,
   AdminTicketsExtentQueryVariables
+>;
+export const AdminTicketStatsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminTicketStats' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'ticketStats' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'total' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'pending' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'inProgress' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'completed' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'cancelled' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'gapPeople' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'gapNeeds' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminTicketStatsQuery,
+  AdminTicketStatsQueryVariables
 >;
 export const AdminTicketDocument = {
   kind: 'Document',

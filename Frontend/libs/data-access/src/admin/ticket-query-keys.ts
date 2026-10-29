@@ -10,6 +10,7 @@ export const ticketKeys = {
   lists: () => ['admin', 'tickets', 'tickets'] as const,
   mapPins: () => [...ticketKeys.lists(), 'mapPins'] as const,
   extents: () => [...ticketKeys.lists(), 'extent'] as const,
+  stats: () => ['admin', 'tickets', 'stats'] as const,
   details: () => ['admin', 'tickets', 'ticket'] as const,
   tasks: () => ['admin', 'tickets', 'ticketTasks'] as const,
   histories: () => ['admin', 'tickets', 'TicketHistory'] as const,
@@ -32,8 +33,8 @@ export function ticketDetailUuid(queryKey: readonly unknown[]): string | null {
 }
 
 /**
- * The keys a ticket write makes stale: the lists and that ticket's own detail, needs and history.
- * Without its uuid (a write that names only a need, photo or assignment), every
+ * The keys a ticket write makes stale: the lists, the stats and that ticket's own detail, needs
+ * and history. Without its uuid (a write that names only a need, photo or assignment), every
  * ticket's detail, needs and history — of which only the open sheet's are on screen.
  */
 export function ticketWriteKeys(ticketUuid?: string | null): unknown[][] {
@@ -44,5 +45,9 @@ export function ticketWriteKeys(ticketUuid?: string | null): unknown[][] {
         [...ticketKeys.histories(), { path: { uuid: ticketUuid } }],
       ]
     : [ticketKeys.details(), ticketKeys.tasks(), ticketKeys.histories()];
-  return [[...ticketKeys.lists()], ...own.map((k) => [...k])];
+  return [
+    [...ticketKeys.lists()],
+    [...ticketKeys.stats()],
+    ...own.map((k) => [...k]),
+  ];
 }

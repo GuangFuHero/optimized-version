@@ -97,8 +97,8 @@ export function spaceTicketKeysForWrite(
 }
 
 /**
- * After a ticket write: refetch the lists, that ticket's sheet and the spaces it moves
- * where they are on screen; anything else is only marked stale, never reloaded now.
+ * After a ticket write: refetch the lists, the stats, that ticket's sheet and the spaces it
+ * moves where they are on screen; anything else is only marked stale, never reloaded now.
  */
 export function invalidateTicketWrite(
   queryClient: QueryClient,
@@ -217,6 +217,25 @@ export function useTicketsExtent(
     ...ticketsExtentQuery(variables),
     enabled: options.enabled,
   });
+}
+
+/** The board's counts over every ticket the caller may list, whatever the filters. */
+export const ticketStatsQuery = () =>
+  queryOptions({
+    queryKey: ticketKeys.stats(),
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminTicketStatsDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useTicketStats(options: AdminQueryOptions = {}) {
+  return useQuery({ ...ticketStatsQuery(), enabled: options.enabled });
 }
 
 export const ticketQuery = (variables: documents.AdminTicketQueryVariables) =>
