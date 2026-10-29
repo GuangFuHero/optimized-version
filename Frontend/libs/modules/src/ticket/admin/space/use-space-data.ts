@@ -78,31 +78,42 @@ function loadedSpace(
  */
 export function useSpaces(bounds?: BoundsInput) {
   const buildings = useBuildingMaps(bounds ? { bounds } : {});
-  const items = buildings.data?.buildingMaps.items ?? [];
+  const items = buildings.data?.buildingMaps.items ?? NO_BUILDINGS;
+  // Combined outside the render, so the result keeps its identity until a query's does change:
+  // spreading each query's data into the memo's deps changed their count with the spaces.
   const tickets = useQueries({
     queries: items.map((building) =>
       buildingMapTicketsQuery({ buildingMapUuid: building.uuid }),
     ),
+    combine: combineSpaceTickets,
   });
 
-  const ticketsLoading = tickets.some((query) => query.isPending);
-  const ticketData = tickets.map((query) => query.data);
   const spaces = useMemo(
     () =>
       items.map((building, index) =>
-        loadedSpace(building, ticketData[index]?.buildingMapTickets ?? []),
+        loadedSpace(building, tickets.data[index]?.buildingMapTickets ?? []),
       ),
-    // `ticketData` is a new array each render; its entries are what change.
-    [items, ...ticketData],
+    [items, tickets.data],
   );
 
   return {
     spaces,
     /** The list stopped at its limit: there are spaces past it. */
     moreSpaces: buildings.data?.buildingMaps.pageInfo.hasNextPage ?? false,
-    isLoading: buildings.isPending || ticketsLoading,
-    error:
-      buildings.error ?? tickets.find((query) => query.error)?.error ?? null,
+    isLoading: buildings.isPending || tickets.isPending,
+    error: buildings.error ?? tickets.error,
+  };
+}
+
+const NO_BUILDINGS: AdminBuildingMapFieldsFragment[] = [];
+
+function combineSpaceTickets<T>(
+  results: { data: T | undefined; isPending: boolean; error: Error | null }[],
+) {
+  return {
+    data: results.map((query) => query.data),
+    isPending: results.some((query) => query.isPending),
+    error: results.find((query) => query.error)?.error ?? null,
   };
 }
 
