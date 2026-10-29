@@ -38,6 +38,7 @@ import type {
   RescueMapClosureArea,
   RescueMapControllerValue,
   RescueMapDetailItem,
+  RescueMapDraftArea,
   RescueMapDraftPoint,
   RescueMapLocationCell,
   RescueMapMarkerItem,
@@ -212,6 +213,8 @@ interface MapProps {
   showScale?: boolean;
   /** 點擊地圖空白處時回傳經緯度。 */
   onMapClick?: (position: [number, number]) => void;
+  /** 後台正在圈選、尚未儲存的區域外框。 */
+  draftArea?: RescueMapDraftArea | null;
   /** 顯示在地圖上的暫存圖釘。 */
   previewMarker?: RescueMapMarkerItem | null;
   /** 覆寫地圖互動游標。 */
@@ -246,6 +249,7 @@ export const Map = memo(function Map({
   showScale = false,
   onMapClick,
   previewMarker,
+  draftArea,
   cursor,
   draftPoint,
   onDraftPointChange,
@@ -391,6 +395,7 @@ export const Map = memo(function Map({
             onMarkerClick={handleMarkerClick}
             onLocationCellClick={handleLocationCellClick}
             previewMarker={previewMarker}
+            draftArea={draftArea}
             cursor={cursor}
             onMapClick={onMapClick}
             layoutKey={detailOpen ? 'detail-open' : 'detail-closed'}

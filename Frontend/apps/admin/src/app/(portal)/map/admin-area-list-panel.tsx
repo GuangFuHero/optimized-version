@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ChevronRight, Eye, EyeOff, MapPinned } from 'lucide-react';
 
-import { Box, ButtonBase, Stack, Typography } from '@mui/material';
+import { Box, Button, ButtonBase, Stack, Typography } from '@mui/material';
 import { useEffect, useRef } from 'react';
 
 import {
@@ -260,14 +260,16 @@ export function AdminAreaListPanel({
   hasError,
   canDraw = false,
   onSelect,
+  onStartDraw,
 }: {
   items: readonly AdminAreaListItem[];
   selectedId: string | null;
   isLoading: boolean;
   hasError: boolean;
-  /** Whether this viewer may draw areas; the empty state's hint says so. Nothing draws yet. */
+  /** Whether this viewer may draw areas: the button below is theirs, and the empty state says so. */
   canDraw?: boolean;
   onSelect: (id: string) => void;
+  onStartDraw?: () => void;
 }) {
   return (
     <Stack aria-label="區域清單" sx={{ flex: 1, minHeight: 0 }}>
@@ -317,6 +319,21 @@ export function AdminAreaListPanel({
           <EmptyState canDraw={canDraw} />
         ) : null}
       </Stack>
+      {canDraw && onStartDraw ? (
+        <Stack
+          direction="row"
+          sx={{
+            justifyContent: 'flex-end',
+            px: 2.25,
+            py: 1.5,
+            borderTop: '1px solid #DCC1B1',
+          }}
+        >
+          <Button variant="contained" onClick={onStartDraw}>
+            圈選新區域
+          </Button>
+        </Stack>
+      ) : null}
     </Stack>
   );
 }

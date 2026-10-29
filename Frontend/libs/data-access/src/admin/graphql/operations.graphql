@@ -631,6 +631,13 @@ mutation AdminUpsertDisasterType($input: UpsertDisasterTypeInput!) {
     label
   }
 }
+mutation AdminCreateArea($input: CreateAreaInput!) {
+  createArea(input: $input) {
+    uuid
+    type
+    name
+  }
+}
 mutation AdminAssignZoneToTeam($input: ZoneTeamAssignmentInput!) {
   assignZoneToTeam(input: $input) {
     zoneUuid

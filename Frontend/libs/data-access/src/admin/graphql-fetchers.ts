@@ -827,6 +827,16 @@ export function useUpsertDisasterType() {
   });
 }
 
+export function useCreateArea() {
+  return useMutation({
+    mutationFn: (variables: documents.AdminCreateAreaMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminCreateAreaDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+}
+
 export function useAssignZoneToTeam() {
   const queryClient = useQueryClient();
   return useMutation({

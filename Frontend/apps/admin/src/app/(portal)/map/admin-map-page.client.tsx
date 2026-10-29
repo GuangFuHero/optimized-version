@@ -3,24 +3,41 @@
 import { ClipboardList, X, MapPin } from 'lucide-react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
-import { useCapability } from '@rescue-frontend/data-access/admin';
 import {
+  useCapability,
+  useCreateArea,
+  useTeams,
+} from '@rescue-frontend/data-access/admin';
+import {
+  AREA_KIND_LABELS,
+  areaErrorMessage,
   countInsideArea,
   createSiteMapViewportStore,
   dedupeMarkersById,
   isInArea,
   Map,
+  polygonAreaKm2,
+  polygonSelfIntersects,
+  toGeoJsonPolygon,
   StationCreateDrawer,
   TicketCreateDrawer,
   useAdminMapAreas,
   useAdminMapLiveMarkers,
   viewOfArea,
+  type RescueMapDraftArea,
   type RescueMapMarkerItem,
   type RescueMapRouteState,
 } from '@rescue-frontend/modules';
 
+import {
+  AdminAreaDrawPanel,
+  AdminAreaFormPanel,
+  EMPTY_AREA_FORM,
+  type AreaFormValues,
+} from './admin-area-draw-panels';
 import {
   AdminAreaDetailPanel,
   AdminAreaListPanel,
@@ -28,6 +45,11 @@ import {
 } from './admin-area-list-panel';
 
 type CreateMode = 'idle' | 'station' | 'ticket';
+
+// How long a created area can still be taken back, which is how long its request is held.
+const UNDO_MS = 5000;
+// Until the choices are settled with the backend; see `submitArea`.
+const DEFAULT_HAZARD_STATUS = 'dangerous';
 
 // Everything but where the map looks: the view goes to its own store, so panning does not
 // re-render this page.
@@ -307,6 +329,140 @@ export function AdminMapPageClient() {
     },
     [areas.closureAreas, areas.publicZones, viewportStore],
   );
+  // Drawing a new area: first its corners, then what it is.
+  const canDraw = useCapability('work_zone.add').data ?? false;
+  const teams = useTeams({ enabled: canDraw });
+  const activeTeams = useMemo(
+    () => (teams.data ?? []).filter((team) => team.status === 'active'),
+    [teams.data],
+  );
+  const createArea = useCreateArea();
+  const [drawStep, setDrawStep] = useState<'idle' | 'drawing' | 'form'>('idle');
+  const [drawPoints, setDrawPoints] = useState<[number, number][]>([]);
+  const [formValues, setFormValues] = useState<AreaFormValues>(EMPTY_AREA_FORM);
+  // The outline of an area sent for creation, kept on the map through the 5 seconds it can be undone.
+  const [heldPoints, setHeldPoints] = useState<[number, number][] | null>(null);
+  const isDrawing = drawStep !== 'idle';
+  const outline = heldPoints ?? (isDrawing ? drawPoints : []);
+  const crosses = useMemo(() => polygonSelfIntersects(outline), [outline]);
+  const draftArea = useMemo<RescueMapDraftArea | null>(
+    () => (outline.length > 0 ? { points: outline, invalid: crosses } : null),
+    [crosses, outline],
+  );
+  const draftContents = useMemo(
+    () =>
+      drawPoints.length >= 3
+        ? countInsideArea({ polygons: [[drawPoints]] }, markers)
+        : { tickets: 0, stations: 0 },
+    [drawPoints, markers],
+  );
+  const startDrawing = useCallback(() => {
+    setSelectedAreaId(null);
+    setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
+    setDrawPoints([]);
+    setFormValues(EMPTY_AREA_FORM);
+    setDrawStep('drawing');
+  }, []);
+  const cancelDrawing = useCallback(() => {
+    setDrawStep('idle');
+    setDrawPoints([]);
+    setFormValues(EMPTY_AREA_FORM);
+  }, []);
+  const undoCorner = useCallback(
+    () => setDrawPoints((current) => current.slice(0, -1)),
+    [],
+  );
+  const canFinishOutline = drawPoints.length >= 3 && !crosses;
+  useEffect(() => {
+    if (drawStep !== 'drawing') {
+      return;
+    }
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+        undoCorner();
+      } else if (event.key === 'Enter' && canFinishOutline) {
+        setDrawStep('form');
+      } else if (event.key === 'Escape') {
+        cancelDrawing();
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+
+    return () => window.removeEventListener('keydown', onKey);
+  }, [cancelDrawing, canFinishOutline, drawStep, undoCorner]);
+  // The request waits 5 seconds, since there is no way to take a created area back: pressing
+  // 復原 within them sends nothing, and puts the form back as it was.
+  const heldRequest = useRef<number | null>(null);
+  const submitArea = useCallback(
+    (values: AreaFormValues) => {
+      if (!values.kind) {
+        return;
+      }
+
+      const kind = values.kind;
+      const points = drawPoints;
+      const name = values.name.trim();
+      const label = `${AREA_KIND_LABELS[kind]}「${name}」`;
+      const input = {
+        type: kind,
+        geometry: toGeoJsonPolygon(points),
+        name,
+        note: values.note.trim() || null,
+        ...(kind === 'team_zone' ? { teamUuid: values.teamUuid } : {}),
+        ...(kind === 'mark_zone' ? { isPublic: values.isPublic } : {}),
+        // The backend wants a status for every 危險區 and Notion names no choices for it, so one
+        // is sent until the choices are settled (not asked for in the design either).
+        ...(kind === 'hazardous_zone' ? { status: DEFAULT_HAZARD_STATUS } : {}),
+      };
+      const backToForm = () => {
+        setHeldPoints(null);
+        setDrawPoints(points);
+        setFormValues(values);
+        setDrawStep('form');
+      };
+
+      setHeldPoints(points);
+      setDrawStep('idle');
+      setDrawPoints([]);
+      setFormValues(EMPTY_AREA_FORM);
+
+      const send = async () => {
+        heldRequest.current = null;
+
+        try {
+          const created = await createArea.mutateAsync({ input });
+
+          setHeldPoints(null);
+          areas.reload();
+          setSelectedAreaId(created.createArea.uuid);
+          toast.success(`已建立${label}`);
+        } catch (error) {
+          backToForm();
+          toast.error(areaErrorMessage(error));
+        }
+      };
+
+      heldRequest.current = window.setTimeout(() => void send(), UNDO_MS);
+      toast(`已建立${label}`, {
+        duration: UNDO_MS,
+        action: {
+          label: '復原',
+          onClick: () => {
+            if (heldRequest.current !== null) {
+              window.clearTimeout(heldRequest.current);
+              heldRequest.current = null;
+            }
+
+            backToForm();
+          },
+        },
+      });
+    },
+    [areas, createArea, drawPoints],
+  );
   const [createMode, setCreateMode] = useState<CreateMode>('idle');
   const [pendingPosition, setPendingPosition] = useState<
     [number, number] | null
@@ -320,17 +476,26 @@ export function AdminMapPageClient() {
   );
   const handleRouteStateChange = useCallback(
     (next: RescueMapRouteState) => {
-      const { position, bbox, ...rest } = next;
+      const { position, bbox, ...picked } = next;
+      // A pin tapped while drawing is a corner missed, not a ticket to open.
+      const rest = isDrawing
+        ? { ...picked, selectedMarkerId: undefined }
+        : picked;
 
       viewportStore.setState({ position, bbox });
       setRouteState((current) =>
         haveSameNonViewportState(current, rest) ? current : rest,
       );
     },
-    [viewportStore],
+    [isDrawing, viewportStore],
   );
 
   const handleMapClick = (position: [number, number]) => {
+    if (drawStep === 'drawing') {
+      setDrawPoints((current) => [...current, position]);
+      return;
+    }
+
     if (createMode === 'idle') {
       setSelectedAreaId(null);
       return;
@@ -381,8 +546,10 @@ export function AdminMapPageClient() {
             viewportStore={viewportStore}
             showScale
             onMapClick={handleMapClick}
+            draftArea={draftArea}
+            cursor={drawStep === 'drawing' ? 'crosshair' : undefined}
             renderControls={() =>
-              canCreateStation || canCreateTicket ? (
+              !isDrawing && (canCreateStation || canCreateTicket) ? (
                 <AdminMapCreateControls
                   mode={createMode}
                   pendingPosition={pendingPosition}
@@ -410,7 +577,29 @@ export function AdminMapPageClient() {
               bgcolor: '#F6FAFF',
             }}
           >
-            {selectedAreaItem ? (
+            {drawStep === 'drawing' ? (
+              <AdminAreaDrawPanel
+                cornerCount={drawPoints.length}
+                contents={draftContents}
+                areaKm2={polygonAreaKm2(drawPoints)}
+                crosses={crosses}
+                onUndoCorner={undoCorner}
+                onCancel={cancelDrawing}
+                onNext={() => setDrawStep('form')}
+              />
+            ) : drawStep === 'form' ? (
+              <AdminAreaFormPanel
+                initial={formValues}
+                teams={activeTeams}
+                isSubmitting={false}
+                onBack={(values) => {
+                  setFormValues(values);
+                  setDrawStep('drawing');
+                }}
+                onCancel={cancelDrawing}
+                onSubmit={submitArea}
+              />
+            ) : selectedAreaItem ? (
               <AdminAreaDetailPanel
                 item={selectedAreaItem}
                 tickets={selectedAreaTickets}
@@ -424,7 +613,9 @@ export function AdminMapPageClient() {
                 selectedId={selectedAreaId}
                 isLoading={areas.isFetching && !areas.hasFetchedOnce}
                 hasError={areas.error !== null}
+                canDraw={canDraw}
                 onSelect={handleSelectArea}
+                onStartDraw={startDrawing}
               />
             )}
           </Box>

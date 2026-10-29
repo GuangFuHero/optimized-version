@@ -31,6 +31,7 @@ import {
 import type {
   RescueMapArea,
   RescueMapControllerValue,
+  RescueMapDraftArea,
   RescueMapDraftPoint,
   RescueMapLocationCell,
   RescueMapMarkerItem,
@@ -50,6 +51,8 @@ interface RescueMapCanvasProps {
   /** 點選訪客的概略區塊（ADR-281）。未提供時格子只畫不接點擊。 */
   onLocationCellClick?: (cell: RescueMapLocationCell) => void;
   previewMarker?: RescueMapMarkerItem | null;
+  /** The outline being drawn: see `Map`'s prop of the same name. */
+  draftArea?: RescueMapDraftArea | null;
   cursor?: string;
   onMapClick?: (position: [number, number]) => void;
   layoutKey: string;
@@ -796,6 +799,7 @@ export function RescueMapCanvas({
   onMarkerClick,
   onLocationCellClick,
   previewMarker,
+  draftArea,
   cursor,
   onMapClick,
   layoutKey,
@@ -821,6 +825,7 @@ export function RescueMapCanvas({
   const cellLayerSignatureRef = useRef<string | null>(null);
   const cellLabelsRef = useRef<LocationCellLabel[]>([]);
   const previewMarkerRef = useRef<L.Marker | null>(null);
+  const draftAreaLayerRef = useRef<L.LayerGroup | null>(null);
   const draftMarkerRef = useRef<L.Marker | null>(null);
   const draftBubbleRef = useRef<L.Marker | null>(null);
   // While the crosshair is dragged, the map autopans: that move is not the person moving the map.
@@ -1303,6 +1308,58 @@ export function RescueMapCanvas({
     marker.addTo(map);
     previewMarkerRef.current = marker;
   }, [previewMarker]);
+
+  // The outline being drawn: a dashed line through the corners, filled once there are three, red
+  // while it crosses itself. Not interactive, so a click on it still reaches the map and adds a corner.
+  useEffect(() => {
+    const map = mapRef.current;
+
+    draftAreaLayerRef.current?.remove();
+    draftAreaLayerRef.current = null;
+
+    if (!map || !draftArea || draftArea.points.length === 0) {
+      return;
+    }
+
+    const stroke = draftArea.invalid ? '#D32F2F' : '#151C22';
+    const layer = L.layerGroup();
+
+    if (draftArea.points.length >= 3) {
+      L.polygon(draftArea.points, {
+        interactive: false,
+        color: stroke,
+        weight: 2.5,
+        dashArray: '6 6',
+        fillColor: stroke,
+        fillOpacity: 0.18,
+      }).addTo(layer);
+    } else {
+      L.polyline(draftArea.points, {
+        interactive: false,
+        color: stroke,
+        weight: 2.5,
+        dashArray: '6 6',
+      }).addTo(layer);
+    }
+
+    draftArea.points.forEach((point) => {
+      L.circleMarker(point, {
+        interactive: false,
+        radius: 6,
+        color: stroke,
+        weight: 3,
+        fillColor: '#fff',
+        fillOpacity: 1,
+      }).addTo(layer);
+    });
+
+    layer.addTo(map);
+    draftAreaLayerRef.current = layer;
+
+    return () => {
+      layer.remove();
+    };
+  }, [draftArea]);
 
   const draftLat = draftPoint?.lat;
   const draftLng = draftPoint?.lng;

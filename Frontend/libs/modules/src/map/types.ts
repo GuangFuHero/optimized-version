@@ -118,6 +118,15 @@ export interface RescueMapArea {
   highlighted?: boolean;
 }
 
+/**
+ * The outline an admin is drawing on 互助地圖, before it is saved: its corners in the order they were
+ * clicked, and whether it crosses itself (drawn red, and not to be finished).
+ */
+export interface RescueMapDraftArea {
+  points: [number, number][];
+  invalid: boolean;
+}
+
 /** A 危險區, on the 封閉區域 layer. */
 export type RescueMapClosureArea = RescueMapArea;
 

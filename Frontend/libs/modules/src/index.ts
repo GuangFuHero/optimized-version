@@ -53,10 +53,15 @@ export { SiteListView } from './list';
 
 export { Map, readRescueMapMarkers } from './map';
 export { hasRescueMapDetailItem } from './map/location-cells';
-export { AREA_KIND_LABELS, type RescueMapAreaKind } from './map/areas';
+export {
+  AREA_KIND_LABELS,
+  AREA_LABEL_NAME_MAX,
+  type RescueMapAreaKind,
+} from './map/areas';
 export { PUBLIC_ZONE_COLORS } from './map/constants';
 export type {
   RescueMapClosureArea,
+  RescueMapDraftArea,
   RescueMapPublicZone,
   RescueMapBaseLayer,
   RescueMapControllerValue,
@@ -68,8 +73,12 @@ export type {
 } from './map/types';
 
 export {
+  areaErrorMessage,
   countInsideArea,
   isInArea,
+  polygonAreaKm2,
+  polygonSelfIntersects,
+  toGeoJsonPolygon,
   useAdminMapAreas,
   useAdminMapLiveMarkers,
   viewOfArea,

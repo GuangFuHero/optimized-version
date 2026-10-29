@@ -3367,6 +3367,20 @@ export type AdminUpsertDisasterTypeMutation = {
   };
 };
 
+export type AdminCreateAreaMutationVariables = Exact<{
+  input: CreateAreaInput;
+}>;
+
+export type AdminCreateAreaMutation = {
+  __typename?: 'Mutation';
+  createArea: {
+    __typename?: 'AreaType';
+    uuid: string;
+    type: string;
+    name?: string | null;
+  };
+};
+
 export type AdminAssignZoneToTeamMutationVariables = Exact<{
   input: ZoneTeamAssignmentInput;
 }>;
@@ -8323,6 +8337,62 @@ export const AdminUpsertDisasterTypeDocument = {
 } as unknown as DocumentNode<
   AdminUpsertDisasterTypeMutation,
   AdminUpsertDisasterTypeMutationVariables
+>;
+export const AdminCreateAreaDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AdminCreateArea' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'input' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'CreateAreaInput' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'createArea' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'input' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminCreateAreaMutation,
+  AdminCreateAreaMutationVariables
 >;
 export const AdminAssignZoneToTeamDocument = {
   kind: 'Document',
