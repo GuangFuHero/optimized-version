@@ -96,6 +96,9 @@ interface DecidedOpening {
  * is left at is remembered under it. The live one would let an event view changed while the map is
  * open pass for the one it was left under, and the next visit would come back to the old view
  * instead of going to the new event view. Undefined until the opening is worked out.
+ *
+ * `eventView` is the live one, for a map opened under an event that could not be read: with nothing
+ * remembered, a view it is left at is remembered under the event view once that arrives.
  */
 export function useMapOpening({
   memoryKey,
@@ -103,7 +106,11 @@ export function useMapOpening({
 }: {
   memoryKey?: RescueMapMemoryKey;
   addressHasPosition: boolean;
-}): { opening: MapOpening | null; openedUnder: EventMapView } {
+}): {
+  opening: MapOpening | null;
+  openedUnder: EventMapView;
+  eventView: EventMapView;
+} {
   const event = useEventMapView();
   const [decided, setDecided] = useState<DecidedOpening | null>(null);
 
@@ -127,5 +134,6 @@ export function useMapOpening({
   return {
     opening: decided?.opening ?? null,
     openedUnder: decided?.openedUnder,
+    eventView: event.eventView,
   };
 }

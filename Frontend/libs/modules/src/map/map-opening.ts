@@ -12,7 +12,7 @@ import type { RescueMapView } from './types';
  */
 
 /** Each browsing map remembers a view of its own (prototype `wg.mapLast.<map>`). */
-export type RescueMapMemoryKey = 'site' | 'mutual-aid' | 'station' | 'ticket';
+export type RescueMapMemoryKey = 'site' | 'mutual-aid' | 'station';
 
 /**
  * What the event says about where maps open: its view; `null` when it sets none, or no event is
@@ -92,16 +92,23 @@ function roundCoordinate(value: number) {
 }
 
 /**
- * What to remember of a view the map was left at. An event that could not be read keeps the event
- * view already remembered, or a failed read would pass for a changed event next time; with none to
- * keep, nothing is remembered.
+ * What to remember of a view the map was left at. A map opened under an event that could not be read
+ * keeps the event view already remembered, or a failed read would pass for a changed event next time.
+ * With none to keep, the event view read since then stands in (`eventViewSince`), so a first visit on
+ * a slow connection is remembered once the event arrives; with neither, nothing is remembered.
  */
 export function recordMapView(
   view: RescueMapView,
   eventView: EventMapView,
   remembered: RememberedMapView | null,
+  eventViewSince: EventMapView = undefined,
 ): RememberedMapView | null {
-  const leftUnder = eventView === undefined ? remembered?.eventView : eventView;
+  const leftUnder =
+    eventView !== undefined
+      ? eventView
+      : remembered
+        ? remembered.eventView
+        : eventViewSince;
 
   if (leftUnder === undefined) {
     return null;
@@ -173,9 +180,15 @@ export function rememberMapView(
   key: RescueMapMemoryKey,
   view: RescueMapView,
   eventView: EventMapView,
+  eventViewSince?: EventMapView,
 ) {
   try {
-    const record = recordMapView(view, eventView, readRememberedMapView(key));
+    const record = recordMapView(
+      view,
+      eventView,
+      readRememberedMapView(key),
+      eventViewSince,
+    );
 
     if (record) {
       window.localStorage.setItem(

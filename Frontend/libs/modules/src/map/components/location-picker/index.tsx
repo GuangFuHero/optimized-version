@@ -108,6 +108,7 @@ export function LocationPicker({
   const pickedByHandRef = useRef(false);
   // With no point to open at, the map opens at the event's view, so it waits for it.
   const eventMapView = useEventMapView();
+  const mapShown = Boolean(initialValueRef.current) || eventMapView.ready;
 
   onChangeRef.current = onChange;
 
@@ -179,17 +180,18 @@ export function LocationPicker({
           bgcolor: color.bg.neutral.sunken,
         }}
       >
-        {initialValueRef.current || eventMapView.ready ? (
+        {mapShown ? (
           <LocationPickerCanvas
             value={value}
             onPick={handlePick}
             startView={eventMapView.view}
           />
         ) : null}
-        {/* Said while there is a pin too: that it drags is otherwise told nowhere (designer, a004385). */}
+        {/* Said while there is a pin too: that it drags is otherwise told nowhere (designer, a004385).
+            Until the map is there, there is nothing to tap or drag, so only the locating line shows. */}
         {status === 'locating' ? (
           <HintPill icon={<LocateFixed />}>正在取得目前定位…</HintPill>
-        ) : value ? (
+        ) : !mapShown ? null : value ? (
           <HintPill icon={<Move />}>
             可拖曳大頭針微調，或點地圖其他位置
           </HintPill>

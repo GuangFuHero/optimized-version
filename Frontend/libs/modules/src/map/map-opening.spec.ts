@@ -126,10 +126,32 @@ describe('recordMapView', () => {
     expect(
       recordMapView(LEFT_AT, undefined, { ...MOVED_EVENT, eventView: EVENT }),
     ).toEqual({ ...LEFT_AT, eventView: EVENT });
+    // Even once the event has been read since: a changed event still drops what was left.
+    expect(
+      recordMapView(
+        LEFT_AT,
+        undefined,
+        { ...MOVED_EVENT, eventView: EVENT },
+        MOVED_EVENT,
+      ),
+    ).toEqual({ ...LEFT_AT, eventView: EVENT });
+  });
+
+  it('records a first visit under the event view read after it opened', () => {
+    // Opened while the event was still unread on a slow connection; the event arrived meanwhile.
+    expect(stored(recordMapView(LEFT_AT, undefined, null, EVENT))).toEqual({
+      ...LEFT_AT,
+      eventView: EVENT,
+    });
+    expect(stored(recordMapView(LEFT_AT, undefined, null, null))).toEqual({
+      ...LEFT_AT,
+      eventView: null,
+    });
   });
 
   it('records nothing when the event could not be read and there is no event view to keep', () => {
     expect(recordMapView(LEFT_AT, undefined, null)).toBeNull();
+    expect(recordMapView(LEFT_AT, undefined, null, undefined)).toBeNull();
   });
 });
 

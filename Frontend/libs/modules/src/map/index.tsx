@@ -307,18 +307,25 @@ export const Map = memo(function Map({
   const [addressPosition] = useState(
     () => viewportStore?.getSnapshot().position ?? routeState?.position,
   );
-  const { opening, openedUnder } = useMapOpening({
+  const { opening, openedUnder, eventView } = useMapOpening({
     memoryKey: viewMemoryKey,
     addressHasPosition: Boolean(addressPosition),
   });
   const opensAtOnce = addressPosition?.zoom !== undefined;
   const openedUnderRef = useRef(openedUnder);
   openedUnderRef.current = openedUnder;
+  const eventViewRef = useRef(eventView);
+  eventViewRef.current = eventView;
 
   const rememberView = useCallback(
     (view: RescueMapView) => {
       if (viewMemoryKey) {
-        rememberMapView(viewMemoryKey, view, openedUnderRef.current);
+        rememberMapView(
+          viewMemoryKey,
+          view,
+          openedUnderRef.current,
+          eventViewRef.current,
+        );
       }
     },
     [viewMemoryKey],
