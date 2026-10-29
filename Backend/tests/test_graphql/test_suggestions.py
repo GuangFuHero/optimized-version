@@ -639,6 +639,32 @@ async def test_stations_filter_has_pending_suggestions(
 
 
 @pytest.mark.asyncio
+async def test_a_pending_suggestion_naming_no_uuid_does_not_break_the_filter(
+    client, login_user_auth, sample_station
+):
+    """`target_uuid` is free text; a row the API could not have written is skipped, not cast and failed."""
+    user_uuid, user_token = login_user_auth
+    await _create(client, user_token, "station", sample_station, "name", "新站名")
+    async with test_db() as db:
+        db.add(
+            StationUpdateSuggestion(
+                target_type="station",
+                target_uuid="not-a-uuid",
+                field_name="name",
+                new_value="壞資料",
+                status="pending",
+                created_by=user_uuid,
+            )
+        )
+    queue = "query { stations(hasPendingSuggestions: true, limit: 500) { items { uuid } } }"
+
+    body = await _gql(client, None, queue, {})
+
+    assert "errors" not in body, body
+    assert sample_station in {s["uuid"] for s in body["data"]["stations"]["items"]}
+
+
+@pytest.mark.asyncio
 async def test_a_merge_whose_reviewer_is_gone_reads_a_null_reviewer(
     client, auditor_auth, login_user_auth, sample_station
 ):

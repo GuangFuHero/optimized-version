@@ -90,6 +90,17 @@ async def test_a_page_holds_at_most_1000_stations(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("page", [{"limit": -1}, {"skip": -1}], ids=["limit", "skip"])
+async def test_a_negative_page_is_refused_by_name(client, page):
+    """As the ticket list refuses one, rather than a masked database error."""
+    *_, bounds = _box()
+
+    body = await _stations(client, bounds=bounds, **{"limit": 50, "skip": 0, **page})
+
+    assert [error["message"] for error in body["errors"]] == ["limit and skip must not be negative"]
+
+
+@pytest.mark.asyncio
 async def test_official_keeps_the_stations_the_back_office_made(client):
     """`source = 'official'` is what the back office writes, and what defines official (ADR-394)."""
     lng, lat, bounds = _box()

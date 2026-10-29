@@ -86,6 +86,21 @@ async def test_the_facets_count_what_stations_lists(client):
 
 
 @pytest.mark.asyncio
+async def test_an_address_with_no_town_is_its_own_row_in_its_county(client):
+    """Kept so a county whose stations all lack a 鄉鎮市區 still shows, and the rows add up (ADR-394)."""
+    lng, lat, bounds = _box()
+    await _station((lng, lat), county="花蓮縣", town="光復鄉")
+    await _station((lng, lat), county="花蓮縣")
+
+    facets = await _facets(client, bounds=bounds)
+
+    assert facets["areas"] == [
+        {"county": "花蓮縣", "town": "光復鄉", "count": 1},
+        {"county": "花蓮縣", "town": None, "count": 1},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_the_facets_take_the_same_filters(client):
     """A filter narrows every count, as it narrows the list."""
     lng, lat, bounds = _box()

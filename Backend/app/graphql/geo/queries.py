@@ -10,7 +10,8 @@ from datetime import datetime
 from uuid import UUID
 
 import strawberry
-from sqlalchemy import String, cast, exists, false, or_, select
+from sqlalchemy import UUID as SqlUUID
+from sqlalchemy import cast, exists, false, literal, or_, select, union
 
 from app.api.v1.endpoints.auth.deps import consume_rate_limit
 from app.core.permissions import Perm
@@ -48,28 +49,43 @@ from app.repositories.geo_repository import (
 from app.services import address as address_service
 from app.services import station as station_service
 
+# A uuid as `uuid::text` writes it. `target_uuid` is free text, so only a row of this shape is cast.
+_UUID_TEXT = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
+
+def _inline(value: str):
+    """`value` written into the SQL rather than bound, so a generic plan Postgres caches still sees it."""
+    return literal(value, literal_execute=True)
+
 
 def _has_pending_suggestion():
-    """EXISTS clause: the station, or one of its active properties, has a pending suggestion.
+    """The station, or one of its active properties, has a pending suggestion (ADR-394).
 
-    Two EXISTS, one per target, rather than one EXISTS with the two targets OR-ed inside: each
-    half then reaches its rows through an index (the pending suggestions by `target_uuid`, and a
-    station's properties by `station_uuid`), where the single one compared every station with
-    every pending suggestion (ADR-394).
+    Starts from the pending suggestions, a small share of the table, and keeps the stations they
+    name, rather than testing every station against them: that plan cost enough to be JIT-compiled
+    on every call, and compiling took far longer than running it. The constants are inlined because
+    with them bound, Postgres's cached generic plan from a connection's sixth call is several times
+    slower. The pattern keeps a malformed `target_uuid` from failing the cast for every caller.
     """
     suggestion = StationUpdateSuggestion
-    pending = (suggestion.status == "pending", suggestion.delete_at.is_(None))
-    on_station = exists(
-        select(1).where(*pending, suggestion.target_uuid == cast(Station.uuid, String)).correlate(Station)
+    pending = (
+        suggestion.status == _inline("pending"),
+        suggestion.delete_at.is_(None),
+        suggestion.target_uuid.op("~")(_inline(_UUID_TEXT)),
     )
-    on_property = exists(
-        select(1)
-        .select_from(StationProperty)
-        .join(suggestion, suggestion.target_uuid == cast(StationProperty.uuid, String))
-        .where(StationProperty.station_uuid == Station.uuid, StationProperty.delete_at.is_(None), *pending)
-        .correlate(Station)
+    on_station = select(cast(suggestion.target_uuid, SqlUUID)).where(
+        *pending, suggestion.target_type == _inline("station")
     )
-    return or_(on_station, on_property)
+    on_property = (
+        select(StationProperty.station_uuid)
+        .join(suggestion, cast(suggestion.target_uuid, SqlUUID) == StationProperty.uuid)
+        .where(
+            *pending,
+            suggestion.target_type == _inline("station_property"),
+            StationProperty.delete_at.is_(None),
+        )
+    )
+    return Station.uuid.in_(union(on_station, on_property))
 
 
 # Rows a page of `stations` may hold (ADR-394): above every limit a caller sends today, so it
@@ -232,6 +248,8 @@ class GeoQuery:
         """
         if limit > STATION_LIST_MAX_LIMIT:
             raise ValueError(f"limit must be at most {STATION_LIST_MAX_LIMIT}")
+        if limit < 0 or skip < 0:
+            raise ValueError("limit and skip must not be negative")
         db = info.context["db"]
         status_value = operational_status.value if operational_status is not None else None
         extra_filters = await _station_filters(
