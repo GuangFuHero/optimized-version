@@ -11,7 +11,12 @@ import {
 } from '../../constants';
 import type { RescueMapBaseLayer, RescueMapControllerValue } from '../../types';
 
-import { designTokens, displayTextSize, withAlpha } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  safeAreaBottom,
+  withAlpha,
+} from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
 
@@ -297,7 +302,7 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
             boxShadow: shadow.lg,
             px: 2,
             pt: 1.25,
-            pb: 3,
+            pb: safeAreaBottom(24),
           },
         }}
       >
