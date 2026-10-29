@@ -123,6 +123,9 @@ export function MapViewPickerCanvas({
       zoomControl.addTo(map);
     } else {
       zoomControl.remove();
+      // Disabling the keyboard handler leaves its tabindex, which would make the picture a tab stop
+      // that does nothing. Enabling the handler again puts it back.
+      map.getContainer().removeAttribute('tabindex');
     }
   }, [editable]);
 
@@ -136,8 +139,8 @@ export function MapViewPickerCanvas({
   }, [request]);
 
   // No cursor of its own: Leaflet gives a draggable map its grab cursors and takes them off with dragging.
-  // Leaflet makes the container a tab stop, so it is named, and says which keys move it while they do;
-  // read only, it is a picture of the view.
+  // Editable, Leaflet makes the container a tab stop, so it is named and says which keys move it; read
+  // only, it is a picture of the view and no tab stop.
   return (
     <div
       ref={hostRef}
