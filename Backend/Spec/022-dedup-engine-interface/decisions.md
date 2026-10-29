@@ -1,4 +1,4 @@
-# 去重引擎介面 — ADR 全集（ADR-295~299、301~307、313~323、397）
+# 去重引擎介面 — ADR 全集（ADR-295~299、301~307、313~323、396~397、433~436）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/008-rbac-authorization/decisions.md`（ADR-285 為 2026-09-28 全 repo 各分支掃描的最大值）。
@@ -590,6 +590,48 @@ ADR-301／302 的 API 保留，但回傳的疑似重複改為通用形狀（見 
 
 ---
 
+### ADR-396 同一區域的送出依地點排隊：查詢前取 advisory lock，最多等 500 ms，等不到照常建立
+
+> **部分被取代（2026-10-29，PR #140 review）**：前台請求協助也要鎖（ADR-433）；500 ms 改成全部 key 合計的期限（ADR-434，取代第 3 點的「每個 key 各等」）；
+> 放棄時 log 只寫約 250 m 的位置（ADR-435）；站點與工單分開排隊（ADR-436，取代第 2 點的「同一組 key」）。其餘不變。
+
+**白話**：兩個人幾乎同時在同一個地方送出一樣的東西，以前兩筆都會建立、也都不會跳提示。
+現在同一區域的送出會排隊，後面那筆查得到前面那筆，就會被提示。排隊最多等 0.5 秒，等不到就照以前的方式建立，不會比以前差。
+
+**Context**（PR #132 回報，2026-10-27 實測，證據在 PR #132 的審查附件）：
+
+1. 三個進入點（`submit_new_ticket`、`submit_new_task`、`submit_new_station`）都是「先問 engine → 寫入 → commit」，中間沒有鎖。
+   兩筆在彼此 commit 之前都查不到對方。用兩條連線重現：先後送出時第二筆被擋；第一筆在寫入後、commit 前暫停時，兩筆都建立。三條路徑都一樣。
+2. 漏掉的重複沒有配對卡（配對卡只在使用者確認時寫），所以 admin 審核清單也看不到。
+3. 20 筆一樣的單同時送出、共用預設連線池（15 條）：
+   - 現況：15 筆建立。
+   - 不設上限的鎖：只建立 1 筆，但 engine 一筆 1.5 秒時，最慢一筆要等 32.6 秒，其他區域的請求也被拖到 8.3 秒（排隊的請求佔住連線）。
+   - 上限 300 ms：engine 比上限快時只建立 1 筆；比上限慢時退回現況（15 筆），最慢一筆只比現況多約 0.6 秒，其他區域跟現況差不多。
+4. 漏洞在後端的流程，不在 engine（ADR-304／306），所以由後端修，engine 不用改。
+
+**Decision**：
+
+1. 三個進入點在驗證完、問 engine（`score` 與 `check`）之前，先鎖住送出位置所在的區域。
+   位置：新開單、站點用草稿的 `location`；替既有的單加任務用所屬工單的位置（後端自己查，算法與 `app/db/h3.py` 相同，用 `ST_PointOnSurface`）。
+2. 區域 = 該點的 h3 第 8 級格子加周圍一圈（共 7 格）。依 h3 index 由小到大逐一 `pg_advisory_xact_lock(<h3 index 轉 bigint>)`，順序固定避免互相卡死。
+   鎖在 commit 或 rollback 時自動放掉；被提示的那筆會先 commit `hint_shown`，鎖也跟著放掉。
+3. 等待上限 `AREA_LOCK_TIMEOUT_MS = 500`：在 SAVEPOINT 裡 `SET LOCAL lock_timeout`，逾時就 rollback 這個 SAVEPOINT、記 warning，不帶鎖照常往下走（fail-open）。
+   500 ms 是 engine 最差 p99 約 245 ms（ADR-307）的兩倍。上限要比「前一筆從拿到鎖到 commit」長，後面那筆才查得到它。
+4. 鎖得住的前提：engine 的比對半徑不能超過 `AREA_LOCK_MAX_RADIUS_M = 500`（公尺）。
+   相距小於這個距離的兩點，h3 第 8 級格子的距離 ≤ 2，兩邊的 7 格一定有重疊。現行 fast-v4 半徑：任務 291 m、站點 137 m。
+   守門測試（後端擁有，ADR-306）：(a) 台灣範圍內隨機取相距 `AREA_LOCK_MAX_RADIUS_M` 的點對，格子距離都 ≤ 2；(b) registry 的 engine 半徑 ≤ `AREA_LOCK_MAX_RADIUS_M`。
+   Chi 把半徑調大時 (b) 會紅，由後端改格子層級或範圍。
+5. engine 出錯時 `check`／`score` 會整個 transaction rollback（ADR-313），鎖跟著放掉，這一筆就不帶鎖建立。這跟現況相同，接受。
+
+這條取代 PR #132 在 spec §9 想加的「同時送出可能漏提示，目前接受」。
+
+➕ 一般情況下（engine 比 500 ms 快），同一區域爆量時只會建立一筆，其他的都會被提示。
+➕ 最差就是退回現況；不同區域互不影響；engine 不用改。
+➖ 同一區域爆量時，每筆最多多等約 0.5 秒。
+➖ 每次送出多一次查詢（取 7 個鎖）。
+◾ 實測時 DB 是 amd64 模擬，數字偏悲觀。上限之後要改，依 ADR-306 由後端拍板。
+◾ 測試：`tests/test_dedup_area_lock.py`（三條路徑的兩連線確定性重現、逾時照常建立、鎖在 commit／hold 後放掉、守門 (a)(b)）。
+
 ### ADR-397 前台的請求協助 `createHelpRequest` 也走兩段式
 
 **白話**：民眾從前台「請求協助」送出的單，現在也會先比對附近有沒有一樣的需求。有的話先不建，讓民眾確認；
@@ -629,3 +671,76 @@ union 上不合法，每一次請求協助都會失敗。所以後端和前台�
 ◾ 測試：`tests/test_graphql/test_create_dedup.py`（真 engine：被擋、帶確認建立）、`tests/test_dedup_submission.py`
 （沒有疑似整份建立、確認只蓋自己那件、確認指向不存在的東西、engine 失敗、驗證不過時不問 engine）；
 `tests/test_help_request.py` 的民眾規則改走 `submit_help_request`。
+
+### ADR-433 前台的請求協助 `submit_help_request` 也依地點排隊
+
+**白話**：民眾從前台「請求協助」送出的單，跟管理平台新開單一樣要排隊。兩位民眾同時送出一樣的求助時，後面那筆會被提示，不會兩筆都建立。
+
+**Date**：2026-10-29。HC Bot 在 PR #140 review 提出（blocking，2026-10-28）。
+
+**Context**：ADR-396 寫的時候只有三個進入點。之後 main 合進 ADR-397，`submit_help_request` 成為第四個進入點，
+一樣是「先問 engine → 寫入 → commit」，但沒有加鎖。rebase 後用兩條連線重現：第二筆不用等，兩筆都建立。
+
+**Decision**：`submit_help_request` 在驗證完、`_score_acknowledged` 之前呼叫 `lock_area_at(db, 草稿位置, kind="ticket")`，跟 `submit_new_ticket` 一樣。
+以後新增的兩段式進入點都要加鎖，`dedup_submission.py` 的模組說明已寫明。
+
+➕ 最大宗的輸入（民眾求助）也不會同時送出漏提示。
+➖ 沒有新的取捨，代價同 ADR-396。
+◾ 測試：`tests/test_dedup_area_lock.py::test_racing_help_requests_create_one`。
+
+### ADR-434 等鎖上限是全部 key 合計 500 ms，不是每個 key 各 500 ms
+
+**白話**：一筆送出要拿 7 個鎖。以前每個鎖各等最多 0.5 秒，最壞要等約 3.5 秒。現在從開始等算起，全部合計最多 0.5 秒。
+
+**Date**：2026-10-29。HC Bot 在 PR #140 review 提出（should-fix）：7 個鎖每隔 450 ms 放掉一個，`lock_area_at` 等了 3.15 秒也沒放棄。
+
+**Context**：Postgres 的 `lock_timeout` 是每一次取鎖各自計時。ADR-396 第 3 點只設一次 `lock_timeout = 500ms`，
+所以 7 個鎖分別被不同鄰居握住時，每個都能再等 500 ms。這違反 ADR-396「最多多等約 0.5 秒」的承諾。
+
+**Decision**：
+
+1. 開始取鎖時算一個期限（`time.monotonic()` + `AREA_LOCK_TIMEOUT_MS`）。
+2. 每取一個鎖前，把 `lock_timeout` 設成剩下的時間。最少設 1 ms，因為設成 0 等於關掉逾時。
+3. 超過期限的處理不變：rollback SAVEPOINT、記 warning、不帶鎖照常建立。
+
+➕ 「最多多等約 0.5 秒」現在對任何鄰居分布都成立。
+➖ 每個鎖前多一次 `set_config`，共多 6 次很小的查詢。
+◾ PR #148（Dan）讓「仍要建立」的那筆在鎖裡問兩次 engine，會拉長前一筆握鎖的時間。ADR-396 要求上限長於「前一筆拿到鎖到 commit」。
+  #140 先合（2026-10-29 決定），由 #148 依本條重算。
+◾ 測試：`test_the_whole_wait_is_capped_not_each_key`。7 個鎖每 250 ms 放一個，每個都比上限短，合計超過上限，必須放棄。
+
+### ADR-435 放棄等鎖的 log 只寫約 250 m 的位置
+
+**白話**：等不到鎖時寫的 warning，以前會寫出送出的精確座標。現在經緯度都四捨五入到 1/400 度（約 250 m）。看得出哪一區塞車，看不出是哪一戶。
+
+**Date**：2026-10-29。HC Bot 在 PR #140 review 提出（should-fix）。
+
+**Context**：API 不給沒有詳細權限的人看工單的精確位置，但 log 的讀者不受這個限制。本機爆量測試時，約一半的送出會放棄等鎖並寫 log。
+
+**Decision**：log 的經緯度用 `round(x * 400) / 400`。只影響 log，鎖仍用精確位置算格子。
+
+➕ log 不再留下求助者的精確位置。
+➖ 要追某一筆時，log 對不到確切地點，要用時間去對 DB。
+◾ 測試：`test_the_give_up_log_names_the_area_not_the_point`。
+
+### ADR-436 站點與工單分開排隊：站點用負號的 key
+
+**白話**：同一區有很多人在報需求單時，登記站點的人不用跟著排隊。因為站點只會跟站點比，需求單只會跟需求單比。
+
+**Date**：2026-10-29。HC Bot 在 PR #140 review 提問；使用者決定「先查 engine 會不會跨類型比，只比同類就分開」。
+
+**Context**（查證）：
+
+1. 介面規定比對結果的 `related_kind` 要和草稿同一類，因為配對卡只連同類的兩筆（`app/dedup_engine/contract.py` 的 `Suspect` 說明，後端也會丟掉不符的結果，spec §4 第 3 點）。
+2. 快層實作也是如此：站點只查 `open_stations_near`，工單與任務只查 `open_tasks_near`（`app/dedup_engine/fast.py::FastEngine.check`）。
+3. 所以站點等工單的鎖，或工單等站點的鎖，都換不到任何提示，只是白等。
+
+**Decision**：
+
+1. `area_keys`／`lock_area_at` 加必填的 `kind`：`"ticket"`（新開單、請求協助、加任務，都是跟任務比）或 `"station"`。
+2. 工單用格子的 H3 index（轉 bigint 必為正數）；站點用它的負數，兩組永遠不會相同。
+3. 站點的 key 一樣由小到大取，順序固定，不會互相卡死。
+
+➕ 站點與工單的爆量互不拖累。
+➖ 如果之後 engine 改成跨類型比對，這裡要改回共用 key。前提寫在本條，介面的同類規定也有後端的丟棄邏輯把關。
+◾ 測試：`test_station_and_ticket_keys_never_overlap`、`test_a_station_does_not_wait_behind_tickets_in_its_area`（突變：站點改回 `kind="ticket"` 會紅）。
