@@ -37,12 +37,19 @@ export interface AdminPriorityBadge {
 export function adminTicketPriorityBadge(
   value: string | null | undefined,
 ): AdminPriorityBadge | null {
-  const label = adminTicketPriorityLabel(value);
   switch (value?.trim().toLowerCase()) {
     case 'critical':
-      return { label: label!, tone: 'danger', variant: 'solid' };
+      return {
+        label: ADMIN_TICKET_PRIORITY_LABELS.critical,
+        tone: 'danger',
+        variant: 'solid',
+      };
     case 'high':
-      return { label: label!, tone: 'warning', variant: 'subtle' };
+      return {
+        label: ADMIN_TICKET_PRIORITY_LABELS.high,
+        tone: 'warning',
+        variant: 'subtle',
+      };
     default:
       return null;
   }

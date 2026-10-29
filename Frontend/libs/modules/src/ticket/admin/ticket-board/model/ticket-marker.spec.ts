@@ -164,9 +164,16 @@ describe('toCreatedTicketMarker', () => {
   });
 });
 
+/** A marker for a ticket that has a point: `toTicketMarker` gives null only without one. */
+function markerOf(ticket: ReturnType<typeof row>) {
+  const marker = toTicketMarker(ticket);
+  if (!marker) throw new Error('expected a marker');
+  return marker;
+}
+
 describe('withMarkerSelected', () => {
   it('marks a marker selected without touching the original', () => {
-    const marker = toTicketMarker(row())!;
+    const marker = markerOf(row());
     const selected = withMarkerSelected(marker, true);
     expect(selected.pin?.selected).toBe(true);
     expect(selected.pin?.color).toBe(marker.pin?.color);
@@ -174,7 +181,7 @@ describe('withMarkerSelected', () => {
   });
 
   it('returns the same marker when nothing changes', () => {
-    const marker = toTicketMarker(row())!;
+    const marker = markerOf(row());
     expect(withMarkerSelected(marker, false)).toBe(marker);
   });
 });
