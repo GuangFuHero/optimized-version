@@ -954,6 +954,9 @@ type Query {
     Only tickets in one of these statuses, as the map's filter ticks several; a status given more than once counts once. Leave it out to match every status, as the site does when its filter means all of them: an empty list matches none
     """
     statuses: [TicketStatus!] = null
+
+    """Only tickets filed under this disaster type (a disaster_types key)"""
+    disasterType: String = null
   ): TicketConnection!
   ticketCells(
     bounds: BoundsInput!
@@ -968,6 +971,7 @@ type Query {
     """
     statuses: [TicketStatus!] = null
   ): [TicketCellType!]!
+  ticketStats: TicketStatsType!
   ticket(
     uuid: UUID!
 
@@ -1751,6 +1755,22 @@ type TicketPropertyConfigType {
   isActive: Boolean!
 }
 
+type TicketStatsType {
+  total: Int!
+  pending: Int!
+  inProgress: Int!
+  completed: Int!
+  cancelled: Int!
+
+  """
+  People still short across open needs with a quantity: quantity less the people linked, never below 0. Needs on completed or cancelled tickets add nothing
+  """
+  gapPeople: Int!
+
+  """How many open needs are short of people (gapPeople > 0)"""
+  gapNeeds: Int!
+}
+
 enum TicketStatus {
   pending
   in_progress
@@ -1905,6 +1925,26 @@ type TicketType {
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here
   """
   createdBy: String
+
+  """
+  Whether the caller holds ticket.edit over this ticket, so a page offers edit controls only where the edit would be allowed
+  """
+  viewerCanEdit: Boolean!
+
+  """
+  Whether the caller holds ticket.delete over this ticket, so a page offers a delete control only where the delete would be allowed
+  """
+  viewerCanDelete: Boolean!
+
+  """
+  Whether the caller holds ticket.audit over this ticket, so a page offers the audit card only where a verdict would be allowed
+  """
+  viewerCanAudit: Boolean!
+
+  """
+  Whether the caller holds ticket.view_history over this ticket, so a page offers the timeline only where reading it would be allowed
+  """
+  viewerCanViewHistory: Boolean!
 
   """
   Requester full name — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs

@@ -1,7 +1,7 @@
 """Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
 from geoalchemy2 import Geography
-from sqlalchemy import and_, case, cast, delete, exists, false, func, not_, or_, select
+from sqlalchemy import ARRAY, String, and_, case, cast, delete, exists, false, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
@@ -90,6 +90,7 @@ class TicketRepository(GenericRepository[Tickets]):
         statuses: list[str] | None = None,
         priority: str | None = None,
         q: str | None = None,
+        disaster_type: str | None = None,
         extra_filters=(),
         detail_filters,
         coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
@@ -156,12 +157,9 @@ class TicketRepository(GenericRepository[Tickets]):
                 conditions.append(func.ST_Intersects(self.model.geometry, func.ST_Expand(envelope, dx, dy)))
                 coarse = func.ST_Intersects(h3_centroid(self.model.geometry, coarse_resolution), envelope)
                 conditions.append(or_(and_(seen, exact), and_(not_(seen), coarse)))
-        if status:
-            conditions.append(self.model.status == status)
-        if statuses is not None:
-            conditions.append(self.model.status.in_(statuses) if statuses else false())
-        if priority:
-            conditions.append(self.model.priority == priority)
+        conditions += self._column_conditions(
+            status=status, statuses=statuses, priority=priority, disaster_type=disaster_type
+        )
         term = normalize_query(q)
         if term is not None:
             if seen is None:
@@ -175,6 +173,26 @@ class TicketRepository(GenericRepository[Tickets]):
                         and_(seen, self._search_condition(term)),
                     )
                 )
+        return conditions
+
+    def _column_conditions(
+        self,
+        *,
+        status: str | None,
+        statuses: list[str] | None,
+        priority: str | None,
+        disaster_type: str | None,
+    ) -> list:
+        """The plain column filters of _active_conditions: what every caller sees of every row."""
+        conditions = []
+        if status:
+            conditions.append(self.model.status == status)
+        if statuses is not None:
+            conditions.append(self.model.status.in_(statuses) if statuses else false())
+        if priority:
+            conditions.append(self.model.priority == priority)
+        if disaster_type:
+            conditions.append(self.model.disaster_types.op("&&")(cast([disaster_type], ARRAY(String))))
         return conditions
 
     def _order_by(self, term: str | None, *, public_only: bool = False) -> list:
@@ -260,6 +278,7 @@ class TicketRepository(GenericRepository[Tickets]):
         statuses: list[str] | None = None,
         priority: str | None = None,
         q: str | None = None,
+        disaster_type: str | None = None,
         skip: int = 0,
         limit: int = 50,
         extra_filters=(),
@@ -287,6 +306,7 @@ class TicketRepository(GenericRepository[Tickets]):
             statuses=statuses,
             priority=priority,
             q=q,
+            disaster_type=disaster_type,
             extra_filters=extra_filters,
             detail_filters=detail_filters,
             coarse_resolution=coarse_resolution,
@@ -316,6 +336,7 @@ class TicketRepository(GenericRepository[Tickets]):
         statuses: list[str] | None = None,
         priority: str | None = None,
         q: str | None = None,
+        disaster_type: str | None = None,
         extra_filters=(),
         detail_filters,
         coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
@@ -328,6 +349,7 @@ class TicketRepository(GenericRepository[Tickets]):
             statuses=statuses,
             priority=priority,
             q=q,
+            disaster_type=disaster_type,
             extra_filters=extra_filters,
             detail_filters=detail_filters,
             coarse_resolution=coarse_resolution,
@@ -377,6 +399,57 @@ class TicketRepository(GenericRepository[Tickets]):
             .order_by(cell)
         )
         return [(cell, count, urgent_count) for cell, count, urgent_count in rows]
+
+    async def stats(self, db: AsyncSession, *, extra_filters=()) -> dict[str, int]:
+        """Counts by status and the volunteer gap over the active tickets `extra_filters` leaves.
+
+        Two statements, no per-ticket work. The gap counts a need the way the board's cards do:
+        an open need (OPEN_NEED_STATUSES) with a quantity, on a ticket not completed or
+        cancelled, short of `quantity` by the people linked to it. Linked people are every
+        task_assignments row, as the `assignedCount` loader reads them.
+        """
+        base = [self.model.delete_at.is_(None), *extra_filters]
+        by_status = dict(
+            (
+                await db.execute(
+                    select(self.model.status, func.count()).where(*base).group_by(self.model.status)
+                )
+            ).all()
+        )
+        assigned = (
+            select(TaskAssignment.task_uuid, func.count().label("n"))
+            .group_by(TaskAssignment.task_uuid)
+            .subquery()
+        )
+        gap = TicketTask.quantity - func.coalesce(assigned.c.n, 0)
+        row = (
+            await db.execute(
+                select(
+                    func.coalesce(func.sum(gap), 0),
+                    func.count(),
+                )
+                .select_from(TicketTask)
+                .join(self.model, self.model.uuid == TicketTask.ticket_uuid)
+                .outerjoin(assigned, assigned.c.task_uuid == TicketTask.uuid)
+                .where(
+                    *base,
+                    self.model.status.notin_(("completed", "cancelled")),
+                    TicketTask.delete_at.is_(None),
+                    TicketTask.status.in_(OPEN_NEED_STATUSES),
+                    TicketTask.quantity.is_not(None),
+                    gap > 0,
+                )
+            )
+        ).one()
+        return {
+            "total": sum(by_status.values()),
+            "pending": by_status.get("pending", 0),
+            "in_progress": by_status.get("in_progress", 0),
+            "completed": by_status.get("completed", 0),
+            "cancelled": by_status.get("cancelled", 0),
+            "gap_people": int(row[0]),
+            "gap_needs": int(row[1]),
+        }
 
 
 class TicketTaskRepository(GenericRepository[TicketTask]):

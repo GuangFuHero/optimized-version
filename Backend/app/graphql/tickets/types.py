@@ -86,6 +86,19 @@ def ticket_audit_visible(info: strawberry.types.Info, ticket_uuid: str, resource
     return decided[key]
 
 
+def ticket_perm_held(info: strawberry.types.Info, perm: Perm, ticket_uuid: str, resource=None):
+    """Whether the caller holds `perm` on this ticket, decided once per request and perm.
+
+    For the viewerCan* flags of perms that gate only a mutation. `resource` as in
+    ticket_detail_visible.
+    """
+    decided = info.context.setdefault("_ticket_perm_held", {})
+    key = (perm, str(ticket_uuid))
+    if key not in decided:
+        decided[key] = asyncio.ensure_future(_decide_ticket_scope(info, perm, str(ticket_uuid), resource))
+    return decided[key]
+
+
 async def _decide_ticket_scope(info: strawberry.types.Info, perm: Perm, ticket_uuid: str, resource) -> bool:
     """resolve_scope + in_scope, like _compute_pii_in_scope. Never raises: denial is withholding."""
     user = info.context["user"]
@@ -859,6 +872,38 @@ class TicketType:
         """Return the reporter's uuid, or null when the caller is out of detail scope."""
         return self._created_by_raw if await self._detail_visible(info) else None
 
+    @strawberry.field(
+        description="Whether the caller holds ticket.edit over this ticket, so a page offers "
+        "edit controls only where the edit would be allowed"
+    )
+    async def viewer_can_edit(self, info: strawberry.types.Info) -> bool:
+        """Resolve ticket.edit against this ticket's scope, as the edit itself would."""
+        return await ticket_perm_held(info, Perm.TICKET_EDIT, str(self.uuid), self._scope_resource())
+
+    @strawberry.field(
+        description="Whether the caller holds ticket.delete over this ticket, so a page offers "
+        "a delete control only where the delete would be allowed"
+    )
+    async def viewer_can_delete(self, info: strawberry.types.Info) -> bool:
+        """Resolve ticket.delete against this ticket's scope, as the delete itself would."""
+        return await ticket_perm_held(info, Perm.TICKET_DELETE, str(self.uuid), self._scope_resource())
+
+    @strawberry.field(
+        description="Whether the caller holds ticket.audit over this ticket, so a page offers "
+        "the audit card only where a verdict would be allowed"
+    )
+    async def viewer_can_audit(self, info: strawberry.types.Info) -> bool:
+        """The same memoized check the audit fields are withheld by."""
+        return await self._audit_visible(info)
+
+    @strawberry.field(
+        description="Whether the caller holds ticket.view_history over this ticket, so a page "
+        "offers the timeline only where reading it would be allowed"
+    )
+    async def viewer_can_view_history(self, info: strawberry.types.Info) -> bool:
+        """The same memoized check the timeline and the claimant list are withheld by."""
+        return await ticket_history_visible(info, str(self.uuid), self._scope_resource())
+
     def _scope_resource(self) -> SimpleNamespace:
         """What `own` and `zone` are decided on: who filed the ticket, and where it is."""
         return SimpleNamespace(created_by=self._created_by_raw, geometry=self._geometry_raw)
@@ -1141,6 +1186,22 @@ CreateTicketResult = Annotated[TicketCreated | DuplicatesSuspected, strawberry.u
 CreateTicketTaskResult = Annotated[
     TicketTaskCreated | DuplicatesSuspected, strawberry.union("CreateTicketTaskResult")
 ]
+
+
+@strawberry.type
+class TicketStatsType:
+    """Counts over the tickets the caller may list, for the board's stats strip."""
+
+    total: int
+    pending: int
+    in_progress: int
+    completed: int
+    cancelled: int
+    gap_people: int = strawberry.field(
+        description="People still short across open needs with a quantity: quantity less the "
+        "people linked, never below 0. Needs on completed or cancelled tickets add nothing"
+    )
+    gap_needs: int = strawberry.field(description="How many open needs are short of people (gapPeople > 0)")
 
 
 @strawberry.type

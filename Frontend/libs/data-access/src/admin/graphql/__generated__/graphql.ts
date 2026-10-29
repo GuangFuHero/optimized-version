@@ -1040,6 +1040,7 @@ export type Query = {
   ticket?: Maybe<TicketType>;
   ticketCells: Array<TicketCellType>;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
+  ticketStats: TicketStatsType;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
   zonesByTeam: TeamZoneConnection;
@@ -1197,6 +1198,7 @@ export type QueryTicketTasksArgs = {
 export type QueryTicketsArgs = {
   auditStatus?: InputMaybe<AuditStatus>;
   bounds?: InputMaybe<BoundsInput>;
+  disasterType?: InputMaybe<Scalars['String']['input']>;
   limit?: Scalars['Int']['input'];
   locationCell?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
@@ -1773,6 +1775,19 @@ export type TicketPropertyConfigType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type TicketStatsType = {
+  __typename?: 'TicketStatsType';
+  cancelled: Scalars['Int']['output'];
+  completed: Scalars['Int']['output'];
+  /** How many open needs are short of people (gapPeople > 0) */
+  gapNeeds: Scalars['Int']['output'];
+  /** People still short across open needs with a quantity: quantity less the people linked, never below 0. Needs on completed or cancelled tickets add nothing */
+  gapPeople: Scalars['Int']['output'];
+  inProgress: Scalars['Int']['output'];
+  pending: Scalars['Int']['output'];
+  total: Scalars['Int']['output'];
+};
+
 export const TicketStatus = {
   Cancelled: 'cancelled',
   Completed: 'completed',
@@ -1881,6 +1896,14 @@ export type TicketType = {
   /** When anything visible about this ticket last changed: a field, its address, disaster details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only when it changes the status; a review verdict never does */
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
+  /** Whether the caller holds ticket.audit over this ticket, so a page offers the audit card only where a verdict would be allowed */
+  viewerCanAudit: Scalars['Boolean']['output'];
+  /** Whether the caller holds ticket.delete over this ticket, so a page offers a delete control only where the delete would be allowed */
+  viewerCanDelete: Scalars['Boolean']['output'];
+  /** Whether the caller holds ticket.edit over this ticket, so a page offers edit controls only where the edit would be allowed */
+  viewerCanEdit: Scalars['Boolean']['output'];
+  /** Whether the caller holds ticket.view_history over this ticket, so a page offers the timeline only where reading it would be allowed */
+  viewerCanViewHistory: Scalars['Boolean']['output'];
 };
 
 export const TriState = {

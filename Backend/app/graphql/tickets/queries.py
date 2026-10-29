@@ -30,6 +30,7 @@ from app.graphql.tickets.types import (
     TicketCellType,
     TicketConnection,
     TicketListOrder,
+    TicketStatsType,
     TicketStatus,
     TicketTaskType,
     TicketType,
@@ -165,8 +166,14 @@ class RequestQuery:
         statuses: Annotated[
             list[TicketStatus] | None, strawberry.argument(description=_STATUSES_DESCRIPTION)
         ] = None,
+        disaster_type: Annotated[
+            str | None,
+            strawberry.argument(
+                description="Only tickets filed under this disaster type (a disaster_types key)"
+            ),
+        ] = None,
     ) -> TicketConnection:
-        """List tickets with optional bbox, status, priority, need-type, audit and keyword filters, paginated.
+        """List tickets with optional bbox, status, priority, need-type, audit, disaster and keyword filters.
 
         Requires ticket.view permission (public — Guest may call this). Note: the
         help-request board is public (ADR-027), so the seed grants ticket.view at `all`
@@ -246,6 +253,7 @@ class RequestQuery:
                 statuses=status_values,
                 priority=priority,
                 q=q,
+                disaster_type=disaster_type,
                 extra_filters=extra_filters,
                 detail_filters=detail_filters,
                 coarse_resolution=resolution,
@@ -258,6 +266,7 @@ class RequestQuery:
                 statuses=status_values,
                 priority=priority,
                 q=q,
+                disaster_type=disaster_type,
                 skip=skip,
                 limit=limit,
                 extra_filters=extra_filters,
@@ -312,6 +321,22 @@ class RequestQuery:
         return [
             TicketCellType(cell=cell, ticket_count=count, urgent_count=urgent) for cell, count, urgent in rows
         ]
+
+    @strawberry.field
+    async def ticket_stats(self, info: strawberry.types.Info) -> TicketStatsType:
+        """Counts by status and the volunteer gap over every active ticket the caller may list.
+
+        The same ticket.view gate and scope as `tickets`, computed in SQL so the board's stats
+        strip does not load the board. `gapPeople` is the people still short across open needs
+        with a quantity (quantity less the people linked, never below 0); `gapNeeds` counts
+        those needs. Needs on completed or cancelled tickets add nothing.
+        """
+        scope = await check_permission(info, Perm.TICKET_VIEW)
+        stats = await ticket_repository.stats(
+            info.context["db"],
+            extra_filters=scope_filter(scope, actor=info.context["user"], model=Tickets),
+        )
+        return TicketStatsType(**stats)
 
     @strawberry.field
     async def ticket(
