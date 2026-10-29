@@ -1,20 +1,31 @@
 'use client';
 
 import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
+import { useTicket } from '@rescue-frontend/data-access/admin';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Map } from '../../../map';
 import type {
   RescueMapControllerValue,
   RescueMapMarkerItem,
 } from '../../../map/types';
+import { stationPoint } from '../../../station/station-point';
 import { getTicketPriorityBadge } from '../../status';
 import { useTicketRows } from './hooks/use-ticket-rows';
+import {
+  framingOf,
+  framingStep,
+  selectedFocusStep,
+  ticketMapNotice,
+  type MapPoint,
+} from './model/map-framing';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
 import {
+  TICKET_MAP_AREA_KEYS,
+  toMapFramingVariables,
   toMapVariables,
   type MapViewport,
   type TicketFilters,
@@ -32,6 +43,10 @@ const { color, radius, shadow, typography } = designTokens;
 const MAP_HEIGHT = 560;
 const CLUSTER_MAX_ZOOM = 14;
 const OVERLAY_INSET = 12;
+/** A lone ticket, or the open one, is shown this close. */
+const FOCUS_ZOOM = 16;
+const FIT_PADDING: [number, number] = [48, 48];
+const latLng = ([lat, lng]: MapPoint): [number, number] => [lat, lng];
 /** A pan or zoom settles this long before the map asks for the tickets in view. */
 const VIEWPORT_DEBOUNCE_MS = 300;
 
@@ -48,7 +63,8 @@ interface TicketMapViewProps {
 
 /**
  * Browse-only: pins by priority; a click on a pin opens the ticket, a click on the map does nothing.
- * Loads the matching tickets inside the view, again each time the map settles after a move.
+ * On opening and on each filter change it frames every matching ticket; from there it loads the
+ * matching tickets inside the view, again each time the map settles after a move.
  */
 export function TicketMapView({
   filters,
@@ -61,10 +77,12 @@ export function TicketMapView({
     () => (viewport ? toMapVariables(filters, viewport) : {}),
     [filters, viewport],
   );
-  const tickets = useTicketRows(variables, { enabled: viewport !== null });
+  const tickets = useTicketRows(variables, {
+    enabled: viewport !== null,
+    keepAcross: TICKET_MAP_AREA_KEYS,
+  });
   const rows = tickets.rows;
-  const hidden =
-    tickets.totalCount !== null ? tickets.totalCount - rows.length : 0;
+  const framing = useFrameMatching(leafletMap, filters, selectedUuid);
   // Built once per load; a selection change swaps only the marker whose look changes.
   const rowMarkers = useMemo(
     () =>
@@ -77,10 +95,17 @@ export function TicketMapView({
     () => rowMarkers.map((m) => withMarkerSelected(m, m.id === selectedUuid)),
     [rowMarkers, selectedUuid],
   );
+  useFocusSelected(leafletMap, rowMarkers, selectedUuid);
+  const notice = ticketMapNotice({
+    failed: tickets.error != null,
+    inViewTotal: tickets.isPlaceholderData ? null : tickets.totalCount,
+    shown: rows.length,
+    matchingTotal: framing.totalCount,
+  });
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {tickets.error != null ? (
+      {notice === 'error' ? (
         <Callout tone="danger">
           無法載入求助單，請稍後再試
           <Button
@@ -92,9 +117,16 @@ export function TicketMapView({
             重試
           </Button>
         </Callout>
-      ) : hidden > 0 ? (
+      ) : notice === 'zoom-in' ? (
         <Callout tone="warning">
           {`此範圍有 ${tickets.totalCount} 張求助單，只顯示 ${rows.length} 張，請放大地圖。`}
+        </Callout>
+      ) : notice === 'none-here' ? (
+        <Callout tone="info">
+          此範圍沒有符合的求助單
+          <Button variant="ghost" size="sm" onClick={framing.frameAgain}>
+            顯示全部
+          </Button>
         </Callout>
       ) : null}
       <Box
@@ -125,6 +157,95 @@ export function TicketMapView({
       </Box>
     </Box>
   );
+}
+
+/**
+ * Frames every ticket matching the filters (up to the map's limit): once when the map opens and
+ * once per filter set, or again on `frameAgain`. Refetches after a write, and the viewport loads
+ * that follow each move, leave the view alone. An open ticket keeps the view, as on the station
+ * map, unless 顯示全部 asked; no match keeps it too.
+ */
+function useFrameMatching(
+  map: LeafletMap | null,
+  filters: TicketFilters,
+  selectedUuid: string | null,
+) {
+  const variables = useMemo(() => toMapFramingVariables(filters), [filters]);
+  const matching = useTicketRows(variables);
+  const [attempt, setAttempt] = useState(0);
+  const request = `${JSON.stringify(variables)}#${attempt}`;
+  const framedRef = useRef<string | null>(null);
+  const selectedRef = useRef(selectedUuid);
+  selectedRef.current = selectedUuid;
+  const askedRef = useRef(false);
+
+  const loaded = matching.totalCount !== null;
+  const rows = matching.rows;
+  useEffect(() => {
+    if (!map || !loaded) return;
+    const step = framingStep(
+      framedRef.current,
+      request,
+      selectedRef.current !== null && !askedRef.current,
+    );
+    if (step === 'done') return;
+    framedRef.current = request;
+    askedRef.current = false;
+    if (step === 'skip') return;
+    const framing = framingOf(
+      rows.flatMap((row): MapPoint[] => (row.position ? [row.position] : [])),
+    );
+    if (framing.kind === 'point') {
+      map.setView(latLng(framing.point), FOCUS_ZOOM);
+    } else if (framing.kind === 'bounds') {
+      map.fitBounds([latLng(framing.southWest), latLng(framing.northEast)], {
+        padding: FIT_PADDING,
+      });
+    }
+  }, [map, loaded, request, rows]);
+
+  return {
+    /** Matching tickets anywhere, null until known. */
+    totalCount: matching.totalCount,
+    frameAgain: () => {
+      askedRef.current = true;
+      setAttempt((n) => n + 1);
+    },
+  };
+}
+
+/**
+ * Brings an open ticket whose pin is not on the map (a pasted `?ticket=` link, say) into view
+ * once its detail has loaded, once per ticket.
+ */
+function useFocusSelected(
+  map: LeafletMap | null,
+  markers: readonly RescueMapMarkerItem[],
+  selectedUuid: string | null,
+) {
+  // The detail sheet's own load: the same query, so no second request.
+  const detail = useTicket({ uuid: selectedUuid ?? '' });
+  const ticket = detail.data?.ticket ?? null;
+  const detailLoaded = detail.data !== undefined;
+  const markersRef = useRef(markers);
+  markersRef.current = markers;
+  const focusedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!map) return;
+    const step = selectedFocusStep({
+      selectedUuid,
+      focusedUuid: focusedRef.current,
+      loadedIds: new Set(markersRef.current.map((m) => m.id)),
+      detailLoaded,
+      point: ticket ? stationPoint(ticket.geometry) : null,
+    });
+    if (!step) return;
+    focusedRef.current = selectedUuid;
+    if (step.point) {
+      map.setView(latLng(step.point), Math.max(map.getZoom(), FOCUS_ZOOM));
+    }
+  }, [map, selectedUuid, detailLoaded, ticket]);
 }
 
 /** The area the map shows, settled after each move; null until the map is built. */

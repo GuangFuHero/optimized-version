@@ -19,6 +19,8 @@ import {
   EMPTY_TICKET_FILTERS,
   pageCountOf,
   parseTicketFilters,
+  parseTicketPage,
+  TICKET_PAGE_KEYS,
   toPageVariables,
   writeTicketFilters,
   type TicketFilters,
@@ -53,7 +55,7 @@ export function TicketBoardPage() {
   );
   const filters = useMemo(() => parseTicketFilters(params), [params]);
   const view: BoardView = params.get('view') === 'map' ? 'map' : 'table';
-  const page = Number(params.get('page')) || 1;
+  const page = parseTicketPage(params);
   const caps = useTicketCapabilities();
   const now = useNow();
   const [filterOpen, setFilterOpen] = useState(false);
@@ -86,7 +88,9 @@ export function TicketBoardPage() {
     () => toPageVariables(filters, page),
     [filters, page],
   );
-  const tickets = useTicketRows(pageVariables);
+  const tickets = useTicketRows(pageVariables, {
+    keepAcross: TICKET_PAGE_KEYS,
+  });
   const count = tickets.totalCount ?? 0;
   const pageCount = pageCountOf(count);
   // A page past the end (a pasted link, or the last ticket on it deleted) moves to the last one.

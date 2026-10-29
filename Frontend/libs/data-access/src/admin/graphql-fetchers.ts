@@ -49,13 +49,33 @@ export const ticketsQuery = (
 
 export function useTickets(
   variables: documents.AdminTicketsQueryVariables = {},
-  options: AdminQueryOptions & { keepPrevious?: boolean } = {},
+  options: AdminQueryOptions & {
+    /**
+     * Keep the last result on screen until the next one lands: always, or only when this holds
+     * for the last load's variables (say, it differs from this one just by its page).
+     */
+    keepPrevious?:
+      | boolean
+      | ((previous: documents.AdminTicketsQueryVariables) => boolean);
+  } = {},
 ) {
+  const { keepPrevious } = options;
   return useQuery({
     ...ticketsQuery(variables),
     enabled: options.enabled,
-    // Paging or panning keeps the last result on screen until the next one lands.
-    placeholderData: options.keepPrevious ? keepPreviousData : undefined,
+    placeholderData:
+      typeof keepPrevious === 'function'
+        ? (previousData, previousQuery) => {
+            const previous = previousQuery?.queryKey.at(-1) as
+              | documents.AdminTicketsQueryVariables
+              | undefined;
+            return previous && keepPrevious(previous)
+              ? previousData
+              : undefined;
+          }
+        : keepPrevious
+          ? keepPreviousData
+          : undefined,
   });
 }
 

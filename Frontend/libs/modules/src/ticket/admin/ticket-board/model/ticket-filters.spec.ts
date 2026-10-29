@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import {
   countActiveFilters,
+  differsOnlyIn,
   EMPTY_TICKET_FILTERS,
   pageCountOf,
   parseTicketFilters,
+  parseTicketPage,
   searchHint,
+  TICKET_MAP_AREA_KEYS,
+  TICKET_MAP_LIMIT,
+  TICKET_PAGE_KEYS,
+  toMapFramingVariables,
   toMapVariables,
   toPageVariables,
   toServerVariables,
@@ -148,5 +154,69 @@ describe('ticket filters', () => {
       minLng: -180,
       maxLng: 180,
     });
+  });
+
+  it('reads ?page= as a whole page number from 1', () => {
+    const page = (value: string | null) =>
+      parseTicketPage(
+        new URLSearchParams(value === null ? '' : `page=${value}`),
+      );
+    expect(page(null)).toBe(1);
+    expect(page('3')).toBe(3);
+    expect(page('2.7')).toBe(2);
+    expect(page('-2')).toBe(1);
+    expect(page('0')).toBe(1);
+    expect(page('abc')).toBe(1);
+    expect(page('Infinity')).toBe(1);
+  });
+
+  it('keeps the last rows only across a page turn', () => {
+    const filtered = { ...EMPTY_TICKET_FILTERS, status: 'pending' as const };
+    expect(
+      differsOnlyIn(
+        toPageVariables(filtered, 1),
+        toPageVariables(filtered, 2),
+        TICKET_PAGE_KEYS,
+      ),
+    ).toBe(true);
+    expect(
+      differsOnlyIn(
+        toPageVariables(EMPTY_TICKET_FILTERS, 1),
+        toPageVariables(filtered, 1),
+        TICKET_PAGE_KEYS,
+      ),
+    ).toBe(false);
+    expect(
+      differsOnlyIn(
+        toPageVariables({ ...EMPTY_TICKET_FILTERS, q: '水電' }, 1),
+        toPageVariables({ ...EMPTY_TICKET_FILTERS, q: '淹水' }, 2),
+        TICKET_PAGE_KEYS,
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps the last pins only across a move of the map', () => {
+    const view = { west: 121, south: 23, east: 121.1, north: 23.1, zoom: 13 };
+    const moved = { ...view, west: 121.05, east: 121.15, zoom: 14 };
+    expect(
+      differsOnlyIn(
+        toMapVariables(EMPTY_TICKET_FILTERS, view),
+        toMapVariables(EMPTY_TICKET_FILTERS, moved),
+        TICKET_MAP_AREA_KEYS,
+      ),
+    ).toBe(true);
+    expect(
+      differsOnlyIn(
+        toMapVariables(EMPTY_TICKET_FILTERS, view),
+        toMapVariables({ ...EMPTY_TICKET_FILTERS, priority: 'high' }, view),
+        TICKET_MAP_AREA_KEYS,
+      ),
+    ).toBe(false);
+  });
+
+  it('frames every matching ticket, wherever it is', () => {
+    expect(
+      toMapFramingVariables({ ...EMPTY_TICKET_FILTERS, status: 'pending' }),
+    ).toEqual({ status: 'pending', skip: 0, limit: TICKET_MAP_LIMIT });
   });
 });

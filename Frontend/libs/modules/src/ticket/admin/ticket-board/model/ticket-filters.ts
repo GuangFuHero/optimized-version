@@ -111,6 +111,12 @@ export function countActiveFilters(filters: TicketFilters): number {
 
 export const TICKET_PAGE_SIZE = 50;
 
+/** The `?page=` param as a page number: a whole number from 1, else 1. */
+export function parseTicketPage(params: URLSearchParams): number {
+  const page = Math.trunc(Number(params.get('page')));
+  return Number.isFinite(page) && page >= 1 ? page : 1;
+}
+
 /** One board page: the filters plus that page's window. Pages count from 1. */
 export function toPageVariables(
   filters: TicketFilters,
@@ -126,6 +132,27 @@ export function toPageVariables(
 
 export function pageCountOf(totalCount: number): number {
   return Math.max(1, Math.ceil(totalCount / TICKET_PAGE_SIZE));
+}
+
+/** Variables that only page the board: a load differing in these alone keeps the last rows up. */
+export const TICKET_PAGE_KEYS = ['skip'] as const;
+/** Variables that only move the map: a load differing in these alone keeps the last pins up. */
+export const TICKET_MAP_AREA_KEYS = ['bounds', 'zoom'] as const;
+
+/** Whether two loads ask for the same tickets but for `keys`: paging, or the map's area. */
+export function differsOnlyIn(
+  a: AdminTicketsQueryVariables,
+  b: AdminTicketsQueryVariables,
+  keys: readonly (keyof AdminTicketsQueryVariables)[],
+): boolean {
+  const names = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<
+    keyof AdminTicketsQueryVariables
+  >;
+  return [...names].every(
+    (name) =>
+      keys.includes(name) ||
+      JSON.stringify(a[name]) === JSON.stringify(b[name]),
+  );
 }
 
 /** The map's load: the most the `tickets` query hands back at once. */
@@ -149,6 +176,16 @@ const clamp = (value: number, min: number, max: number) =>
 const SNAP = 1e4;
 const down = (value: number) => Math.floor(value * SNAP) / SNAP;
 const up = (value: number) => Math.ceil(value * SNAP) / SNAP;
+
+/**
+ * Every ticket matching the filters, wherever it is, up to the map's limit: what the map frames
+ * when it opens and when the filters change.
+ */
+export function toMapFramingVariables(
+  filters: TicketFilters,
+): AdminTicketsQueryVariables {
+  return { ...toServerVariables(filters), skip: 0, limit: TICKET_MAP_LIMIT };
+}
 
 /** The tickets inside `viewport` that match the filters, up to the map's limit. */
 export function toMapVariables(

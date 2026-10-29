@@ -6,19 +6,30 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import { useMemo } from 'react';
 
+import { differsOnlyIn } from '../model/ticket-filters';
 import { toTicketRow, type TicketRow } from '../model/ticket-row';
 
 const NO_ROWS: readonly TicketRow[] = [];
 
 /**
- * One load of `tickets` as board rows: a list page, or the map's visible area. The last result
- * stays on screen while the next page or area loads.
+ * One load of `tickets` as board rows: a list page, the map's visible area, or the map's framing.
+ * The last result stays on screen while the next loads only when the two differ just in
+ * `keepAcross` (the page, or the map's area); any other change shows as loading.
  */
 export function useTicketRows(
   variables: AdminTicketsQueryVariables,
-  options: { enabled?: boolean } = {},
+  options: {
+    enabled?: boolean;
+    keepAcross?: readonly (keyof AdminTicketsQueryVariables)[];
+  } = {},
 ) {
-  const query = useTickets(variables, { ...options, keepPrevious: true });
+  const { enabled, keepAcross } = options;
+  const query = useTickets(variables, {
+    enabled,
+    keepPrevious: keepAcross
+      ? (previous) => differsOnlyIn(previous, variables, keepAcross)
+      : false,
+  });
   const rows = useMemo(
     () => query.data?.tickets.items.map(toTicketRow),
     [query.data],
