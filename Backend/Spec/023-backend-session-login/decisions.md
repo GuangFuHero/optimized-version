@@ -551,8 +551,10 @@ browser never holds an `id_token`, so the third proof is out of its reach, and e
      the usual 401 (ADR-328), so the site's proxy refreshes and sends the request again. Anything a refresh
      cannot fix (no token, a session that has ended, a revoked identity) is sent to
      `{app}/login?error=session_expired` instead of answering JSON, because this is a page navigation.
-   - `action` is one of `add_contact`, `set_password`, `link_identity` and `unlink_identity`, the actions
-     whose proof can be the third one. `provider` must be one the account holds.
+   - `action` is one of `add_contact`, `link_identity` and `unlink_identity`, the actions whose proof can be
+     the third one. `provider` must be one the account holds. (`set_password` was one until ADR-401,
+     `Spec/012`, 2026-10-27: an account with no email or phone is now refused a password, and one with a
+     contact proves it there.)
    - `app`, `return_to` and the `Referer` follow ADR-331 points 4 and 6.
    - The state also records the purpose, the action, the session (`sid`) and the account.
    - The provider is asked to check the person afresh: for LINE, `prompt=login` (the sign-in screen even

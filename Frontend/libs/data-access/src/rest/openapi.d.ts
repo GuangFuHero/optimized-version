@@ -479,6 +479,9 @@ export interface paths {
      *     revoked, and it means a session that watched a password being set does not keep running
      *     on the strength of it. The owner is told afterwards, because a first password on an
      *     SSO-only account is a new permanent way in and must not appear silently.
+     *
+     *     An account with no verified email or phone is refused before any proof (ADR-401): a password
+     *     signs in with one of them, so it could never be used.
      */
     post: operations['set_password_api_v1_auth_set_password_post'];
     delete?: never;
@@ -527,6 +530,9 @@ export interface paths {
     /**
      * Reset Password
      * @description Complete a logged-out reset: consume the code, write the new password, revoke all sessions.
+     *
+     *     Every contact on the account is then told, as after `change-password` (ADR-218), not only
+     *     the one the code went to.
      */
     post: operations['reset_password_api_v1_auth_reset_password_post'];
     delete?: never;
@@ -748,7 +754,8 @@ export interface paths {
      *
      *     Feature 010 replaced the single platform/team role pair with the full identity list
      *     (ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).
-     *     Both land in the same row. Built by PlatformUserDirectory (Spec/026).
+     *     Both land in the same row. Built by PlatformUserDirectory (Spec/026). `q`, `platform_role`
+     *     and `team_uuid` narrow it and combine (ADR-412, ADR-432).
      */
     get: operations['list_users_api_v1_admin_users_get'];
     put?: never;
@@ -1333,6 +1340,29 @@ export interface paths {
     get: operations['list_audit_logs_api_v1_admin_audit_logs_get'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/audit-logs/export': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * 匯出稽核紀錄（CSV）
+     * @description The same filters as the list, as one CSV file (ADR-414). Super admins only.
+     *
+     *     A POST because every export is recorded (ADR-417): a write, so a browser signed in by cookie has
+     *     to send it from one of our pages (ADR-327), and a link on another site cannot start one.
+     */
+    post: operations['export_audit_logs_api_v1_admin_audit_logs_export_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2038,6 +2068,11 @@ export interface components {
       platform_role: string | null;
       /** Identities */
       identities?: components['schemas']['IdentitySummary'][];
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
       /** Last Login At */
       last_login_at?: string | null;
       /** Last Activity At */
@@ -2110,6 +2145,33 @@ export interface components {
       logo_url?: string | null;
       /** Notes */
       notes?: string | null;
+    };
+    /**
+     * AuditExportRequest
+     * @description The filters of an export, the same as the list's (ADR-414).
+     *
+     *     All optional; `from` and `to` bound `created_at`, as on the list. A field the export does not
+     *     know is refused, so a misspelled filter cannot export the whole log (ADR-428). `tz` is the IANA
+     *     zone the file's times and name are written in (ADR-430).
+     */
+    AuditExportRequest: {
+      /** Table */
+      table?: string | null;
+      /** Row Id */
+      row_id?: string | null;
+      /** Actor Uuid */
+      actor_uuid?: string | null;
+      /** From */
+      from?: string | null;
+      /** To */
+      to?: string | null;
+      /**
+       * Tz
+       * @description IANA time zone, e.g. Asia/Taipei
+       * @default UTC
+       * @example Asia/Taipei
+       */
+      tz: string;
     };
     /**
      * AuditLogItem
@@ -3390,6 +3452,7 @@ export interface components {
       | 'pre_departure.delete'
       | 'audit.view'
       | 'team.audit.view'
+      | 'audit.export'
       | 'rbac.view'
       | 'rbac.assign'
       | 'rbac.edit';
@@ -5474,6 +5537,14 @@ export interface operations {
       query?: {
         skip?: number;
         limit?: number;
+        /** @description Part of the nickname; full and half width match */
+        q?: string | null;
+        /** @description First that applies: super_admin, data_auditor, gov (in a gov team), ngo (in a team, none gov), user (no team, no other platform role) */
+        platform_role?:
+          | ('super_admin' | 'data_auditor' | 'gov' | 'ngo' | 'user')
+          | null;
+        /** @description Only those holding a role in this team */
+        team_uuid?: string | null;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -6785,6 +6856,46 @@ export interface operations {
         content: {
           'application/json': components['schemas']['HTTPValidationError'];
         };
+      };
+    };
+  };
+  export_audit_logs_api_v1_admin_audit_logs_export_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AuditExportRequest'];
+      };
+    };
+    responses: {
+      /** @description The filtered log, newest first */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/csv': unknown;
+        };
+      };
+      /** @description No audit.export at all (super admins only), or not from one of our pages */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description audit_export_too_large: too many rows, `matched` and `limit` say how many; or an unknown field or time zone in the body */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

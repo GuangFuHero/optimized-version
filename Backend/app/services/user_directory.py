@@ -13,10 +13,11 @@ worth of copied queries.
 """
 
 import logging
+import unicodedata
 from abc import ABC, abstractmethod
 from types import SimpleNamespace
 
-from sqlalchemy import exists, select
+from sqlalchemy import and_, exists, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -26,7 +27,7 @@ from app.models.auth import User
 from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
 from app.repositories.session_repository import SessionRepository
-from app.schemas.admin import AdminUserListItem, IdentitySummary, TeamMemberItem
+from app.schemas.admin import AdminUserListItem, IdentitySummary, TeamMemberItem, UserSearch
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 
@@ -71,14 +72,33 @@ class UserDirectory(ABC):
 class PlatformUserDirectory(UserDirectory):
     """Every account, with every identity it holds and its live sessions (ADR-073, ADR-094)."""
 
-    def __init__(self, db: AsyncSession, actor: User, redis):
-        """Sessions are counted in Redis."""
+    def __init__(self, db: AsyncSession, actor: User, redis, search: UserSearch | None = None):
+        """Sessions are counted in Redis; `search` narrows the list (ADR-412)."""
         super().__init__(db, actor)
         self.redis = redis
+        self.search = search or UserSearch()
 
     async def authorize(self) -> None:
         """user.view (super admin, data auditor in the seed)."""
         await require_scope(self.actor, Perm.USER_VIEW, self.db)
+
+    def narrow(self, query):
+        """Apply the search: `q` against the nickname only, never contact details (ADR-412, ADR-432)."""
+        q = (self.search.q or "").strip()
+        if q:
+            # NFKC on both sides, so `ming` finds the full-width `Ｍｉｎｇ` zh-TW input methods type.
+            # The form is a keyword in Postgres, not a value: written literally, never bound.
+            nickname = func.normalize(User.name, literal_column("NFKC"))
+            query = query.where(nickname.icontains(unicodedata.normalize("NFKC", q), autoescape=True))
+        if self.search.platform_role:
+            query = query.where(_platform_is(self.search.platform_role))
+        if self.search.team_uuid is not None:
+            query = query.where(
+                exists().where(
+                    UserRoleAssign.user_uuid == User.uuid, UserRoleAssign.team_uuid == self.search.team_uuid
+                )
+            )
+        return query
 
     async def list(self, *, skip: int, limit: int) -> list[AdminUserListItem]:
         """The rows of 成員與權限."""
@@ -94,6 +114,7 @@ class PlatformUserDirectory(UserDirectory):
                 real_name=u.real_name if real_name else None,
                 platform_role=platform_role(identities.get(str(u.uuid), [])),
                 identities=identities.get(str(u.uuid), []),
+                created_at=u.created_at,
                 last_login_at=u.last_login_at,
                 last_activity_at=u.last_activity_at,
                 active_session_count=sessions_by_user.get(str(u.uuid)),
@@ -242,6 +263,47 @@ async def session_counts(redis, user_uuids: list[str]) -> dict[str, int | None]:
         if alive:
             counts[index] += 1
     return dict(zip(user_uuids, counts, strict=True))
+
+
+_SUPER_ADMIN = "super_admin"
+_DATA_AUDITOR = "data_auditor"
+_GOV = "gov"
+
+
+def _platform_is(key: str):
+    """The accounts the 平台角色 column shows as `key`; the first that applies wins (ADR-432).
+
+    super_admin > data_auditor > gov (in a gov team) > ngo (in a team, none of them gov) > user
+    (in no team, no platform role besides `user`). As #146's `platformOf()` works it out.
+    """
+    staff = or_(_holds_platform_role(_SUPER_ADMIN), _holds_platform_role(_DATA_AUDITOR))
+    if key == _SUPER_ADMIN:
+        return _holds_platform_role(_SUPER_ADMIN)
+    if key == _DATA_AUDITOR:
+        return and_(_holds_platform_role(_DATA_AUDITOR), ~_holds_platform_role(_SUPER_ADMIN))
+    if key == _GOV:
+        return and_(~staff, _in_a_team(of_type=_GOV))
+    if key == "ngo":
+        return and_(~staff, _in_a_team(), ~_in_a_team(of_type=_GOV))
+    return and_(~_in_a_team(), ~_holds_platform_role(DEFAULT_PLATFORM_ROLE, other_than=True))
+
+
+def _in_a_team(*, of_type: str | None = None):
+    """EXISTS: the account holds a role in a team (of that type), as `identities` lists them."""
+    query = exists().where(UserRoleAssign.user_uuid == User.uuid, UserRoleAssign.team_uuid.is_not(None))
+    if of_type is not None:
+        query = query.where(Team.uuid == UserRoleAssign.team_uuid, Team.type == of_type)
+    return query
+
+
+def _holds_platform_role(role_name: str, *, other_than: bool = False):
+    """EXISTS: the account holds the platform role `role_name` — or, `other_than`, one besides it."""
+    named = Role.name != role_name if other_than else Role.name == role_name
+    return (
+        exists()
+        .where(UserRoleAssign.user_uuid == User.uuid, UserRoleAssign.team_uuid.is_(None))
+        .where(Role.uuid == UserRoleAssign.role_uuid, named)
+    )
 
 
 def platform_role(identities: list[IdentitySummary]) -> str | None:

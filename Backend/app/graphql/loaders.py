@@ -443,18 +443,25 @@ def _make_responsible_teams_by_ticket_loader(db: AsyncSession):
     """
 
     async def load_fn(ticket_uuids: list[str]) -> list[list[AssignedTeamType]]:
-        # Aliased because the zones and the tickets share base_geometries (see scope_filter).
-        ticket = aliased(BaseGeometry)
+        # The page's points first, kept apart from the rest (MATERIALIZED), so each is looked up in the zones'
+        # spatial index; joined straight, the plan scanned every point inside each zone and kept the page's
+        # last. A CTE also keeps the zones and the tickets, which share base_geometries, apart.
+        page = (
+            select(BaseGeometry.uuid, BaseGeometry.geometry)
+            .where(BaseGeometry.uuid.in_(ticket_uuids))
+            .cte("page")
+            .prefix_with("MATERIALIZED")
+        )
         zone = aliased(TeamZone, flat=True)
         rows = await db.execute(
-            select(ticket.uuid, Team)
+            select(page.c.uuid, Team)
             .select_from(TeamZoneAssign)
             .join(Team, Team.uuid == TeamZoneAssign.team_uuid)
             .join(zone, zone.uuid == TeamZoneAssign.zone_uuid)
-            .join(ticket, func.ST_Contains(zone.geometry, ticket.geometry))
-            .where(ticket.uuid.in_(ticket_uuids), zone.delete_at.is_(None), Team.delete_at.is_(None))
+            .join(page, func.ST_Contains(zone.geometry, page.c.geometry))
+            .where(zone.delete_at.is_(None), Team.delete_at.is_(None))
             .distinct()
-            .order_by(ticket.uuid, Team.name, Team.uuid)
+            .order_by(page.c.uuid, Team.name, Team.uuid)
         )
         grouped: dict[str, list[AssignedTeamType]] = defaultdict(list)
         for ticket_uuid, team in rows:

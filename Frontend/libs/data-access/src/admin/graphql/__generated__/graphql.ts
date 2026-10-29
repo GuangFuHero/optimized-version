@@ -1025,6 +1025,7 @@ export type Query = {
   teamZone?: Maybe<TeamZoneType>;
   teamZones: TeamZoneConnection;
   ticket?: Maybe<TicketType>;
+  ticketCells: Array<TicketCellType>;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
@@ -1161,6 +1162,12 @@ export type QueryTicketArgs = {
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
+export type QueryTicketCellsArgs = {
+  bounds: BoundsInput;
+  statuses?: InputMaybe<Array<TicketStatus>>;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+};
+
 export type QueryTicketPropertyConfigsArgs = {
   disasterTypes: Array<Scalars['String']['input']>;
   includeInactive?: Scalars['Boolean']['input'];
@@ -1178,12 +1185,15 @@ export type QueryTicketsArgs = {
   auditStatus?: InputMaybe<AuditStatus>;
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
+  locationCell?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
+  order?: TicketListOrder;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   status?: InputMaybe<Scalars['String']['input']>;
+  statuses?: InputMaybe<Array<TicketStatus>>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
@@ -1682,6 +1692,16 @@ export type TicketAuditEntryType = {
   status: Scalars['String']['output'];
 };
 
+/** How many tickets one H3 cell holds, of those its caller is shown as the cell */
+export type TicketCellType = {
+  __typename?: 'TicketCellType';
+  /** H3 index (hex), the same value TicketType.locationCell carries for these tickets */
+  cell: Scalars['String']['output'];
+  ticketCount: Scalars['Int']['output'];
+  /** Of those, how many are urgent: a priority other than 'low' or 'medium' (trimmed, any case), and not 'in_progress' — the rule the site colours a ticket urgent by */
+  urgentCount: Scalars['Int']['output'];
+};
+
 export type TicketConnection = {
   __typename?: 'TicketConnection';
   items: Array<TicketType>;
@@ -1710,6 +1730,13 @@ export type TicketDisasterDetailType = {
   value: Scalars['String']['output'];
 };
 
+export const TicketListOrder = {
+  NeedsFirst: 'NEEDS_FIRST',
+  Newest: 'NEWEST',
+} as const;
+
+export type TicketListOrder =
+  (typeof TicketListOrder)[keyof typeof TicketListOrder];
 export type TicketPropertyConfigType = {
   __typename?: 'TicketPropertyConfigType';
   /** Which control the form renders for this field */
@@ -1733,6 +1760,14 @@ export type TicketPropertyConfigType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export const TicketStatus = {
+  Cancelled: 'cancelled',
+  Completed: 'completed',
+  InProgress: 'in_progress',
+  Pending: 'pending',
+} as const;
+
+export type TicketStatus = (typeof TicketStatus)[keyof typeof TicketStatus];
 export type TicketTaskCreated = {
   __typename?: 'TicketTaskCreated';
   task: TicketTaskType;
@@ -2747,6 +2782,12 @@ export type AdminCurrentDisasterQuery = {
     __typename?: 'CurrentDisasterType';
     name: string;
     shortName?: string | null;
+    mapView?: {
+      __typename?: 'MapViewType';
+      lat: number;
+      lng: number;
+      zoom: number;
+    } | null;
   } | null;
 };
 
@@ -5972,6 +6013,18 @@ export const AdminCurrentDisasterDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'shortName' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'mapView' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'lat' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'lng' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'zoom' } },
+                    ],
+                  },
+                },
               ],
             },
           },

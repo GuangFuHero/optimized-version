@@ -35,6 +35,14 @@ logger = logging.getLogger("app.dedup")
 # test holds the engine to a much smaller budget; this is the backstop.
 ENGINE_TIMEOUT_S = 2.0
 
+# Submissions in one area queue so the later one sees the earlier (ADR-396). The wait is capped
+# above the engine's worst measured check (p99 ~245 ms, ADR-307); past it the submission goes on
+# unlocked, as before the lock existed.
+AREA_LOCK_TIMEOUT_MS = 500
+# The furthest apart two submissions can be and still meet on a lock. The engine's search radius
+# must not exceed it; tests/test_dedup_area_lock.py guards both.
+AREA_LOCK_MAX_RADIUS_M = 500
+
 
 class EngineWroteError(RuntimeError):
     """The engine wrote to the database during a call that must be read-only."""
