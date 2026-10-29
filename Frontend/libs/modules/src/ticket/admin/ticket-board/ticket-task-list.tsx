@@ -22,6 +22,7 @@ import { ChevronDown, Circle, User, UserPlus, X } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 
 import { Muted } from '../../../admin/shared/muted';
+import { useBusyKeys, useReportBusy } from './hooks/use-busy-keys';
 import { NEED_KIND_ICONS } from './need-kind-icons';
 import {
   assignErrorMessage,
@@ -72,8 +73,11 @@ interface PickerTeam {
 
 interface TicketTaskListProps {
   ticket: DetailTicket;
-  /** 再加一項需求 is sending (or not): the drawer holds its close meanwhile. */
-  onAddBusyChange?(busy: boolean): void;
+  /**
+   * A write here is in flight (or none is): 再加一項需求, 指派承接, removing someone, 停止招募 or
+   * 刪除需求. The drawer holds its close meanwhile.
+   */
+  onBusyChange?(busy: boolean): void;
 }
 
 type PendingAction =
@@ -88,10 +92,8 @@ type PendingAction =
  * `viewerCanUnassign` offers × to take that person off. `ticket.edit` on the ticket adds
  * 再加一項需求 below them.
  */
-export function TicketTaskList({
-  ticket,
-  onAddBusyChange,
-}: TicketTaskListProps) {
+export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
+  const busyFor = useBusyKeys(onBusyChange);
   // One task model for the board, read off the drawer's ticket as off a list row.
   const rows = useMemo(() => toTaskRows(ticket.tasks), [ticket.tasks]);
   const [pending, setPending] = useState<PendingAction | null>(null);
@@ -154,19 +156,21 @@ export function TicketTaskList({
                 onRemove={(assignment) =>
                   request({ kind: 'unassign', task: row, assignment })
                 }
+                onAssignBusyChange={busyFor(`assign:${task.uuid}`)}
               />
             );
           })}
         </Box>
       )}
       {ticket.viewerCanEdit ? (
-        <AddNeedForm ticketUuid={ticket.uuid} onBusyChange={onAddBusyChange} />
+        <AddNeedForm ticketUuid={ticket.uuid} onBusyChange={busyFor('add')} />
       ) : null}
       <StopRecruitingConfirm
         open={dialogOpen && pending?.kind === 'stop'}
         ticketUuid={ticket.uuid}
         task={pending?.kind === 'stop' ? pending.task : null}
         onClose={() => setDialogOpen(false)}
+        onBusyChange={busyFor('stop')}
       />
       <DeleteNeedConfirm
         open={dialogOpen && pending?.kind === 'delete'}
@@ -174,6 +178,7 @@ export function TicketTaskList({
         task={pending?.kind === 'delete' ? pending.task : null}
         needs={rows}
         onClose={() => setDialogOpen(false)}
+        onBusyChange={busyFor('delete')}
       />
       <UnassignConfirm
         open={dialogOpen && pending?.kind === 'unassign'}
@@ -181,6 +186,7 @@ export function TicketTaskList({
         task={pending?.kind === 'unassign' ? pending.task : null}
         assignment={pending?.kind === 'unassign' ? pending.assignment : null}
         onClose={() => setDialogOpen(false)}
+        onBusyChange={busyFor('unassign')}
       />
     </>
   );
@@ -193,6 +199,8 @@ interface ConfirmProps {
   /** Kept while the dialog fades out, so it keeps its content. */
   task: TaskRow | null;
   onClose: () => void;
+  /** The write is in flight (or not): the drawer holds its close meanwhile. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 /** 停止招募: the need's list is fixed at the people on it. `Dialog` refuses to close mid-request. */
@@ -201,8 +209,10 @@ function StopRecruitingConfirm({
   ticketUuid,
   task,
   onClose,
+  onBusyChange,
 }: ConfirmProps) {
   const stop = useStopTaskRecruiting();
+  useReportBusy(stop.isPending, onBusyChange);
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -246,8 +256,10 @@ function DeleteNeedConfirm({
   task,
   needs,
   onClose,
+  onBusyChange,
 }: ConfirmProps & { needs: TaskRow[] }) {
   const remove = useDeleteTicketTask();
+  useReportBusy(remove.isPending, onBusyChange);
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -315,8 +327,10 @@ function UnassignConfirm({
   task,
   assignment,
   onClose,
+  onBusyChange,
 }: ConfirmProps & { assignment: DetailAssignment | null }) {
   const unassign = useUnassignTaskActor();
+  useReportBusy(unassign.isPending, onBusyChange);
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -467,6 +481,7 @@ function TaskCard({
   assignmentsHidden,
   statusMenu,
   onRemove,
+  onAssignBusyChange,
 }: {
   ticketUuid: string;
   task: DetailTask;
@@ -477,6 +492,8 @@ function TaskCard({
   assignmentsHidden: boolean;
   statusMenu: ReactNode;
   onRemove: (assignment: DetailAssignment) => void;
+  /** 指派承接 is sending (or not). */
+  onAssignBusyChange: (busy: boolean) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const KindIcon = NEED_KIND_ICONS[task.taskType] ?? Circle;
@@ -584,6 +601,7 @@ function TaskCard({
           task={task}
           team={team}
           onDone={() => setAdding(false)}
+          onBusyChange={onAssignBusyChange}
         />
       ) : null}
     </Box>
@@ -654,17 +672,20 @@ function AssignPicker({
   task,
   team,
   onDone,
+  onBusyChange,
 }: {
   ticketUuid: string;
   task: DetailTask;
   team: PickerTeam | null;
   onDone: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const selectId = useId();
   const members = useTeamMembers(team?.uuid, {
     enabled: Boolean(team?.canList),
   });
   const assign = useAssignTaskActor();
+  useReportBusy(assign.isPending, onBusyChange);
   const queryClient = useQueryClient();
   const options = useMemo(
     () => assignPickerOptions(members.data ?? [], task.assignments),

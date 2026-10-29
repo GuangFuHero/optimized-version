@@ -65,8 +65,8 @@ import { TicketTaskList } from './ticket-task-list';
 
 const { color, radius, typography } = designTokens;
 
-/** The station drawer's width, so both boards' drawers match. */
-export const TICKET_SHEET_WIDTH = 540;
+/** The ticket drawer's width, the prototype's `TKDrawer` (680px); the station drawer keeps its own. */
+export const TICKET_SHEET_WIDTH = 680;
 
 type DetailTab = 'info' | 'history';
 
@@ -108,8 +108,8 @@ export function TicketDetailSheet({
     [disasterTypes.data],
   );
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
-  // The edit form is saving, a need is being added or a verdict sent: Escape, the backdrop and ×
-  // wait for it.
+  // The edit form is saving, a need is being added, assigned or taken off, or a verdict sent:
+  // Escape, the backdrop and × wait for it.
   const [formBusy, setFormBusy] = useState(false);
   const [needBusy, setNeedBusy] = useState(false);
   const [auditBusy, setAuditBusy] = useState(false);
@@ -555,7 +555,7 @@ function TicketInfo({
         title="需求與承接"
         right={<Muted inline>{progress.label ?? '尚無需求'}</Muted>}
       >
-        <TicketTaskList ticket={ticket} onAddBusyChange={onNeedBusyChange} />
+        <TicketTaskList ticket={ticket} onBusyChange={onNeedBusyChange} />
       </Section>
 
       {ticket.viewerCanAudit && ticket.auditContentHash ? (
