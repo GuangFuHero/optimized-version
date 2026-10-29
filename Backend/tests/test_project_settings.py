@@ -42,6 +42,21 @@ async def test_second_row_is_rejected(db):
         await db.commit()
 
 
+@pytest.mark.parametrize(
+    "view",
+    [
+        {"map_center_lat": 121.418, "map_center_lng": 23.67, "map_zoom": 14},
+        {"map_center_lat": 23.67, "map_center_lng": 121.418, "map_zoom": 19},
+    ],
+    ids=["swapped-centre", "zoom-19"],
+)
+async def test_a_view_the_map_cannot_open_is_refused_by_the_table(db, view):
+    """The table holds the API's ranges too, so a row written past the API cannot hand the map a bad view."""
+    db.add(ProjectSettings(name="花蓮 0816", **view))
+    with pytest.raises(IntegrityError):
+        await db.commit()
+
+
 async def test_disaster_types_round_trips_as_a_list(db):
     """Mixed disasters are a set of types on one event, not separate events."""
     db.add(ProjectSettings(name="花蓮 0816", disaster_types=["landslide", "flood"]))
@@ -81,10 +96,10 @@ async def test_config_defaults(db):
     db.add(cfg)
     await db.commit()
     await db.refresh(cfg)
-    assert cfg.disaster_types == []      # 空陣列 = 不分災害型別一律啟用
+    assert cfg.disaster_types == []  # 空陣列 = 不分災害型別一律啟用
     assert cfg.is_active is True
     assert cfg.sort_order == 0
-    assert cfg.label is None             # 前端回退顯示 property_name
+    assert cfg.label is None  # 前端回退顯示 property_name
 
 
 # ──────────────────────────────────────────────
@@ -117,9 +132,7 @@ async def _make_project_admin(db):
         permission = Permission(key=perm.value)
         db.add(permission)
         await db.flush()
-        db.add(RolePermissionAssign(
-            role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"
-        ))
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
     user = User(name="Super Admin")
     db.add(user)
     await db.flush()
@@ -195,9 +208,14 @@ async def test_patch_creates_the_row_when_the_table_is_empty(client, db_session,
     """PATCH is an upsert: the first call creates the deployment's one row."""
     admin_uuid, role_uuid = await _make_project_admin(db_session)
 
-    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid), json={
-        "name": "花蓮 0816", "disaster_types": ["landslide", "flood"],
-    })
+    resp = await client.patch(
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
+        json={
+            "name": "花蓮 0816",
+            "disaster_types": ["landslide", "flood"],
+        },
+    )
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["name"] == "花蓮 0816"
@@ -210,17 +228,121 @@ async def test_patch_creates_the_row_when_the_table_is_empty(client, db_session,
 async def test_repeated_patch_never_creates_a_second_row(client, db_session, redis):
     """The single-row invariant survives repeated writes (ADR-090)."""
     admin_uuid, role_uuid = await _make_project_admin(db_session)
-    await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
-                       json={"name": "花蓮 0816", "disaster_types": ["landslide"]})
+    await client.patch(
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
+        json={"name": "花蓮 0816", "disaster_types": ["landslide"]},
+    )
 
-    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
-                              json={"disaster_types": ["fire"]})
+    resp = await client.patch(
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
+        json={"disaster_types": ["fire"]},
+    )
 
     assert resp.status_code == 200, resp.text
     assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 1
     # PATCH semantics: the omitted name kept its stored value.
     assert resp.json()["name"] == "花蓮 0816"
     assert resp.json()["disaster_types"] == ["fire"]
+
+
+async def test_the_short_name_is_set_trimmed_and_cleared(client, db_session, redis):
+    """ADR-392: optional, so a blank or null one clears it and the full name is shown instead."""
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
+    headers = await _auth_header(redis, admin_uuid, role_uuid)
+    await client.patch(SETTINGS_URL, headers=headers, json={"name": "花蓮馬太鞍溪堰塞湖專案"})
+
+    set_ = await client.patch(SETTINGS_URL, headers=headers, json={"short_name": "  花蓮馬太鞍溪 "})
+    read = await client.get(SETTINGS_URL, headers=headers)
+    blanked = await client.patch(SETTINGS_URL, headers=headers, json={"short_name": "  "})
+    await client.patch(SETTINGS_URL, headers=headers, json={"short_name": "花蓮馬太鞍溪"})
+    untouched = await client.patch(SETTINGS_URL, headers=headers, json={"disaster_types": ["flood"]})
+    nulled = await client.patch(SETTINGS_URL, headers=headers, json={"short_name": None})
+
+    assert set_.status_code == 200, set_.text
+    assert (set_.json()["short_name"], read.json()["short_name"]) == ("花蓮馬太鞍溪", "花蓮馬太鞍溪")
+    assert blanked.json()["short_name"] is None
+    assert untouched.json()["short_name"] == "花蓮馬太鞍溪"
+    assert nulled.json()["short_name"] is None
+
+
+async def test_a_short_name_past_30_characters_is_refused(client, db_session, redis):
+    """It has to fit a phone's top bar; the full name is the place for the rest."""
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
+    headers = await _auth_header(redis, admin_uuid, role_uuid)
+
+    resp = await client.patch(SETTINGS_URL, headers=headers, json={"name": "花蓮", "short_name": "長" * 31})
+
+    assert resp.status_code == 422, resp.text
+    assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 0
+
+
+async def test_spaces_around_a_30_character_short_name_do_not_count(client, db_session, redis):
+    """It is trimmed before the length check, so padding neither pushes it over nor gets stored."""
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
+    headers = await _auth_header(redis, admin_uuid, role_uuid)
+
+    resp = await client.patch(
+        SETTINGS_URL, headers=headers, json={"name": "花蓮", "short_name": "  " + "長" * 30 + " "}
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["short_name"] == "長" * 30
+
+
+GUANGFU = {"lat": 23.67, "lng": 121.418, "zoom": 14}
+
+
+async def test_the_map_view_is_set_kept_and_cleared(client, db_session, redis):
+    """ADR-395: sent whole, kept while a PATCH leaves it out, cleared by null."""
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
+    headers = await _auth_header(redis, admin_uuid, role_uuid)
+    unconfigured = await client.get(SETTINGS_URL, headers=headers)
+    await client.patch(SETTINGS_URL, headers=headers, json={"name": "花蓮馬太鞍溪堰塞湖專案"})
+    unset = await client.get(SETTINGS_URL, headers=headers)
+
+    set_ = await client.patch(SETTINGS_URL, headers=headers, json={"map_view": GUANGFU})
+    read = await client.get(SETTINGS_URL, headers=headers)
+    untouched = await client.patch(SETTINGS_URL, headers=headers, json={"disaster_types": ["flood"]})
+    cleared = await client.patch(SETTINGS_URL, headers=headers, json={"map_view": None})
+
+    assert (unconfigured.json()["map_view"], unset.json()["map_view"]) == (None, None)
+    assert set_.status_code == 200, set_.text
+    assert (set_.json()["map_view"], read.json()["map_view"]) == (GUANGFU, GUANGFU)
+    assert untouched.json()["map_view"] == GUANGFU
+    assert cleared.json()["map_view"] is None
+    assert await db_session.scalar(text("SELECT map_zoom FROM project_settings")) is None
+
+
+@pytest.mark.parametrize(
+    "map_view",
+    [
+        {**GUANGFU, "lat": 90.5},
+        {**GUANGFU, "lng": -180.5},
+        {**GUANGFU, "zoom": 6},
+        {**GUANGFU, "zoom": 19},
+        {**GUANGFU, "zoom": 14.5},
+        {"lat": 23.67, "lng": 121.418},
+    ],
+    ids=[
+        "latitude off the globe",
+        "longitude off the globe",
+        "zoomed out past the map",
+        "zoomed in past the map",
+        "a fractional zoom",
+        "no zoom",
+    ],
+)
+async def test_a_map_view_the_site_cannot_open_is_refused(client, db_session, redis, map_view):
+    """The map allows zoom 7 to 18 (rescue-map-canvas); the centre is on the globe; all three are needed."""
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
+    headers = await _auth_header(redis, admin_uuid, role_uuid)
+
+    resp = await client.patch(SETTINGS_URL, headers=headers, json={"name": "花蓮", "map_view": map_view})
+
+    assert resp.status_code == 422, resp.text
+    assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 0
 
 
 async def test_reads_are_refused_without_project_view(client, db_session, redis):
@@ -236,8 +358,11 @@ async def test_writes_are_refused_without_project_edit(client, db_session, redis
     """Changing the disaster types requires project.edit (ADR-090)."""
     user_uuid = await _make_plain_user(db_session)
 
-    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, user_uuid),
-                              json={"name": "亂改", "disaster_types": ["fire"]})
+    resp = await client.patch(
+        SETTINGS_URL,
+        headers=await _auth_header(redis, user_uuid),
+        json={"name": "亂改", "disaster_types": ["fire"]},
+    )
 
     assert resp.status_code == 403, resp.text
     assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 0
@@ -288,14 +413,22 @@ async def test_project_settings_changes_are_audited(client, db_session, redis):
     await db_session.commit()
     admin_uuid, role_uuid = await _make_project_admin(db_session)
 
-    await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
-                       json={"name": "花蓮 0816", "disaster_types": ["landslide"]})
-    await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
-                       json={"disaster_types": ["fire"]})
+    await client.patch(
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
+        json={"name": "花蓮 0816", "disaster_types": ["landslide"]},
+    )
+    await client.patch(
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
+        json={"disaster_types": ["fire"]},
+    )
 
-    actions = list(await db_session.scalars(
-        text("SELECT action FROM audit_logs WHERE table_name = 'project_settings' ORDER BY created_at")
-    ))
+    actions = list(
+        await db_session.scalars(
+            text("SELECT action FROM audit_logs WHERE table_name = 'project_settings' ORDER BY created_at")
+        )
+    )
     assert actions == ["INSERT", "UPDATE"]
 
 
@@ -308,13 +441,19 @@ async def test_project_settings_is_registered_as_audited():
 # Disaster-type label normalization (ADR-091 補充)
 # ──────────────────────────────────────────────
 
+
 async def test_settings_disaster_types_are_lowercased_on_write(client, db_session, redis):
     """Labels are matched by exact string equality, so casing must not be a mismatch source."""
     admin_uuid, role_uuid = await _make_project_admin(db_session)
 
-    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid), json={
-        "name": "花蓮 0816", "disaster_types": ["Flood", " LANDSLIDE ", "flood"],
-    })
+    resp = await client.patch(
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
+        json={
+            "name": "花蓮 0816",
+            "disaster_types": ["Flood", " LANDSLIDE ", "flood"],
+        },
+    )
 
     assert resp.status_code == 200, resp.text
     # lower-cased, trimmed, de-duplicated, original order kept
@@ -324,8 +463,12 @@ async def test_settings_disaster_types_are_lowercased_on_write(client, db_sessio
 async def test_config_disaster_types_are_lowercased_on_write(db):
     """The config side is normalized the same way, or the two sides could never match."""
     cfg = await station_property_config_repository.upsert(
-        db, station_type="shelter", property_name="淹水深度", data_type="number",
-        enum_options=None, disaster_types=["Flood", "flood ", "LANDSLIDE"],
+        db,
+        station_type="shelter",
+        property_name="淹水深度",
+        data_type="number",
+        enum_options=None,
+        disaster_types=["Flood", "flood ", "LANDSLIDE"],
     )
 
     assert cfg.disaster_types == ["flood", "landslide"]
@@ -335,25 +478,34 @@ async def test_mixed_case_settings_still_match_config(client, db_session, redis)
     """The whole point: a mis-cased setting must not silently blank out the field list."""
     admin_uuid, role_uuid = await _make_project_admin(db_session)
     await station_property_config_repository.upsert(
-        db_session, station_type="shelter", property_name="淹水深度", data_type="number",
-        enum_options=None, disaster_types=["flood"],
+        db_session,
+        station_type="shelter",
+        property_name="淹水深度",
+        data_type="number",
+        enum_options=None,
+        disaster_types=["flood"],
     )
 
-    await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
-                       json={"name": "花蓮 0816", "disaster_types": ["Flood"]})
+    await client.patch(
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
+        json={"name": "花蓮 0816", "disaster_types": ["Flood"]},
+    )
 
     types = await project_settings_repository.get_current_disaster_types(db_session)
-    rows = await station_property_config_repository.list_by_type(
-        db_session, "shelter", disaster_types=types
-    )
+    rows = await station_property_config_repository.list_by_type(db_session, "shelter", disaster_types=types)
     assert [r.property_name for r in rows] == ["淹水深度"]
 
 
 async def test_empty_disaster_types_survives_normalization(db):
     """An empty list means "every disaster type" — it must not be confused with "not supplied"."""
     cfg = await station_property_config_repository.upsert(
-        db, station_type="shelter", property_name="收容人數", data_type="number",
-        enum_options=None, disaster_types=[],
+        db,
+        station_type="shelter",
+        property_name="收容人數",
+        data_type="number",
+        enum_options=None,
+        disaster_types=[],
     )
 
     assert cfg.disaster_types == []
@@ -372,7 +524,8 @@ async def test_a_typo_in_a_disaster_type_is_now_rejected(client, db_session, red
     """
     admin_uuid, role_uuid = await _make_project_admin(db_session)
     resp = await client.patch(
-        SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
         json={"name": "花蓮 0816", "disaster_types": ["floods"]},
     )
 
@@ -387,15 +540,20 @@ async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_
     a valid key, but with every field scoped to `flood` it empties the forms just as thoroughly.
     """
     admin_uuid, role_uuid = await _make_project_admin(db_session)
-    db_session.add(StationPropertyConfig(
-        station_type="shelter", property_name="淹水深度", data_type="number",
-        disaster_types=["flood"],
-    ))
+    db_session.add(
+        StationPropertyConfig(
+            station_type="shelter",
+            property_name="淹水深度",
+            data_type="number",
+            disaster_types=["flood"],
+        )
+    )
     await db_session.commit()
 
     with caplog.at_level(logging.WARNING):
         resp = await client.patch(
-            SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
+            SETTINGS_URL,
+            headers=await _auth_header(redis, admin_uuid, role_uuid),
             json={"name": "花蓮 0816", "disaster_types": ["earthquake"]},
         )
 
@@ -408,23 +566,26 @@ async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_
 async def test_a_disaster_type_a_field_uses_warns_about_nothing(client, db_session, redis):
     """The warning has to stay quiet when the label is right, or it is noise."""
     admin_uuid, role_uuid = await _make_project_admin(db_session)
-    db_session.add(StationPropertyConfig(
-        station_type="shelter", property_name="淹水深度", data_type="number",
-        disaster_types=["flood"],
-    ))
+    db_session.add(
+        StationPropertyConfig(
+            station_type="shelter",
+            property_name="淹水深度",
+            data_type="number",
+            disaster_types=["flood"],
+        )
+    )
     await db_session.commit()
 
     resp = await client.patch(
-        SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
         json={"name": "花蓮 0816", "disaster_types": ["flood"]},
     )
 
     assert resp.json()["warnings"] == []
 
 
-async def test_a_ticket_field_does_not_silence_the_station_form_warning(
-    client, db_session, caplog, redis
-):
+async def test_a_ticket_field_does_not_silence_the_station_form_warning(client, db_session, caplog, redis):
     """`project_settings` scopes the station and task forms; ticket fields are not in scope.
 
     Counting `ticket_property_config` made the warning unreachable, since the migration seeds
@@ -432,14 +593,19 @@ async def test_a_ticket_field_does_not_silence_the_station_form_warning(
     be reported (ADR-264).
     """
     admin_uuid, role_uuid = await _make_project_admin(db_session)
-    db_session.add(TicketPropertyConfig(
-        property_name="輻射劑量", data_type="number", disaster_types=["radiation"],
-    ))
+    db_session.add(
+        TicketPropertyConfig(
+            property_name="輻射劑量",
+            data_type="number",
+            disaster_types=["radiation"],
+        )
+    )
     await db_session.commit()
 
     with caplog.at_level(logging.WARNING):
         resp = await client.patch(
-            SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
+            SETTINGS_URL,
+            headers=await _auth_header(redis, admin_uuid, role_uuid),
             json={"name": "花蓮 0816", "disaster_types": ["radiation"]},
         )
 
@@ -447,9 +613,7 @@ async def test_a_ticket_field_does_not_silence_the_station_form_warning(
     assert any("radiation" in w for w in resp.json()["warnings"]), resp.json()
 
 
-async def test_a_retired_disaster_type_does_not_block_an_unrelated_settings_write(
-    client, db_session, redis
-):
+async def test_a_retired_disaster_type_does_not_block_an_unrelated_settings_write(client, db_session, redis):
     """Resending the stored list must not be refused by a type retired since it was saved.
 
     A `PATCH` carrying only `name` already worked; the same PATCH carrying the unchanged
@@ -458,16 +622,16 @@ async def test_a_retired_disaster_type_does_not_block_an_unrelated_settings_writ
     admin_uuid, role_uuid = await _make_project_admin(db_session)
     headers = await _auth_header(redis, admin_uuid, role_uuid)
     await client.patch(
-        SETTINGS_URL, headers=headers,
+        SETTINGS_URL,
+        headers=headers,
         json={"name": "花蓮 0816", "disaster_types": ["flood", "landslide"]},
     )
-    await db_session.execute(
-        text("UPDATE disaster_types SET is_active = false WHERE key = 'landslide'")
-    )
+    await db_session.execute(text("UPDATE disaster_types SET is_active = false WHERE key = 'landslide'"))
     await db_session.commit()
 
     resp = await client.patch(
-        SETTINGS_URL, headers=headers,
+        SETTINGS_URL,
+        headers=headers,
         json={"name": "花蓮 0817", "disaster_types": ["flood", "landslide"]},
     )
 
@@ -480,7 +644,8 @@ async def test_configuring_the_disaster_before_its_fields_is_not_an_error(client
     admin_uuid, role_uuid = await _make_project_admin(db_session)
 
     resp = await client.patch(
-        SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
+        SETTINGS_URL,
+        headers=await _auth_header(redis, admin_uuid, role_uuid),
         json={"name": "花蓮 0816", "disaster_types": ["landslide"]},
     )
 
@@ -518,12 +683,20 @@ async def test_retiring_a_field_does_not_require_restating_its_type(db):
     value silently redefined the field at the same time.
     """
     await station_property_config_repository.upsert(
-        db, station_type="shelter", property_name="收容人數", data_type="number",
-        enum_options=["a", "b"], label="收容人數", sort_order=3,
+        db,
+        station_type="shelter",
+        property_name="收容人數",
+        data_type="number",
+        enum_options=["a", "b"],
+        label="收容人數",
+        sort_order=3,
     )
 
     retired = await station_property_config_repository.upsert(
-        db, station_type="shelter", property_name="收容人數", is_active=False,
+        db,
+        station_type="shelter",
+        property_name="收容人數",
+        is_active=False,
     )
 
     assert retired.is_active is False
@@ -537,18 +710,27 @@ async def test_creating_a_field_still_requires_a_data_type(db):
     """The column is NOT NULL — omitting it on creation is a client error, not a 500."""
     with pytest.raises(PropertyConfigValidationError):
         await station_property_config_repository.upsert(
-            db, station_type="shelter", property_name="全新欄位", label="沒有型別",
+            db,
+            station_type="shelter",
+            property_name="全新欄位",
+            label="沒有型別",
         )
 
 
 async def test_retiring_a_task_field_behaves_the_same(db):
     """The task side shares the code path; pin it so the two cannot drift."""
     await task_property_config_repository.upsert(
-        db, task_type="rescue", property_name="樓層", data_type="number",
+        db,
+        task_type="rescue",
+        property_name="樓層",
+        data_type="number",
     )
 
     retired = await task_property_config_repository.upsert(
-        db, task_type="rescue", property_name="樓層", is_active=False,
+        db,
+        task_type="rescue",
+        property_name="樓層",
+        is_active=False,
     )
 
     assert retired.is_active is False

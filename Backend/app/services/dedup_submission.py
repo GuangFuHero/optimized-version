@@ -11,8 +11,8 @@ including one whose acknowledgement names nothing, is checked and can still be h
 create, the scored pairs are carded in the same commit.
 
 Every engine call happens before anything is written, so a failed call can roll back the
-transaction. Batch import does not come through here; it calls `create_ticket` /
-`create_station` directly.
+transaction. Every new ticket comes through here, the site's help request included. Batch
+import does not; it calls `create_ticket` / `create_station` directly.
 """
 
 from dataclasses import dataclass
@@ -98,6 +98,47 @@ async def submit_new_ticket(
         await ticket_service.insert_ticket_task(db, actor=actor, ticket_uuid=str(ticket.uuid), fields=f)
         for f in task_fields
     ]
+    created = {task_ref(i): str(t.uuid) for i, t in enumerate(created_tasks)}
+    carded = await _record_acknowledged(db, pairs, created, actor_uuid)
+    await db.commit()
+    await dedup_review.notify_new_cards(db, count=carded, actor=actor, actor_uuid=actor_uuid)
+    await db.refresh(ticket)
+    for task in created_tasks:
+        await db.refresh(task)
+    return SubmissionCreated(entity=ticket, tasks=tuple(created_tasks))
+
+
+async def submit_help_request(
+    db: AsyncSession,
+    *,
+    actor: User,
+    tasks: list[dict],
+    **request_fields,
+) -> SubmissionCreated | SubmissionHeld:
+    """File the site's help request (請求協助), or hold all of it when any need looks like a duplicate.
+
+    The only way a help request is filed. `request_fields` are `validate_help_request`'s other
+    keyword arguments. Each need may carry `acknowledged_duplicate_of`, as a `createTicket` task
+    does. A held request writes nothing: no ticket, address, need or photo; a filed one is written
+    in one commit.
+    """
+    now = datetime.now(UTC)
+    needs = [{k: v for k, v in task.items() if k != "acknowledged_duplicate_of"} for task in tasks]
+    fields = await ticket_service.validate_help_request(db, actor=actor, tasks=needs, **request_fields)
+    actor_uuid = str(actor.uuid)
+    submission = NewTicket(
+        ticket=ticket_draft(fields.ticket), tasks=tuple(task_draft(f) for f in fields.needs)
+    )
+    acknowledged = {task_ref(i): task.get("acknowledged_duplicate_of") for i, task in enumerate(tasks)}
+
+    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
+    held = await _hold_if_suspected(
+        db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
+    )
+    if held is not None:
+        return held
+
+    ticket, created_tasks = await ticket_service.insert_help_request(db, actor=actor, fields=fields)
     created = {task_ref(i): str(t.uuid) for i, t in enumerate(created_tasks)}
     carded = await _record_acknowledged(db, pairs, created, actor_uuid)
     await db.commit()

@@ -36,7 +36,6 @@ export {
   SITE_BASE_LAYERS,
   SITE_DATA_TYPE_LABELS,
   SITE_DATA_TYPES,
-  SITE_FALLBACK_BASE_LAYER,
   SITE_FALLBACK_DATA_TYPE,
   SITE_MODULES,
   SITE_SUB_DATA_TYPE_OPTIONS,
@@ -127,7 +126,11 @@ export {
   type SiteActionDrawerProps,
 } from './shell/site';
 
-export { StationCreateDrawer, StationDetailDrawer } from './station';
+export {
+  StationCreateDrawer,
+  StationDetailDrawer,
+  StationManagementPage,
+} from './station';
 
 export {
   TicketCreateDrawer,

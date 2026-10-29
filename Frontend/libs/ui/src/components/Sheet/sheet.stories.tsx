@@ -77,3 +77,8 @@ export const BottomSheetOnMobile: Story = {
 export const NoFooter: Story = {
   args: { footer: undefined, eyebrow: undefined, headerContent: undefined },
 };
+
+/** The admin prototype's drawer (`station-drawer.jsx`): a larger title, a round close button. */
+export const Admin: Story = {
+  args: { variant: 'admin', width: 540, subtitle: undefined },
+};

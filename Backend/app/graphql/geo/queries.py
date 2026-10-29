@@ -17,6 +17,7 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout
 from app.core.security import resolve_scope
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import (
     AddressLookupType,
@@ -45,6 +46,7 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services import address as address_service
+from app.services import station as station_service
 
 
 def _has_pending_suggestion():
@@ -119,6 +121,7 @@ async def _station_filters(
     assigned_team_uuid: UUID | None,
     unassigned_only: bool,
     has_pending_suggestions: bool,
+    reviewable_only: bool,
     **list_filters,
 ) -> list:
     """The caller's station.view scope plus every filter `stations` and `stationFacets` share.
@@ -139,6 +142,8 @@ async def _station_filters(
         extra_filters.append(~runs_it)
     if has_pending_suggestions:
         extra_filters.append(_has_pending_suggestion())
+    if reviewable_only:
+        extra_filters += await _held_over(info, Perm.STATION_REVIEW)
     return extra_filters + _list_filters(**list_filters)
 
 
@@ -170,6 +175,7 @@ class GeoQuery:
         assigned_team_uuid: UUID | None = None,
         unassigned_only: bool = False,
         has_pending_suggestions: bool = False,
+        reviewable_only: bool = False,
         county: str | None = None,
         town: str | None = None,
         official: bool | None = None,
@@ -201,7 +207,10 @@ class GeoQuery:
             unassigned_only: Only the stations no team runs yet — gov's queue to hand out.
                 Mutually exclusive with assigned_team_uuid.
             has_pending_suggestions: When true, only stations with a pending suggestion on
-                themselves or one of their properties — the reviewer's queue.
+                themselves or one of their properties. Public, like pendingSuggestedFields.
+            reviewable_only: Only the stations the caller holds station.review over; with
+                has_pending_suggestions, the caller's own review queue (WG-168). Empty for a
+                caller without station.review, including a guest.
             county: Only the stations whose address is in this 縣市 (ADR-394). A station
                 with no address is in none.
             town: Only those in this 鄉鎮市區 too; needs `county`.
@@ -229,6 +238,7 @@ class GeoQuery:
             assigned_team_uuid=assigned_team_uuid,
             unassigned_only=unassigned_only,
             has_pending_suggestions=has_pending_suggestions,
+            reviewable_only=reviewable_only,
             county=county,
             town=town,
             official=official,
@@ -281,6 +291,7 @@ class GeoQuery:
         assigned_team_uuid: UUID | None = None,
         unassigned_only: bool = False,
         has_pending_suggestions: bool = False,
+        reviewable_only: bool = False,
         county: str | None = None,
         town: str | None = None,
         official: bool | None = None,
@@ -302,6 +313,7 @@ class GeoQuery:
             assigned_team_uuid=assigned_team_uuid,
             unassigned_only=unassigned_only,
             has_pending_suggestions=has_pending_suggestions,
+            reviewable_only=reviewable_only,
             county=county,
             town=town,
             official=official,
@@ -341,6 +353,18 @@ class GeoQuery:
             ],
             pending_review_count=pending,
         )
+
+    @strawberry.field
+    async def assignable_station_teams(self, info: strawberry.types.Info) -> list[AssignedTeamType]:
+        """Every team a station can be assigned to (ADR-285).
+
+        Requires station.assign, and a gov team or platform identity — the same gate as
+        assignStationToTeam, so the picker exists exactly where the assignment would succeed.
+        """
+        teams = await station_service.list_assignable_teams(
+            info.context["db"], actor=require_authenticated(info)
+        )
+        return [AssignedTeamType.from_model(team) for team in teams]
 
     @strawberry.field
     async def station(self, info: strawberry.types.Info, uuid: UUID) -> StationType | None:

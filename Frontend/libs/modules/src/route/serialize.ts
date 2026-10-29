@@ -1,5 +1,4 @@
 import {
-  SITE_FALLBACK_BASE_LAYER,
   SITE_FALLBACK_DATA_TYPE,
   normalizeSiteSubDataTypes,
 } from './constants';
@@ -44,8 +43,10 @@ function buildQueryString(state: SiteRouteState): string {
 /**
  * 將共用路由狀態序列化為前台網址，作為 UI → 網址 的單一來源。
  *
- * - `map` → `/map/{baseLayer}/{dataType}[/{subDataTypes}][/@{lat},{lng},{zoom}z]?{query}`
+ * - `map` → `/map[/{baseLayer}]/{dataType}[/{subDataTypes}][/@{lat},{lng},{zoom}z]?{query}`
  * - `list` → `/list/{dataType}[/{subDataTypes}]?{query}`
+ *
+ * 底圖只在有人選過時才寫：沒寫的連結，每個人打開都照自己的偏好。
  */
 export function createSiteHref(
   module: SiteModule,
@@ -66,9 +67,10 @@ export function createSiteHref(
         })()
       : '';
 
+  const baseLayerSegment = state.baseLayer ? `/${state.baseLayer}` : '';
   const pathSegments =
     module === 'map'
-      ? `/map/${state.baseLayer ?? SITE_FALLBACK_BASE_LAYER}/${dataType}${subSegment}${viewportSegment}`
+      ? `/map${baseLayerSegment}/${dataType}${subSegment}${viewportSegment}`
       : `/list/${dataType}${subSegment}`;
 
   return `${pathSegments}${buildQueryString(state)}`;

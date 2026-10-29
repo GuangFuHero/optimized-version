@@ -1,6 +1,7 @@
 import { designTokens } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../../types';
+import { stationTypeGlyphShapes } from './station-glyph';
 
 const { color } = designTokens;
 
@@ -41,31 +42,30 @@ function getMarkerTone(item: RescueMapMarkerItem): {
     };
   }
 
+  // White, not `fg.onSecondary`: on the blue, text stays black (4.5:1) but an icon needs only 3:1, and
+  // white measures 3.56:1 (designer, 2026-10-25, `Design/前台/docs/前台視覺對齊.md` item 5).
   return {
     markerFill: color.brand.secondary.default,
     markerStroke: color.bg.neutral.default,
-    glyphFill: color.fg.onSecondary,
+    glyphFill: color.fg.inverse,
   };
 }
 
 function buildMarkerGlyphSvg(
-  variant: RescueMapMarkerItem['variant'],
+  item: RescueMapMarkerItem,
   glyphFill: string,
 ): string {
-  if (variant === 'resource-station') {
+  // A station shows its type's icon, at the prototype's 19px in the 36px pin (`site-map.jsx`
+  // markerGlyphName): whether it is a shelter or temporary no longer picks one of two drawn shapes.
+  if (item.detailType === 'station') {
     return [
-      `<path d="M16.9 22.6H19.1V20.8H20.9V18.6H19.1V16.8H16.9V18.6H15.1V20.8H16.9V22.6Z" fill="${glyphFill}"/>`,
-      `<path d="M18 27C16.3 26.6 14.9 25.6 13.8 24.1C12.7 22.6 12.1 20.9 12.1 19.1V14.7L18 12.5L23.9 14.7V19.1C23.9 20.9 23.3 22.6 22.2 24.1C21.1 25.6 19.7 26.6 18 27ZM18 25.5C19.2 25.1 20.3 24.3 21.1 23.1C21.9 21.9 22.3 20.6 22.3 19.1V15.7L18 14.1L13.7 15.7V19.1C13.7 20.6 14.1 21.9 14.9 23.1C15.7 24.3 16.8 25.1 18 25.5Z" fill="${glyphFill}"/>`,
+      `<svg x="8.5" y="8.5" width="19" height="19" viewBox="0 0 24 24" fill="${glyphFill}">`,
+      stationTypeGlyphShapes(item.stationMeta?.type),
+      '</svg>',
     ].join('');
   }
 
-  if (variant === 'pinned-location') {
-    return [
-      `<path d="M21.3 13.3H23V15H21.3V21.2L19.3 23.2H16.7L14.7 21.2V15H13V13.3H14.7V11H13.8V9.3H22.2V11H21.3V13.3ZM16.4 15V20.5L17.4 21.5H18.6L19.6 20.5V15H16.4Z" fill="${glyphFill}"/>`,
-    ].join('');
-  }
-
-  if (variant === 'urgent-ticket') {
+  if (item.variant === 'urgent-ticket') {
     return [
       `<path d="M16.8 25V20.8L13.2 22.9L12 20.8L15.6 18.8L12 16.7L13.2 14.6L16.8 16.7V12.5H19.2V16.7L22.8 14.6L24 16.7L20.4 18.8L24 20.8L22.8 22.9L19.2 20.8V25H16.8Z" fill="${glyphFill}"/>`,
     ].join('');
@@ -78,7 +78,7 @@ function buildMarkerGlyphSvg(
 
 function buildMarkerAssetSvg(item: RescueMapMarkerItem): string {
   const tone = getMarkerTone(item);
-  const glyphSvg = buildMarkerGlyphSvg(item.variant, tone.glyphFill);
+  const glyphSvg = buildMarkerGlyphSvg(item, tone.glyphFill);
 
   return [
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 36 36" fill="none" aria-hidden="true">',
@@ -105,10 +105,54 @@ function createMapMarkerIconHtml(item: RescueMapMarkerItem): string {
   ].join('');
 }
 
+/**
+ * The opt-in teardrop pin (`item.pin`), from the admin station map prototype
+ * (`Design/後台/js/admin/station-v2/station-map.jsx` pinHtml). The look lives in `styles.ts`;
+ * only the caller's colour is inline.
+ */
+function createPinIcon(
+  pin: NonNullable<RescueMapMarkerItem['pin']>,
+  leaflet: typeof import('leaflet'),
+): import('leaflet').DivIcon {
+  const modifiers = [
+    pin.selected ? ' map-pin--selected' : '',
+    pin.dimmed ? ' map-pin--dimmed' : '',
+  ].join('');
+
+  return leaflet.divIcon({
+    className: 'map-pin-wrapper',
+    html: `<span class="map-pin${modifiers}"><span class="map-pin__drop" style="background:${escapeHtml(pin.color)}"></span></span>`,
+    iconSize: [42, 42],
+    iconAnchor: [21, 36],
+  });
+}
+
+/** Tooltip content for `item.tooltip`; null when the marker has none. */
+export function createMapMarkerTooltipHtml(
+  item: RescueMapMarkerItem,
+): string | null {
+  if (!item.tooltip) {
+    return null;
+  }
+
+  const { title, subtitle } = item.tooltip;
+
+  return [
+    `<span class="map-marker-tooltip__title">${escapeHtml(title)}</span>`,
+    subtitle
+      ? `<span class="map-marker-tooltip__subtitle">${escapeHtml(subtitle)}</span>`
+      : '',
+  ].join('');
+}
+
 export function createMapMarkerIcon(
   item: RescueMapMarkerItem,
   leaflet: typeof import('leaflet'),
 ): import('leaflet').DivIcon {
+  if (item.pin) {
+    return createPinIcon(item.pin, leaflet);
+  }
+
   const { iconSize, iconAnchor } = getMapMarkerDimensions(item.variant);
 
   return leaflet.divIcon({

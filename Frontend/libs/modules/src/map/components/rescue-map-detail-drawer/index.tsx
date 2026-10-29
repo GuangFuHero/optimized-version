@@ -9,6 +9,7 @@ import { Icons } from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../../../shell/site/site-badge';
 import { StationDetailDrawer } from '../../../station';
+import { SiteStationDetailDrawer } from '../../../station/site-detail/site-station-detail-drawer';
 import {
   readOpHour,
   resolveStationAvailability,
@@ -45,6 +46,12 @@ export type RescueMapTicketDetailOverrides = Partial<
   detailsContent?: ReactNode;
 };
 
+/**
+ * Which station detail to draw. The site has its own, on the site's text scale; the back office's
+ * map keeps the one it has, so that is the default.
+ */
+export type RescueMapStationLayout = 'admin' | 'site';
+
 interface RescueMapDetailDrawerProps {
   marker: RescueMapDetailItem | null;
   onClose: () => void;
@@ -54,6 +61,7 @@ interface RescueMapDetailDrawerProps {
   isAuthenticated?: boolean;
   ticketDetailOverrides?: RescueMapTicketDetailOverrides;
   stationSecondaryAction?: StationDetailActionProps;
+  stationLayout?: RescueMapStationLayout;
 }
 
 const DetailsIcon = Icons.details;
@@ -154,6 +162,17 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
   };
 }
 
+// For a guest too, who is told in the drawer to sign in (PUB-FEAT-001 Q7: the way in always shows).
+function createStationEditAction(
+  marker: RescueMapMarkerItem,
+): StationDetailActionProps {
+  return {
+    label: '修改建議',
+    icon: <EditRoundedIcon />,
+    onClick: () => openStationSuggestion(marker.id),
+  };
+}
+
 function createStationSummary({
   marker,
   stationSecondaryAction,
@@ -190,12 +209,7 @@ function createStationSummary({
         icon: <DetailsIcon />,
       },
     ],
-    // For a guest too, who is told in the drawer to sign in (PUB-FEAT-001 Q7: the way in always shows).
-    editAction: {
-      label: '修改建議',
-      icon: <EditRoundedIcon />,
-      onClick: () => openStationSuggestion(marker.id),
-    },
+    editAction: createStationEditAction(marker),
     secondaryAction: stationSecondaryAction,
     // 2026-08-21 決議：前台不顯示 `source`。站點一律由後台建立，來源不具區別力；
     // 有區別力的是「是不是官方造冊」。這張卡也不再列 visibility —— 讀者只會看到
@@ -221,6 +235,7 @@ export function RescueMapDetailDrawer({
   isAuthenticated = false,
   ticketDetailOverrides,
   stationSecondaryAction,
+  stationLayout = 'admin',
 }: RescueMapDetailDrawerProps) {
   const [activeStationTab, setActiveStationTab] =
     useState<StationDetailTabId>('info');
@@ -296,7 +311,16 @@ export function RescueMapDetailDrawer({
         />
       ) : null}
 
-      {marker.detailType === 'station' ? (
+      {marker.detailType === 'station' && stationLayout === 'site' ? (
+        <SiteStationDetailDrawer
+          marker={marker}
+          onClose={onClose}
+          editAction={createStationEditAction(marker)}
+          secondaryAction={stationSecondaryAction}
+        />
+      ) : null}
+
+      {marker.detailType === 'station' && stationLayout === 'admin' ? (
         <StationDetailDrawer
           {...createStationSummary({
             marker,

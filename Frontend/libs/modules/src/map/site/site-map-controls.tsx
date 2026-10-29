@@ -60,18 +60,17 @@ function readPinnedSubDataTypes(): Record<RescueMapDataType, string[]> {
     return createEmptyPinnedSubDataTypes();
   }
 
-  const storedValue = window.localStorage.getItem(
-    SITE_PINNED_SUB_TYPE_STORAGE_KEY,
-  );
-
-  if (!storedValue) {
-    return createEmptyPinnedSubDataTypes();
-  }
-
+  // A browser that blocks site data throws on any touch of localStorage: nothing is pinned then.
   try {
-    return normalizePinnedSubDataTypes(
-      pinnedSubDataTypes.parse(JSON.parse(storedValue)),
+    const storedValue = window.localStorage.getItem(
+      SITE_PINNED_SUB_TYPE_STORAGE_KEY,
     );
+
+    return storedValue
+      ? normalizePinnedSubDataTypes(
+          pinnedSubDataTypes.parse(JSON.parse(storedValue)),
+        )
+      : createEmptyPinnedSubDataTypes();
   } catch {
     return createEmptyPinnedSubDataTypes();
   }
@@ -84,10 +83,14 @@ function writePinnedSubDataTypes(
     return;
   }
 
-  window.localStorage.setItem(
-    SITE_PINNED_SUB_TYPE_STORAGE_KEY,
-    JSON.stringify(pinnedSubDataTypes),
-  );
+  try {
+    window.localStorage.setItem(
+      SITE_PINNED_SUB_TYPE_STORAGE_KEY,
+      JSON.stringify(pinnedSubDataTypes),
+    );
+  } catch {
+    // Blocked site data: the pins hold until the page closes.
+  }
 }
 
 function SiteLayerButton({ controller }: SiteMapControlsProps) {

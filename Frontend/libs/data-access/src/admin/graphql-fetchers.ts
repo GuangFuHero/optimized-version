@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { adminGraphqlClient, graphqlResponseData } from './client';
+import { collectAllPages } from './collect-pages';
 import * as documents from './graphql/__generated__/graphql';
 
 export interface AdminQueryOptions {
@@ -98,6 +99,39 @@ export function useStations(
   return useQuery({ ...stationsQuery(variables), enabled: options.enabled });
 }
 
+export type AllStationsQueryVariables = Omit<
+  documents.AdminStationsQueryVariables,
+  'skip' | 'limit'
+>;
+
+/** Every station matching `variables`, read page by page up to the collector's cap. */
+export const allStationsQuery = (variables: AllStationsQueryVariables = {}) =>
+  queryOptions({
+    queryKey: ['admin', 'stations', 'all', variables],
+    queryFn: ({ signal }) =>
+      collectAllPages(async (skip, limit) => {
+        const data = await adminGraphqlClient
+          .query(
+            documents.AdminStationsDocument,
+            { ...variables, skip, limit },
+            { fetchOptions: { credentials: 'include', signal } },
+          )
+          .toPromise()
+          .then(graphqlResponseData);
+        return {
+          items: data.stations.items,
+          hasNextPage: data.stations.pageInfo.hasNextPage,
+        };
+      }),
+  });
+
+export function useAllStations(
+  variables: AllStationsQueryVariables = {},
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({ ...allStationsQuery(variables), enabled: options.enabled });
+}
+
 export const stationQuery = (variables: documents.AdminStationQueryVariables) =>
   queryOptions({
     queryKey: ['admin', 'stations', 'station', variables],
@@ -116,6 +150,86 @@ export function useStation(
 ) {
   return useQuery({
     ...stationQuery(variables),
+    enabled: Boolean(variables.uuid) && options.enabled !== false,
+  });
+}
+
+/**
+ * The nearest 門牌 to a map pin, from the backend's TGOS lookup. Its `addressToken`, sent back with
+ * the unchanged `fullAddress`, saves the address as verified. Never stale: a pin's 門牌 doesn't move.
+ */
+export const reverseGeocodeQuery = (
+  variables: documents.AdminReverseGeocodeQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'address', 'reverseGeocode', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminReverseGeocodeDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+    staleTime: Infinity,
+  });
+
+export function useReverseGeocode(
+  position: readonly [number, number] | null | undefined,
+) {
+  const [lat, lng] = position ?? [];
+  return useQuery({
+    ...reverseGeocodeQuery({ lat: lat ?? 0, lng: lng ?? 0 }),
+    enabled: lat != null && lng != null,
+    // The address is only a head start: a failed lookup leaves the form blank, no toast.
+    retry: false,
+    meta: { quietErrors: true },
+  });
+}
+
+/** Under `teams`, so a team change refreshes the picker along with the team list. */
+export const assignableStationTeamsQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'teams', 'AssignableStationTeams'],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminAssignableStationTeamsDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData)
+        .then((data) => data.assignableStationTeams),
+  });
+
+/** Every team a station can be assigned to; the backend refuses callers who cannot assign. */
+export function useAssignableStationTeams(options: AdminQueryOptions = {}) {
+  return useQuery({
+    ...assignableStationTeamsQuery(),
+    enabled: options.enabled,
+  });
+}
+
+export const stationReviewQuery = (
+  variables: documents.AdminStationReviewQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'stations', 'review', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminStationReviewDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useStationReview(
+  variables: documents.AdminStationReviewQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...stationReviewQuery(variables),
     enabled: Boolean(variables.uuid) && options.enabled !== false,
   });
 }
@@ -283,6 +397,27 @@ export function useDisasterTypes(
     ...disasterTypesQuery(variables),
     enabled: options.enabled,
   });
+}
+
+// Public (ADR-392), so the site reads it too. Under `settings`, so saving the settings reads it
+// again. Quiet: a name that does not load leaves the platform's, which is no error to report.
+export const currentDisasterQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'settings', 'currentDisaster'],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminCurrentDisasterDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData),
+    meta: { quietErrors: true },
+  });
+
+export function useCurrentDisaster(options: AdminQueryOptions = {}) {
+  return useQuery({ ...currentDisasterQuery(), enabled: options.enabled });
 }
 
 export function useCreateTicket() {
@@ -453,6 +588,21 @@ export function useDeleteStation() {
     mutationFn: (variables: documents.AdminDeleteStationMutationVariables) =>
       adminGraphqlClient
         .mutation(documents.AdminDeleteStationDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
+  });
+}
+
+export function useMergeStationSuggestions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminMergeStationSuggestionsMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminMergeStationSuggestionsDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
     onSuccess: () =>

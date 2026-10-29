@@ -3165,6 +3165,18 @@ export interface components {
       provider: string;
     };
     /**
+     * MapView
+     * @description Where the site's map opens (ADR-395): all three or none, so it is one value rather than three.
+     */
+    MapView: {
+      /** Lat */
+      lat: number;
+      /** Lng */
+      lng: number;
+      /** Zoom */
+      zoom: number;
+    };
+    /**
      * MarkAllReadResponse
      * @description Response returned after marking all notifications as read.
      */
@@ -3405,10 +3417,13 @@ export interface components {
       uuid?: string | null;
       /** Name */
       name?: string | null;
+      /** Short Name */
+      short_name?: string | null;
       /** Disaster Types */
       disaster_types?: string[];
       /** Started At */
       started_at?: string | null;
+      map_view?: components['schemas']['MapView'] | null;
       /** Warnings */
       warnings?: string[];
     };
@@ -3419,10 +3434,13 @@ export interface components {
     ProjectSettingsUpdate: {
       /** Name */
       name?: string | null;
+      /** Short Name */
+      short_name?: string | null;
       /** Disaster Types */
       disaster_types?: string[] | null;
       /** Started At */
       started_at?: string | null;
+      map_view?: components['schemas']['MapView'] | null;
     };
     /**
      * PropertyForReviewResponse

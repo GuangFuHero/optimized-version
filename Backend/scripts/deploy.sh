@@ -4,6 +4,9 @@
 #   ./scripts/deploy.sh              deploy origin/main
 #   ./scripts/deploy.sh <git-ref>    deploy a tag/SHA (also the manual-rollback path)
 #   SEED_MOCK=true ./scripts/deploy.sh   additionally (re)apply the mock-scenario seed
+#   NEXT_APPS=admin ./scripts/deploy.sh  rebuild only the named Next apps: `frontend` (the site) and/or
+#                                        `admin`; empty rebuilds neither. Unset = both, the default. A
+#                                        Next app left out keeps running the image it already has.
 #
 # -E (errtrace) is REQUIRED: without it the ERR trap does not fire for failures inside
 # functions (gen_env, compose wrapper) and the rollback would be silently skipped.
@@ -19,6 +22,10 @@ LOCK_FILE=/var/lock/disaster-deploy.lock
 GCS_BUCKET="gs://wanguard-250923-db-backups"    # created by the one-time bootstrap (30-day lifecycle)
 READYZ_URL=http://localhost:8000/readyz
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Unset and empty differ on purpose: unset builds both, NEXT_APPS="" builds neither.
+read -r -a NEXT_APP_LIST <<< "${NEXT_APPS-frontend admin}"
+BUILD_CACHE_MAX_AGE=168h      # build cache older than this is pruned before every deploy
+MIN_FREE_GB=5                 # after that prune, a deploy with less free disk than this does not start
 
 # Globals shared with the failure trap
 STAGE=pre            # pre -> worktree -> service
@@ -77,20 +84,21 @@ on_failure() {
 gen_env() {     # .env is a deploy-time artifact: compose interpolation + container env share it (S7)
     log "generating .env from Secret Manager"
     local secret_key pg_pw smtp_key kotsms_user kotsms_pw oauth_google_secret oauth_line_secret
-    local nextauth_secret google_secret line_secret tunnel_token
+    local tunnel_token tgos_addr_app_id tgos_addr_api_key tgos_geo_app_id tgos_geo_api_key
     secret_key=$(gcloud secrets versions access latest --secret=staging-backend-jwt-signing-key)
     pg_pw=$(gcloud secrets versions access latest --secret=staging-backend-postgres-password)
     smtp_key=$(gcloud secrets versions access latest --secret=staging-backend-smtp2go-api-key)
     kotsms_user=$(gcloud secrets versions access latest --secret=staging-backend-kotsms-username)
     kotsms_pw=$(gcloud secrets versions access latest --secret=staging-backend-kotsms-password)
-    # The backend runs the Google and LINE sign-in (ADR-331). Same values as the staging-frontend-* pair
-    # below, which NextAuth reads until the frontend drops it.
+    # The backend runs the Google and LINE sign-in (ADR-331).
     oauth_google_secret=$(gcloud secrets versions access latest --secret=staging-backend-google-client-secret)
     oauth_line_secret=$(gcloud secrets versions access latest --secret=staging-backend-line-channel-secret)
-    # Frontend (Next.js) + Cloudflare Tunnel secrets — shared with the frontend/cloudflared containers.
-    nextauth_secret=$(gcloud secrets versions access latest --secret=staging-frontend-nextauth-secret)
-    google_secret=$(gcloud secrets versions access latest --secret=staging-frontend-google-client-secret)
-    line_secret=$(gcloud secrets versions access latest --secret=staging-frontend-line-client-secret)
+    # The two TGOS address services' keys (Spec/027). TGOS takes them from the VM's registered IP alone.
+    tgos_addr_app_id=$(gcloud secrets versions access latest --secret=staging-backend-tgos-addr-app-id)
+    tgos_addr_api_key=$(gcloud secrets versions access latest --secret=staging-backend-tgos-addr-api-key)
+    tgos_geo_app_id=$(gcloud secrets versions access latest --secret=staging-backend-tgos-geo-app-id)
+    tgos_geo_api_key=$(gcloud secrets versions access latest --secret=staging-backend-tgos-geo-api-key)
+    # The Cloudflare Tunnel's token, for the cloudflared container. The Next apps hold no secret.
     tunnel_token=$(gcloud secrets versions access latest --secret=staging-cloudflared-tunnel-token)
     # Backend values are embedded unquoted in the .env AND the asyncpg DSN URL: restrict to a charset
     # safe for compose's .env parser, the URL, and shell.
@@ -103,16 +111,18 @@ gen_env() {     # .env is a deploy-time artifact: compose interpolation + contai
         || { printf 'ERROR: smtp2go key has .env-unsafe characters\n' >&2; false; }
     [[ "$kotsms_user" =~ ^[A-Za-z0-9_-]+$ && "$kotsms_pw" =~ ^[A-Za-z0-9_-]+$ ]] \
         || { printf 'ERROR: a kotsms credential has .env-unsafe characters\n' >&2; false; }
-    # The OAuth secrets and the frontend secrets/token go into plain KEY=value (not a URL), so only
+    # The OAuth secrets, the TGOS keys and the tunnel token go into plain KEY=value (not a URL), so only
     # newlines would corrupt the dotenv file — they may legitimately contain + / = and are fine unquoted.
     for v in "$oauth_google_secret" "$oauth_line_secret"; do
         [[ -n "$v" && "$v" != *$'\n'* ]] \
             || { printf 'ERROR: a backend OAuth secret is empty or multi-line\n' >&2; false; }
     done
-    for v in "$nextauth_secret" "$google_secret" "$line_secret" "$tunnel_token"; do
+    for v in "$tgos_addr_app_id" "$tgos_addr_api_key" "$tgos_geo_app_id" "$tgos_geo_api_key"; do
         [[ -n "$v" && "$v" != *$'\n'* ]] \
-            || { printf 'ERROR: a frontend secret is empty or multi-line\n' >&2; false; }
+            || { printf 'ERROR: a TGOS key is empty or multi-line\n' >&2; false; }
     done
+    [[ -n "$tunnel_token" && "$tunnel_token" != *$'\n'* ]] \
+        || { printf 'ERROR: the tunnel token is empty or multi-line\n' >&2; false; }
     # Two files for least privilege: backend secrets (DB password, JWT key) NEVER reach the
     # public-facing frontend/cloudflared containers. Non-secret config is shared (harmless).
     rm -f .env .env.frontend   # recreate under umask 177 so both are 0600
@@ -134,15 +144,15 @@ gen_env() {     # .env is a deploy-time artifact: compose interpolation + contai
         printf 'KOTSMS_PASSWORD=%s\n' "$kotsms_pw"
         printf 'GOOGLE_CLIENT_SECRET=%s\n' "$oauth_google_secret"
         printf 'LINE_CHANNEL_SECRET=%s\n' "$oauth_line_secret"
+        printf 'TGOS_ADDR_APP_ID=%s\n' "$tgos_addr_app_id"
+        printf 'TGOS_ADDR_API_KEY=%s\n' "$tgos_addr_api_key"
+        printf 'TGOS_GEO_APP_ID=%s\n' "$tgos_geo_app_id"
+        printf 'TGOS_GEO_API_KEY=%s\n' "$tgos_geo_api_key"
         cat scripts/deploy-config.staging.env
     } > .env
     {
         printf '# GENERATED by deploy.sh %s — do not edit; regenerated every deploy\n' \
             "$(date -u +%FT%TZ)"
-        printf 'NEXTAUTH_SECRET=%s\n' "$nextauth_secret"
-        printf 'AUTH_SECRET=%s\n' "$nextauth_secret"
-        printf 'GOOGLE_CLIENT_SECRET=%s\n' "$google_secret"
-        printf 'LINE_CLIENT_SECRET=%s\n' "$line_secret"
         printf 'TUNNEL_TOKEN=%s\n' "$tunnel_token"
         cat scripts/deploy-config.staging.env
     } > .env.frontend
@@ -166,7 +176,20 @@ main() {
     gcloud auth list --filter=status:ACTIVE --format='value(account)' | grep -q . \
         || die "no active gcloud identity (VM service account?)"
     [ -z "$(git status --porcelain)" ] || die "git working tree not clean"
-    [[ -f .env.tgos ]] || printf 'WARNING: .env.tgos missing; address lookups will answer "unavailable"\n' >&2
+    local app
+    for app in "${NEXT_APP_LIST[@]}"; do
+        [[ "$app" == frontend || "$app" == admin ]] || die "NEXT_APPS takes frontend and admin, not '$app'"
+    done
+    # Build cache, not images: :latest and :prev (the rollback target) are images and stay. Every deploy
+    # leaves a fresh copy of the install and build layers, and the `docker image prune` at the end never
+    # reaches them.
+    log "pruning build cache older than $BUILD_CACHE_MAX_AGE: $(
+        docker builder prune -f --filter "until=$BUILD_CACHE_MAX_AGE" | tail -n 1)"
+    local docker_root free_gb
+    docker_root=$(docker info --format '{{.DockerRootDir}}')
+    free_gb=$(( $(df -BM --output=avail "$docker_root" | tail -n 1 | tr -dc '0-9') / 1024 ))
+    log "disk: ${free_gb}G free under $docker_root"
+    (( free_gb >= MIN_FREE_GB )) || die "under ${MIN_FREE_GB}G free: clear space first (Backend/DEPLOY.md)"
 
     log "[2/9] recording rollback baseline (from the RUNNING container, not tags)"
     OLD_SHA=$(git rev-parse HEAD)
@@ -192,11 +215,24 @@ main() {
     log "[4/9] generating .env (after checkout, so new refs can add variables)"   # S2
     gen_env
 
-    log "[5/9] building db + backend + frontend images"
+    log "[5/9] building db + backend, then the Next apps one at a time: ${NEXT_APP_LIST[*]:-(none)}"
     # db is built too (PostGIS + h3-pg, ADR-283): `compose up` below only builds an image that
     # is missing, so without this a Dockerfile change would never reach an existing VM. A
     # changed image makes step 6 recreate the db container on the same pgdata volume.
-    compose build db backend frontend
+    compose build db backend
+    # The services this ref's compose file defines. A ref from before the back office has no `admin`,
+    # and deploying one is how a rollback goes: it must not stop on the missing service.
+    local services
+    services=$(compose config --services)
+    # One Next build at a time: the VM has 4 GB, already partly in swap while idle, and two at once can
+    # wake the OOM killer. The second app reuses the first one's install layer (Frontend/Dockerfile).
+    for app in "${NEXT_APP_LIST[@]}"; do
+        if grep -qx "$app" <<< "$services"; then
+            compose build "$app"
+        else
+            log "skipping $app: $(git rev-parse --short HEAD) does not define it"
+        fi
+    done
 
     log "[6/9] starting db + redis (waiting for healthy)"
     compose up -d --wait db redis
@@ -219,20 +255,28 @@ main() {
             < scripts/seed_mock_scenarios.sql
     fi
 
-    log "[9/9] starting new backend + frontend + tunnel + retention, waiting for backend readiness"
+    log "[9/9] starting new backend + Next apps + tunnel + retention, waiting for backend readiness"
     STAGE=service                       # from here, failure = full image rollback
     # `retention` runs the notification cleanup loop (PRD Q4) off the same backend image.
-    # Named explicitly like the rest: this file never does a bare `compose up`.
-    compose up -d backend frontend cloudflared retention
-    wait_ready || false                 # backend readiness gates rollback (frontend/tunnel do not)
+    # Named explicitly like the rest: this file never does a bare `compose up`. A Next app left out of
+    # NEXT_APPS keeps its image: `up` builds only an image that is missing.
+    local -a up=(backend frontend cloudflared retention)
+    if grep -qx admin <<< "$services"; then
+        up+=(admin)
+    fi
+    compose up -d "${up[@]}"
+    wait_ready || false                 # backend readiness gates rollback (Next apps/tunnel do not)
 
     trap - ERR
-    # Frontend + tunnel are NOT part of the rollback gate (backend-only). Warn-only smoke check.
-    if curl -fsS --max-time 10 https://staging.wan-guard.com >/dev/null 2>&1; then
-        log "frontend reachable via tunnel: https://staging.wan-guard.com"
-    else
-        log "WARN: https://staging.wan-guard.com not reachable yet (frontend/tunnel may still be starting)"
-    fi
+    # Next apps + tunnel are NOT part of the rollback gate (backend-only). Warn-only smoke check.
+    local url
+    for url in https://staging.wan-guard.com https://admin-staging.wan-guard.com; do
+        if curl -fsS --max-time 10 "$url" >/dev/null 2>&1; then
+            log "reachable via tunnel: $url"
+        else
+            log "WARN: $url not reachable yet (the app or the tunnel may still be starting)"
+        fi
+    done
     docker image prune -f >/dev/null || true    # dangling only; :latest/:prev survive; never fail a good deploy
     log "DEPLOY OK — $(git rev-parse --short HEAD) in $(( $(date +%s) - start_ts ))s"
     log "rollback hint: ./scripts/deploy.sh $OLD_SHA"

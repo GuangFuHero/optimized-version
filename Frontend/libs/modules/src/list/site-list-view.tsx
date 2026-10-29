@@ -517,6 +517,7 @@ export function SiteListView() {
                   }
                 : undefined
             }
+            stationLayout="site"
           />
         </Box>
       </Box>
@@ -566,6 +567,7 @@ export function SiteListView() {
                 }
               : undefined
           }
+          stationLayout="site"
         />
       </Drawer>
 

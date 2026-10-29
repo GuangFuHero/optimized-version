@@ -44,6 +44,21 @@ export function teamNoun(role: RoleRequestRole | null): string {
 }
 
 /**
+ * Said under the identities once one names a team (prototype `site-actions.jsx`; JOIN-101,
+ * `Design/前台/docs/加入團隊.md`): an invite picks the team, and its admins still approve (Spec 026).
+ * The identity's word both times: 那個單位 for a government applicant (the designer).
+ */
+export function inviteHint(role: RoleRequestRole | null): string | null {
+  if (!teamTypeForRole(role)) {
+    return null;
+  }
+
+  const noun = teamNoun(role);
+
+  return `如果${noun}已經給你邀請碼，掃碼會直接帶到那個${noun}，不用自己找；一樣要等管理員核准。`;
+}
+
+/**
  * The team already called `name`, compared as the backend does (ADR-352 point 3): trimmed, ignoring
  * case. Only among the teams listed — a suspended team, or one of the other type, keeps its name
  * too, and only the backend can say so.
