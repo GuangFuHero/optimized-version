@@ -9,11 +9,8 @@ import { toast } from 'sonner';
 import { downloadBlob } from '../../../admin/shared/model/bulk-import';
 import { ToolbarButton } from '../../../admin/shared/toolbar-button';
 import { formatTicketTypeLabel } from '../../status';
-import {
-  TICKET_EXPORT_TYPES,
-  ticketExportFilename,
-  type TicketExportType,
-} from './model/ticket-export';
+import { ticketExportFilename } from './model/ticket-export';
+import { NEED_TYPES, type NeedType } from './model/ticket-row';
 
 type Format = 'csv' | 'xlsx';
 
@@ -27,7 +24,7 @@ export function TicketExportMenu() {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const exportTickets = useExportTickets();
 
-  const download = (taskType: TicketExportType, format: Format) =>
+  const download = (taskType: NeedType, format: Format) =>
     exportTickets.mutate(
       { params: { query: { task_type: taskType, format } } },
       {
@@ -63,7 +60,7 @@ export function TicketExportMenu() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        {TICKET_EXPORT_TYPES.flatMap((taskType) =>
+        {NEED_TYPES.flatMap((taskType) =>
           FORMATS.map((format) => (
             <MenuItem
               key={`${taskType}-${format.value}`}

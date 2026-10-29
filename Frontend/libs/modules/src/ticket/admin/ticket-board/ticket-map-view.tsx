@@ -34,11 +34,11 @@ import {
 } from './model/ticket-filters';
 import {
   resolveMapSelection,
-  TICKET_PRIORITY_PIN_COLORS,
+  ticketPriorityLegend,
   toTicketMarker,
   withMarkerSelected,
 } from './model/ticket-marker';
-import type { TicketPin, TicketPriority } from './model/ticket-row';
+import type { TicketPin } from './model/ticket-row';
 
 const { color, radius, shadow, typography } = designTokens;
 
@@ -52,9 +52,7 @@ const latLng = ([lat, lng]: MapPoint): [number, number] => [lat, lng];
 /** A pan or zoom settles this long before the map asks for the tickets in view. */
 const VIEWPORT_DEBOUNCE_MS = 300;
 
-const LEGEND: { priority: TicketPriority; label: string }[] = (
-  ['critical', 'high', 'medium', 'low'] as const
-).map((priority) => ({ priority, label: ticketPriorityLabel(priority) }));
+const LEGEND = ticketPriorityLegend(ticketPriorityLabel);
 
 interface TicketMapViewProps {
   /** The board's filters: the map loads only matching tickets inside its view. */
@@ -457,10 +455,10 @@ function PriorityLegend() {
       >
         優先度
       </Typography>
-      {LEGEND.map(({ priority, label }) => (
+      {LEGEND.map(({ color: pinColor, label }) => (
         <Box
           component="li"
-          key={priority}
+          key={pinColor}
           sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}
         >
           <Box
@@ -470,7 +468,7 @@ function PriorityLegend() {
               height: 13,
               borderRadius: '50% 50% 50% 0',
               transform: 'rotate(-45deg)',
-              bgcolor: TICKET_PRIORITY_PIN_COLORS[priority],
+              bgcolor: pinColor,
             }}
           />
           <Typography

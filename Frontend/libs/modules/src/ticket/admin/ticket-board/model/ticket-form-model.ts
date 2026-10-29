@@ -57,13 +57,6 @@ export const TICKET_TITLE_MAX = 200;
 /** Needs one create may carry. */
 export const TICKET_NEEDS_MAX = 20;
 
-export const TICKET_PRIORITIES: readonly TicketPriority[] = [
-  'critical',
-  'high',
-  'medium',
-  'low',
-];
-
 export function emptyNeed(): NeedDraft {
   return { taskType: 'rescue', taskName: '', quantity: '', description: '' };
 }

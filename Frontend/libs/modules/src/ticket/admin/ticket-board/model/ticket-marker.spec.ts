@@ -6,6 +6,7 @@ import type { TicketRow } from './ticket-row';
 import {
   resolveMapSelection,
   TICKET_PRIORITY_PIN_COLORS,
+  ticketPriorityLegend,
   toCreatedTicketMarker,
   toTicketMarker,
   withMarkerSelected,
@@ -69,8 +70,21 @@ describe('toTicketMarker', () => {
     expect(toTicketMarker(row({ position: null }))).toBeNull();
   });
 
-  it('has four distinct priority colours', () => {
-    expect(new Set(Object.values(TICKET_PRIORITY_PIN_COLORS)).size).toBe(4);
+  it('draws three colours, as the design prototype: medium and low share the blue', () => {
+    expect(TICKET_PRIORITY_PIN_COLORS).toEqual({
+      critical: '#D32F2F',
+      high: '#F57C00',
+      medium: '#2592B9',
+      low: '#2592B9',
+    });
+  });
+
+  it('lists one legend entry per colour, naming each priority drawn in it', () => {
+    expect(ticketPriorityLegend((p) => p)).toEqual([
+      { color: '#D32F2F', label: 'critical' },
+      { color: '#F57C00', label: 'high' },
+      { color: '#2592B9', label: 'medium、low' },
+    ]);
   });
 });
 

@@ -12,13 +12,13 @@ import { DuplicateNotice } from './duplicate-notice';
 import {
   buildNeedInput,
   isForbidden,
-  NEED_TYPES,
   readCreateResult,
   validateNeedDraft,
   type DuplicateSuspect,
   type NeedDraft,
   type NeedDraftErrors,
 } from './model/task-actions';
+import { NEED_TYPES } from './model/ticket-row';
 
 const EMPTY_DRAFT: NeedDraft = {
   taskType: 'hr',

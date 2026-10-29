@@ -5,16 +5,14 @@ import type {
 } from '@rescue-frontend/data-access/admin';
 import { AuditStatus as AuditStatusValues } from '@rescue-frontend/data-access/admin';
 
-import type { AuditStatus, TicketPriority, TicketStatus } from './ticket-row';
+import {
+  TICKET_PRIORITIES,
+  type AuditStatus,
+  type TicketPriority,
+  type TicketStatus,
+} from './ticket-row';
 import { resolveTicketSearch } from '../../../ticket-search';
 import { TICKET_STATUS_OPTIONS } from '../../../status';
-
-const PRIORITIES: readonly TicketPriority[] = [
-  'low',
-  'medium',
-  'high',
-  'critical',
-];
 
 export interface TicketFilters {
   status: TicketStatus | null;
@@ -55,7 +53,7 @@ export function parseTicketFilters(params: URLSearchParams): TicketFilters {
       KEYS.status,
       TICKET_STATUS_OPTIONS.map((o) => o.value),
     ),
-    priority: pick(KEYS.priority, PRIORITIES),
+    priority: pick(KEYS.priority, TICKET_PRIORITIES),
     taskType: params.get(KEYS.taskType) || null,
     audit: pick(KEYS.audit, Object.values(AuditStatusValues)),
     disaster: params.get(KEYS.disaster) || null,

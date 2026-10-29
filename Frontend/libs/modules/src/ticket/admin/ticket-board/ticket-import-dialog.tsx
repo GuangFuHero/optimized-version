@@ -25,7 +25,7 @@ import {
 import { Muted } from '../../../admin/shared/muted';
 import { importSummary } from '../../../admin/shared/model/bulk-import';
 import { formatTicketTypeLabel } from '../../status';
-import { TICKET_EXPORT_TYPES } from './model/ticket-export';
+import { NEED_TYPES } from './model/ticket-row';
 
 const { color, typography } = designTokens;
 
@@ -142,7 +142,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
                 aria-label="任務類型"
                 sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
               >
-                {TICKET_EXPORT_TYPES.map((type) => (
+                {NEED_TYPES.map((type) => (
                   <TypeChip
                     key={type}
                     label={formatTicketTypeLabel(type)}

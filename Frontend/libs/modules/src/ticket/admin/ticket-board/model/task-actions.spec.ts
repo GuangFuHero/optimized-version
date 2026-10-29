@@ -26,7 +26,6 @@ const task = (over: Partial<TaskRow> = {}): TaskRow =>
     quantity: 5,
     assignedCount: 2,
     gap: 3,
-    raw: {} as TaskRow['raw'],
     ...over,
   }) as TaskRow;
 

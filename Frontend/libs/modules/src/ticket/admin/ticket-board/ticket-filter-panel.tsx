@@ -8,17 +8,21 @@ import { ChipRow } from '../../../admin/shared/chip-row';
 import { formatTicketTypeLabel, TICKET_STATUS_OPTIONS } from '../../status';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
 import type { TicketFilters } from './model/ticket-filters';
-import type { AuditStatus, TicketPriority } from './model/ticket-row';
-import { AUDIT_BADGES } from './ticket-table';
+import {
+  AUDIT_BADGES,
+  NEED_TYPES,
+  TICKET_PRIORITIES,
+  type AuditStatus,
+  type TicketPriority,
+} from './model/ticket-row';
 
 const { color, radius, shadow } = designTokens;
 
-const PRIORITY_OPTIONS: readonly { value: TicketPriority; label: string }[] = (
-  ['critical', 'high', 'medium', 'low'] as const
-).map((value) => ({ value, label: ticketPriorityLabel(value) }));
-
-/** The four need types the backend documents (see formatTicketTypeLabel). */
-const TASK_TYPES = ['rescue', 'supply', 'medical', 'hr'] as const;
+const PRIORITY_OPTIONS: readonly { value: TicketPriority; label: string }[] =
+  TICKET_PRIORITIES.map((value) => ({
+    value,
+    label: ticketPriorityLabel(value),
+  }));
 
 const AUDIT_OPTIONS = (Object.keys(AUDIT_BADGES) as AuditStatus[]).map(
   (value) => ({ value, label: AUDIT_BADGES[value].label }),
@@ -75,7 +79,7 @@ export function TicketFilterPanel({
       <ChipRow
         label="需求類型"
         value={filters.taskType}
-        options={TASK_TYPES.map((t) => ({
+        options={NEED_TYPES.map((t) => ({
           value: t as string,
           label: formatTicketTypeLabel(t),
         }))}

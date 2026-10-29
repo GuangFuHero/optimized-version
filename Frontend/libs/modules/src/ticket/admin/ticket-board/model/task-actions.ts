@@ -84,9 +84,6 @@ export function readCreateResult(result: {
   };
 }
 
-/** The task types a need can be: `CreateTicketTaskInput.taskType`. */
-export const NEED_TYPES = ['rescue', 'supply', 'medical', 'hr'] as const;
-
 /** 再加一項需求's fields, as typed. */
 export interface NeedDraft {
   taskType: string;

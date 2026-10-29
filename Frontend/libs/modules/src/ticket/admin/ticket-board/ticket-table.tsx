@@ -35,8 +35,6 @@ import {
 
 const { color, radius, typography } = designTokens;
 
-export { AUDIT_BADGES };
-
 interface TicketTableProps {
   /** The page on view, as the server cut it. */
   rows: readonly TicketRow[];

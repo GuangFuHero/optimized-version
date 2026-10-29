@@ -36,7 +36,6 @@ import { formatTicketTypeLabel } from '../../status';
 import { DuplicateNotice } from './duplicate-notice';
 import {
   isForbidden,
-  NEED_TYPES,
   readCreateResult,
   type DuplicateSuspect,
   type NeedDraft,
@@ -45,6 +44,7 @@ import {
   ticketPriorityLabel,
   type DetailTicket,
 } from './model/ticket-detail-view';
+import { NEED_TYPES, TICKET_PRIORITIES } from './model/ticket-row';
 import {
   acknowledgeSuspects,
   changedUpdateInput,
@@ -53,7 +53,6 @@ import {
   isCoarseTicket,
   photoChanges,
   TICKET_NEEDS_MAX,
-  TICKET_PRIORITIES,
   ticketFormFromTicket,
   toCreateTicketInput,
   updateTicketForm,

@@ -15,7 +15,16 @@ export type TicketStatus =
   | 'in_progress'
   | 'completed'
   | 'cancelled';
-export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
+/** Priorities, most urgent first: the order every picker, legend and filter lists them in. */
+export const TICKET_PRIORITIES = ['critical', 'high', 'medium', 'low'] as const;
+export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
+
+/**
+ * The task types a need can be (`CreateTicketTaskInput.taskType`, see formatTicketTypeLabel), and
+ * so the types a ticket import or export is cut by (the backend's `task_type`).
+ */
+export const NEED_TYPES = ['rescue', 'supply', 'medical', 'hr'] as const;
+export type NeedType = (typeof NEED_TYPES)[number];
 
 /** A ticket's audit state as the board badges it. */
 export const AUDIT_BADGES: Record<
@@ -50,8 +59,13 @@ export interface TaskRow {
   assignedCount: number;
   /** People still missing: only an open need with a quantity has one. */
   gap: number;
-  raw: AdminTaskFieldsFragment;
 }
+
+/** What `TaskRow` reads of a need: the list's fragment and the drawer's ticket both carry it. */
+export type TaskRowFields = Pick<
+  AdminTaskFieldsFragment,
+  'uuid' | 'taskType' | 'taskName' | 'status' | 'quantity' | 'assignedCount'
+>;
 
 export interface TicketRow {
   uuid: string;
@@ -74,7 +88,7 @@ export interface TicketRow {
   raw: AdminTicketFieldsFragment & { tasks: AdminTaskFieldsFragment[] };
 }
 
-function toTaskRow(task: AdminTaskFieldsFragment): TaskRow {
+function toTaskRow(task: TaskRowFields): TaskRow {
   const quantity = task.quantity ?? null;
   const gap =
     OPEN_TASK_STATUSES.has(task.status) && quantity !== null
@@ -88,8 +102,12 @@ function toTaskRow(task: AdminTaskFieldsFragment): TaskRow {
     quantity,
     assignedCount: task.assignedCount,
     gap,
-    raw: task,
   };
+}
+
+/** A ticket's needs as the board models them, from the list row or the drawer's ticket alike. */
+export function toTaskRows(tasks: readonly TaskRowFields[]): TaskRow[] {
+  return tasks.map(toTaskRow);
 }
 
 /** What the map reads of a ticket: its pin, the cell's ticket list, and a picked pin's ticket. */
@@ -126,7 +144,7 @@ export function toTicketRow(
 ): TicketRow {
   const county = ticket.secondaryLocation?.county?.trim() ?? '';
   const town = ticket.secondaryLocation?.town?.trim() ?? '';
-  const tasks = ticket.tasks.map(toTaskRow);
+  const tasks = toTaskRows(ticket.tasks);
   return {
     ...toTicketPin(ticket),
     auditStatus: ticket.auditStatus as AuditStatus,

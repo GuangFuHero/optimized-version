@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { TICKET_EXPORT_TYPES, ticketExportFilename } from './ticket-export';
+import { ticketExportFilename } from './ticket-export';
+import { NEED_TYPES } from './ticket-row';
 
 describe('ticketExportFilename', () => {
   it('names the export by type and Taipei date', () => {
@@ -16,6 +17,6 @@ describe('ticketExportFilename', () => {
   });
 
   it('exports the four task types', () => {
-    expect(TICKET_EXPORT_TYPES).toEqual(['rescue', 'supply', 'medical', 'hr']);
+    expect(NEED_TYPES).toEqual(['rescue', 'supply', 'medical', 'hr']);
   });
 });

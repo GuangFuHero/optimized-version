@@ -8,6 +8,7 @@ import {
 import type { RescueMapMarkerItem } from '../../../../map/types';
 import { stationPoint } from '../../../../station/station-point';
 import {
+  TICKET_PRIORITIES,
   UNTITLED_TICKET,
   type TicketPin,
   type TicketPriority,
@@ -15,13 +16,35 @@ import {
 
 const c = designTokens.primitives.color;
 
-/** Pin colour per priority on the admin ticket map; the legend reads the same record. */
+/**
+ * Pin colour per priority on the admin ticket map, as the design prototype has it (tk-map.jsx's
+ * `PRI_HEX`): three colours, medium and low sharing the blue. Each is the token with that exact
+ * hex (#D32F2F, #F57C00, #2592B9). The legend reads the same record.
+ */
 export const TICKET_PRIORITY_PIN_COLORS: Record<TicketPriority, string> = {
   critical: c.red[500],
-  high: c.orange[500],
-  medium: c.amber[500],
-  low: c.neutral[500],
+  high: c.amber[500],
+  medium: c.blue[400],
+  low: c.blue[400],
 };
+
+/**
+ * The map legend: one entry per pin colour, in priority order, naming every priority drawn in it
+ * (中優先、低優先 share one).
+ */
+export function ticketPriorityLegend(
+  label: (priority: TicketPriority) => string,
+): { color: string; label: string }[] {
+  const entries = new Map<string, string[]>();
+  for (const priority of TICKET_PRIORITIES) {
+    const color = TICKET_PRIORITY_PIN_COLORS[priority];
+    entries.set(color, [...(entries.get(color) ?? []), label(priority)]);
+  }
+  return [...entries].map(([color, labels]) => ({
+    color,
+    label: labels.join('、'),
+  }));
+}
 
 /** A finished ticket stays on the map, faded. */
 export function isTicketClosed(row: Pick<TicketPin, 'status'>): boolean {
