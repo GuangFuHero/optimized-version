@@ -88,6 +88,8 @@ export function SpaceDetailSheet({
   const { space, isLoading, error } = useSpace(uuid);
   const caps = useSpaceCapabilities();
   const [editing, setEditing] = useState(false);
+  // An edit is saving: Escape and the backdrop wait for it.
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => setEditing(false), [uuid]);
 
@@ -98,6 +100,7 @@ export function SpaceDetailSheet({
         building={space.building}
         tickets={space.tickets}
         onClose={() => setEditing(false)}
+        onBusyChange={setBusy}
       />
     );
   } else if (space) {
@@ -150,7 +153,9 @@ export function SpaceDetailSheet({
   return (
     <SheetFrame
       open={Boolean(uuid)}
-      onClose={onClose}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
       width={SPACE_SHEET_WIDTH}
       variant="admin"
       ariaLabel="看各樓層"

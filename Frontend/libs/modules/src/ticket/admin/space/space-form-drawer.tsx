@@ -83,24 +83,33 @@ export type SpaceFormDrawerProps =
  * while open, so each opening starts from a clean form.
  */
 export function SpaceFormDrawer(props: SpaceFormDrawerProps) {
+  // The form is saving: Escape and the backdrop wait for it, so its error isn't lost.
+  const [busy, setBusy] = useState(false);
   if (!props.open) return null;
   const title = props.mode === 'create' ? '開啟空間' : '編輯空間';
 
   return (
     <SheetFrame
       open
-      onClose={props.onClose}
+      onClose={() => {
+        if (!busy) props.onClose();
+      }}
       width={SPACE_FORM_WIDTH}
       variant="admin"
       ariaLabel={title}
     >
       {props.mode === 'create' ? (
-        <CreateSpaceForm onClose={props.onClose} onCreated={props.onCreated} />
+        <CreateSpaceForm
+          onClose={props.onClose}
+          onCreated={props.onCreated}
+          onBusyChange={setBusy}
+        />
       ) : (
         <SpaceEditLayout
           building={props.building}
           tickets={props.tickets}
           onClose={props.onClose}
+          onBusyChange={setBusy}
         />
       )}
     </SheetFrame>
@@ -110,9 +119,11 @@ export function SpaceFormDrawer(props: SpaceFormDrawerProps) {
 function CreateSpaceForm({
   onClose,
   onCreated,
+  onBusyChange,
 }: {
   onClose: () => void;
   onCreated?: (uuid: string) => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const formId = useId();
   const [values, setValues] = useState<SpaceFormValues>(emptySpaceForm);
@@ -120,6 +131,7 @@ function CreateSpaceForm({
   const [check, setCheck] = useState<AddressCheck | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const create = useCreateBuildingMap();
+  useBusyReport(create.isPending, onBusyChange);
   const { spaces } = useSpaces();
 
   const pinLookup = useSpacePinLookup(values.pin);
@@ -286,14 +298,17 @@ function CreateSpaceForm({
   );
 }
 
+/** Its holder must refuse Escape and the backdrop while `onBusyChange` says it is saving. */
 export function SpaceEditLayout({
   building,
   tickets,
   onClose,
+  onBusyChange,
 }: {
   building: AdminBuildingMapFieldsFragment;
   tickets: readonly SpaceTicket[];
   onClose: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const formId = useId();
   const [values, setValues] = useState<SpaceFormValues>(() => ({
@@ -305,6 +320,7 @@ export function SpaceEditLayout({
   }));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const update = useUpdateBuildingMap();
+  useBusyReport(update.isPending, onBusyChange);
 
   const set = <K extends keyof SpaceFormValues>(
     key: K,
@@ -615,4 +631,15 @@ function ErrorText({ children }: { children: ReactNode }) {
       {children}
     </Typography>
   );
+}
+
+/** Tells the sheet holding a form when its save starts and ends, and that it ended on unmount. */
+function useBusyReport(
+  busy: boolean,
+  onBusyChange: ((busy: boolean) => void) | undefined,
+) {
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 }
