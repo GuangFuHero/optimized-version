@@ -6,8 +6,10 @@ import type {
 import { AuditStatus as AuditStatusValues } from '@rescue-frontend/data-access/admin';
 
 import {
+  NEED_TYPES,
   TICKET_PRIORITIES,
   type AuditStatus,
+  type NeedType,
   type TicketPriority,
   type TicketStatus,
 } from './ticket-row';
@@ -24,6 +26,17 @@ export interface TicketFilters {
   disaster: string | null;
   q: string;
 }
+
+/**
+ * The need types in the order the filter panel's 需求 row lists them: the design's 搜救 / 人力 /
+ * 物資, then 醫療, which the backend has and the design does not.
+ */
+export const NEED_FILTER_TYPES: readonly NeedType[] = [
+  'rescue',
+  'hr',
+  'supply',
+  ...NEED_TYPES.filter((t) => !['rescue', 'hr', 'supply'].includes(t)),
+];
 
 export const EMPTY_TICKET_FILTERS: TicketFilters = {
   status: null,

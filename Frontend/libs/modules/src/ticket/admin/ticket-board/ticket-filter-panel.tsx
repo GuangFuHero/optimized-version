@@ -7,10 +7,9 @@ import { designTokens } from '@rescue-frontend/ui';
 import { ChipRow } from '../../../admin/shared/chip-row';
 import { TICKET_STATUS_OPTIONS } from '../../status';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
-import type { TicketFilters } from './model/ticket-filters';
+import { NEED_FILTER_TYPES, type TicketFilters } from './model/ticket-filters';
 import {
   AUDIT_BADGES,
-  NEED_TYPES,
   needTypeLabel,
   TICKET_PRIORITIES,
   type AuditStatus,
@@ -24,6 +23,11 @@ const PRIORITY_OPTIONS: readonly { value: TicketPriority; label: string }[] =
     value,
     label: ticketPriorityLabel(value),
   }));
+
+const NEED_OPTIONS = NEED_FILTER_TYPES.map((value) => ({
+  value: value as string,
+  label: needTypeLabel(value),
+}));
 
 const AUDIT_OPTIONS = (Object.keys(AUDIT_BADGES) as AuditStatus[]).map(
   (value) => ({ value, label: AUDIT_BADGES[value].label }),
@@ -73,25 +77,16 @@ export function TicketFilterPanel({
         onChange={(v) => set('status', v)}
       />
       <ChipRow
-        label="優先度"
+        label="優先級"
         value={filters.priority}
         options={PRIORITY_OPTIONS}
         onChange={(v) => set('priority', v)}
       />
       <ChipRow
-        label="需求類型"
+        label="需求"
         value={filters.taskType}
-        options={NEED_TYPES.map((t) => ({
-          value: t as string,
-          label: needTypeLabel(t),
-        }))}
+        options={NEED_OPTIONS}
         onChange={(v) => set('taskType', v)}
-      />
-      <ChipRow
-        label="審核"
-        value={filters.audit}
-        options={AUDIT_OPTIONS}
-        onChange={(v) => set('audit', v)}
       />
       {disasterChoices.length > 0 ? (
         <ChipRow
@@ -101,6 +96,12 @@ export function TicketFilterPanel({
           onChange={(v) => set('disaster', v)}
         />
       ) : null}
+      <ChipRow
+        label="審核"
+        value={filters.audit}
+        options={AUDIT_OPTIONS}
+        onChange={(v) => set('audit', v)}
+      />
     </Box>
   );
 }

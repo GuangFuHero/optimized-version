@@ -4,6 +4,7 @@ import {
   countActiveFilters,
   differsOnlyIn,
   listsEveryTicket,
+  NEED_FILTER_TYPES,
   EMPTY_TICKET_FILTERS,
   pageCountOf,
   parseTicketFilters,
@@ -17,6 +18,7 @@ import {
   toServerVariables,
   writeTicketFilters,
 } from './ticket-filters';
+import { NEED_TYPES } from './ticket-row';
 
 describe('ticket filters', () => {
   it('round-trips through the URL and keeps unrelated params', () => {
@@ -234,5 +236,12 @@ describe('listsEveryTicket', () => {
     expect(listsEveryTicket({ ...EMPTY_TICKET_FILTERS, q: '淹水' })).toBe(
       false,
     );
+  });
+});
+
+describe('NEED_FILTER_TYPES', () => {
+  it('lists the design order 搜救 / 人力 / 物資 first, then every other need type once', () => {
+    expect(NEED_FILTER_TYPES.slice(0, 3)).toEqual(['rescue', 'hr', 'supply']);
+    expect([...NEED_FILTER_TYPES].sort()).toEqual([...NEED_TYPES].sort());
   });
 });
