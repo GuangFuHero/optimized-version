@@ -8,8 +8,8 @@ export interface StationFitInput {
   /** The map opened where this browser last left it (MAP-VIEW-104). */
   restored: boolean;
   /**
-   * These filters came with the page, by a link or a reload, and differ from those it last showed:
-   * the map frames them even where it was left.
+   * These filters came with the page, by a link or a reload, and differ from those the map last
+   * showed: it frames them even where it was left.
    */
   arrivedWithNewFilters: boolean;
   /** A station is selected: the view follows it instead. */
@@ -27,7 +27,7 @@ export type StationFitStep = 'frame' | 'keep' | 'wait';
 /**
  * Whether the station map frames its stations now (prototype station-map.jsx:106-198, MAP-VIEW-104).
  *
- * Only a change of filters frames again, and a link or a reload bringing other filters than the page
+ * Only a change of filters frames again, and a link or a reload bringing other filters than the map
  * last showed is one. The prototype compares the filtered stations themselves,
  * but its data never changes on its own; here the list is read again after every add, edit or
  * delete, and freshness moves with the clock, so comparing stations would pull the map back each
@@ -68,7 +68,10 @@ const SHOWN_FILTERS_KEY = 'station-management:shown-filters';
 // Reads and writes below fail quietly, as the map's remembered view does (map-opening.ts): the
 // filters then count as new, and a map that could remember nothing frames them anyway.
 
-/** The filters the stations page last showed, in any view, as `stationFiltersKey` writes them. */
+/**
+ * The filters the station map last framed or left alone, as `stationFiltersKey` writes them. The map
+ * writes them, not the page: the page can be built twice as it opens, and would count its own.
+ */
 export function readShownStationFilters(): string | null {
   try {
     return window.localStorage.getItem(SHOWN_FILTERS_KEY);

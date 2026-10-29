@@ -26,7 +26,11 @@ import type {
   RescueMapControllerValue,
   RescueMapMarkerItem,
 } from '../../../map/types';
-import { decideStationFit } from './model/station-map-fit';
+import {
+  decideStationFit,
+  readShownStationFilters,
+  rememberShownStationFilters,
+} from './model/station-map-fit';
 import {
   getPresentStationTypes,
   getStationTypePinColor,
@@ -55,8 +59,8 @@ interface StationMapViewProps {
   filtersKey: string;
   /** The stations for these filters are still being read. */
   loading: boolean;
-  /** These filters came by a link or a reload, unlike the last ones shown: frame them on opening. */
-  arrivedWithNewFilters: boolean;
+  /** These filters came with the page, by a link or a reload, rather than being changed on it. */
+  filtersFromLink: boolean;
   hasAnyStation: boolean;
   now: Date;
   selectedUuid: string | null;
@@ -72,7 +76,7 @@ export function StationMapView({
   rows,
   filtersKey,
   loading,
-  arrivedWithNewFilters,
+  filtersFromLink,
   hasAnyStation,
   now,
   selectedUuid,
@@ -85,6 +89,11 @@ export function StationMapView({
   const [leafletMap, setLeafletMap] = useState<LeafletMap | null>(null);
   // Whether the map opened where this browser last left it; set with the map, before it is used.
   const restoredRef = useRef(false);
+  // A link or a reload bringing other filters than this map last showed frames them even where it
+  // was left (HC on #171). Asked once, as the map is built: back from the table, it was shown them.
+  const [arrivedWithNewFilters] = useState(
+    () => filtersFromLink && readShownStationFilters() !== filtersKey,
+  );
   const zoom = useMapZoom(leafletMap);
   const markers = useMemo(
     () =>
@@ -288,6 +297,7 @@ function useFitStations(
     });
     if (step === 'wait') return;
     framedKeyRef.current = filtersKey;
+    rememberShownStationFilters(filtersKey);
     if (step === 'keep') return;
     const points = markersRef.current.map((marker) => marker.position);
     if (points.length === 1) {
