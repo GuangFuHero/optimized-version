@@ -3,7 +3,11 @@
 import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
 import { Box, ButtonBase, type SxProps, type Theme } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  safeAreaBottom,
+} from '@rescue-frontend/ui';
 
 import { openHelpRequest } from './open-help-request';
 
@@ -61,7 +65,7 @@ export function MobileRequestHelpFab() {
       sx={{
         position: 'fixed',
         right: 16,
-        bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+        bottom: safeAreaBottom(16),
         zIndex: 4,
       }}
     />
@@ -81,7 +85,7 @@ export function MapRequestHelpBar() {
         display: { mobile: 'flex', tablet: 'none' },
         px: 1.5,
         pt: 1,
-        pb: 'calc(8px + env(safe-area-inset-bottom, 0px))',
+        pb: safeAreaBottom(8),
         bgcolor: color.bg.neutral.default,
         borderTop: `1px solid ${color.border.default}`,
       }}

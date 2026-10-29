@@ -9,13 +9,17 @@ inline attachment by the SMTP2Go adapter) so it renders without any external ima
 """
 
 import logging
+from datetime import UTC, datetime
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 
 logger = logging.getLogger("app.email")
 
 _BRAND_ZH = "島嶼守望"
+# Every recipient reads a time in a message on a Taiwan clock, whatever zone the server runs in.
+_TAIWAN = ZoneInfo("Asia/Taipei")
 
 # --- inline style fragments (email clients strip <style> blocks, so every rule lives on the element) ---
 # Font names use SINGLE quotes: the style="..." attribute is double-quoted, so double-quoted font names
@@ -436,22 +440,28 @@ def build_step_up_code_email(
     return subject, html, text
 
 
-def build_password_set_email(masked_value: str, *, changed: bool = False) -> tuple[str, str, str]:
+def build_password_set_email(
+    masked_value: str, *, changed: bool = False, at: datetime | None = None
+) -> tuple[str, str, str]:
     """Return (subject, html, text) telling the account its password was set or changed.
 
     Setting a first password on an SSO-only account creates a permanent credential where
     there was none (ADR-215); changing one replaces it (ADR-218). The step-up or the old
     password already required consent, but this is the record: if either was ever handed to
     someone, this message is where the owner sees what it bought.
+
+    A change says when, on a Taiwan clock, and what to do if it was not the owner (糖's copy, uiux,
+    2026-10-27, one step as the SMS since 2026-10-28). `at` is when it changed, now if not given.
     """
-    zh_verb, en_verb = ("已變更", "was changed on") if changed else ("已設定", "was set on")
-    heading = f"您的帳號密碼{zh_verb} Password {'changed' if changed else 'set'}"
+    if changed:
+        return _password_changed_email(at or datetime.now(UTC))
+    heading = "您的帳號密碼已設定 Password set"
     subject = f"【{_BRAND_ZH}】{heading}"
     html = _render_email(
         h1=heading,
         notices=[
-            _notice(f"您的帳號（{masked_value}）的登入密碼{zh_verb}，所有裝置都已登出。",
-                    f"The sign-in password {en_verb} your account ({masked_value}), and every "
+            _notice(f"您的帳號（{masked_value}）的登入密碼已設定，所有裝置都已登出。",
+                    f"The sign-in password was set on your account ({masked_value}), and every "
                     "session was signed out."),
             _notice("<strong>若非本人操作，請立即使用第三方登入進入帳號並變更密碼</strong>，"
                     "並聯繫我們。",
@@ -461,13 +471,24 @@ def build_password_set_email(masked_value: str, *, changed: bool = False) -> tup
         footer_lines=[_FOOTER_BRAND],
     )
     text = (
-        f"您的帳號（{masked_value}）的登入密碼{zh_verb}，所有裝置都已登出。\n"
+        f"您的帳號（{masked_value}）的登入密碼已設定，所有裝置都已登出。\n"
         "若非本人操作，請立即使用第三方登入進入帳號並變更密碼，並聯繫我們。\n\n"
-        f"The sign-in password {en_verb} your account ({masked_value}), and every session was "
+        f"The sign-in password was set on your account ({masked_value}), and every session was "
         "signed out.\nIf this was not you, sign in with your third-party provider, change the "
         "password immediately and contact us.\n"
     )
     return subject, html, text
+
+
+def _password_changed_email(at: datetime) -> tuple[str, str, str]:
+    """`build_password_set_email` for a change: when it happened, and what to do if it was not you."""
+    when = at.astimezone(_TAIWAN).strftime("%Y/%m/%d %H:%M")
+    heading = "您的帳號密碼已變更 Password changed"
+    zh = f"你的密碼在 {when} 變更了。如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設。"
+    en = (f"Your password was changed at {when}, Taiwan time. If it wasn't you, go to the sign-in page "
+          "right away and reset it with 「忘記密碼」 (Forgot password).")
+    html = _render_email(h1=heading, notices=[_notice(zh, en)], footer_lines=[_FOOTER_BRAND])
+    return f"【{_BRAND_ZH}】{heading}", html, f"{zh}\n\n{en}\n"
 
 
 def build_login_method_changed_email(added: bool, provider: str) -> tuple[str, str, str]:

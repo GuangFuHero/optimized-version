@@ -110,6 +110,7 @@ export {
   fontStack,
   fontVariables,
   IOS_NO_ZOOM_INPUT_PX,
+  safeAreaBottom,
   withAlpha,
 } from './theme';
 export type {

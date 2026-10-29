@@ -38,6 +38,12 @@ export interface RescueMapViewportState {
   zoom?: number;
 }
 
+/** A view a map opens at: a centre and a zoom. */
+export interface RescueMapView {
+  center: [number, number];
+  zoom: number;
+}
+
 export interface RescueMapRouteState {
   baseLayer?: RescueMapBaseLayer;
   dataType?: RescueMapDataType;

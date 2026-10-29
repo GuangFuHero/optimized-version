@@ -35,6 +35,7 @@ export function AccountSecurityInBrowser() {
   if (user) {
     return (
       <AccountSecurityClient
+        userId={user.uuid}
         contacts={user.contacts ?? []}
         loginMethods={user.login_methods ?? []}
       />

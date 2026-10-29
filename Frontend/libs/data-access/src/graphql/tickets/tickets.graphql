@@ -137,6 +137,12 @@ query GetTicket($uuid: UUID!) {
       # The address as typed on the site's 請求協助, when the parts above are empty.
       landmarkNote
     }
+    # Who answers for where it is, written under the address: the teams of the 責任區 it lies in.
+    # Empty when in none, and to a caller without ticket.view_detail (ADR-422).
+    responsibleTeams {
+      uuid
+      name
+    }
     photos {
       uuid
       url

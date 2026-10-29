@@ -408,6 +408,11 @@ query AdminCurrentDisaster {
   currentDisaster {
     name
     shortName
+    mapView {
+      lat
+      lng
+      zoom
+    }
   }
 }
 mutation AdminCreateTicket($input: CreateTicketInput!) {
