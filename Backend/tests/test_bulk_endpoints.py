@@ -460,3 +460,38 @@ async def test_malformed_decisions_are_a_400(client, db_session, redis, decision
 
     assert resp.status_code == 400
     assert "decisions" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_declined_row_is_not_created_and_counted_apart(client, db_session, redis):
+    """`declined` names the rows the importer chose not to create; the response counts them."""
+    headers = await _importer(db_session, redis)
+
+    commit = await _commit(client, headers, [_row("光復國小"), _row("大進國小")], declined=json.dumps([3]))
+
+    body = commit.json()
+    assert (body["created"], body["failed"], body["suspected"], body["declined"]) == (1, 0, 0, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("declined", "decisions", "says"),
+    [
+        ("not json", None, "declined"),
+        (json.dumps({"2": True}), None, "declined"),
+        (json.dumps(["2"]), None, "declined"),
+        (json.dumps([True]), None, "declined"),
+        (json.dumps([2, 2]), None, "第 2 列"),
+        (json.dumps([2]), json.dumps([{"line": 2, "acknowledged_duplicate_of": "x"}]), "第 2 列"),
+    ],
+    ids=["not-json", "not-a-list", "line-not-a-number", "line-a-bool", "a-line-twice", "also-in-decisions"],
+)
+async def test_malformed_declined_is_a_400(client, db_session, redis, declined, decisions, says):
+    """As for `decisions`; a line both filed anyway and declined is the caller's mistake too."""
+    headers = await _importer(db_session, redis)
+    data = {"declined": declined} | ({"decisions": decisions} if decisions else {})
+
+    resp = await _commit(client, headers, [_row("光復國小")], **data)
+
+    assert resp.status_code == 400
+    assert says in resp.json()["detail"]

@@ -2225,6 +2225,11 @@ export interface components {
        * @description 仍要建立的疑似重複列，JSON 陣列：[{line, acknowledged_duplicate_of}]，acknowledged_duplicate_of 是預覽給的 related_uuid。沒列的疑似重複列不建立（ADR-398）
        */
       decisions?: string | null;
+      /**
+       * Declined
+       * @description 選了不建立的疑似重複列，列號的 JSON 陣列，例如 [4, 9]：預覽的 suspects 扣掉 decisions 的列，沒決定的也算。這些列一律不建立，送出時引擎沒回答也一樣（ADR-398）
+       */
+      declined?: string | null;
     };
     /** Body_commit_ticket_import_api_v1_bulk_tickets_import_commit_post */
     Body_commit_ticket_import_api_v1_bulk_tickets_import_commit_post: {
@@ -2243,6 +2248,11 @@ export interface components {
        * @description 仍要建立的疑似重複列，JSON 陣列：[{line, acknowledged_duplicate_of}]，acknowledged_duplicate_of 是預覽給的 related_uuid。沒列的疑似重複列不建立（ADR-398）
        */
       decisions?: string | null;
+      /**
+       * Declined
+       * @description 選了不建立的疑似重複列，列號的 JSON 陣列，例如 [4, 9]：預覽的 suspects 扣掉 decisions 的列，沒決定的也算。這些列一律不建立，送出時引擎沒回答也一樣（ADR-398）
+       */
+      declined?: string | null;
     };
     /** Body_login_api_v1_auth_login_post */
     Body_login_api_v1_auth_login_post: {
@@ -2320,13 +2330,13 @@ export interface components {
       partial_rows?: number[];
       /**
        * Suspected
-       * @description 疑似重複、沒確認所以沒建立的列數，不含跟著它沒建立的後續列（見 suspects 的 followers）。不算在 failed 裡，但在錯誤報告裡
+       * @description 疑似重複、沒確認也不在 declined 裡，所以沒建立的列數，不含跟著它沒建立的後續列（見 suspects 的 followers）。不算在 failed 裡，但在錯誤報告裡
        * @default 0
        */
       suspected: number;
       /**
        * Suspects
-       * @description 沒建立的疑似重複列，形狀同預覽（ADR-398）
+       * @description 沒確認也不在 declined 裡的疑似重複列，形狀同預覽（ADR-398）
        */
       suspects?: components['schemas']['SuspectedRowResponse'][];
       /**
@@ -2335,6 +2345,12 @@ export interface components {
        * @default true
        */
       dedup_checked: boolean;
+      /**
+       * Declined
+       * @description 放在 declined、所以沒建立的列數，不含跟著它沒建立的後續列。不算在 failed、suspected 裡，但在錯誤報告裡（ADR-398）
+       * @default 0
+       */
+      declined: number;
     };
     /**
      * BulkPreviewResponse
