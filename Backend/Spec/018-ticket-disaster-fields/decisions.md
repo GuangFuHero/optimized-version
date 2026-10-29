@@ -736,3 +736,33 @@ floor 是 RF、nF、Bn     → 往下驗 room
 ➕ 回 `TicketType` 的地方（list、single、mutation 回傳）都由同一個 resolver 給，不用逐支改。
 ➖ 建物刪了以後，原本在裡面的單看不出曾經屬於哪一棟；對照表的列還在，要查得直接查 DB。
 ◾ 民眾的 `createHelpRequest` 建進建物：Carol 10-25 說 V1 要做，另開一支 PR。
+
+### ADR-422 單上看得到負責的團隊（`responsibleTeams`），跟精確位置同一道邊界
+
+**白話**：登入的人讀單時，看得到這張單落在哪些責任區、由哪些團隊負責；訪客看不到。
+
+**Date**: 2026-10-29（Carol 在 Discord #uiux 定「責任區的負責團隊，單的詳情上看得到就好」，不寫進公開紀錄
+ADR-421；使用者在協調者分頁選「訪客看不到」）
+
+**Context**：前台只有在地圖上點責任區的標籤，才看得到「負責：A、B」（`AreaType.assignedTeams`）。單上看不出
+它在哪個責任區：`TicketType` 沒有這個欄位，前台的詳情也沒寫。責任區和它的團隊本來就在公開地圖上（ADR-311），
+團隊名稱不是個資（ADR-285）。
+
+**Decision**：
+
+- `TicketType.responsibleTeams: [AssignedTeamType!]!`，跟地圖的 `assignedTeams` 同一個型別。不在任何責任區時是
+  空的。
+- 哪些區算，跟 `zone` 權限同一條規則（`core/rbac_scopes.py`）：只算責任區，`ST_Contains(區, 單的點)`，排除已刪的
+  區。所以這裡寫的團隊，就是用 `zone` 權限管得到這張單的那幾隊；剛好落在邊線上不算，跟權限一樣。危險區、標示區
+  沒有團隊，不算。
+- 哪些團隊：那些區在 `team_zone_assign` 上的團隊，排除已刪的，暫停的照列，跟地圖一樣。好幾個區有同一隊時只列
+  一次；依名稱排序。
+- 由 `ticket.view_detail` 把關，跟 `geometry`、`secondaryLocation`、`buildingMapUuid` 同一個判斷（ADR-281、
+  ADR-386），沒有就回空的。訪客只拿到約 1 公里的區塊；用精確的點算出「在 A 區」，A 區的邊界剛好穿過那個區塊時，
+  就比區塊更精確地說出了位置。
+- loader `responsible_teams_by_ticket`，一個 request 一句。先判斷權限再查，訪客讀一頁單不會多查。
+
+➕ 回 `TicketType` 的地方（list、single、mutation 回傳）都由同一個 resolver 給。
+➕ 跟 `zone` 權限同一個判斷，詳情寫的和誰管得到這張單不會對不上。
+➖ 訪客看不到誰負責；要看就登入，或到地圖點那一區的標籤。
+◾ 只看得到團隊，看不到是哪一區；前台照地圖標籤的寫法只寫「負責：A、B」。
