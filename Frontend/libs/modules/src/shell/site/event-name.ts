@@ -10,12 +10,22 @@ interface CurrentDisaster {
  * The name beside the logo (prototype `site-shell.jsx` `BrandLockup`): the event's short name, or its
  * full name when it has none, with the full name to hover. The prototype's back-office sidebar names it
  * the same way (`wg-event.js` `wgEventShortName`), so one person crossing over sees one system. Until
- * the event is set, and while it loads, the platform's name stays (`前台視覺對齊.md` §3).
+ * the event is set, or when it cannot be read, the platform's name stays (`前台視覺對齊.md` §3).
+ *
+ * While the first answer is `pending` the name is blank: the platform's name first and the event's a
+ * moment later would read as two names, and push the badge and the search box along when it swaps.
  */
-export function siteBrandName(disaster: CurrentDisaster | null | undefined): {
+export function siteBrandName(
+  disaster: CurrentDisaster | null | undefined,
+  { pending = false }: { pending?: boolean } = {},
+): {
   label: string;
   fullName: string | null;
 } {
+  if (disaster === undefined && pending) {
+    return { label: '', fullName: null };
+  }
+
   if (!disaster) {
     return { label: PLATFORM_NAME, fullName: null };
   }

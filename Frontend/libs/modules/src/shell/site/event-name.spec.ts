@@ -27,7 +27,7 @@ describe('siteBrandName', () => {
     ).toEqual(named);
   });
 
-  it('keeps the platform’s name until the event is set, or while it loads or fails', () => {
+  it('keeps the platform’s name until the event is set, or when it fails to load', () => {
     expect(siteBrandName(null)).toEqual({
       label: PLATFORM_NAME,
       fullName: null,
@@ -37,5 +37,25 @@ describe('siteBrandName', () => {
       fullName: null,
     });
     expect(PLATFORM_NAME).toBe('島嶼守望');
+  });
+
+  it('leaves the name blank while the event loads', () => {
+    expect(siteBrandName(undefined, { pending: true })).toEqual({
+      label: '',
+      fullName: null,
+    });
+  });
+
+  it('blanks the name only while there is no answer yet', () => {
+    expect(
+      siteBrandName(
+        { name: '花蓮馬太鞍溪堰塞湖專案', shortName: '花蓮馬太鞍溪' },
+        { pending: true },
+      ),
+    ).toEqual({ label: '花蓮馬太鞍溪', fullName: '花蓮馬太鞍溪堰塞湖專案' });
+    expect(siteBrandName(null, { pending: true })).toEqual({
+      label: PLATFORM_NAME,
+      fullName: null,
+    });
   });
 });

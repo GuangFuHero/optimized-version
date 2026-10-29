@@ -129,6 +129,7 @@ function SiteSidebarNav({
         >
           <GuangFuBrandIcon width={38} height={26} />
           {/* The phone's top bar has no room for the name, so the drawer has it (`site-shell.jsx:722`). */}
+          {/* Two lines, then the ellipsis: a phone shows no `title`, so a cut name could not be read. */}
           <SiteBrandName
             sx={{
               flex: 1,
@@ -137,6 +138,10 @@ function SiteSidebarNav({
               lineHeight: '28px',
               fontWeight: 700,
               color: color.fg.neutral.default,
+              whiteSpace: 'normal',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
             }}
           />
           <IconButton
