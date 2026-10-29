@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   acknowledgeSuspects,
+  applyReverseGeocode,
   changedUpdateInput,
   emptyTicketForm,
   photoChanges,
   ticketFormFromTicket,
   toCreateTicketInput,
   toUpdateTicketInput,
+  updateTicketForm,
   validateTicketForm,
   type TicketFormValues,
 } from './ticket-form-model';
@@ -351,5 +353,86 @@ describe('photoChanges', () => {
       attach: [],
       detach: [],
     });
+  });
+});
+
+describe('applyReverseGeocode', () => {
+  const found = {
+    status: 'found',
+    fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+    floor: '2樓',
+    room: null,
+    addressToken: 'token-1',
+  } as const;
+
+  it('fills a blank address with the line, its token and the floor it split off', () => {
+    const form = applyReverseGeocode(filled, found);
+    expect(form).toMatchObject({
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+      addressToken: 'token-1',
+      floor: '2樓',
+      room: '',
+    });
+    expect(toCreateTicketInput(form).secondaryLocation).toEqual({
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+      floor: '2樓',
+      addressToken: 'token-1',
+    });
+  });
+
+  it('never replaces a typed line or a typed floor', () => {
+    const typed = { ...filled, fullAddress: '中正路12號', floor: '5樓' };
+    expect(applyReverseGeocode(typed, found)).toBe(typed);
+    const floorOnly = applyReverseGeocode({ ...filled, floor: '5樓' }, found);
+    expect(floorOnly.floor).toBe('5樓');
+  });
+
+  it("replaces an earlier pin's line the user left as it was", () => {
+    const first = applyReverseGeocode(filled, found);
+    const moved = applyReverseGeocode(first, {
+      ...found,
+      fullAddress: '花蓮縣光復鄉糖廠街21號',
+      addressToken: 'token-2',
+    });
+    expect(moved).toMatchObject({
+      fullAddress: '花蓮縣光復鄉糖廠街21號',
+      addressToken: 'token-2',
+    });
+  });
+
+  it('leaves the form alone when nothing was found or the lookup is unavailable', () => {
+    for (const status of ['not_found', 'unavailable']) {
+      const lookup = {
+        ...found,
+        status,
+        fullAddress: null,
+        addressToken: null,
+      };
+      expect(applyReverseGeocode(filled, lookup)).toBe(filled);
+    }
+  });
+});
+
+describe('updateTicketForm', () => {
+  const looked = {
+    ...filled,
+    fullAddress: '花蓮縣光復鄉糖廠街19號',
+    addressToken: 'token-1',
+  };
+
+  it('drops the token once the line is edited, so the backend stores it unverified', () => {
+    const form = updateTicketForm(looked, {
+      fullAddress: '花蓮縣光復鄉糖廠街21號',
+    });
+    expect(form.addressToken).toBe('');
+    expect(toCreateTicketInput(form).secondaryLocation).toEqual({
+      fullAddress: '花蓮縣光復鄉糖廠街21號',
+    });
+  });
+
+  it('keeps the token while other fields change', () => {
+    expect(updateTicketForm(looked, { room: '3' }).addressToken).toBe(
+      'token-1',
+    );
   });
 });

@@ -14,6 +14,7 @@ import {
   useCreateTicket,
   useDetachTicketPhoto,
   useDisasterTypes,
+  useReverseGeocode,
   useUpdateTicket,
 } from '@rescue-frontend/data-access/admin';
 import {
@@ -43,6 +44,7 @@ import {
 } from './model/ticket-detail-view';
 import {
   acknowledgeSuspects,
+  applyReverseGeocode,
   changedUpdateInput,
   emptyNeed,
   emptyTicketForm,
@@ -52,6 +54,7 @@ import {
   TICKET_PRIORITIES,
   ticketFormFromTicket,
   toCreateTicketInput,
+  updateTicketForm,
   validateTicketForm,
   type TicketFormErrors,
   type TicketFormValues,
@@ -121,13 +124,27 @@ export function TicketForm(props: TicketFormProps) {
   const disasterLabel = (key: string) =>
     disasterOptions.find((d) => d.key === key)?.label ?? key;
 
+  // Once per pin, on create only: the query caches each position, so a lookup is never repeated.
+  const { lat: pinLat, lng: pinLng } = values.point ?? {};
+  const lookup = useReverseGeocode(
+    mode === 'create' && pinLat != null && pinLng != null
+      ? [pinLat, pinLng]
+      : null,
+  );
+  const lookupResult = lookup.data?.reverseGeocode;
+  useEffect(() => {
+    if (lookupResult) {
+      setValues((current) => applyReverseGeocode(current, lookupResult));
+    }
+  }, [lookupResult]);
+
   useEffect(() => {
     onBusyChange?.(submitting);
   }, [submitting, onBusyChange]);
   useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 
   const change = (patch: Partial<TicketFormValues>, cleared: string[]) => {
-    setValues((current) => ({ ...current, ...patch }));
+    setValues((current) => updateTicketForm(current, patch));
     setErrors((current) => {
       const next = { ...current };
       for (const key of cleared) delete next[key as keyof TicketFormErrors];
@@ -389,6 +406,7 @@ export function TicketForm(props: TicketFormProps) {
               <TextInput
                 label="地址"
                 placeholder="例：花蓮縣光復鄉中正路一段31號"
+                hint={lookup.isFetching ? '正在根據座標解析地址…' : undefined}
                 value={values.fullAddress}
                 onChange={(event) => set('fullAddress', event.target.value)}
               />
