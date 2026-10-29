@@ -136,8 +136,8 @@ export function MapViewPickerCanvas({
   }, [request]);
 
   // No cursor of its own: Leaflet gives a draggable map its grab cursors and takes them off with dragging.
-  // Leaflet makes the container a tab stop, so it is named, and says which keys move it while they do
-  // (HC, #153); read only, it is a picture of the view.
+  // Leaflet makes the container a tab stop, so it is named, and says which keys move it while they do;
+  // read only, it is a picture of the view.
   return (
     <div
       ref={hostRef}

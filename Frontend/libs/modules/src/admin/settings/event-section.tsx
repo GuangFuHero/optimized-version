@@ -45,7 +45,7 @@ function EventBasics({
   const dirty = basicsChanged(draft, saved);
   const problem = nameProblem(draft.name);
 
-  // A close or reload with the name edited asks first, as the briefing editor does (HC, #153).
+  // A close or reload with the name edited asks first, as the briefing editor does.
   useEffect(() => {
     if (!dirty) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {

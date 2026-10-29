@@ -59,7 +59,7 @@ export function MapViewRow({
     );
   };
 
-  // Cleared, the small map goes back to all of Taiwan: what everyone now opens on (HC, #153).
+  // Cleared, the small map goes back to all of Taiwan: what everyone now opens on.
   const clear = () => {
     update.mutate(
       { body: mapViewBody(null) },

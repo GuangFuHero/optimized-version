@@ -29,7 +29,7 @@ export function basicsBody(draft: EventBasicsDraft) {
 
 /**
  * Whether saving would change anything: what is sent is trimmed, so spaces alone leave nothing to save,
- * and nothing saying so once the save is done (HC, #153).
+ * and nothing saying so once the save is done.
  */
 export function basicsChanged(
   draft: EventBasicsDraft,
@@ -43,7 +43,7 @@ export function basicsChanged(
 
 /**
  * The start is read and typed in Taiwan time, whatever the device's zone, as every time on the site is
- * shown: a volunteer helping from abroad sees and saves the same moment (HC, #153).
+ * shown: a volunteer helping from abroad sees and saves the same moment.
  */
 export function toDateTimeLocal(iso: string | null | undefined): string {
   return toTaiwanDateTimeLocal(iso);
