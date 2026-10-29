@@ -5,7 +5,7 @@ import type { components } from '@rescue-frontend/data-access/openapi';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import type { ReactNode } from 'react';
 
-import { downloadBase64 } from './model/bulk-import';
+import { downloadBase64, importFailures } from './model/bulk-import';
 import { Muted } from './muted';
 
 const { color, focusRing, motion, radius, typography } = designTokens;
@@ -75,6 +75,7 @@ export function ImportResult({
   createdUnit,
   showUpdated = false,
   note,
+  partialNote,
   fieldLabel = fileColumn,
 }: {
   result: Result;
@@ -85,8 +86,11 @@ export function ImportResult({
   showUpdated?: boolean;
   /** A reminder under the counts, shown when anything was created. */
   note?: ReactNode;
+  /** What a partial row (main record written, a later step failed) left undone, and what to check. */
+  partialNote: ReactNode;
   fieldLabel?: (column: string) => string;
 }) {
+  const { partialLines, unwritten } = importFailures(result);
   return (
     <>
       <Box
@@ -110,9 +114,15 @@ export function ImportResult({
           <Badge tone="neutral">批次 {result.batch_id}</Badge>
         </Box>
         {note && result.created > 0 ? <Muted>{note}</Muted> : null}
-        {result.failed > 0 ? (
+        {unwritten > 0 ? (
           <Callout tone="warning">
-            失敗的列沒有寫入。修正後再匯入一次即可 —— 已成功的列不會重複建立。
+            {partialLines.length > 0 ? `其餘 ${unwritten} 列` : '失敗的列'}
+            沒有寫入。修正後再匯入一次即可 —— 已成功的列不會重複建立。
+          </Callout>
+        ) : null}
+        {partialLines.length > 0 ? (
+          <Callout tone="danger">
+            第 {partialLines.join('、')} 列只寫入了一部分：{partialNote}
           </Callout>
         ) : null}
         {result.errors.length > 0 ? (

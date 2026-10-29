@@ -11,7 +11,7 @@ import {
   usePreviewTicketImport,
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
-import { Badge, Button, designTokens } from '@rescue-frontend/ui';
+import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { CircleCheck, FolderOpen, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -75,10 +75,11 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
       {
         onSuccess: (data) => {
           setResult(data);
+          // The backend counts rows, and a ticket with three needs is three rows: 列, not 張.
           toast.success(
             data.updated > 0
-              ? `已匯入：新增 ${data.created} 張、更新 ${data.updated} 張`
-              : `已匯入：新增 ${data.created} 張`,
+              ? `已匯入：新增 ${data.created} 列、更新 ${data.updated} 列`
+              : `已匯入：新增 ${data.created} 列`,
           );
         },
       },
@@ -121,7 +122,13 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
       </Box>
 
       {result ? (
-        <ImportResult result={result} onClose={onClose} createdUnit="張" />
+        <ImportResult
+          result={result}
+          onClose={onClose}
+          createdUnit="列"
+          showUpdated
+          partialNote="求助單已寫入，但這一列的需求或需求欄位沒有寫完。請打開這些求助單核對需求與欄位後補齊。"
+        />
       ) : (
         <>
           <Box
@@ -135,8 +142,11 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
           >
             <Step
               title="1 · 這份檔案是哪一種任務"
-              caption="一個檔案只放一種任務類型；一列是一張求助單。"
+              caption="一個檔案只放一種任務類型；一列是一項需求，標題與聯絡電話相同的列屬於同一張求助單。"
             >
+              <Callout tone="info">
+                匯入的列還不會檢查是否與現有求助單重複，匯入前請先確認。
+              </Callout>
               <Box
                 role="radiogroup"
                 aria-label="任務類型"
@@ -203,12 +213,12 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
                 aside={
                   <>
                     <Muted>還沒寫入</Muted>
-                    <Badge tone="success">新增 {summary.create}</Badge>
+                    <Badge tone="success">新增 {summary.create} 列</Badge>
                     {summary.update > 0 ? (
-                      <Badge tone="info">更新 {summary.update}</Badge>
+                      <Badge tone="info">更新 {summary.update} 列</Badge>
                     ) : null}
                     {summary.failedLines > 0 ? (
-                      <Badge tone="danger">失敗 {summary.failedLines}</Badge>
+                      <Badge tone="danger">失敗 {summary.failedLines} 列</Badge>
                     ) : null}
                   </>
                 }
@@ -235,7 +245,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
                 : commitImport.isPending
                   ? '匯入中…'
                   : summary
-                    ? `新增 ${summary.create}・失敗 ${summary.failedLines}（共 ${preview?.row_count ?? 0} 列）`
+                    ? `新增 ${summary.create} 列・更新 ${summary.update} 列・失敗 ${summary.failedLines} 列（共 ${preview?.row_count ?? 0} 列）`
                     : ''}
             </Muted>
             <Button variant="ghost" onClick={onClose} disabled={locked}>

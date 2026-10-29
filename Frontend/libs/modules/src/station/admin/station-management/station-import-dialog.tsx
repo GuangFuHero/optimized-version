@@ -214,6 +214,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
           createdUnit="列"
           showUpdated
           note="新增的站點請到現場確認營運狀態，並補上聯絡人與電話。"
+          partialNote="站點已寫入，但它的部分欄位沒有寫入（多半是缺少填寫站點欄位的權限）。請打開這些站點核對欄位，再補齊或請有權限的人補上。"
           fieldLabel={importFieldLabel}
         />
       ) : (
