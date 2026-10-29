@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
-from sqlalchemy import event, select
+from sqlalchemy import event, select, update
 
 from app.core.permissions import Perm
 from app.db.session import engine as app_engine
@@ -426,6 +426,30 @@ async def test_viewer_can_assign_follows_the_need_as_assigning_someone_else_does
     assert rights(await _gql(client, none_token, ASSIGN_RIGHTS, {"t": ticket})) == {
         "mine": (False, [False, False]),
         "theirs": (False, [False]),
+    }
+
+
+@pytest.mark.asyncio
+async def test_nobody_is_offered_a_removal_once_recruiting_was_stopped_by_hand(client, redis):
+    """Then unassignTaskActor refuses everyone, so the flag is false even at `all`."""
+    reads = [(Perm.TICKET_VIEW, "all"), (Perm.TICKET_VIEW_HISTORY, "all")]
+    _, token = await _create_user_with_grants(redis, [*reads, (Perm.TICKET_ASSIGN, "all")])
+    other = await _user("other")
+    ticket = await _ticket(other, "stopped by hand")
+    await _need_by(ticket, other, "open", assignees=[other])
+    stopped = await _need_by(ticket, other, "stopped", assignees=[other])
+    async with gql_conftest.test_db() as db:
+        await db.execute(
+            update(TicketTask)
+            .where(TicketTask.uuid == stopped)
+            .values(status="fulfilled", recruiting_stopped_at=datetime.now(UTC))
+        )
+
+    tasks = (await _gql(client, token, ASSIGN_RIGHTS, {"t": ticket}))["ticket"]["tasks"]
+
+    assert {t["taskName"]: [a["viewerCanUnassign"] for a in t["assignments"]] for t in tasks} == {
+        "open": [True],
+        "stopped": [False],
     }
 
 

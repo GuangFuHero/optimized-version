@@ -160,6 +160,8 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         # or property is judged by, and the coarse point shown in place of the exact one.
         "ticket_by_uuid": DataLoader(load_fn=_make_ticket_by_uuid_loader(db)),
         "ticket_uuid_by_task": DataLoader(load_fn=_make_ticket_uuid_by_task_loader(db)),
+        # Whether recruiting on a need was stopped by hand, after which nobody may give a place back.
+        "recruiting_stopped_by_task": DataLoader(load_fn=_make_recruiting_stopped_by_task_loader(db)),
         "coarse_point": DataLoader(load_fn=_make_coarse_point_loader(db)),
         # Whether the caller is going to a ticket: what unlocks whom to call (ADR-286 point 1).
         "ticket_claimed_by": DataLoader(load_fn=_make_ticket_claimed_by_loader(db)),
@@ -306,6 +308,23 @@ def _make_ticket_uuid_by_task_loader(db: AsyncSession):
         ).all()
         by_task = {str(task_uuid): str(ticket_uuid) for task_uuid, ticket_uuid in rows}
         return [by_task.get(str(uuid)) for uuid in task_uuids]
+
+    return load_fn
+
+
+def _make_recruiting_stopped_by_task_loader(db: AsyncSession):
+    """Batch-load whether each task's recruiting was stopped by hand; an unknown task reads False."""
+
+    async def load_fn(task_uuids: list[str]) -> list[bool]:
+        stopped = {
+            str(uuid)
+            for uuid in await db.scalars(
+                select(TicketTask.uuid).where(
+                    TicketTask.uuid.in_(task_uuids), TicketTask.recruiting_stopped_at.is_not(None)
+                )
+            )
+        }
+        return [str(uuid) in stopped for uuid in task_uuids]
 
     return load_fn
 

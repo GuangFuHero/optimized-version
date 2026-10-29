@@ -1612,7 +1612,7 @@ export type TaskAssignmentType = {
   /** Timestamp when the status was last changed */
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
-  /** Whether the caller holds ticket.assign over this assignment, so a page offers to remove the person only where unassignTaskActor would be allowed: `own` is the assignee themselves, `zone` the need's ticket in the caller's team zones */
+  /** Whether unassignTaskActor would remove this person for the caller, so a page offers it only there: the caller holds ticket.assign over the assignment (`own` is the assignee themselves, `zone` the need's ticket in the caller's team zones), and recruiting on the need was not stopped by hand, after which nobody may give a place back */
   viewerCanUnassign: Scalars['Boolean']['output'];
 };
 

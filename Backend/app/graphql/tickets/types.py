@@ -363,13 +363,16 @@ class TaskAssignmentType:
 
     @strawberry.field(
         description=(
-            "Whether the caller holds ticket.assign over this assignment, so a page offers to "
-            "remove the person only where unassignTaskActor would be allowed: `own` is the "
-            "assignee themselves, `zone` the need's ticket in the caller's team zones"
+            "Whether unassignTaskActor would remove this person for the caller, so a page offers it "
+            "only there: the caller holds ticket.assign over the assignment (`own` is the assignee "
+            "themselves, `zone` the need's ticket in the caller's team zones), and recruiting on the "
+            "need was not stopped by hand, after which nobody may give a place back"
         )
     )
     async def viewer_can_unassign(self, info: strawberry.types.Info) -> bool:
-        """The check unassign_task_actor makes (_assignment_scope_target), without raising."""
+        """The checks unassign_task_actor makes (scope, then a stop by hand), without raising."""
+        if await info.context["loaders"]["recruiting_stopped_by_task"].load(str(self.task_uuid)):
+            return False
         ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
         if ticket_uuid is None:
             return False
