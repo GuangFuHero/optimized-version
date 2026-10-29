@@ -179,6 +179,9 @@
 | project.edit | — | — | — | all | — | — |
 
 > 後台每一頁的外殼都讀專案設定（側欄顯示目前的災害），所以每個後台身分都有 `project.view`；改設定仍只有超管（ADR-324）。
+>
+> 災害名稱另有公開讀法：GraphQL `currentDisaster` 只回名稱、簡稱和地圖打開的位置（`name`、`shortName`、`mapView`），
+> 不看 capability，訪客和 `user` 都讀得到；災害類型、開始時間照舊要 `project.view`（ADR-392、ADR-395）。
 
 ### 緊急公告 Announcement
 

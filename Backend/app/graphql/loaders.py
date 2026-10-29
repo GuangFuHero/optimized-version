@@ -34,7 +34,7 @@ from app.graphql.tickets.types import (
     TicketTaskType,
 )
 from app.models.auth import User
-from app.models.geo import BaseGeometry
+from app.models.geo import BaseGeometry, BuildingMapTicketMap
 from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
@@ -162,6 +162,8 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         "coarse_point": DataLoader(load_fn=_make_coarse_point_loader(db)),
         # Whether the caller is going to a ticket: what unlocks whom to call (ADR-286 point 1).
         "ticket_claimed_by": DataLoader(load_fn=_make_ticket_claimed_by_loader(db)),
+        # The building a ticket was filed under, which the map groups the ticket by.
+        "building_map_by_ticket": DataLoader(load_fn=_make_building_map_by_ticket_loader(db)),
     }
 
 
@@ -328,6 +330,26 @@ def _make_ticket_claimed_by_loader(db: AsyncSession):
             )
             claimed.update((actor_uuid, str(ticket_uuid)) for (ticket_uuid,) in rows)
         return [(str(actor_uuid), str(ticket_uuid)) in claimed for actor_uuid, ticket_uuid in keys]
+
+    return load_fn
+
+
+def _make_building_map_by_ticket_loader(db: AsyncSession):
+    """Batch-load the building map each ticket was filed under; a deleted one reads as none.
+
+    A building is soft-deleted on its `base_geometries` row and its tickets stay, links and all,
+    so the join there is what unties them. Joined on `BaseGeometry` rather than `BuildingMap`, as
+    the link's foreign key already makes it a building.
+    """
+
+    async def load_fn(ticket_uuids: list[str]) -> list[str | None]:
+        rows = await db.execute(
+            select(BuildingMapTicketMap.ticket_uuid, BuildingMapTicketMap.building_map_uuid)
+            .join(BaseGeometry, BaseGeometry.uuid == BuildingMapTicketMap.building_map_uuid)
+            .where(BuildingMapTicketMap.ticket_uuid.in_(ticket_uuids), BaseGeometry.delete_at.is_(None))
+        )
+        by_ticket = {str(ticket_uuid): building_uuid for ticket_uuid, building_uuid in rows}
+        return [by_ticket.get(str(uuid)) for uuid in ticket_uuids]
 
     return load_fn
 

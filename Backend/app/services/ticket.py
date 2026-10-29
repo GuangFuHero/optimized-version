@@ -16,6 +16,7 @@ from app.core.disaster_types import validate_disaster_types
 from app.core.permissions import Perm
 from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
+from app.models.geo import edited, touch
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
@@ -66,7 +67,7 @@ CLOSED_TASK_STATUSES = frozenset({"fulfilled", "canceled"})
 CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 
 # The kinds of help a need can ask for — the values `CreateTicketTaskInput.taskType` documents
-# and `chart_render` labels. Enforced only by `create_help_request`; `create_ticket_task`
+# and `chart_render` labels. Enforced only by `validate_help_request`; `create_ticket_task`
 # still stores whatever it is sent. The site's GraphQL input lists them as `NeedKind`
 # (graphql/tickets/types.py): keep the two in step.
 TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
@@ -317,7 +318,20 @@ def _checked_photo_links(photo_urls: list[str] | None) -> list[str]:
     return [normalize_photo_url(link) for link in links]
 
 
-async def create_help_request(
+@dataclass(frozen=True)
+class HelpRequestFields:
+    """A help request that passed authz and every check but is not written yet.
+
+    `ticket` is ready for `insert_ticket`; `needs` are its tasks, in the order the requester
+    listed them; `photo_links` are the links as they will be stored.
+    """
+
+    ticket: TicketFields
+    needs: tuple["TaskFields", ...]
+    photo_links: tuple[str, ...]
+
+
+async def validate_help_request(
     db: AsyncSession,
     *,
     actor: User,
@@ -330,19 +344,12 @@ async def create_help_request(
     tasks: list[dict],
     photo_urls: list[str] | None = None,
     contact_email: str | None = None,
-) -> Tickets:
-    """File a citizen's request for help: the ticket, every need and photo link, in one commit.
-
-    The public site's 「請求協助」. `create_ticket` followed by one `create_ticket_task` per need
-    commits each step on its own, so a failure part-way leaves a ticket with some of its needs
-    missing and a retry files a second ticket. Here nothing is written unless all of it is.
+) -> HelpRequestFields:
+    """Every check the site's help request (「請求協助」) must pass, without writing anything.
 
     The site never asks how urgent a request is: priority is `medium`, and staff adjust it
     afterwards. The ticket's own `task_type` is the first need's, as the admin form sets it. An
     email is optional; the account's own is never filled in for it.
-
-    Photo links (「現場照片（選填）」) become the ticket's photos, read back by
-    `TicketType.photos` and withheld from whoever cannot see the ticket's detail.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
     if not title.strip():
@@ -364,35 +371,54 @@ async def create_help_request(
         required=frozenset({"contact_name"}),
     )
     secondary_location = apply_address(secondary_location, point=point_of(geometry))
-    creator = str(actor.uuid)
-    ticket = await ticket_repository.add(
-        db,
-        obj_in={
-            "property_name": "request",
-            "geometry": geojson_to_geom(geometry),
-            "created_by": creator,
-            "title": title,
-            "description": description,
-            **contacts,
-            "status": "pending",
-            "priority": "medium",
-            "task_type": tasks[0]["task_type"],
-        },
+    return HelpRequestFields(
+        ticket=TicketFields(
+            point=geometry,
+            values={
+                "title": title,
+                "description": description,
+                **contacts,
+                "priority": "medium",
+                "task_type": tasks[0]["task_type"],
+            },
+            secondary_location=secondary_location,
+        ),
+        needs=tuple(
+            TaskFields(
+                values={
+                    "task_type": task["task_type"],
+                    "task_name": task["task_name"],
+                    "task_description": task.get("task_description"),
+                    "quantity": task.get("quantity"),
+                    "source": "user",
+                }
+            )
+            for task in tasks
+        ),
+        photo_links=tuple(photo_links),
     )
-    if secondary_location:
-        await secondary_location_repository.add(
-            db, obj_in={"geometry_uuid": str(ticket.uuid), **secondary_location}
-        )
-    for position, task in enumerate(tasks):
+
+
+async def insert_help_request(
+    db: AsyncSession, *, actor: User, fields: HelpRequestFields
+) -> tuple[Tickets, list[TicketTask]]:
+    """Write a checked help request and flush: the ticket, its address, needs and photos.
+
+    The caller owns the commit, one for all of it: `create_ticket` followed by one
+    `create_ticket_task` per need commits each step on its own, so a failure part-way would leave
+    a ticket with some of its needs missing and a retry would file a second ticket.
+
+    Photo links (「現場照片（選填）」) become the ticket's photos, read back by `TicketType.photos`
+    and withheld from whoever cannot see the ticket's detail.
+    """
+    ticket = await insert_ticket(db, actor=actor, fields=fields.ticket)
+    creator = str(actor.uuid)
+    needs = [
         await ticket_task_repository.add(
             db,
             obj_in={
                 "ticket_uuid": str(ticket.uuid),
-                "task_type": task["task_type"],
-                "task_name": task["task_name"],
-                "task_description": task.get("task_description"),
-                "quantity": task.get("quantity"),
-                "source": "user",
+                **need.values,
                 "created_by": creator,
                 # One transaction means one `now()` for every need, and the tasks loader
                 # breaks that tie on uuid — random. A microsecond apart keeps them in the order
@@ -400,7 +426,9 @@ async def create_help_request(
                 "created_at": func.now() + timedelta(microseconds=position),
             },
         )
-    for position, url in enumerate(photo_links):
+        for position, need in enumerate(fields.needs)
+    ]
+    for position, url in enumerate(fields.photo_links):
         await photo_repository.add(
             db,
             obj_in={
@@ -413,9 +441,7 @@ async def create_help_request(
                 "created_at": func.now() + timedelta(microseconds=position),
             },
         )
-    await db.commit()
-    await db.refresh(ticket)
-    return ticket
+    return ticket, needs
 
 
 async def list_my_tickets(db: AsyncSession, *, actor: User) -> list[Tickets]:
@@ -458,11 +484,17 @@ async def update_ticket(
     if not ticket:
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
+    # Locked before anything is read, so the address's change check compares against what is current.
+    ticket = await lock_ticket(db, uuid)
+    if ticket is None or ticket.delete_at is not None:
+        # Deleted by a concurrent call while this one waited for the lock.
+        raise ValueError("Ticket not found")
     if secondary_location is not None:
         secondary_location = apply_address(
             secondary_location, point=point_of(geom_to_geojson(ticket.geometry))
         )
-        await _replace_secondary_location(db, str(ticket.uuid), secondary_location)
+        if await _replace_secondary_location(db, str(ticket.uuid), secondary_location):
+            touch(ticket)
 
     obj_in = dict(changes)
     if "disaster_types" in obj_in:
@@ -481,8 +513,8 @@ async def update_ticket(
     return ticket
 
 
-async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, values: dict) -> None:
-    """Overwrite the address row for a geometry, or create it when there is none.
+async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, values: dict) -> bool:
+    """Overwrite the address row for a geometry, or create it when there is none; say whether it changed.
 
     A whole-input replacement, so clearing a member means sending it null, not omitting it.
     Flush only: `update_ticket` commits.
@@ -490,10 +522,12 @@ async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, valu
     existing = await secondary_location_repository.get_by_geometry(db, geometry_uuid)
     if existing is None:
         await secondary_location_repository.add(db, obj_in={"geometry_uuid": geometry_uuid, **values})
-        return
+        return True
     for field, value in values.items():
         setattr(existing, field, value)
+    changed = edited(existing)
     await db.flush()
+    return changed
 
 
 async def set_ticket_disaster_details(
@@ -523,6 +557,15 @@ async def set_ticket_disaster_details(
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
     _check_disaster_detail_size(details)
+    # Locked before the answers are read, so the change check compares against what is current.
+    ticket = await lock_ticket(db, ticket_uuid)
+    if ticket is None or ticket.delete_at is not None:
+        # Deleted by a concurrent call while this one waited for the lock.
+        raise ValueError("Ticket not found")
+    before = {
+        (d.property_name, d.value)
+        for d in await ticket_disaster_detail_repository.list_by_ticket(db, ticket_uuid)
+    }
 
     await ticket_disaster_detail_repository.delete_for_ticket(db, ticket_uuid)
     for property_name, values in details.items():
@@ -537,6 +580,8 @@ async def set_ticket_disaster_details(
                     "value": value,
                 },
             )
+    if {(name, v) for name, values in details.items() for v in values if v is not None and v != ""} != before:
+        touch(ticket)
     await db.flush()
     await void_stale_verdict(db, ticket_uuid)
     await db.commit()
@@ -604,7 +649,7 @@ async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
     ticket.status = "cancelled"
     ticket.delete_at = now
     for need in needs:
-        _mark_need_deleted(need, now)
+        mark_need_deleted(need, now)
     claimants = set()
     if needs:
         on_needs = await db.scalars(
@@ -627,7 +672,7 @@ async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
     )
 
 
-def _mark_need_deleted(task: TicketTask, now: datetime) -> None:
+def mark_need_deleted(task: TicketTask, now: datetime) -> None:
     """Cancel and soft-delete a need at once; completed_at goes with the fulfilled state it leaves."""
     task.status = "canceled"
     task.canceled_at = now
@@ -656,7 +701,8 @@ async def delete_ticket_task(db: AsyncSession, *, actor: User, uuid: str) -> Non
     await require_scope(actor, Perm.TICKET_DELETE, db, resource=ticket)
 
     ticket, task = await _lock_ticket_and_task(db, task_uuid=uuid)
-    _mark_need_deleted(task, datetime.now(UTC))
+    mark_need_deleted(task, datetime.now(UTC))
+    touch(ticket)
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     claimants = [str(a.actor_uuid) for a in await task_assignment_repository.list_by_task(db, uuid)]
@@ -775,6 +821,7 @@ async def insert_added_task(
     )
     if ticket is None or ticket.delete_at is not None:
         raise ValueError("Ticket not found")
+    touch(ticket)
     task = await insert_ticket_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
     await recompute_ticket_status(db, ticket_uuid=ticket_uuid)
     await void_stale_verdict(db, ticket_uuid)
@@ -872,11 +919,14 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     # The ticket before the need, the order every writer keeps: voiding the verdict locks it.
-    await lock_ticket(db, str(task.ticket_uuid))
+    ticket = await lock_ticket(db, str(task.ticket_uuid))
+    task = await _need_still_on(db, task.uuid, task.ticket_uuid)
 
     for field, value in changes.items():
         if hasattr(task, field):
             setattr(task, field, value)
+    if edited(task):
+        touch(ticket)
     await db.flush()
     await void_stale_verdict(db, str(task.ticket_uuid))
     await db.commit()
@@ -954,7 +1004,9 @@ async def _add_task_property(
     """Write the property, void the ticket's verdict if it no longer holds, and commit."""
     ticket_uuid = str(task.ticket_uuid)
     # The ticket before the need, the order every writer keeps: the new row holds the need too.
-    await lock_ticket(db, ticket_uuid)
+    ticket = await lock_ticket(db, ticket_uuid)
+    await _need_still_on(db, task.uuid, ticket_uuid)
+    touch(ticket)
     prop = await task_property_repository.add(
         db,
         obj_in={
@@ -984,10 +1036,24 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     ticket_uuid = str(task.ticket_uuid)
-    await lock_ticket(db, ticket_uuid)  # the ticket before the need, as in _add_task_property
+    ticket = await lock_ticket(db, ticket_uuid)  # the ticket before the need, as in _add_task_property
+    # Read again under the lock, so the change check below compares against what is current.
+    prop = await db.scalar(
+        select(TaskProperty).where(TaskProperty.uuid == prop.uuid).execution_options(populate_existing=True)
+    )
+    if str(prop.task_uuid) != str(task.uuid):
+        # The item itself moved to the need its need folded into (ADR-388). Checked before the
+        # need, which the fold soft-deleted: "merged" says where it went, "not found" would not.
+        raise ValueError(MOVED_DURING_DEDUP)
+    await _need_still_on(db, task.uuid, ticket_uuid)
+    if prop.delete_at is not None:
+        # A dedup resolve cancelled the item while this one waited for the lock.
+        raise ValueError("Task property not found")
     for field, value in changes.items():
         if hasattr(prop, field):
             setattr(prop, field, value)
+    if edited(prop):
+        touch(ticket)
     await db.flush()
     await void_stale_verdict(db, ticket_uuid)
     await db.commit()
@@ -1161,6 +1227,7 @@ async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> T
     task.quantity = len(claimants)
     task.completed_at = now
     task.recruiting_stopped_at = now
+    touch(ticket)
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     task_id, task_name, ticket_title, actor_uid = task.uuid, task.task_name, ticket.title, actor.uuid
@@ -1181,6 +1248,32 @@ async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> T
     return task
 
 
+# A dedup resolve (Spec 028) moves needs to the ticket it keeps, and claims and items to the need
+# they fold into. A writer that read where a row lived before taking the ticket's lock may have
+# queued behind that resolve; it re-reads under the lock and stops rather than act on the
+# cancelled ticket or check its scope against the wrong one (ADR-388).
+MOVED_DURING_DEDUP = (
+    "This need was merged into another ticket while you were working on it; reload and try again"
+)
+
+
+async def _need_still_on(db: AsyncSession, task_uuid, ticket_uuid) -> TicketTask:
+    """The need, read again under its ticket's lock; refused if it is gone or moved meanwhile.
+
+    A need a dedup resolve folded into another stays on the cancelled ticket, soft-deleted, so the
+    ticket check alone would let an edit land on it and report success; a plain delete racing an
+    edit is the same case.
+    """
+    task = await db.scalar(
+        select(TicketTask).where(TicketTask.uuid == task_uuid).execution_options(populate_existing=True)
+    )
+    if task is None or task.delete_at is not None:
+        raise ValueError("Ticket task not found")
+    if str(task.ticket_uuid) != str(ticket_uuid):
+        raise ValueError(MOVED_DURING_DEDUP)
+    return task
+
+
 async def _lock_ticket_and_task(
     db: AsyncSession, *, task_uuid: str, live_only: bool = True
 ) -> tuple[Tickets, TicketTask]:
@@ -1188,8 +1281,9 @@ async def _lock_ticket_and_task(
 
     A ticket's status is worked out from all of its needs (recompute_ticket_status), so whatever
     changes a need holds its ticket as well, and taking the two in one fixed order makes writers
-    on the same ticket queue instead of deadlocking. The need's ticket is read unlocked first: a
-    need never moves to another ticket.
+    on the same ticket queue instead of deadlocking. The need's ticket is read unlocked first; only
+    a dedup resolve moves a need to another ticket, and one that did so while this waited for the
+    ticket's lock is refused (ADR-388).
 
     A deleted need, or a need of a deleted ticket, is not found — checked under the locks, so a
     deletion cannot slip in between. `live_only=False` locks it anyway, for a release: giving a
@@ -1210,6 +1304,8 @@ async def _lock_ticket_and_task(
         .with_for_update()
         .execution_options(populate_existing=True)
     )
+    if task is not None and str(task.ticket_uuid) != str(ticket_uuid):
+        raise ValueError(MOVED_DURING_DEDUP)
     if task is None or (live_only and (ticket.delete_at is not None or task.delete_at is not None)):
         raise ValueError("Ticket task not found")
     return ticket, task
@@ -1325,6 +1421,10 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
         actor, Perm.TICKET_ASSIGN, db, resource=await _assignment_scope_target(db, assignment)
     )
     ticket, task = await _lock_ticket_and_task(db, task_uuid=str(assignment.task_uuid), live_only=False)
+    on_task = await db.scalar(select(TaskAssignment.task_uuid).where(TaskAssignment.uuid == uuid))
+    if on_task is not None and str(on_task) != str(task.uuid):
+        # Its need was folded into another by a dedup resolve while this waited (ADR-388).
+        raise ValueError(MOVED_DURING_DEDUP)
     if task.recruiting_stopped_at is not None:
         raise ValueError("Recruiting has stopped for this task")
     removed = await db.scalar(

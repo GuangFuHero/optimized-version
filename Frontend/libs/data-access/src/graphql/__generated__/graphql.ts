@@ -394,6 +394,8 @@ export type CreateStationInput = {
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Data origin: 'user' (default) or 'official' */
   source?: Scalars['String']['input'];
+  /** Optional public line on what the station is short of */
+  supplyStatus?: InputMaybe<Scalars['String']['input']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: InputMaybe<Scalars['String']['input']>;
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
@@ -596,6 +598,8 @@ export type HazardousZoneType = {
 };
 
 export type HelpRequestTaskInput = {
+  /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   taskDescription?: InputMaybe<Scalars['String']['input']>;
@@ -617,7 +621,7 @@ export type Mutation = {
   createBriefingTemplate: BriefingTemplateType;
   createBuildingMap: BuildingMapType;
   createCrowdSourcing: CrowdSourcingType;
-  createHelpRequest: TicketType;
+  createHelpRequest: CreateTicketResult;
   createStation: CreateStationResult;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;
@@ -909,7 +913,7 @@ export type MutationWithdrawRoleRequestArgs = {
 
 export type MyRoleRequestsType = {
   __typename?: 'MyRoleRequestsType';
-  /** May send an application now: no back-office identity, none pending, not paused */
+  /** May send an application now: none pending and not paused. A back-office identity rules out only the data auditor choice (ADR-351) */
   canApply: Scalars['Boolean']['output'];
   /** Holds a role beyond `user`: the entry offers 前往後台 instead of applying */
   hasBackofficeIdentity: Scalars['Boolean']['output'];
@@ -984,6 +988,7 @@ export type Query = {
   normalizeAddress: AddressLookupType;
   /** The nearest 門牌 to a map pin, within 500 m. Signed-in callers only, 30 lookups a minute shared with normalizeAddress */
   reverseGeocode: AddressLookupType;
+  roleRequestTeams: Array<RoleRequestTeam>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stations: StationConnection;
@@ -1073,6 +1078,10 @@ export type QueryNormalizeAddressArgs = {
 export type QueryReverseGeocodeArgs = {
   lat: Scalars['Float']['input'];
   lng: Scalars['Float']['input'];
+};
+
+export type QueryRoleRequestTeamsArgs = {
+  type?: InputMaybe<RoleRequestTeamType>;
 };
 
 export type QueryStationArgs = {
@@ -1173,18 +1182,43 @@ export const RoleRequestStatus = {
 
 export type RoleRequestStatus =
   (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
+export type RoleRequestTeam = {
+  __typename?: 'RoleRequestTeam';
+  name: Scalars['String']['output'];
+  type: RoleRequestTeamType;
+  uuid: Scalars['UUID']['output'];
+};
+
+export const RoleRequestTeamType = {
+  Gov: 'GOV',
+  Ngo: 'NGO',
+} as const;
+
+export type RoleRequestTeamType =
+  (typeof RoleRequestTeamType)[keyof typeof RoleRequestTeamType];
 export type RoleRequestType = {
   __typename?: 'RoleRequestType';
+  applicantEmail?: Maybe<Scalars['String']['output']>;
+  applicantName?: Maybe<Scalars['String']['output']>;
+  /** Masked */
+  applicantPhone?: Maybe<Scalars['String']['output']>;
   /** When it was approved, rejected or withdrawn */
   closedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Spec 019 only; no longer sent (ADR-355) */
   contact?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['DateTime']['output'];
+  /** The team a new-team application founds */
+  newTeamName?: Maybe<Scalars['String']['output']>;
   reason: Scalars['String']['output'];
   requestedRole: RoleRequestRole;
   /** The reviewer's reply, if any */
   reviewNote?: Maybe<Scalars['String']['output']>;
   status: RoleRequestStatus;
+  /** The existing team a member request asks to join */
+  team?: Maybe<RoleRequestTeam>;
   uuid: Scalars['UUID']['output'];
+  /** Sent through a team's invite link */
+  viaInvite: Scalars['Boolean']['output'];
 };
 
 export type SecondaryLocationInput = {
@@ -1416,6 +1450,10 @@ export type StationType = {
   suggestedFields: Array<SuggestedFieldType>;
   /** Merges applied to this station, newest first; empty without station.review over this station */
   suggestionMerges: Array<StationSuggestionMergeType>;
+  /** What the station is short of, in free text, e.g. '飲用水見底、尿布尚有存量'. Public (ADR-333) */
+  supplyStatus?: Maybe<Scalars['String']['output']>;
+  /** When supply_status last changed; null while it has never been set */
+  supplyStatusUpdatedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1427,9 +1465,12 @@ export type StationType = {
 };
 
 export type SubmitRoleRequestInput = {
-  contact?: InputMaybe<Scalars['String']['input']>;
+  email?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  newTeamName?: InputMaybe<Scalars['String']['input']>;
   reason: Scalars['String']['input'];
   requestedRole: RoleRequestRole;
+  teamUuid?: InputMaybe<Scalars['UUID']['input']>;
 };
 
 export type SuggestableFieldType = {
@@ -1814,6 +1855,7 @@ export type UpdateStationInput = {
   opHour?: InputMaybe<Scalars['String']['input']>;
   /** Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed' */
   operationalStatus?: InputMaybe<StationOperationalStatus>;
+  supplyStatus?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
   /** Updated visibility: 'public', 'restricted', or 'internal' */
   visibility?: InputMaybe<Visibility>;
@@ -2027,6 +2069,8 @@ export type StationFieldsFragment = {
   isTemporary: boolean;
   isOfficial: boolean;
   operationalStatus: string;
+  supplyStatus?: string | null;
+  supplyStatusUpdatedAt?: any | null;
   createdBy?: string | null;
   createdAt?: any | null;
   updatedAt?: any | null;
@@ -2117,23 +2161,29 @@ export type GetStationQuery = {
     | null;
 };
 
-export type GetClosureAreasQueryVariables = Exact<{
+export type GetMapAreasQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
-export type GetClosureAreasQuery = {
+export type GetMapAreasQuery = {
   __typename?: 'Query';
-  hazardousZones: {
-    __typename?: 'HazardousZoneConnection';
-    items: Array<
-      { __typename?: 'HazardousZoneType' } & {
-        ' $fragmentRefs'?: {
-          ClosureAreaFieldsFragment: ClosureAreaFieldsFragment;
-        };
-      }
-    >;
+  areas: {
+    __typename?: 'AreaConnection';
+    items: Array<{
+      __typename?: 'AreaType';
+      uuid: string;
+      type: string;
+      name?: string | null;
+      note?: string | null;
+      geometry?: Geometry | null;
+      assignedTeams: Array<{
+        __typename?: 'AssignedTeamType';
+        uuid: string;
+        name: string;
+      }>;
+    }>;
     pageInfo: { __typename?: 'PageInfo' } & {
       ' $fragmentRefs'?: { PageInfoFieldsFragment: PageInfoFieldsFragment };
     };
@@ -2153,6 +2203,47 @@ export type GetClosureAreaQuery = {
         };
       })
     | null;
+};
+
+export type ReverseGeocodeQueryVariables = Exact<{
+  lat: Scalars['Float']['input'];
+  lng: Scalars['Float']['input'];
+}>;
+
+export type ReverseGeocodeQuery = {
+  __typename?: 'Query';
+  reverseGeocode: {
+    __typename?: 'AddressLookupType';
+    status: string;
+    fullAddress?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    buildingSection?: string | null;
+    floor?: string | null;
+    room?: string | null;
+    addressToken?: string | null;
+  };
+};
+
+export type NormalizeAddressQueryVariables = Exact<{
+  address: Scalars['String']['input'];
+  lat?: InputMaybe<Scalars['Float']['input']>;
+  lng?: InputMaybe<Scalars['Float']['input']>;
+}>;
+
+export type NormalizeAddressQuery = {
+  __typename?: 'Query';
+  normalizeAddress: {
+    __typename?: 'AddressLookupType';
+    status: string;
+    fullAddress?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    buildingSection?: string | null;
+    floor?: string | null;
+    room?: string | null;
+    addressToken?: string | null;
+  };
 };
 
 export type UpdateStationMutationVariables = Exact<{
@@ -2212,6 +2303,40 @@ export type CreateCrowdSourcingMutation = {
   };
 };
 
+export type GetStationForSuggestionQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type GetStationForSuggestionQuery = {
+  __typename?: 'Query';
+  station?: {
+    __typename?: 'StationType';
+    uuid: string;
+    name?: string | null;
+    type?: string | null;
+    description?: string | null;
+    opHour?: string | null;
+    operationalStatus: string;
+    supplyStatus?: string | null;
+    pendingSuggestedFields: Array<string>;
+  } | null;
+};
+
+export type CreateStationSuggestionMutationVariables = Exact<{
+  input: CreateStationSuggestionInput;
+}>;
+
+export type CreateStationSuggestionMutation = {
+  __typename?: 'Mutation';
+  createStationSuggestion: {
+    __typename?: 'StationSuggestionType';
+    uuid: string;
+    fieldName: string;
+    newValue: string;
+    status: string;
+  };
+};
+
 export type MyRoleRequestsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type MyRoleRequestsQuery = {
@@ -2229,8 +2354,29 @@ export type MyRoleRequestsQuery = {
       reviewNote?: string | null;
       createdAt: any;
       closedAt?: any | null;
+      newTeamName?: string | null;
+      applicantName?: string | null;
+      applicantPhone?: string | null;
+      team?: {
+        __typename?: 'RoleRequestTeam';
+        uuid: string;
+        name: string;
+      } | null;
     }>;
   };
+};
+
+export type RoleRequestTeamsQueryVariables = Exact<{
+  type: RoleRequestTeamType;
+}>;
+
+export type RoleRequestTeamsQuery = {
+  __typename?: 'Query';
+  roleRequestTeams: Array<{
+    __typename?: 'RoleRequestTeam';
+    uuid: string;
+    name: string;
+  }>;
 };
 
 export type SubmitRoleRequestMutationVariables = Exact<{
@@ -2440,16 +2586,29 @@ export type CreateHelpRequestMutationVariables = Exact<{
 
 export type CreateHelpRequestMutation = {
   __typename?: 'Mutation';
-  createHelpRequest: {
-    __typename?: 'TicketType';
-    tasks: Array<
-      { __typename?: 'TicketTaskType' } & {
-        ' $fragmentRefs'?: {
-          TicketNeedFieldsFragment: TicketNeedFieldsFragment;
-        };
+  createHelpRequest:
+    | {
+        __typename: 'DuplicatesSuspected';
+        suspects: Array<{
+          __typename?: 'DuplicateSuspect';
+          draftRef: string;
+          relatedUuid: string;
+          relatedTicketUuid?: string | null;
+        }>;
       }
-    >;
-  } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } };
+    | {
+        __typename: 'TicketCreated';
+        ticket: { __typename?: 'TicketType' } & {
+          ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
+        };
+        tasks: Array<
+          { __typename?: 'TicketTaskType' } & {
+            ' $fragmentRefs'?: {
+              TicketNeedFieldsFragment: TicketNeedFieldsFragment;
+            };
+          }
+        >;
+      };
 };
 
 export type UpdateTicketMutationVariables = Exact<{
@@ -2685,6 +2844,11 @@ export const StationFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3266,6 +3430,11 @@ export const GetStationsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3451,6 +3620,11 @@ export const GetStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3459,13 +3633,13 @@ export const GetStationDocument = {
     },
   ],
 } as unknown as DocumentNode<GetStationQuery, GetStationQueryVariables>;
-export const GetClosureAreasDocument = {
+export const GetMapAreasDocument = {
   kind: 'Document',
   definitions: [
     {
       kind: 'OperationDefinition',
       operation: 'query',
-      name: { kind: 'Name', value: 'GetClosureAreas' },
+      name: { kind: 'Name', value: 'GetMapAreas' },
       variableDefinitions: [
         {
           kind: 'VariableDefinition',
@@ -3499,7 +3673,7 @@ export const GetClosureAreasDocument = {
         selections: [
           {
             kind: 'Field',
-            name: { kind: 'Name', value: 'hazardousZones' },
+            name: { kind: 'Name', value: 'areas' },
             arguments: [
               {
                 kind: 'Argument',
@@ -3535,9 +3709,30 @@ export const GetClosureAreasDocument = {
                   selectionSet: {
                     kind: 'SelectionSet',
                     selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'note' } },
                       {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'ClosureAreaFields' },
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'geometry' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'assignedTeams' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'name' },
+                            },
+                          ],
+                        },
                       },
                     ],
                   },
@@ -3577,34 +3772,8 @@ export const GetClosureAreasDocument = {
         ],
       },
     },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'ClosureAreaFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'HazardousZoneType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'informationSource' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'note' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
   ],
-} as unknown as DocumentNode<
-  GetClosureAreasQuery,
-  GetClosureAreasQueryVariables
->;
+} as unknown as DocumentNode<GetMapAreasQuery, GetMapAreasQueryVariables>;
 export const GetClosureAreaDocument = {
   kind: 'Document',
   definitions: [
@@ -3676,6 +3845,173 @@ export const GetClosureAreaDocument = {
     },
   ],
 } as unknown as DocumentNode<GetClosureAreaQuery, GetClosureAreaQueryVariables>;
+export const ReverseGeocodeDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'ReverseGeocode' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'lat' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'lng' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'reverseGeocode' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'lat' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'lat' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'lng' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'lng' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'fullAddress' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'lat' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'lng' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'buildingSection' },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'room' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'addressToken' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<ReverseGeocodeQuery, ReverseGeocodeQueryVariables>;
+export const NormalizeAddressDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'NormalizeAddress' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'address' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'lat' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'lng' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'normalizeAddress' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'address' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'address' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'lat' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'lat' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'lng' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'lng' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'fullAddress' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'lat' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'lng' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'buildingSection' },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'room' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'addressToken' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  NormalizeAddressQuery,
+  NormalizeAddressQueryVariables
+>;
 export const UpdateStationDocument = {
   kind: 'Document',
   definitions: [
@@ -3772,6 +4108,11 @@ export const UpdateStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3951,6 +4292,127 @@ export const CreateCrowdSourcingDocument = {
   CreateCrowdSourcingMutation,
   CreateCrowdSourcingMutationVariables
 >;
+export const GetStationForSuggestionDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetStationForSuggestion' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'station' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'operationalStatus' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'supplyStatus' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'pendingSuggestedFields' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  GetStationForSuggestionQuery,
+  GetStationForSuggestionQueryVariables
+>;
+export const CreateStationSuggestionDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'CreateStationSuggestion' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'input' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'CreateStationSuggestionInput' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'createStationSuggestion' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'input' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'fieldName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'newValue' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CreateStationSuggestionMutation,
+  CreateStationSuggestionMutationVariables
+>;
 export const MyRoleRequestsDocument = {
   kind: 'Document',
   definitions: [
@@ -4003,6 +4465,35 @@ export const MyRoleRequestsDocument = {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'closedAt' },
                       },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'team' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'name' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'newTeamName' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'applicantName' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'applicantPhone' },
+                      },
                     ],
                   },
                 },
@@ -4014,6 +4505,58 @@ export const MyRoleRequestsDocument = {
     },
   ],
 } as unknown as DocumentNode<MyRoleRequestsQuery, MyRoleRequestsQueryVariables>;
+export const RoleRequestTeamsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'RoleRequestTeams' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'type' } },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'RoleRequestTeamType' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'roleRequestTeams' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'type' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'type' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  RoleRequestTeamsQuery,
+  RoleRequestTeamsQueryVariables
+>;
 export const SubmitRoleRequestDocument = {
   kind: 'Document',
   definitions: [
@@ -4962,19 +5505,77 @@ export const CreateHelpRequestDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
                 {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'TicketFields' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'tasks' },
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'TicketCreated' },
+                  },
                   selectionSet: {
                     kind: 'SelectionSet',
                     selections: [
                       {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'TicketNeedFields' },
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'ticket' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'FragmentSpread',
+                              name: { kind: 'Name', value: 'TicketFields' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'tasks' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'FragmentSpread',
+                              name: { kind: 'Name', value: 'TicketNeedFields' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'DuplicatesSuspected' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspects' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'draftRef' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedUuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: {
+                                kind: 'Name',
+                                value: 'relatedTicketUuid',
+                              },
+                            },
+                          ],
+                        },
                       },
                     ],
                   },

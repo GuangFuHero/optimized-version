@@ -1,17 +1,23 @@
 'use client';
 
-import { Box, ButtonBase, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, RowAction } from '@rescue-frontend/ui';
 
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
 import type { StationDetailActionProps } from './types';
 
+const { iconSize } = designTokens;
+
 export interface StationDetailFooterActionProps {
   actions?: readonly (StationDetailActionProps | undefined)[];
 }
 
+/**
+ * The drawer's foot. Its buttons are `RowAction`s, the pill a list row's 分享 is, so the same action
+ * takes the same shape in the list and in the drawer (visual alignment item 1, 2026-10-25).
+ */
 export function StationDetailFooterAction({
   actions = [],
 }: StationDetailFooterActionProps) {
@@ -44,48 +50,21 @@ export function StationDetailFooterAction({
       {inlineActions.length > 0 ? (
         <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 1.5 }}>
           {inlineActions.map((action) => (
-            <ButtonBase
+            <RowAction
               key={action.label}
-              disableRipple
               aria-label={action.ariaLabel ?? action.label}
               onClick={action.onClick}
-              sx={{
-                flex: 1,
-                minWidth: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 1,
-                px: 1,
-                py: '9px',
-                borderRadius: 0,
-                bgcolor: stationDetailPalette.editActionBackground,
-                border: `1px solid ${stationDetailPalette.border}`,
-                color: stationDetailPalette.editActionText,
-                '&:hover': {
-                  bgcolor: stationDetailPalette.editActionHover,
-                },
-              }}
-            >
-              <StationDetailIconSlot
-                icon={action.icon}
-                width={14}
-                height={14}
-                color={stationDetailPalette.editActionText}
-              />
-              <Typography
-                sx={{
-                  color: 'inherit',
-                  fontSize: displayTextSize[12],
-                  lineHeight: '16px',
-                  fontWeight: 600,
-                  letterSpacing: '0.6px',
-                  textAlign: 'center',
-                }}
-              >
-                {action.label}
-              </Typography>
-            </ButtonBase>
+              icon={
+                <StationDetailIconSlot
+                  icon={action.icon}
+                  width={iconSize.sm}
+                  height={iconSize.sm}
+                  color="currentColor"
+                />
+              }
+              label={action.label}
+              sx={{ flex: 1, minWidth: 0, justifyContent: 'center' }}
+            />
           ))}
         </Box>
       ) : null}
@@ -93,46 +72,22 @@ export function StationDetailFooterAction({
       {blockActions.length > 0 ? (
         <Box sx={{ display: 'grid', gap: 2, mt: inlineActions.length ? 2 : 0 }}>
           {blockActions.map((action) => (
-            <ButtonBase
+            <RowAction
               key={action.label}
-              disableRipple
+              tone="danger"
               aria-label={action.ariaLabel ?? action.label}
               onClick={action.onClick}
-              sx={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 1,
-                px: 1,
-                py: '9px',
-                borderRadius: 0,
-                border: `1px solid ${stationDetailPalette.destructiveActionBorder}`,
-                color: stationDetailPalette.destructiveActionText,
-                '&:hover': {
-                  bgcolor: stationDetailPalette.destructiveActionHover,
-                },
-              }}
-            >
-              <StationDetailIconSlot
-                icon={action.icon}
-                width={14}
-                height={14}
-                color={stationDetailPalette.destructiveActionText}
-              />
-              <Typography
-                sx={{
-                  color: 'inherit',
-                  fontSize: displayTextSize[12],
-                  lineHeight: '16px',
-                  fontWeight: 600,
-                  letterSpacing: '0.6px',
-                  textAlign: 'center',
-                }}
-              >
-                {action.label}
-              </Typography>
-            </ButtonBase>
+              icon={
+                <StationDetailIconSlot
+                  icon={action.icon}
+                  width={iconSize.sm}
+                  height={iconSize.sm}
+                  color="currentColor"
+                />
+              }
+              label={action.label}
+              sx={{ width: '100%', justifyContent: 'center' }}
+            />
           ))}
         </Box>
       ) : null}

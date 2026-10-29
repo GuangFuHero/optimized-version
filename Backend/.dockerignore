@@ -6,6 +6,8 @@
 __pycache__/
 *.pyc
 .env
+.env.*
+!.env.example
 docker-compose.override.yml
 scripts/smoke_email.py
 note/

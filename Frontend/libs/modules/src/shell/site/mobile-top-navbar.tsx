@@ -2,17 +2,18 @@
 
 import { Suspense } from 'react';
 
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
 import { Box, ButtonBase } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
 import { getRescueColorScheme, layoutSizes } from '@rescue-frontend/ui';
 
+import { SiteNotifyBell } from '../../notification';
 import { MenuGlyph } from './menu-glyph';
 import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
 } from './header-search-input';
+import { SiteSignInButton } from './sign-in-button';
 import { SiteUserMenu } from './user-menu';
 
 interface SiteMobileTopNavBarProps {
@@ -24,7 +25,7 @@ interface SiteMobileTopNavBarProps {
 }
 
 /**
- * 前台行動版頂部導覽列：左側選單鈕開啟側欄抽屜、中央顯示目前模組、右側為使用者選單。
+ * 前台行動版頂部導覽列：左側選單鈕開啟側欄抽屜、中央顯示目前模組、右側為通知與使用者選單。
  */
 export function SiteMobileTopNavBar({
   isAuthenticated = false,
@@ -42,7 +43,8 @@ export function SiteMobileTopNavBar({
         width: '100%',
         height: layoutSizes.site.mobileTopNavBarHeight,
         display: 'grid',
-        gridTemplateColumns: '40px minmax(0, 1fr) 40px',
+        // The right one as wide as what it holds: the bell and the account, or the sign-in button.
+        gridTemplateColumns: '40px minmax(0, 1fr) auto',
         alignItems: 'center',
         columnGap: 1,
         px: 2,
@@ -84,27 +86,16 @@ export function SiteMobileTopNavBar({
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'flex-end',
+          gap: 0.5,
         }}
       >
         {isAuthenticated ? (
+          <SiteNotifyBell size={40} ringColor={palette.frame} />
+        ) : null}
+        {isAuthenticated ? (
           <SiteUserMenu userName={userName} onSignOut={onSignOut} />
         ) : (
-          <ButtonBase
-            disableRipple
-            aria-label="登入"
-            onClick={onSignIn}
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: '12px',
-              color: palette.brandText,
-              '&:hover': {
-                bgcolor: palette.avatarHover,
-              },
-            }}
-          >
-            <LoginRoundedIcon sx={{ fontSize: 22 }} />
-          </ButtonBase>
+          <SiteSignInButton compact onClick={onSignIn} />
         )}
       </Box>
     </Box>

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 from geoalchemy2.shape import from_shape
+from plotly.offline import get_plotlyjs_version
 from shapely.geometry import Point
 
 from app.api.v1.endpoints.analytics import _in_catalog_unit
@@ -32,6 +33,9 @@ STATIONS_DATA_URL = "/api/v1/analytics/stations/data"
 TICKETS_VALUE_URL = "/api/v1/analytics/tickets/value"
 STATIONS_VALUE_URL = "/api/v1/analytics/stations/value"
 CATALOG_URL = "/api/v1/analytics/catalog"
+# The plotly.js the admin dashboard draws figures with: `plotly.js-dist-min` in
+# Frontend/libs/modules/package.json.
+FRONTEND_PLOTLYJS_VERSION = "4.1.1"
 
 
 async def _user_with_perms(db, redis, *perms: Perm, scope: str = "all") -> dict:
@@ -446,6 +450,51 @@ async def test_category_axis_shows_display_names(client, db_session, redis):
     assert bar["x"] == ["搜救"]
     assert bar["name"] == "任務單"
     assert "rescue" not in res.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("chart_type", "key"), [("bar", "x"), ("pie", "labels")])
+async def test_free_text_categories_render_as_literal_text(client, db_session, redis, chart_type, key):
+    """Plotly.js renders tags in labels, so a station type can't smuggle a link onto the dashboard.
+
+    /data is not a figure, so it keeps the raw type.
+    """
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.STATION_VIEW)
+    types = ['<a href="https://example.com">點此回報</a>', "<b>粗體</b>", "R&D", "物資站", None]
+    for station_type in types:
+        db_session.add(
+            Station(
+                geometry=from_shape(Point(121.5, 25.0), srid=4326),
+                created_by=user_uuid,
+                level=1,
+                source="user",
+                visibility="public",
+                type=station_type,
+            )
+        )
+    await db_session.commit()
+
+    params = {"y": "station_count", "x": "category", "chart_type": chart_type}
+    res = await client.get(STATIONS_URL, params=params, headers=headers)
+    assert res.status_code == 200
+    assert set(res.json()["data"][0][key]) == {
+        '&lt;a href="https://example.com"&gt;點此回報&lt;/a&gt;',
+        "&lt;b&gt;粗體&lt;/b&gt;",
+        "R&amp;D",
+        "物資站",
+        "未分類",
+    }
+    data = (await client.get(STATIONS_DATA_URL, params=params, headers=headers)).json()
+    assert set(data["x_values"]) == {*types[:-1], "未分類"}
+
+
+def test_bundled_plotlyjs_matches_the_frontend():
+    """The figure JSON is written for the plotly.js inside the Python plotly package."""
+    assert get_plotlyjs_version() == FRONTEND_PLOTLYJS_VERSION, (
+        f"plotly bundles plotly.js {get_plotlyjs_version()} but the frontend loads "
+        f"{FRONTEND_PLOTLYJS_VERSION}. Move the plotly pin in pyproject.toml and the frontend's "
+        "plotly.js-dist-min together, then update FRONTEND_PLOTLYJS_VERSION."
+    )
 
 
 @pytest.mark.asyncio

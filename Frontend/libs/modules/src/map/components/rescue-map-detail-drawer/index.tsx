@@ -2,12 +2,14 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../../../shell/site/site-badge';
 import { StationDetailDrawer } from '../../../station';
+import { SiteStationDetailDrawer } from '../../../station/site-detail/site-station-detail-drawer';
 import {
   readOpHour,
   resolveStationAvailability,
@@ -18,6 +20,8 @@ import type {
   StationDetailTabId,
   StationStatusTone,
 } from '../../../station/station-detail';
+import { openStationSuggestion } from '../../../station/suggestion/open-station-suggestion';
+import { describeSupplyStatus } from '../../../station/supply-status';
 import { TicketDetailDrawer } from '../../../ticket';
 import { formatTicketTypeLabel } from '../../../ticket/status';
 import type { TicketDetailDrawerProps } from '../../../ticket/ticket-detail';
@@ -42,6 +46,12 @@ export type RescueMapTicketDetailOverrides = Partial<
   detailsContent?: ReactNode;
 };
 
+/**
+ * Which station detail to draw. The site has its own, on the site's text scale; the back office's
+ * map keeps the one it has, so that is the default.
+ */
+export type RescueMapStationLayout = 'admin' | 'site';
+
 interface RescueMapDetailDrawerProps {
   marker: RescueMapDetailItem | null;
   onClose: () => void;
@@ -51,6 +61,7 @@ interface RescueMapDetailDrawerProps {
   isAuthenticated?: boolean;
   ticketDetailOverrides?: RescueMapTicketDetailOverrides;
   stationSecondaryAction?: StationDetailActionProps;
+  stationLayout?: RescueMapStationLayout;
 }
 
 const DetailsIcon = Icons.details;
@@ -151,6 +162,17 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
   };
 }
 
+// For a guest too, who is told in the drawer to sign in (PUB-FEAT-001 Q7: the way in always shows).
+function createStationEditAction(
+  marker: RescueMapMarkerItem,
+): StationDetailActionProps {
+  return {
+    label: '修改建議',
+    icon: <EditRoundedIcon />,
+    onClick: () => openStationSuggestion(marker.id),
+  };
+}
+
 function createStationSummary({
   marker,
   stationSecondaryAction,
@@ -179,6 +201,7 @@ function createStationSummary({
       statusDetail: availability.detail,
       badges: createStationBadges(marker),
     },
+    // No 修改建議（N） tab, nor 歷史記錄: nothing public lists a station's suggestions or history yet.
     tabs: [
       {
         id: 'info' as const,
@@ -186,11 +209,7 @@ function createStationSummary({
         icon: <DetailsIcon />,
       },
     ],
-    // 歷史記錄、待處理、建議修改尚無對應後端資料，暫時隱藏。
-    // editAction: {
-    //   label: '編輯站點',
-    //   icon: <EditRoundedIcon />,
-    // },
+    editAction: createStationEditAction(marker),
     secondaryAction: stationSecondaryAction,
     // 2026-08-21 決議：前台不顯示 `source`。站點一律由後台建立，來源不具區別力；
     // 有區別力的是「是不是官方造冊」。這張卡也不再列 visibility —— 讀者只會看到
@@ -202,6 +221,10 @@ function createStationSummary({
       methods: [],
     },
     resources: createStationResources(marker),
+    supplyStatus: describeSupplyStatus(
+      marker.stationMeta?.supplyStatus,
+      marker.stationMeta?.supplyStatusUpdatedAt,
+    ),
   };
 }
 
@@ -212,6 +235,7 @@ export function RescueMapDetailDrawer({
   isAuthenticated = false,
   ticketDetailOverrides,
   stationSecondaryAction,
+  stationLayout = 'admin',
 }: RescueMapDetailDrawerProps) {
   const [activeStationTab, setActiveStationTab] =
     useState<StationDetailTabId>('info');
@@ -287,7 +311,16 @@ export function RescueMapDetailDrawer({
         />
       ) : null}
 
-      {marker.detailType === 'station' ? (
+      {marker.detailType === 'station' && stationLayout === 'site' ? (
+        <SiteStationDetailDrawer
+          marker={marker}
+          onClose={onClose}
+          editAction={createStationEditAction(marker)}
+          secondaryAction={stationSecondaryAction}
+        />
+      ) : null}
+
+      {marker.detailType === 'station' && stationLayout === 'admin' ? (
         <StationDetailDrawer
           {...createStationSummary({
             marker,

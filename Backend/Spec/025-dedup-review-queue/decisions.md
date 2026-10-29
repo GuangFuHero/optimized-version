@@ -19,6 +19,8 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 **理由**：判定只改配對卡，前端可以先讓審核清單上線；合併的範圍（逐欄位、取消、認領、撤銷寫回）
 大很多，混在一起會拖住整張票。
 
+> 2026-10-24：拆出去的合併已在 **Spec 028**（`028-dedup-resolve`，ADR-365～385）實作：選主要單、前端送最終值、另一張單一定取消、志工跟著搬、不能撤銷。
+
 ---
 
 ## ADR-337：super_admin 與 data_auditor 都拿到 `ai_duplicate.view`／`ai_duplicate.review`
@@ -100,6 +102,9 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
 不寫 task／station 的 `is_duplicate`／`dedup_group_id`，不取消任何一筆。
 後續處理（合併、取消）屬於 ADR-336 的另一張票。
 
+> 2026-10-24：**部分被 ADR-365（Spec 028）取代**。confirm／reject 仍只改配對卡；
+> 新增的 `resolve` 會在同一筆交易裡改單、處理需求，並把卡改成 `confirmed`。
+
 ---
 
 ## ADR-342：撤銷 — 自己的判定用 review，撤別人的需要新權限 `ai_duplicate.revoke`
@@ -113,6 +118,11 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
 - 新增 `Perm.AI_DUP_REVOKE = "ai_duplicate.revoke"`，只授給 super_admin（seed＋data migration）。
 - 撤銷時：`reviewed_by == 目前使用者` → 只需 `ai_duplicate.review`；否則需要 `ai_duplicate.revoke`，沒有就 403。
 - 撤銷把卡改回判定前的狀態（存在判定事件的 `before_state`），清掉 `reviewed_by`／`reviewed_at`，寫撤銷事件。不限時間。
+
+---
+
+> 2026-10-25：配對卡的已審狀態改名為 `confirmed_duplicate`／`not_duplicate`（Spec 028 ADR-391）。本檔與 ADR-339、343 寫的
+> `confirmed`／`rejected` 指的是改名前的狀態值；**事件類型仍是 `confirmed`／`rejected`**，沒有改。
 
 ---
 

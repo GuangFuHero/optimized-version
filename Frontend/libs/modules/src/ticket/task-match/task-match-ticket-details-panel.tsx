@@ -18,8 +18,9 @@ import { LocationPrivacyNotice } from '../../map/components/location-privacy-not
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
 import { formatTicketStreet, formatTicketUnit } from '../address';
+import { requesterAuditNotice } from '../audit-issue';
 import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
-import { NeedRow, readTicketNeeds } from '../needs';
+import { NeedRow, readTicketNeeds, useNeedClaim } from '../needs';
 import { PhotoThumb } from '../photos';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
@@ -186,6 +187,13 @@ export function TaskMatchTicketDetailsPanel({
   const ticketCreatedBy = ticket?.createdBy ?? marker.ticketMeta?.createdBy;
   // Its requester can add one more need, even to a ticket left with none.
   const canAddNeed = useCanAddNeed({ ticketStatus, ticketCreatedBy });
+  const { viewerId } = useNeedClaim();
+  const auditNotice = requesterAuditNotice({
+    auditStatus: ticket?.auditStatus ?? marker.ticketMeta?.auditStatus,
+    createdBy: ticketCreatedBy,
+    viewerId,
+    title: ticket?.title || marker.title,
+  });
   const contact =
     [
       ticket?.contactName?.trim() || marker.ticketMeta?.contactName?.trim(),
@@ -200,6 +208,9 @@ export function TaskMatchTicketDetailsPanel({
 
   return (
     <Stack spacing={2}>
+      {/* At the very top, as the design has it: orange, not red, as the ticket stands. */}
+      {auditNotice ? <Alert severity="warning">{auditNotice}</Alert> : null}
+
       {ticketError ? (
         <Alert severity="error">
           {ticketError.message ?? '載入任務詳情失敗。'}

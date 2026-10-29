@@ -2,9 +2,8 @@
 
 import { Suspense } from 'react';
 
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
 import PublicRoundedIcon from '@mui/icons-material/PublicRounded';
-import { Box, ButtonBase, Stack, Typography } from '@mui/material';
+import { Box, Stack } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
 import {
@@ -14,13 +13,16 @@ import {
 } from '@rescue-frontend/ui';
 
 import { GuangFuBrandIcon } from '../../brand';
+import { SiteNotifyBell } from '../../notification';
 import { SitePortalSwitch, type SitePortalEntry } from '../../role-request';
 import { RequestHelpButton } from '../../ticket/help-request/request-help-button';
+import { SiteBrandName } from './brand-name';
 import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
 } from './header-search-input';
 import { PageHelpButton } from './page-help';
+import { SiteSignInButton } from './sign-in-button';
 import { SiteUserMenu } from './user-menu';
 
 const { color, typography } = designTokens;
@@ -103,17 +105,16 @@ export function SiteTopNavBar({
     >
       <Stack sx={{ flexDirection: 'row', alignItems: 'center', gap: 1.25 }}>
         <GuangFuBrandIcon width={38} height={26} />
-        <Typography
+        {/* Capped, so a long name without a short one cannot squeeze the search out. */}
+        <SiteBrandName
           sx={{
+            maxWidth: { tablet: 160, desktop: 240 },
             color: palette.brandText,
             fontSize: displayTextSize[16],
             lineHeight: '24px',
             fontWeight: 700,
-            whiteSpace: 'nowrap',
           }}
-        >
-          島嶼守望
-        </Typography>
+        />
         {portalEntry === 'backOffice' ? <SiteRealmBadge /> : null}
         <SitePortalSwitch entry={portalEntry} onApply={onApplyRoleRequest} />
       </Stack>
@@ -140,25 +141,12 @@ export function SiteTopNavBar({
         {/* The site's pages have no title to sit beside, so here. */}
         <PageHelpButton ringColor={palette.frame} />
         {isAuthenticated ? (
+          <SiteNotifyBell size={36} ringColor={palette.frame} />
+        ) : null}
+        {isAuthenticated ? (
           <SiteUserMenu userName={userName} onSignOut={onSignOut} />
         ) : (
-          <ButtonBase
-            disableRipple
-            aria-label="登入"
-            onClick={onSignIn}
-            sx={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              color: palette.brandText,
-              transition: 'box-shadow 120ms ease',
-              '&:hover': {
-                boxShadow: `0 0 0 3px ${palette.avatarHover}`,
-              },
-            }}
-          >
-            <LoginRoundedIcon sx={{ fontSize: 20 }} />
-          </ButtonBase>
+          <SiteSignInButton onClick={onSignIn} />
         )}
       </Stack>
     </Box>

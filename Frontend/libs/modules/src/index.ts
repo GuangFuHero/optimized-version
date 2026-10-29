@@ -36,7 +36,6 @@ export {
   SITE_BASE_LAYERS,
   SITE_DATA_TYPE_LABELS,
   SITE_DATA_TYPES,
-  SITE_FALLBACK_BASE_LAYER,
   SITE_FALLBACK_DATA_TYPE,
   SITE_MODULES,
   SITE_SUB_DATA_TYPE_OPTIONS,
@@ -101,7 +100,12 @@ export type {
 
 export { AnnouncementPage } from './admin/announcement';
 export { BackOfficePlaceholder } from './role-request';
-export { AdminPlaceholderPage, AdminShell, NoBackOfficeAccess } from './shell';
+export {
+  AdminErrorPage,
+  AdminPlaceholderPage,
+  AdminShell,
+  NoBackOfficeAccess,
+} from './shell';
 export type { AdminShellProps } from './shell';
 
 // The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.
@@ -114,6 +118,7 @@ export {
 } from './session/end-expired-session';
 export { SessionExpiredNotice } from './session/session-expired-notice';
 export { AuthSessionProvider, useAuthSession } from './session/auth-session';
+export { BriefingsPage } from './briefing/admin/briefings-page';
 
 export {
   SiteActionDrawer,
@@ -123,7 +128,11 @@ export {
   type SiteActionDrawerProps,
 } from './shell/site';
 
-export { StationCreateDrawer, StationDetailDrawer } from './station';
+export {
+  StationCreateDrawer,
+  StationDetailDrawer,
+  StationManagementPage,
+} from './station';
 
 export {
   TicketCreateDrawer,
@@ -134,6 +143,6 @@ export { NeedClaimProvider } from './ticket/needs';
 export type { ReloadedTicket } from './ticket/needs';
 export {
   clearAllHelpRequestDrafts,
-  MapRequestHelpButton,
+  MapRequestHelpBar,
   PlaceHereAction,
 } from './ticket/help-request';

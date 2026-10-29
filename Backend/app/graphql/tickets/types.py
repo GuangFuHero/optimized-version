@@ -502,6 +502,13 @@ class HelpRequestTaskInput:
             "People or units needed, at least 1; required except for a 'rescue' need, which may omit it"
         ),
     )
+    acknowledged_duplicate_of: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); "
+            "not checked again"
+        ),
+    )
 
 
 @strawberry.input
@@ -626,7 +633,12 @@ class TicketType:
         ),
     )
     created_at: datetime | None = None
-    updated_at: datetime | None = None
+    updated_at: datetime | None = strawberry.field(
+        default=None,
+        description="When anything visible about this ticket last changed: a field, its address, disaster "
+        "details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only "
+        "when it changes the status; a review verdict never does",
+    )
 
     # Private storage backing the contact_* PII resolvers below (ADR-049) — never exposed
     # directly in the schema, only readable (raw or masked) through the gated resolvers.
@@ -995,6 +1007,24 @@ class TicketType:
             return None
         return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
 
+    @strawberry.field(
+        description=(
+            "The building map this ticket was filed under (createTicket's buildingMapUuid). Null when "
+            "it was not filed under one, when that building map is deleted, and to a caller without "
+            "ticket.view_detail here"
+        )
+    )
+    async def building_map_uuid(self, info: strawberry.types.Info) -> UUID | None:
+        """Return the ticket's building, or null when out of detail scope: naming it names the place.
+
+        The ticket was given the building's point (place_ticket), so knowing the building is
+        knowing the exact point `geometry` withholds. Decided before the lookup, as the address
+        is, so a page of tickets a guest reads costs no query here.
+        """
+        if not await self._detail_visible(info):
+            return None
+        return await info.context["loaders"]["building_map_by_ticket"].load(str(self.uuid))
+
     @strawberry.field
     async def disaster_details(self, info: strawberry.types.Info) -> list["TicketDisasterDetailType"]:
         """Resolve this ticket's disaster-specific field values.
@@ -1054,7 +1084,7 @@ class MyTaskAssignmentType:
 
 @strawberry.type
 class TicketCreated:
-    """`createTicket` created the ticket and all its tasks, in the order sent."""
+    """`createTicket` or `createHelpRequest` created the ticket and all its tasks, in the order sent."""
 
     ticket: TicketType
     tasks: list[TicketTaskType]
