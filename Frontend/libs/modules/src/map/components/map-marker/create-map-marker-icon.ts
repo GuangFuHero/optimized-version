@@ -115,6 +115,7 @@ function createPinIcon(
   leaflet: typeof import('leaflet'),
 ): import('leaflet').DivIcon {
   const modifiers = [
+    pin.shape === 'square' ? ' map-pin--square' : '',
     pin.selected ? ' map-pin--selected' : '',
     pin.dimmed ? ' map-pin--dimmed' : '',
   ].join('');

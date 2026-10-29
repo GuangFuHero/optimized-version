@@ -25,3 +25,15 @@ export {
   type SpaceHouseholdTarget,
 } from './household-input';
 export { orderFloors } from './floors';
+export { boardCountLine } from './board-count';
+export { SpaceMapCard } from './space-map-card';
+export {
+  FLOOR_STATE_TONE,
+  SPACE_LEGEND_LABEL,
+  SPACE_PIN_EMPTY,
+  spaceIdOfMarker,
+  spacePinColor,
+  toSpaceMarker,
+} from './space-map';
+export { sortSpaceRows, visibleSpaceRows } from './space-board';
+export { spaceTicketTag, type TaggedSpace } from './space-ticket-tag';
