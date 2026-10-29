@@ -31,7 +31,12 @@ export function ChipRow<T extends string>({
       >
         {label}
       </Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+      {/* Named by the row's label, so a screen reader hears whose 「全部」 this is. */}
+      <Box
+        role="group"
+        aria-label={label}
+        sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
+      >
         {[{ value: null, label: '全部' }, ...options].map((option) => {
           const selected = option.value === value;
           return (
