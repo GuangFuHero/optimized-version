@@ -5,7 +5,10 @@ import type {
   UpdateStationInput,
 } from '@rescue-frontend/data-access/admin';
 
-import { updateAddressFields } from '../../admin/shared/model/address-fill';
+import {
+  afterPinMove,
+  updateAddressFields,
+} from '../../admin/shared/model/address-fill';
 import type { OperationalStatus } from '../operational-status';
 import { stationPoint } from '../station-point';
 
@@ -111,15 +114,32 @@ export function stationToForm(station: Station): StationFormState {
   };
 }
 
-/** One field typed into the form. A new address line no longer matches the lookup's token. */
+/**
+ * One field typed into the form. A new address line no longer matches the lookup's token, and
+ * neither does a line once the coordinates change.
+ */
 export function updateStationForm<K extends keyof StationFormState>(
   form: StationFormState,
   key: K,
   value: StationFormState[K],
 ): StationFormState {
-  return updateAddressFields(form, {
+  const next = updateAddressFields(form, {
     [key]: value,
   } as Partial<StationFormState>);
+  const moved =
+    (key === 'latitude' || key === 'longitude') && form[key] !== value;
+  return moved ? afterPinMove(next) : next;
+}
+
+/** The pin moved on the map: the coordinates follow it, and a looked-up line loses its token. */
+export function followStationPin(
+  form: StationFormState,
+  [lat, lng]: [number, number],
+): StationFormState {
+  const latitude = String(lat);
+  const longitude = String(lng);
+  if (form.latitude === latitude && form.longitude === longitude) return form;
+  return afterPinMove({ ...form, latitude, longitude });
 }
 
 function validCoordinate(value: string, max: number): boolean {

@@ -10,6 +10,10 @@ import type {
   UpdateTicketInput,
 } from '@rescue-frontend/data-access/admin';
 
+import {
+  afterPinMove,
+  updateAddressFields,
+} from '../../../../admin/shared/model/address-fill';
 import type { PickedPoint } from '../../../../map/components/location-picker';
 import { stationPoint } from '../../../../station/station-point';
 import { PHOTO_LINK_MAX } from '../../../photos/photo-links';
@@ -121,6 +125,22 @@ function untouched(need: NeedDraft): boolean {
 /** The rows that go out, in order: their index is the backend's `task:<i>`. */
 function sentNeeds(values: TicketFormValues): NeedDraft[] {
   return values.needs.filter((need) => !untouched(need));
+}
+
+/**
+ * Fields changed on the form. A new address line no longer matches the lookup's token, and
+ * neither does a line once the pin moves off the point it was looked up for.
+ */
+export function updateTicketForm(
+  values: TicketFormValues,
+  patch: Partial<TicketFormValues>,
+): TicketFormValues {
+  const next = updateAddressFields(values, patch);
+  const from = values.point;
+  const to = next.point;
+  const moved =
+    'point' in patch && (from?.lat !== to?.lat || from?.lng !== to?.lng);
+  return moved ? afterPinMove(next) : next;
 }
 
 export function validateTicketForm(

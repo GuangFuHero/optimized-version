@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  afterPinMove,
   applyReverseGeocode,
   updateAddressFields,
   type AddressFillFields,
@@ -65,6 +66,33 @@ describe('applyReverseGeocode', () => {
         }),
       ).toBe(blank);
     }
+  });
+});
+
+describe('afterPinMove', () => {
+  it('keeps a looked-up line but drops its token, so it is saved unverified', () => {
+    const looked = applyReverseGeocode(blank, found);
+    expect(afterPinMove(looked)).toEqual({
+      ...looked,
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+      addressToken: '',
+    });
+  });
+
+  it('leaves a form without a token as it was', () => {
+    const typed = { ...blank, fullAddress: '我打的地址' };
+    expect(afterPinMove(typed)).toBe(typed);
+  });
+
+  it("is not undone by the next point's lookup: the line and its lack of a token stay", () => {
+    const moved = afterPinMove(applyReverseGeocode(blank, found));
+    expect(
+      applyReverseGeocode(moved, {
+        ...found,
+        fullAddress: '花蓮縣光復鄉糖廠街21號',
+        addressToken: 'token-2',
+      }),
+    ).toBe(moved);
   });
 });
 

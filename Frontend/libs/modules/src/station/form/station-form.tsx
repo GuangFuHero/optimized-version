@@ -21,6 +21,7 @@ import {
   buildCreateInput,
   buildUpdateInput,
   emptyStationForm,
+  followStationPin,
   formPosition,
   stationToForm,
   updateStationForm,
@@ -161,11 +162,7 @@ function LoadedStationForm(props: LoadedStationFormProps) {
   // A pin moved on the map while the form is open: follow it.
   useEffect(() => {
     if (pinLat == null || pinLng == null) return;
-    setForm((current) => ({
-      ...current,
-      latitude: String(pinLat),
-      longitude: String(pinLng),
-    }));
+    setForm((current) => followStationPin(current, [pinLat, pinLng]));
   }, [pinLat, pinLng]);
 
   // Once per pin: the query caches each position, so a lookup is never repeated.

@@ -5,6 +5,7 @@ import {
   buildCreateInput,
   buildUpdateInput,
   emptyStationForm,
+  followStationPin,
   formPosition,
   stationToForm,
   updateStationForm,
@@ -134,6 +135,29 @@ describe('station form address', () => {
       '新名字',
     );
     expect(form.addressToken).toBe('token-1');
+  });
+
+  it('keeps the line but drops its token when the pin moves, so the backend stores it unverified', () => {
+    const looked = applyReverseGeocode(filled, found);
+    const form = followStationPin(looked, [23.671, 121.42]);
+    expect(form).toMatchObject({
+      latitude: '23.671',
+      longitude: '121.42',
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+      addressToken: '',
+    });
+    expect(buildCreateInput(form).secondaryLocation).toEqual({
+      locationType: 'address',
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+    });
+    expect(updateStationForm(looked, 'latitude', '23.68').addressToken).toBe(
+      '',
+    );
+  });
+
+  it('keeps the token while the pin stays on its point', () => {
+    const looked = applyReverseGeocode(filled, found);
+    expect(followStationPin(looked, [23.67, 121.42])).toBe(looked);
   });
 
   it('sends the pole fields only for a pole location', () => {

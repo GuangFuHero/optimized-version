@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  applyReverseGeocode,
-  updateAddressFields,
-} from '../../../../admin/shared/model/address-fill';
+import { applyReverseGeocode } from '../../../../admin/shared/model/address-fill';
 import {
   acknowledgeSuspects,
   changedUpdateInput,
@@ -12,6 +9,7 @@ import {
   ticketFormFromTicket,
   toCreateTicketInput,
   toUpdateTicketInput,
+  updateTicketForm,
   validateTicketForm,
   type TicketFormValues,
 } from './ticket-form-model';
@@ -423,7 +421,7 @@ describe('applyReverseGeocode', () => {
   });
 });
 
-describe('updateAddressFields on the ticket form', () => {
+describe('updateTicketForm', () => {
   const looked = {
     ...filled,
     fullAddress: '花蓮縣光復鄉糖廠街19號',
@@ -431,7 +429,7 @@ describe('updateAddressFields on the ticket form', () => {
   };
 
   it('drops the token once the line is edited, so the backend stores it unverified', () => {
-    const form = updateAddressFields(looked, {
+    const form = updateTicketForm(looked, {
       fullAddress: '花蓮縣光復鄉糖廠街21號',
     });
     expect(form.addressToken).toBe('');
@@ -441,8 +439,29 @@ describe('updateAddressFields on the ticket form', () => {
   });
 
   it('keeps the token while other fields change', () => {
-    expect(updateAddressFields(looked, { room: '3' }).addressToken).toBe(
+    expect(updateTicketForm(looked, { room: '3' }).addressToken).toBe(
       'token-1',
     );
+  });
+
+  it('keeps the line but drops its token when the pin moves, so it is saved unverified', () => {
+    const form = updateTicketForm(looked, {
+      point: { lat: 25.001, lng: 121.5, source: 'manual' },
+    });
+    expect(form).toMatchObject({
+      fullAddress: '花蓮縣光復鄉糖廠街19號',
+      addressToken: '',
+    });
+    expect(toCreateTicketInput(form).secondaryLocation).toEqual({
+      fullAddress: '花蓮縣光復鄉糖廠街19號',
+    });
+  });
+
+  it('keeps the token when the pin is set to the point it already had', () => {
+    expect(
+      updateTicketForm(looked, {
+        point: { lat: 25, lng: 121.5, source: 'gps' },
+      }).addressToken,
+    ).toBe('token-1');
   });
 });

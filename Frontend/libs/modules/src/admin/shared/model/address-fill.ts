@@ -26,6 +26,14 @@ export function updateAddressFields<T extends AddressFillFields>(
 }
 
 /**
+ * The pin moved off the point the line was looked up for. The line stays, as a line is never
+ * replaced, but the lookup's token no longer vouches for it: the address is saved unverified.
+ */
+export function afterPinMove<T extends AddressFillFields>(form: T): T {
+  return form.addressToken ? { ...form, addressToken: '' } : form;
+}
+
+/**
  * What a lookup found, filled in only where the form is still blank: the line with its token, and
  * a 樓 or 室 the lookup split off. A line already there, typed or from an earlier lookup, is never
  * replaced.
