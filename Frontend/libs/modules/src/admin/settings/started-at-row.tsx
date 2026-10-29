@@ -83,7 +83,7 @@ function StartedAtDialog({
         填<strong>災害發生</strong>的時間，不是平台上線的時間。
       </Typography>
       <TextInput
-        label="起始時間"
+        label="起始時間（台灣時間）"
         required
         type="datetime-local"
         value={value}

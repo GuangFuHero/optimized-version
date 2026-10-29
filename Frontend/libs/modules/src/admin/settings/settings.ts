@@ -1,4 +1,7 @@
-import { format, isValid, parseISO } from 'date-fns';
+import {
+  fromTaiwanDateTimeLocal,
+  toTaiwanDateTimeLocal,
+} from '../../time/taiwan-time';
 
 /** The backend's own limits (`ProjectSettingsUpdate`), held in the field so a save never 422s on them. */
 export const NAME_MAX_LENGTH = 100;
@@ -24,21 +27,36 @@ export function basicsBody(draft: EventBasicsDraft) {
   };
 }
 
-/** A stored start as `datetime-local` wants it, in the browser's zone, as the sidebar counts days. */
-export function toDateTimeLocal(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const date = parseISO(iso);
-  return isValid(date) ? format(date, "yyyy-MM-dd'T'HH:mm") : '';
+/**
+ * Whether saving would change anything: what is sent is trimmed, so spaces alone leave nothing to save,
+ * and nothing saying so once the save is done (HC, #153).
+ */
+export function basicsChanged(
+  draft: EventBasicsDraft,
+  saved: EventBasicsDraft,
+): boolean {
+  const body = basicsBody(draft);
+  return (
+    body.name !== saved.name || (body.short_name ?? '') !== saved.shortName
+  );
 }
 
-/** `datetime-local` has no zone: it is the browser's, so it is read as local time. */
+/**
+ * The start is read and typed in Taiwan time, whatever the device's zone, as every time on the site is
+ * shown: a volunteer helping from abroad sees and saves the same moment (HC, #153).
+ */
+export function toDateTimeLocal(iso: string | null | undefined): string {
+  return toTaiwanDateTimeLocal(iso);
+}
+
+/** Empty for what is not a time, which `startedAtProblem` stops first. */
 export function fromDateTimeLocal(value: string): string {
-  return new Date(value).toISOString();
+  return fromTaiwanDateTimeLocal(value)?.toISOString() ?? '';
 }
 
 export function startedAtProblem(value: string, now: Date): string | null {
-  const date = value ? new Date(value) : null;
-  if (!date || !isValid(date)) return '請選擇時間';
+  const date = fromTaiwanDateTimeLocal(value);
+  if (!date) return '請選擇時間';
   return date.getTime() > now.getTime() ? '起始時間不能是未來' : null;
 }
 

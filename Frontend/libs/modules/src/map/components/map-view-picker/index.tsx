@@ -20,6 +20,8 @@ const MapViewPickerCanvas = dynamic(
 );
 
 interface MapViewPickerProps {
+  /** The map's name for a screen reader: Leaflet makes it a tab stop. */
+  label: string;
   /** Where the map opens. Read once: later changes move nothing, `request` does. */
   initial: MapViewValue;
   editable: boolean;
@@ -33,6 +35,7 @@ interface MapViewPickerProps {
  * ring marks the centre (prototype `st-app.jsx` `MapViewRow`). Nobody types a latitude.
  */
 export function MapViewPicker({
+  label,
   initial,
   editable,
   onMove,
@@ -51,6 +54,7 @@ export function MapViewPicker({
       }}
     >
       <MapViewPickerCanvas
+        label={label}
         initial={initial}
         editable={editable}
         onMove={onMove}

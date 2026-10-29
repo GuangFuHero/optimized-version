@@ -3,7 +3,7 @@
 import { Radio } from 'lucide-react';
 
 import { Stack, Typography } from '@mui/material';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -17,6 +17,7 @@ import { MapViewRow } from './map-view-row';
 import { SettingsRow, SettingsSection } from './settings-layout';
 import {
   basicsBody,
+  basicsChanged,
   NAME_MAX_LENGTH,
   nameProblem,
   SHORT_NAME_MAX_LENGTH,
@@ -41,9 +42,19 @@ function EventBasics({
   const update = useUpdateProjectSettings();
   const nameId = useId();
   const shortNameId = useId();
-  const dirty =
-    draft.name !== saved.name || draft.shortName !== saved.shortName;
+  const dirty = basicsChanged(draft, saved);
   const problem = nameProblem(draft.name);
+
+  // A close or reload with the name edited asks first, as the briefing editor does (HC, #153).
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [dirty]);
 
   const save = () => {
     if (problem) return;

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addableDisasterTypes,
   basicsBody,
+  basicsChanged,
   canRemoveDisasterType,
   disasterTypeLabel,
   fieldCountFor,
@@ -35,6 +36,16 @@ describe('名稱與簡稱', () => {
     });
   });
 
+  it('counts as changed only what saving would change, so spaces alone leave nothing to save', () => {
+    const saved = { name: '花蓮', shortName: '' };
+
+    expect(basicsChanged({ name: '花蓮 ', shortName: '  ' }, saved)).toBe(
+      false,
+    );
+    expect(basicsChanged({ name: '花蓮縣', shortName: '' }, saved)).toBe(true);
+    expect(basicsChanged({ name: '花蓮', shortName: '花' }, saved)).toBe(true);
+  });
+
   it('never carries map_view, so saving the name leaves the map where it was', () => {
     expect(basicsBody({ name: '花蓮', shortName: '' })).not.toHaveProperty(
       'map_view',
@@ -43,7 +54,7 @@ describe('名稱與簡稱', () => {
 });
 
 describe('起始時間', () => {
-  const now = new Date(2026, 9, 27, 12, 0);
+  const now = new Date('2026-10-27T12:00:00+08:00');
 
   it('asks for a time, then refuses one in the future', () => {
     expect(startedAtProblem('', now)).toBe('請選擇時間');
@@ -54,9 +65,9 @@ describe('起始時間', () => {
     expect(startedAtProblem('2026-10-04T06:30', now)).toBeNull();
   });
 
-  it('round-trips through the datetime-local field in the browser’s zone', () => {
+  it('round-trips through the datetime-local field in Taiwan time, whatever the device’s zone', () => {
     const iso = fromDateTimeLocal('2026-10-04T06:30');
-    expect(new Date(iso).getTime()).toBe(new Date(2026, 9, 4, 6, 30).getTime());
+    expect(iso).toBe('2026-10-03T22:30:00.000Z');
     expect(toDateTimeLocal(iso)).toBe('2026-10-04T06:30');
   });
 

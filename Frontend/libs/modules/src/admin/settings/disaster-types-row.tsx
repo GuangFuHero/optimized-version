@@ -61,8 +61,9 @@ function TypeChip({
           onClick={onRemove}
           aria-label={`從這次災害拿掉${label}`}
           sx={{
-            width: 20,
-            height: 20,
+            // The smallest target a finger hits reliably (HC, #153); it still fits in the 30px chip.
+            width: 24,
+            height: 24,
             borderRadius: `${radius.full}px`,
             color: color.fg.neutral.muted,
             '&:hover': { bgcolor: color.bg.neutral.sunken },

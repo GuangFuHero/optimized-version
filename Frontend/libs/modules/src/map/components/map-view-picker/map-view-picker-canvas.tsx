@@ -16,6 +16,7 @@ import type { MapViewPickerRequest, MapViewValue } from './types';
 const BASE_LAYER = BASE_LAYER_CONFIG['osm-direct'];
 
 interface MapViewPickerCanvasProps {
+  label: string;
   initial: MapViewValue;
   editable: boolean;
   onMove: (view: MapViewValue) => void;
@@ -28,6 +29,7 @@ interface MapViewPickerCanvasProps {
  * dragged or zoomed, and it can change once the viewer's permissions arrive.
  */
 export function MapViewPickerCanvas({
+  label,
   initial,
   editable,
   onMove,
@@ -134,5 +136,16 @@ export function MapViewPickerCanvas({
   }, [request]);
 
   // No cursor of its own: Leaflet gives a draggable map its grab cursors and takes them off with dragging.
-  return <div ref={hostRef} style={{ position: 'absolute', inset: 0 }} />;
+  // Leaflet makes the container a tab stop, so it is named, and says which keys move it while they do
+  // (HC, #153); read only, it is a picture of the view.
+  return (
+    <div
+      ref={hostRef}
+      role={editable ? 'application' : 'img'}
+      aria-label={
+        editable ? `${label}：用方向鍵移動地圖，按 + 或 − 放大縮小` : label
+      }
+      style={{ position: 'absolute', inset: 0 }}
+    />
+  );
 }

@@ -59,12 +59,15 @@ export function MapViewRow({
     );
   };
 
+  // Cleared, the small map goes back to all of Taiwan: what everyone now opens on (HC, #153).
   const clear = () => {
     update.mutate(
       { body: mapViewBody(null) },
       {
-        onSuccess: () =>
-          toast.success('已清除地圖預設位置，地圖打開會顯示全台'),
+        onSuccess: () => {
+          setRequest({ view: initialMapView(null), id: Date.now() });
+          toast.success('已清除地圖預設位置，地圖打開會顯示全台');
+        },
       },
     );
   };
@@ -86,6 +89,7 @@ export function MapViewRow({
             : '還沒設定 —— 大家打開地圖會看到整個台灣，要自己找到災區。'}
         </Typography>
         <MapViewPicker
+          label="地圖預設位置"
           initial={initial}
           editable={canEdit}
           onMove={handleMove}
