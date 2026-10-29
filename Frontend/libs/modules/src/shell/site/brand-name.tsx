@@ -30,13 +30,17 @@ export function SiteBrandName({ sx }: { sx?: SxProps<Theme> }) {
     return () => window.clearTimeout(timer);
   }, [isPending]);
 
-  const { label, fullName } = siteBrandName(data?.currentDisaster, {
+  const { label, fullName, minWidth } = siteBrandName(data?.currentDisaster, {
     loading: isLoading,
     waitedOut,
   });
 
   return (
-    <Typography noWrap title={fullName ?? undefined} sx={sx}>
+    <Typography
+      noWrap
+      title={fullName ?? undefined}
+      sx={[{ minWidth }, ...(Array.isArray(sx) ? sx : [sx])]}
+    >
       {label}
     </Typography>
   );

@@ -17,6 +17,10 @@ interface CurrentDisaster {
  * be read, when the read is held back because the browser is offline (it is then not loading), or is
  * still out once `waitedOut` (`CURRENT_DISASTER_WAIT_MS`). An answer that comes later still names the
  * event.
+ *
+ * The blank keeps `minWidth`, the room the platform's name takes, so the name arriving moves what
+ * follows it (the badge, the search box) no further than the platform's name giving way to it did.
+ * For nothing to move at all, the name would have to be in the server's HTML.
  */
 export function siteBrandName(
   disaster: CurrentDisaster | null | undefined,
@@ -27,9 +31,11 @@ export function siteBrandName(
 ): {
   label: string;
   fullName: string | null;
+  minWidth?: string;
 } {
   if (loading && !waitedOut) {
-    return { label: '', fullName: null };
+    // A Chinese character is one `em` wide, so this is as wide as the platform's name.
+    return { label: '', fullName: null, minWidth: `${PLATFORM_NAME.length}em` };
   }
 
   if (!disaster) {
