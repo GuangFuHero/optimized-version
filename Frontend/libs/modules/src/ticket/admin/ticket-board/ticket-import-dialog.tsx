@@ -8,13 +8,21 @@ import {
 } from '@mui/material';
 import {
   useCommitTicketImport,
+  useExportTickets,
   usePreviewTicketImport,
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
-import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
-import { CircleCheck, FolderOpen, Upload, X } from 'lucide-react';
+import {
+  Badge,
+  Button,
+  Callout,
+  designTokens,
+  TextInput,
+} from '@rescue-frontend/ui';
+import { CircleCheck, Download, FolderOpen, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useDebounceCallback } from 'usehooks-ts';
 
 import {
   ErrorList,
@@ -23,46 +31,111 @@ import {
   TypeChip,
 } from '../../../admin/shared/import-dialog-parts';
 import { Muted } from '../../../admin/shared/muted';
-import { importSummary } from '../../../admin/shared/model/bulk-import';
+import {
+  downloadBlob,
+  importSummary,
+} from '../../../admin/shared/model/bulk-import';
 import { formatTicketTypeLabel } from '../../status';
-import { NEED_TYPES } from './model/ticket-row';
+import { NEED_KIND_ICONS } from './need-kind-icons';
+import { ticketExportFilename } from './model/ticket-export';
+import {
+  IMPORT_NEED_TYPES,
+  pastedCsvFile,
+  ticketImportCaption,
+} from './model/ticket-import';
+import type { NeedType } from './model/ticket-row';
 
 const { color, typography } = designTokens;
 
 type Preview = components['schemas']['BulkPreviewResponse'];
 type Result = components['schemas']['BulkImportResponse'];
 
+/** Pasted text settles this long before it is sent for a preview. */
+const PASTE_PREVIEW_DEBOUNCE_MS = 600;
+
+/**
+ * 匯入任務單, as the design draws it: 1 · the need type the file holds, 2 · the file, chosen or
+ * pasted as CSV text, with that type's template (its 匯出), then the preview and 確認匯入.
+ */
 export function TicketImportDialog({ onClose }: { onClose: () => void }) {
-  const [taskType, setTaskType] = useState<string | null>(null);
+  const [taskType, setTaskType] = useState<NeedType | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [pasted, setPasted] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // The file the dialog shows now: a preview of any earlier one, landing late, is dropped.
+  const latestFile = useRef<File | null>(null);
   const previewImport = usePreviewTicketImport();
   const commitImport = useCommitTicketImport();
+  const exportTemplate = useExportTickets();
   const busy = previewImport.isPending || commitImport.isPending;
   // Closing mid-import would unmount the dialog: the import still happens, but its report is lost.
   // A preview in flight would land after the dialog is gone too, so both hold it open.
   const locked = busy;
 
-  const chooseFile = (nextFile: File | undefined) => {
-    if (!nextFile || !taskType) return;
+  const previewFile = (nextFile: File | null) => {
+    latestFile.current = nextFile;
     setFile(nextFile);
     setPreview(null);
+    if (!nextFile || !taskType) return;
     previewImport.mutate(
       {
         params: { query: { task_type: taskType } },
         // The generated type says string; the serializer appends the File as-is.
         body: { file: nextFile as unknown as string },
       },
-      { onSuccess: (data) => setPreview(data) },
+      {
+        onSuccess: (data) => {
+          if (latestFile.current === nextFile) setPreview(data);
+        },
+      },
     );
   };
+  const previewPasted = useDebounceCallback(
+    (text: string) => previewFile(pastedCsvFile(text)),
+    PASTE_PREVIEW_DEBOUNCE_MS,
+  );
 
-  const chooseType = (type: string) => {
-    setTaskType(type);
+  const chooseFile = (nextFile: File | undefined) => {
+    if (!nextFile || !taskType) return;
+    previewPasted.cancel();
+    setPasted('');
+    previewFile(nextFile);
+  };
+
+  const paste = (text: string) => {
+    setPasted(text);
+    // Typing replaces a chosen file; its preview no longer stands.
+    latestFile.current = null;
     setFile(null);
     setPreview(null);
+    previewPasted(text);
+  };
+
+  const chooseType = (type: NeedType) => {
+    previewPasted.cancel();
+    latestFile.current = null;
+    setTaskType(type);
+    setFile(null);
+    setPasted('');
+    setPreview(null);
+  };
+
+  const downloadTemplate = () => {
+    if (!taskType) return;
+    exportTemplate.mutate(
+      { params: { query: { task_type: taskType, format: 'csv' } } },
+      {
+        onSuccess: (blob) => {
+          downloadBlob(
+            blob as Blob,
+            ticketExportFilename(taskType, 'csv', new Date()),
+          );
+          toast.success(`已下載「${formatTicketTypeLabel(taskType)}」範本`);
+        },
+      },
+    );
   };
 
   const commit = () => {
@@ -88,13 +161,14 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
 
   const summary = preview ? importSummary(preview) : null;
   const typeLabel = taskType ? formatTicketTypeLabel(taskType) : '';
+  const pickFirst = taskType ? undefined : '先選這份檔案是哪一種需求';
 
   return (
     <MuiDialog
       open
       onClose={locked ? undefined : onClose}
       maxWidth={false}
-      slotProps={{ paper: { sx: { width: 'min(640px, 96vw)', m: 0 } } }}
+      slotProps={{ paper: { sx: { width: 'min(760px, 96vw)', m: 0 } } }}
     >
       <Box
         sx={{
@@ -114,7 +188,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
             flex: 1,
           }}
         >
-          {result ? '匯入完成' : '匯入求助單'}
+          {result ? '匯入完成' : '匯入任務單'}
         </Typography>
         <IconButton aria-label="關閉" onClick={onClose} disabled={locked}>
           <X size={20} />
@@ -127,7 +201,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
           onClose={onClose}
           createdUnit="列"
           showUpdated
-          partialNote="求助單已寫入，但這一列的需求或需求欄位沒有寫完。請打開這些求助單核對需求與欄位後補齊。"
+          partialNote="任務單已寫入，但這一列的需求或需求欄位沒有寫完。請打開這些任務單核對需求與欄位後補齊。"
         />
       ) : (
         <>
@@ -140,72 +214,99 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
               overflow: 'auto',
             }}
           >
-            <Step
-              title="1 · 這份檔案是哪一種任務"
-              caption="一個檔案只放一種任務類型；一列是一項需求，標題與聯絡電話相同的列屬於同一張求助單。"
-            >
-              <Callout tone="info">
-                匯入的列還不會檢查是否與現有求助單重複，匯入前請先確認。
-              </Callout>
+            <Step title="1 · 這份檔案是哪一種需求">
               <Box
                 role="radiogroup"
-                aria-label="任務類型"
+                aria-label="需求種類"
                 sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
               >
-                {NEED_TYPES.map((type) => (
-                  <TypeChip
-                    key={type}
-                    label={formatTicketTypeLabel(type)}
-                    active={taskType === type}
-                    // A preview still running would land after the switch cleared its file.
-                    disabled={busy}
-                    onSelect={() => chooseType(type)}
-                  />
-                ))}
+                {IMPORT_NEED_TYPES.map((type) => {
+                  const KindIcon = NEED_KIND_ICONS[type];
+                  return (
+                    <TypeChip
+                      key={type}
+                      icon={KindIcon ? <KindIcon size={15} /> : undefined}
+                      label={formatTicketTypeLabel(type)}
+                      active={taskType === type}
+                      // A preview still running would land after the switch cleared its file.
+                      disabled={busy}
+                      onSelect={() => chooseType(type)}
+                    />
+                  );
+                })}
               </Box>
+              <Muted>
+                一個檔案只放一種需求；一列是一張單的一筆需求。同一張單有好幾筆需求，就寫好幾列、標題和電話相同。
+              </Muted>
+              <Callout tone="info">
+                匯入的列還不會檢查是否與現有任務單重複，匯入前請先確認。
+              </Callout>
             </Step>
 
-            {taskType ? (
-              <Step
-                title="2 · 上傳檔案"
-                trailing={
+            <Step
+              title="2 · 上傳檔案"
+              trailing={
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    startIcon={<Download size={15} />}
+                    title={pickFirst ?? '「匯出」這一種需求的 CSV，當作範本'}
+                    onClick={downloadTemplate}
+                    disabled={!taskType || exportTemplate.isPending}
+                  >
+                    {exportTemplate.isPending
+                      ? '下載中…'
+                      : taskType
+                        ? `下載「${typeLabel}」範本`
+                        : '下載範本'}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     startIcon={<FolderOpen size={15} />}
+                    title={pickFirst}
                     onClick={() => fileInput.current?.click()}
-                    disabled={busy}
+                    disabled={!taskType || busy}
                   >
                     選擇 CSV／Excel
                   </Button>
-                }
-              >
-                <input
-                  ref={fileInput}
-                  type="file"
-                  hidden
-                  accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  onChange={(e) => {
-                    chooseFile(e.target.files?.[0]);
-                    e.target.value = '';
+                </>
+              }
+            >
+              <input
+                ref={fileInput}
+                type="file"
+                hidden
+                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={(e) => {
+                  chooseFile(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+              {file && !pasted ? (
+                <Typography
+                  sx={{
+                    ...typography.data[300],
+                    color: color.fg.neutral.muted,
                   }}
-                />
-                {file ? (
-                  <Typography
-                    sx={{
-                      ...typography.data[300],
-                      color: color.fg.neutral.muted,
-                    }}
-                  >
-                    已讀取：{file.name}
-                  </Typography>
-                ) : null}
-                <Muted>
-                  從「匯出」下載的「{typeLabel}
-                  」檔案就是範本。欄位依檔案的表頭自動對應。
-                </Muted>
-              </Step>
-            ) : null}
+                >
+                  已讀取：{file.name}
+                </Typography>
+              ) : null}
+              <TextInput
+                multiline
+                minRows={3}
+                aria-label="貼上 CSV 內容"
+                placeholder={
+                  pickFirst ?? '也可以直接貼上 CSV 內容（第一列是欄位名稱）'
+                }
+                value={pasted}
+                disabled={!taskType || commitImport.isPending}
+                onChange={(event) => paste(event.target.value)}
+              />
+              <Muted>{ticketImportCaption(taskType)}</Muted>
+            </Step>
 
             {preview && summary ? (
               <Step
@@ -256,7 +357,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
               startIcon={<Upload size={17} />}
               disabled={!summary?.canCommit || busy}
             >
-              匯入
+              確認匯入
             </Button>
           </Box>
         </>

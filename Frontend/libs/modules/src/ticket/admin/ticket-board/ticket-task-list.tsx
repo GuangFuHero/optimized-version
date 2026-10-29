@@ -18,21 +18,11 @@ import {
   Dialog,
   displayTextSize,
 } from '@rescue-frontend/ui';
-import {
-  ChevronDown,
-  Circle,
-  LifeBuoy,
-  Package,
-  Stethoscope,
-  User,
-  UserPlus,
-  Users,
-  X,
-  type LucideIcon,
-} from 'lucide-react';
+import { ChevronDown, Circle, User, UserPlus, X } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 
 import { Muted } from '../../../admin/shared/muted';
+import { NEED_KIND_ICONS } from './need-kind-icons';
 import {
   assignErrorMessage,
   deleteNeedErrorMessage,
@@ -70,13 +60,6 @@ const ASSIGNMENT_LABELS: Record<string, string> = {
   accepted: '已接單',
   en_route: '前往中',
   completed: '已完成',
-};
-
-const KIND_ICONS: Record<string, LucideIcon> = {
-  rescue: LifeBuoy,
-  hr: Users,
-  supply: Package,
-  medical: Stethoscope,
 };
 
 /** The caller's team, whose members 指派承接 offers; null when the identity has none. */
@@ -496,7 +479,7 @@ function TaskCard({
   onRemove: (assignment: DetailAssignment) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const KindIcon = KIND_ICONS[task.taskType] ?? Circle;
+  const KindIcon = NEED_KIND_ICONS[task.taskType] ?? Circle;
   const caption = { ...typography.body[300], color: color.fg.neutral.muted };
 
   return (
