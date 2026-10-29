@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import {
   Box,
+  ButtonBase,
   IconButton,
   MenuItem,
   TextField,
@@ -19,6 +20,7 @@ import {
   useUpdateTicket,
 } from '@rescue-frontend/data-access/admin';
 import {
+  Badge,
   Button,
   Callout,
   designTokens,
@@ -31,6 +33,7 @@ import { applyReverseGeocode } from '../../../admin/shared/model/address-fill';
 import { Muted } from '../../../admin/shared/muted';
 import { LocationPicker } from '../../../map/components/location-picker';
 import type { ClaimError } from '../../needs/claim-error';
+import { filledInputSx } from '../../../station/form/station-form-fields';
 import { PhotoLinkEditor } from '../../photos';
 import { formatTicketTypeLabel } from '../../status';
 import { DuplicateNotice } from './duplicate-notice';
@@ -53,6 +56,7 @@ import {
   isCoarseTicket,
   photoChanges,
   TICKET_NEEDS_MAX,
+  ticketFormErrorSummary,
   ticketFormFromTicket,
   toCreateTicketInput,
   updateTicketForm,
@@ -61,7 +65,7 @@ import {
   type TicketFormValues,
 } from './model/ticket-form-model';
 
-const { color, typography } = designTokens;
+const { color, radius, typography } = designTokens;
 
 export type TicketFormProps = (
   | {
@@ -86,8 +90,8 @@ function saveError(error: unknown, mode: 'create' | 'edit'): string {
   const refusal = error as ClaimError;
   if (isForbidden(refusal))
     return mode === 'create'
-      ? '你的帳號沒有新增求助單的權限。'
-      : '你的帳號沒有編輯求助單的權限。';
+      ? '你的帳號沒有新增任務單的權限。'
+      : '你的帳號沒有編輯任務單的權限。';
   if (refusal?.networkError) return '連線失敗，請確認網路後再試一次。';
   return mode === 'create'
     ? '建立失敗，請稍後再試一次。'
@@ -96,7 +100,7 @@ function saveError(error: unknown, mode: 'create' | 'edit'): string {
 
 /**
  * The admin form for one ticket, filling whichever `SheetFrame` holds it: `TicketCreateSheet` (the
- * board's 新增求助單 and the 互助地圖's pin), or the ticket's own drawer when 編輯 swaps it in. A coordinator enters a request taken by
+ * board's 新增任務 and the 互助地圖's pin), or the ticket's own drawer when 編輯 swaps it in. A coordinator enters a request taken by
  * phone; the backend marks its needs official, as it does every need filed from the back office.
  */
 export function TicketForm(props: TicketFormProps) {
@@ -267,6 +271,8 @@ export function TicketForm(props: TicketFormProps) {
     onDone(current.uuid);
   }
 
+  const missing = ticketFormErrorSummary(errors);
+
   const submit = () => {
     const next = validateTicketForm(values, mode);
     setErrors(next);
@@ -299,127 +305,28 @@ export function TicketForm(props: TicketFormProps) {
           gap: '24px',
         }}
       >
-        <Section title="基本資料">
+        <Section title="地點資訊">
           <TextInput
-            label="標題"
+            label="任務標題"
             required
+            placeholder="例：中山路100號 透天半倒受困"
             value={values.title}
             error={errors.title}
             onChange={(event) => set('title', event.target.value)}
           />
-          <TextField
-            select
-            fullWidth
-            size="small"
-            label="優先度"
-            value={values.priority}
-            onChange={(event) =>
-              set(
-                'priority',
-                event.target.value as TicketFormValues['priority'],
-              )
-            }
-          >
-            {TICKET_PRIORITIES.map((priority) => (
-              <MenuItem key={priority} value={priority}>
-                {ticketPriorityLabel(priority)}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            fullWidth
-            size="small"
-            label="災害類型"
-            value={values.disasterTypes}
-            onChange={(event) => {
-              const picked = event.target.value as unknown as string[] | string;
-              set(
-                'disasterTypes',
-                typeof picked === 'string' ? picked.split(',') : picked,
-              );
-            }}
-            slotProps={{
-              select: {
-                multiple: true,
-                renderValue: (picked) =>
-                  (picked as string[]).map(disasterLabel).join('、'),
-              },
-            }}
-          >
-            {disasterOptions.map((d) => (
-              <MenuItem key={d.key} value={d.key}>
-                {d.label}
-              </MenuItem>
-            ))}
-          </TextField>
-          {coarse ? (
-            <Muted>你沒有檢視詳細資料的權限，無法編輯說明與照片</Muted>
-          ) : (
-            <TextInput
-              label="說明"
-              multiline
-              minRows={2}
-              value={values.description}
-              onChange={(event) => set('description', event.target.value)}
-            />
-          )}
-        </Section>
-
-        {mode === 'create' ? (
-          <Section title="聯絡人">
-            <TextInput
-              label="姓名"
-              required
-              value={values.contactName}
-              error={errors.contactName}
-              onChange={(event) => set('contactName', event.target.value)}
-            />
-            <TextInput
-              label="電話"
-              inputMode="tel"
-              value={values.contactPhone}
-              onChange={(event) => set('contactPhone', event.target.value)}
-            />
-            <TextInput
-              label="Email"
-              inputMode="email"
-              value={values.contactEmail}
-              onChange={(event) => set('contactEmail', event.target.value)}
-            />
-          </Section>
-        ) : null}
-
-        <Section title="位置">
-          {mode === 'create' ? (
-            <>
-              <LocationPicker
-                value={values.point}
-                onChange={(point) => set('point', point)}
-                invalid={Boolean(errors.point)}
-              />
-              {errors.point ? <ErrorText>{errors.point}</ErrorText> : null}
-            </>
-          ) : (
-            <>
-              {values.point ? (
-                // Shown, not editable: the point can't change after the ticket is created.
-                <Box inert sx={{ pointerEvents: 'none' }}>
-                  <LocationPicker
-                    value={values.point}
-                    onChange={() => undefined}
-                  />
-                </Box>
-              ) : null}
-              <Muted>建立後無法修改地圖位置</Muted>
-            </>
-          )}
           {coarse ? (
             // A coarse ticket hides its address from this viewer: blank fields saved over it
             // would replace the real one.
             <Muted>約略位置（無檢視詳細位置權限），無法修改地址</Muted>
           ) : (
-            <>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) 120px 120px',
+                gap: '12px',
+                alignItems: 'start',
+              }}
+            >
               <TextInput
                 label="地址"
                 placeholder="例：花蓮縣光復鄉中正路一段31號"
@@ -427,27 +334,142 @@ export function TicketForm(props: TicketFormProps) {
                 value={values.fullAddress}
                 onChange={(event) => set('fullAddress', event.target.value)}
               />
+              <TextInput
+                label="樓層（選填）"
+                placeholder="如 6F／RF"
+                value={values.floor}
+                onChange={(event) => set('floor', event.target.value)}
+              />
+              <TextInput
+                label="房號（選填）"
+                value={values.room}
+                onChange={(event) => set('room', event.target.value)}
+              />
+            </Box>
+          )}
+          <FieldBlock
+            label="地標"
+            required={mode === 'create'}
+            hint={
+              mode === 'create'
+                ? errors.point
+                  ? undefined
+                  : '點地圖任一處或拖曳大頭針調整；救援端以此座標導航'
+                : '建立後無法修改地標'
+            }
+          >
+            {mode === 'create' ? (
+              <>
+                <LocationPicker
+                  value={values.point}
+                  onChange={(point) => set('point', point)}
+                  invalid={Boolean(errors.point)}
+                />
+                {errors.point ? <ErrorText>{errors.point}</ErrorText> : null}
+              </>
+            ) : values.point ? (
+              // Shown, not editable: the point can't change after the ticket is created.
+              <Box inert sx={{ pointerEvents: 'none' }}>
+                <LocationPicker
+                  value={values.point}
+                  onChange={() => undefined}
+                />
+              </Box>
+            ) : null}
+          </FieldBlock>
+          {mode === 'create' ? (
+            <>
               <Box
                 sx={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                   gap: '12px',
+                  alignItems: 'start',
                 }}
               >
                 <TextInput
-                  label="樓層"
-                  value={values.floor}
-                  onChange={(event) => set('floor', event.target.value)}
+                  label="現場聯絡人"
+                  required
+                  placeholder="姓名／稱謂"
+                  value={values.contactName}
+                  error={errors.contactName}
+                  onChange={(event) => set('contactName', event.target.value)}
                 />
                 <TextInput
-                  label="房號"
-                  value={values.room}
-                  onChange={(event) => set('room', event.target.value)}
+                  label="聯絡電話（選填）"
+                  inputMode="tel"
+                  placeholder="0912-345-678"
+                  value={values.contactPhone}
+                  onChange={(event) => set('contactPhone', event.target.value)}
                 />
               </Box>
+              <TextInput
+                label="Email（選填）"
+                inputMode="email"
+                value={values.contactEmail}
+                onChange={(event) => set('contactEmail', event.target.value)}
+              />
             </>
+          ) : null}
+          {coarse ? (
+            <Muted>你沒有檢視詳細資料的權限，無法編輯狀況描述與照片</Muted>
+          ) : (
+            <TextInput
+              label="狀況描述（選填）"
+              multiline
+              minRows={3}
+              placeholder="簡述現場狀況…"
+              value={values.description}
+              onChange={(event) => set('description', event.target.value)}
+            />
           )}
         </Section>
+
+        {mode === 'create' ? (
+          <Section
+            title="需求清單"
+            aside={
+              <>
+                <Badge tone="neutral">{values.needs.length}</Badge>
+                <Muted>一個地點可有多筆需求；志工以「需求」為單位承接</Muted>
+              </>
+            }
+          >
+            {values.needs.map((need, index) => (
+              <NeedRow
+                key={index}
+                index={index}
+                need={need}
+                errors={errors}
+                removable={values.needs.length > 1}
+                onChange={(key, value) => setNeed(index, key, value)}
+                onRemove={() =>
+                  setNeeds(values.needs.filter((_, at) => at !== index))
+                }
+              />
+            ))}
+            {errors.needs ? <ErrorText>{errors.needs}</ErrorText> : null}
+            <ButtonBase
+              disabled={values.needs.length >= TICKET_NEEDS_MAX}
+              onClick={() => setNeeds([...values.needs, emptyNeed()])}
+              sx={{
+                ...typography.label[400],
+                gap: '6px',
+                height: 42,
+                borderRadius: `${radius.md}px`,
+                border: `1px dashed ${color.border.default}`,
+                color: color.brand.secondary.default,
+                '&:hover': { bgcolor: color.bg.neutral.subtle },
+                '&.Mui-disabled': { color: color.fg.disable },
+              }}
+            >
+              <Plus size={16} />
+              {values.needs.length >= TICKET_NEEDS_MAX
+                ? `最多 ${TICKET_NEEDS_MAX} 項需求`
+                : '新增需求'}
+            </ButtonBase>
+          </Section>
+        ) : null}
 
         {coarse ? null : (
           // The editor names itself, with its count: the heading stays for screen readers only.
@@ -464,38 +486,89 @@ export function TicketForm(props: TicketFormProps) {
           </Section>
         )}
 
-        {mode === 'create' ? (
-          <Section title="需求">
-            {values.needs.map((need, index) => (
-              <NeedRow
-                key={index}
-                index={index}
-                need={need}
-                errors={errors}
-                removable={values.needs.length > 1}
-                onChange={(key, value) => setNeed(index, key, value)}
-                onRemove={() =>
-                  setNeeds(values.needs.filter((_, at) => at !== index))
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: '220px minmax(0, 1fr)',
+            gap: '12px',
+            alignItems: 'start',
+          }}
+        >
+          <FieldBlock label="優先級">
+            {(id) => (
+              <TextField
+                id={id}
+                select
+                fullWidth
+                hiddenLabel
+                sx={filledInputSx}
+                value={values.priority}
+                onChange={(event) =>
+                  set(
+                    'priority',
+                    event.target.value as TicketFormValues['priority'],
+                  )
                 }
-              />
-            ))}
-            {errors.needs ? <ErrorText>{errors.needs}</ErrorText> : null}
-            <Box>
-              <Button
-                size="sm"
-                variant="outline"
-                startIcon={<Plus size={16} />}
-                disabled={values.needs.length >= TICKET_NEEDS_MAX}
-                onClick={() => setNeeds([...values.needs, emptyNeed()])}
               >
-                {values.needs.length >= TICKET_NEEDS_MAX
-                  ? `最多 ${TICKET_NEEDS_MAX} 項需求`
-                  : '再加一項需求'}
-              </Button>
-            </Box>
-          </Section>
-        ) : null}
+                {TICKET_PRIORITIES.map((priority) => (
+                  <MenuItem key={priority} value={priority}>
+                    {ticketPriorityLabel(priority)}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+          </FieldBlock>
+          <FieldBlock label="災害類型（選填）">
+            {(id) => (
+              <TextField
+                id={id}
+                select
+                fullWidth
+                hiddenLabel
+                sx={filledInputSx}
+                value={values.disasterTypes}
+                onChange={(event) => {
+                  const picked = event.target.value as unknown as
+                    | string[]
+                    | string;
+                  set(
+                    'disasterTypes',
+                    typeof picked === 'string' ? picked.split(',') : picked,
+                  );
+                }}
+                slotProps={{
+                  select: {
+                    multiple: true,
+                    displayEmpty: true,
+                    renderValue: (picked) =>
+                      (picked as string[]).length ? (
+                        (picked as string[]).map(disasterLabel).join('、')
+                      ) : (
+                        <Box
+                          component="span"
+                          sx={{ color: color.fg.neutral.muted }}
+                        >
+                          未選
+                        </Box>
+                      ),
+                  },
+                }}
+              >
+                {disasterOptions.map((d) => (
+                  <MenuItem key={d.key} value={d.key}>
+                    {d.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+          </FieldBlock>
+        </Box>
 
+        {missing.length > 0 ? (
+          <Callout tone="danger">
+            {`尚有 ${missing.length} 項未完成，請補齊：${missing.join('、')}。`}
+          </Callout>
+        ) : null}
         {error ? <Callout tone="danger">{error}</Callout> : null}
         {suspects ? (
           <DuplicateNotice
@@ -513,9 +586,8 @@ export function TicketForm(props: TicketFormProps) {
 
   return (
     <SheetLayout
-      eyebrow={mode === 'edit' ? '求助單' : undefined}
-      title={mode === 'create' ? '新增求助單' : '編輯求助單'}
-      closeLabel={mode === 'create' ? '關閉新增求助單' : '關閉編輯求助單'}
+      title={mode === 'create' ? '新增任務' : '編輯任務單'}
+      closeLabel={mode === 'create' ? '關閉新增任務' : '關閉編輯任務單'}
       onClose={cancel}
       footer={
         <>
@@ -539,8 +611,8 @@ export function TicketForm(props: TicketFormProps) {
             {submitting
               ? '儲存中…'
               : mode === 'create'
-                ? '建立求助單'
-                : '確認送出'}
+                ? '建立任務'
+                : '儲存變更'}
           </Button>
         </>
       }
@@ -565,6 +637,7 @@ function NeedRow({
   onChange: (key: keyof NeedDraft, value: string) => void;
   onRemove: () => void;
 }) {
+  const rescue = need.taskType === 'rescue';
   return (
     <Box
       role="group"
@@ -572,20 +645,36 @@ function NeedRow({
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        gap: '10px',
+        gap: '8px',
         p: '12px',
-        borderRadius: '8px',
+        borderRadius: `${radius.md}px`,
         border: `1px solid ${color.border.default}`,
+        bgcolor: color.bg.neutral.default,
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      {/* tk-form's row: 種類, 需求名稱, 數量, then remove. */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: '120px minmax(0, 1fr) 96px 36px',
+          gap: '10px',
+          alignItems: 'start',
+        }}
+      >
         <TextField
           select
           fullWidth
-          size="small"
-          label="類型"
+          hiddenLabel
+          sx={filledInputSx}
           value={need.taskType}
           onChange={(event) => onChange('taskType', event.target.value)}
+          slotProps={{
+            select: {
+              SelectDisplayProps: {
+                'aria-label': `需求 ${index + 1} 種類`,
+              } as object,
+            },
+          }}
         >
           {NEED_TYPES.map((type) => (
             <MenuItem key={type} value={type}>
@@ -593,33 +682,40 @@ function NeedRow({
             </MenuItem>
           ))}
         </TextField>
+        <TextInput
+          inputProps={{ 'aria-label': `需求 ${index + 1} 名稱` }}
+          required
+          placeholder="需求名稱，如：破拆人力／圓鍬／礦泉水"
+          value={need.taskName}
+          error={errors[`needs.${index}.taskName`]}
+          onChange={(event) => onChange('taskName', event.target.value)}
+        />
+        <TextInput
+          required={!rescue}
+          placeholder={rescue ? '數量（可不填）' : '數量'}
+          type="number"
+          inputProps={{
+            min: 1,
+            step: 1,
+            'aria-label': `需求 ${index + 1} 數量`,
+          }}
+          value={need.quantity}
+          error={errors[`needs.${index}.quantity`]}
+          onChange={(event) => onChange('quantity', event.target.value)}
+        />
         <IconButton
           aria-label={`移除需求 ${index + 1}`}
+          title={removable ? '移除此需求' : '至少保留一筆需求'}
           disabled={!removable}
           onClick={onRemove}
+          sx={{ width: 36, height: 36, mt: '6px' }}
         >
-          <Trash2 size={17} />
+          <Trash2 size={16} />
         </IconButton>
       </Box>
       <TextInput
-        label="需求名稱"
-        required
-        value={need.taskName}
-        error={errors[`needs.${index}.taskName`]}
-        onChange={(event) => onChange('taskName', event.target.value)}
-      />
-      <TextInput
-        label="數量"
-        required={need.taskType !== 'rescue'}
-        hint={need.taskType === 'rescue' ? '救援可不填' : undefined}
-        type="number"
-        inputProps={{ min: 1, step: 1 }}
-        value={need.quantity}
-        error={errors[`needs.${index}.quantity`]}
-        onChange={(event) => onChange('quantity', event.target.value)}
-      />
-      <TextInput
-        label="說明"
+        inputProps={{ 'aria-label': `需求 ${index + 1} 說明` }}
+        placeholder="說明（選填）"
         value={need.description}
         onChange={(event) => onChange('description', event.target.value)}
       />
@@ -642,29 +738,104 @@ const VISUALLY_HIDDEN = {
 function Section({
   title,
   titleHidden = false,
+  aside,
   children,
 }: {
   title: string;
   /** Keep the heading for screen readers only, when the section's own content shows the name. */
   titleHidden?: boolean;
+  /** A count or a note after the heading. */
+  aside?: ReactNode;
   children: ReactNode;
 }) {
+  const heading = (
+    <Typography
+      component="h3"
+      sx={
+        titleHidden
+          ? VISUALLY_HIDDEN
+          : { ...typography.label[500], color: color.fg.neutral.default }
+      }
+    >
+      {title}
+    </Typography>
+  );
   return (
     <Box
       component="section"
-      sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+      sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
     >
-      <Typography
-        component="h3"
-        sx={
-          titleHidden
-            ? VISUALLY_HIDDEN
-            : { ...typography.label[400], color: color.fg.neutral.default }
-        }
-      >
-        {title}
-      </Typography>
+      {aside ? (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
+          {heading}
+          {aside}
+        </Box>
+      ) : (
+        heading
+      )}
       {children}
+    </Box>
+  );
+}
+
+/**
+ * A label over a control that is not a `TextInput` (the map, a select), in `TextInput`'s look.
+ * A render function gets the id to give the control, so the label points at it.
+ */
+function FieldBlock({
+  label,
+  required = false,
+  hint,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  hint?: ReactNode;
+  children: ReactNode | ((id: string) => ReactNode);
+}) {
+  const id = useId();
+  const linked = typeof children === 'function';
+  return (
+    <Box
+      sx={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'baseline',
+          flexWrap: 'wrap',
+          gap: '6px',
+        }}
+      >
+        <Typography
+          component={linked ? 'label' : 'span'}
+          htmlFor={linked ? id : undefined}
+          sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+        >
+          {label}
+          {required ? (
+            <Box component="span" aria-hidden sx={{ color: color.fg.danger }}>
+              {' *'}
+            </Box>
+          ) : null}
+        </Typography>
+        {hint ? (
+          <Typography
+            component="span"
+            sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+          >
+            {hint}
+          </Typography>
+        ) : null}
+      </Box>
+      {typeof children === 'function' ? children(id) : children}
     </Box>
   );
 }

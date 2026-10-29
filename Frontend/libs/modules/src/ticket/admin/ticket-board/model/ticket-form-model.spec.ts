@@ -6,6 +6,7 @@ import {
   changedUpdateInput,
   emptyTicketForm,
   photoChanges,
+  ticketFormErrorSummary,
   ticketFormFromTicket,
   toCreateTicketInput,
   toUpdateTicketInput,
@@ -505,5 +506,31 @@ describe('updateTicketForm', () => {
         point: { lat: 25, lng: 121.5, source: 'gps' },
       }).addressToken,
     ).toBe('token-1');
+  });
+});
+
+describe('ticketFormErrorSummary', () => {
+  it("names each field with an error once, in the form's order", () => {
+    expect(
+      ticketFormErrorSummary(
+        validateTicketForm(
+          { ...emptyTicketForm(), needs: [need({ taskName: '' })] },
+          'create',
+        ),
+      ),
+    ).toEqual(['任務標題', '地標', '現場聯絡人', '需求']);
+  });
+
+  it('counts several need errors as one 需求', () => {
+    expect(
+      ticketFormErrorSummary({
+        'needs.0.taskName': '請填寫需求名稱',
+        'needs.1.quantity': '請填寫數量',
+      }),
+    ).toEqual(['需求']);
+  });
+
+  it('is empty for a form that passes', () => {
+    expect(ticketFormErrorSummary({})).toEqual([]);
   });
 });

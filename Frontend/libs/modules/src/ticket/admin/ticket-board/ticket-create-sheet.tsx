@@ -18,7 +18,7 @@ export interface TicketCreateSheetProps {
 }
 
 /**
- * The one admin create path for a ticket: the board's 新增求助單 and a pin placed on the 互助地圖
+ * The one admin create path for a ticket: the board's 新增任務 and a pin placed on the 互助地圖
  * both open `TicketForm` in this sheet.
  */
 export function TicketCreateSheet({
@@ -39,7 +39,7 @@ export function TicketCreateSheet({
       onClose={close}
       width={TICKET_SHEET_WIDTH}
       variant="admin"
-      ariaLabel="新增求助單"
+      ariaLabel="新增任務"
     >
       {/* Mounted per opening, so each one starts from a blank form at its own point. */}
       {open ? (

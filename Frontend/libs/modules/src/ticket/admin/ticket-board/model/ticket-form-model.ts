@@ -151,8 +151,9 @@ export function validateTicketForm(
     errors.photoUrls = `照片最多 ${PHOTO_LINK_MAX} 張`;
   if (mode === 'edit') return errors;
 
-  if (!values.contactName.trim()) errors.contactName = '請填寫聯絡人';
-  if (!values.point) errors.point = '請在地圖上標記位置';
+  if (!values.contactName.trim()) errors.contactName = '請填寫現場聯絡人';
+  // 地標必填: rescuers navigate by this point (tk-form.jsx).
+  if (!values.point) errors.point = '請在地圖上標記地標位置';
   if (values.needs.length > TICKET_NEEDS_MAX) {
     errors.needs = `需求最多 ${TICKET_NEEDS_MAX} 項`;
   } else if (sentNeeds(values).length === 0) {
@@ -308,6 +309,28 @@ export function changedUpdateInput(
     };
   }
   return changed;
+}
+
+/** The fields an error points at, as the form names them, for its 尚有 N 項未完成 summary. */
+const MISSING_LABELS: [prefix: string, label: string][] = [
+  ['title', '任務標題'],
+  ['point', '地標'],
+  ['contactName', '現場聯絡人'],
+  ['needs', '需求'],
+  ['photoUrls', '現場照片'],
+];
+
+/**
+ * The form's errors as the summary under it lists them (prototype 「請補齊：…」): each field once,
+ * in the form's order, every need error counted as one 需求.
+ */
+export function ticketFormErrorSummary(errors: TicketFormErrors): string[] {
+  const keys = Object.keys(errors).filter(
+    (key) => errors[key as keyof TicketFormErrors],
+  );
+  return MISSING_LABELS.filter(([prefix]) =>
+    keys.some((key) => key === prefix || key.startsWith(`${prefix}.`)),
+  ).map(([, label]) => label);
 }
 
 /**

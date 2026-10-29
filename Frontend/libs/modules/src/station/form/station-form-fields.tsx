@@ -38,7 +38,7 @@ export interface StationFormFieldsProps {
 }
 
 /** The prototype's filled input: 46px, neutral subtle fill, a hairline that thickens on focus. */
-const filledInputSx = {
+export const filledInputSx = {
   '& .MuiInputBase-root': {
     minHeight: 46,
     borderRadius: `${radius.md}px`,
