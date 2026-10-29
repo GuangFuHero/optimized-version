@@ -11,7 +11,7 @@ import strawberry
 from strawberry.scalars import JSON
 
 from app.core.permissions import Perm
-from app.core.rbac_scopes import Scope, in_scope
+from app.core.rbac_scopes import Scope, active_team, in_scope
 from app.core.security import resolve_scope
 from app.db.h3 import COARSE_MAX_H3_RESOLUTION
 from app.graphql.area.types import AssignedTeamType
@@ -39,8 +39,9 @@ def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resourc
     Returns the cached asyncio Task (await it). `resource` — anything with `created_by` and
     `geometry` — spares the loader round-trip when the caller already holds the ticket; the
     tasks, which carry neither, pass nothing and the ticket is loaded only if the scope is
-    `own` or `zone`. Same no-double-scheduling argument as TicketType._pii_in_scope: the
-    check-then-store below runs synchronously on the event loop.
+    `own` (`zone` goes to ticket_in_team_zones, keyed by uuid alone). Same no-double-scheduling
+    argument as TicketType._pii_in_scope: the check-then-store below runs synchronously on the
+    event loop.
     """
     decided = info.context["_ticket_detail_visible"]
     key = str(ticket_uuid)
@@ -110,11 +111,27 @@ async def _decide_ticket_scope(info: strawberry.types.Info, perm: Perm, ticket_u
         return False
     if scope == Scope.ALL:
         return True
+    if scope == Scope.ZONE:
+        return await ticket_in_team_zones(info, ticket_uuid)
     if resource is None:
         resource = await info.context["loaders"]["ticket_by_uuid"].load(ticket_uuid)
         if resource is None:
             return False
     return await in_scope(scope, actor=user, resource=resource, db=db)
+
+
+async def ticket_in_team_zones(info: strawberry.types.Info, ticket_uuid: str) -> bool:
+    """`zone` scope on a ticket: whether it lies in the caller's team zones, once per ticket.
+
+    What `in_scope` decides for `zone`, but through the `ticket_in_team_zones` loader: whether a
+    ticket is in my zones does not depend on the perm, so every viewerCan* flag, the detail and
+    the contact checks share one answer, and a page shares one statement. Read from the ticket's
+    row, as the resource passed in carries the same point. No team, no zone.
+    """
+    team = active_team(info.context["user"])
+    if team is None:
+        return False
+    return await info.context["loaders"]["ticket_in_team_zones"].load((str(team), str(ticket_uuid)))
 
 
 @strawberry.enum
@@ -912,10 +929,10 @@ class TicketType:
         """Memoized ticket.view_pii check shared by the contact_* and triage-flag resolvers.
 
         Cached as a single asyncio Task on this instance so that when GraphQL resolves
-        contact_name/email/phone concurrently on the SAME TicketType, the underlying zone
-        check (in_scope → ST_Contains, see app/core/rbac_scopes.py) runs at most once per
-        ticket instead of three times. The check-then-create below is synchronous, so it is
-        atomic under the event loop — no double-scheduling. Lifetime = this instance = one
+        contact_name/email/phone concurrently on the SAME TicketType, resolve_scope and the
+        check behind it (for `zone`, ticket_in_team_zones) run once per ticket instead of
+        three times. The check-then-create below is synchronous, so it is atomic under the
+        event loop — no double-scheduling. Lifetime = this instance = one
         request; there is no cross-request cache, so the staleness window is identical to
         the per-request _rbac_cache it sits alongside.
         """
@@ -940,6 +957,8 @@ class TicketType:
             return False
         if scope == Scope.ALL:
             return True
+        if scope == Scope.ZONE:
+            return await ticket_in_team_zones(info, str(self.uuid))
         return await in_scope(scope, actor=user, resource=self._scope_resource(), db=info.context["db"])
 
     async def _triage_visible(self, info: strawberry.types.Info) -> bool:

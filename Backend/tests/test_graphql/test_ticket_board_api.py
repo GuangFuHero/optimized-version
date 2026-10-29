@@ -6,14 +6,18 @@ from datetime import UTC, datetime
 import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from app.core.permissions import Perm
+from app.db.session import engine as app_engine
 from app.models.auth import User
+from app.models.rbac import Permission, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
 from tests.test_graphql import conftest as gql_conftest
+from tests.test_graphql import test_zone_scope
 from tests.test_graphql.conftest import _create_user_with_grants, auth_header
+from tests.test_graphql.test_zone_scope import INSIDE_ZONE_POINT, OUTSIDE_ZONE_POINT, _make_zone_scoped_editor
 
 RIGHTS = """
 query($q: String!) {
@@ -22,6 +26,9 @@ query($q: String!) {
     }
 }
 """
+
+# A team assigned a zone over ~121-122E/24-25N, shared with the zone-scope tests.
+team_assigned_to_zone = test_zone_scope.team_assigned_to_zone
 
 STATS = "query { ticketStats { total pending inProgress completed cancelled gapPeople gapNeeds } }"
 
@@ -35,11 +42,13 @@ async def _user(prefix: str = "u") -> str:
         return str(user.uuid)
 
 
-async def _ticket(created_by: str, title: str, status: str = "pending", disasters=()) -> str:
+async def _ticket(
+    created_by: str, title: str, status: str = "pending", disasters=(), point=(121.5, 25.0)
+) -> str:
     """Insert one ticket."""
     async with gql_conftest.test_db() as db:
         ticket = Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            geometry=from_shape(Point(*point), srid=4326),
             created_by=created_by,
             title=title,
             description="d",
@@ -135,6 +144,93 @@ async def test_viewer_can_flags_are_false_without_the_perm(client, redis):
     body = resp.json()
     assert "errors" not in body, body
     assert not any(v for i in body["data"]["tickets"]["items"] for k, v in i.items() if k != "title")
+
+
+async def _zone_statements(client, token, query, variables) -> tuple[dict, int]:
+    """Run one request; return its data and how many statements it sent that test a team zone."""
+    seen = []
+
+    def on_execute(conn, cursor, statement, params, context, executemany):
+        if "team_zones" in statement:
+            seen.append(statement)
+
+    event.listen(app_engine.sync_engine, "before_cursor_execute", on_execute)
+    try:
+        data = await _gql(client, token, query, variables)
+    finally:
+        event.remove(app_engine.sync_engine, "before_cursor_execute", on_execute)
+    return data, len(seen)
+
+
+@pytest.mark.asyncio
+async def test_zone_check_runs_once_per_page_not_per_ticket_and_perm(client, redis, team_assigned_to_zone):
+    """At `zone`, every flag and detail field shares one zone lookup for the whole page.
+
+    Before, each viewerCan* flag reran `ST_Contains` per row: a page's zone statements grew with
+    its rows times its perms. Now the list's own filter and one batched lookup, at any page size.
+    """
+    perms = (
+        Perm.TICKET_VIEW,
+        Perm.TICKET_VIEW_DETAIL,
+        Perm.TICKET_VIEW_PII,
+        Perm.TICKET_EDIT,
+        Perm.TICKET_DELETE,
+        Perm.TICKET_AUDIT,
+        Perm.TICKET_VIEW_HISTORY,
+    )
+    _, token = await _make_zone_scoped_editor(redis, team_assigned_to_zone, perms)
+    author = await _user()
+    query = """
+    query($q: String!) {
+        tickets(q: $q) {
+            items {
+                title description contactName
+                viewerCanEdit viewerCanDelete viewerCanAudit viewerCanViewHistory
+            }
+        }
+    }
+    """
+    counts = []
+    for size in (1, 4):
+        tag = uuid_mod.uuid4().hex[:10]
+        for i in range(size):
+            await _ticket(author, f"{tag} in{i}", point=(INSIDE_ZONE_POINT.x, INSIDE_ZONE_POINT.y + i * 0.01))
+        data, statements = await _zone_statements(client, token, query, {"q": tag})
+        items = data["tickets"]["items"]
+        assert len(items) == size
+        assert all(i["viewerCanEdit"] and i["viewerCanAudit"] and i["description"] == "d" for i in items)
+        counts.append(statements)
+    assert counts[0] == counts[1], counts
+
+
+@pytest.mark.asyncio
+async def test_zone_flags_follow_where_the_ticket_is(client, redis, team_assigned_to_zone):
+    """The shared zone answer still tells a ticket inside the team's zone from one outside it.
+
+    ticket.view stays `all` so both are read; edit and delete at `zone` share the one lookup.
+    """
+    _, token = await _make_zone_scoped_editor(
+        redis, team_assigned_to_zone, (Perm.TICKET_EDIT, Perm.TICKET_DELETE)
+    )
+    async with gql_conftest.test_db() as db:
+        role_uuid = await db.scalar(
+            select(UserRoleAssign.role_uuid).where(UserRoleAssign.team_uuid == team_assigned_to_zone)
+        )
+        view = await db.scalar(select(Permission).where(Permission.key == Perm.TICKET_VIEW.value))
+        db.add(RolePermissionAssign(role_uuid=role_uuid, permission_uuid=view.uuid, scope="all"))
+    tag = uuid_mod.uuid4().hex[:10]
+    author = await _user()
+    inside = await _ticket(author, f"{tag} in", point=(INSIDE_ZONE_POINT.x, INSIDE_ZONE_POINT.y))
+    outside = await _ticket(author, f"{tag} out", point=(OUTSIDE_ZONE_POINT.x, OUTSIDE_ZONE_POINT.y))
+    query = """
+    query($a: UUID!, $b: UUID!) {
+        a: ticket(uuid: $a) { viewerCanEdit viewerCanDelete }
+        b: ticket(uuid: $b) { viewerCanEdit viewerCanDelete }
+    }
+    """
+    data = await _gql(client, token, query, {"a": inside, "b": outside})
+    assert data["a"] == {"viewerCanEdit": True, "viewerCanDelete": True}
+    assert data["b"] == {"viewerCanEdit": False, "viewerCanDelete": False}
 
 
 @pytest.mark.asyncio

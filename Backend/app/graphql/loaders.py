@@ -167,6 +167,9 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         "building_map_by_ticket": DataLoader(load_fn=_make_building_map_by_ticket_loader(db)),
         # The teams of the 責任區 a ticket lies in (ADR-422).
         "responsible_teams_by_ticket": DataLoader(load_fn=_make_responsible_teams_by_ticket_loader(db)),
+        # Whether a ticket lies in the caller's team zones: the `zone` scope, once per ticket for
+        # every perm a page asks about (app/graphql/tickets/types.py:_decide_ticket_scope).
+        "ticket_in_team_zones": DataLoader(load_fn=_make_ticket_in_team_zones_loader(db)),
     }
 
 
@@ -467,5 +470,41 @@ def _make_responsible_teams_by_ticket_loader(db: AsyncSession):
         for ticket_uuid, team in rows:
             grouped[str(ticket_uuid)].append(AssignedTeamType.from_model(team))
         return [grouped[str(uuid)] for uuid in ticket_uuids]
+
+    return load_fn
+
+
+def _make_ticket_in_team_zones_loader(db: AsyncSession):
+    """Batch-load whether each ticket's point lies in a zone of a team, keyed ``(team_uuid, ticket_uuid)``.
+
+    The test `zone` scope makes (`in_scope` in app/core/rbac_scopes.py): `ST_Contains` on a zone not
+    deleted and assigned to the team. A request has one caller and so one team, so a page costs one
+    statement, however many perms its fields resolve at `zone`. The page's points are materialized
+    first, as in `responsible_teams_by_ticket`. A ticket without a point, or gone, is outside.
+    """
+
+    async def load_fn(keys: list[tuple[str, str]]) -> list[bool]:
+        by_team: dict[str, list[str]] = defaultdict(list)
+        for team_uuid, ticket_uuid in keys:
+            by_team[str(team_uuid)].append(str(ticket_uuid))
+        inside: set[tuple[str, str]] = set()
+        for team_uuid, ticket_uuids in by_team.items():
+            page = (
+                select(BaseGeometry.uuid, BaseGeometry.geometry)
+                .where(BaseGeometry.uuid.in_(ticket_uuids))
+                .cte("page")
+                .prefix_with("MATERIALIZED")
+            )
+            zone = aliased(TeamZone, flat=True)
+            rows = await db.execute(
+                select(page.c.uuid)
+                .select_from(TeamZoneAssign)
+                .join(zone, zone.uuid == TeamZoneAssign.zone_uuid)
+                .join(page, func.ST_Contains(zone.geometry, page.c.geometry))
+                .where(TeamZoneAssign.team_uuid == team_uuid, zone.delete_at.is_(None))
+                .distinct()
+            )
+            inside.update((team_uuid, str(ticket_uuid)) for (ticket_uuid,) in rows)
+        return [(str(team_uuid), str(ticket_uuid)) in inside for team_uuid, ticket_uuid in keys]
 
     return load_fn
