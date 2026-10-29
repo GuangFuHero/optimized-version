@@ -945,6 +945,29 @@ export type MyRoleRequestsType = {
   requests: Array<RoleRequestType>;
 };
 
+export type MyStationSuggestionType = {
+  __typename?: 'MyStationSuggestionType';
+  /** Approved or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null */
+  appliedValue?: Maybe<Scalars['String']['output']>;
+  comment?: Maybe<Scalars['String']['output']>;
+  /** When it was approved or rejected, or for a revoked one when the approval was undone; null while pending */
+  decidedAt?: Maybe<Scalars['DateTime']['output']>;
+  fieldName: Scalars['String']['output'];
+  /** The value suggested, the latest if sent again */
+  newValue: Scalars['String']['output'];
+  /** The field's value when last sent, as text ('' for none); null for a suggestion sent before this was recorded */
+  previousValue?: Maybe<Scalars['String']['output']>;
+  /** The station it is about, or its property's; null once deleted or out of the caller's view, by the rules of `station` */
+  station?: Maybe<StationType>;
+  /** 'pending', 'approved', 'rejected', or 'revoked' */
+  status: Scalars['String']['output'];
+  /** When it was first sent */
+  submittedAt: Scalars['DateTime']['output'];
+  /** 'station' or 'station_property' */
+  targetType: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+};
+
 /** One of the caller's claims, with the need and the ticket it is for */
 export type MyTaskAssignmentType = {
   __typename?: 'MyTaskAssignmentType';
@@ -1008,6 +1031,7 @@ export type Query = {
   hazardousZone?: Maybe<HazardousZoneType>;
   hazardousZones: HazardousZoneConnection;
   myRoleRequests: MyRoleRequestsType;
+  myStationSuggestions: Array<MyStationSuggestionType>;
   myTaskAssignments: Array<MyTaskAssignmentType>;
   myTickets: Array<TicketType>;
   /** Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute shared with reverseGeocode */
@@ -1093,6 +1117,10 @@ export type QueryHazardousZonesArgs = {
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
+};
+
+export type QueryMyStationSuggestionsArgs = {
+  limit?: Scalars['Int']['input'];
 };
 
 export type QueryNormalizeAddressArgs = {

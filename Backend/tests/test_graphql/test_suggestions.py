@@ -660,3 +660,175 @@ async def test_a_merge_whose_reviewer_is_gone_reads_a_null_reviewer(
     view = (await _gql(client, auditor_token, history, {"uuid": sample_station}))["data"]["station"]
 
     assert view["suggestionMerges"] == [{"uuid": merge["uuid"], "reviewedBy": None}]
+
+
+# ---------------------------------------------------------------------------
+# myStationSuggestions (ADR-420)
+# ---------------------------------------------------------------------------
+
+MINE = """
+query($limit: Int) {
+    myStationSuggestions(limit: $limit) {
+        uuid targetType fieldName previousValue newValue comment status appliedValue
+        submittedAt decidedAt station { uuid opHour }
+    }
+}
+"""
+
+
+async def _mine(client, token, limit=None):
+    """Helper: the caller's suggestions, by field name."""
+    body = await _gql(client, token, MINE, {"limit": limit} if limit else {})
+    assert "errors" not in body, body
+    return body["data"]["myStationSuggestions"]
+
+
+@pytest.mark.asyncio
+async def test_my_suggestions_list_only_yours_with_the_value_you_saw(
+    client, redis, login_user_auth, sample_station
+):
+    """Each row reads "this → that": the value when it was sent, and the one suggested."""
+    _, token = login_user_auth
+    other = (await _create_user_with_role(redis, "Login User"))[1]
+    await _create(client, token, "station", sample_station, "op_hour", "24h", "the sign says so")
+    await _create(client, other, "station", sample_station, "name", "someone else's")
+
+    rows = await _mine(client, token)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert (row["targetType"], row["fieldName"], row["previousValue"], row["newValue"]) == (
+        "station", "op_hour", "08:00-18:00", "24h",
+    )
+    assert (row["comment"], row["status"], row["appliedValue"], row["decidedAt"]) == (
+        "the sign says so", "pending", None, None,
+    )
+    assert row["submittedAt"]
+    assert row["station"] == {"uuid": sample_station, "opHour": "08:00-18:00"}
+
+
+@pytest.mark.asyncio
+async def test_a_field_without_a_value_was_recorded_as_empty(client, login_user_auth, sample_station):
+    """'' says the field was empty; null is kept for rows sent before the value was recorded."""
+    _, token = login_user_auth
+    await _create(client, token, "station", sample_station, "name", "光復國小")
+    first = (await _mine(client, token))[0]
+    assert first["previousValue"] == ""
+
+    async with test_db() as db:
+        await db.execute(
+            update(StationUpdateSuggestion)
+            .where(StationUpdateSuggestion.uuid == first["uuid"])
+            .values(previous_value=None)
+        )
+    assert (await _mine(client, token))[0]["previousValue"] is None
+
+
+@pytest.mark.asyncio
+async def test_my_suggestions_show_what_the_reviewer_wrote_and_when(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """Approved with the reviewer's own value, and rejected: each says how it ended, and when."""
+    _, token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, token, "station", sample_station, "op_hour", "24h")
+    await _create(client, token, "station", sample_station, "name", "光復國小")
+    await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", "00:00-24:00"),
+        _decide(sample_station, "name", approve=False),
+    ], note="for the review record")
+
+    rows = {r["fieldName"]: r for r in await _mine(client, token)}
+
+    assert rows["op_hour"]["status"] == "approved"
+    assert rows["op_hour"]["newValue"] == "24h"
+    assert rows["op_hour"]["appliedValue"] == "00:00-24:00"
+    assert rows["op_hour"]["previousValue"] == "08:00-18:00"
+    assert rows["name"]["status"] == "rejected"
+    assert rows["name"]["appliedValue"] is None
+    assert rows["op_hour"]["decidedAt"] and rows["name"]["decidedAt"]
+
+
+@pytest.mark.asyncio
+async def test_a_revoked_suggestion_keeps_what_was_applied_and_dates_the_revoke(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """Revoking an approval leaves the row revoked, with the value it had applied."""
+    _, token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, token, "station", sample_station, "op_hour", "24h")
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", "24h"),
+    ]))["data"]["mergeStationSuggestions"]
+    approved_at = (await _mine(client, token))[0]["decidedAt"]
+    await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
+
+    row = (await _mine(client, token))[0]
+
+    assert (row["status"], row["appliedValue"]) == ("revoked", "24h")
+    assert row["decidedAt"] > approved_at
+
+
+@pytest.mark.asyncio
+async def test_sending_again_moves_a_suggestion_up_and_records_the_value_then(
+    client, login_user_auth, sample_station
+):
+    """A resubmit updates the value before and the one suggested; when it was first sent stays."""
+    _, token = login_user_auth
+    await _create(client, token, "station", sample_station, "op_hour", "24h")
+    sent_at = (await _mine(client, token))[0]["submittedAt"]
+    await _create(client, token, "station", sample_station, "name", "光復國小")
+    async with test_db() as db:
+        await db.execute(update(Station).where(Station.uuid == sample_station).values(op_hour="07:00-19:00"))
+
+    await _create(client, token, "station", sample_station, "op_hour", "06:00-22:00")
+    rows = await _mine(client, token)
+
+    assert [r["fieldName"] for r in rows] == ["op_hour", "name"]
+    assert (rows[0]["previousValue"], rows[0]["newValue"]) == ("07:00-19:00", "06:00-22:00")
+    assert rows[0]["submittedAt"] == sent_at
+
+
+@pytest.mark.asyncio
+async def test_a_property_suggestion_names_its_station(
+    client, login_user_auth, sample_station, sample_station_property
+):
+    """A property's row carries the property's value before, and the station it belongs to."""
+    _, token = login_user_auth
+    await _create(client, token, "station_property", sample_station_property, "quantity", "10")
+
+    row = (await _mine(client, token))[0]
+
+    assert (row["targetType"], row["previousValue"], row["newValue"]) == ("station_property", "2", "10")
+    assert row["station"]["uuid"] == sample_station
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_station_leaves_the_suggestion_without_one(client, login_user_auth, sample_station):
+    """The row stays listed; only the station it pointed at is gone."""
+    _, token = login_user_auth
+    await _create(client, token, "station", sample_station, "op_hour", "24h")
+    async with test_db() as db:
+        # Through the row: delete_at lives on the parent table, which an UPDATE on stations cannot set.
+        station = await db.scalar(select(Station).where(Station.uuid == sample_station))
+        station.delete_at = datetime.now(UTC)
+
+    rows = await _mine(client, token)
+
+    assert len(rows) == 1
+    assert rows[0]["station"] is None
+
+
+@pytest.mark.asyncio
+async def test_my_suggestions_need_a_sign_in_and_a_sane_limit(client, login_user_auth, sample_station):
+    """A guest has no suggestions of its own; a limit outside 1-100 is refused."""
+    _, token = login_user_auth
+    await _create(client, token, "station", sample_station, "name", "光復國小")
+    await _create(client, token, "station", sample_station, "op_hour", "24h")
+
+    guest = await _gql(client, None, MINE, {})
+    assert guest["errors"]
+    assert len(await _mine(client, token, limit=1)) == 1
+    for limit in (0, 101):
+        body = await _gql(client, token, MINE, {"limit": limit})
+        assert "limit must be between 1 and 100" in body["errors"][0]["message"]

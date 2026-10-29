@@ -1,4 +1,4 @@
-"""Station-update suggestion write actions (create / merge / revoke).
+"""Station-update suggestion actions (create / merge / revoke), and the submitter's own list.
 
 Same flat-service style as station.py. A merge decides every pending suggestion on the chosen
 fields of one station, writes the reviewer's values, and records the before/after in a
@@ -17,7 +17,7 @@ from app.core.permissions import Perm
 from app.graphql.suggestions.fields import VALID_TARGET_TYPES, coerce_and_validate
 from app.models.auth import User
 from app.models.geo import Station, touch
-from app.models.station_property import StationSuggestionMerge, StationUpdateSuggestion
+from app.models.station_property import StationProperty, StationSuggestionMerge, StationUpdateSuggestion
 from app.repositories.geo_repository import (
     station_property_repository,
     station_repository,
@@ -84,6 +84,10 @@ async def create_station_suggestion(
         # Stripped here as at merge, so one line however spaced is one proposal to the reviewer.
         # A blank stays "", the column being text; the merge stores it as null (ADR-333).
         value = value.strip()
+    # What the field holds now, so the submitter can later read "this → that" (ADR-420). Read after
+    # the field is validated as suggestable: no other attribute of the row is ever copied out.
+    current = getattr(target, field_name)
+    previous = "" if current is None else str(current)
 
     # xmax = 0 only on a freshly inserted row, which tells an insert from a resubmit.
     suggestion_uuid, inserted = (
@@ -94,6 +98,7 @@ async def create_station_suggestion(
                 target_uuid=target_uuid,
                 field_name=field_name,
                 new_value=value,
+                previous_value=previous,
                 comment=comment,
                 status="pending",
                 created_by=str(actor_uid),
@@ -103,7 +108,12 @@ async def create_station_suggestion(
                 # A bound 'pending' stops matching the partial index once Postgres caches a generic
                 # plan, so the predicate is literal SQL.
                 index_where=text("status = 'pending'"),
-                set_={"new_value": value, "comment": comment, "updated_at": func.now()},
+                set_={
+                    "new_value": value,
+                    "previous_value": previous,
+                    "comment": comment,
+                    "updated_at": func.now(),
+                },
             )
             .returning(StationUpdateSuggestion.uuid, literal_column("xmax = 0"))
         )
@@ -129,6 +139,82 @@ async def create_station_suggestion(
     )
     await db.refresh(suggestion)
     return suggestion
+
+
+@dataclass(frozen=True)
+class MySuggestion:
+    """One of the caller's suggestions, with the merge that decided it and the station it is about.
+
+    `station` is None once the station is deleted; `merge` is None while the row is pending.
+    """
+
+    suggestion: StationUpdateSuggestion
+    merge: StationSuggestionMerge | None
+    station: Station | None
+
+
+async def list_my_station_suggestions(db: AsyncSession, *, actor: User, limit: int) -> list[MySuggestion]:
+    """The suggestions `actor` sent — the site's 我回報的站點 (ADR-420).
+
+    Latest activity first: a resubmit or a decision moves a row up, both setting `updated_at`. No
+    capability check, as for the caller's own tickets: losing station.contribute stops new
+    suggestions, not the reading of old ones. A soft-deleted row drops off. The merges and stations
+    are read in one query each, whatever the number of rows.
+    """
+    rows = list(
+        (
+            await db.scalars(
+                select(StationUpdateSuggestion)
+                .where(
+                    StationUpdateSuggestion.created_by == str(actor.uuid),
+                    StationUpdateSuggestion.delete_at.is_(None),
+                )
+                .order_by(StationUpdateSuggestion.updated_at.desc(), StationUpdateSuggestion.uuid.desc())
+                .limit(limit)
+            )
+        ).all()
+    )
+
+    merges: dict[str, StationSuggestionMerge] = {}
+    merge_uuids = {str(row.merge_uuid) for row in rows if row.merge_uuid}
+    if merge_uuids:
+        found = await db.scalars(
+            select(StationSuggestionMerge).where(StationSuggestionMerge.uuid.in_(merge_uuids))
+        )
+        merges = {str(merge.uuid): merge for merge in found}
+
+    # A property's station even once the property is deleted: the suggestion was still about it.
+    station_of_property: dict[str, str] = {}
+    property_uuids = {row.target_uuid for row in rows if row.target_type == "station_property"}
+    if property_uuids:
+        found = await db.execute(
+            select(StationProperty.uuid, StationProperty.station_uuid).where(
+                StationProperty.uuid.in_(property_uuids)
+            )
+        )
+        station_of_property = {str(uuid): str(station_uuid) for uuid, station_uuid in found}
+
+    def station_uuid_of(row: StationUpdateSuggestion) -> str | None:
+        if row.target_type == "station_property":
+            return station_of_property.get(row.target_uuid)
+        return row.target_uuid
+
+    stations: dict[str, Station] = {}
+    station_uuids = {uuid for uuid in map(station_uuid_of, rows) if uuid}
+    if station_uuids:
+        found = await db.scalars(
+            select(Station).where(Station.uuid.in_(station_uuids), Station.delete_at.is_(None))
+        )
+        stations = {str(station.uuid): station for station in found}
+
+    return [
+        MySuggestion(
+            suggestion=row,
+            merge=merges.get(str(row.merge_uuid)) if row.merge_uuid else None,
+            station=stations.get(station_uuid_of(row) or ""),
+        )
+        for row in rows
+    ]
 
 
 async def merge_station_suggestions(
