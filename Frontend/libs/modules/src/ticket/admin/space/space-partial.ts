@@ -17,6 +17,16 @@ export function deleteKeepsText(count: number, cut: boolean): string {
   return `這個空間會從列表與地圖上消失。底下${cut ? '至少 ' : ' '}${count} 張任務單會保留，變回一般任務單（不再歸在這個空間），樓層與戶別照舊寫在單上。`;
 }
 
+/** What 刪除空間 says once done (prototype `tk-app.jsx` `deleteSpace`): the tickets it kept. */
+export function deletedToast(
+  name: string,
+  count: number,
+  cut: boolean,
+): string {
+  const kept = count ? `，${cut ? '至少 ' : ''}${count} 張任務單保留` : '';
+  return `已刪除空間「${name}」${kept}`;
+}
+
 /** The edit form's 「樓層改少」 warning heading (designer §開啟空間 4). */
 export function strandedHeading(count: number, cut: boolean): string {
   return `${cut ? '至少有' : '有'} ${count} 張任務單在要拿掉的樓層`;

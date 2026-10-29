@@ -35,7 +35,7 @@ import {
 } from './space-analysis';
 import { floorStateColor, StateBadge } from './space-badges';
 import { SpaceFormDrawer } from './space-form-drawer';
-import { deleteKeepsText, ticketsCut } from './space-partial';
+import { deletedToast, deleteKeepsText, ticketsCut } from './space-partial';
 import {
   useSpace,
   useSpaceCapabilities,
@@ -178,6 +178,8 @@ function SpaceDetailContent({
   const shownFloors = showAll ? analysis.floors : withTickets;
   const hiddenCount = analysis.floors.length - withTickets.length;
   const count = analysis.members.length;
+  // Deleting keeps every ticket under it, the cancelled ones `members` leaves out too.
+  const kept = space.tickets.length;
   const cut = ticketsCut(space.tickets.length);
 
   const confirmDelete = () => {
@@ -186,7 +188,7 @@ function SpaceDetailContent({
       {
         onSuccess: () => {
           setConfirming(false);
-          toast(`已刪除空間：${building.name}`);
+          toast(deletedToast(building.name, kept, cut));
           onDeleted();
         },
       },
@@ -394,7 +396,7 @@ function SpaceDetailContent({
         submitting={remove.isPending}
         error={remove.error ? remove.error.message : undefined}
       >
-        {deleteKeepsText(count, cut)}
+        {deleteKeepsText(kept, cut)}
       </Dialog>
     </SheetLayout>
   );

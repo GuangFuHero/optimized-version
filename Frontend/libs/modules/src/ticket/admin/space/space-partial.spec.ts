@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { boardCountLine } from './board-count';
 import {
+  deletedToast,
   deleteKeepsText,
   SPACE_TICKETS_LIMIT,
   strandedHeading,
@@ -37,5 +38,20 @@ describe('the board count with more spaces than loaded', () => {
   it('marks the space count as a floor', () => {
     expect(boardCountLine(13, 200, true)).toBe('13 筆任務 · 200+ 個空間');
     expect(boardCountLine(13, 2, false)).toBe('13 筆任務 · 2 個空間');
+  });
+});
+
+describe('deletedToast', () => {
+  it('names the space and the tickets it kept, as the prototype does', () => {
+    expect(deletedToast('中正25', 3, false)).toBe(
+      '已刪除空間「中正25」，3 張任務單保留',
+    );
+    expect(deletedToast('中正25', 200, true)).toBe(
+      '已刪除空間「中正25」，至少 200 張任務單保留',
+    );
+  });
+
+  it('says only the name when the space held no tickets', () => {
+    expect(deletedToast('中正25', 0, false)).toBe('已刪除空間「中正25」');
   });
 });
