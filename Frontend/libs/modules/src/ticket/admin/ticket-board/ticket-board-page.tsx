@@ -91,7 +91,12 @@ export function TicketBoardPage() {
   const tickets = useTicketRows(pageVariables, {
     keepAcross: TICKET_PAGE_KEYS,
   });
-  const count = tickets.totalCount ?? 0;
+  // While a filter change loads, the header keeps the last total rather than dropping to 0.
+  const [lastTotal, setLastTotal] = useState(0);
+  if (tickets.totalCount !== null && tickets.totalCount !== lastTotal) {
+    setLastTotal(tickets.totalCount);
+  }
+  const count = tickets.totalCount ?? lastTotal;
   const pageCount = pageCountOf(count);
   // A page past the end (a pasted link, or the last ticket on it deleted) moves to the last one.
   useEffect(() => {
