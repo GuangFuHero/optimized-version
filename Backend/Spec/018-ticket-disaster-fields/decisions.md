@@ -1,4 +1,4 @@
-# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386）
+# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/016-resource-history/decisions.md`（ADR-243 為目前全 repo 最大值）。
@@ -672,6 +672,7 @@ DB image 改為 `Backend/docker/postgres-h3/Dockerfile`（`postgis/postgis:16-3.
 但不會超出那一格。接受：保證的下限仍是一個 resolution 8 格子。
 ➖ 同一格的單會疊在同一點，前端需要把「概略位置」畫成區域並分群（前端 PR 另開）。
 原型的 `GUEST_GRID_DIAMETER_M = 550` 把 550 當直徑，只是示意，不可沿用。
+（2026-10-25：每格的筆數改由後端算，見 ADR-387。）
 ➖ 換 DB image：staging 部署時 db container 會以同一個 `pgdata` volume 重建，停機數秒。
 `CREATE EXTENSION h3` 需要 superuser（staging 是）。
 ◾ 取 cell 前先套 `ST_PointOnSurface`：`base_geometries` 同時放 ticket 的點與封閉區域的多邊形，
@@ -736,3 +737,79 @@ floor 是 RF、nF、Bn     → 往下驗 room
 ➕ 回 `TicketType` 的地方（list、single、mutation 回傳）都由同一個 resolver 給，不用逐支改。
 ➖ 建物刪了以後，原本在裡面的單看不出曾經屬於哪一棟；對照表的列還在，要查得直接查 DB。
 ◾ 民眾的 `createHelpRequest` 建進建物：Carol 10-25 說 V1 要做，另開一支 PR。
+
+### ADR-387 格子的筆數由後端算（`ticketCells`），一格的單用 `tickets(locationCell:)` 列
+
+**白話**：訪客地圖上每一格寫的數字，改由後端一次算好；點開一格，列的就是那一格真正的單，可以翻頁。
+
+**Context**：訪客地圖把單畫成格子（ADR-281／283），格子裡的數字是前端拿畫面裡的前 200 張
+（`use-site-map-live-data.ts`，`tickets(limit: 200)`）按 `locationCell` 數出來的。畫面裡超過 200 張，
+格子就少算，畫面上也看不出來；點開一格，列的也只是那 200 張裡剛好落在這格的。糖 10-24 要筆數由後端直接給。
+
+**Decision**：
+
+- `ticketCells(bounds!, zoom, statuses)` 回每一格的 `{ cell, ticketCount, urgentCount }`，照 `cell` 排序，
+  沒有單的格子不回。在 Postgres 裡一句 `GROUP BY` 算完。
+  - 條件只用 `_active_conditions`，再加「呼叫者看到的是格子」（`NOT seen`）。所以數字跟用同樣的參數一頁一頁翻
+    `tickets`、按 `locationCell` 數的一樣：`bounds` 用格子中心比（ADR-282），`zoom` 決定 resolution、最細 8。
+  - 看得到精確點的單是圖釘，不算進格子。`view_detail` 是 `all` 的人回空清單，不跑 SQL。
+  - `statuses` 收 `TicketStatus` enum 的清單（pending／in_progress／completed／cancelled）：地圖可以同時勾好幾個
+    狀態，拼錯的值 GraphQL 直接擋。沒傳是全部；傳空清單是一張都不算（把狀態全取消勾選，地圖就是空的）。
+    前台要全部就不送 `statuses`，欄位說明寫明（Dan 2026-10-29 定後端維持這樣）。
+    `tickets` 也收同一個 `statuses`，一格的清單跟它的筆數用同一份條件；原本的 `status` 留著給現有的呼叫端。
+  - 同一個狀態傳很多次只算一次：後端先去重、排好再查（HC 2026-10-28 在 #121 提出）。清單每換一種長度就是一句
+    新的 SQL，在每條連線上都要重新規劃；每一項也佔一個 driver 參數，超過 32,767 個整句失敗。去重後最多六種。
+  - `urgentCount`：照前端現在的規則（`markers.ts` 的 `resolveTicketVariant`）：priority 去掉前後空白、轉小寫後
+    不是 low／medium，而且不是 `in_progress`，就算急件。priority 寫入時不驗證，`High`、`urgent` 在地圖上是紅的，
+    格子也要算進去。給數字不給 true／false，前端判斷 `> 0`。
+  - 跟 keyword search 共用同一個 statement ceiling（3 秒，`app/core/search.py` 的 `statement_ceiling`）：
+    匿名、每次移動地圖都會呼叫，超過就回「請放大地圖再試」，不佔著連線。不擋框的大小：地圖拉遠時訪客也要看到
+    筆數，花多少時間看的是框裡有幾張單，不是框有多大。
+- `tickets(locationCell:)` 只回「呼叫者看到的是這一格」的單，每列的 `geometry`／`locationCell` 用這一格的
+  resolution，`zoom` 不管。比 resolution 8 細、或不是 H3 cell 的字串，回錯誤。格式對、但不存在的格子
+  （例如 base cell 超過 121）也回同一個錯誤：先問 h3-pg 的 `h3_is_valid_cell`，因為 `h3_cell_to_geometry`
+  遇到這種會直接報錯，整個查詢就失敗。驗過以後改寫成 h3-pg 輸出的標準寫法（小寫、不補零），比對的是文字，
+  不改寫的話補零或大寫的寫法會什麼都查不到。
+  - 先用 `base_geometries` 的 geography 索引粗篩（離格子中心 `2 × 平均邊長` 內），再用 h3 決定每一列，
+    跟 ADR-282 的 `bounds` 粗篩同一個道理。
+
+➕ 給的東西都是 `tickets` 翻頁本來就拿得到的：同樣的列、同樣的比對方式，只是在資料庫裡數好。
+➕ 擋細格子：不擋的話，訪客送一個 resolution 15 的格子，就能把單的位置縮到幾公尺內。
+➖ 不做快取：地圖每移動一次就重算。
+◾ 量測（`login_test`，畫面裡 1 萬張、畫面外 1 萬張）：同一句 SQL 前 5 次約 2～3 秒，第 6 次起約 50 ms。
+前 5 次用的是帶參數的 custom plan，把格子中心那個條件估成 1 列，選了對 `tickets` 整張掃的 nested loop；
+之後 Postgres 換成 generic plan 就正常。既有的 `tickets(bounds)` 訪客列表是同一個現象（同樣前 5 次約 3 秒），
+不是這條造成的，另案處理。`tickets(locationCell:)` 走 geography 索引，1～100 ms。
+前 5 次接近 3 秒的 ceiling，量級到 1 萬張在畫面裡時，前幾次可能回「請放大地圖」，修計畫的問題時一起看。
+◾ 「有急件就整格紅」這條規則本身在等糖、Carol；規則改了，改 `CALM_PRIORITIES` 和那個條件就好。寫入時驗證
+priority 另議：會改到每一個寫入路徑，已經存進去的資料也不會跟著變。
+
+### ADR-422 單上看得到負責的團隊（`responsibleTeams`），跟精確位置同一道邊界
+
+**白話**：登入的人讀單時，看得到這張單落在哪些責任區、由哪些團隊負責；訪客看不到。
+
+**Date**: 2026-10-29（Carol 在 Discord #uiux 定「責任區的負責團隊，單的詳情上看得到就好」：寫在單上，不寫在
+任務單公開操作紀錄的每一筆裡；使用者在協調者分頁選「訪客看不到」）
+
+**Context**：前台只有在地圖上點責任區的標籤，才看得到「負責：A、B」（`AreaType.assignedTeams`）。單上看不出
+它在哪個責任區：`TicketType` 沒有這個欄位，前台的詳情也沒寫。責任區和它的團隊本來就在公開地圖上（ADR-311），
+團隊名稱不是個資（ADR-285）。
+
+**Decision**：
+
+- `TicketType.responsibleTeams: [AssignedTeamType!]!`，跟地圖的 `assignedTeams` 同一個型別。不在任何責任區時是
+  空的。
+- 哪些區算，跟 `zone` 權限同一條規則（`core/rbac_scopes.py`）：只算責任區，`ST_Contains(區, 單的點)`，排除已刪的
+  區。所以這裡寫的團隊，就是用 `zone` 權限管得到這張單的那幾隊；剛好落在邊線上不算，跟權限一樣。危險區、標示區
+  沒有團隊，不算。
+- 哪些團隊：那些區在 `team_zone_assign` 上的團隊，排除已刪的，暫停的照列，跟地圖一樣。好幾個區有同一隊時只列
+  一次；依名稱排序。
+- 由 `ticket.view_detail` 把關，跟 `geometry`、`secondaryLocation`、`buildingMapUuid` 同一個判斷（ADR-281、
+  ADR-386），沒有就回空的。訪客只拿到約 1 公里的區塊；用精確的點算出「在 A 區」，A 區的邊界剛好穿過那個區塊時，
+  就比區塊更精確地說出了位置。
+- loader `responsible_teams_by_ticket`，一個 request 一句。先判斷權限再查，訪客讀一頁單不會多查。
+
+➕ 回 `TicketType` 的地方（list、single、mutation 回傳）都由同一個 resolver 給。
+➕ 跟 `zone` 權限同一個判斷，詳情寫的和誰管得到這張單不會對不上。
+➖ 訪客看不到誰負責；要看就登入，或到地圖點那一區的標籤。
+◾ 只看得到團隊，看不到是哪一區；前台照地圖標籤的寫法只寫「負責：A、B」。

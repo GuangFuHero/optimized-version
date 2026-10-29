@@ -337,6 +337,7 @@ function SiteMapViewportDataLayer({
             ticketDetailOverrides={createTicketDetailOverrides}
             stationDetailSecondaryAction={stationDetailSecondaryAction}
             stationLayout="site"
+            viewMemoryKey="site"
           />
         </Box>
         <MapRequestHelpBar />
