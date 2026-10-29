@@ -121,7 +121,7 @@ async def validate_station(
 ) -> StationFields:
     """Checkpoint 1 plus every input check `create_station` makes, without writing anything.
 
-    `source` is not an argument: the identity making the station decides it (ADR-438).
+    `source` is not an argument: the identity making the station decides it.
     """
     await require_scope(actor, Perm.STATION_ADD, db)
     validate_point(geometry)

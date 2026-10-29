@@ -368,7 +368,14 @@ class TicketTaskType:
             "only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description=(
+            "Origin of this task: 'user' when the site's identity made it, 'official' when a back-office "
+            "one did. Tasks made before that rule keep what they had, 'gov' or 'import', as do the mock "
+            "seed's, which writes 'gov'"
+        ),
+    )
     recruiting_stopped_at: datetime | None = strawberry.field(
         default=None,
         description=(
@@ -508,7 +515,7 @@ class CreateTicketTaskInput:
     )
     source: str = strawberry.field(
         default="user",
-        description="Not read: the identity making the task decides it (ADR-438)",
+        description="Not read: the identity making the task decides it",
         deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
     )
     route_uuid: UUID | None = strawberry.field(
@@ -1181,7 +1188,7 @@ class CreateTicketTaskDraft:
     quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
     source: str = strawberry.field(
         default="user",
-        description="Not read: the identity making the task decides it (ADR-438)",
+        description="Not read: the identity making the task decides it",
         deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
     )
     route_uuid: UUID | None = None

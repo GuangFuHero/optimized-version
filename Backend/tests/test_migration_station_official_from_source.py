@@ -1,4 +1,4 @@
-"""Migration af6e25b0d8db: `is_official` is worked out from `source`, which holds two values (ADR-438).
+"""Migration af6e25b0d8db: `is_official` is worked out from `source`, which holds two values.
 
 Built like tests/test_migration_audit_export_grant.py: stop before the revision, write the stations a
 deployed database holds, upgrade, look, and step back.

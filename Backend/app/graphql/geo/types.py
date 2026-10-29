@@ -195,7 +195,7 @@ class StationType:
         default=False,
         description=(
             "True if the back office made this station: `source` is 'official', as the `official` filter "
-            "reads it (ADR-438)"
+            "reads it"
         ),
     )
     operational_status: str = strawberry.field(
@@ -536,7 +536,7 @@ class CreateStationInput:
     comment: str | None = None
     source: str = strawberry.field(
         default="user",
-        description="Not read: the identity making the station decides it (ADR-438)",
+        description="Not read: the identity making the station decides it",
         deprecation_reason="The backend sets `source` from the identity making the station; leave it out",
     )
     visibility: Visibility = strawberry.field(

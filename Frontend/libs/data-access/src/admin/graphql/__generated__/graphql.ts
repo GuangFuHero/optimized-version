@@ -390,7 +390,7 @@ export type CreateStationInput = {
   /** Optional secondary address or pole location to attach to this station */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /**
-   * Not read: the identity making the station decides it (ADR-438)
+   * Not read: the identity making the station decides it
    * @deprecated The backend sets `source` from the identity making the station; leave it out
    */
   source?: Scalars['String']['input'];
@@ -479,7 +479,7 @@ export type CreateTicketTaskDraft = {
   quantity?: InputMaybe<Scalars['Int']['input']>;
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
   /**
-   * Not read: the identity making the task decides it (ADR-438)
+   * Not read: the identity making the task decides it
    * @deprecated The backend sets `source` from the identity making the task; leave it out
    */
   source?: Scalars['String']['input'];
@@ -495,7 +495,7 @@ export type CreateTicketTaskInput = {
   /** Optional UUID of an associated route */
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
   /**
-   * Not read: the identity making the task decides it (ADR-438)
+   * Not read: the identity making the task decides it
    * @deprecated The backend sets `source` from the identity making the task; leave it out
    */
   source?: Scalars['String']['input'];
@@ -1532,7 +1532,7 @@ export type StationType = {
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
   /** True if this station has been flagged as a duplicate entry */
   isDuplicate: Scalars['Boolean']['output'];
-  /** True if the back office made this station: `source` is 'official', as the `official` filter reads it (ADR-438) */
+  /** True if the back office made this station: `source` is 'official', as the `official` filter reads it */
   isOfficial: Scalars['Boolean']['output'];
   /** True if this is a temporary station (e.g. emergency shelter) */
   isTemporary: Scalars['Boolean']['output'];
@@ -1869,7 +1869,7 @@ export type TicketTaskType = {
   quantity?: Maybe<Scalars['Int']['output']>;
   /** When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back */
   recruitingStoppedAt?: Maybe<Scalars['DateTime']['output']>;
-  /** Origin of this task: 'user' or 'official' */
+  /** Origin of this task: 'user' when the site's identity made it, 'official' when a back-office one did. Tasks made before that rule keep what they had, 'gov' or 'import', as do the mock seed's, which writes 'gov' */
   source: Scalars['String']['output'];
   /** Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or its requester stopped recruiting — the people on it still go), or 'canceled'. Moves only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion */
   status: Scalars['String']['output'];

@@ -114,7 +114,7 @@ async def test_official_keeps_the_stations_the_back_office_made(client):
 
 @pytest.mark.asyncio
 async def test_the_official_badge_is_what_source_says(client):
-    """The site's 官方 badge reads `isOfficial`, which the database works out from `source` (ADR-438)."""
+    """The site's 官方 badge reads `isOfficial`, which the database works out from `source`."""
     lng, lat, bounds = _box()
     made = await _station((lng, lat), source="official")
     user = await _station((lng, lat), source="user")
