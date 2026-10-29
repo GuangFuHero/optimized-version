@@ -1,4 +1,5 @@
 """Integration tests for logged-out forgot/reset password."""
+import asyncio
 import re
 
 import pytest
@@ -30,6 +31,31 @@ async def test_pwreset_issue_then_consume_roundtrip(redis):
     assert payload["user_uuid"] == "u-1"
     # consumed -> gone
     assert await repo.consume_password_reset(type_="email", value="a@x.com", code=code) is None
+
+
+@pytest.mark.asyncio
+async def test_a_reset_code_works_once_even_when_sent_at_the_same_time(redis):
+    """Three requests with the same code: one gets the payload, the other two get None.
+
+    The Barrier holds every request after its read, so all three see the code still pending.
+    """
+    repo = VerificationRepository(redis)
+    code = await repo.issue_password_reset(user_uuid="u-1", type_="email", value="a@x.com")
+    gate = asyncio.Barrier(3)
+    orig_get = repo.redis.get
+
+    async def gated_get(k):
+        v = await orig_get(k)
+        await gate.wait()
+        return v
+
+    repo.redis.get = gated_get
+    results = await asyncio.gather(
+        *[repo.consume_password_reset(type_="email", value="a@x.com", code=code) for _ in range(3)]
+    )
+    repo.redis.get = orig_get
+
+    assert [r is not None for r in results].count(True) == 1
 
 
 # --- Task 3: message builders ---
