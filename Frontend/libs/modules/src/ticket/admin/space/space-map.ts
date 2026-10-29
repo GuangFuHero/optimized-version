@@ -5,6 +5,7 @@
  */
 
 import type { RescueMapMarkerItem } from '../../../map/types';
+import type { MapViewport } from '../ticket-board/model/ticket-filters';
 import { TICKET_PRIORITY_PIN_COLORS } from '../ticket-board/model/ticket-marker';
 import type { SpaceListRow, SpacePriority } from './space-analysis';
 
@@ -67,4 +68,25 @@ export function pinnedTickets<T extends { buildingMapUuid: string | null }>(
   return rows.filter(
     (row) => !row.buildingMapUuid || !pinnedSpaceIds.has(row.buildingMapUuid),
   );
+}
+
+/**
+ * The spaces the map's side list shows: those whose pin is inside the view, as its tickets are the
+ * ones loaded for the view. None until the map has one; a space without a point has no pin to be in it.
+ */
+export function spacesInView(
+  spaces: readonly SpaceListRow[],
+  viewport: MapViewport | null,
+): SpaceListRow[] {
+  if (!viewport) return [];
+  return spaces.filter(({ lngLat }) => {
+    if (!lngLat) return false;
+    const [lng, lat] = lngLat;
+    return (
+      lng >= viewport.west &&
+      lng <= viewport.east &&
+      lat >= viewport.south &&
+      lat <= viewport.north
+    );
+  });
 }

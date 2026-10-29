@@ -11,6 +11,7 @@ import type { Map as LeafletMap } from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
 
+import { Muted } from '../../../admin/shared/muted';
 import { Map } from '../../../map';
 import type {
   RescueMapControllerValue,
@@ -46,8 +47,10 @@ import {
   pinnedTickets,
   SPACE_LEGEND_LABEL,
   spaceIdOfMarker,
+  spacesInView,
   toSpaceMarker,
 } from '../space/space-map';
+import { SpaceTag, StateBadge } from '../space/space-badges';
 import { SpaceMapCard } from '../space/space-map-card';
 
 const { color, radius, shadow, typography } = designTokens;
@@ -79,8 +82,8 @@ interface TicketMapViewProps {
 const NO_SPACES: readonly SpaceListRow[] = [];
 
 /**
- * Browse-only: the loaded tickets listed beside pins by priority; a click on a list item or a pin
- * opens the ticket, a click on the map does nothing. The open ticket is the list's highlighted item.
+ * Browse-only: the loaded tickets, after the spaces in view, listed beside pins by priority; a click
+ * on a list item or a pin opens the ticket or the space, a click on the map does nothing. The open ticket is the list's highlighted item.
  * On opening and on each filter change it frames every matching ticket; from there it loads the
  * matching tickets inside the view, again each time the map settles after a move.
  */
@@ -101,6 +104,10 @@ export function TicketMapView({
   );
   const tickets = useTicketPins(variables, { enabled: viewport !== null });
   const rows = tickets.pins;
+  const listSpaces = useMemo(
+    () => spacesInView(spaces, viewport),
+    [spaces, viewport],
+  );
   // Built once per load; a selection change swaps only the marker whose look changes. A ticket in
   // a space draws no pin of its own: it shares the space's square one.
   const rowMarkers = useMemo(() => {
@@ -170,10 +177,12 @@ export function TicketMapView({
       >
         <TicketMapList
           rows={rows}
+          spaces={listSpaces}
           loading={viewport === null || tickets.isFetching}
           failed={tickets.error != null}
           selectedUuid={selectedUuid}
           onOpen={onOpenTicket}
+          onOpenSpace={onOpenSpace}
         />
         <Box
           sx={{
@@ -412,18 +421,53 @@ function SelectionSync({
  * the ticket as its pin does; the open ticket is highlighted and scrolled into view, wherever it
  * was opened from.
  */
+/** A row of the side list, a ticket's or a space's; the open ticket's is highlighted. */
+const listItemSx = (selected: boolean) => ({
+  width: '100%',
+  display: 'grid',
+  gridTemplateColumns: LIST_COLUMNS,
+  alignItems: 'center',
+  gap: '12px',
+  p: '12px 16px',
+  textAlign: 'left',
+  bgcolor: selected ? color.bg.primary.subtle : 'transparent',
+  boxShadow: selected ? `inset 3px 0 0 ${color.brand.primary.default}` : 'none',
+  '&:hover': {
+    bgcolor: selected ? color.bg.primary.subtle : color.bg.neutral.subtle,
+  },
+});
+
+const linkSx = {
+  ...typography.label[300],
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '2px',
+  mt: '4px',
+  color: color.brand.secondary.default,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+};
+
+/**
+ * The tickets loaded for the view, beside the map, after the spaces whose pin is in it
+ * (`tk-table.jsx` map list, `SpaceCard`): spaces first, as on the list's first page.
+ */
 function TicketMapList({
   rows,
+  spaces,
   loading,
   failed,
   selectedUuid,
   onOpen,
+  onOpenSpace,
 }: {
   rows: readonly TicketPin[];
+  spaces: readonly SpaceListRow[];
   loading: boolean;
   failed: boolean;
   selectedUuid: string | null;
   onOpen: (uuid: string) => void;
+  onOpenSpace?: (uuid: string) => void;
 }) {
   const itemsRef = useRef(new globalThis.Map<string, HTMLElement>());
   useEffect(() => {
@@ -462,7 +506,7 @@ function TicketMapList({
         <span>優先級</span>
         <span>狀態</span>
       </Box>
-      {rows.length === 0 ? (
+      {rows.length === 0 && spaces.length === 0 ? (
         <Box sx={{ p: '24px 16px', textAlign: 'center' }}>
           <Typography
             sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
@@ -475,6 +519,62 @@ function TicketMapList({
           component="ul"
           sx={{ m: 0, p: 0, listStyle: 'none', overflowY: 'auto', flex: 1 }}
         >
+          {spaces.map((space) => (
+            <Box
+              component="li"
+              key={`space:${space.id}`}
+              sx={{
+                borderBottom: `1px solid ${color.border.default}`,
+                bgcolor: color.bg.neutral.subtle,
+              }}
+            >
+              <ButtonBase
+                onClick={() => onOpenSpace?.(space.id)}
+                disabled={!onOpenSpace}
+                sx={listItemSx(false)}
+              >
+                <Box sx={{ minWidth: 0 }}>
+                  <SpaceTag />
+                  <Typography
+                    noWrap
+                    title={space.name}
+                    sx={{
+                      ...typography.label[400],
+                      fontWeight: 700,
+                      color: color.fg.neutral.default,
+                      mt: '2px',
+                    }}
+                  >
+                    {space.name}
+                  </Typography>
+                  <Typography
+                    noWrap
+                    title={space.summary}
+                    sx={{
+                      ...typography.body[300],
+                      color: color.fg.neutral.muted,
+                    }}
+                  >
+                    {space.summary}
+                  </Typography>
+                  <Typography component="span" sx={linkSx}>
+                    看各樓層
+                    <ChevronRight size={14} />
+                  </Typography>
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  {space.priority ? (
+                    <PriorityCell priority={space.priority} />
+                  ) : (
+                    <Muted cell>—</Muted>
+                  )}
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <StateBadge state={space.status} />
+                </Box>
+              </ButtonBase>
+            </Box>
+          ))}
           {rows.map((row) => {
             const selected = row.uuid === selectedUuid;
             const address = ticketAddressLine(row);
@@ -491,24 +591,7 @@ function TicketMapList({
                 <ButtonBase
                   onClick={() => onOpen(row.uuid)}
                   aria-current={selected ? 'true' : undefined}
-                  sx={{
-                    width: '100%',
-                    display: 'grid',
-                    gridTemplateColumns: LIST_COLUMNS,
-                    alignItems: 'center',
-                    gap: '12px',
-                    p: '12px 16px',
-                    textAlign: 'left',
-                    bgcolor: selected ? color.bg.primary.subtle : 'transparent',
-                    boxShadow: selected
-                      ? `inset 3px 0 0 ${color.brand.primary.default}`
-                      : 'none',
-                    '&:hover': {
-                      bgcolor: selected
-                        ? color.bg.primary.subtle
-                        : color.bg.neutral.subtle,
-                    },
-                  }}
+                  sx={listItemSx(selected)}
                 >
                   <Box sx={{ minWidth: 0 }}>
                     <Typography
@@ -532,19 +615,7 @@ function TicketMapList({
                     >
                       {address}
                     </Typography>
-                    <Typography
-                      component="span"
-                      sx={{
-                        ...typography.label[300],
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '2px',
-                        mt: '4px',
-                        color: color.brand.secondary.default,
-                        textDecoration: 'underline',
-                        textUnderlineOffset: '3px',
-                      }}
-                    >
+                    <Typography component="span" sx={linkSx}>
                       開啟任務細節
                       <ChevronRight size={14} />
                     </Typography>

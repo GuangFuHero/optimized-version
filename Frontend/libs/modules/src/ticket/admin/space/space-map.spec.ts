@@ -7,6 +7,7 @@ import {
   SPACE_PIN_EMPTY,
   spaceIdOfMarker,
   spacePinColor,
+  spacesInView,
   toSpaceMarker,
 } from './space-map';
 
@@ -88,5 +89,22 @@ describe('pinnedTickets', () => {
       'a',
       'c',
     ]);
+  });
+});
+
+describe('spacesInView', () => {
+  const view = { west: 121.4, south: 23.6, east: 121.5, north: 23.7, zoom: 14 };
+
+  it('lists the spaces whose pin is inside the view', () => {
+    const inside = row({ id: 'in', lngLat: [121.425, 23.668] });
+    const outside = row({ id: 'out', lngLat: [121.6, 23.668] });
+    expect(spacesInView([inside, outside], view).map((s) => s.id)).toEqual([
+      'in',
+    ]);
+  });
+
+  it('leaves out a space without a point, and lists none before the map has a view', () => {
+    expect(spacesInView([row({ lngLat: null })], view)).toEqual([]);
+    expect(spacesInView([row()], null)).toEqual([]);
   });
 });
