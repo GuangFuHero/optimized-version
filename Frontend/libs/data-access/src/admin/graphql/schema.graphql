@@ -890,7 +890,8 @@ input PromoteMarkZoneInput {
 }
 
 type Query {
-  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, reviewableOnly: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  assignableStationTeams: [AssignedTeamType!]!
   station(uuid: UUID!): StationType
   hazardousZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): HazardousZoneConnection!
   hazardousZone(uuid: UUID!): HazardousZoneType
@@ -1374,6 +1375,31 @@ type StationType {
   Internal back-office note on this station — null unless the caller holds station.view_pii here (ADR-332)
   """
   comment: String
+
+  """
+  Whether the caller holds station.edit over this station, so a page offers edit controls only where the edit would be allowed
+  """
+  viewerCanEdit: Boolean!
+
+  """
+  Whether the caller holds station.delete over this station, so a page offers a delete control only where the delete would be allowed
+  """
+  viewerCanDelete: Boolean!
+
+  """
+  Whether the caller holds station.view_history over this station, so a page offers the timeline only where reading it would be allowed
+  """
+  viewerCanViewHistory: Boolean!
+
+  """
+  Whether the caller's station export would include this station, so a page can count an export before running it
+  """
+  viewerCanExport: Boolean!
+
+  """
+  Whether the contact fields on this station come back unmasked for the caller
+  """
+  viewerCanViewPii: Boolean!
   photos: [PhotoType!]!
   secondaryLocation: SecondaryLocationType
   properties: [StationPropertyType!]!

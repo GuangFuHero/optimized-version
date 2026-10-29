@@ -156,6 +156,7 @@ export function ProfileSheet({
     <Sheet
       open
       onClose={onClose}
+      variant="admin"
       eyebrow="個人設定"
       title={user.name}
       width={520}
