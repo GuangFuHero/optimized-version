@@ -26,7 +26,11 @@ import {
 } from '../../../admin/shared/export-popover-parts';
 import { downloadBlob } from '../../../admin/shared/model/bulk-import';
 import { NEED_KIND_ICONS } from './need-kind-icons';
-import { ticketExportFilename } from './model/ticket-export';
+import {
+  exportCapLabel,
+  exportTypeCount,
+  ticketExportFilename,
+} from './model/ticket-export';
 import { needTypeLabel, type NeedType } from './model/ticket-row';
 
 const { color, focusRing, radius, typography } = designTokens;
@@ -45,15 +49,16 @@ export function TicketExportMenu() {
   const [format, setFormat] = useState<ExportFormat>('csv');
   const exportTickets = useExportTickets();
   // Counted only while the popover is open; a ticket write marks it stale with the lists.
-  const counts = useTicketExportCounts({ enabled: Boolean(anchor) }).data
-    ?.counts;
+  const answer = useTicketExportCounts({ enabled: Boolean(anchor) }).data;
 
   const types: NeedType[] =
-    (counts?.medical ?? 0) > 0 ? [...LISTED_TYPES, 'medical'] : LISTED_TYPES;
-  const countOf = (type: NeedType) =>
-    counts === undefined ? null : (counts[type] ?? 0);
+    (answer?.counts.medical ?? 0) > 0
+      ? [...LISTED_TYPES, 'medical']
+      : LISTED_TYPES;
   const typeLabel = needTypeLabel(taskType);
-  const count = countOf(taskType);
+  // A type past the cap is refused by the backend: said so up front, and its button stays off.
+  const { count, overCap } = exportTypeCount(answer, taskType);
+  const capLabel = answer ? exportCapLabel(answer.max_rows) : '';
 
   const download = () =>
     exportTickets.mutate(
@@ -120,7 +125,7 @@ export function TicketExportMenu() {
           >
             {types.map((type) => {
               const KindIcon = NEED_KIND_ICONS[type];
-              const typeCount = countOf(type);
+              const line = exportTypeCount(answer, type);
               return (
                 <FormControlLabel
                   key={type}
@@ -147,10 +152,12 @@ export function TicketExportMenu() {
                       <Typography
                         sx={{
                           ...typography.body[300],
-                          color: color.fg.neutral.muted,
+                          color: line.overCap
+                            ? color.fg.danger
+                            : color.fg.neutral.muted,
                         }}
                       >
-                        {typeCount ?? '—'} 筆
+                        {line.overCap ? capLabel : `${line.count ?? '—'} 筆`}
                       </Typography>
                     </Box>
                   }
@@ -177,10 +184,14 @@ export function TicketExportMenu() {
           <Button
             fullWidth
             onClick={download}
-            disabled={!count || exportTickets.isPending}
+            disabled={!count || overCap || exportTickets.isPending}
             startIcon={<Download size={17} />}
           >
-            {exportTickets.isPending ? '匯出中…' : `下載 ${count ?? '—'} 筆`}
+            {exportTickets.isPending
+              ? '匯出中…'
+              : overCap
+                ? '無法匯出'
+                : `下載 ${count ?? '—'} 筆`}
           </Button>
         </Box>
       </Popover>
