@@ -1,7 +1,7 @@
 """Submissions in one area queue, so the later one sees the earlier one (ADR-396, PR #132).
 
-ADR-419 adds the site's help request, ADR-420 caps the whole wait, ADR-421 rounds the logged
-point, and ADR-422 gives stations their own keys.
+ADR-433 adds the site's help request, ADR-434 caps the whole wait, ADR-435 rounds the logged
+point, and ADR-436 gives stations their own keys.
 
 Two submissions that ask the engine before either commits both get created with no hint. Each
 race test pauses the first submission after its insert, before its commit, starts the second on
@@ -190,7 +190,7 @@ async def test_racing_stations_create_one(db, monkeypatch):
 
 
 async def test_racing_help_requests_create_one(db, monkeypatch):
-    """The site's help request queues like createTicket (ADR-419): the second is held."""
+    """The site's help request queues like createTicket (ADR-433): the second is held."""
     actor = await actor_with(db, Perm.TICKET_ADD)
 
     async def submit(session, user):
@@ -272,7 +272,7 @@ async def test_a_lock_held_too_long_is_given_up_and_the_submission_still_goes(db
 
 
 async def test_the_whole_wait_is_capped_not_each_key(db, caplog):
-    """Keys freed one by one, each sooner than the cap, still add up past it (ADR-420).
+    """Keys freed one by one, each sooner than the cap, still add up past it (ADR-434).
 
     Waiting key by key, the submission would take every key in turn and never give up.
     """
@@ -302,7 +302,7 @@ async def test_the_whole_wait_is_capped_not_each_key(db, caplog):
 
 
 async def test_the_give_up_log_names_the_area_not_the_point(db, caplog):
-    """The exact point is withheld from most readers; the log rounds it to about 250 m (ADR-421)."""
+    """The exact point is withheld from most readers; the log rounds it to about 250 m (ADR-435)."""
     exact = GeoPoint(121.56037, 23.67113)
     conns = Connections(2)
     try:
@@ -407,7 +407,7 @@ async def test_a_submission_elsewhere_does_not_wait(db, caplog):
 
 
 async def test_station_and_ticket_keys_never_overlap(db):
-    """H3 indexes are positive as bigint; station keys are their negation (ADR-422)."""
+    """H3 indexes are positive as bigint; station keys are their negation (ADR-436)."""
     tickets = await dedup_area_lock.area_keys(db, HERE, kind="ticket")
     stations = await dedup_area_lock.area_keys(db, HERE, kind="station")
 

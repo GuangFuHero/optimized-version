@@ -8,13 +8,13 @@ The area is the submission point's H3 cell and the ring around it. Two points cl
 `AREA_LOCK_MAX_RADIUS_M` have cells at most 2 apart, so their lock sets share a cell. Keys are
 taken in ascending order, so two submissions never hold each other's keys.
 
-Stations and tickets lock apart (ADR-422): the engine compares a station only with stations and a
+Stations and tickets lock apart (ADR-436): the engine compares a station only with stations and a
 task only with tasks, so neither has to wait for the other. Ticket keys are the cells' H3 indexes,
 which are positive as bigint; station keys are their negation, so the two never meet.
 
 Transaction-scoped advisory locks: released by the submission's commit (including the commit of
 a held submission's `hint_shown`) or rollback. The whole wait, over all keys, is capped at
-`AREA_LOCK_TIMEOUT_MS` (ADR-420); past that the submission goes on unlocked (fail-open), which is
+`AREA_LOCK_TIMEOUT_MS` (ADR-434); past that the submission goes on unlocked (fail-open), which is
 the behaviour before the lock.
 """
 
@@ -38,7 +38,7 @@ AREA_LOCK_H3_RESOLUTION = 8
 _LOCK_NOT_AVAILABLE = "55P03"
 
 # Logged points are rounded to 1/400 degree, about 250 m: enough to see which area is congested,
-# without the exact point the API withholds from most readers (ADR-421).
+# without the exact point the API withholds from most readers (ADR-435).
 _LOG_GRID_PER_DEGREE = 400
 
 # What a submission is checked against: stations, or tasks (a new ticket, a help request, a task).

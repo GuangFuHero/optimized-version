@@ -1207,16 +1207,16 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
   最慢 0.83 s；期間的 `/users/me` 200（0.54 s）；DB `tickets` 1、`hint_shown` 20（含之後再送一次）。
   log 有 9 筆「area lock not granted」：排隊超過 500 ms 的請求放棄等鎖，但那時第一筆已經 commit，所以仍被提示
 
-## Task 28: PR #140 review 修正（ADR-419~422，2026-10-29）
+## Task 28: PR #140 review 修正（ADR-433~436，2026-10-29）
 
 **Files:** `app/services/dedup_area_lock.py`、`app/services/dedup_submission.py`、`tests/test_dedup_area_lock.py`
 
 先 rebase main（解 `decisions.md`、`dedup_submission.py` 模組說明兩處衝突，都是兩邊各加一段）。每一步先寫會失敗的測試，跑一次確認是紅的，再實作。
 
-- [x] **28.1 請求協助也排隊（ADR-419）**：`test_racing_help_requests_create_one`，紅的原因是第二筆沒等鎖就建立。`submit_help_request` 在 `_score_acknowledged` 前呼叫 `lock_area_at` → 綠
-- [x] **28.2 站點分開（ADR-422）**：`area_keys`／`lock_area_at` 加必填 `kind`；`test_station_and_ticket_keys_never_overlap`、`test_a_station_does_not_wait_behind_tickets_in_its_area`。突變檢查：站點改回 `kind="ticket"` 時後者紅
-- [x] **28.3 合計期限（ADR-420）**：`test_the_whole_wait_is_capped_not_each_key`（session 級鎖握住 7 個 key、每 250 ms 放一個），紅的原因是沒有放棄。改成每個 key 前把 `lock_timeout` 設成剩下的時間 → 綠
-- [x] **28.4 log 四捨五入（ADR-421）**：`test_the_give_up_log_names_the_area_not_the_point`，紅的原因是 log 有精確座標 → 綠
+- [x] **28.1 請求協助也排隊（ADR-433）**：`test_racing_help_requests_create_one`，紅的原因是第二筆沒等鎖就建立。`submit_help_request` 在 `_score_acknowledged` 前呼叫 `lock_area_at` → 綠
+- [x] **28.2 站點分開（ADR-436）**：`area_keys`／`lock_area_at` 加必填 `kind`；`test_station_and_ticket_keys_never_overlap`、`test_a_station_does_not_wait_behind_tickets_in_its_area`。突變檢查：站點改回 `kind="ticket"` 時後者紅
+- [x] **28.3 合計期限（ADR-434）**：`test_the_whole_wait_is_capped_not_each_key`（session 級鎖握住 7 個 key、每 250 ms 放一個），紅的原因是沒有放棄。改成每個 key 前把 `lock_timeout` 設成剩下的時間 → 綠
+- [x] **28.4 log 四捨五入（ADR-435）**：`test_the_give_up_log_names_the_area_not_the_point`，紅的原因是 log 有精確座標 → 綠
 - [x] **28.5 nit**：`test_a_submission_elsewhere_does_not_wait` 不再計時，改成斷言沒有「area lock」warning
 - [x] **28.6** `test_dedup_area_lock.py` 14 passed；全套測試（`-n 4`）：3081 passed
 - [x] **28.7 Docker 從零完整驗證**（2026-10-29）：`--no-cache` 建 image、隔離 network、alembic 到 head、seed；真 HTTP，兩輪（第二輪換地點，避開冷啟動）：
