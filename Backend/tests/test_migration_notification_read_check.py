@@ -1,7 +1,7 @@
-"""Migration 9dd1f61063fe: a notification is read exactly when it has a read time (ADR-439).
+"""Migration 9dd1f61063fe: a notification is read exactly when it has a read time.
 
-Two databases: one whose rows agree, as staging's did, and one holding a row that does not, which the
-upgrade refuses rather than guess which column is right.
+Two databases: one whose rows agree, and one holding a row that does not, which the upgrade refuses
+rather than guess which column is right.
 """
 
 import asyncio
@@ -23,8 +23,8 @@ _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _NOON = datetime(2026, 10, 29, 4, 0, tzinfo=UTC)
 
 
-async def _alembic(url: str, *args: str) -> int:
-    """Run alembic against `url` in a subprocess; returns its exit code."""
+async def _alembic(url: str, *args: str) -> tuple[int, str]:
+    """Run alembic against `url` in a subprocess; returns its exit code and what it wrote to stderr."""
     process = await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
@@ -35,8 +35,8 @@ async def _alembic(url: str, *args: str) -> int:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    await process.communicate()
-    return process.returncode
+    _, stderr = await process.communicate()
+    return process.returncode, stderr.decode()
 
 
 async def _notify(conn, title: str, *, read: bool, read_at: datetime | None) -> None:
@@ -71,7 +71,7 @@ async def _run(suffix: str, *, disagreeing_row: bool) -> dict:
         async with engine.connect() as conn:
             await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
             await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
-        assert await _alembic(url, "upgrade", _BEFORE) == 0
+        assert (await _alembic(url, "upgrade", _BEFORE))[0] == 0
         async with engine.connect() as conn:
             await conn.execute(
                 text(
@@ -83,14 +83,17 @@ async def _run(suffix: str, *, disagreeing_row: bool) -> dict:
             await _notify(conn, "已讀", read=True, read_at=_NOON)
             if disagreeing_row:
                 await _notify(conn, "已讀沒時間", read=True, read_at=None)
-        upgraded = await _alembic(url, "upgrade", _REVISION) == 0
+        code, stderr = await _alembic(url, "upgrade", _REVISION)
+        upgraded = code == 0
         result = {"upgraded": upgraded}
+        if not upgraded:
+            result["says"] = stderr
         if upgraded:
             async with engine.connect() as conn:
                 result["read_without_time"] = await _refused(conn, "a", read=True, read_at=None)
                 result["time_without_read"] = await _refused(conn, "b", read=False, read_at=_NOON)
                 result["agreeing"] = await _refused(conn, "c", read=True, read_at=_NOON)
-            assert await _alembic(url, "downgrade", _BEFORE) == 0
+            assert (await _alembic(url, "downgrade", _BEFORE))[0] == 0
             async with engine.connect() as conn:
                 result["after_downgrade"] = await _refused(conn, "d", read=True, read_at=None)
         return result
@@ -122,8 +125,14 @@ async def test_after_the_upgrade_a_disagreeing_row_is_refused_either_way(outcome
 
 @pytest.mark.asyncio(loop_scope="module")
 async def test_a_database_holding_a_disagreeing_row_does_not_upgrade(outcomes):
-    """Nothing to guess from: the upgrade stops, and the row is there to be looked at."""
-    assert outcomes["disagreeing"] == {"upgraded": False}
+    """Nothing to guess from: the upgrade stops, says how many rows and how to list them."""
+    disagreeing = outcomes["disagreeing"]
+    assert disagreeing["upgraded"] is False
+    assert "1 notifications have `read` and `read_at` disagreeing" in disagreeing["says"]
+    assert (
+        "SELECT uuid, read, read_at FROM notifications WHERE NOT (read = (read_at IS NOT NULL))"
+        in disagreeing["says"]
+    )
 
 
 @pytest.mark.asyncio(loop_scope="module")
