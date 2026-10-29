@@ -4,9 +4,9 @@
   back, timeout, write detection, malformed and acknowledged results dropped. Fail-open.
   `try_check_submission` is the same, but says when the engine gave no answer.
 - `record_suspect_shown`: audit that a hint was shown.
-- `bear_out_acknowledged`: which of the submitter's "file it anyway" answers name what the engine
-  suspects for their draft (ADR-400), before creating. Batch import uses its parts,
-  `acknowledged_uuids`, `borne_out` and `unchecked_pairs`.
+- `settle_submission`: one check of a single create: which of the submitter's "file it anyway"
+  answers name what the engine suspects for their draft (ADR-400), and what is still suspected.
+  Batch import uses its parts, `acknowledged_uuids`, `borne_out` and `unchecked_pairs`.
 - `record_pair_ignored`: card that pair once the new entity exists. Does not commit.
 
 Every engine call goes through `_guarded` before anything is written, so a failure can roll back
@@ -134,31 +134,42 @@ class AcknowledgedPair:
     engine_version: str
 
 
-async def bear_out_acknowledged(
+@dataclass(frozen=True)
+class Settled:
+    """One check of a submission: the acknowledgements it bears out, and what it still suspects."""
+
+    pairs: list[AcknowledgedPair]
+    suspects: list[Suspect]
+
+
+async def settle_submission(
     db: AsyncSession,
     *,
     submission: Submission,
     acknowledged: Mapping[str, str | None],
     actor: User,
     now: datetime,
-) -> list[AcknowledgedPair]:
-    """The acknowledgements the engine bears out, by asking it about `submission`. Never raises.
+) -> Settled:
+    """Ask the engine about `submission` once: what to card and what to hold. Never raises.
 
     An acknowledgement answers the hint its draft was shown, so it counts only when it names the
     entity the engine suspects for that draft now (ADR-400). One naming anything else, or a draft
-    no longer suspected, counts for nothing: the draft is checked as usual and is not carded.
-    When the engine gives no answer nothing is checked anyway, so each one naming an entity that
-    exists is carded unscored (ADR-313). Called before anything is written, like `check`.
+    no longer suspected, counts for nothing: the draft is held like any other and is not carded.
+    The same answer decides what is held, so a submission filed anyway asks once, as one that isn't
+    does: under ADR-396's area lock, the wait it was sized for. When the engine gives no answer it
+    is not asked again: each acknowledgement naming an entity that exists is carded unscored
+    (ADR-313) and nothing is held, as an import stops asking (ADR-398). Called before anything is
+    written, like `check`.
     """
     named = acknowledged_uuids(acknowledged)
-    if not named:
-        return []
     suspects = await try_check_submission(
         db, submission=submission, acknowledged=frozenset(), actor=actor, now=now
     )
     if suspects is None:
-        return await unchecked_pairs(db, named)
-    return borne_out(suspects, named)
+        return Settled(pairs=await unchecked_pairs(db, named), suspects=[])
+    pairs = borne_out(suspects, named)
+    filed = {pair.draft_ref for pair in pairs}
+    return Settled(pairs=pairs, suspects=[s for s in suspects if s.draft_ref not in filed])
 
 
 def acknowledged_uuids(acknowledged: Mapping[str, str | None]) -> dict[str, str]:

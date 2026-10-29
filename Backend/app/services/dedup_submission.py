@@ -5,10 +5,10 @@ created (so nothing is left half-created), the API returns `Suspected`, and the 
 decides. No suspect creates as usual.
 
 A draft may carry `acknowledged_duplicate_of`: the entity the submitter was shown and
-confirmed this draft is not a duplicate of. It skips the check only when it names the very
-entity the engine suspects for that draft (ADR-400), so the same hint is not shown again. Every
-other draft, including one whose acknowledgement names anything else, is checked and can still
-be held. On create, those pairs are carded in the same commit.
+confirmed this draft is not a duplicate of. It is not held only when it names the very entity
+the engine suspects for that draft (ADR-400), so the same hint is not shown again. Every other
+draft, including one whose acknowledgement names anything else, can still be held. One check
+decides both (`dedup.settle_submission`). On create, those pairs are carded in the same commit.
 
 Every engine call happens before anything is written, so a failed call can roll back the
 transaction. Every new ticket comes through here, the site's help request included. Batch
@@ -87,12 +87,11 @@ async def submit_new_ticket(
     submission = NewTicket(ticket=ticket_draft(fields), tasks=tuple(task_draft(f) for f in task_fields))
     acknowledged = {task_ref(i): t.acknowledged_duplicate_of for i, t in enumerate(tasks)}
 
-    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
-    held = await _hold_if_suspected(
-        db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
+    settled = await dedup_service.settle_submission(
+        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
     )
-    if held is not None:
-        return held
+    if settled.suspects:
+        return await _hold(db, settled.suspects, actor)
 
     ticket = await ticket_service.insert_ticket(db, actor=actor, fields=fields)
     created_tasks = [
@@ -100,7 +99,7 @@ async def submit_new_ticket(
         for f in task_fields
     ]
     created = {task_ref(i): str(t.uuid) for i, t in enumerate(created_tasks)}
-    carded = await _record_acknowledged(db, pairs, created, actor_uuid)
+    carded = await _record_acknowledged(db, settled.pairs, created, actor_uuid)
     await db.commit()
     await dedup_review.notify_new_cards(db, count=carded, actor=actor, actor_uuid=actor_uuid)
     await db.refresh(ticket)
@@ -132,16 +131,15 @@ async def submit_help_request(
     )
     acknowledged = {task_ref(i): task.get("acknowledged_duplicate_of") for i, task in enumerate(tasks)}
 
-    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
-    held = await _hold_if_suspected(
-        db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
+    settled = await dedup_service.settle_submission(
+        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
     )
-    if held is not None:
-        return held
+    if settled.suspects:
+        return await _hold(db, settled.suspects, actor)
 
     ticket, created_tasks = await ticket_service.insert_help_request(db, actor=actor, fields=fields)
     created = {task_ref(i): str(t.uuid) for i, t in enumerate(created_tasks)}
-    carded = await _record_acknowledged(db, pairs, created, actor_uuid)
+    carded = await _record_acknowledged(db, settled.pairs, created, actor_uuid)
     await db.commit()
     await dedup_review.notify_new_cards(db, count=carded, actor=actor, actor_uuid=actor_uuid)
     await db.refresh(ticket)
@@ -167,17 +165,16 @@ async def submit_new_task(
     submission = NewTask(ticket_uuid=ticket_uuid, task=task_draft(fields))
     acknowledged = {task_ref(0): task.acknowledged_duplicate_of}
 
-    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
-    held = await _hold_if_suspected(
-        db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
+    settled = await dedup_service.settle_submission(
+        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
     )
-    if held is not None:
-        return held
+    if settled.suspects:
+        return await _hold(db, settled.suspects, actor)
 
     created_task = await ticket_service.insert_added_task(
         db, actor=actor, ticket_uuid=ticket_uuid, fields=fields
     )
-    carded = await _record_acknowledged(db, pairs, {task_ref(0): str(created_task.uuid)}, actor_uuid)
+    carded = await _record_acknowledged(db, settled.pairs, {task_ref(0): str(created_task.uuid)}, actor_uuid)
     await db.commit()
     await dedup_review.notify_new_cards(db, count=carded, actor=actor, actor_uuid=actor_uuid)
     await db.refresh(created_task)
@@ -194,15 +191,14 @@ async def submit_new_station(
     submission = NewStation(station=station_draft(fields))
     acknowledged = {"station": acknowledged_duplicate_of}
 
-    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
-    held = await _hold_if_suspected(
-        db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
+    settled = await dedup_service.settle_submission(
+        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
     )
-    if held is not None:
-        return held
+    if settled.suspects:
+        return await _hold(db, settled.suspects, actor)
 
     station = await station_service.insert_station(db, actor=actor, fields=fields)
-    carded = await _record_acknowledged(db, pairs, {"station": str(station.uuid)}, actor_uuid)
+    carded = await _record_acknowledged(db, settled.pairs, {"station": str(station.uuid)}, actor_uuid)
     await db.commit()
     await dedup_review.notify_new_cards(db, count=carded, actor=actor, actor_uuid=actor_uuid)
     await db.refresh(station)
@@ -210,31 +206,13 @@ async def submit_new_station(
     return SubmissionCreated(entity=station)
 
 
-async def _hold_if_suspected(db, *, submission, acknowledged, actor, now) -> SubmissionHeld | None:
-    """Ask the engine; on any suspect, audit each one, commit that, and hold the submission."""
-    suspects = await dedup_service.check_submission(
-        db,
-        submission=submission,
-        acknowledged=frozenset(acknowledged),
-        actor=actor,
-        now=now,
-    )
-    if not suspects:
-        return None
+async def _hold(db, suspects, actor) -> SubmissionHeld:
+    """Audit each suspect as shown, commit that, and hold the submission."""
     actor_uuid = str(actor.uuid)
     for suspect in suspects:
         await dedup_service.record_suspect_shown(db, suspect=suspect, actor_uuid=actor_uuid)
     await db.commit()
     return SubmissionHeld(suspects=tuple(suspects))
-
-
-async def _score_acknowledged(
-    db, submission, acknowledged, actor, now
-) -> list[dedup_service.AcknowledgedPair]:
-    """The acknowledgements that name the hint the engine gives their draft, scored by it (ADR-400)."""
-    return await dedup_service.bear_out_acknowledged(
-        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
-    )
 
 
 async def _record_acknowledged(db, pairs, created, actor_uuid) -> int:

@@ -174,10 +174,15 @@ async def _ticket_with_task(db, owner, task_uuid=None) -> tuple[str, str]:
     return str(ticket.uuid), str(task.uuid)
 
 
-async def _settle(db, actor, acknowledged: dict):
-    return await dedup_service.bear_out_acknowledged(
+async def _settled(db, actor, acknowledged: dict) -> dedup_service.Settled:
+    return await dedup_service.settle_submission(
         db, submission=SUBMISSION, acknowledged=acknowledged, actor=actor, now=NOW
     )
+
+
+async def _settle(db, actor, acknowledged: dict) -> list[dedup_service.AcknowledgedPair]:
+    """The acknowledgements the check bears out."""
+    return (await _settled(db, actor, acknowledged)).pairs
 
 
 async def _committed_task(db, actor, task_uuid=None) -> str:
@@ -216,12 +221,26 @@ async def test_record_pair_ignored_cards_the_pair(db, engine):
     assert engine.check_calls == [SUBMISSION]
 
 
+async def test_one_check_says_what_to_card_and_what_to_hold(db, engine):
+    """The acknowledged draft's hint is borne out; the other draft's hint still holds the submission."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    related = await _committed_task(db, actor)
+    engine.suspects = [_suspect("task:0", uuid=related), _suspect("task:1")]
+
+    settled = await _settled(db, actor, {"task:0": related})
+
+    assert [pair.draft_ref for pair in settled.pairs] == ["task:0"]
+    assert [suspect.draft_ref for suspect in settled.suspects] == ["task:1"]
+    assert engine.check_calls == [SUBMISSION]
+
+
 async def test_an_acknowledgement_naming_anything_but_its_drafts_hint_is_not_borne_out(db, engine):
     """`related` exists and is a hint, but for task:1; acknowledged on task:0 it counts for nothing."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     related = await _committed_task(db, actor)
     engine.suspects = [_suspect("task:0"), _suspect("task:1", uuid=related)]
-    assert await _settle(db, actor, {"task:0": related}) == []
+    settled = await _settled(db, actor, {"task:0": related})
+    assert (settled.pairs, [s.draft_ref for s in settled.suspects]) == ([], ["task:0", "task:1"])
 
 
 async def test_when_the_check_fails_an_entity_that_exists_is_still_carded_unscored(db, engine):
@@ -244,11 +263,12 @@ async def test_when_the_check_fails_an_unknown_uuid_is_not_carded(db, engine):
         assert await _settle(db, actor, {ref: str(uuid_mod.uuid4())}) == []
 
 
-async def test_an_acknowledgement_that_is_not_a_uuid_never_reaches_the_engine(db, engine):
-    """A related uuid that is not a uuid never reaches the engine or the uuid columns."""
+async def test_an_acknowledgement_that_is_not_a_uuid_is_not_borne_out(db, engine):
+    """It names nothing, so it is never compared or carded; the draft is held like any other."""
     actor = await actor_with(db, Perm.TICKET_ADD)
-    assert await _settle(db, actor, {"task:0": "not-a-uuid"}) == []
-    assert engine.check_calls == []
+    engine.suspects = [_suspect("task:0")]
+    settled = await _settled(db, actor, {"task:0": "not-a-uuid"})
+    assert (settled.pairs, [s.draft_ref for s in settled.suspects]) == ([], ["task:0"])
 
 
 async def test_a_failing_query_in_the_check_leaves_the_session_usable(db, engine):
