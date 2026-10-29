@@ -2303,6 +2303,62 @@ export type AdminTicketsQuery = {
   };
 };
 
+export type AdminTicketMapPinsQueryVariables = Exact<{
+  bounds?: InputMaybe<BoundsInput>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  priority?: InputMaybe<Scalars['String']['input']>;
+  q?: InputMaybe<Scalars['String']['input']>;
+  needType?: InputMaybe<Scalars['String']['input']>;
+  auditStatus?: InputMaybe<AuditStatus>;
+  disasterType?: InputMaybe<Scalars['String']['input']>;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+export type AdminTicketMapPinsQuery = {
+  __typename?: 'Query';
+  tickets: {
+    __typename?: 'TicketConnection';
+    items: Array<{
+      __typename?: 'TicketType';
+      uuid: string;
+      title: string;
+      geometry?: Geometry | null;
+      status: string;
+      priority: string;
+      locationCell?: string | null;
+      secondaryLocation?: {
+        __typename?: 'SecondaryLocationType';
+        county?: string | null;
+        town?: string | null;
+      } | null;
+    }>;
+    pageInfo: { __typename?: 'PageInfo'; totalCount: number };
+  };
+};
+
+export type AdminTicketsExtentQueryVariables = Exact<{
+  status?: InputMaybe<Scalars['String']['input']>;
+  priority?: InputMaybe<Scalars['String']['input']>;
+  q?: InputMaybe<Scalars['String']['input']>;
+  needType?: InputMaybe<Scalars['String']['input']>;
+  auditStatus?: InputMaybe<AuditStatus>;
+  disasterType?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+export type AdminTicketsExtentQuery = {
+  __typename?: 'Query';
+  ticketsExtent: {
+    __typename?: 'TicketsExtentType';
+    count: number;
+    minLat?: number | null;
+    maxLat?: number | null;
+    minLng?: number | null;
+    maxLng?: number | null;
+  };
+};
+
 export type AdminTicketStatsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type AdminTicketStatsQuery = {
@@ -4524,6 +4580,379 @@ export const AdminTicketsDocument = {
     },
   ],
 } as unknown as DocumentNode<AdminTicketsQuery, AdminTicketsQueryVariables>;
+export const AdminTicketMapPinsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminTicketMapPins' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'bounds' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'BoundsInput' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'status' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'priority' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'needType' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'auditStatus' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'AuditStatus' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'disasterType' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'zoom' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          defaultValue: { kind: 'IntValue', value: '0' },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'limit' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          defaultValue: { kind: 'IntValue', value: '50' },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'tickets' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'bounds' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'bounds' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'status' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'status' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'priority' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'priority' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'q' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'needType' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'needType' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'auditStatus' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'auditStatus' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'disasterType' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'disasterType' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'zoom' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'zoom' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'skip' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'skip' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'limit' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'limit' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'items' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'geometry' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'status' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'priority' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'locationCell' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'secondaryLocation' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'county' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'town' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'pageInfo' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'totalCount' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminTicketMapPinsQuery,
+  AdminTicketMapPinsQueryVariables
+>;
+export const AdminTicketsExtentDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminTicketsExtent' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'status' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'priority' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'needType' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'auditStatus' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'AuditStatus' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'disasterType' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'ticketsExtent' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'status' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'status' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'priority' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'priority' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'q' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'needType' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'needType' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'auditStatus' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'auditStatus' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'disasterType' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'disasterType' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'count' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'minLat' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'maxLat' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'minLng' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'maxLng' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminTicketsExtentQuery,
+  AdminTicketsExtentQueryVariables
+>;
 export const AdminTicketStatsDocument = {
   kind: 'Document',
   definitions: [

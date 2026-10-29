@@ -125,6 +125,70 @@ query AdminTickets(
     }
   }
 }
+query AdminTicketMapPins(
+  $bounds: BoundsInput
+  $status: String
+  $priority: String
+  $q: String
+  $needType: String
+  $auditStatus: AuditStatus
+  $disasterType: String
+  $zoom: Float
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  tickets(
+    bounds: $bounds
+    status: $status
+    priority: $priority
+    q: $q
+    needType: $needType
+    auditStatus: $auditStatus
+    disasterType: $disasterType
+    zoom: $zoom
+    skip: $skip
+    limit: $limit
+  ) {
+    items {
+      uuid
+      title
+      geometry
+      status
+      priority
+      locationCell
+      secondaryLocation {
+        county
+        town
+      }
+    }
+    pageInfo {
+      totalCount
+    }
+  }
+}
+query AdminTicketsExtent(
+  $status: String
+  $priority: String
+  $q: String
+  $needType: String
+  $auditStatus: AuditStatus
+  $disasterType: String
+) {
+  ticketsExtent(
+    status: $status
+    priority: $priority
+    q: $q
+    needType: $needType
+    auditStatus: $auditStatus
+    disasterType: $disasterType
+  ) {
+    count
+    minLat
+    maxLat
+    minLng
+    maxLng
+  }
+}
 query AdminTicketStats {
   ticketStats {
     total

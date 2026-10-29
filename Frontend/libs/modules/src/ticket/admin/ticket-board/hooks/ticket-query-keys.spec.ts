@@ -1,5 +1,7 @@
 import {
+  ticketMapPinsQuery,
   ticketQuery,
+  ticketsExtentQuery,
   ticketsQuery,
   ticketStatsQuery,
   ticketWriteKeys,
@@ -18,6 +20,22 @@ describe('ticket write invalidation', () => {
       true,
     );
     expect(hits(keys, ticketStatsQuery().queryKey)).toBe(true);
+  });
+
+  it("makes the map's pins and the filters' extent stale", () => {
+    expect(hits(keys, ticketMapPinsQuery({ zoom: 12 }).queryKey)).toBe(true);
+    expect(hits(keys, ticketsExtentQuery({ status: 'pending' }).queryKey)).toBe(
+      true,
+    );
+  });
+
+  it("keeps the map's pins apart from the board's pages", () => {
+    expect(
+      partialMatchKey(
+        ticketMapPinsQuery({ zoom: 12 }).queryKey,
+        ticketsQuery({ zoom: 12 }).queryKey,
+      ),
+    ).toBe(false);
   });
 
   it("makes only the written ticket's detail stale", () => {

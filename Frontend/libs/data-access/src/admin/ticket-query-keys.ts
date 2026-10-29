@@ -3,8 +3,13 @@
  * below can be invalidated one by one instead of the whole board at once.
  */
 export const ticketKeys = {
-  /** Every `tickets` connection: the board's list pages and the map's viewport loads. */
+  /**
+   * Every load that lists or counts tickets: the board's list pages, and under it the map's pins
+   * and the filters' extent, so a write that makes the lists stale reaches those too.
+   */
   lists: () => ['admin', 'tickets', 'tickets'] as const,
+  mapPins: () => [...ticketKeys.lists(), 'mapPins'] as const,
+  extents: () => [...ticketKeys.lists(), 'extent'] as const,
   stats: () => ['admin', 'tickets', 'stats'] as const,
   details: () => ['admin', 'tickets', 'ticket'] as const,
   tasks: () => ['admin', 'tickets', 'ticketTasks'] as const,

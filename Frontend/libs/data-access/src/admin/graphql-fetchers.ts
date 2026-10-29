@@ -47,35 +47,88 @@ export const ticketsQuery = (
         .then(graphqlResponseData),
   });
 
+/**
+ * Keep the last result on screen until the next one lands: always, or only when this holds for
+ * the last load's variables (say, it differs from this one just by its page).
+ */
+type KeepPrevious<V> = boolean | ((previous: V) => boolean);
+
+function placeholderFor<V>(keepPrevious: KeepPrevious<V> | undefined) {
+  if (typeof keepPrevious !== 'function') {
+    return keepPrevious ? keepPreviousData : undefined;
+  }
+  return <D>(
+    previousData: D | undefined,
+    previousQuery?: { queryKey: readonly unknown[] },
+  ) => {
+    const previous = previousQuery?.queryKey.at(-1) as V | undefined;
+    return previous && keepPrevious(previous) ? previousData : undefined;
+  };
+}
+
 export function useTickets(
   variables: documents.AdminTicketsQueryVariables = {},
   options: AdminQueryOptions & {
-    /**
-     * Keep the last result on screen until the next one lands: always, or only when this holds
-     * for the last load's variables (say, it differs from this one just by its page).
-     */
-    keepPrevious?:
-      | boolean
-      | ((previous: documents.AdminTicketsQueryVariables) => boolean);
+    keepPrevious?: KeepPrevious<documents.AdminTicketsQueryVariables>;
   } = {},
 ) {
-  const { keepPrevious } = options;
   return useQuery({
     ...ticketsQuery(variables),
     enabled: options.enabled,
-    placeholderData:
-      typeof keepPrevious === 'function'
-        ? (previousData, previousQuery) => {
-            const previous = previousQuery?.queryKey.at(-1) as
-              | documents.AdminTicketsQueryVariables
-              | undefined;
-            return previous && keepPrevious(previous)
-              ? previousData
-              : undefined;
-          }
-        : keepPrevious
-          ? keepPreviousData
-          : undefined,
+    placeholderData: placeholderFor(options.keepPrevious),
+  });
+}
+
+/** The map's load of the visible area: only the fields its pins and notices read. */
+export const ticketMapPinsQuery = (
+  variables: documents.AdminTicketMapPinsQueryVariables = {},
+) =>
+  queryOptions({
+    queryKey: [...ticketKeys.mapPins(), variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminTicketMapPinsDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useTicketMapPins(
+  variables: documents.AdminTicketMapPinsQueryVariables = {},
+  options: AdminQueryOptions & {
+    keepPrevious?: KeepPrevious<documents.AdminTicketMapPinsQueryVariables>;
+  } = {},
+) {
+  return useQuery({
+    ...ticketMapPinsQuery(variables),
+    enabled: options.enabled,
+    placeholderData: placeholderFor(options.keepPrevious),
+  });
+}
+
+/** How many tickets match the filters, and the box their points span: the map frames it. */
+export const ticketsExtentQuery = (
+  variables: documents.AdminTicketsExtentQueryVariables = {},
+) =>
+  queryOptions({
+    queryKey: [...ticketKeys.extents(), variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminTicketsExtentDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useTicketsExtent(
+  variables: documents.AdminTicketsExtentQueryVariables = {},
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...ticketsExtentQuery(variables),
+    enabled: options.enabled,
   });
 }
 
