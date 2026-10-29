@@ -157,11 +157,17 @@ function TicketRow({
             >
               {marker.title}
             </Typography>
+            {/* The title first: on a narrow row the 未填戶別 placeholder gives way entirely, and a
+                room keeps at most 45% (a long one cut short), rather than the title shrinking to a
+                character. */}
             {unit || showUnit ? (
               <Typography
                 component="span"
+                noWrap
                 sx={{
-                  flexShrink: 0,
+                  flexShrink: unit ? 0 : 100,
+                  minWidth: 0,
+                  maxWidth: '45%',
                   px: '5px',
                   borderRadius: `${radius.sm}px`,
                   fontSize: displayTextSize[11],

@@ -14,6 +14,15 @@ import { useBuilding } from './use-building';
 
 const { color, typography } = designTokens;
 
+// One line each: in the ~350px detail panel the default padding left 「上一張」 room for two characters
+// a line. Halves of the row, as before, with the space spent on the words.
+const STEP_BUTTON_SX = {
+  flex: 1,
+  minHeight: 44,
+  px: 1,
+  whiteSpace: 'nowrap',
+} as const;
+
 interface BuildingTicketNavigationProps {
   buildingUuid: string;
   /** The ticket whose detail this sits in. */
@@ -70,7 +79,7 @@ export function BuildingTicketNavigation({
               previous ? () => onSelectTicket(previous.marker) : undefined
             }
             startIcon={<ChevronLeftRoundedIcon />}
-            sx={{ flex: 1, minHeight: 44 }}
+            sx={STEP_BUTTON_SX}
           >
             上一張
           </Button>
@@ -89,7 +98,7 @@ export function BuildingTicketNavigation({
             disabled={!next}
             onClick={next ? () => onSelectTicket(next.marker) : undefined}
             endIcon={<ChevronRightRoundedIcon />}
-            sx={{ flex: 1, minHeight: 44 }}
+            sx={STEP_BUTTON_SX}
           >
             下一張
           </Button>
