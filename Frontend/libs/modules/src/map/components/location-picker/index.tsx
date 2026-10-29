@@ -15,6 +15,7 @@ import {
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { useEventMapView } from '../../hooks/use-event-map-view';
+import { shouldAutoLocate } from './auto-locate';
 import type { PickedPoint } from './types';
 
 export type { PickedPoint };
@@ -42,6 +43,8 @@ interface LocationPickerProps {
   onChange: (next: PickedPoint) => void;
   invalid?: boolean;
   height?: number;
+  /** Ask the device where it is when opened with no point (default). Off for back-office forms. */
+  autoLocate?: boolean;
 }
 
 /** Pinned over the map's lower left. It takes no taps: the map under it must stay tappable. */
@@ -100,11 +103,14 @@ export function LocationPicker({
   onChange,
   invalid = false,
   height = 176,
+  autoLocate = true,
 }: LocationPickerProps) {
   const [status, setStatus] = useState<LocateStatus>('idle');
   const onChangeRef = useRef(onChange);
   const mountedRef = useRef(true);
   const initialValueRef = useRef(value);
+  // Read once, on opening, like the initial value.
+  const autoLocateRef = useRef(autoLocate);
   const pickedByHandRef = useRef(false);
   // With no point to open at, the map opens at the event's view, so it waits for it.
   const eventMapView = useEventMapView();
@@ -152,7 +158,12 @@ export function LocationPicker({
     mountedRef.current = true;
 
     // Opened from a button, there is no point yet: start from where the person is.
-    if (!initialValueRef.current) {
+    if (
+      shouldAutoLocate({
+        autoLocate: autoLocateRef.current,
+        hasInitialValue: Boolean(initialValueRef.current),
+      })
+    ) {
       locate(false);
     }
 

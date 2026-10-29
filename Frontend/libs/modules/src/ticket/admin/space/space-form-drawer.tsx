@@ -214,6 +214,7 @@ function CreateSpaceForm({
                 }
                 invalid={Boolean(shown('pin'))}
                 height={260}
+                autoLocate={false}
               />
               {shown('pin') ? <ErrorText>{shown('pin')}</ErrorText> : null}
             </>
