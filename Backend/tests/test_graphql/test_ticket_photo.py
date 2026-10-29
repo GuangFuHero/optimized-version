@@ -66,9 +66,7 @@ async def staff_auth(redis):
 @pytest_asyncio.fixture
 async def filer_auth(redis):
     """A user who can file tickets but not edit them."""
-    return await _make_user_with_grants(
-        redis, {Perm.TICKET_ADD: "all", Perm.TICKET_VIEW: "all"}
-    )
+    return await _make_user_with_grants(redis, {Perm.TICKET_ADD: "all", Perm.TICKET_VIEW: "all"})
 
 
 async def _gql(client, token: str, query: str, variables: dict) -> dict:
@@ -123,9 +121,7 @@ async def test_create_ticket_refuses_eleven_photo_links(client, staff_auth):
     _, token = staff_auth
     before = await _ticket_count()
 
-    body = await _create_ticket(
-        client, token, photoUrls=[f"https://a.example/{i}.jpg" for i in range(11)]
-    )
+    body = await _create_ticket(client, token, photoUrls=[f"https://a.example/{i}.jpg" for i in range(11)])
 
     assert "errors" in body, body
     assert "At most 10 photos are allowed" in body["errors"][0]["message"]
@@ -170,7 +166,9 @@ async def test_attach_ticket_photo_unknown_ticket(client, staff_auth):
     """An unknown ticket uuid errors as 'Ticket not found'."""
     _, token = staff_auth
     body = await _gql(
-        client, token, ATTACH_TICKET_PHOTO,
+        client,
+        token,
+        ATTACH_TICKET_PHOTO,
         {"ticketUuid": str(uuid_mod.uuid4()), "url": "https://a.example/x.jpg"},
     )
     assert "Ticket not found" in body["errors"][0]["message"]
@@ -185,7 +183,9 @@ async def test_detach_ticket_photo_removes_it(client, staff_auth):
     )
     ticket_uuid = created["data"]["createTicket"]["ticket"]["uuid"]
     attached = await _gql(
-        client, token, ATTACH_TICKET_PHOTO,
+        client,
+        token,
+        ATTACH_TICKET_PHOTO,
         {"ticketUuid": ticket_uuid, "url": "https://a.example/3.jpg"},
     )
     photo_uuid = attached["data"]["attachTicketPhoto"]["uuid"]
@@ -194,7 +194,8 @@ async def test_detach_ticket_photo_removes_it(client, staff_auth):
     assert "errors" not in body, body
     assert body["data"]["detachTicketPhoto"] is True
     assert await _photo_urls(client, token, ticket_uuid) == [
-        "https://a.example/1.jpg", "https://a.example/2.jpg",
+        "https://a.example/1.jpg",
+        "https://a.example/2.jpg",
     ]
 
 
@@ -231,7 +232,9 @@ async def test_detach_ticket_photo_refuses_a_station_photo(client, staff_auth, c
     # The station photo is untouched.
     resp = await client.post(
         "/graphql",
-        json={"query": "query($uuid: UUID!) { station(uuid: $uuid) { photos { uuid } } }",
-              "variables": {"uuid": station_uuid}},
+        json={
+            "query": "query($uuid: UUID!) { station(uuid: $uuid) { photos { uuid } } }",
+            "variables": {"uuid": station_uuid},
+        },
     )
     assert len(resp.json()["data"]["station"]["photos"]) == 1

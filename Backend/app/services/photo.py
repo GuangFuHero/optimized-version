@@ -153,9 +153,7 @@ async def detach_station_photo(db: AsyncSession, *, actor: User, uuid: str) -> N
     await photo_repository.soft_delete(db, db_obj=photo)
 
 
-async def attach_ticket_photo(
-    db: AsyncSession, *, actor: User, ticket_uuid: str, url: str
-) -> Photo:
+async def attach_ticket_photo(db: AsyncSession, *, actor: User, ticket_uuid: str, url: str) -> Photo:
     """Attach a photo link to a ticket.
 
     Unlike a station's, a ticket's photos are not crowd-sourced: this is a ticket edit, so it

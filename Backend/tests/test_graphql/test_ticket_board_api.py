@@ -39,9 +39,16 @@ async def _ticket(created_by: str, title: str, status: str = "pending", disaster
     """Insert one ticket."""
     async with gql_conftest.test_db() as db:
         ticket = Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=created_by, title=title,
-            description="d", contact_name="c", contact_email="c@test.com", status=status,
-            priority="high", task_type="hr", disaster_types=sorted(disasters),
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=created_by,
+            title=title,
+            description="d",
+            contact_name="c",
+            contact_email="c@test.com",
+            status=status,
+            priority="high",
+            task_type="hr",
+            disaster_types=sorted(disasters),
         )
         db.add(ticket)
         await db.flush()
@@ -52,7 +59,11 @@ async def _need(ticket: str, quantity: int | None, status: str = "pending", peop
     """Insert one need on `ticket` with `people` linked."""
     async with gql_conftest.test_db() as db:
         task = TicketTask(
-            ticket_uuid=ticket, task_type="hr", task_name="n", quantity=quantity, status=status,
+            ticket_uuid=ticket,
+            task_type="hr",
+            task_name="n",
+            quantity=quantity,
+            status=status,
             source="user",
             created_by=await db.scalar(select(Tickets.created_by).where(Tickets.uuid == ticket)),
         )
@@ -81,7 +92,11 @@ async def _gql(client, token, query, variables=None):
 async def test_viewer_can_flags_follow_each_tickets_scope(client, redis):
     """At `own`, only the caller's own ticket carries the flags; at `all`, every one does."""
     perms = [
-        Perm.TICKET_VIEW, Perm.TICKET_EDIT, Perm.TICKET_DELETE, Perm.TICKET_AUDIT, Perm.TICKET_VIEW_HISTORY,
+        Perm.TICKET_VIEW,
+        Perm.TICKET_EDIT,
+        Perm.TICKET_DELETE,
+        Perm.TICKET_AUDIT,
+        Perm.TICKET_VIEW_HISTORY,
     ]
     own_uuid, own_token = await _create_user_with_grants(redis, [(p, "own") for p in perms])
     _, all_token = await _create_user_with_grants(redis, [(p, "all") for p in perms])
@@ -156,14 +171,14 @@ async def test_ticket_stats_count_statuses_and_the_volunteer_gap(client, redis):
     done = await _ticket(uid, "c2", status="completed")
     cancelled = await _ticket(uid, "x", status="cancelled")
 
-    await _need(pending, 5, people=2)                       # short 3
-    await _need(pending, 2, status="in_progress")           # short 2 (legacy in_progress still open)
-    await _need(working, 1, people=3)                       # over-subscribed: no gap
-    await _need(working, None)                              # no quantity: no gap
-    await _need(working, 4, status="completed")             # closed need: no gap
-    await _need(done, 9)                                    # ticket completed: no gap
-    await _need(cancelled, 9)                               # ticket cancelled: no gap
-    removed = await _need(pending, 7)                       # taken off: no gap
+    await _need(pending, 5, people=2)  # short 3
+    await _need(pending, 2, status="in_progress")  # short 2 (legacy in_progress still open)
+    await _need(working, 1, people=3)  # over-subscribed: no gap
+    await _need(working, None)  # no quantity: no gap
+    await _need(working, 4, status="completed")  # closed need: no gap
+    await _need(done, 9)  # ticket completed: no gap
+    await _need(cancelled, 9)  # ticket cancelled: no gap
+    removed = await _need(pending, 7)  # taken off: no gap
     async with gql_conftest.test_db() as db:
         task = (await db.execute(select(TicketTask).where(TicketTask.uuid == removed))).scalar_one()
         task.delete_at = datetime.now(UTC)
@@ -171,6 +186,11 @@ async def test_ticket_stats_count_statuses_and_the_volunteer_gap(client, redis):
     after = (await _gql(client, token, STATS))["ticketStats"]
     stats = {key: after[key] - before[key] for key in after}
     assert stats == {
-        "total": 5, "pending": 1, "inProgress": 1, "completed": 2, "cancelled": 1,
-        "gapPeople": 5, "gapNeeds": 2,
+        "total": 5,
+        "pending": 1,
+        "inProgress": 1,
+        "completed": 2,
+        "cancelled": 1,
+        "gapPeople": 5,
+        "gapNeeds": 2,
     }

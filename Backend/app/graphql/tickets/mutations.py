@@ -108,8 +108,10 @@ class RequestMutation:
         Returns the created PhotoType.
         """
         photo = await photo_service.attach_ticket_photo(
-            info.context["db"], actor=require_authenticated(info),
-            ticket_uuid=str(ticket_uuid), url=url,
+            info.context["db"],
+            actor=require_authenticated(info),
+            ticket_uuid=str(ticket_uuid),
+            url=url,
         )
         return PhotoType.from_model(photo)
 
