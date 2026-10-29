@@ -376,6 +376,46 @@ async def test_a_declined_row_the_engine_flags_again_is_reported_as_before_and_c
 
 
 @pytest.mark.asyncio
+async def test_when_the_engine_fails_part_way_declined_rows_on_either_side_stay_out(db, engine):
+    """Before the failure a declined row is flagged and recorded as usual; after it, never asked about.
+
+    The row whose check failed and the rows after it land unchecked, as when the first check fails.
+    """
+    actor = await _station_importer(db)
+    school = await _existing_station(db, actor, "光復國小")
+
+    def suspects(submission):
+        if submission.station.name == "大進國小":
+            raise RuntimeError("engine exploded")
+        return _suspect_stations_named("光復國民小學", related=school)(submission)
+
+    engine.suspects = suspects
+    raw, filename = _stations(
+        [
+            _station_row("光復國民小學"),
+            _station_row("大進國小"),
+            _station_row("光復長老教會"),
+            _station_row("富源國小"),
+        ]
+    )
+
+    outcome = await commit_stations(
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter", declined=frozenset({2, 4})
+    )
+
+    assert [call.station.name for call in engine.check_calls] == ["光復國民小學", "大進國小"]
+    assert await _station_names(db) == ["光復國小", "大進國小", "富源國小"]
+    assert (outcome.created, outcome.failed, outcome.suspected, outcome.declined) == (2, 0, 0, 2)
+    assert outcome.dedup_checked is False
+    held = {row["name"]: row["error"] for row in _report_rows(outcome)}
+    assert held.keys() == {"光復國民小學", "光復長老教會"}
+    assert "疑似重複，未建立：很像「光復國小」" in held["光復國民小學"]
+    assert held["光復長老教會"].endswith("-: 選了不建立，未建立")
+    events = (await db.execute(select(DedupAuditEvent.event_type, DedupAuditEvent.primary_uuid))).all()
+    assert [(event, str(uuid)) for event, uuid in events] == [("hint_shown", school)]
+
+
+@pytest.mark.asyncio
 async def test_declining_a_line_that_creates_nothing_changes_nothing(db, engine):
     """An update, or a line the file does not have, as a decision for one is ignored."""
     actor = await _station_importer(db)
