@@ -1792,6 +1792,11 @@ type TicketType {
   Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address
   """
   secondaryLocation: SecondaryLocationType
+
+  """
+  The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it lies in none, and to a caller without ticket.view_detail here
+  """
+  responsibleTeams: [AssignedTeamType!]!
   disasterDetails: [TicketDisasterDetailType!]!
 }
 
