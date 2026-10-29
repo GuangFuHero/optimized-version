@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { applyReverseGeocode } from '../../../../admin/shared/model/address-fill';
 import {
   acknowledgeSuspects,
+  applyPhotoChanges,
   changedUpdateInput,
   emptyTicketForm,
   photoChanges,
@@ -476,6 +477,48 @@ describe('photoChanges', () => {
       attach: [],
       detach: [],
     });
+  });
+});
+
+describe('applyPhotoChanges', () => {
+  // A backend that holds at most ten photos, as attachTicketPhoto does.
+  const capped = (count: number) => {
+    let held = count;
+    const calls: string[] = [];
+    return {
+      calls,
+      detach: async (uuid: string) => {
+        calls.push(`detach ${uuid}`);
+        held -= 1;
+      },
+      attach: async (url: string) => {
+        calls.push(`attach ${url}`);
+        if (held >= 10) throw new Error('A ticket holds at most 10 photos');
+        held += 1;
+      },
+    };
+  };
+
+  it('swaps a link on a ticket at the ten-photo cap', async () => {
+    const backend = capped(10);
+    await expect(
+      applyPhotoChanges({ attach: ['K'], detach: ['p10'] }, backend),
+    ).resolves.toEqual({ failed: false });
+    expect(backend.calls).toEqual(['detach p10', 'attach K']);
+  });
+
+  it('carries on past a failed step and says one failed', async () => {
+    const backend = capped(0);
+    const failing = {
+      ...backend,
+      detach: async () => {
+        throw new Error('gone');
+      },
+    };
+    await expect(
+      applyPhotoChanges({ attach: ['K'], detach: ['p1'] }, failing),
+    ).resolves.toEqual({ failed: true });
+    expect(backend.calls).toEqual(['attach K']);
   });
 });
 

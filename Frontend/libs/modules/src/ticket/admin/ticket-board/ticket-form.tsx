@@ -58,6 +58,7 @@ import {
 } from './model/ticket-row';
 import {
   acknowledgeSuspects,
+  applyPhotoChanges,
   changedUpdateInput,
   emptyNeed,
   emptyTicketForm,
@@ -256,33 +257,25 @@ export function TicketForm(props: TicketFormProps) {
       return;
     }
 
-    const { attach, detach } = photoChanges(
-      saved.current.photos,
-      values.photoUrls,
+    const { failed } = await applyPhotoChanges(
+      photoChanges(saved.current.photos, values.photoUrls),
+      {
+        detach: async (uuid) => {
+          await detachPhoto.mutateAsync({ uuid });
+          saved.current.photos = saved.current.photos.filter(
+            (photo) => photo.uuid !== uuid,
+          );
+        },
+        attach: async (url) => {
+          const { attachTicketPhoto: photo } = await attachPhoto.mutateAsync({
+            ticketUuid: current.uuid,
+            url,
+          });
+          saved.current.photos.push({ uuid: photo.uuid, url: photo.url });
+        },
+      },
     );
-    let photosFailed = false;
-    for (const url of attach) {
-      try {
-        const { attachTicketPhoto: photo } = await attachPhoto.mutateAsync({
-          ticketUuid: current.uuid,
-          url,
-        });
-        saved.current.photos.push({ uuid: photo.uuid, url: photo.url });
-      } catch {
-        photosFailed = true;
-      }
-    }
-    for (const uuid of detach) {
-      try {
-        await detachPhoto.mutateAsync({ uuid });
-        saved.current.photos = saved.current.photos.filter(
-          (photo) => photo.uuid !== uuid,
-        );
-      } catch {
-        photosFailed = true;
-      }
-    }
-    if (photosFailed) {
+    if (failed) {
       setError(PHOTOS_PARTLY_SAVED);
       return;
     }

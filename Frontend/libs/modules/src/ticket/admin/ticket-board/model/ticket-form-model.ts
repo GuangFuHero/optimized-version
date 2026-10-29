@@ -373,3 +373,33 @@ export function photoChanges(
   }
   return { attach, detach: left.map((photo) => photo.uuid) };
 }
+
+/**
+ * Sends `photoChanges` to the backend, the detaches first: a ticket at the ten-photo cap that
+ * swaps one link has room for the new photo only once the old one is gone. A failed step doesn't
+ * stop the others; `failed` says whether any did.
+ */
+export async function applyPhotoChanges(
+  changes: { attach: string[]; detach: string[] },
+  send: {
+    detach(uuid: string): Promise<void>;
+    attach(url: string): Promise<void>;
+  },
+): Promise<{ failed: boolean }> {
+  let failed = false;
+  for (const uuid of changes.detach) {
+    try {
+      await send.detach(uuid);
+    } catch {
+      failed = true;
+    }
+  }
+  for (const url of changes.attach) {
+    try {
+      await send.attach(url);
+    } catch {
+      failed = true;
+    }
+  }
+  return { failed };
+}
