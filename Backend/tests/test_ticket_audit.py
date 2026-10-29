@@ -608,9 +608,10 @@ async def test_an_issue_is_told_to_the_requester_and_the_volunteers_without_the_
     )
 
     notices = await _notices(db)
-    assert set(notices) == {requester_uuid, volunteer_uuid}
-    assert "請確認資料是否正確" in notices[requester_uuid]
-    assert "您報名的求助單" in notices[volunteer_uuid]
+    assert notices == {
+        requester_uuid: "協調人員正在確認你的求助單「一樓客廳積泥需要幫忙清」，有需要會跟你聯絡。",
+        volunteer_uuid: "你報名的求助單「一樓客廳積泥需要幫忙清」資料可能有誤，出發前請先跟開單者確認。",
+    }
     assert not any("電話打不通" in body for body in notices.values())
 
 
