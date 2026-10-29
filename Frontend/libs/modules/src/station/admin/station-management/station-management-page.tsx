@@ -21,9 +21,14 @@ import {
   countActiveFilters,
   EMPTY_FILTERS,
   parseStationFilters,
+  stationFiltersKey,
   writeStationFilters,
   type StationFilters,
 } from './model/station-filters';
+import {
+  readShownStationFilters,
+  rememberShownStationFilters,
+} from './model/station-map-fit';
 import { ReviewQueueDialog } from './review-queue-dialog';
 import { StationDetailSheet } from './station-detail-sheet';
 import { StationExportMenu } from './station-export-menu';
@@ -58,6 +63,22 @@ function useNow(intervalMs = 60_000) {
   return now;
 }
 
+/**
+ * Whether these filters came with the page, by a link or a reload, and differ from those it last
+ * showed (HC on #171): the map then frames them even where it was left. Filters changed on the page
+ * are shown as they change, in the table too, and do not count.
+ */
+function useArrivedWithNewFilters(filtersKey: string): boolean {
+  const [arrival] = useState(() => ({
+    filtersKey,
+    isNew: readShownStationFilters() !== filtersKey,
+  }));
+  useEffect(() => {
+    rememberShownStationFilters(filtersKey);
+  }, [filtersKey]);
+  return arrival.isNew && arrival.filtersKey === filtersKey;
+}
+
 export function StationManagementPage() {
   const router = useRouter();
   const pathname = usePathname() ?? '/stations';
@@ -68,10 +89,8 @@ export function StationManagementPage() {
   );
   const filters = useMemo(() => parseStationFilters(params), [params]);
   // The filters alone, as one string: the map frames its stations again only when this changes.
-  const filtersKey = useMemo(
-    () => writeStationFilters(new URLSearchParams(), filters).toString(),
-    [filters],
-  );
+  const filtersKey = useMemo(() => stationFiltersKey(filters), [filters]);
+  const arrivedWithNewFilters = useArrivedWithNewFilters(filtersKey);
   const view: StationView = params.get('view') === 'map' ? 'map' : 'table';
   const caps = useStationCapabilities();
   const now = useNow();
@@ -206,6 +225,7 @@ export function StationManagementPage() {
                 rows={rows}
                 filtersKey={filtersKey}
                 loading={stations.isPending}
+                arrivedWithNewFilters={arrivedWithNewFilters}
                 hasAnyStation={hasAnyStation}
                 now={now}
                 selectedUuid={selectedUuid}

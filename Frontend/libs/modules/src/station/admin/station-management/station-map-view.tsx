@@ -55,6 +55,8 @@ interface StationMapViewProps {
   filtersKey: string;
   /** The stations for these filters are still being read. */
   loading: boolean;
+  /** These filters came by a link or a reload, unlike the last ones shown: frame them on opening. */
+  arrivedWithNewFilters: boolean;
   hasAnyStation: boolean;
   now: Date;
   selectedUuid: string | null;
@@ -70,6 +72,7 @@ export function StationMapView({
   rows,
   filtersKey,
   loading,
+  arrivedWithNewFilters,
   hasAnyStation,
   now,
   selectedUuid,
@@ -97,6 +100,7 @@ export function StationMapView({
     filtersKey,
     loading,
     restoredRef,
+    arrivedWithNewFilters,
   });
   useFlyToSelected(leafletMap, markers, selectedUuid);
 
@@ -255,10 +259,12 @@ function useFitStations(
     filtersKey,
     loading,
     restoredRef,
+    arrivedWithNewFilters,
   }: {
     filtersKey: string;
     loading: boolean;
     restoredRef: RefObject<boolean>;
+    arrivedWithNewFilters: boolean;
   },
 ) {
   const framedKeyRef = useRef<string | null>(null);
@@ -266,27 +272,37 @@ function useFitStations(
   selectedRef.current = selectedUuid;
   const markersRef = useRef(markers);
   markersRef.current = markers;
+  // Asked again as the count changes, for filters still waiting on their first stations.
+  const pointCount = markers.length;
 
   useEffect(() => {
     if (!map) return;
-    const points = markersRef.current.map((marker) => marker.position);
     const step = decideStationFit({
       filtersKey,
       framedKey: framedKeyRef.current,
       loading,
       restored: restoredRef.current,
+      arrivedWithNewFilters,
       selected: Boolean(selectedRef.current),
-      pointCount: points.length,
+      pointCount,
     });
     if (step === 'wait') return;
     framedKeyRef.current = filtersKey;
     if (step === 'keep') return;
+    const points = markersRef.current.map((marker) => marker.position);
     if (points.length === 1) {
       map.setView(points[0], 15);
     } else {
       map.fitBounds(points, { padding: [48, 48] });
     }
-  }, [map, filtersKey, loading, restoredRef]);
+  }, [
+    map,
+    filtersKey,
+    loading,
+    restoredRef,
+    arrivedWithNewFilters,
+    pointCount,
+  ]);
 }
 
 /** Brings a newly selected station into view, close enough to see it apart from its neighbours. */

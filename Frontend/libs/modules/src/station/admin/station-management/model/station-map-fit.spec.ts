@@ -7,6 +7,7 @@ const FIRST_OPEN: StationFitInput = {
   framedKey: null,
   loading: false,
   restored: false,
+  arrivedWithNewFilters: false,
   selected: false,
   pointCount: 3,
 };
@@ -24,6 +25,17 @@ describe('decideStationFit', () => {
 
     expect(decideStationFit({ ...restored, loading: true })).toBe('wait');
     expect(decideStationFit(restored)).toBe('keep');
+  });
+
+  it('frames a map opened where it was left when a link or a reload brings other filters', () => {
+    const restored = {
+      ...FIRST_OPEN,
+      restored: true,
+      arrivedWithNewFilters: true,
+    };
+
+    expect(decideStationFit({ ...restored, loading: true })).toBe('wait');
+    expect(decideStationFit(restored)).toBe('frame');
   });
 
   it('frames again when the filters change, once their stations are read', () => {
@@ -50,7 +62,14 @@ describe('decideStationFit', () => {
     ).toBe('keep');
   });
 
-  it('has nothing to frame when no station has a point', () => {
-    expect(decideStationFit({ ...FIRST_OPEN, pointCount: 0 })).toBe('keep');
+  it('waits while no station has a point, and frames the first ones to arrive', () => {
+    // An import started from the empty list, or a read that failed and works on refocus: the
+    // filters stay the same, and their first stations still frame.
+    expect(decideStationFit({ ...FIRST_OPEN, pointCount: 0 })).toBe('wait');
+    expect(decideStationFit(FIRST_OPEN)).toBe('frame');
+
+    const changed = { ...SETTLED, filtersKey: 'type=shelter' };
+    expect(decideStationFit({ ...changed, pointCount: 0 })).toBe('wait');
+    expect(decideStationFit(changed)).toBe('frame');
   });
 });
