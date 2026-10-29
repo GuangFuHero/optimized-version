@@ -112,14 +112,14 @@ describe('recordMapView', () => {
     });
   });
 
-  it('rounds the centre to five places, about a metre', () => {
+  it('rounds the centre to three places, about 100 m', () => {
     expect(
       recordMapView(
-        { center: [23.6700049, 121.4180051], zoom: 14 },
+        { center: [23.6704049, 121.4185051], zoom: 14 },
         EVENT,
         null,
       ),
-    ).toMatchObject({ center: [23.67, 121.41801] });
+    ).toMatchObject({ center: [23.67, 121.419] });
   });
 
   it('keeps the event view already recorded when the event could not be read', () => {

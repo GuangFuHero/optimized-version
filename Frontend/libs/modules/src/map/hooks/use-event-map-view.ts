@@ -33,13 +33,42 @@ const READING: EventMapViewState = {
   view: MAP_VIEW_TAIWAN,
 };
 
+const UNREAD: EventMapViewState = {
+  ready: true,
+  eventView: undefined,
+  view: MAP_VIEW_TAIWAN,
+};
+
+/**
+ * How long a map waits for the event before opening as if it could not be read. A backend that does
+ * not answer would otherwise keep the map behind its loading line, on the patchy networks it is most
+ * needed on.
+ */
+export const EVENT_MAP_VIEW_WAIT_MS = 3000;
+
 /**
  * Where the event says maps open (`currentDisaster.mapView`, ADR-395). An event that sets no view,
  * no event configured yet and a failed read all come to all of Taiwan; only the last leaves
- * `eventView` undefined.
+ * `eventView` undefined, and so does a read still out after EVENT_MAP_VIEW_WAIT_MS. An answer that
+ * comes later is taken, but a map already open does not move to it.
  */
 export function useEventMapView(): EventMapViewState {
   const { data, status } = useCurrentDisaster();
+  const settled = Boolean(data) || status === 'error';
+  const [waitedOut, setWaitedOut] = useState(false);
+
+  useEffect(() => {
+    if (settled) {
+      return;
+    }
+
+    const timer = window.setTimeout(
+      () => setWaitedOut(true),
+      EVENT_MAP_VIEW_WAIT_MS,
+    );
+
+    return () => window.clearTimeout(timer);
+  }, [settled]);
 
   return useMemo(() => {
     // A read that fails after one that worked keeps the answer it had.
@@ -49,16 +78,24 @@ export function useEventMapView(): EventMapViewState {
       return { ready: true, eventView, view: eventView ?? MAP_VIEW_TAIWAN };
     }
 
-    return status === 'error'
-      ? { ready: true, eventView: undefined, view: MAP_VIEW_TAIWAN }
-      : READING;
-  }, [data, status]);
+    return status === 'error' || waitedOut ? UNREAD : READING;
+  }, [data, status, waitedOut]);
+}
+
+interface DecidedOpening {
+  opening: MapOpening;
+  openedUnder: EventMapView;
 }
 
 /**
  * Where a map opens, worked out once (`resolveMapOpening`); null until then. A position in the
  * address is not waited on: the map opens there at once, and this only settles what it falls back
  * to. Otherwise it waits for the event, which says whether the view the map was left at still holds.
+ *
+ * `openedUnder` is the event view the opening was worked out under, kept as it was: a view the map
+ * is left at is remembered under it. The live one would let an event view changed while the map is
+ * open pass for the one it was left under, and the next visit would come back to the old view
+ * instead of going to the new event view. Undefined until the opening is worked out.
  */
 export function useMapOpening({
   memoryKey,
@@ -66,26 +103,29 @@ export function useMapOpening({
 }: {
   memoryKey?: RescueMapMemoryKey;
   addressHasPosition: boolean;
-}): { opening: MapOpening | null; eventView: EventMapView } {
+}): { opening: MapOpening | null; openedUnder: EventMapView } {
   const event = useEventMapView();
-  const [opening, setOpening] = useState<MapOpening | null>(null);
+  const [decided, setDecided] = useState<DecidedOpening | null>(null);
 
   useEffect(() => {
-    if (opening || !event.ready) {
+    if (decided || !event.ready) {
       return;
     }
 
-    const next =
+    const opening =
       memoryKey && !addressHasPosition
         ? resolveMapOpening(readRememberedMapView(memoryKey), event.eventView)
         : resolveMapOpening(null, event.eventView);
 
-    if (memoryKey && next.dropRemembered) {
+    if (memoryKey && opening.dropRemembered) {
       forgetMapView(memoryKey);
     }
 
-    setOpening(next);
-  }, [addressHasPosition, event, memoryKey, opening]);
+    setDecided({ opening, openedUnder: event.eventView });
+  }, [addressHasPosition, decided, event, memoryKey]);
 
-  return { opening, eventView: event.eventView };
+  return {
+    opening: decided?.opening ?? null,
+    openedUnder: decided?.openedUnder,
+  };
 }

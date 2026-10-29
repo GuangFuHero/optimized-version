@@ -88,7 +88,7 @@ export function resolveMapOpening(
 }
 
 function roundCoordinate(value: number) {
-  return Math.round(value * 1e5) / 1e5;
+  return Math.round(value * 1e3) / 1e3;
 }
 
 /**
@@ -108,7 +108,8 @@ export function recordMapView(
   }
 
   return {
-    // About a metre, as the prototype keeps it.
+    // About 100 m: enough to come back to the same view, not enough to show the next person on a
+    // shared computer the very door the last one looked at. The prototype keeps about a metre.
     center: [roundCoordinate(view.center[0]), roundCoordinate(view.center[1])],
     zoom: view.zoom,
     eventView: leftUnder,
