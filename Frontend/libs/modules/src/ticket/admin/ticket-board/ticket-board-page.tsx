@@ -199,8 +199,13 @@ export function TicketBoardPage() {
               '& > *': COLUMN_SX,
             }}
           >
-            {/* A failed count is unknown, not zero: it shows as loading does. */}
-            <TicketStatsStrip stats={stats} />
+            {/* A failed count is unknown, not zero: it shows as loading does, with its own 重試. */}
+            <TicketStatsStrip
+              stats={stats}
+              failed={statsQuery.error != null}
+              retrying={statsQuery.isFetching}
+              onRetry={() => void statsQuery.refetch()}
+            />
             <TicketToolbar
               caps={caps}
               query={filters.q}
@@ -245,10 +250,7 @@ export function TicketBoardPage() {
                 failed={tickets.error != null}
                 unfiltered={listsEveryTicket(filters)}
                 retrying={tickets.isFetching}
-                onRetry={() => {
-                  void tickets.refetch();
-                  if (statsQuery.error != null) void statsQuery.refetch();
-                }}
+                onRetry={() => void tickets.refetch()}
                 now={now}
                 page={Math.min(page, pageCount)}
                 pageCount={pageCount}
