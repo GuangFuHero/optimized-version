@@ -15,6 +15,7 @@ from collections import defaultdict
 
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from strawberry.dataloader import DataLoader
 
 from app.db.h3 import h3_cell_text, h3_centroid
@@ -44,7 +45,7 @@ from app.models.station_property import (
     StationSuggestionMerge,
     StationUpdateSuggestion,
 )
-from app.models.team import Team
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.team_repository import team_zone_assign_repository
@@ -164,6 +165,8 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         "ticket_claimed_by": DataLoader(load_fn=_make_ticket_claimed_by_loader(db)),
         # The building a ticket was filed under, which the map groups the ticket by.
         "building_map_by_ticket": DataLoader(load_fn=_make_building_map_by_ticket_loader(db)),
+        # The teams of the 責任區 a ticket lies in (ADR-422).
+        "responsible_teams_by_ticket": DataLoader(load_fn=_make_responsible_teams_by_ticket_loader(db)),
     }
 
 
@@ -427,5 +430,42 @@ def _make_teams_by_zone_loader(db: AsyncSession):
         for zone_uuid, team in pairs:
             grouped[zone_uuid].append(AssignedTeamType.from_model(team))
         return [grouped[str(uuid)] for uuid in zone_uuids]
+
+    return load_fn
+
+
+def _make_responsible_teams_by_ticket_loader(db: AsyncSession):
+    """Batch-load the teams of every 責任區 each ticket's point lies in (ADR-422).
+
+    The test `zone` scope makes (rbac_scopes.py): `ST_Contains` on a zone not deleted, so the teams named
+    are the ones whose zone scope reaches the ticket. A team over a ticket through two zones comes once;
+    soft-deleted teams are left out, as `teams_by_zone` leaves them. By team name, ending on `uuid`.
+    """
+
+    async def load_fn(ticket_uuids: list[str]) -> list[list[AssignedTeamType]]:
+        # The page's points first, kept apart from the rest (MATERIALIZED), so each is looked up in the zones'
+        # spatial index; joined straight, the plan scanned every point inside each zone and kept the page's
+        # last. A CTE also keeps the zones and the tickets, which share base_geometries, apart.
+        page = (
+            select(BaseGeometry.uuid, BaseGeometry.geometry)
+            .where(BaseGeometry.uuid.in_(ticket_uuids))
+            .cte("page")
+            .prefix_with("MATERIALIZED")
+        )
+        zone = aliased(TeamZone, flat=True)
+        rows = await db.execute(
+            select(page.c.uuid, Team)
+            .select_from(TeamZoneAssign)
+            .join(Team, Team.uuid == TeamZoneAssign.team_uuid)
+            .join(zone, zone.uuid == TeamZoneAssign.zone_uuid)
+            .join(page, func.ST_Contains(zone.geometry, page.c.geometry))
+            .where(zone.delete_at.is_(None), Team.delete_at.is_(None))
+            .distinct()
+            .order_by(page.c.uuid, Team.name, Team.uuid)
+        )
+        grouped: dict[str, list[AssignedTeamType]] = defaultdict(list)
+        for ticket_uuid, team in rows:
+            grouped[str(ticket_uuid)].append(AssignedTeamType.from_model(team))
+        return [grouped[str(uuid)] for uuid in ticket_uuids]
 
     return load_fn

@@ -6,9 +6,11 @@ import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
 
 import {
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -37,8 +39,10 @@ import {
   withAlpha,
 } from '@rescue-frontend/ui';
 
+import { useMapOpening } from './hooks/use-event-map-view';
 import { useRescueMapController } from './hooks/use-rescue-map-controller';
 import { buildLocationCells } from './location-cells';
+import { rememberMapView, type RescueMapMemoryKey } from './map-opening';
 import type {
   RescueMapClusterAppearance,
   RescueMapClosureArea,
@@ -49,10 +53,13 @@ import type {
   RescueMapMarkerItem,
   RescueMapPublicZone,
   RescueMapRouteState,
+  RescueMapView,
   RescueMapViewportStoreLike,
 } from './types';
 
 const { color, primitives, radius, shadow } = designTokens;
+
+const MAP_LOADING_MESSAGE = '救災寶加載地圖中...';
 
 const RescueMapCanvas = dynamic(
   () =>
@@ -61,7 +68,7 @@ const RescueMapCanvas = dynamic(
     ),
   {
     ssr: false,
-    loading: () => <RescueMapStatusMessage message="救災寶加載地圖中..." />,
+    loading: () => <RescueMapStatusMessage message={MAP_LOADING_MESSAGE} />,
   },
 );
 
@@ -261,6 +268,11 @@ interface MapProps {
   clusterMaxZoom?: number;
   /** Opt-in: receives the Leaflet map once it is built, for callers that steer it themselves. */
   onMapReady?: (map: LeafletMap) => void;
+  /**
+   * Which map this is, for it to open where this browser last left it (MAP-VIEW-104). Not given, it
+   * remembers nothing and opens at the event's view.
+   */
+  viewMemoryKey?: RescueMapMemoryKey;
 }
 
 export const Map = memo(function Map({
@@ -287,7 +299,38 @@ export const Map = memo(function Map({
   clusterAppearance,
   clusterMaxZoom,
   onMapReady,
+  viewMemoryKey,
 }: MapProps = {}) {
+  // Read once, as the canvas reads it: a position in the address (a shared link, a reload) is where
+  // the map opens, at once. Without one, the map waits to know where to open (MAP-VIEW-101–104);
+  // so does one from a `bbox` alone, which names no zoom, for the event's.
+  const [addressPosition] = useState(
+    () => viewportStore?.getSnapshot().position ?? routeState?.position,
+  );
+  const { opening, openedUnder, eventView } = useMapOpening({
+    memoryKey: viewMemoryKey,
+    addressHasPosition: Boolean(addressPosition),
+  });
+  const opensAtOnce = addressPosition?.zoom !== undefined;
+  const openedUnderRef = useRef(openedUnder);
+  openedUnderRef.current = openedUnder;
+  const eventViewRef = useRef(eventView);
+  eventViewRef.current = eventView;
+
+  const rememberView = useCallback(
+    (view: RescueMapView) => {
+      if (viewMemoryKey) {
+        rememberMapView(
+          viewMemoryKey,
+          view,
+          openedUnderRef.current,
+          eventViewRef.current,
+        );
+      }
+    },
+    [viewMemoryKey],
+  );
+
   const controller = useRescueMapController({
     routeState,
     onRouteStateChange,
@@ -296,6 +339,7 @@ export const Map = memo(function Map({
     publicZones,
     // 視窗外的標記在地圖上本就不可見，關閉 bbox 過濾讓視角移動不重建 markers。
     filterMarkersByBbox: false,
+    defaultView: opening?.view,
   });
 
   // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。
@@ -427,24 +471,29 @@ export const Map = memo(function Map({
             overflow: 'hidden',
           }}
         >
-          <RescueMapCanvas
-            controller={controller}
-            onMarkerClick={handleMarkerClick}
-            onLocationCellClick={handleLocationCellClick}
-            previewMarker={previewMarker}
-            cursor={cursor}
-            onMapClick={onMapClick}
-            layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}
-            showScale={showScale}
-            clusterAppearance={clusterAppearance}
-            clusterMaxZoom={clusterMaxZoom}
-            zoomControlPosition={showZoomControl ? 'topright' : undefined}
-            onMapReady={onMapReady}
-            viewportStore={viewportStore}
-            draftPoint={draftPoint}
-            onDraftPointChange={onDraftPointChange}
-            draftPointAction={draftPointAction}
-          />
+          {opensAtOnce || opening ? (
+            <RescueMapCanvas
+              controller={controller}
+              onMarkerClick={handleMarkerClick}
+              onLocationCellClick={handleLocationCellClick}
+              previewMarker={previewMarker}
+              cursor={cursor}
+              onMapClick={onMapClick}
+              layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}
+              showScale={showScale}
+              clusterAppearance={clusterAppearance}
+              clusterMaxZoom={clusterMaxZoom}
+              zoomControlPosition={showZoomControl ? 'topright' : undefined}
+              onMapReady={onMapReady}
+              viewportStore={viewportStore}
+              draftPoint={draftPoint}
+              onDraftPointChange={onDraftPointChange}
+              draftPointAction={draftPointAction}
+              onViewChange={rememberView}
+            />
+          ) : (
+            <RescueMapStatusMessage message={MAP_LOADING_MESSAGE} />
+          )}
           {renderControls ? (
             renderControls(controller)
           ) : (

@@ -1224,6 +1224,7 @@ export type QueryTicketsArgs = {
   locationCell?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
+  order?: TicketListOrder;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
@@ -1806,6 +1807,13 @@ export type TicketDisasterDetailType = {
   value: Scalars['String']['output'];
 };
 
+export const TicketListOrder = {
+  NeedsFirst: 'NEEDS_FIRST',
+  Newest: 'NEWEST',
+} as const;
+
+export type TicketListOrder =
+  (typeof TicketListOrder)[keyof typeof TicketListOrder];
 export type TicketPropertyConfigType = {
   __typename?: 'TicketPropertyConfigType';
   /** Which control the form renders for this field */
@@ -1923,6 +1931,8 @@ export type TicketType = {
   priority: Scalars['String']['output'];
   /** Internal polymorphic discriminator — always 'request' */
   propertyName: Scalars['String']['output'];
+  /** The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it lies in none, and to a caller without ticket.view_detail here */
+  responsibleTeams: Array<AssignedTeamType>;
   /** Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address */
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
@@ -2849,6 +2859,12 @@ export type AdminCurrentDisasterQuery = {
     __typename?: 'CurrentDisasterType';
     name: string;
     shortName?: string | null;
+    mapView?: {
+      __typename?: 'MapViewType';
+      lat: number;
+      lng: number;
+      zoom: number;
+    } | null;
   } | null;
 };
 
@@ -6074,6 +6090,18 @@ export const AdminCurrentDisasterDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'shortName' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'mapView' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'lat' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'lng' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'zoom' } },
+                    ],
+                  },
+                },
               ],
             },
           },

@@ -14,6 +14,7 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
 from app.db.h3 import COARSE_MAX_H3_RESOLUTION
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import (
@@ -151,6 +152,18 @@ class AuditStatus(enum.Enum):
     need_audit = "need_audit"
     audited = "audited"
     audit_issue = "audit_issue"
+
+
+@strawberry.enum
+class TicketListOrder(enum.Enum):
+    """How the `tickets` list is ordered: `TICKET_ORDERS` in app/repositories/tickets_repository.py.
+
+    NEEDS_FIRST is the site list's (ADR-419): tickets still taking people first, one with an open
+    rescue need ahead of the rest, then newest first within each.
+    """
+
+    NEWEST = "newest"
+    NEEDS_FIRST = "needs_first"
 
 
 @strawberry.enum
@@ -1038,6 +1051,23 @@ class TicketType:
         if not await self._detail_visible(info):
             return None
         return await info.context["loaders"]["building_map_by_ticket"].load(str(self.uuid))
+
+    @strawberry.field(
+        description=(
+            "The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it "
+            "lies in none, and to a caller without ticket.view_detail here"
+        )
+    )
+    async def responsible_teams(self, info: strawberry.types.Info) -> list[AssignedTeamType]:
+        """Return who answers for the place this ticket is at, or none when out of detail scope.
+
+        Worked out from the exact point, so where a zone's edge crosses the cell a guest is shown,
+        it tells which side the ticket is on: more than the cell (ADR-281). Decided before the
+        lookup, as the address is, so a page of tickets a guest reads costs no query here.
+        """
+        if not await self._detail_visible(info):
+            return []
+        return await info.context["loaders"]["responsible_teams_by_ticket"].load(str(self.uuid))
 
     @strawberry.field
     async def disaster_details(self, info: strawberry.types.Info) -> list["TicketDisasterDetailType"]:
