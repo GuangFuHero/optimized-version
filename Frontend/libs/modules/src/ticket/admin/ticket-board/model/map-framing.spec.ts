@@ -183,9 +183,6 @@ describe('ticketMapNotice', () => {
       }),
     ).toBe('none-here');
     expect(
-      ticketMapNotice({ ...base, inViewTotal: 0, shown: 0, matchingTotal: 0 }),
-    ).toBeNull();
-    expect(
       ticketMapNotice({
         ...base,
         inViewTotal: 0,
@@ -193,6 +190,12 @@ describe('ticketMapNotice', () => {
         matchingTotal: null,
       }),
     ).toBeNull();
+  });
+
+  it('says there is nothing to show once no ticket matches anywhere', () => {
+    expect(
+      ticketMapNotice({ ...base, inViewTotal: 0, shown: 0, matchingTotal: 0 }),
+    ).toBe('empty');
   });
 
   it('waits for the view to load', () => {

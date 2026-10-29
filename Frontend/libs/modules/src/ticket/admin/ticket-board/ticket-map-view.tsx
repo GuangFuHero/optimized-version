@@ -6,7 +6,7 @@ import {
   useTicketsExtent,
 } from '@rescue-frontend/data-access/admin';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
-import { Building2, ChevronRight, X } from 'lucide-react';
+import { Building2, ChevronRight, MapPinOff, X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
@@ -29,6 +29,7 @@ import {
 } from './model/map-framing';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
 import {
+  listsEveryTicket,
   toExtentVariables,
   toMapVariables,
   type MapViewport,
@@ -211,6 +212,9 @@ export function TicketMapView({
             )}
           />
           <PriorityLegend withSpaces={spaces.length > 0} />
+          {notice === 'empty' && spaces.length === 0 ? (
+            <MapEmptyState filtered={!listsEveryTicket(filters)} />
+          ) : null}
         </Box>
       </Box>
     </Box>
@@ -631,6 +635,46 @@ function TicketMapList({
             );
           })}
         </Box>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * Nothing matches anywhere: said over the map, not left blank (`tk-map.jsx`'s empty state). Every
+ * ticket has a point, so its 「都還沒有地標」 case can't happen here.
+ */
+function MapEmptyState({ filtered }: { filtered: boolean }) {
+  return (
+    <Box
+      role="status"
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 500,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '6px',
+        p: '24px',
+        textAlign: 'center',
+        pointerEvents: 'none',
+        bgcolor: `color-mix(in srgb, ${color.bg.neutral.default} 72%, transparent)`,
+      }}
+    >
+      <MapPinOff size={28} color={color.fg.neutral.muted} />
+      <Typography
+        sx={{ ...typography.label[500], color: color.fg.neutral.default }}
+      >
+        {filtered ? '沒有符合條件的任務單' : '地圖上還沒有任務單'}
+      </Typography>
+      {filtered ? null : (
+        <Typography
+          sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+        >
+          任務單建立並標好地標後，會以圖釘出現在這裡。
+        </Typography>
       )}
     </Box>
   );

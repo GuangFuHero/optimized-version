@@ -85,11 +85,17 @@ export function selectedFocusStep(input: {
   return { point: loadedIds.has(selectedUuid) ? null : point };
 }
 
-export type TicketMapNotice = 'error' | 'zoom-in' | 'none-here' | null;
+export type TicketMapNotice =
+  | 'error'
+  | 'zoom-in'
+  | 'none-here'
+  | 'empty'
+  | null;
 
 /**
  * What the map says above itself: a failed load, more tickets in view than it draws, or none in
- * view though some match elsewhere.
+ * view though some match elsewhere. With none matching anywhere it says so over the map
+ * (`tk-map.jsx`'s empty state).
  */
 export function ticketMapNotice(input: {
   failed: boolean;
@@ -102,6 +108,7 @@ export function ticketMapNotice(input: {
   if (input.failed) return 'error';
   if (input.inViewTotal === null) return null;
   if (input.inViewTotal > input.shown) return 'zoom-in';
+  if (input.inViewTotal === 0 && input.matchingTotal === 0) return 'empty';
   if (input.inViewTotal === 0 && (input.matchingTotal ?? 0) > 0) {
     return 'none-here';
   }
