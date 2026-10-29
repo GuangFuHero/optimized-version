@@ -17,16 +17,19 @@ class IdentitySummary(BaseModel):
     team: str | None = None
 
 
+# The 平台角色 the back office shows, first match wins (ADR-432, #146's `platformOf()`).
+PlatformKey = Literal["super_admin", "data_auditor", "gov", "ngo", "user"]
+
+
 @dataclass(frozen=True)
 class UserSearch:
-    """What `GET /admin/users` narrows the list by (ADR-412). Every field is optional and they combine.
+    """What `GET /admin/users` narrows the list by (ADR-412, ADR-432). All optional; they combine.
 
-    `q` is matched against the nickname only. Phones, emails and real names are not searched: they
-    are personal data, and a search on them answers "whose number is this" (ADR-412).
+    `q` is matched against the nickname only, even for readers who see real names (ADR-432).
     """
 
     q: str | None = None
-    platform_role: str | None = None
+    platform_role: PlatformKey | None = None
     team_uuid: UUID | None = None
 
 
@@ -46,7 +49,7 @@ class AdminUserListItem(BaseModel):
     platform_role: str | None
     identities: list[IdentitySummary] = Field(default_factory=list)
     # When the account was made: the 加入時間 column (ADR-413).
-    created_at: datetime | None = None
+    created_at: datetime
     last_login_at: datetime | None = None
     # Refreshed on refresh-token rotation, so up to one access-token TTL (15 min) stale (ADR-093).
     last_activity_at: datetime | None = None

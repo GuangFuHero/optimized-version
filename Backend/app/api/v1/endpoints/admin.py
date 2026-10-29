@@ -24,6 +24,7 @@ from app.schemas.admin import (
     AssignRoleResponse,
     CreateTeamRequest,
     MapView,
+    PlatformKey,
     ProjectSettingsResponse,
     ProjectSettingsUpdate,
     TeamMemberItem,
@@ -56,9 +57,17 @@ router = APIRouter()
 async def list_users(
     skip: int = 0,
     limit: int = 100,
-    q: str | None = Query(None, max_length=100, description="Part of the nickname"),
-    platform_role: str | None = Query(
-        None, max_length=50, description="As the platform_role column shows; `user`: no other platform role"
+    # A NUL reaches Postgres, which refuses it: a 422 here, not a 500 there (ADR-432).
+    q: str | None = Query(
+        None,
+        max_length=100,
+        pattern=r"^[^\x00]*$",
+        description="Part of the nickname; full and half width match",
+    ),
+    platform_role: PlatformKey | None = Query(
+        None,
+        description="First that applies: super_admin, data_auditor, gov (in a gov team), "
+        "ngo (in a team, none gov), user (no team, no other platform role)",
     ),
     team_uuid: UUID | None = Query(None, description="Only those holding a role in this team"),
     db: AsyncSession = Depends(security.get_db),
@@ -70,7 +79,7 @@ async def list_users(
     Feature 010 replaced the single platform/team role pair with the full identity list
     (ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).
     Both land in the same row. Built by PlatformUserDirectory (Spec/026). `q`, `platform_role`
-    and `team_uuid` narrow it and combine (ADR-412).
+    and `team_uuid` narrow it and combine (ADR-412, ADR-432).
     """
     search = UserSearch(q=q, platform_role=platform_role, team_uuid=team_uuid)
     return await PlatformUserDirectory(db, current_user, redis, search).list(skip=skip, limit=limit)
