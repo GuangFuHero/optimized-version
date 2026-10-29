@@ -36,15 +36,24 @@ const PRIORITY_RANK: Record<SpacePriority, number> = {
 const isCancelled = (ticket: SpaceTicket) =>
   ticket.status === 'cancelled' || ticket.status === 'canceled';
 const isCompleted = (ticket: SpaceTicket) => ticket.status === 'completed';
-const hasOpenNeed = (ticket: SpaceTicket) =>
+/**
+ * 有需求還沒人接: an open need nobody is on. Claiming a need leaves it pending and moves only its
+ * ticket to in_progress (backend ADR-293, `ticket_status.py`), so a pending need alone says
+ * nothing about whether anyone took it.
+ */
+const hasUntakenNeed = (ticket: SpaceTicket) =>
   !isCompleted(ticket) &&
-  ticket.tasks.some((task) => task.status === 'pending');
+  ticket.tasks.some(
+    (task) => OPEN_TASK_STATUSES.has(task.status) && task.assignedCount === 0,
+  );
 
 /** A cancelled ticket doesn't count: a floor with only that has no tickets. */
 export function floorState(tickets: readonly SpaceTicket[]): FloorState {
   const live = tickets.filter((ticket) => !isCancelled(ticket));
   if (!live.length) return 'empty';
-  if (live.some((ticket) => ticket.status === 'pending' || hasOpenNeed(ticket)))
+  if (
+    live.some((ticket) => ticket.status === 'pending' || hasUntakenNeed(ticket))
+  )
     return 'need';
   if (live.some((ticket) => ticket.status === 'in_progress')) return 'progress';
   return 'done';

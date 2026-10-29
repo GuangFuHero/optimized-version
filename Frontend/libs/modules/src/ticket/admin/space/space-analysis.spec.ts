@@ -104,18 +104,62 @@ describe('floorState', () => {
     expect(floorState([ticket({ status: 'pending' })])).toBe('need');
   });
 
+  // Shapes the backend gives (ticket_status.py, ADR-293): a claimed need stays pending, and only
+  // its ticket moves to in_progress; a need leaves pending once it is filled.
   it('needs help while an in-progress ticket has a need nobody took', () => {
     expect(
       floorState([
-        ticket({ status: 'in_progress', tasks: [task({ status: 'pending' })] }),
+        ticket({
+          status: 'in_progress',
+          tasks: [
+            task({ status: 'pending', quantity: 3, assignedCount: 1 }),
+            task({ status: 'pending', quantity: 2, assignedCount: 0 }),
+          ],
+        }),
       ]),
     ).toBe('need');
   });
 
-  it('is in progress once every need is taken', () => {
+  it('is in progress while every open need has somebody on it', () => {
     expect(
-      floorState([ticket({ status: 'in_progress', tasks: [task()] })]),
+      floorState([
+        ticket({
+          status: 'in_progress',
+          tasks: [
+            task({ status: 'pending', quantity: 3, assignedCount: 1 }),
+            task({ status: 'fulfilled', quantity: 1, assignedCount: 1 }),
+          ],
+        }),
+      ]),
     ).toBe('progress');
+  });
+
+  it('counts a rescue need without a head count by whether anyone took it', () => {
+    const rescue = (assignedCount: number) =>
+      ticket({
+        status: 'in_progress',
+        tasks: [
+          task({ status: 'pending', quantity: null, assignedCount }),
+          task({ status: 'pending', quantity: 1, assignedCount: 1 }),
+        ],
+      });
+
+    expect(floorState([rescue(0)])).toBe('need');
+    expect(floorState([rescue(2)])).toBe('progress');
+  });
+
+  it('reads a legacy in_progress need nobody took as still needing help', () => {
+    expect(
+      floorState([
+        ticket({
+          status: 'in_progress',
+          tasks: [
+            task({ status: 'in_progress', quantity: 2, assignedCount: 0 }),
+            task({ status: 'pending', quantity: 1, assignedCount: 1 }),
+          ],
+        }),
+      ]),
+    ).toBe('need');
   });
 
   it('is done when a completed ticket still has a recruiting need', () => {
