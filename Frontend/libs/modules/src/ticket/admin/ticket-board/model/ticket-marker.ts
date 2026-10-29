@@ -9,8 +9,8 @@ import type { RescueMapMarkerItem } from '../../../../map/types';
 import { stationPoint } from '../../../../station/station-point';
 import {
   UNTITLED_TICKET,
+  type TicketPin,
   type TicketPriority,
-  type TicketRow,
 } from './ticket-row';
 
 const c = designTokens.primitives.color;
@@ -24,12 +24,12 @@ export const TICKET_PRIORITY_PIN_COLORS: Record<TicketPriority, string> = {
 };
 
 /** A finished ticket stays on the map, faded. */
-export function isTicketClosed(row: TicketRow): boolean {
+export function isTicketClosed(row: Pick<TicketPin, 'status'>): boolean {
   return row.status === 'completed' || row.status === 'cancelled';
 }
 
 /** A map marker for a ticket, or null when the ticket has no point. */
-export function toTicketMarker(row: TicketRow): RescueMapMarkerItem | null {
+export function toTicketMarker(row: TicketPin): RescueMapMarkerItem | null {
   if (!row.position) return null;
   return {
     id: row.uuid,
@@ -98,7 +98,7 @@ export type MapSelection =
  */
 export function resolveMapSelection(
   id: string,
-  rows: readonly TicketRow[],
+  rows: readonly TicketPin[],
 ): MapSelection | null {
   if (rows.some((row) => row.uuid === id)) return { kind: 'ticket', uuid: id };
   if (!isLocationCellId(id)) return null;

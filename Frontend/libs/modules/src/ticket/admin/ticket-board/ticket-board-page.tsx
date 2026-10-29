@@ -1,7 +1,10 @@
 'use client';
 
 import { Box, Stack } from '@mui/material';
-import { useTicketStats } from '@rescue-frontend/data-access/admin';
+import {
+  useTicketsExtent,
+  useTicketStats,
+} from '@rescue-frontend/data-access/admin';
 import { designTokens } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Upload } from 'lucide-react';
@@ -21,6 +24,7 @@ import {
   parseTicketFilters,
   parseTicketPage,
   TICKET_PAGE_KEYS,
+  toExtentVariables,
   toPageVariables,
   writeTicketFilters,
   type TicketFilters,
@@ -83,21 +87,27 @@ export function TicketBoardPage() {
     [params, replaceParams],
   );
 
-  // One page from the server. Loaded in the map view too: its total is the header's count.
+  // One page from the server, for the table only.
   const pageVariables = useMemo(
     () => toPageVariables(filters, page),
     [filters, page],
   );
   const tickets = useTicketRows(pageVariables, {
+    enabled: view === 'table',
     keepAcross: TICKET_PAGE_KEYS,
   });
-  // While a filter change loads, the header keeps the last total rather than dropping to 0.
-  const [lastTotal, setLastTotal] = useState(0);
-  if (tickets.totalCount !== null && tickets.totalCount !== lastTotal) {
-    setLastTotal(tickets.totalCount);
-  }
-  const count = tickets.totalCount ?? lastTotal;
-  const pageCount = pageCountOf(count);
+  // The map counts by the extent it frames: the same query as the map's, so no second request.
+  const extentVariables = useMemo(() => toExtentVariables(filters), [filters]);
+  const extent = useTicketsExtent(extentVariables, {
+    enabled: view === 'map',
+  });
+  // Unknown (loading, or failed) shows as —, never 0. Paging keeps the last page's total up while
+  // the next loads; a filter change does not, as that total is the old filter's.
+  const count =
+    view === 'map'
+      ? (extent.data?.ticketsExtent.count ?? null)
+      : tickets.totalCount;
+  const pageCount = pageCountOf(tickets.totalCount ?? 0);
   // A page past the end (a pasted link, or the last ticket on it deleted) moves to the last one.
   useEffect(() => {
     if (tickets.totalCount === null || tickets.isPlaceholderData) return;

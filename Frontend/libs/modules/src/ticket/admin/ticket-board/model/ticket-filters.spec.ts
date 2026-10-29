@@ -9,9 +9,8 @@ import {
   parseTicketPage,
   searchHint,
   TICKET_MAP_AREA_KEYS,
-  TICKET_MAP_LIMIT,
   TICKET_PAGE_KEYS,
-  toMapFramingVariables,
+  toExtentVariables,
   toMapVariables,
   toPageVariables,
   toServerVariables,
@@ -214,9 +213,9 @@ describe('ticket filters', () => {
     ).toBe(false);
   });
 
-  it('frames every matching ticket, wherever it is', () => {
+  it('frames every matching ticket, wherever it is and however many', () => {
     expect(
-      toMapFramingVariables({ ...EMPTY_TICKET_FILTERS, status: 'pending' }),
-    ).toEqual({ status: 'pending', skip: 0, limit: TICKET_MAP_LIMIT });
+      toExtentVariables({ ...EMPTY_TICKET_FILTERS, status: 'pending' }),
+    ).toEqual({ status: 'pending' });
   });
 });

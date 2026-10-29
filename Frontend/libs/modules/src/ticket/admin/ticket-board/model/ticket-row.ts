@@ -1,6 +1,7 @@
 import type {
   AdminTaskFieldsFragment,
   AdminTicketFieldsFragment,
+  AdminTicketMapPinsQuery,
   AuditStatus,
 } from '@rescue-frontend/data-access/admin';
 import type { BadgeTone } from '@rescue-frontend/ui';
@@ -91,6 +92,35 @@ function toTaskRow(task: AdminTaskFieldsFragment): TaskRow {
   };
 }
 
+/** What the map reads of a ticket: its pin, the cell's ticket list, and a picked pin's ticket. */
+export type TicketPin = Pick<
+  TicketRow,
+  | 'uuid'
+  | 'title'
+  | 'status'
+  | 'priority'
+  | 'area'
+  | 'position'
+  | 'locationCell'
+>;
+
+type TicketPinFields = AdminTicketMapPinsQuery['tickets']['items'][number];
+
+export function toTicketPin(ticket: TicketPinFields): TicketPin {
+  const county = ticket.secondaryLocation?.county?.trim() ?? '';
+  const town = ticket.secondaryLocation?.town?.trim() ?? '';
+  return {
+    uuid: ticket.uuid,
+    title: ticket.title?.trim() || UNTITLED_TICKET,
+    // The schema types these as plain strings; the backend only stores the listed values.
+    status: ticket.status as TicketStatus,
+    priority: ticket.priority as TicketPriority,
+    area: `${county}${town}`,
+    position: stationPoint(ticket.geometry),
+    locationCell: ticket.locationCell ?? null,
+  };
+}
+
 export function toTicketRow(
   ticket: AdminTicketFieldsFragment & { tasks: AdminTaskFieldsFragment[] },
 ): TicketRow {
@@ -98,18 +128,11 @@ export function toTicketRow(
   const town = ticket.secondaryLocation?.town?.trim() ?? '';
   const tasks = ticket.tasks.map(toTaskRow);
   return {
-    uuid: ticket.uuid,
-    title: ticket.title?.trim() || UNTITLED_TICKET,
-    // The schema types these as plain strings; the backend only stores the listed values.
-    status: ticket.status as TicketStatus,
-    priority: ticket.priority as TicketPriority,
+    ...toTicketPin(ticket),
     auditStatus: ticket.auditStatus as AuditStatus,
     disasterTypes: ticket.disasterTypes,
     county,
     town,
-    area: `${county}${town}`,
-    position: stationPoint(ticket.geometry),
-    locationCell: ticket.locationCell ?? null,
     isCoarse: !!ticket.locationCell,
     updatedAt: ticket.updatedAt ?? null,
     tasks,

@@ -7,14 +7,30 @@ export type MapFraming =
   | { kind: 'point'; point: MapPoint }
   | { kind: 'bounds'; southWest: MapPoint; northEast: MapPoint };
 
-/** One point is shown at a street zoom; several by the box around them. */
-export function framingOf(points: readonly MapPoint[]): MapFraming {
-  if (points.length === 0) return { kind: 'none' };
-  const lats = points.map(([lat]) => lat);
-  const lngs = points.map(([, lng]) => lng);
-  const southWest: MapPoint = [Math.min(...lats), Math.min(...lngs)];
-  const northEast: MapPoint = [Math.max(...lats), Math.max(...lngs)];
-  if (southWest[0] === northEast[0] && southWest[1] === northEast[1]) {
+/** The box `ticketsExtent` hands back around every matching ticket's point. */
+export interface TicketExtent {
+  count: number;
+  minLat?: number | null;
+  maxLat?: number | null;
+  minLng?: number | null;
+  maxLng?: number | null;
+}
+
+/** One point is shown at a street zoom; several by the box around them; none leaves the view. */
+export function framingOf(extent: TicketExtent): MapFraming {
+  const { count, minLat, maxLat, minLng, maxLng } = extent;
+  if (
+    count === 0 ||
+    minLat == null ||
+    maxLat == null ||
+    minLng == null ||
+    maxLng == null
+  ) {
+    return { kind: 'none' };
+  }
+  const southWest: MapPoint = [minLat, minLng];
+  const northEast: MapPoint = [maxLat, maxLng];
+  if (minLat === maxLat && minLng === maxLng) {
     return { kind: 'point', point: southWest };
   }
   return { kind: 'bounds', southWest, northEast };

@@ -8,31 +8,49 @@ import {
 } from './map-framing';
 
 describe('framingOf', () => {
-  it('has nothing to frame without points', () => {
-    expect(framingOf([])).toEqual({ kind: 'none' });
+  const box = {
+    count: 3,
+    minLat: 22.6,
+    maxLat: 25.0,
+    minLng: 120.3,
+    maxLng: 121.6,
+  };
+
+  it('leaves the view alone when nothing matches', () => {
+    expect(framingOf({ count: 0 })).toEqual({ kind: 'none' });
+    expect(
+      framingOf({
+        count: 0,
+        minLat: null,
+        maxLat: null,
+        minLng: null,
+        maxLng: null,
+      }),
+    ).toEqual({ kind: 'none' });
   });
 
   it('goes to a lone point, or to points that all coincide', () => {
-    expect(framingOf([[23.5, 121.2]])).toEqual({
+    const point = { minLat: 23.5, maxLat: 23.5, minLng: 121.2, maxLng: 121.2 };
+    expect(framingOf({ count: 1, ...point })).toEqual({
       kind: 'point',
       point: [23.5, 121.2],
     });
-    expect(
-      framingOf([
-        [23.5, 121.2],
-        [23.5, 121.2],
-      ]),
-    ).toEqual({ kind: 'point', point: [23.5, 121.2] });
+    expect(framingOf({ count: 2, ...point })).toEqual({
+      kind: 'point',
+      point: [23.5, 121.2],
+    });
   });
 
   it('boxes several points', () => {
-    expect(
-      framingOf([
-        [25.0, 121.5],
-        [22.6, 120.3],
-        [23.9, 121.6],
-      ]),
-    ).toEqual({
+    expect(framingOf(box)).toEqual({
+      kind: 'bounds',
+      southWest: [22.6, 120.3],
+      northEast: [25.0, 121.6],
+    });
+  });
+
+  it('boxes every match, however many there are', () => {
+    expect(framingOf({ ...box, count: 5000 })).toEqual({
       kind: 'bounds',
       southWest: [22.6, 120.3],
       northEast: [25.0, 121.6],
@@ -103,12 +121,29 @@ describe('ticketMapNotice', () => {
     expect(ticketMapNotice({ ...base, inViewTotal: 250, shown: 200 })).toBe(
       'zoom-in',
     );
+    expect(
+      ticketMapNotice({
+        ...base,
+        inViewTotal: 250,
+        shown: 200,
+        matchingTotal: 900,
+      }),
+    ).toBe('zoom-in');
   });
 
   it('points elsewhere when none are in view but some match', () => {
     expect(ticketMapNotice({ ...base, inViewTotal: 0, shown: 0 })).toBe(
       'none-here',
     );
+    // Every match counts, not just the first page of them.
+    expect(
+      ticketMapNotice({
+        ...base,
+        inViewTotal: 0,
+        shown: 0,
+        matchingTotal: 900,
+      }),
+    ).toBe('none-here');
     expect(
       ticketMapNotice({ ...base, inViewTotal: 0, shown: 0, matchingTotal: 0 }),
     ).toBeNull();

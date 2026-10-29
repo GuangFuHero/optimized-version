@@ -1,7 +1,10 @@
 'use client';
 
 import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
-import { useTicket } from '@rescue-frontend/data-access/admin';
+import {
+  useTicket,
+  useTicketsExtent,
+} from '@rescue-frontend/data-access/admin';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
@@ -14,7 +17,7 @@ import type {
 } from '../../../map/types';
 import { stationPoint } from '../../../station/station-point';
 import { getTicketPriorityBadge } from '../../status';
-import { useTicketRows } from './hooks/use-ticket-rows';
+import { useTicketPins } from './hooks/use-ticket-pins';
 import {
   framingOf,
   framingStep,
@@ -24,8 +27,7 @@ import {
 } from './model/map-framing';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
 import {
-  TICKET_MAP_AREA_KEYS,
-  toMapFramingVariables,
+  toExtentVariables,
   toMapVariables,
   type MapViewport,
   type TicketFilters,
@@ -36,7 +38,7 @@ import {
   toTicketMarker,
   withMarkerSelected,
 } from './model/ticket-marker';
-import type { TicketPriority, TicketRow } from './model/ticket-row';
+import type { TicketPin, TicketPriority } from './model/ticket-row';
 
 const { color, radius, shadow, typography } = designTokens;
 
@@ -72,17 +74,15 @@ export function TicketMapView({
   onOpenTicket,
 }: TicketMapViewProps) {
   const [leafletMap, setLeafletMap] = useState<LeafletMap | null>(null);
-  const viewport = useMapViewport(leafletMap);
+  const framing = useFrameMatching(leafletMap, filters, selectedUuid);
+  // The first load waits for the first framing, so it is of the framed view and not the default.
+  const viewport = useMapViewport(framing.ready ? leafletMap : null);
   const variables = useMemo(
     () => (viewport ? toMapVariables(filters, viewport) : {}),
     [filters, viewport],
   );
-  const tickets = useTicketRows(variables, {
-    enabled: viewport !== null,
-    keepAcross: TICKET_MAP_AREA_KEYS,
-  });
-  const rows = tickets.rows;
-  const framing = useFrameMatching(leafletMap, filters, selectedUuid);
+  const tickets = useTicketPins(variables, { enabled: viewport !== null });
+  const rows = tickets.pins;
   // Built once per load; a selection change swaps only the marker whose look changes.
   const rowMarkers = useMemo(
     () =>
@@ -97,7 +97,7 @@ export function TicketMapView({
   );
   useFocusSelected(leafletMap, rowMarkers, selectedUuid);
   const notice = ticketMapNotice({
-    failed: tickets.error != null,
+    failed: tickets.error != null || framing.failed,
     inViewTotal: tickets.isPlaceholderData ? null : tickets.totalCount,
     shown: rows.length,
     matchingTotal: framing.totalCount,
@@ -112,7 +112,10 @@ export function TicketMapView({
             variant="ghost"
             size="sm"
             disabled={tickets.isFetching}
-            onClick={() => void tickets.refetch()}
+            onClick={() => {
+              if (tickets.error != null) void tickets.refetch();
+              if (framing.failed) framing.retry();
+            }}
           >
             重試
           </Button>
@@ -160,18 +163,20 @@ export function TicketMapView({
 }
 
 /**
- * Frames every ticket matching the filters (up to the map's limit): once when the map opens and
- * once per filter set, or again on `frameAgain`. Refetches after a write, and the viewport loads
- * that follow each move, leave the view alone. An open ticket keeps the view, as on the station
- * map, unless 顯示全部 asked; no match keeps it too.
+ * Frames every ticket matching the filters, by the box `ticketsExtent` hands back: once when the
+ * map opens and once per filter set, or again on `frameAgain`. Refetches after a write, and the
+ * viewport loads that follow each move, leave the view alone. An open ticket keeps the view, as
+ * on the station map, unless 顯示全部 asked; no match keeps it too. `ready` turns true once the
+ * first framing is decided and the map has settled there (or the extent failed to load).
  */
 function useFrameMatching(
   map: LeafletMap | null,
   filters: TicketFilters,
   selectedUuid: string | null,
 ) {
-  const variables = useMemo(() => toMapFramingVariables(filters), [filters]);
-  const matching = useTicketRows(variables);
+  const variables = useMemo(() => toExtentVariables(filters), [filters]);
+  const extent = useTicketsExtent(variables);
+  const [ready, setReady] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const request = `${JSON.stringify(variables)}#${attempt}`;
   const framedRef = useRef<string | null>(null);
@@ -179,10 +184,13 @@ function useFrameMatching(
   selectedRef.current = selectedUuid;
   const askedRef = useRef(false);
 
-  const loaded = matching.totalCount !== null;
-  const rows = matching.rows;
+  const box = extent.data?.ticketsExtent;
+  const failed = extent.error != null;
   useEffect(() => {
-    if (!map || !loaded) return;
+    if (map && failed) setReady(true);
+  }, [map, failed]);
+  useEffect(() => {
+    if (!map || !box) return;
     const step = framingStep(
       framedRef.current,
       request,
@@ -191,22 +199,29 @@ function useFrameMatching(
     if (step === 'done') return;
     framedRef.current = request;
     askedRef.current = false;
-    if (step === 'skip') return;
-    const framing = framingOf(
-      rows.flatMap((row): MapPoint[] => (row.position ? [row.position] : [])),
-    );
+    const framing = step === 'frame' ? framingOf(box) : null;
+    if (!framing || framing.kind === 'none') {
+      setReady(true);
+      return;
+    }
+    // Leaflet ends every setView and fitBounds, even one that does not move, with moveend.
+    map.once('moveend', () => setReady(true));
     if (framing.kind === 'point') {
       map.setView(latLng(framing.point), FOCUS_ZOOM);
-    } else if (framing.kind === 'bounds') {
+    } else {
       map.fitBounds([latLng(framing.southWest), latLng(framing.northEast)], {
         padding: FIT_PADDING,
       });
     }
-  }, [map, loaded, request, rows]);
+  }, [map, box, request]);
 
   return {
+    /** The map may load the tickets in view. */
+    ready,
     /** Matching tickets anywhere, null until known. */
-    totalCount: matching.totalCount,
+    totalCount: box?.count ?? null,
+    failed,
+    retry: () => void extent.refetch(),
     frameAgain: () => {
       askedRef.current = true;
       setAttempt((n) => n + 1);
@@ -288,7 +303,7 @@ function SelectionSync({
   onOpen,
 }: {
   controller: RescueMapControllerValue;
-  rows: readonly TicketRow[];
+  rows: readonly TicketPin[];
   onOpen: (uuid: string) => void;
 }) {
   const { selectedMarkerId, setSelectedMarkerId } = controller;
@@ -323,7 +338,7 @@ function CellTicketList({
   onPick,
   onClose,
 }: {
-  rows: TicketRow[];
+  rows: TicketPin[];
   onPick: (uuid: string) => void;
   onClose: () => void;
 }) {

@@ -19,7 +19,8 @@ export function ViewSwitch({
   help,
   onChange,
 }: {
-  count: number;
+  /** Null while unknown (loading, or failed): shown as —. */
+  count: number | null;
   view: BoardView;
   /** The header ?'s one-line explanation of the page. */
   help: string;
@@ -44,7 +45,7 @@ export function ViewSwitch({
         component="span"
         sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
       >
-        ({count})
+        ({count ?? '—'})
       </Typography>
       <Box
         role="group"

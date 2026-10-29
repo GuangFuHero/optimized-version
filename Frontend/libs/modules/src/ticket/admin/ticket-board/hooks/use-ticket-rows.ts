@@ -12,9 +12,8 @@ import { toTicketRow, type TicketRow } from '../model/ticket-row';
 const NO_ROWS: readonly TicketRow[] = [];
 
 /**
- * One load of `tickets` as board rows: a list page, the map's visible area, or the map's framing.
- * The last result stays on screen while the next loads only when the two differ just in
- * `keepAcross` (the page, or the map's area); any other change shows as loading.
+ * One page of `tickets` as board rows. The last result stays on screen while the next loads only
+ * when the two differ just in `keepAcross` (the page); any other change shows as loading.
  */
 export function useTicketRows(
   variables: AdminTicketsQueryVariables,

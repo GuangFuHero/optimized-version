@@ -19,7 +19,8 @@ interface TicketToolbarProps {
   filterOpen: boolean;
   onToggleFilter: () => void;
   onClear: () => void;
-  count: number;
+  /** Matching tickets; null while unknown (loading, or failed). */
+  count: number | null;
   /** 新增求助單; the button shows only when the viewer may add and this is set. */
   onCreate?: () => void;
   /** Filled by the export task; shown only when the viewer may export. */
@@ -69,7 +70,7 @@ export function TicketToolbar({
           ml: 'auto',
         }}
       >
-        {count} 張
+        {count ?? '—'} 張
       </Typography>
 
       {caps.canExport ? exportControl : null}

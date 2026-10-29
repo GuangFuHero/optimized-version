@@ -1,4 +1,8 @@
-import type { AdminTicketsQueryVariables } from '@rescue-frontend/data-access/admin';
+import type {
+  AdminTicketMapPinsQueryVariables,
+  AdminTicketsExtentQueryVariables,
+  AdminTicketsQueryVariables,
+} from '@rescue-frontend/data-access/admin';
 import { AuditStatus as AuditStatusValues } from '@rescue-frontend/data-access/admin';
 
 import type { AuditStatus, TicketPriority, TicketStatus } from './ticket-row';
@@ -178,20 +182,20 @@ const down = (value: number) => Math.floor(value * SNAP) / SNAP;
 const up = (value: number) => Math.ceil(value * SNAP) / SNAP;
 
 /**
- * Every ticket matching the filters, wherever it is, up to the map's limit: what the map frames
- * when it opens and when the filters change.
+ * Every ticket matching the filters, wherever it is: the header's count in the map view, and the
+ * box the map frames when it opens and when the filters change.
  */
-export function toMapFramingVariables(
+export function toExtentVariables(
   filters: TicketFilters,
-): AdminTicketsQueryVariables {
-  return { ...toServerVariables(filters), skip: 0, limit: TICKET_MAP_LIMIT };
+): AdminTicketsExtentQueryVariables {
+  return toServerVariables(filters);
 }
 
 /** The tickets inside `viewport` that match the filters, up to the map's limit. */
 export function toMapVariables(
   filters: TicketFilters,
   viewport: MapViewport,
-): AdminTicketsQueryVariables {
+): AdminTicketMapPinsQueryVariables {
   return {
     ...toServerVariables(filters),
     bounds: {
