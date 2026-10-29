@@ -98,7 +98,8 @@ export function TicketDetailSheet({
   onDeleted,
 }: TicketDetailSheetProps) {
   const query = useTicket({ uuid: uuid ?? '' }, { enabled: Boolean(uuid) });
-  const disasterTypes = useDisasterTypes();
+  // Active types only (retired ones need project.edit); a retired key shows as itself.
+  const disasterTypes = useDisasterTypes({ includeInactive: false });
   const disasterLabels = useMemo(
     () =>
       Object.fromEntries(

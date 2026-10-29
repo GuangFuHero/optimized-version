@@ -125,11 +125,16 @@ export function TicketForm(props: TicketFormProps) {
   const updateTicket = useUpdateTicket();
   const attachPhoto = useAttachTicketPhoto();
   const detachPhoto = useDetachTicketPhoto();
-  const disasterTypes = useDisasterTypes();
-  // Active types only, but a type the ticket already has stays choosable after it is retired.
-  const disasterOptions = (disasterTypes.data?.disasterTypes ?? []).filter(
-    (d) => d.isActive || values.disasterTypes.includes(d.key),
-  );
+  // Active types only: listing retired ones needs project.edit, which a team admin lacks. A type
+  // the ticket already has stays choosable after it is retired, under its key.
+  const disasterTypes = useDisasterTypes({ includeInactive: false });
+  const activeDisasters = disasterTypes.data?.disasterTypes ?? [];
+  const disasterOptions = [
+    ...activeDisasters,
+    ...values.disasterTypes
+      .filter((key) => !activeDisasters.some((d) => d.key === key))
+      .map((key) => ({ key, label: key })),
+  ];
   const disasterLabel = (key: string) =>
     disasterOptions.find((d) => d.key === key)?.label ?? key;
 

@@ -37,7 +37,8 @@ export function TicketFilterPanel({
   filters,
   onChange,
 }: TicketFilterPanelProps) {
-  const disasterTypes = useDisasterTypes();
+  // Active types only: listing retired ones needs project.edit, which a team admin lacks.
+  const disasterTypes = useDisasterTypes({ includeInactive: false });
   const set = <K extends keyof TicketFilters>(
     key: K,
     value: TicketFilters[K],
