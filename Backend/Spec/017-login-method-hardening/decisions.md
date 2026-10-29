@@ -437,3 +437,50 @@ await identity_repository.delete_identity(db, identity=identity)
    這是 ADR-233 原本已經修好、現在刻意退回的狀態，記在 PR 的 Known gaps，需要一張前端票。
    影響範圍已因 ADR-234 擴大：零 contact 的 SSO 帳號還需要 `id_token` 欄位。
 ➖ 簡訊少了英文，非中文使用者收到的通知看不懂。這是 #41 已經替整個系統做過的取捨，本 stack 跟隨而非另立。
+
+---
+
+### ADR-399 忘記密碼重設之後，也通知帳號的每一個聯絡方式
+
+**白話**：設定密碼、變更密碼之後都會通知，用忘記密碼重設之後卻不會。現在三條改密碼的路都通知。
+
+**Date**: 2026-10-27（Dan；在 #144 的前台改動裡發現）。第 3 點：HC 2026-10-28 在 #149 的 review 提出，Dan 2026-10-29
+決定在這支一起修；HC 2026-10-29 要求寫明它也改到其他三種驗證碼。
+
+**Context**：ADR-218 第 3 點讓 `link` / `unlink` / `change-password` 成功後通知帳號上每一個聯絡方式，
+`set-password` 也通知（ADR-215，`notify_password_set`）。`reset-password`（忘記密碼的第二步）寫入
+新密碼、撤銷所有 session，但什麼都不寄：只有收到驗證碼的那個聯絡方式知道有人要重設，帳號上的其他
+聯絡方式沒收到任何訊息，收驗證碼的那個也不會知道密碼真的換了。
+
+**Decision**：
+
+1. `reset-password` 撤銷 session 之後呼叫 `notify_password_set(..., changed=True)`，寄的就是
+   `change-password` 那則「密碼已變更」，同樣走 BackgroundTasks 加 `_or_log`（ADR-162）：密碼已經寫入，
+   寄送失敗不會讓請求變成 500。
+2. 「密碼已變更」的內容改用糖的文案（Discord #uiux，2026-10-27）：說什麼時候變更（台灣時間），以及不是本人時
+   怎麼做。簡訊要縮短，糖 2026-10-28 在 #uiux 選 B（只留「忘記密碼」那一步），email 也拿掉第二步。
+   - email：「你的密碼在 {時間} 變更了。如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設。」
+     時間寫 `2026/10/28 14:05`；主旨不變，英文照翻。
+   - 簡訊一則（70 字內，ADR-237 的成本取捨）：「島嶼守望 你的密碼在 10/28 14:05 變更了。如果不是你自己改的，
+     請馬上到登入頁按「忘記密碼」重設。」
+   - 「並聯繫我們」先不加，等 Carol 給固定的聯絡管道。
+   - 同一次變更寄給每個聯絡方式的時間都一樣（`notify_password_set` 取一次）。
+   - 第一次設定密碼的通知（`changed=False`）不變。
+3. **同一組驗證碼只能用一次**：比對驗證碼的共用函式（`VerificationRepository._consume`）改成比對到才刪，而且只有
+   真的刪到的那個請求算通過（Redis 上一段 Lua，讀和刪中間不會插進別的請求）。用這支的四種碼都一樣：註冊、新增
+   聯絡方式、step-up 時原聯絡方式的碼、忘記密碼重設。同一組碼同時送出幾次也只有一次通過，其他的跟錯碼、過期碼
+   拿到一樣的回應：註冊、新增聯絡方式、重設是 400 `code_invalid`，step-up 是 401 `step_up_invalid`。
+
+**Consequences**：
+➕ 設定、變更、重設三條路的通知一致。
+➕ 收到的人知道是什麼時候，也知道下一步。
+➕ 四種驗證碼都是真的只能用一次，一次重設只會寄一則「已變更」。
+➖ 收驗證碼的那個聯絡方式會收到兩則，先是驗證碼、再是「已變更」。`change-password` 也通知每一個
+   聯絡方式、不排除任何一個，這裡照做。
+➖ 新文案不再寫出是哪個帳號（原本的遮罩聯絡方式），照糖的文案。
+
+**回歸測試**：`tests/test_forgot_password.py` 的 `test_a_reset_tells_every_contact_on_the_account`
+（信箱和手機都收到「變更」）。拿掉那個呼叫會紅：`assert [] == [('owner@x.com', True)]`。文案與時間：
+`tests/test_email_sender.py`、`tests/test_sms_sender.py`（固定時間、台灣時區、一則 70 字內）。第 3 點：
+`tests/test_forgot_password.py` 的 `test_a_reset_code_works_once_even_when_sent_at_the_same_time`（同一組碼三個
+請求同時送，只有一個通過）。改之前會紅：`assert 3 == 1`。

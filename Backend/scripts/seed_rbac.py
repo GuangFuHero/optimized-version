@@ -156,6 +156,7 @@ ROLES_DATA = [
                 Perm.RBAC_EDIT,
                 Perm.AUDIT_VIEW,
                 Perm.TEAM_AUDIT_VIEW,
+                Perm.AUDIT_EXPORT,
                 Perm.ROLE_REQUEST_REVIEW,
                 Perm.TEAM_VIEW,
                 Perm.TEAM_EDIT,

@@ -30,6 +30,7 @@ from app.graphql.tickets.types import (
     TaskPropertyType,
     TicketCellType,
     TicketConnection,
+    TicketListOrder,
     TicketStatus,
     TicketTaskType,
     TicketType,
@@ -142,6 +143,16 @@ class RequestQuery:
         audit_status: Annotated[
             AuditStatus | None, strawberry.argument(description="Only tickets at this audit status")
         ] = None,
+        order: Annotated[
+            TicketListOrder,
+            strawberry.argument(
+                description=(
+                    "NEWEST (default): newest first, best match first when searching. NEEDS_FIRST: "
+                    "tickets still taking people first, one with an open rescue need ahead, then as "
+                    "NEWEST; a need the signed-in caller claimed counts as open"
+                )
+            ),
+        ] = TicketListOrder.NEWEST,
         location_cell: Annotated[
             str | None,
             strawberry.argument(
@@ -189,6 +200,9 @@ class RequestQuery:
         to the requester, the coordinators and whoever claimed one of its needs (ADR-286 point 1)
         — and its triage answers take ticket.view_history besides ticket.view_pii (point 6).
 
+        `order` NEEDS_FIRST is the site list's (ADR-419). It reads only what the list already shows
+        anyone — each ticket's status, each need's type and status — and the caller's own claims.
+
         `locationCell` lists the tickets a `ticketCells` row counts (ADR-387). A cell finer than
         COARSE_MAX_H3_RESOLUTION is refused: matching on one would place a point the cell is
         there to withhold. So is one naming no real cell, which h3-pg would raise on. A valid one
@@ -200,6 +214,7 @@ class RequestQuery:
         if limit < 0 or skip < 0:
             raise ValueError("limit and skip must not be negative")
         db = info.context["db"]
+        user = info.context["user"]
         resolution = coarse_resolution(zoom)
         if location_cell is not None:
             resolution = cell_resolution(location_cell)
@@ -253,6 +268,8 @@ class RequestQuery:
                 detail_filters=detail_filters,
                 coarse_resolution=resolution,
                 location_cell=location_cell,
+                order=order.value,
+                viewer_uuid=None if user is None else str(user.uuid),
             )
         return TicketConnection(
             items=[TicketType.from_model(m, coarse_resolution=resolution, listed=True) for m in items],
