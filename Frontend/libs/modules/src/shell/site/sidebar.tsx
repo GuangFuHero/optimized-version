@@ -142,6 +142,8 @@ function SiteSidebarNav({
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
+              // A long run of Latin letters or digits has nowhere to break, so it could not wrap.
+              overflowWrap: 'anywhere',
             }}
           />
           <IconButton
