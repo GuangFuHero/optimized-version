@@ -10,6 +10,7 @@ import {
   Typography,
 } from '@mui/material';
 import {
+  type AdminTicketFieldsFragment,
   useAttachTicketPhoto,
   useCreateTicket,
   useDetachTicketPhoto,
@@ -63,7 +64,13 @@ import {
 const { color, typography } = designTokens;
 
 export type TicketFormProps = (
-  | { mode: 'create' }
+  | {
+      mode: 'create';
+      /** A point picked on a map before the form opened: the pin starts there. */
+      initialPoint?: { lat: number; lng: number } | null;
+      /** The ticket just created, before `onDone`. */
+      onCreated?(ticket: AdminTicketFieldsFragment): void;
+    }
   | { mode: 'edit'; ticket: DetailTicket }
 ) & {
   /** Created (the new ticket's uuid) or saved. */
@@ -88,8 +95,8 @@ function saveError(error: unknown, mode: 'create' | 'edit'): string {
 }
 
 /**
- * The board's form for one ticket, filling whichever `SheetFrame` holds it: the toolbar's 新增求助單
- * sheet, or the ticket's own drawer when 編輯 swaps it in. A coordinator enters a request taken by
+ * The admin form for one ticket, filling whichever `SheetFrame` holds it: `TicketCreateSheet` (the
+ * board's 新增求助單 and the 互助地圖's pin), or the ticket's own drawer when 編輯 swaps it in. A coordinator enters a request taken by
  * phone, so a new ticket's needs are official.
  */
 export function TicketForm(props: TicketFormProps) {
@@ -98,7 +105,9 @@ export function TicketForm(props: TicketFormProps) {
   const coarse = ticket ? isCoarseTicket(ticket) : false;
   const formId = useId();
   const [values, setValues] = useState<TicketFormValues>(() =>
-    ticket ? ticketFormFromTicket(ticket) : emptyTicketForm(),
+    props.mode === 'edit'
+      ? ticketFormFromTicket(props.ticket)
+      : emptyTicketForm(props.initialPoint),
   );
   const [errors, setErrors] = useState<TicketFormErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -202,7 +211,10 @@ export function TicketForm(props: TicketFormProps) {
       setSuspects(read.suspects);
       return;
     }
-    if (result.__typename === 'TicketCreated') onDone(result.ticket.uuid);
+    if (result.__typename === 'TicketCreated') {
+      if (props.mode === 'create') props.onCreated?.(result.ticket);
+      onDone(result.ticket.uuid);
+    }
   }
 
   async function save(current: DetailTicket) {

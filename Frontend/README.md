@@ -34,7 +34,6 @@ cp .env.example .env.local
 
 - `NEXT_PUBLIC_API_BASE_URL` / `API_BASE_URL` / `GRAPHQL_URL`：後端 REST、GraphQL 的 URL
 - `AUTH_COOKIE_PREFIX`：登入 cookie 名稱的前綴，要跟後端的 `AUTH_COOKIE_PREFIX` 一樣（本機 `wgdev`）
-- `GOOGLE_MAPS_API_KEY`：選填，只用來在地圖上建立站點時預填地址
 
 前後台的登入（密碼、Google、LINE）都由後端處理，前端沒有自己的登入 secret；Google、LINE 只在後端設定（見
 [`docs/authentication.md`](docs/authentication.md)）。

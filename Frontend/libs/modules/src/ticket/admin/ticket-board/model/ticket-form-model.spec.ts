@@ -41,6 +41,13 @@ describe('emptyTicketForm', () => {
     expect(form.point).toBeNull();
     expect(form.photoUrls).toEqual([]);
   });
+
+  it('pins a seed point picked on the map, marked as the seed', () => {
+    const form = emptyTicketForm({ lat: 23.65, lng: 121.42 });
+    expect(form.point).toEqual({ lat: 23.65, lng: 121.42, source: 'seed' });
+    expect(form.fullAddress).toBe('');
+    expect(validateTicketForm(form, 'create').point).toBeUndefined();
+  });
 });
 
 describe('validateTicketForm', () => {

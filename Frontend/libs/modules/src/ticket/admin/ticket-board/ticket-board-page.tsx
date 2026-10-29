@@ -2,7 +2,7 @@
 
 import { Box, Stack } from '@mui/material';
 import { useTicketStats } from '@rescue-frontend/data-access/admin';
-import { designTokens, SheetFrame } from '@rescue-frontend/ui';
+import { designTokens } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -25,10 +25,10 @@ import {
   type TicketFilters,
 } from './model/ticket-filters';
 import { toTicketStats } from './model/ticket-stats';
-import { TICKET_SHEET_WIDTH, TicketDetailSheet } from './ticket-detail-sheet';
+import { TicketCreateSheet } from './ticket-create-sheet';
+import { TicketDetailSheet } from './ticket-detail-sheet';
 import { TicketMapView } from './ticket-map-view';
 import { TicketFilterPanel } from './ticket-filter-panel';
-import { TicketForm } from './ticket-form';
 import { TicketStatsStrip } from './ticket-stats-strip';
 import { TicketTable } from './ticket-table';
 import { ToolbarButton } from '../../../station/admin/station-management/toolbar-button';
@@ -126,11 +126,6 @@ export function TicketBoardPage() {
   const [editingUuid, setEditingUuid] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  // The create form is saving: Escape and the backdrop wait for it.
-  const [createBusy, setCreateBusy] = useState(false);
-  const closeCreate = () => {
-    if (!createBusy) setCreating(false);
-  };
 
   return (
     <>
@@ -233,25 +228,11 @@ export function TicketBoardPage() {
           openTicket(null);
         }}
       />
-      <SheetFrame
+      <TicketCreateSheet
         open={creating && caps.canAdd}
-        onClose={closeCreate}
-        width={TICKET_SHEET_WIDTH}
-        variant="admin"
-        ariaLabel="新增求助單"
-      >
-        {creating ? (
-          <TicketForm
-            mode="create"
-            onDone={(uuid) => {
-              setCreating(false);
-              openTicket(uuid);
-            }}
-            onCancel={() => setCreating(false)}
-            onBusyChange={setCreateBusy}
-          />
-        ) : null}
-      </SheetFrame>
+        onClose={() => setCreating(false)}
+        onCreated={(ticket) => openTicket(ticket.uuid)}
+      />
     </>
   );
 }

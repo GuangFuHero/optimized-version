@@ -1,3 +1,4 @@
+import type { AdminTicketFieldsFragment } from '@rescue-frontend/data-access/admin';
 import { designTokens } from '@rescue-frontend/ui';
 
 import {
@@ -5,7 +6,12 @@ import {
   locationCellId,
 } from '../../../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../../../map/types';
-import type { TicketPriority, TicketRow } from './ticket-row';
+import { stationPoint } from '../../../../station/station-point';
+import {
+  UNTITLED_TICKET,
+  type TicketPriority,
+  type TicketRow,
+} from './ticket-row';
 
 const c = designTokens.primitives.color;
 
@@ -46,6 +52,30 @@ export function toTicketMarker(
       selected,
     },
     tooltip: { title: row.title, subtitle: row.area },
+  };
+}
+
+/**
+ * The admin 互助地圖's marker for a ticket it has just created, or null when the ticket has no
+ * point. That map draws its markers by variant and fills its detail drawer from `ticketMeta`.
+ */
+export function toCreatedTicketMarker(
+  ticket: AdminTicketFieldsFragment,
+): RescueMapMarkerItem | null {
+  const position = stationPoint(ticket.geometry);
+  if (!position) return null;
+  return {
+    id: ticket.uuid,
+    title: ticket.title?.trim() || UNTITLED_TICKET,
+    subtitle: ticket.description?.trim() || '救災任務',
+    position,
+    label: ticket.status === 'in_progress' ? '處理中' : '待處理',
+    variant:
+      ticket.priority === 'critical' || ticket.priority === 'high'
+        ? 'urgent-ticket'
+        : 'in-progress',
+    detailType: 'ticket',
+    ticketMeta: ticket,
   };
 }
 

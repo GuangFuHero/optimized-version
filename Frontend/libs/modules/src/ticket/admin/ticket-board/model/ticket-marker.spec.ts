@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import type { AdminTicketFieldsFragment } from '@rescue-frontend/data-access/admin';
+
 import type { TicketRow } from './ticket-row';
 import {
   resolveMapSelection,
   TICKET_PRIORITY_PIN_COLORS,
+  toCreatedTicketMarker,
   toTicketMarker,
 } from './ticket-marker';
 
@@ -103,5 +106,45 @@ describe('resolveMapSelection', () => {
   it('gives null for an unknown id or an empty cell', () => {
     expect(resolveMapSelection('nope', rows)).toBeNull();
     expect(resolveMapSelection('cell:8a2a1072b5affff', rows)).toBeNull();
+  });
+});
+
+describe('toCreatedTicketMarker', () => {
+  const created = (over: Partial<AdminTicketFieldsFragment> = {}) =>
+    ({
+      uuid: 'new-1',
+      title: '屋頂受困',
+      description: '二樓有兩人',
+      geometry: { type: 'Point', coordinates: [121.42, 23.65] },
+      status: 'pending',
+      priority: 'critical',
+      ...over,
+    }) as AdminTicketFieldsFragment;
+
+  it('places the marker at the ticket point, as [lat, lng]', () => {
+    const marker = toCreatedTicketMarker(created());
+    expect(marker).toMatchObject({
+      id: 'new-1',
+      title: '屋頂受困',
+      subtitle: '二樓有兩人',
+      position: [23.65, 121.42],
+      label: '待處理',
+      variant: 'urgent-ticket',
+      detailType: 'ticket',
+    });
+    expect(marker?.ticketMeta?.priority).toBe('critical');
+  });
+
+  it('draws a medium or low ticket as in progress, and names an untitled one', () => {
+    const marker = toCreatedTicketMarker(
+      created({ priority: 'low', title: ' ', description: null }),
+    );
+    expect(marker?.variant).toBe('in-progress');
+    expect(marker?.title).toBe('（未命名求助單）');
+    expect(marker?.subtitle).toBe('救災任務');
+  });
+
+  it('gives no marker to a ticket without a point', () => {
+    expect(toCreatedTicketMarker(created({ geometry: null }))).toBeNull();
   });
 });

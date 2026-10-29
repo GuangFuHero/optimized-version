@@ -136,9 +136,10 @@ export {
 
 export {
   TicketBoardPage,
-  TicketCreateDrawer,
+  TicketCreateSheet,
   TicketDetailDrawer,
   createTaskMatchTicketDetailOverrides,
+  toCreatedTicketMarker,
 } from './ticket';
 export { NeedClaimProvider } from './ticket/needs';
 export type { ReloadedTicket } from './ticket/needs';

@@ -64,7 +64,13 @@ export function emptyNeed(): NeedDraft {
   return { taskType: 'rescue', taskName: '', quantity: '', description: '' };
 }
 
-export function emptyTicketForm(): TicketFormValues {
+/**
+ * A blank create form, pinned at `seed` when the form opens from a point picked on a map: the pin's
+ * address lookup runs for it as for any other pin.
+ */
+export function emptyTicketForm(
+  seed: { lat: number; lng: number } | null = null,
+): TicketFormValues {
   return {
     title: '',
     description: '',
@@ -73,7 +79,7 @@ export function emptyTicketForm(): TicketFormValues {
     contactName: '',
     contactPhone: '',
     contactEmail: '',
-    point: null,
+    point: seed ? { lat: seed.lat, lng: seed.lng, source: 'seed' } : null,
     fullAddress: '',
     addressToken: '',
     floor: '',

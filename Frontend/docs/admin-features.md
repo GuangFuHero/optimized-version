@@ -32,7 +32,6 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `station/admin/station-detail`
 - `station/admin/station-drawer`
 - `station/admin/station-management`
-- `ticket/admin/ticket-create`
 - `ticket/admin/ticket-detail`
 - `ticket/admin/ticket-list`
 - `ticket/admin/ticket-report`
@@ -47,7 +46,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `page.tsx` + `admin-map-page.client.tsx` 已存在
 - 使用 `@rescue-frontend/modules` 的 `Map`
 - 已有「新增站點 / 新增任務」控制 UI
-- 依賴 `StationCreateDrawer`（共用的 `StationFormDrawer` 新增模式）、`TicketCreateDrawer`
+- 依賴 `StationCreateDrawer`（共用的 `StationFormDrawer` 新增模式）、`TicketCreateSheet`（任務管理的 `TicketForm` 新增模式，以點下的位置為圖釘）
 - 只有登入狀態會顯示建立 controls
 
 ### `/stations`（資源站點管理 v2，ADMIN-026）
