@@ -489,35 +489,43 @@ async def set_team_status(db: AsyncSession, *, actor: User, team_uuid: str, new_
         closed = await _close_pending_requests(db, team_id, actor_uuid, _CLOSED_NOTE)
         members = await _team_member_uuids(db, team_id)
     await db.commit()
-    try:
-        for request_uuid, applicant_uuid in closed:
-            await NotificationService.dispatch(
-                db,
-                event_type="role_request_rejected",
-                title="你的加入團隊申請沒有通過",
-                body=_CLOSED_NOTE,
-                actor_uuid=actor_uuid,
-                ref_type="role_request",
-                ref_uuid=request_uuid,
-                explicit_recipients=[applicant_uuid],
-            )
-        if members:
-            await NotificationService.dispatch(
-                db,
-                event_type="team_suspended",
-                title=f"「{team_name}」已暫停",
-                body=f"你在「{team_name}」的身分暫時無法使用，恢復後會自動回來。",
-                priority="high",
-                actor_uuid=actor_uuid,
-                ref_type="team",
-                ref_uuid=team_id,
-                explicit_recipients=members,
-            )
-    except Exception:
-        logger.exception("Telling people team %s is now %s failed", team_id, new_status)
-        await db.rollback()
+    # Each notice in its own try: one applicant's failing must not keep the team from hearing.
+    for request_uuid, applicant_uuid in closed:
+        await _notify_or_log(
+            db,
+            f"Telling applicant {applicant_uuid} that team {team_id} closed their request failed",
+            event_type="role_request_rejected",
+            title="你的加入團隊申請沒有通過",
+            body=_CLOSED_NOTE,
+            actor_uuid=actor_uuid,
+            ref_type="role_request",
+            ref_uuid=request_uuid,
+            explicit_recipients=[applicant_uuid],
+        )
+    if members:
+        await _notify_or_log(
+            db,
+            f"Telling the members that team {team_id} is suspended failed",
+            event_type="team_suspended",
+            title=f"「{team_name}」已暫停",
+            body=f"你在「{team_name}」的身分暫時無法使用，恢復後會自動回來。",
+            priority="high",
+            actor_uuid=actor_uuid,
+            ref_type="team",
+            ref_uuid=team_id,
+            explicit_recipients=members,
+        )
     await db.refresh(team)
     return team
+
+
+async def _notify_or_log(db: AsyncSession, failure: str, **notice) -> None:
+    """Send one notice; a failure is logged and rolled back, and the caller carries on."""
+    try:
+        await NotificationService.dispatch(db, **notice)
+    except Exception:
+        logger.exception(failure)
+        await db.rollback()
 
 
 async def _team_member_uuids(db: AsyncSession, team_uuid) -> list:

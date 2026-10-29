@@ -252,3 +252,43 @@ async def test_a_notice_that_fails_does_not_undo_the_suspension(client, db_sessi
     response = await world.set(client, "suspended")
 
     assert (response.status_code, response.json()["status"]) == (200, "suspended")
+
+
+def _failing_for(monkeypatch, event_type: str):
+    """Make `dispatch` raise for one kind of notice and work as usual for the rest."""
+    from app.services import notification_service
+
+    real = notification_service.NotificationService.dispatch
+
+    async def flaky(db, **kwargs):
+        if kwargs["event_type"] == event_type:
+            raise RuntimeError("notification store down")
+        return await real(db, **kwargs)
+
+    monkeypatch.setattr(notification_service.NotificationService, "dispatch", flaky)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_rejection_notice_still_tells_the_members(client, db_session, redis, monkeypatch):
+    """One applicant's notice failing must not silence the whole team (#154 review)."""
+    world = await World().build(db_session, redis)
+    _failing_for(monkeypatch, "role_request_rejected")
+
+    response = await world.set(client, "suspended")
+
+    assert response.status_code == 200
+    assert len(await _notices(db_session)) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_failed_member_notice_still_tells_the_applicant(client, db_session, redis, monkeypatch):
+    """And the other way round: the applicant still hears why the request was closed."""
+    world = await World().build(db_session, redis)
+    _failing_for(monkeypatch, "team_suspended")
+
+    response = await world.set(client, "suspended")
+
+    assert response.status_code == 200
+    assert [notice.recipient_uuid for notice in await _notices(db_session, "role_request_rejected")] == [
+        world.applicant
+    ]
