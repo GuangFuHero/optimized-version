@@ -11,7 +11,11 @@ import {
 import type { ReactNode } from 'react';
 import { useId } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  safeAreaBottom,
+} from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
 
@@ -194,7 +198,7 @@ export function SiteActionDrawer({
               ? {
                   px: 2,
                   pt: 1.5,
-                  pb: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+                  pb: safeAreaBottom(12),
                 }
               : { px: 3, py: 2 }),
           }}

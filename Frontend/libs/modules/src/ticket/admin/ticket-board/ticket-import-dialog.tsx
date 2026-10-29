@@ -162,7 +162,8 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
     );
   };
 
-  const summary = preview ? importSummary(preview) : null;
+  // Ticket imports aren't compared for duplicates yet (DEDUP-006): no row is held, so none is filed.
+  const summary = preview ? importSummary(preview, 0) : null;
   const typeLabel = taskType ? needTypeLabel(taskType) : '';
   const pickFirst = taskType ? undefined : '先選這份檔案是哪一種需求';
 

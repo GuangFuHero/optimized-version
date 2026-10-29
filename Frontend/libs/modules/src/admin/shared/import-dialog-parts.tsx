@@ -68,7 +68,10 @@ export function TypeChip({
   );
 }
 
-/** The dialog's last screen: what the import wrote, what failed, and the failed rows' report. */
+/**
+ * The dialog's last screen: what the import wrote, what failed, and the failed rows' report. An
+ * import that checks for duplicates adds its own counts (`badges`) and notes (`children`).
+ */
 export function ImportResult({
   result,
   onClose,
@@ -77,6 +80,9 @@ export function ImportResult({
   note,
   partialNote,
   fieldLabel = fileColumn,
+  badges,
+  reportLabel = '下載失敗的列',
+  children,
 }: {
   result: Result;
   onClose: () => void;
@@ -89,6 +95,12 @@ export function ImportResult({
   /** What a partial row (main record written, a later step failed) left undone, and what to check. */
   partialNote: ReactNode;
   fieldLabel?: (column: string) => string;
+  /** More counts, after 新增 and 更新. */
+  badges?: ReactNode;
+  /** The report's button: it holds the held rows too when the import checks for duplicates. */
+  reportLabel?: string;
+  /** Shown after the note, before what failed. */
+  children?: ReactNode;
 }) {
   const { partialLines, unwritten } = importFailures(result);
   return (
@@ -108,12 +120,14 @@ export function ImportResult({
           {showUpdated ? (
             <Badge tone="info">更新 {result.updated} 列</Badge>
           ) : null}
+          {badges}
           <Badge tone={result.failed ? 'danger' : 'neutral'}>
             失敗 {result.failed} 列
           </Badge>
           <Badge tone="neutral">批次 {result.batch_id}</Badge>
         </Box>
         {note && result.created > 0 ? <Muted>{note}</Muted> : null}
+        {children}
         {unwritten > 0 ? (
           <Callout tone="warning">
             {partialLines.length > 0 ? `其餘 ${unwritten} 列` : '失敗的列'}
@@ -145,7 +159,7 @@ export function ImportResult({
               result.error_report && downloadBase64(result.error_report)
             }
           >
-            下載失敗的列
+            {reportLabel}
           </Button>
         ) : null}
         <Button onClick={onClose}>關閉</Button>

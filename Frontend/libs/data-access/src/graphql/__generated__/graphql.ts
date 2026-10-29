@@ -1172,6 +1172,7 @@ export type QueryTicketsArgs = {
   limit?: Scalars['Int']['input'];
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
+  order?: TicketListOrder;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
@@ -1690,6 +1691,13 @@ export type TicketDisasterDetailType = {
   value: Scalars['String']['output'];
 };
 
+export const TicketListOrder = {
+  NeedsFirst: 'NEEDS_FIRST',
+  Newest: 'NEWEST',
+} as const;
+
+export type TicketListOrder =
+  (typeof TicketListOrder)[keyof typeof TicketListOrder];
 export type TicketPropertyConfigType = {
   __typename?: 'TicketPropertyConfigType';
   /** Which control the form renders for this field */
@@ -1797,6 +1805,8 @@ export type TicketType = {
   priority: Scalars['String']['output'];
   /** Internal polymorphic discriminator — always 'request' */
   propertyName: Scalars['String']['output'];
+  /** The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it lies in none, and to a caller without ticket.view_detail here */
+  responsibleTeams: Array<AssignedTeamType>;
   /** Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address */
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
@@ -2456,6 +2466,7 @@ export type GetTicketsWithNeedsQueryVariables = Exact<{
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
+  order?: InputMaybe<TicketListOrder>;
 }>;
 
 export type GetTicketsWithNeedsQuery = {
@@ -2510,6 +2521,11 @@ export type GetTicketQuery = {
           room?: string | null;
           landmarkNote?: string | null;
         } | null;
+        responsibleTeams: Array<{
+          __typename?: 'AssignedTeamType';
+          uuid: string;
+          name: string;
+        }>;
         photos: Array<{
           __typename?: 'PhotoType';
           uuid: string;
@@ -4680,6 +4696,17 @@ export const GetTicketsWithNeedsDocument = {
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'zoom' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'order' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'TicketListOrder' },
+          },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -4739,6 +4766,14 @@ export const GetTicketsWithNeedsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'zoom' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'order' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'order' },
                 },
               },
             ],
@@ -4946,6 +4981,17 @@ export const GetTicketDocument = {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'landmarkNote' },
                       },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'responsibleTeams' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                     ],
                   },
                 },

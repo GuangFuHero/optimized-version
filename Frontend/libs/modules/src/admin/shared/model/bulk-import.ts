@@ -4,16 +4,28 @@ type BulkPreview = components['schemas']['BulkPreviewResponse'];
 type BulkResult = components['schemas']['BulkImportResponse'];
 type ErrorReport = components['schemas']['ErrorReportResponse'];
 
-/** A bulk import preview in counts: rows to create and update, lines that failed, and whether to go on. */
+/**
+ * A bulk import preview in counts: rows to create and update, lines that failed, and whether to go
+ * on. Suspected rows count neither as new nor as updates (ADR-398): only those the importer files
+ * anyway (`filed`) will be written, so only they add to what the commit imports.
+ */
 export function importSummary(
-  preview: Pick<BulkPreview, 'to_create' | 'to_update' | 'errors'>,
+  preview: Pick<
+    BulkPreview,
+    'to_create' | 'to_update' | 'errors' | 'suspected'
+  >,
+  filed: number,
 ) {
   const failedLines = new Set(preview.errors.map((e) => e.line)).size;
+  const importable = preview.to_create + preview.to_update + filed;
   return {
     create: preview.to_create,
     update: preview.to_update,
+    suspected: preview.suspected,
+    filed,
     failedLines,
-    canCommit: preview.to_create + preview.to_update > 0,
+    importable,
+    canCommit: importable > 0,
   };
 }
 
