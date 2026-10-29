@@ -37,7 +37,7 @@ def _content_disposition(filename: str) -> str:
     """
     ascii_name = "".join(c if c.isascii() and (c.isalnum() or c in "-_.") else "_" for c in filename)
     encoded = quote(filename, safe="")
-    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8\'\'{encoded}"
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded}"
 
 
 def _as_response(exported: bulk_export.ExportFile) -> Response:
@@ -213,8 +213,12 @@ async def preview_station_import(
     raw, filename = await _read_upload(file)
     try:
         result = await bulk_import.preview_stations(
-            db, actor=current_user, raw=raw, filename=filename,
-            station_type=station_type, mapping=_parse_mapping(mapping),
+            db,
+            actor=current_user,
+            raw=raw,
+            filename=filename,
+            station_type=station_type,
+            mapping=_parse_mapping(mapping),
         )
     except (BulkImportError, TableFormatError) as exc:
         raise _bad_request(exc) from exc
@@ -238,8 +242,12 @@ async def preview_ticket_import(
     raw, filename = await _read_upload(file)
     try:
         result = await bulk_import.preview_tickets(
-            db, actor=current_user, raw=raw, filename=filename,
-            task_type=task_type, mapping=_parse_mapping(mapping),
+            db,
+            actor=current_user,
+            raw=raw,
+            filename=filename,
+            task_type=task_type,
+            mapping=_parse_mapping(mapping),
         )
     except (BulkImportError, TableFormatError) as exc:
         raise _bad_request(exc) from exc
@@ -266,8 +274,13 @@ async def commit_station_import(
     decided = _parse_decisions(decisions)
     try:
         outcome = await bulk_import.commit_stations(
-            db, actor=current_user, raw=raw, filename=filename,
-            station_type=station_type, mapping=_parse_mapping(mapping), decisions=decided,
+            db,
+            actor=current_user,
+            raw=raw,
+            filename=filename,
+            station_type=station_type,
+            mapping=_parse_mapping(mapping),
+            decisions=decided,
             declined=_parse_declined(declined, decided),
         )
     except (BulkImportError, TableFormatError) as exc:
@@ -295,8 +308,13 @@ async def commit_ticket_import(
     decided = _parse_decisions(decisions)
     try:
         outcome = await bulk_import.commit_tickets(
-            db, actor=current_user, raw=raw, filename=filename,
-            task_type=task_type, mapping=_parse_mapping(mapping), decisions=decided,
+            db,
+            actor=current_user,
+            raw=raw,
+            filename=filename,
+            task_type=task_type,
+            mapping=_parse_mapping(mapping),
+            decisions=decided,
             declined=_parse_declined(declined, decided),
         )
     except (BulkImportError, TableFormatError) as exc:
