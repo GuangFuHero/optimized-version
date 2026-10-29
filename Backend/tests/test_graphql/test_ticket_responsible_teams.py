@@ -9,12 +9,14 @@ import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point, Polygon, box
 
+from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.request import Tickets
 from app.models.team import Team, TeamZone, TeamZoneAssign
 from tests.test_graphql.conftest import auth_header
 from tests.test_graphql.conftest import test_db as open_db
 from tests.test_graphql.test_loaders import _SelectCounter
+from tests.test_graphql.test_ticket_detail_boundary import _actor
 
 pytestmark = pytest.mark.asyncio
 
@@ -57,9 +59,9 @@ async def _gql(client, query, variables, token=None):
     return body["data"]
 
 
-async def _team(name: str, *, deleted: bool = False) -> str:
+async def _team(name: str, *, deleted: bool = False, status: str = "active") -> str:
     async with open_db() as db:
-        team = Team(name=name, type="ngo", delete_at=datetime.now(UTC) if deleted else None)
+        team = Team(name=name, type="ngo", status=status, delete_at=datetime.now(UTC) if deleted else None)
         db.add(team)
         await db.flush()
         return str(team.uuid)
@@ -82,14 +84,17 @@ async def _zone(shape: Polygon, *team_uuids: str, deleted: bool = False) -> str:
         return str(zone.uuid)
 
 
-async def _ticket_at(point: Point) -> str:
+async def _ticket_at(point: Point, *, by: str | None = None) -> str:
+    """A ticket at `point`, filed by `by`, or by someone made up for it."""
     async with open_db() as db:
-        creator = User(name=f"creator_{uuid_mod.uuid4().hex[:8]}")
-        db.add(creator)
-        await db.flush()
+        if by is None:
+            creator = User(name=f"creator_{uuid_mod.uuid4().hex[:8]}")
+            db.add(creator)
+            await db.flush()
+            by = str(creator.uuid)
         ticket = Tickets(
             geometry=from_shape(point, srid=4326),
-            created_by=str(creator.uuid),
+            created_by=by,
             title="民宅清淤",
             contact_name="王小姐",
             status="pending",
@@ -164,6 +169,37 @@ async def test_a_guest_is_told_no_team(client, login_user_auth):
 
     assert await _names(client, ticket) == []
     assert await _names(client, ticket, token) == ["A 救援隊"]
+
+
+async def test_view_detail_narrowed_to_own_names_the_teams_of_the_callers_tickets_only(client, redis):
+    """Signed in is not enough: like the exact point, it is decided per ticket on ticket.view_detail."""
+    caller, token = await _actor(redis, [(Perm.TICKET_VIEW, "all"), (Perm.TICKET_VIEW_DETAIL, "own")])
+    place = _place()
+    await _zone(place.township, await _team("A 救援隊"))
+    mine = await _ticket_at(place.here, by=caller)
+    theirs = await _ticket_at(place.here)
+
+    assert await _names(client, mine, token) == ["A 救援隊"]
+    assert await _names(client, theirs, token) == []
+
+
+async def test_a_ticket_on_a_zone_s_edge_is_not_in_it(client, login_user_auth):
+    """`ST_Contains`, as `zone` scope decides: the edge is no one's, so detail and permission agree."""
+    _, token = login_user_auth
+    place = _place()
+    await _zone(place.village, await _team("A 救援隊"))
+    edge = Point(place.village.bounds[2], place.here.y)
+
+    assert await _names(client, await _ticket_at(edge), token) == []
+
+
+async def test_a_suspended_team_is_still_named(client, login_user_auth):
+    """As on the map: a suspended team keeps its zone until someone takes it off."""
+    _, token = login_user_auth
+    place = _place()
+    await _zone(place.village, await _team("A 暫停的隊", status="suspended"))
+
+    assert await _names(client, await _ticket_at(place.here), token) == ["A 暫停的隊"]
 
 
 async def test_a_page_of_tickets_looks_their_teams_up_once(client, login_user_auth):
