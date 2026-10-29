@@ -6,20 +6,39 @@ requests, invites and zone assignments. Not what members did while acting as the
 the history timeline's, under its own capabilities.
 """
 
+import json
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, literal_column, or_, select
+from sqlalchemy import and_, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.context import request_client_ip, request_identity
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, active_team
 from app.core.security import resolve_scope
+from app.core.tabular import write_csv
 from app.models.audit import TEAM_UUID_OF_ROW, AuditLog
 from app.models.auth import User
 
 MAX_PAGE = 100
+# The most rows one export carries (ADR-414). More is refused rather than cut short.
+MAX_EXPORT_ROWS = 10_000
+EXPORT_COLUMNS = (
+    "created_at",
+    "table_name",
+    "action",
+    "row_id",
+    "actor_uuid",
+    "actor_name",
+    "client_ip",
+    "context",
+    "old_values",
+    "new_values",
+)
 
 # Personal data a data auditor holds audit.view at `all` for but must not read (ADR-359 point 5):
 # what an applicant sent and the name a reviewer confirmed (ADR-287 point 7, ADR-355 point 5), and
@@ -33,6 +52,9 @@ _APPLICANT_KEYS = {
     "user_identities": ("provider_subject",),
 }
 REDACTED = "[redacted]"
+# Values no reader of the log needs and every reader could misuse (ADR-431): an invite link's
+# token lets anyone signed in file join requests to that team for 24 hours. Masked for everyone.
+_SECRET_KEYS = {"team_invites": ("token",)}
 
 # Tables whose rows name the team in a `team_uuid` column (ADR-358 point 4).
 _TEAM_COLUMN_TABLES = ("user_role_assign", "user_permission_assign", "team_invites", "team_zone_assign")
@@ -71,10 +93,16 @@ async def _team_reach(db: AsyncSession, actor: User) -> str | None:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
 
 
-def redact_applicant_details(table_name: str, values: dict | None) -> dict | None:
-    """The row's values with what only reviewers read replaced (see _APPLICANT_KEYS)."""
-    keys = _APPLICANT_KEYS.get(table_name)
-    if values is None or keys is None:
+def mask_values(table_name: str, values: dict | None, *, reads_applicant_details: bool) -> dict | None:
+    """The row's values as this reader may see them, on screen and in a file alike.
+
+    Secrets (_SECRET_KEYS) are always replaced; what only reviewers read (_APPLICANT_KEYS) is
+    replaced unless `reads_applicant_details`.
+    """
+    keys = _SECRET_KEYS.get(table_name, ())
+    if not reads_applicant_details:
+        keys += _APPLICANT_KEYS.get(table_name, ())
+    if values is None or not keys:
         return values
     return {key: (REDACTED if key in keys and value is not None else value) for key, value in values.items()}
 
@@ -88,14 +116,8 @@ class AuditPage:
     reads_applicant_details: bool
 
 
-async def list_audit_logs(
-    db: AsyncSession, *, actor: User, filters: AuditFilters, limit: int, offset: int
-) -> AuditPage:
-    """Newest first."""
-    team_uuid = await _team_reach(db, actor)
-    query = select(AuditLog)
-    if team_uuid is not None:
-        query = query.where(_about_team(team_uuid))
+def _filtered(query, filters: AuditFilters):
+    """`query` over AuditLog narrowed by what the caller asked for."""
     if filters.table is not None:
         query = query.where(AuditLog.table_name == filters.table)
     if filters.row_id is not None:
@@ -106,14 +128,125 @@ async def list_audit_logs(
         query = query.where(AuditLog.created_at >= filters.since)
     if filters.until is not None:
         query = query.where(AuditLog.created_at < filters.until)
+    return query
+
+
+async def _reads_applicant_details(db: AsyncSession, actor: User) -> bool:
+    """Whether the platform view shows what only reviewers read (ADR-359 point 5)."""
+    return await resolve_scope(actor, Perm.ROLE_REQUEST_REVIEW, db) != Scope.NONE
+
+
+async def list_audit_logs(
+    db: AsyncSession, *, actor: User, filters: AuditFilters, limit: int, offset: int
+) -> AuditPage:
+    """Newest first."""
+    team_uuid = await _team_reach(db, actor)
+    query = _filtered(select(AuditLog), filters)
+    if team_uuid is not None:
+        query = query.where(_about_team(team_uuid))
     rows = await db.execute(
         query.order_by(AuditLog.created_at.desc(), AuditLog.uuid).offset(offset).limit(min(limit, MAX_PAGE))
     )
-    reads_details = team_uuid is not None or (
-        await resolve_scope(actor, Perm.ROLE_REQUEST_REVIEW, db) != Scope.NONE
-    )
+    reads_details = team_uuid is not None or await _reads_applicant_details(db, actor)
     return AuditPage(
         rows=list(rows.scalars().all()),
         platform_view=team_uuid is None,
         reads_applicant_details=reads_details,
     )
+
+
+class AuditExportTooLarge(ValueError):
+    """More rows than one export carries. REST answers 422 with `matched` and `limit`."""
+
+    def __init__(self, matched: int, limit: int):
+        """Say how many matched and how many one file carries."""
+        super().__init__(f"{matched} changes match; one file carries at most {limit}. Narrow the date range.")
+        self.matched = matched
+        self.limit = limit
+
+
+def _cell(value) -> str:
+    """One CSV cell: JSON for the stored values, ISO for times, '' for nothing."""
+    if value is None:
+        return ""
+    if isinstance(value, dict | list):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+async def export_audit_logs(db: AsyncSession, *, actor: User, filters: AuditFilters, tz: ZoneInfo) -> bytes:
+    """The filtered log as CSV, newest first (ADR-414), times in `tz` (ADR-430).
+
+    audit.export at `all`, else 403 and nothing recorded. Every other attempt is recorded, a file
+    handed out (ADR-417) and one refused for being over the cap (ADR-429) alike.
+
+    Always the platform view, with the IP. Values are masked exactly as on screen (`mask_values`).
+    """
+    if await resolve_scope(actor, Perm.AUDIT_EXPORT, db) != Scope.ALL:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
+    count = await db.scalar(_filtered(select(func.count()).select_from(AuditLog), filters))
+    if count > MAX_EXPORT_ROWS:
+        await _record_export(db, actor_uuid=actor.uuid, filters=filters, tz=tz, matched=count, rows=0)
+        raise AuditExportTooLarge(count, MAX_EXPORT_ROWS)
+    query = _filtered(select(AuditLog, User.name).outerjoin(User, User.uuid == AuditLog.user_uuid), filters)
+    rows = (await db.execute(query.order_by(AuditLog.created_at.desc(), AuditLog.uuid))).all()
+    reads_details = await _reads_applicant_details(db, actor)
+    content = write_csv(
+        EXPORT_COLUMNS, [_export_row(row, actor_name, reads_details, tz) for row, actor_name in rows]
+    )
+    # After the file is built: recording it commits, which expires the rows just written out.
+    await _record_export(db, actor_uuid=actor.uuid, filters=filters, tz=tz, matched=count, rows=len(rows))
+    return content
+
+
+async def _record_export(
+    db: AsyncSession, *, actor_uuid, filters: AuditFilters, tz: ZoneInfo, matched: int, rows: int
+) -> None:
+    """Write who exported what (ADR-417): a download touches no table, so no trigger records it.
+
+    Shaped like the session-kick row (ADR-191): `action` is EXPORT, not a DML verb, so it is never
+    counted as a change; `row_id` is a fresh id for this one export. `matched` over `rows` is an
+    attempt refused for being over the cap (ADR-429).
+    """
+    identity = request_identity.get()
+    db.add(
+        AuditLog(
+            table_name="audit_logs",
+            action="EXPORT",
+            row_id=uuid.uuid4(),
+            new_values={
+                "rows": rows,
+                "matched": matched,
+                "tz": tz.key,
+                "filters": {
+                    "table": filters.table,
+                    "row_id": _cell(filters.row_id) or None,
+                    "actor_uuid": _cell(filters.actor_uuid) or None,
+                    "from": _cell(filters.since) or None,
+                    "to": _cell(filters.until) or None,
+                },
+            },
+            user_uuid=actor_uuid,
+            client_ip=request_client_ip.get(),
+            context=json.loads(identity) if identity else None,
+        )
+    )
+    await db.commit()
+
+
+def _export_row(row: AuditLog, actor_name: str | None, reads_details: bool, tz: ZoneInfo) -> dict[str, str]:
+    values = {
+        "created_at": row.created_at.astimezone(tz),
+        "table_name": row.table_name,
+        "action": row.action,
+        "row_id": row.row_id,
+        "actor_uuid": row.user_uuid,
+        "actor_name": actor_name,
+        "client_ip": row.client_ip,
+        "context": row.context,
+        "old_values": mask_values(row.table_name, row.old_values, reads_applicant_details=reads_details),
+        "new_values": mask_values(row.table_name, row.new_values, reads_applicant_details=reads_details),
+    }
+    return {key: _cell(value) for key, value in values.items()}

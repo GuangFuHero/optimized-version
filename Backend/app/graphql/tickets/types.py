@@ -154,6 +154,16 @@ class AuditStatus(enum.Enum):
     audit_issue = "audit_issue"
 
 
+@strawberry.enum
+class TicketStatus(enum.Enum):
+    """A ticket's status, to filter on: worked out from its needs in app/services/ticket_status.py."""
+
+    pending = "pending"
+    in_progress = "in_progress"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
 @strawberry.type(description="One move of a ticket's audit status")
 class TicketAuditEntryType:
     """An entry of `TicketType.auditHistory`, built by `ticket_audit.audit_history`."""
@@ -1127,6 +1137,22 @@ class TicketConnection:
 
     items: list[TicketType]
     page_info: PageInfo
+
+
+@strawberry.type(description="How many tickets one H3 cell holds, of those its caller is shown as the cell")
+class TicketCellType:
+    """A row of `ticketCells`: one cell on the guest map and the number to write in it (ADR-387)."""
+
+    cell: str = strawberry.field(
+        description="H3 index (hex), the same value TicketType.locationCell carries for these tickets"
+    )
+    ticket_count: int
+    urgent_count: int = strawberry.field(
+        description=(
+            "Of those, how many are urgent: a priority other than 'low' or 'medium' (trimmed, any case), "
+            "and not 'in_progress' — the rule the site colours a ticket urgent by"
+        )
+    )
 
 
 @strawberry.input
