@@ -1,5 +1,9 @@
 export { OpenSpaceButton } from './open-space-button';
 export {
+  SpaceDetailSheet,
+  type SpaceDetailSheetProps,
+} from './space-detail-sheet';
+export {
   SpaceFormDrawer,
   type SpaceFormDrawerProps,
 } from './space-form-drawer';

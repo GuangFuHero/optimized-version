@@ -2,15 +2,19 @@
 
 // Temporary: delete when BE-036 is wired into 任務管理 (ADMIN-025).
 
-import { Box, Stack, Typography } from '@mui/material';
+import { useState } from 'react';
+
+import { ButtonBase, Stack, Typography } from '@mui/material';
 import {
   FLOOR_STATE_LABEL,
   OpenSpaceButton,
+  SpaceDetailSheet,
   useSpaces,
 } from '@rescue-frontend/modules';
 
 export default function SpacePreviewPage() {
   const { spaces, isLoading, error } = useSpaces();
+  const [openUuid, setOpenUuid] = useState<string | null>(null);
 
   return (
     <Stack sx={{ gap: 2, p: 3 }}>
@@ -23,9 +27,17 @@ export default function SpacePreviewPage() {
       {isLoading ? <Typography>載入中…</Typography> : null}
       {error ? <Typography color="error">{String(error)}</Typography> : null}
       {spaces.map(({ row }) => (
-        <Box
+        <ButtonBase
           key={row.id}
-          sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}
+          onClick={() => setOpenUuid(row.id)}
+          sx={{
+            display: 'block',
+            textAlign: 'left',
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: 1,
+            p: 1.5,
+          }}
         >
           <Typography sx={{ fontWeight: 600 }}>🏢 {row.name}</Typography>
           <Typography variant="body2">{row.address ?? '—'}</Typography>
@@ -33,8 +45,13 @@ export default function SpacePreviewPage() {
             {row.summary} · {FLOOR_STATE_LABEL[row.status]} · 優先級{' '}
             {row.priority ?? '—'}
           </Typography>
-        </Box>
+        </ButtonBase>
       ))}
+      <SpaceDetailSheet
+        uuid={openUuid}
+        onClose={() => setOpenUuid(null)}
+        onOpenTicket={(uuid) => console.info('open ticket', uuid)}
+      />
     </Stack>
   );
 }

@@ -97,7 +97,7 @@ export function SpaceFormDrawer(props: SpaceFormDrawerProps) {
       {props.mode === 'create' ? (
         <CreateSpaceForm onClose={props.onClose} onCreated={props.onCreated} />
       ) : (
-        <EditSpaceForm
+        <SpaceEditLayout
           building={props.building}
           tickets={props.tickets}
           onClose={props.onClose}
@@ -285,7 +285,7 @@ function CreateSpaceForm({
   );
 }
 
-function EditSpaceForm({
+export function SpaceEditLayout({
   building,
   tickets,
   onClose,
@@ -535,6 +535,7 @@ function AddressNoteLine({
         ? `${note.text}（仍可建立，會存成「未確認門牌」）`
         : note.text;
   const looking = note.kind === 'looking' || note.kind === 'checking';
+  const { pinDoor, typedLine } = note;
 
   return (
     <Box
@@ -556,21 +557,13 @@ function AddressNoteLine({
       <Box component="span" sx={{ flex: 1, minWidth: 0 }}>
         {text}
       </Box>
-      {note.pinDoor ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onUsePin(note.pinDoor!)}
-        >
-          {`用大頭針的地址：${shortDoor(note.pinDoor.fullAddress)}`}
+      {pinDoor ? (
+        <Button variant="ghost" size="sm" onClick={() => onUsePin(pinDoor)}>
+          {`用大頭針的地址：${shortDoor(pinDoor.fullAddress)}`}
         </Button>
       ) : null}
-      {note.typedLine ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onUseTyped(note.typedLine!)}
-        >
+      {typedLine ? (
+        <Button variant="ghost" size="sm" onClick={() => onUseTyped(typedLine)}>
           改回你打的
         </Button>
       ) : null}
