@@ -154,6 +154,18 @@ class AuditStatus(enum.Enum):
 
 
 @strawberry.enum
+class TicketListOrder(enum.Enum):
+    """How the `tickets` list is ordered: `TICKET_ORDERS` in app/repositories/tickets_repository.py.
+
+    NEEDS_FIRST is the site list's (ADR-419): tickets still taking people first, one with an open
+    rescue need ahead of the rest, then newest first within each.
+    """
+
+    NEWEST = "newest"
+    NEEDS_FIRST = "needs_first"
+
+
+@strawberry.enum
 class TicketStatus(enum.Enum):
     """A ticket's status, to filter on: worked out from its needs in app/services/ticket_status.py."""
 

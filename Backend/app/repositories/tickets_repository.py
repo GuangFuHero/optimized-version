@@ -1,7 +1,7 @@
 """Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
 from geoalchemy2 import Geography
-from sqlalchemy import and_, cast, delete, exists, false, func, not_, or_, select
+from sqlalchemy import and_, case, cast, delete, exists, false, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
@@ -17,6 +17,12 @@ from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
+from app.services.ticket_status import OPEN_NEED_STATUSES, OPEN_TICKET_STATUSES
+
+# How list_active can order the tickets (TicketListOrder in app/graphql/tickets/types.py, ADR-419).
+TICKET_ORDERS = frozenset({"newest", "needs_first"})
+# The need type the site list puts first (a need's task_type, TASK_TYPES in app/services/ticket.py).
+_RESCUE = "rescue"
 
 # The site colours a ticket urgent unless its priority, trimmed and lowercased, is one of these, or
 # it is in progress (`map/site/markers.ts` resolveTicketVariant); priority is not validated on
@@ -193,6 +199,58 @@ class TicketRepository(GenericRepository[Tickets]):
             *standing,
         ]
 
+    @staticmethod
+    def _needs_summary(viewer_uuid: str | None):
+        """Each ticket's needs as one row: an open rescue need and, for a viewer, the needs they claimed.
+
+        Grouped once and LEFT JOINed, not an EXISTS per row in the ORDER BY: Postgres costs a
+        correlated EXISTS there as if it ran for every row, and from about 8,500 tickets that
+        estimate passes `jit_above_cost`, which adds 150–300 ms of JIT compiling to a query that
+        takes about 40 ms (ADR-419). Only the rows that can set a flag are grouped.
+        """
+        rescue = TicketTask.task_type == _RESCUE
+        rescue_open = and_(rescue, TicketTask.status.in_(OPEN_NEED_STATUSES))
+        columns = [TicketTask.ticket_uuid, func.bool_or(rescue_open).label("rescue_open")]
+        source = TicketTask.__table__
+        relevant = rescue_open
+        if viewer_uuid is not None:
+            # A claim is a row in task_assignments; giving the place back deletes it.
+            claimed = TaskAssignment.uuid.is_not(None)
+            source = source.outerjoin(
+                TaskAssignment,
+                and_(TaskAssignment.task_uuid == TicketTask.uuid, TaskAssignment.actor_uuid == viewer_uuid),
+            )
+            columns += [
+                func.bool_or(and_(rescue, claimed)).label("rescue_mine"),
+                func.bool_or(claimed).label("mine"),
+            ]
+            relevant = or_(rescue_open, claimed)
+        return (
+            select(*columns)
+            .select_from(source)
+            .where(TicketTask.delete_at.is_(None), relevant)
+            .group_by(TicketTask.ticket_uuid)
+            .subquery("needs")
+        )
+
+    def _needs_tier(self, needs, *, viewer: bool):
+        """0: a rescue need still taking people. 1: another need still taking people. 2: none.
+
+        The site list's order (ADR-419, prototype `site-data.js:613-650`). A ticket's status says
+        whether any need is open (services/ticket_status.py); one cancelled by hand before statuses
+        were derived takes nobody, whatever its needs read. A need the viewer claimed counts as
+        open for them, as on the site, so taking the last place does not send the ticket down —
+        unless the ticket is cancelled, which nobody is working on any more.
+        """
+        open_ticket = self.model.status.in_(OPEN_TICKET_STATUSES)
+        live = self.model.status != "cancelled"
+        whens = [(and_(open_ticket, needs.c.rescue_open), 0)]
+        if viewer:
+            whens += [(and_(live, needs.c.rescue_mine), 0), (or_(open_ticket, and_(live, needs.c.mine)), 1)]
+        else:
+            whens.append((open_ticket, 1))
+        return case(*whens, else_=2)
+
     async def list_active(
         self,
         db: AsyncSession,
@@ -208,12 +266,20 @@ class TicketRepository(GenericRepository[Tickets]):
         detail_filters,
         coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
         location_cell: str | None = None,
+        order: str = "newest",
+        viewer_uuid: str | None = None,
     ) -> list[Tickets]:
         """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope.
 
         `statuses` / `detail_filters` / `coarse_resolution` / `location_cell`: see
         _active_conditions (ADR-281/282/387).
+
+        `order` is one of TICKET_ORDERS. "needs_first" puts _needs_tier ahead of the standing
+        order — ahead of relevance too, when searching (ADR-419) — and `viewer_uuid`, the caller
+        when signed in, counts the needs they claimed as open.
         """
+        if order not in TICKET_ORDERS:
+            raise ValueError(f"Unknown ticket order: {order}")
         term = normalize_query(q)
         conditions = self._active_conditions(
             bounds=bounds,
@@ -226,11 +292,16 @@ class TicketRepository(GenericRepository[Tickets]):
             coarse_resolution=coarse_resolution,
             location_cell=location_cell,
         )
+        query = select(self.model).where(*conditions)
+        tiers = []
+        if order == "needs_first":
+            needs = self._needs_summary(viewer_uuid)
+            # At most one summary row per ticket, so the join repeats no ticket.
+            query = query.outerjoin(needs, needs.c.ticket_uuid == self.model.uuid)
+            tiers = [self._needs_tier(needs, viewer=viewer_uuid is not None)]
         async with search_timeout(db, term):
             result = await db.execute(
-                select(self.model)
-                .where(*conditions)
-                .order_by(*self._order_by(term, public_only=bool(detail_filters)))
+                query.order_by(*tiers, *self._order_by(term, public_only=bool(detail_filters)))
                 .offset(skip)
                 .limit(limit)
             )
