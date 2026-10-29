@@ -343,7 +343,10 @@ export function TicketForm(props: TicketFormProps) {
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) 120px 120px',
+                gridTemplateColumns: {
+                  mobile: 'minmax(0, 1fr)',
+                  tablet: 'minmax(0, 1fr) 120px 120px',
+                },
                 gap: '12px',
                 alignItems: 'start',
               }}
@@ -516,7 +519,10 @@ export function TicketForm(props: TicketFormProps) {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: '220px minmax(0, 1fr)',
+            gridTemplateColumns: {
+              mobile: 'minmax(0, 1fr)',
+              tablet: '220px minmax(0, 1fr)',
+            },
             gap: '12px',
             alignItems: 'start',
           }}
@@ -685,11 +691,14 @@ function NeedRow({
         bgcolor: color.bg.neutral.default,
       }}
     >
-      {/* tk-form's row: 種類, 需求名稱, 數量, then remove. */}
+      {/* tk-form's row: 種類, 需求名稱, 數量, then remove. On a phone 種類 takes a line of its own. */}
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: '120px minmax(0, 1fr) 96px 36px',
+          gridTemplateColumns: {
+            mobile: 'minmax(0, 1fr) 96px 36px',
+            tablet: '120px minmax(0, 1fr) 96px 36px',
+          },
           gap: '10px',
           alignItems: 'start',
         }}
@@ -698,7 +707,10 @@ function NeedRow({
           select
           fullWidth
           hiddenLabel
-          sx={filledInputSx}
+          sx={{
+            ...filledInputSx,
+            gridColumn: { mobile: '1 / -1', tablet: 'auto' },
+          }}
           value={need.taskType}
           onChange={(event) => onChange('taskType', event.target.value)}
           slotProps={{

@@ -589,7 +589,7 @@ function SummaryCard({
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
+        gridTemplateColumns: { mobile: 'minmax(0, 1fr)', tablet: '1fr 1fr' },
         gap: '16px',
         p: '16px',
         borderRadius: `${radius.lg}px`,
