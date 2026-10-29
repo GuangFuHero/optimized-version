@@ -357,8 +357,10 @@ export function TicketForm(props: TicketFormProps) {
             >
               <TextInput
                 label="地址"
+                required={mode === 'create'}
                 placeholder="例：花蓮縣光復鄉中正路一段31號"
                 hint={lookup.isFetching ? '正在根據座標解析地址…' : undefined}
+                error={errors.fullAddress}
                 value={values.fullAddress}
                 onChange={(event) => set('fullAddress', event.target.value)}
               />

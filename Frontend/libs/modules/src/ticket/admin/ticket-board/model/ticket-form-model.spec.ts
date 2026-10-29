@@ -32,6 +32,12 @@ const filled: TicketFormValues = {
   needs: [need()],
 };
 
+/** `filled` with the address a create also needs: a form that passes as it is. */
+const valid: TicketFormValues = {
+  ...filled,
+  fullAddress: '花蓮縣光復鄉中正路一段31號',
+};
+
 describe('emptyTicketForm', () => {
   it('starts at medium priority with one empty rescue need', () => {
     const form = emptyTicketForm();
@@ -52,11 +58,11 @@ describe('emptyTicketForm', () => {
 });
 
 describe('validateTicketForm', () => {
-  it('requires title, contact name, a point and at least one need on create', () => {
+  it('requires title, address, contact name, a point and at least one need on create', () => {
     expect(
       Object.keys(validateTicketForm(emptyTicketForm(), 'create')).sort(),
-    ).toEqual(['contactName', 'needs', 'point', 'title']);
-    expect(validateTicketForm(filled, 'create')).toEqual({});
+    ).toEqual(['contactName', 'fullAddress', 'needs', 'point', 'title']);
+    expect(validateTicketForm(valid, 'create')).toEqual({});
   });
 
   it('does not require point, contact or needs on edit', () => {
@@ -88,7 +94,7 @@ describe('validateTicketForm', () => {
 
   it('requires quantity except for rescue', () => {
     const check = (n: ReturnType<typeof need>) =>
-      validateTicketForm({ ...filled, needs: [n] }, 'create');
+      validateTicketForm({ ...valid, needs: [n] }, 'create');
     expect(
       Object.keys(check(need({ taskType: 'supply', quantity: '' }))),
     ).toEqual(['needs.0.quantity']);
@@ -100,7 +106,7 @@ describe('validateTicketForm', () => {
 
   it('asks a started need for its name', () => {
     const errors = validateTicketForm(
-      { ...filled, needs: [need(), need({ taskName: '', quantity: '2' })] },
+      { ...valid, needs: [need(), need({ taskName: '', quantity: '2' })] },
       'create',
     );
     expect(Object.keys(errors)).toEqual(['needs.1.taskName']);
@@ -207,6 +213,13 @@ describe('a household in a space (BE-036)', () => {
       validateTicketForm(household, 'create', space).point,
     ).toBeUndefined();
     expect(validateTicketForm(household, 'create').point).toBeDefined();
+  });
+
+  it("needs no address either: it takes the building's", () => {
+    expect(
+      validateTicketForm(household, 'create', space).fullAddress,
+    ).toBeUndefined();
+    expect(validateTicketForm(household, 'create').fullAddress).toBeDefined();
   });
 
   it('files under the space with its floor and 戶別, and no point of its own', () => {
@@ -578,7 +591,7 @@ describe('ticketFormErrorSummary', () => {
           'create',
         ),
       ),
-    ).toEqual(['任務標題', '地標', '現場聯絡人', '需求']);
+    ).toEqual(['任務標題', '地址', '地標', '現場聯絡人', '需求']);
   });
 
   it('counts several need errors as one 需求', () => {

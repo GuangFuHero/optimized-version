@@ -157,6 +157,8 @@ export function validateTicketForm(
     errors.photoUrls = `照片最多 ${PHOTO_LINK_MAX} 張`;
   if (mode === 'edit') return errors;
 
+  // 地址必填 (tk-form.jsx); a household in a space takes the building's.
+  if (!values.fullAddress.trim() && !space) errors.fullAddress = '請填寫地址';
   if (!values.contactName.trim()) errors.contactName = '請填寫現場聯絡人';
   // 地標必填: rescuers navigate by this point (tk-form.jsx). A household in a space takes the space's.
   if (!values.point && !space) errors.point = '請在地圖上標記地標位置';
@@ -334,6 +336,7 @@ export function changedUpdateInput(
 /** The fields an error points at, as the form names them, for its 尚有 N 項未完成 summary. */
 const MISSING_LABELS: [prefix: string, label: string][] = [
   ['title', '任務標題'],
+  ['fullAddress', '地址'],
   ['point', '地標'],
   ['contactName', '現場聯絡人'],
   ['needs', '需求'],
