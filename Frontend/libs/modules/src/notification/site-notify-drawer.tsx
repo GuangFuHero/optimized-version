@@ -6,6 +6,7 @@ import DoNotDisturbOnRoundedIcon from '@mui/icons-material/DoNotDisturbOnRounded
 import HighlightOffRoundedIcon from '@mui/icons-material/HighlightOffRounded';
 import MergeRoundedIcon from '@mui/icons-material/MergeRounded';
 import NotificationsOffRoundedIcon from '@mui/icons-material/NotificationsOffRounded';
+import ReportProblemRoundedIcon from '@mui/icons-material/ReportProblemRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
@@ -69,6 +70,9 @@ const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
   'called-off': { icon: <DoNotDisturbOnRoundedIcon />, tone: color.fg.danger },
   // Not in the prototype, which has no notice for a duplicate review.
   merged: { icon: <MergeRoundedIcon />, tone: color.brand.secondary.subtle },
+  // Not in the prototype either. A warning, not red: the ticket stands, only something in it may be
+  // wrong.
+  'audit-issue': { icon: <ReportProblemRoundedIcon />, tone: color.fg.warning },
   'role-approved': { icon: <VerifiedRoundedIcon />, tone: color.fg.success },
   'role-rejected': {
     icon: <HighlightOffRoundedIcon />,

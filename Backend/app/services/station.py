@@ -15,9 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import active_team
-from app.graphql.scalars import geojson_to_geom
+from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
-from app.models.geo import Station
+from app.models.geo import Station, touch
 from app.models.station_property import CrowdSourcing, StationProperty
 from app.models.team import Team
 from app.repositories.geo_repository import (
@@ -26,6 +26,7 @@ from app.repositories.geo_repository import (
     station_property_repository,
     station_repository,
 )
+from app.repositories.team_repository import team_repository
 from app.services.address import apply_address, point_of, unverify_if_moved
 from app.services.authz import require_gov_team, require_scope
 from app.services.geo_validation import (
@@ -270,7 +271,9 @@ async def update_station(
     if geometry is not None:
         validate_point(geometry)
         await unverify_if_moved(db, str(station.uuid), station.geometry, geometry)
-        obj_in["geometry"] = geojson_to_geom(geometry)
+        # A re-sent point is not a move, and assigning it anyway would count as a change.
+        if point_of(geom_to_geojson(station.geometry)) != point_of(geometry):
+            obj_in["geometry"] = geojson_to_geom(geometry)
     # Only re-stamp on an actual transition. Testing for the key's presence instead
     # meant a client that PUTs the whole form back bumped status_changed_at on every
     # save, and station_freshness_trend reads exactly that column — so an unchanged
@@ -305,6 +308,28 @@ async def delete_station(db: AsyncSession, *, actor: User, uuid: str) -> None:
     await station_repository.soft_delete(db, db_obj=station)
 
 
+async def _require_station_assigner(db: AsyncSession, actor: User) -> None:
+    """The gate on handing out stations: station.assign, from a gov team or a platform identity.
+
+    Checked as a capability alone, like work_zone.assign: assigning is a gov-wide action, and
+    checked against the station a `team` grant would 404 on exactly the unassigned stations
+    gov is there to hand out.
+    """
+    await require_scope(actor, Perm.STATION_ASSIGN, db)
+    await require_gov_team(db, actor, detail="Only gov teams may assign stations.")
+
+
+async def list_assignable_teams(db: AsyncSession, *, actor: User) -> list[Team]:
+    """Every team a station can be handed to — the active ones, whoever's they are (ADR-285).
+
+    Behind the same gate as assign_station, so the picker is offered exactly where the
+    assignment would succeed. It is not team.view: a gov member hands stations to teams it
+    cannot otherwise browse, and sees only what `AssignedTeamType` shows of them.
+    """
+    await _require_station_assigner(db, actor)
+    return await team_repository.list_active(db, extra_filters=(Team.status == "active",))
+
+
 async def assign_station(
     db: AsyncSession, *, actor: User, station_uuid: str, team_uuid: str | None
 ) -> Station:
@@ -314,18 +339,13 @@ async def assign_station(
     tells nobody. Otherwise the new team's admins hear they got it and the old team's admins
     that they lost it.
 
-    Checked as a capability alone, like work_zone.assign: assigning is a gov-wide action, and
-    checked against the station a `team` grant would 404 on exactly the unassigned stations
-    gov is there to hand out.
-
     The station row stays locked FOR UPDATE until the write commits, so a second assignment
     racing this one reads the team this one left it with. Without the lock both would read
     the same old team: it would hear "unassigned" twice, and the team in between would never
     hear it lost the station. Authorization runs first, so a caller who is refused never
     takes the lock.
     """
-    await require_scope(actor, Perm.STATION_ASSIGN, db)
-    await require_gov_team(db, actor, detail="Only gov teams may assign stations.")
+    await _require_station_assigner(db, actor)
     station = await db.scalar(
         select(Station).where(Station.uuid == station_uuid, Station.delete_at.is_(None)).with_for_update()
     )
@@ -395,8 +415,10 @@ async def create_station_property(
     any station; there is deliberately no ownership/zone check (crowd-sourced facility data).
     """
     await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
-    if not await station_repository.get_by_uuid_active(db, station_uuid):
+    station = await station_repository.get_by_uuid_active(db, station_uuid)
+    if not station:
         raise ValueError("Station not found")
+    touch(station)
     return await station_property_repository.create(
         db,
         obj_in={
@@ -456,6 +478,11 @@ async def update_station_property(
     actor_uid = actor.uuid
     old_value = (prop.quantity, prop.comment)
 
+    # A verdict on the property (pending/verified/rejected) says it was checked, not that it changed.
+    if any(getattr(prop, field) != value for field, value in changes.items() if field != "status") and (
+        station := await station_repository.get_by_uuid_active(db, station_uuid)
+    ):
+        touch(station)
     updated = await station_property_repository.update(db, db_obj=prop, obj_in=changes)
 
     # `comment` cannot change here — UpdateStationPropertyInput has no such field — but it is

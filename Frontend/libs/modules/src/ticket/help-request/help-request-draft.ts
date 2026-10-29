@@ -3,7 +3,7 @@
  * form is long, and is lost whole when the site reloads as a guest on a sign-in that ran out, or
  * when a sign-out in another tab turns the drawer into the guest one. Keyed by the account, so
  * someone else signing in to the same tab does not see it. Gone when it is sent, on 取消, or on
- * 登出 in this tab.
+ * 登出 in this tab. An opening at a point on the map leaves it be (`holdHelpRequestDraft`).
  */
 
 import { isFilledFromPin, type FilledAddress } from '../address-lookup';
@@ -187,6 +187,54 @@ export function clearHelpRequestDraft(
   } catch {
     // Nothing kept that could be taken away.
   }
+}
+
+/** What one opening of the drawer does with the tab's draft. */
+export interface HelpRequestDraftHold {
+  /** The form to start from: none where the opening does not bring the draft back. */
+  read: (
+    storage: DraftStorage | null,
+    userId: string,
+  ) => HelpRequestForm | null;
+  /** The form as it is filled in. */
+  write: (
+    storage: DraftStorage | null,
+    userId: string,
+    form: HelpRequestForm,
+  ) => void;
+  /** 取消: what was typed in this opening is let go of. */
+  discard: (storage: DraftStorage | null, userId: string) => void;
+}
+
+/**
+ * The tab's draft, for one opening of the drawer. From 請求協助, or back from signing in, the
+ * draft comes back and the form is kept as it is filled in. At a point picked on the map it does
+ * not: its title and address were written for another place (designer, 10-27). That draft is then
+ * left as it was, for 請求協助 to bring back, until something is done in this form — the point it
+ * was opened at and the pin's 門牌 are not — and from then on this form is the draft.
+ */
+export function holdHelpRequestDraft(
+  bringsBack: boolean,
+): HelpRequestDraftHold {
+  let leftBe = !bringsBack;
+
+  return {
+    read: (storage, userId) =>
+      bringsBack ? readHelpRequestDraft(storage, userId) : null,
+    write: (storage, userId, form) => {
+      if (leftBe && !hasContent(form)) {
+        return;
+      }
+
+      leftBe = false;
+      writeHelpRequestDraft(storage, userId, form);
+    },
+    discard: (storage, userId) => {
+      if (!leftBe) {
+        clearHelpRequestDraft(storage, userId);
+      }
+    },
+  };
 }
 
 /**

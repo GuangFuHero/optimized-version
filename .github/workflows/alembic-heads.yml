@@ -1,0 +1,29 @@
+name: Alembic Heads
+
+# No `paths:` filter: a required check whose workflow never starts stays pending forever, and this
+# one costs seconds. It also runs on main, so a second head that slips in is flagged on the commit.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Reports the check for pull requests going through a merge queue, if one is ever enabled.
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  alembic-heads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # On a pull request this is the PR merged into the base as it is right now. Only the
+      # migrations and the script are needed, and the repo carries large design assets.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            Backend/alembic/versions
+            Backend/scripts
+
+      - name: Check for a single Alembic head
+        run: python3 Backend/scripts/check_alembic_heads.py
