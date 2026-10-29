@@ -438,7 +438,8 @@ export function DeleteTicketConfirm({
 /**
  * 任務詳情, after the prototype's `TicketDetail`: the summary card, 地點資訊, 現場災況, the photos,
  * 需求與承接, and the audit card for whoever may give a verdict. What a coarse ticket withholds
- * reads 無權限檢視, never as missing.
+ * reads 無權限檢視, never as missing. The prototype's 系統資訊 (公開範圍, 自動封存) is left out: a
+ * ticket has no visibility, and nothing archives tickets or keeps an archive-days setting.
  */
 function TicketInfo({
   ticket,

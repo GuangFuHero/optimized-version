@@ -86,6 +86,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 - 已有 page 檔案
 - 對應的 reusable modules 位於 `ticket/admin/*`
+- 任務詳情沒有設計稿的「系統資訊」（公開範圍、自動封存）：後端的任務單沒有公開範圍欄位，也沒有自動封存規則與封存天數設定，等後端有了再加
 
 ### `/users`
 
