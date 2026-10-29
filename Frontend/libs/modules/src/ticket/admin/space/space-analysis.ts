@@ -9,6 +9,7 @@ import type {
   AdminSpaceTicketFieldsFragment,
 } from '@rescue-frontend/data-access/admin';
 
+import { OPEN_TASK_STATUSES } from '../ticket-board/model/ticket-row';
 import { matchFloor, orderFloors } from './floors';
 
 export type SpaceTicket = AdminSpaceTicketFieldsFragment;
@@ -142,6 +143,8 @@ export interface SpaceListRow {
   priority: SpacePriority | null;
   /** Needs still recruiting on tickets not yet completed. */
   openNeeds: number;
+  /** People still missing on those tickets' open needs, as a ticket row counts its 志工缺口. */
+  volunteerGap: number;
   /** Its most recently updated ticket's time; null with none. */
   updatedAt: string | null;
   lngLat: [number, number] | null;
@@ -193,6 +196,18 @@ export function toSpaceListRow(
     openNeeds: live.reduce(
       (sum, ticket) =>
         sum + ticket.tasks.filter((task) => task.status === 'pending').length,
+      0,
+    ),
+    volunteerGap: live.reduce(
+      (sum, ticket) =>
+        sum +
+        ticket.tasks.reduce(
+          (gap, task) =>
+            OPEN_TASK_STATUSES.has(task.status) && task.quantity != null
+              ? gap + Math.max(0, task.quantity - task.assignedCount)
+              : gap,
+          0,
+        ),
       0,
     ),
     updatedAt,

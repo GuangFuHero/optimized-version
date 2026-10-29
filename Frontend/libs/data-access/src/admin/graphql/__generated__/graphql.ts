@@ -2148,6 +2148,7 @@ export type AdminTicketFieldsFragment = {
   updatedAt?: string | null;
   disasterTypes: Array<string>;
   locationCell?: string | null;
+  buildingMapUuid?: string | null;
   viewerCanEdit: boolean;
   viewerCanDelete: boolean;
   viewerCanAudit: boolean;
@@ -2156,6 +2157,7 @@ export type AdminTicketFieldsFragment = {
     __typename?: 'SecondaryLocationType';
     county?: string | null;
     town?: string | null;
+    floor?: string | null;
   } | null;
 };
 
@@ -2262,6 +2264,7 @@ export type AdminTicketsQuery = {
       updatedAt?: string | null;
       disasterTypes: Array<string>;
       locationCell?: string | null;
+      buildingMapUuid?: string | null;
       viewerCanEdit: boolean;
       viewerCanDelete: boolean;
       viewerCanAudit: boolean;
@@ -2272,6 +2275,7 @@ export type AdminTicketsQuery = {
         landmarkNote?: string | null;
         county?: string | null;
         town?: string | null;
+        floor?: string | null;
       } | null;
       photos: Array<{ __typename?: 'PhotoType'; uuid: string }>;
       responsibleTeams: Array<{
@@ -2400,6 +2404,7 @@ export type AdminTicketQuery = {
     updatedAt?: string | null;
     disasterTypes: Array<string>;
     locationCell?: string | null;
+    buildingMapUuid?: string | null;
     viewerCanEdit: boolean;
     viewerCanDelete: boolean;
     viewerCanAudit: boolean;
@@ -3031,6 +3036,7 @@ export type AdminCreateTicketMutation = {
           updatedAt?: string | null;
           disasterTypes: Array<string>;
           locationCell?: string | null;
+          buildingMapUuid?: string | null;
           viewerCanEdit: boolean;
           viewerCanDelete: boolean;
           viewerCanAudit: boolean;
@@ -3039,6 +3045,7 @@ export type AdminCreateTicketMutation = {
             __typename?: 'SecondaryLocationType';
             county?: string | null;
             town?: string | null;
+            floor?: string | null;
           } | null;
         };
       };
@@ -3069,6 +3076,7 @@ export type AdminUpdateTicketMutation = {
     updatedAt?: string | null;
     disasterTypes: Array<string>;
     locationCell?: string | null;
+    buildingMapUuid?: string | null;
     viewerCanEdit: boolean;
     viewerCanDelete: boolean;
     viewerCanAudit: boolean;
@@ -3077,6 +3085,7 @@ export type AdminUpdateTicketMutation = {
       __typename?: 'SecondaryLocationType';
       county?: string | null;
       town?: string | null;
+      floor?: string | null;
     } | null;
   };
 };
@@ -3117,6 +3126,7 @@ export type AdminAuditTicketMutation = {
     updatedAt?: string | null;
     disasterTypes: Array<string>;
     locationCell?: string | null;
+    buildingMapUuid?: string | null;
     viewerCanEdit: boolean;
     viewerCanDelete: boolean;
     viewerCanAudit: boolean;
@@ -3125,6 +3135,7 @@ export type AdminAuditTicketMutation = {
       __typename?: 'SecondaryLocationType';
       county?: string | null;
       town?: string | null;
+      floor?: string | null;
     } | null;
   };
 };
@@ -4022,6 +4033,8 @@ export type AdminSpaceTicketFieldsFragment = {
   title: string;
   status: string;
   priority: string;
+  auditStatus: string;
+  disasterTypes: Array<string>;
   updatedAt?: string | null;
   secondaryLocation?: {
     __typename?: 'SecondaryLocationType';
@@ -4031,6 +4044,7 @@ export type AdminSpaceTicketFieldsFragment = {
   tasks: Array<{
     __typename?: 'TicketTaskType';
     uuid: string;
+    taskType: string;
     status: string;
     quantity?: number | null;
     assignedCount: number;
@@ -4110,6 +4124,8 @@ export type AdminBuildingMapTicketsQuery = {
     title: string;
     status: string;
     priority: string;
+    auditStatus: string;
+    disasterTypes: Array<string>;
     updatedAt?: string | null;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
@@ -4119,6 +4135,7 @@ export type AdminBuildingMapTicketsQuery = {
     tasks: Array<{
       __typename?: 'TicketTaskType';
       uuid: string;
+      taskType: string;
       status: string;
       quantity?: number | null;
       assignedCount: number;
@@ -4255,6 +4272,7 @@ export const AdminTicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -4263,6 +4281,7 @@ export const AdminTicketFieldsFragmentDoc = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'county' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
               ],
             },
           },
@@ -4531,6 +4550,8 @@ export const AdminSpaceTicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {
             kind: 'Field',
@@ -4550,6 +4571,7 @@ export const AdminSpaceTicketFieldsFragmentDoc = {
               kind: 'SelectionSet',
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
                 {
@@ -4858,6 +4880,7 @@ export const AdminTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -4866,6 +4889,7 @@ export const AdminTicketsDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'county' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
               ],
             },
           },
@@ -5614,6 +5638,7 @@ export const AdminTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -5622,6 +5647,7 @@ export const AdminTicketDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'county' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
               ],
             },
           },
@@ -7495,6 +7521,7 @@ export const AdminCreateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -7503,6 +7530,7 @@ export const AdminCreateTicketDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'county' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
               ],
             },
           },
@@ -7615,6 +7643,7 @@ export const AdminUpdateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -7623,6 +7652,7 @@ export const AdminUpdateTicketDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'county' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
               ],
             },
           },
@@ -7812,6 +7842,7 @@ export const AdminAuditTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'secondaryLocation' },
@@ -7820,6 +7851,7 @@ export const AdminAuditTicketDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'county' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'town' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
               ],
             },
           },
@@ -11496,6 +11528,8 @@ export const AdminBuildingMapTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {
             kind: 'Field',
@@ -11515,6 +11549,7 @@ export const AdminBuildingMapTicketsDocument = {
               kind: 'SelectionSet',
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'status' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
                 {

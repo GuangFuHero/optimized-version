@@ -20,9 +20,11 @@ fragment AdminTicketFields on TicketType {
   updatedAt
   disasterTypes
   locationCell
+  buildingMapUuid
   secondaryLocation {
     county
     town
+    floor
   }
   viewerCanEdit
   viewerCanDelete
@@ -930,6 +932,8 @@ fragment AdminSpaceTicketFields on TicketType {
   title
   status
   priority
+  auditStatus
+  disasterTypes
   updatedAt
   secondaryLocation {
     floor
@@ -937,6 +941,7 @@ fragment AdminSpaceTicketFields on TicketType {
   }
   tasks {
     uuid
+    taskType
     status
     quantity
     assignedCount

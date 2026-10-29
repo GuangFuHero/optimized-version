@@ -17,6 +17,7 @@ type SpaceTask = SpaceTicket['tasks'][number];
 function task(overrides: Partial<SpaceTask> = {}): SpaceTask {
   return {
     uuid: 'task',
+    taskType: 'rescue',
     status: 'fulfilled',
     quantity: 1,
     assignedCount: 1,
@@ -39,6 +40,8 @@ function ticket(
     title: '受困',
     status: 'pending',
     priority: 'low',
+    auditStatus: 'no_audit',
+    disasterTypes: [],
     updatedAt: '2026-10-29T01:00:00Z',
     secondaryLocation: { floor, room },
     tasks: [],
@@ -81,6 +84,7 @@ function row(overrides: Partial<SpaceListRow> = {}): SpaceListRow {
     status: 'empty',
     priority: null,
     openNeeds: 0,
+    volunteerGap: 0,
     updatedAt: null,
     lngLat: [121.4, 23.6],
     ...overrides,
@@ -276,6 +280,30 @@ describe('toSpaceListRow', () => {
 
     expect(r.openNeeds).toBe(2);
     expect(r.updatedAt).toBe('2026-10-29T05:00:00Z');
+  });
+
+  it('counts the people still missing on open needs, as a ticket row does', () => {
+    const a = analyzeSpace(
+      ['1F', 'RF'],
+      [
+        ticket({
+          floor: '1F',
+          tasks: [
+            task({ status: 'pending', quantity: 3, assignedCount: 1 }),
+            task({ status: 'in_progress', quantity: 2, assignedCount: 0 }),
+            task({ status: 'pending', quantity: null, assignedCount: 0 }),
+            task({ status: 'fulfilled', quantity: 5, assignedCount: 0 }),
+          ],
+        }),
+        ticket({
+          floor: '1F',
+          status: 'cancelled',
+          tasks: [task({ status: 'pending', quantity: 9, assignedCount: 0 })],
+        }),
+      ],
+    );
+
+    expect(toSpaceListRow(building(), a).volunteerGap).toBe(4);
   });
 
   it('has no point when the building has none', () => {
