@@ -8,6 +8,7 @@ export {
   getBackendGraphqlUrl,
 } from './server/backend-api-url';
 export { withClientIpAsync } from './server/client-ip';
+export { requestOriginAsync } from './server/request-origin';
 
 export { reverseGeocode } from './server/reverse-geocode';
 export {
