@@ -326,7 +326,7 @@ function AddressFields({
 }
 
 /** A label above its control, the prototype's `L`; `hint` sits under the control. */
-function Labeled({
+export function Labeled({
   label,
   required = false,
   hint,
@@ -367,7 +367,7 @@ function Labeled({
   );
 }
 
-function Columns({
+export function Columns({
   count = 2,
   gap = '14px',
   children,
