@@ -14,7 +14,8 @@ export const dynamic = 'force-static';
 const { color } = designTokens;
 
 // The fonts beside this card hold only these characters (`assets/share-card/README.md`). Change a
-// word and subset them again, or it is drawn as an empty box.
+// word and subset them again, or it is drawn as an empty box. Any change to the card also raises the
+// version in `SITE_SHARE_CARD.url`, or what LINE and Facebook keep goes on showing the old one.
 const TITLE = '島嶼守望';
 const SUBTITLE = '檢視救災任務與站點資訊。';
 

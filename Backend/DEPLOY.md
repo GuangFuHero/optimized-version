@@ -139,8 +139,10 @@ Staging's values are in `scripts/deploy-config.staging.env`. `gen_env` appends i
 `.env.frontend` (the site), and the back office's container reads it as it is. Both Next apps read
 `AUTH_COOKIE_PREFIX`, `SITE_APP_URL` and `ADMIN_APP_URL` too. The back office reads `SITE_APP_URL` at request
 time for the link back to the site's map on the page it shows an account with no back-office identity;
-without it that page has no way back. The OAuth secrets are written to the backend's `.env` only. Production
-does not exist yet; its column is the plan.
+without it that page has no way back. The site reads it at request time too, as the origin of the links and
+the link-preview card its pages hand out; without it, it takes the host the request names, which any client
+can forge, so a deployed site must have it. The OAuth secrets are written to the backend's `.env` only.
+Production does not exist yet; its column is the plan.
 
 | Setting | Production | Staging | Local |
 |---------|------------|---------|-------|

@@ -10,8 +10,9 @@ import { requestOriginAsync } from '@rescue-frontend/modules/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    // Relative URLs, the share card's included, resolve on the host the request came in on.
-    // Without a base, Next resolves them on localhost, which no link preview can fetch.
+    // Relative URLs, the share card's included, resolve on the site's origin: `SITE_APP_URL`, or in
+    // local development the host the request came in on. Without a base, Next resolves them on
+    // localhost, which no link preview can fetch. Always a valid origin, so this never throws.
     metadataBase: new URL(await requestOriginAsync()),
     title: '島嶼守望 - 救災前台',
     description: '救災前台網站，提供使用者查看資訊、任務、站點等功能',
