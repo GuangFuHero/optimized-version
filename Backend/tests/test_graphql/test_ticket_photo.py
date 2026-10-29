@@ -238,3 +238,89 @@ async def test_detach_ticket_photo_refuses_a_station_photo(client, staff_auth, c
         },
     )
     assert len(resp.json()["data"]["station"]["photos"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_attach_ticket_photo_refuses_an_eleventh(client, staff_auth):
+    """A ticket holding ten photos takes no eleventh, as createTicket takes no eleven; detaching frees one."""
+    _, token = staff_auth
+    created = await _create_ticket(client, token, photoUrls=[f"https://a.example/{i}.jpg" for i in range(9)])
+    ticket_uuid = created["data"]["createTicket"]["ticket"]["uuid"]
+
+    tenth = await _gql(
+        client, token, ATTACH_TICKET_PHOTO, {"ticketUuid": ticket_uuid, "url": "https://a.example/9.jpg"}
+    )
+    assert "errors" not in tenth, tenth
+    eleventh = await _gql(
+        client, token, ATTACH_TICKET_PHOTO, {"ticketUuid": ticket_uuid, "url": "https://a.example/10.jpg"}
+    )
+    assert "At most 10 photos are allowed" in eleventh["errors"][0]["message"], eleventh
+    assert len(await _photo_urls(client, token, ticket_uuid)) == 10
+
+    detached = await _gql(
+        client, token, DETACH_TICKET_PHOTO, {"uuid": tenth["data"]["attachTicketPhoto"]["uuid"]}
+    )
+    assert "errors" not in detached, detached
+    again = await _gql(
+        client, token, ATTACH_TICKET_PHOTO, {"ticketUuid": ticket_uuid, "url": "https://a.example/10.jpg"}
+    )
+    assert "errors" not in again, again
+
+
+# ticket.edit at `own`: the scope check runs against the ticket, so the filer edits only theirs.
+_OWN_EDITOR = {
+    Perm.TICKET_ADD: "all",
+    Perm.TICKET_VIEW: "all",
+    Perm.TICKET_VIEW_DETAIL: "all",
+    Perm.TICKET_EDIT: "own",
+}
+
+
+@pytest.mark.asyncio
+async def test_attach_ticket_photo_at_own_scope_reaches_only_ones_own_ticket(client, redis, staff_auth):
+    """An own-scoped editor attaches to the ticket they filed, and is refused on someone else's."""
+    _, staff_token = staff_auth
+    _, own_token = await _make_user_with_grants(redis, _OWN_EDITOR)
+    mine = (await _create_ticket(client, own_token))["data"]["createTicket"]["ticket"]["uuid"]
+    theirs = (await _create_ticket(client, staff_token))["data"]["createTicket"]["ticket"]["uuid"]
+
+    allowed = await _gql(
+        client, own_token, ATTACH_TICKET_PHOTO, {"ticketUuid": mine, "url": "https://a.example/m.jpg"}
+    )
+    assert "errors" not in allowed, allowed
+    denied = await _gql(
+        client, own_token, ATTACH_TICKET_PHOTO, {"ticketUuid": theirs, "url": "https://a.example/t.jpg"}
+    )
+    assert "errors" in denied, denied
+    assert await _photo_urls(client, staff_token, theirs) == []
+
+
+@pytest.mark.asyncio
+async def test_detach_ticket_photo_at_own_scope_reaches_only_ones_own_ticket(client, redis, staff_auth):
+    """An own-scoped editor detaches from the ticket they filed, and is refused on someone else's."""
+    _, staff_token = staff_auth
+    _, own_token = await _make_user_with_grants(redis, _OWN_EDITOR)
+    mine = (await _create_ticket(client, own_token, photoUrls=["https://a.example/m.jpg"]))["data"][
+        "createTicket"
+    ]
+    theirs = (await _create_ticket(client, staff_token, photoUrls=["https://a.example/t.jpg"]))["data"][
+        "createTicket"
+    ]
+    async with _test_db() as db:
+        photo_of = {
+            str(p.ref_uuid): str(p.uuid)
+            for p in (
+                await db.execute(
+                    select(Photo).where(
+                        Photo.ref_uuid.in_([mine["ticket"]["uuid"], theirs["ticket"]["uuid"]])
+                    )
+                )
+            ).scalars()
+        }
+
+    denied = await _gql(client, own_token, DETACH_TICKET_PHOTO, {"uuid": photo_of[theirs["ticket"]["uuid"]]})
+    assert "errors" in denied, denied
+    assert await _photo_urls(client, staff_token, theirs["ticket"]["uuid"]) == ["https://a.example/t.jpg"]
+    allowed = await _gql(client, own_token, DETACH_TICKET_PHOTO, {"uuid": photo_of[mine["ticket"]["uuid"]]})
+    assert "errors" not in allowed, allowed
+    assert await _photo_urls(client, own_token, mine["ticket"]["uuid"]) == []
