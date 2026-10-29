@@ -160,14 +160,12 @@ describe('toCreateTicketInput', () => {
           taskName: '飲用水',
           quantity: 3,
           taskDescription: null,
-          source: 'official',
         },
         {
           taskType: 'rescue',
           taskName: '受困',
           quantity: null,
           taskDescription: null,
-          source: 'official',
         },
       ],
     });

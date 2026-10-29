@@ -98,7 +98,7 @@ function saveError(error: unknown, mode: 'create' | 'edit'): string {
 /**
  * The admin form for one ticket, filling whichever `SheetFrame` holds it: `TicketCreateSheet` (the
  * board's 新增求助單 and the 互助地圖's pin), or the ticket's own drawer when 編輯 swaps it in. A coordinator enters a request taken by
- * phone, so a new ticket's needs are official.
+ * phone; the backend marks its needs official, as it does every need filed from the back office.
  */
 export function TicketForm(props: TicketFormProps) {
   const { mode, onDone, onCancel, onBusyChange } = props;

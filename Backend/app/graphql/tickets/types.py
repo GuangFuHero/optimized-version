@@ -398,7 +398,13 @@ class TicketTaskType:
             "only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description=(
+            "Origin of this task: 'official' when filed from a back-office identity, 'user' when "
+            "from the site, 'import' from a bulk import. Set by the server"
+        ),
+    )
     recruiting_stopped_at: datetime | None = strawberry.field(
         default=None,
         description=(
@@ -536,7 +542,6 @@ class CreateTicketTaskInput:
             "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
     route_uuid: UUID | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
     )
@@ -1255,7 +1260,6 @@ class CreateTicketTaskDraft:
     task_name: str
     task_description: str | None = None
     quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
     route_uuid: UUID | None = None
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,

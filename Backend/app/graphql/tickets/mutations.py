@@ -317,7 +317,6 @@ class TicketTaskMutation:
                 task_name=input.task_name,
                 task_description=input.task_description,
                 quantity=input.quantity,
-                source=input.source,
                 route_uuid=str(input.route_uuid) if input.route_uuid else None,
                 acknowledged_duplicate_of=acknowledged_duplicate_of,
             ),
@@ -489,7 +488,6 @@ def _task_submission(draft) -> TaskSubmission:
         task_name=draft.task_name,
         task_description=draft.task_description,
         quantity=draft.quantity,
-        source=draft.source,
         route_uuid=str(draft.route_uuid) if draft.route_uuid else None,
         acknowledged_duplicate_of=draft.acknowledged_duplicate_of,
     )

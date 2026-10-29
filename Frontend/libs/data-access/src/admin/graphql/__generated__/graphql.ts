@@ -477,8 +477,6 @@ export type CreateTicketTaskDraft = {
   /** Number of people or units needed */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
-  /** Origin: 'user' (default) or 'official' */
-  source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   taskName: Scalars['String']['input'];
   /** Category: 'rescue', 'supply', 'medical', or 'hr' */
@@ -490,8 +488,6 @@ export type CreateTicketTaskInput = {
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
-  /** Origin: 'user' (default) or 'official' */
-  source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   taskName: Scalars['String']['input'];
   /** Category: 'rescue', 'supply', 'medical', or 'hr' */
@@ -1820,7 +1816,7 @@ export type TicketTaskType = {
   quantity?: Maybe<Scalars['Int']['output']>;
   /** When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back */
   recruitingStoppedAt?: Maybe<Scalars['DateTime']['output']>;
-  /** Origin of this task: 'user' or 'official' */
+  /** Origin of this task: 'official' when filed from a back-office identity, 'user' when from the site, 'import' from a bulk import. Set by the server */
   source: Scalars['String']['output'];
   /** Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or its requester stopped recruiting — the people on it still go), or 'canceled'. Moves only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion */
   status: Scalars['String']['output'];

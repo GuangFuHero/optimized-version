@@ -555,9 +555,6 @@ input CreateTicketTaskDraft {
 
   """Number of people or units needed"""
   quantity: Int = null
-
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
   routeUuid: UUID = null
 
   """
@@ -579,9 +576,6 @@ input CreateTicketTaskInput {
   People or units needed, at least 1; required except for a 'rescue' task, which may omit it
   """
   quantity: Int = null
-
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
 
   """Optional UUID of an associated route"""
   routeUuid: UUID = null
@@ -1804,7 +1798,9 @@ type TicketTaskType {
   """
   status: String!
 
-  """Origin of this task: 'user' or 'official'"""
+  """
+  Origin of this task: 'official' when filed from a back-office identity, 'user' when from the site, 'import' from a bulk import. Set by the server
+  """
   source: String!
 
   """

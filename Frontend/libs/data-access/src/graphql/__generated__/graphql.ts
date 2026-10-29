@@ -478,8 +478,6 @@ export type CreateTicketTaskDraft = {
   /** Number of people or units needed */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
-  /** Origin: 'user' (default) or 'official' */
-  source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   taskName: Scalars['String']['input'];
   /** Category: 'rescue', 'supply', 'medical', or 'hr' */
@@ -492,8 +490,6 @@ export type CreateTicketTaskInput = {
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
-  /** Origin: 'user' (default) or 'official' */
-  source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   taskName: Scalars['String']['input'];
   /** Category: 'rescue', 'supply', 'medical', or 'hr' */
