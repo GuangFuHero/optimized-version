@@ -49,14 +49,14 @@ async def _waiting_on_a_lock(engine, action_task, attempts: int = 200) -> None:
     raise AssertionError("the second action never waited on the resolve's locks")
 
 
-async def _during_resolve(db, monkeypatch, action, *perms):
+async def _during_resolve(db, monkeypatch, action, *perms, overrides=lambda ids: {}):
     """Run `action(session, actor, ids)` while a resolve of example one holds its locks.
 
-    Returns (what the action raised or returned, ids).
+    `overrides(ids)` replaces parts of the request. Returns (what the action raised or returned, ids).
     """
     reviewer, ids = await _world(db)
     ids["v3_on_b1"] = await _assignment(db, "b1", "v3", ids)
-    request = _example_one(ids, await _versions(db, reviewer, ids))
+    request = _example_one(ids, await _versions(db, reviewer, ids), **overrides(ids))
     other = await _actor(db, *perms)
     people = {
         "reviewer": (reviewer.uuid, reviewer.active_identity),
@@ -189,6 +189,42 @@ async def test_editing_an_item_queued_behind_its_move_is_refused(db, monkeypatch
     outcome, ids = await _during_resolve(db, monkeypatch, action, Perm.TICKET_EDIT)
 
     assert isinstance(outcome, ValueError) and "merged into another ticket" in str(outcome), outcome
+
+
+async def test_editing_an_item_queued_behind_its_cancel_is_refused(db, monkeypatch):
+    """A's own item on a1 is cancelled while a1 stays; an edit must not land on it or stamp the ticket."""
+
+    def cancel_pa1(ids):
+        return {
+            "primary_tasks": [
+                {
+                    "task": ids["a1"],
+                    "action": "keep",
+                    "absorb": [ids["b1"]],
+                    "values": {"quantity": 7},
+                    "properties": [
+                        {"property": ids["pa1"], "action": "cancel"},
+                        {"property": ids["pb1"], "action": "keep", "values": {"quantity": 3}},
+                    ],
+                },
+                {
+                    "task": ids["a2"],
+                    "action": "keep",
+                    "absorb": [ids["b2"]],
+                    "values": {"quantity": 6},
+                    "properties": [],
+                },
+            ]
+        }
+
+    async def action(session, actor, ids):
+        return await ticket_service.update_task_property(
+            session, actor=actor, uuid=ids["pa1"], changes={"property_value": "10"}
+        )
+
+    outcome, ids = await _during_resolve(db, monkeypatch, action, Perm.TICKET_EDIT, overrides=cancel_pa1)
+
+    assert isinstance(outcome, ValueError) and "not found" in str(outcome), outcome
 
 
 async def test_an_edit_queued_behind_a_fold_is_refused(db, monkeypatch):

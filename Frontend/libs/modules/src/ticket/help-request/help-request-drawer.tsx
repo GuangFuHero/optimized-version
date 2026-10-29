@@ -47,10 +47,8 @@ import {
 } from '../address-lookup';
 import { PhotoLinkEditor } from '../photos';
 import {
-  clearHelpRequestDraft,
-  readHelpRequestDraft,
+  holdHelpRequestDraft,
   sessionDraftStorage,
-  writeHelpRequestDraft,
 } from './help-request-draft';
 import {
   canAddNeedRow,
@@ -88,6 +86,8 @@ interface HelpRequestDrawerProps {
   open: boolean;
   /** A point picked on the main map to start from; without one the drawer asks the device. */
   seed: PickedPoint | null;
+  /** Whether it starts from the draft kept in this tab: not at a point picked on the map. */
+  bringsBackDraft: boolean;
   isAuthenticated: boolean;
   /** The signed-in account, whose draft the form is kept as in this tab. */
   userId: string | null;
@@ -103,12 +103,13 @@ interface HelpRequestDrawerProps {
 /**
  * 請求協助 (prototype `SiteTicketCreateDrawer`, `Design/前台/js/site/site-actions.jsx:1424-1765`):
  * a resident says where and what they need. Mounted afresh for each opening (`HelpRequestHost`
- * keys it), so a form starts from what was left unsent in this tab, or else empty with a point from
- * the map there before the first render.
+ * keys it), so a form starts from what was left unsent in this tab, unless opened at a point on the
+ * map, or else empty with a point from the map there before the first render.
  */
 export function HelpRequestDrawer({
   open,
   seed,
+  bringsBackDraft,
   isAuthenticated,
   userId,
   submitting,
@@ -131,6 +132,7 @@ export function HelpRequestDrawer({
     <HelpRequestFormDrawer
       open={open}
       seed={seed}
+      bringsBackDraft={bringsBackDraft}
       userId={userId}
       submitting={submitting}
       submitError={submitError}
@@ -402,16 +404,18 @@ function AddressLookupNote({
 function HelpRequestFormDrawer({
   open,
   seed,
+  bringsBackDraft,
   userId,
   submitting,
   submitError,
   onClose,
   onSubmit,
 }: Omit<HelpRequestDrawerProps, 'isAuthenticated' | 'onSignIn'>) {
-  // Read once, for this opening. A draft comes back whole, its point too, over one from the map:
-  // its title and address were written for its own point.
+  const [draftHold] = useState(() => holdHelpRequestDraft(bringsBackDraft));
+  // Read once, for this opening. Back from signing in at a point, a draft comes back whole, its point
+  // too: its title and address were written for its own point.
   const [draft] = useState(() =>
-    userId ? readHelpRequestDraft(sessionDraftStorage(), userId) : null,
+    userId ? draftHold.read(sessionDraftStorage(), userId) : null,
   );
   const [form, setForm] = useState<HelpRequestForm>(
     () => draft ?? emptyHelpRequestForm(seed),
@@ -449,9 +453,9 @@ function HelpRequestFormDrawer({
   // Not once closed: what is left of the form then was sent, or let go of on 取消.
   useEffect(() => {
     if (open && userId) {
-      writeHelpRequestDraft(sessionDraftStorage(), userId, form);
+      draftHold.write(sessionDraftStorage(), userId, form);
     }
-  }, [form, open, userId]);
+  }, [draftHold, form, open, userId]);
 
   const missing = findMissingFields(form);
   const missingKeys = new Set(missing.map((field) => field.key));
@@ -582,7 +586,7 @@ function HelpRequestFormDrawer({
   /** 取消 lets go of what was typed; ✕, the scrim and Escape only put it away for later. */
   const cancel = () => {
     if (userId) {
-      clearHelpRequestDraft(sessionDraftStorage(), userId);
+      draftHold.discard(sessionDraftStorage(), userId);
     }
 
     onClose();

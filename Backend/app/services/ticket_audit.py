@@ -224,8 +224,9 @@ async def audit_ticket(
     That is any change, a need taken off included, though taking one off does not void a verdict
     given earlier. The ticket row is locked first, so a content change cannot land between that check and the
     commit. The verdict records who gave it, when, and the content it was given on. An issue is
-    told to the requester, who can put it right, and to everyone signed up for its needs, who may
-    be on their way; neither notice carries the note or the auditor, which only staff read.
+    told to the requester, that staff are looking into it (the site cannot edit a ticket yet), and
+    to everyone signed up for its needs, who may be on their way; neither notice carries the note
+    or the auditor, which only staff read.
     """
     if status not in VERDICTS:
         raise ValueError(f"Unknown audit verdict: {status}")
@@ -264,9 +265,9 @@ async def audit_ticket(
         notices = [
             (
                 [requester] if requester and str(requester) != str(actor_uid) else [],
-                f"您的求助單「{title}」已被標記為內容有疑慮，請確認資料是否正確。",
+                f"協調人員正在確認你的求助單「{title}」，有需要會跟你聯絡。",
             ),
-            (list(volunteers), f"您報名的求助單「{title}」已被標記為內容有疑慮，資料可能有誤，請留意。"),
+            (list(volunteers), f"你報名的求助單「{title}」資料可能有誤，出發前請先跟開單者確認。"),
         ]
         for recipients, body in notices:
             await NotificationService.dispatch(

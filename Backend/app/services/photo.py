@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
 from app.models.auth import User
+from app.models.geo import touch
 from app.models.photo import Photo
 from app.repositories.geo_repository import station_repository
 from app.repositories.photo_repository import photo_repository
@@ -75,8 +76,10 @@ async def attach_photo_to_geometry(
     """
     await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
     url = normalize_photo_url(url)
-    if not await station_repository.get_by_uuid_active(db, base_geometry_uuid):
+    station = await station_repository.get_by_uuid_active(db, base_geometry_uuid)
+    if not station:
         raise ValueError("Station not found")
+    touch(station)
     return await photo_repository.create(
         db,
         obj_in={
@@ -145,4 +148,5 @@ async def detach_station_photo(db: AsyncSession, *, actor: User, uuid: str) -> N
                 created_by=photo.created_by, team_uuid=station.team_uuid, geometry=station.geometry
             ),
         )
+    touch(station)
     await photo_repository.soft_delete(db, db_obj=photo)

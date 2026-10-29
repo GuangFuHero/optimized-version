@@ -37,7 +37,13 @@ import {
   type RoleRequestFormValues,
 } from './form';
 import { RoleRequestCard } from './role-request-card';
-import { findTeamNamed, NEW_TEAM, reviewerText, teamTypeForRole } from './team';
+import {
+  findTeamNamed,
+  inviteHint,
+  NEW_TEAM,
+  reviewerText,
+  teamTypeForRole,
+} from './team';
 import { TeamPicker } from './team-picker';
 import { useApplyDraft } from './use-apply-draft';
 import { usePhoneVerification } from './use-phone-verification';
@@ -272,6 +278,8 @@ export function RoleRequestDrawer({
               <Button variant="outlined" onClick={() => withdraw.request()}>
                 撤回這筆申請
               </Button>
+              {/* Not 「團隊已經用邀請碼讓你加入」 any more: a scan is an application too, and only one
+                  waits at a time (Spec 026), so this one goes first. */}
               <Typography
                 sx={{
                   mt: 1,
@@ -281,7 +289,7 @@ export function RoleRequestDrawer({
                   textWrap: 'pretty',
                 }}
               >
-                如果團隊已經用邀請碼讓你加入，就不需要這筆申請了，可以直接撤回。
+                如果有團隊給你邀請碼，要先撤回這一筆，才能掃碼改申請那個團隊。
               </Typography>
             </Box>
           )}
@@ -312,6 +320,7 @@ export function RoleRequestDrawer({
   const problems = roleRequestFormProblems(errors, values.role);
   const set = (field: 'name' | 'reason' | 'newTeamName') => (value: string) =>
     setValues((current) => ({ ...current, [field]: value }));
+  const invite = inviteHint(values.role);
   // A new name already on the list is said at once, not only after 送出申請 (prototype).
   const nameTaken = Boolean(
     values.team === NEW_TEAM &&
@@ -422,6 +431,19 @@ export function RoleRequestDrawer({
               />
             ))}
           </Stack>
+          {invite ? (
+            <Typography
+              sx={{
+                mt: 1,
+                color: color.fg.neutral.muted,
+                fontSize: displayTextSize[12],
+                lineHeight: 1.6,
+                textWrap: 'pretty',
+              }}
+            >
+              {invite}
+            </Typography>
+          ) : null}
         </Box>
 
         {values.role && teamType ? (

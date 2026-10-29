@@ -58,7 +58,12 @@ interface Opening {
   /** Keys the drawer, so each opening starts from an empty form. */
   id: number;
   seed: PickedPoint | null;
+  /** Whether it starts from the draft kept in this tab (`holdHelpRequestDraft`). */
+  bringsBackDraft: boolean;
 }
+
+/** A point picked on the map that the drawer opens at, or none. */
+type Seed = HelpRequestSeed | null;
 
 interface FiledTicket {
   uuid: string;
@@ -81,7 +86,7 @@ interface HeldRequest extends HeldHelpRequest {
 function HelpRequestReturn({
   onReturn,
 }: {
-  onReturn: (seed: HelpRequestSeed | null) => void;
+  onReturn: (seed: Seed, bringsBackDraft: boolean) => void;
 }) {
   const searchParams = useSearchParams();
   const { status } = useAuthSession();
@@ -104,8 +109,9 @@ function HelpRequestReturn({
       window.history.replaceState(window.history.state, '', withoutHelp);
     }
 
+    // What was typed before the sign-in comes back, at whatever point it was opened.
     if (status === 'authenticated') {
-      onReturn(helpReturn.seed);
+      onReturn(helpReturn.seed, true);
     }
   }, [helpReturn, onReturn, status]);
 
@@ -141,10 +147,12 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   const [heldError, setHeldError] = useState<string | null>(null);
   const [unsentOpen, setUnsentOpen] = useState(false);
 
-  const openDrawer = useCallback((seed: HelpRequestSeed | null) => {
+  // At a point picked on the map, the draft does not come back.
+  const openDrawer = useCallback((seed: Seed, bringsBackDraft = !seed) => {
     setOpening((current) => ({
       id: (current?.id ?? 0) + 1,
       seed: seed ? { ...seed, source: 'seed' } : null,
+      bringsBackDraft,
     }));
     setSubmitError(null);
     setUnsentOpen(false);
@@ -292,6 +300,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
           key={opening.id}
           open={open}
           seed={opening.seed}
+          bringsBackDraft={opening.bringsBackDraft}
           isAuthenticated={isAuthenticated}
           userId={userId}
           submitting={submitting}

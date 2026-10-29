@@ -14,15 +14,16 @@ alone (ADR-341).
 import json
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
-from sqlalchemy import delete, select, tuple_, update
+from sqlalchemy import delete, func, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disaster_types import validate_disaster_types
 from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.dedup import DedupAuditEvent, DuplicatePair
+from app.models.geo import touch
 from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
@@ -95,7 +96,7 @@ async def resolve(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, reques
     primary, secondary = (low, high) if plan.primary_uuid == low.uuid else (high, low)
     ticket_changes = await _checked_ticket_changes(db, plan.ticket_changes, primary)
 
-    now = datetime.now(UTC)
+    now = await db.scalar(select(func.clock_timestamp()))  # the database's clock, as every stamp is
     tasks = await _tasks_by_uuid(db, (primary.uuid, secondary.uuid))
     await _write(db, plan, ticket_changes, tasks, now)
 
@@ -123,6 +124,10 @@ async def _write(db: AsyncSession, plan: ResolvePlan, ticket_changes: dict, task
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=plan.primary_uuid)
     await void_stale_verdict(db, plan.primary_uuid)
+    # Last, so no later write stamps its own time: both tickets read the merge time, related rows included.
+    for ticket_uuid in (plan.primary_uuid, plan.secondary_uuid):
+        touch(await db.get(Tickets, ticket_uuid), at=now)
+    await db.flush()
 
 
 async def _locked_snapshot(db: AsyncSession, pair: DuplicatePair, request):
