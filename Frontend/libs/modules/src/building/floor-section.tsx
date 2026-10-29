@@ -141,14 +141,27 @@ function TicketRow({
         ) : null}
 
         <Box component="span" sx={{ display: 'block', flex: 1, minWidth: 0 }}>
+          {/* The title first, rather than shrinking to a character: a room keeps at most 45% (a long
+              one cut short), and the 未填戶別 placeholder shows only where it fits whole, else wraps
+              onto a second line this one-line box hides. */}
           <Box
             component="span"
-            sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}
+            sx={{
+              display: 'flex',
+              flexWrap: unit ? 'nowrap' : 'wrap',
+              alignItems: 'baseline',
+              columnGap: 1,
+              // One line of the title: its size here, so 1.4em is its line.
+              fontSize: displayTextSize[13],
+              maxHeight: '1.4em',
+              overflow: 'hidden',
+            }}
           >
             <Typography
               component="span"
               noWrap
               sx={{
+                minWidth: 0,
                 fontSize: displayTextSize[13],
                 lineHeight: 1.4,
                 fontWeight: summary.closed ? 400 : 600,
@@ -157,16 +170,12 @@ function TicketRow({
             >
               {marker.title}
             </Typography>
-            {/* The title first: on a narrow row the 未填戶別 placeholder gives way entirely, and a
-                room keeps at most 45% (a long one cut short), rather than the title shrinking to a
-                character. */}
             {unit || showUnit ? (
               <Typography
                 component="span"
                 noWrap
                 sx={{
-                  flexShrink: unit ? 0 : 100,
-                  minWidth: 0,
+                  flexShrink: 0,
                   maxWidth: '45%',
                   px: '5px',
                   borderRadius: `${radius.sm}px`,
