@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   choiceGate,
   decisionsField,
+  declinedField,
   describeSuspect,
   fileAll,
   heldThoughFiled,
@@ -106,6 +107,26 @@ describe('decisionsField', () => {
 
   it('leaves the field out when no row is filed anyway', () => {
     expect(decisionsField({})).toBeUndefined();
+  });
+});
+
+describe('declinedField', () => {
+  it('sends every suspected row not filed anyway, the undecided ones too, in line order', () => {
+    const suspects = [
+      suspect(22, 'station-c'),
+      suspect(3, 'station-a'),
+      suspect(14, 'station-b'),
+    ];
+
+    expect(
+      JSON.parse(declinedField(suspects, { 14: 'station-b' }) ?? ''),
+    ).toEqual([3, 22]);
+  });
+
+  it('leaves the field out when every suspected row is filed anyway', () => {
+    expect(
+      declinedField([suspect(3, 'station-a')], { 3: 'station-a' }),
+    ).toBeUndefined();
   });
 });
 

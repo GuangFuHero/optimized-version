@@ -44,6 +44,7 @@ import {
 } from './model/import';
 import {
   decisionsField,
+  declinedField,
   describeSuspect,
   type FiledRows,
   heldThoughFiled,
@@ -187,6 +188,8 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
           file: file as unknown as string,
           mapping: JSON.stringify(mapped),
           decisions: decisionsField(filed),
+          // Named, so they stay uncreated even if the check gives no answer at commit (ADR-398).
+          declined: declinedField(preview?.suspects ?? [], filed),
         },
       },
       {
@@ -194,8 +197,8 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
           setResult(data);
           toast.success(
             `已匯入：新增 ${data.created}、更新 ${data.updated}${
-              data.suspected > 0 ? `，${data.suspected} 列疑似重複未建立` : ''
-            }`,
+              data.declined > 0 ? `，${data.declined} 列選了不建立` : ''
+            }${data.suspected > 0 ? `，${data.suspected} 列疑似重複未建立` : ''}`,
           );
         },
       },
@@ -608,6 +611,9 @@ function ImportResult({
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
           <Badge tone="success">新增 {result.created} 列</Badge>
           <Badge tone="info">更新 {result.updated} 列</Badge>
+          {result.declined > 0 ? (
+            <Badge tone="neutral">選了不建立 {result.declined} 列</Badge>
+          ) : null}
           {result.suspected > 0 ? (
             <Badge tone="warning">疑似重複未建立 {result.suspected} 列</Badge>
           ) : null}
@@ -618,6 +624,11 @@ function ImportResult({
         </Box>
         {result.created > 0 ? (
           <Muted>新增的站點請到現場確認營運狀態，並補上聯絡人與電話。</Muted>
+        ) : null}
+        {result.declined > 0 ? (
+          <Muted>
+            選了不建立的 {result.declined} 列沒有建立，也放進了報告檔。
+          </Muted>
         ) : null}
         {result.dedup_checked === false ? (
           <Callout tone="warning">

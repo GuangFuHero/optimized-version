@@ -97,6 +97,23 @@ export function decisionsField(filed: FiledRows): string | undefined {
   return decisions.length > 0 ? JSON.stringify(decisions) : undefined;
 }
 
+/**
+ * The commit's `declined` form field: the suspected rows not filed anyway, as a JSON array of
+ * lines. Undecided rows are in it too, as undecided means not created (uiux 2026-10-27, Q6). The
+ * backend then creates none of them even when its check gives no answer at commit (ADR-398).
+ * Undefined when every suspected row is filed anyway, so the form leaves it out.
+ */
+export function declinedField(
+  suspects: readonly Suspect[],
+  filed: FiledRows,
+): string | undefined {
+  const lines = suspects
+    .map((s) => s.line)
+    .filter((line) => !(line in filed))
+    .sort((a, b) => a - b);
+  return lines.length > 0 ? JSON.stringify(lines) : undefined;
+}
+
 /** How long after one press a second counts as the same gesture: a double click, a held key. */
 const CHOICE_SETTLE_MS = 400;
 
