@@ -151,7 +151,8 @@ pool    = settled or [最舊的那一個]      # 全新帳號的第一週仍然�
 ## 6. 已知缺口與後續票
 
 - **零聯絡方式、零密碼、零 SSO 的帳號**：沒有任何可證明的東西，所以新增第一個聯絡方式不設門檻（ADR-220），
-  而 `link` 與 `set-password` 會 422 `no_proof_channel` 要求先新增聯絡方式。這種帳號也沒有密碼重設路徑可以被偷。
+  而 `link` 會 422 `no_proof_channel`、`set-password` 會 409 `password_needs_contact`（ADR-401），都要求先新增
+  聯絡方式。這種帳號也沒有密碼重設路徑可以被偷。
   有 SSO 的帳號不屬於這一類（ADR-234）。
 - **session 沒有 recent-auth 概念**。`session["created_at"]` 已經存在且 refresh 不會更新它，所以
   sudo window 幾乎零儲存成本；但它是**補強**不是替代（它縮短被竊 session 的有效窗口，而寄碼到

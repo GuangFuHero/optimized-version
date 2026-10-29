@@ -21,7 +21,7 @@
 | 端點 | 狀態 |
 |---|---|
 | `POST /auth/change-password` | ✅ 驗舊密碼、寫新 hash、撤銷所有 session |
-| `POST /auth/set-password` | ✅ SSO-only 帳號首次設密碼 |
+| `POST /auth/set-password` | ✅ SSO-only 帳號首次設密碼；帳號要先有驗證過的電子郵件或手機（ADR-401） |
 | `POST /auth/forgot-password` | ✅ 防列舉（所有分支回相同 202）、`BackgroundTasks` 讓回應時間恆定避免延遲側漏、SSO-only 帳號另發「請用第三方登入」通知 |
 | `POST /auth/reset-password` | ✅ 消耗驗證碼、寫新密碼、撤銷所有 session、通知帳號每一個聯絡方式（017 ADR-399） |
 

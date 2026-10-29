@@ -479,6 +479,9 @@ export interface paths {
      *     revoked, and it means a session that watched a password being set does not keep running
      *     on the strength of it. The owner is told afterwards, because a first password on an
      *     SSO-only account is a new permanent way in and must not appear silently.
+     *
+     *     An account with no verified email or phone is refused before any proof (ADR-401): a password
+     *     signs in with one of them, so it could never be used.
      */
     post: operations['set_password_api_v1_auth_set_password_post'];
     delete?: never;
