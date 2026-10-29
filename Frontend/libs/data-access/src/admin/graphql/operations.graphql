@@ -171,6 +171,8 @@ query AdminTicketMapPins(
       secondaryLocation {
         county
         town
+        fullAddress
+        landmarkNote
       }
     }
     pageInfo {

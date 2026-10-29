@@ -120,7 +120,10 @@ export function toTaskRows(tasks: readonly TaskRowFields[]): TaskRow[] {
   return tasks.map(toTaskRow);
 }
 
-/** What the map reads of a ticket: its pin, the cell's ticket list, and a picked pin's ticket. */
+/**
+ * What the map reads of a ticket: its pin, the side list (title, street line, priority, status),
+ * the cell's ticket list, and a picked pin's ticket.
+ */
 export type TicketPin = Pick<
   TicketRow,
   | 'uuid'
@@ -130,6 +133,8 @@ export type TicketPin = Pick<
   | 'area'
   | 'position'
   | 'locationCell'
+  | 'isCoarse'
+  | 'address'
 >;
 
 type TicketPinFields = AdminTicketMapPinsQuery['tickets']['items'][number];
@@ -146,7 +151,20 @@ export function toTicketPin(ticket: TicketPinFields): TicketPin {
     area: `${county}${town}`,
     position: stationPoint(ticket.geometry),
     locationCell: ticket.locationCell ?? null,
+    isCoarse: !!ticket.locationCell,
+    address: formatTicketStreet(ticket.secondaryLocation),
   };
+}
+
+/**
+ * The line under a ticket's title in the list and the map's side list: its street line; for a
+ * coarse ticket, a note that the address is withheld, never a blank that reads as 未提供.
+ */
+export function ticketAddressLine(
+  row: Pick<TicketPin, 'isCoarse' | 'address'>,
+): string {
+  if (row.isCoarse) return '約略位置（無檢視詳細位置權限）';
+  return row.address ?? '未提供地址';
 }
 
 export function toTicketRow(ticket: TicketListItem): TicketRow {
@@ -159,9 +177,7 @@ export function toTicketRow(ticket: TicketListItem): TicketRow {
     disasterTypes: ticket.disasterTypes,
     county,
     town,
-    isCoarse: !!ticket.locationCell,
     updatedAt: ticket.updatedAt ?? null,
-    address: formatTicketStreet(ticket.secondaryLocation),
     photoCount: ticket.photos.length,
     teamNames: ticket.responsibleTeams.map((team) => team.name),
     tasks,

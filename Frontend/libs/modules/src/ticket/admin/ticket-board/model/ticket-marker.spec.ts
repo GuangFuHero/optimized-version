@@ -22,6 +22,7 @@ const row = (over: Partial<TicketRow> = {}): TicketRow =>
     position: [23.6, 121.4],
     locationCell: null,
     isCoarse: false,
+    address: null,
     ...over,
   }) as TicketRow;
 
@@ -79,11 +80,11 @@ describe('toTicketMarker', () => {
     });
   });
 
-  it('lists one legend entry per colour, naming each priority drawn in it', () => {
+  it('lists one legend entry per colour, named by its most urgent priority', () => {
     expect(ticketPriorityLegend((p) => p)).toEqual([
       { color: '#D32F2F', label: 'critical' },
       { color: '#F57C00', label: 'high' },
-      { color: '#2592B9', label: 'medium、low' },
+      { color: '#2592B9', label: 'medium' },
     ]);
   });
 });

@@ -6,7 +6,7 @@ import {
   useTicketsExtent,
 } from '@rescue-frontend/data-access/admin';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
-import { X } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
@@ -39,11 +39,14 @@ import {
   toTicketMarker,
   withMarkerSelected,
 } from './model/ticket-marker';
-import type { TicketPin } from './model/ticket-row';
+import { ticketAddressLine, type TicketPin } from './model/ticket-row';
+import { PriorityCell, StatusCell } from './ticket-table';
 
 const { color, radius, shadow, typography } = designTokens;
 
 const MAP_HEIGHT = 560;
+/** The side list's columns: 任務, 優先級, 狀態 (tk-map's list beside the map). */
+const LIST_COLUMNS = 'minmax(0, 1fr) 92px 84px';
 const CLUSTER_MAX_ZOOM = 14;
 const OVERLAY_INSET = 12;
 /** A lone ticket, or the open one, is shown this close. */
@@ -63,7 +66,8 @@ interface TicketMapViewProps {
 }
 
 /**
- * Browse-only: pins by priority; a click on a pin opens the ticket, a click on the map does nothing.
+ * Browse-only: the loaded tickets listed beside pins by priority; a click on a list item or a pin
+ * opens the ticket, a click on the map does nothing. The open ticket is the list's highlighted item.
  * On opening and on each filter change it frames every matching ticket; from there it loads the
  * matching tickets inside the view, again each time the map settles after a move.
  */
@@ -106,7 +110,7 @@ export function TicketMapView({
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {notice === 'error' ? (
         <Callout tone="danger">
-          無法載入求助單，請稍後再試
+          無法載入任務單，請稍後再試
           <Button
             variant="ghost"
             size="sm"
@@ -121,11 +125,11 @@ export function TicketMapView({
         </Callout>
       ) : notice === 'zoom-in' ? (
         <Callout tone="warning">
-          {`此範圍有 ${tickets.totalCount} 張求助單，只顯示 ${rows.length} 張，請放大地圖。`}
+          {`此範圍有 ${tickets.totalCount} 張任務單，只顯示 ${rows.length} 張，請放大地圖。`}
         </Callout>
       ) : notice === 'none-here' ? (
         <Callout tone="info">
-          此範圍沒有符合的求助單
+          此範圍沒有符合的任務單
           <Button variant="ghost" size="sm" onClick={framing.frameAgain}>
             顯示全部
           </Button>
@@ -133,29 +137,47 @@ export function TicketMapView({
       ) : null}
       <Box
         sx={{
-          position: 'relative',
-          height: MAP_HEIGHT,
-          overflow: 'hidden',
-          border: `1px solid ${color.border.default}`,
-          borderRadius: `${radius.lg}px`,
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: 'minmax(0, 1fr)',
+            md: 'minmax(0, 2fr) minmax(0, 3fr)',
+          },
+          gap: '16px',
         }}
       >
-        <Map
-          markers={markers}
-          hideDetailDrawer
-          showZoomControl
-          clusterAppearance="solid"
-          clusterMaxZoom={CLUSTER_MAX_ZOOM}
-          onMapReady={setLeafletMap}
-          renderControls={(controller) => (
-            <SelectionSync
-              controller={controller}
-              rows={rows}
-              onOpen={onOpenTicket}
-            />
-          )}
+        <TicketMapList
+          rows={rows}
+          loading={viewport === null || tickets.isFetching}
+          failed={tickets.error != null}
+          selectedUuid={selectedUuid}
+          onOpen={onOpenTicket}
         />
-        <PriorityLegend />
+        <Box
+          sx={{
+            position: 'relative',
+            height: MAP_HEIGHT,
+            overflow: 'hidden',
+            border: `1px solid ${color.border.default}`,
+            borderRadius: `${radius.lg}px`,
+          }}
+        >
+          <Map
+            markers={markers}
+            hideDetailDrawer
+            showZoomControl
+            clusterAppearance="solid"
+            clusterMaxZoom={CLUSTER_MAX_ZOOM}
+            onMapReady={setLeafletMap}
+            renderControls={(controller) => (
+              <SelectionSync
+                controller={controller}
+                rows={rows}
+                onOpen={onOpenTicket}
+              />
+            )}
+          />
+          <PriorityLegend />
+        </Box>
       </Box>
     </Box>
   );
@@ -331,6 +353,165 @@ function SelectionSync({
   );
 }
 
+/**
+ * The list beside the map (tk-map's left pane): every ticket the map has loaded for its view, in
+ * the order the pins came, as 任務 (title, street line, 開啟任務細節), 優先級 and 狀態. A click opens
+ * the ticket as its pin does; the open ticket is highlighted and scrolled into view, wherever it
+ * was opened from.
+ */
+function TicketMapList({
+  rows,
+  loading,
+  failed,
+  selectedUuid,
+  onOpen,
+}: {
+  rows: readonly TicketPin[];
+  loading: boolean;
+  failed: boolean;
+  selectedUuid: string | null;
+  onOpen: (uuid: string) => void;
+}) {
+  const itemsRef = useRef(new globalThis.Map<string, HTMLElement>());
+  useEffect(() => {
+    if (!selectedUuid) return;
+    itemsRef.current.get(selectedUuid)?.scrollIntoView?.({ block: 'nearest' });
+  }, [selectedUuid, rows]);
+
+  return (
+    <Box
+      role="region"
+      aria-label="地圖範圍內的任務單"
+      sx={{
+        height: { xs: 360, md: MAP_HEIGHT },
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        border: `1px solid ${color.border.default}`,
+        borderRadius: `${radius.lg}px`,
+        bgcolor: color.bg.neutral.default,
+      }}
+    >
+      <Box
+        aria-hidden
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: LIST_COLUMNS,
+          gap: '12px',
+          p: '12px 16px',
+          borderBottom: `1px solid ${color.border.default}`,
+          bgcolor: color.bg.neutral.subtle,
+          ...typography.label[300],
+          color: color.fg.neutral.muted,
+        }}
+      >
+        <span>任務</span>
+        <span>優先級</span>
+        <span>狀態</span>
+      </Box>
+      {rows.length === 0 ? (
+        <Box sx={{ p: '24px 16px', textAlign: 'center' }}>
+          <Typography
+            sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+          >
+            {failed ? '—' : loading ? '載入中…' : '此範圍沒有任務單'}
+          </Typography>
+        </Box>
+      ) : (
+        <Box
+          component="ul"
+          sx={{ m: 0, p: 0, listStyle: 'none', overflowY: 'auto', flex: 1 }}
+        >
+          {rows.map((row) => {
+            const selected = row.uuid === selectedUuid;
+            const address = ticketAddressLine(row);
+            return (
+              <Box
+                component="li"
+                key={row.uuid}
+                ref={(el: HTMLElement | null) => {
+                  if (el) itemsRef.current.set(row.uuid, el);
+                  else itemsRef.current.delete(row.uuid);
+                }}
+                sx={{ borderBottom: `1px solid ${color.border.default}` }}
+              >
+                <ButtonBase
+                  onClick={() => onOpen(row.uuid)}
+                  aria-current={selected ? 'true' : undefined}
+                  sx={{
+                    width: '100%',
+                    display: 'grid',
+                    gridTemplateColumns: LIST_COLUMNS,
+                    alignItems: 'center',
+                    gap: '12px',
+                    p: '12px 16px',
+                    textAlign: 'left',
+                    bgcolor: selected ? color.bg.primary.subtle : 'transparent',
+                    boxShadow: selected
+                      ? `inset 3px 0 0 ${color.brand.primary.default}`
+                      : 'none',
+                    '&:hover': {
+                      bgcolor: selected
+                        ? color.bg.primary.subtle
+                        : color.bg.neutral.subtle,
+                    },
+                  }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography
+                      noWrap
+                      title={row.title}
+                      sx={{
+                        ...typography.label[400],
+                        fontWeight: 700,
+                        color: color.fg.neutral.default,
+                      }}
+                    >
+                      {row.title}
+                    </Typography>
+                    <Typography
+                      noWrap
+                      title={address}
+                      sx={{
+                        ...typography.body[300],
+                        color: color.fg.neutral.muted,
+                      }}
+                    >
+                      {address}
+                    </Typography>
+                    <Typography
+                      component="span"
+                      sx={{
+                        ...typography.label[300],
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '2px',
+                        mt: '4px',
+                        color: color.brand.secondary.default,
+                        textDecoration: 'underline',
+                        textUnderlineOffset: '3px',
+                      }}
+                    >
+                      開啟任務細節
+                      <ChevronRight size={14} />
+                    </Typography>
+                  </Box>
+                  <Box sx={{ minWidth: 0 }}>
+                    <PriorityCell priority={row.priority} />
+                  </Box>
+                  <Box sx={{ minWidth: 0 }}>
+                    <StatusCell status={row.status} />
+                  </Box>
+                </ButtonBase>
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 function CellTicketList({
   rows,
   onPick,
@@ -343,7 +524,7 @@ function CellTicketList({
   return (
     <Box
       role="region"
-      aria-label="此區求助單"
+      aria-label="此區任務單"
       sx={{
         position: 'absolute',
         zIndex: 600,
@@ -369,7 +550,7 @@ function CellTicketList({
         }}
       >
         <Typography sx={{ ...typography.label[500], flex: 1 }}>
-          此區有 {rows.length} 張求助單
+          此區有 {rows.length} 張任務單
         </Typography>
         <IconButton
           aria-label="關閉"
@@ -425,7 +606,7 @@ function PriorityLegend() {
   return (
     <Box
       component="ul"
-      aria-label="優先度"
+      aria-label="優先級"
       sx={{
         position: 'absolute',
         zIndex: 500,
@@ -451,7 +632,7 @@ function PriorityLegend() {
           color: color.fg.neutral.muted,
         }}
       >
-        優先度
+        優先級
       </Typography>
       {LEGEND.map(({ color: pinColor, label }) => (
         <Box

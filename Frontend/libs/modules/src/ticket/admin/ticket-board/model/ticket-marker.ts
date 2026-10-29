@@ -29,21 +29,19 @@ export const TICKET_PRIORITY_PIN_COLORS: Record<TicketPriority, string> = {
 };
 
 /**
- * The map legend: one entry per pin colour, in priority order, naming every priority drawn in it
- * (一般、低 share one).
+ * The map legend, as the design draws it (tk-map.jsx): one entry per pin colour, in priority
+ * order, named by the most urgent priority drawn in it — 生命危急、緊急、一般, the blue standing
+ * for 一般 and 低 alike.
  */
 export function ticketPriorityLegend(
   label: (priority: TicketPriority) => string,
 ): { color: string; label: string }[] {
-  const entries = new Map<string, string[]>();
+  const entries = new Map<string, string>();
   for (const priority of TICKET_PRIORITIES) {
     const color = TICKET_PRIORITY_PIN_COLORS[priority];
-    entries.set(color, [...(entries.get(color) ?? []), label(priority)]);
+    if (!entries.has(color)) entries.set(color, label(priority));
   }
-  return [...entries].map(([color, labels]) => ({
-    color,
-    label: labels.join('、'),
-  }));
+  return [...entries].map(([color, name]) => ({ color, label: name }));
 }
 
 /** A finished ticket stays on the map, faded. */

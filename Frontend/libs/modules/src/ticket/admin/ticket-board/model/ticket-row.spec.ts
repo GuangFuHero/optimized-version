@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import {
   needChipLabel,
   needProgress,
+  ticketAddressLine,
   toTaskRows,
+  toTicketPin,
   toTicketRow,
   UNTITLED_TICKET,
   type TicketListItem,
@@ -178,6 +180,72 @@ describe('needChipLabel', () => {
     );
     expect(needChipLabel({ taskName: '常備藥品', quantity: null })).toBe(
       '常備藥品',
+    );
+  });
+});
+
+describe('toTicketPin', () => {
+  const pin = (over: Partial<Parameters<typeof toTicketPin>[0]> = {}) =>
+    toTicketPin({
+      uuid: 't1',
+      title: '淹水',
+      status: 'pending',
+      priority: 'critical',
+      geometry: { type: 'Point' as const, coordinates: [121.5, 25.0] },
+      locationCell: null,
+      secondaryLocation: {
+        county: '花蓮縣',
+        town: '光復鄉',
+        fullAddress: '花蓮縣光復鄉中正路二段120號',
+        landmarkNote: null,
+      },
+      ...over,
+    });
+
+  it("reads the map's side list off the slim pins query", () => {
+    expect(pin()).toMatchObject({
+      title: '淹水',
+      priority: 'critical',
+      status: 'pending',
+      address: '花蓮縣光復鄉中正路二段120號',
+      isCoarse: false,
+    });
+  });
+
+  it("falls back to an old 請求協助's landmark note for its street line", () => {
+    expect(
+      pin({
+        secondaryLocation: {
+          county: '花蓮縣',
+          town: '光復鄉',
+          fullAddress: null,
+          landmarkNote: '光復車站對面',
+        },
+      }).address,
+    ).toBe('光復車站對面');
+  });
+
+  it('marks a coarse pin', () => {
+    expect(pin({ locationCell: '88abc' }).isCoarse).toBe(true);
+  });
+});
+
+describe('ticketAddressLine', () => {
+  it('reads the street line', () => {
+    expect(ticketAddressLine({ isCoarse: false, address: '中山路100號' })).toBe(
+      '中山路100號',
+    );
+  });
+
+  it('says there is none rather than leaving it blank', () => {
+    expect(ticketAddressLine({ isCoarse: false, address: null })).toBe(
+      '未提供地址',
+    );
+  });
+
+  it('says a coarse ticket withholds it, not that it has none', () => {
+    expect(ticketAddressLine({ isCoarse: true, address: null })).toBe(
+      '約略位置（無檢視詳細位置權限）',
     );
   });
 });

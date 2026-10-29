@@ -34,6 +34,7 @@ import { adminTicketPriorityBadge } from './model/ticket-priority';
 import {
   needChipLabel,
   needProgress,
+  ticketAddressLine,
   type NeedProgress,
   type TaskRow,
   type TicketRow,
@@ -232,9 +233,7 @@ export function PriorityCell({ priority }: { priority: string }) {
 
 /** 任務: the photo count (never the images), the title, and the street line under it. */
 function TicketCell({ row }: { row: TicketRow }) {
-  const address = row.isCoarse
-    ? '約略位置（無檢視詳細位置權限）'
-    : (row.address ?? '未提供地址');
+  const address = ticketAddressLine(row);
   return (
     <Box sx={{ minWidth: 0 }}>
       {row.photoCount > 0 ? (

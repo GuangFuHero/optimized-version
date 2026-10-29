@@ -2344,6 +2344,8 @@ export type AdminTicketMapPinsQuery = {
         __typename?: 'SecondaryLocationType';
         county?: string | null;
         town?: string | null;
+        fullAddress?: string | null;
+        landmarkNote?: string | null;
       } | null;
     }>;
     pageInfo: { __typename?: 'PageInfo'; totalCount: number };
@@ -4859,6 +4861,14 @@ export const AdminTicketMapPinsDocument = {
                             {
                               kind: 'Field',
                               name: { kind: 'Name', value: 'town' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'fullAddress' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'landmarkNote' },
                             },
                           ],
                         },
