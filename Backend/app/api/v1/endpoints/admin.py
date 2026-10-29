@@ -55,8 +55,9 @@ router = APIRouter()
     dependencies=[security.has_permission(Perm.USER_VIEW)],
 )
 async def list_users(
-    skip: int = 0,
-    limit: int = 100,
+    # Negative values reached Postgres as OFFSET / LIMIT and answered 500 (ADR-432).
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1),
     # A NUL reaches Postgres, which refuses it: a 422 here, not a 500 there (ADR-432).
     q: str | None = Query(
         None,

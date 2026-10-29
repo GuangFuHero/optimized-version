@@ -120,6 +120,17 @@ async def test_a_nul_in_q_is_refused_not_a_server_error(client, db_session, redi
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("params", [{"skip": -1}, {"limit": 0}, {"limit": -5}])
+async def test_a_negative_page_is_refused_not_a_server_error(client, db_session, redis, params):
+    """`skip` below 0 or `limit` below 1 used to reach Postgres and answer 500 (ADR-432)."""
+    headers = await _auditor_headers(db_session, redis)
+
+    response = await client.get(URL, params=params, headers=headers)
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_a_blank_q_filters_nothing(client, db_session, redis):
     """Whitespace alone is no search."""
     await _person(db_session, "小明")

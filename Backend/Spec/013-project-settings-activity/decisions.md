@@ -631,6 +631,7 @@ https://app.notion.com/p/405bc24b8353814ebab4d00654e5a6d3 ；欄位、沒設定�
    - 帶 NUL 字元（`%00`）原本會一路送到 Postgres 被拒，回 500；現在參數本身擋掉，回 422。
    - 全形半形一起比對：兩邊都先做 NFKC 正規化（Postgres `normalize(name, NFKC)`），`ming1` 找得到 `Ｍｉｎｇ１`。
      NFKC 要寫在 SQL 裡，不能當參數綁定（它在 Postgres 是關鍵字）。
+   - 順便修既有問題：`skip` 負數、`limit` 小於 1 原本也一路送到 Postgres 回 500，現在回 422（`skip ≥ 0`、`limit ≥ 1`）。
 4. `created_at` 改成必填：`users.created_at` 不會是空的，前端型別不用處理 `null`。
 5. 取代 ADR-412 第 1 點的 `platform_role`；ADR-412 其他部分不變。
 
