@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select, update
+from sqlalchemy.dialects import postgresql
 
+from app.graphql.geo.queries import _has_pending_suggestion
 from app.models.geo import Station
 from app.models.station_property import StationProperty, StationSuggestionMerge, StationUpdateSuggestion
 from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
@@ -662,6 +664,15 @@ async def test_a_pending_suggestion_naming_no_uuid_does_not_break_the_filter(
 
     assert "errors" not in body, body
     assert sample_station in {s["uuid"] for s in body["data"]["stations"]["items"]}
+
+
+def test_the_pending_check_binds_no_constants():
+    """Bound, they let a connection's sixth call switch to a cached generic plan several times slower."""
+    statement = select(Station.uuid).where(_has_pending_suggestion())
+
+    compiled = statement.compile(dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True})
+
+    assert compiled.params == {}
 
 
 @pytest.mark.asyncio

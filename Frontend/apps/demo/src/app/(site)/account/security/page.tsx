@@ -35,6 +35,7 @@ export default async function AccountSecurityPage() {
         <AccountSecurityInBrowser />
       ) : (
         <AccountSecurityClient
+          userId={user.uuid}
           contacts={user.contacts ?? []}
           loginMethods={user.login_methods ?? []}
         />

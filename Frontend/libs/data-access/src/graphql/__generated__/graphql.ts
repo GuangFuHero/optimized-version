@@ -1801,6 +1801,8 @@ export type TicketType = {
   priority: Scalars['String']['output'];
   /** Internal polymorphic discriminator — always 'request' */
   propertyName: Scalars['String']['output'];
+  /** The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it lies in none, and to a caller without ticket.view_detail here */
+  responsibleTeams: Array<AssignedTeamType>;
   /** Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address */
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
@@ -2514,6 +2516,11 @@ export type GetTicketQuery = {
           room?: string | null;
           landmarkNote?: string | null;
         } | null;
+        responsibleTeams: Array<{
+          __typename?: 'AssignedTeamType';
+          uuid: string;
+          name: string;
+        }>;
         photos: Array<{
           __typename?: 'PhotoType';
           uuid: string;
@@ -4950,6 +4957,17 @@ export const GetTicketDocument = {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'landmarkNote' },
                       },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'responsibleTeams' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                     ],
                   },
                 },
