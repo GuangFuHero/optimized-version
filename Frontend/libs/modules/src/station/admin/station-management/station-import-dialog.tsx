@@ -30,6 +30,10 @@ import {
   STATION_TYPE_OPTIONS,
 } from '../../type-options';
 import {
+  ImportSuspectsBulkActions,
+  ImportSuspectsStep,
+} from './import-suspects-step';
+import {
   downloadBase64,
   downloadBlob,
   importFieldLabel,
@@ -38,11 +42,19 @@ import {
   STATION_IMPORT_FIELDS,
   stationImportTemplate,
 } from './model/import';
+import {
+  decisionsField,
+  describeSuspect,
+  type FiledRows,
+  heldThoughFiled,
+  keepFiled,
+} from './model/import-suspects';
 
 const { color, focusRing, motion, radius, typography } = designTokens;
 
 type Preview = components['schemas']['BulkPreviewResponse'];
 type Result = components['schemas']['BulkImportResponse'];
+type Suspect = components['schemas']['SuspectedRowResponse'];
 
 const SKIP = '__skip__';
 
@@ -65,6 +77,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   const [pasted, setPasted] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
+  const [filed, setFiled] = useState<FiledRows>({});
   const [result, setResult] = useState<Result | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const pasteTimer = useRef<number | undefined>(undefined);
@@ -85,12 +98,20 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
         // The generated type says string; the serializer appends the File as-is.
         body: { file: nextFile as unknown as string, mapping: nextMapping },
       },
-      { onSuccess: (data) => setPreview(data) },
+      {
+        onSuccess: (data) => {
+          setPreview(data);
+          // A new mapping can change which rows look like what; a choice outlives it only when its
+          // row still looks like the same station (ADR-400).
+          setFiled((current) => keepFiled(current, data.suspects ?? []));
+        },
+      },
     );
 
   const startPreview = (nextFile: File, type: string) => {
     setFile(nextFile);
     setOverrides({});
+    setFiled({});
     setPreview(null);
     runPreview(nextFile, type);
   };
@@ -120,6 +141,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
     setFile(null);
     setPreview(null);
     setOverrides({});
+    setFiled({});
     window.clearTimeout(pasteTimer.current);
     pasteTimer.current = window.setTimeout(() => previewPasted(text), 800);
   };
@@ -131,6 +153,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
     setPasted('');
     setPreview(null);
     setOverrides({});
+    setFiled({});
   };
 
   const changeMapping = (header: string, field: string) => {
@@ -144,6 +167,16 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
     );
   };
 
+  // The same file and mapping again: the engine may answer this time.
+  const rerunPreview = () => {
+    if (!file || !stationType || !preview) return;
+    runPreview(
+      file,
+      stationType,
+      mergeMapping(preview.suggested_mapping, overrides),
+    );
+  };
+
   // The backend marks every imported station official, so the file goes as it is.
   const commit = () => {
     if (!file || !stationType) return;
@@ -153,25 +186,32 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
         body: {
           file: file as unknown as string,
           mapping: JSON.stringify(mapped),
+          decisions: decisionsField(filed),
         },
       },
       {
         onSuccess: (data) => {
           setResult(data);
-          toast.success(`已匯入：新增 ${data.created}、更新 ${data.updated}`);
+          toast.success(
+            `已匯入：新增 ${data.created}、更新 ${data.updated}${
+              data.suspected > 0 ? `，${data.suspected} 列疑似重複未建立` : ''
+            }`,
+          );
         },
       },
     );
   };
 
-  const summary = preview ? importSummary(preview) : null;
+  const suspects = preview?.suspects ?? [];
+  const summary = preview
+    ? importSummary(preview, Object.keys(filed).length)
+    : null;
   const mapped = preview
     ? (JSON.parse(mergeMapping(preview.suggested_mapping, overrides)) as Record<
         string,
         string
       >)
     : {};
-  const importable = summary ? summary.create + summary.update : 0;
   const typeLabel = stationType ? getStationTypeLabel(stationType) : '';
 
   return (
@@ -207,7 +247,7 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
       </Box>
 
       {result ? (
-        <ImportResult result={result} onClose={onClose} />
+        <ImportResult result={result} filed={filed} onClose={onClose} />
       ) : (
         <>
           <Box
@@ -384,12 +424,30 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                     <Muted>還沒寫入</Muted>
                     <Badge tone="success">新增 {summary.create}</Badge>
                     <Badge tone="info">更新 {summary.update}</Badge>
+                    {summary.suspected > 0 ? (
+                      <Badge tone="warning">疑似重複 {summary.suspected}</Badge>
+                    ) : null}
                     {summary.failedLines > 0 ? (
                       <Badge tone="danger">失敗 {summary.failedLines}</Badge>
                     ) : null}
                   </>
                 }
               >
+                {preview.dedup_checked ? null : (
+                  <Callout tone="warning">
+                    這次沒有比對重複：比對服務沒有回應。新增的列可能跟現有的站點重複。
+                    <Box sx={{ mt: '8px' }}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={rerunPreview}
+                      >
+                        重新試算
+                      </Button>
+                    </Box>
+                  </Callout>
+                )}
                 {summary.update > 0 ? (
                   <Muted>
                     「更新」是站名＋縣市＋鄉鎮對到既有的站點；只會改說明、開放時間、level、comment、公開範圍和位置（經緯度），空白的格子不動。站名與地址建立後不能用匯入改。
@@ -398,6 +456,27 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                 {preview.errors.length > 0 ? (
                   <ErrorList errors={preview.errors} />
                 ) : null}
+              </Step>
+            ) : null}
+
+            {suspects.length > 0 ? (
+              <Step
+                title="5 · 疑似重複"
+                aside={<Muted>沒選「仍要建立」的列不會建立</Muted>}
+                trailing={
+                  <ImportSuspectsBulkActions
+                    suspects={suspects}
+                    disabled={busy}
+                    onChange={setFiled}
+                  />
+                }
+              >
+                <ImportSuspectsStep
+                  suspects={suspects}
+                  filed={filed}
+                  disabled={busy}
+                  onChange={setFiled}
+                />
               </Step>
             ) : null}
           </Box>
@@ -412,11 +491,23 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
             }}
           >
             <Muted sx={{ flex: 1 }}>
-              {busy
-                ? '試算中…'
-                : summary
-                  ? `新增 ${summary.create}・更新 ${summary.update}・失敗 ${summary.failedLines}（共 ${preview?.row_count ?? 0} 列）`
-                  : ''}
+              {/* Comparing a crowded file can add about 20 s each way (uiux 2026-10-27, Q16). */}
+              {committing
+                ? '匯入、比對中…'
+                : busy
+                  ? '試算、比對中…'
+                  : summary
+                    ? [
+                        `新增 ${summary.create}`,
+                        `更新 ${summary.update}`,
+                        ...(summary.suspected > 0
+                          ? [
+                              `疑似重複 ${summary.suspected}（仍要建立 ${summary.filed}）`,
+                            ]
+                          : []),
+                        `失敗 ${summary.failedLines}`,
+                      ].join('・') + `（共 ${preview?.row_count ?? 0} 列）`
+                    : ''}
             </Muted>
             <Button variant="ghost" onClick={onClose} disabled={committing}>
               取消
@@ -426,7 +517,9 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
               startIcon={<Upload size={17} />}
               disabled={!summary?.canCommit || busy}
             >
-              {summary?.canCommit ? `確認匯入 ${importable} 列` : '確認匯入'}
+              {summary?.canCommit
+                ? `確認匯入 ${summary.importable} 列`
+                : '確認匯入'}
             </Button>
           </Box>
         </>
@@ -488,11 +581,16 @@ function TypeChip({
 
 function ImportResult({
   result,
+  filed,
   onClose,
 }: {
   result: Result;
+  /** What the importer chose to file anyway, to tell apart the rows the commit held all the same. */
+  filed: FiledRows;
   onClose: () => void;
 }) {
+  const held = result.suspects ?? [];
+  const changed = heldThoughFiled(filed, held);
   return (
     <>
       <Box
@@ -506,6 +604,9 @@ function ImportResult({
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
           <Badge tone="success">新增 {result.created} 列</Badge>
           <Badge tone="info">更新 {result.updated} 列</Badge>
+          {result.suspected > 0 ? (
+            <Badge tone="warning">疑似重複未建立 {result.suspected} 列</Badge>
+          ) : null}
           <Badge tone={result.failed ? 'danger' : 'neutral'}>
             失敗 {result.failed} 列
           </Badge>
@@ -514,6 +615,18 @@ function ImportResult({
         {result.created > 0 ? (
           <Muted>新增的站點請到現場確認營運狀態，並補上聯絡人與電話。</Muted>
         ) : null}
+        {result.dedup_checked ? null : (
+          <Callout tone="warning">
+            這次沒有比對重複，新增的站點可能跟現有的重複。
+          </Callout>
+        )}
+        {result.suspected > 0 ? (
+          <Callout tone="warning">
+            {result.suspected}{' '}
+            列疑似重複，沒有建立，已放進報告檔。確認不是重複的話，重新上傳報告檔，再選「仍要建立」。
+          </Callout>
+        ) : null}
+        {held.length > 0 ? <HeldList held={held} changed={changed} /> : null}
         {result.failed > 0 ? (
           <Callout tone="warning">
             失敗的列沒有寫入。修正後再匯入一次即可 —— 已成功的列不會重複建立。
@@ -537,12 +650,73 @@ function ImportResult({
               result.error_report && downloadBase64(result.error_report)
             }
           >
-            下載失敗的列
+            下載沒匯入的列
           </Button>
         ) : null}
         <Button onClick={onClose}>關閉</Button>
       </Box>
     </>
+  );
+}
+
+/** The suspected rows the commit held, each with the station it looks like now. */
+function HeldList({
+  held,
+  changed,
+}: {
+  held: readonly Suspect[];
+  /** Lines filed anyway that looked like another station by the commit (ADR-400). */
+  changed: ReadonlySet<number>;
+}) {
+  return (
+    <Box
+      sx={{
+        maxHeight: 220,
+        overflow: 'auto',
+        border: `1px solid ${color.border.default}`,
+        borderRadius: `${radius.md}px`,
+      }}
+    >
+      {held.map((suspect) => {
+        const described = describeSuspect(suspect);
+        const looksLike = [described.title, described.distance]
+          .filter(Boolean)
+          .join('，');
+        return (
+          <Box
+            key={suspect.line}
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: '80px 1fr',
+              gap: '8px',
+              p: '6px 12px',
+              borderBottom: `1px solid ${color.border.subtle}`,
+              ...typography.body[300],
+            }}
+          >
+            <span>第 {suspect.line} 列</span>
+            <Box component="span" sx={{ minWidth: 0 }}>
+              {described.row ? (
+                <Box
+                  component="span"
+                  sx={{ display: 'block', color: color.fg.neutral.default }}
+                >
+                  {described.row}
+                </Box>
+              ) : null}
+              <Box
+                component="span"
+                sx={{ display: 'block', color: color.fg.neutral.muted }}
+              >
+                {changed.has(suspect.line)
+                  ? `選了仍要建立，但比對結果跟試算時不同，沒有建立。現在最像的是：${looksLike}`
+                  : `很像：${looksLike}`}
+              </Box>
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
   );
 }
 
