@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>重複審核 Duplicate Review · 救災平台 ManagerEnd</title>
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--color-bg-neutral-subtle); }
+  #root { height: 100vh; overflow: hidden; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--color-bg-neutral-sunken); border-radius: 999px; }
+  .tk-iconbtn { border: none; background: transparent; cursor: pointer; line-height: 0; width: 32px; height: 32px; border-radius: var(--radius-full); display: inline-flex; align-items: center; justify-content: center; }
+  .tk-iconbtn:hover { background: var(--color-bg-neutral-subtle); }
+  .tk-chipbtn { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: var(--radius-full); border: 1px solid var(--color-border-default); background: var(--color-bg-neutral-default); cursor: pointer; font: var(--font-data-300); font-weight: 700; color: var(--color-fg-neutral-subtle); transition: background var(--transition-fast), border-color var(--transition-fast); }
+  .tk-chipbtn:hover { background: var(--color-bg-neutral-subtle); border-color: var(--color-border-accent); }
+  code { font-family: var(--font-data); background: var(--color-bg-neutral-sunken); padding: 1px 5px; border-radius: 4px; }
+
+  /* 清單：一對一列，全寬。最後一欄是建立時間（DUP-BE-412） */
+  .dd-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) 180px 150px 20px; align-items: center; gap: 16px; width: 100%; text-align: left;
+    padding: 14px 16px; border: 1px solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-neutral-default);
+    cursor: pointer; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
+  .dd-row:hover { border-color: var(--color-border-accent); box-shadow: var(--shadow-sm); }
+  .dd-row-score { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+  .dd-row-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .dd-row-meta { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .dd-row-time { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+  @media (max-width: 960px) {
+    .dd-row { grid-template-columns: 64px minmax(0, 1fr) 20px; }
+    .dd-row-meta, .dd-row-time { display: none !important; }
+  }
+
+  /* 比對：欄位名稱固定在左、兩張的表頭固定在上 */
+  .dd-scroll { flex: 1; min-width: 0; overflow: auto; padding: 0 16px 16px 0; }
+  .dd-corner, .dd-head { position: sticky; top: 0; z-index: 2; }
+  .dd-corner { left: 0; z-index: 3; background: var(--color-bg-neutral-default); padding: 0 8px 0 16px; display: flex; align-items: center; border-bottom: 1px solid var(--color-border-default); }
+  .dd-head { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--color-border-default); min-width: 0; }
+  .dd-info { padding: 6px 10px; font: var(--font-body-300); color: var(--color-fg-neutral-subtle); min-width: 0; }
+  .dd-label, .dd-corner { box-shadow: 8px 0 0 var(--color-bg-neutral-default), 9px 0 0 var(--color-border-default); }
+  .dd-label { position: sticky; left: 0; z-index: 1; background: var(--color-bg-neutral-default); padding-left: 16px; font: var(--font-label-300); color: var(--color-fg-neutral-subtle); }
+  .dd-pick { text-align: left; display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm, 6px); font: var(--font-body-300); color: var(--color-fg-neutral-default); transition: border-color var(--transition-fast), background var(--transition-fast); }
+  .dd-pick:not(:disabled):hover { border-color: var(--color-border-accent) !important; }
+  .dd-ref { padding: 8px 10px; border-radius: var(--radius-sm, 6px); background: var(--color-bg-neutral-subtle); font: var(--font-body-300); color: var(--color-fg-neutral-default); }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/_ds_bundle.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+window.WGMark = '';
+window.WGIcon = function WGIcon({ n, s = 20, c = "currentColor", style }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!ref.current || !window.lucide || !lucide[n]) return;
+    const el = lucide.createElement(lucide[n]);
+    el.setAttribute('width', s); el.setAttribute('height', s);
+    el.setAttribute('stroke', c); el.setAttribute('stroke-width', '2');
+    ref.current.innerHTML = '';
+    ref.current.appendChild(el);
+  }, [n, s, c]);
+  return React.createElement('span', { ref, style: { display: 'inline-flex', lineHeight: 0, ...style } });
+};
+</script>
+
+<!-- 共用外殼（後台各頁同一份） -->
+<script src="js/admin/shell/wg-terms.js"></script>
+<script src="js/admin/shell/nav.js?v=20261029a"></script>
+<script src="js/admin/shell/wg-event.js"></script>
+<script type="text/babel" src="js/admin/shell/wg-profile.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/shell/wg-notify.jsx" data-presets="react"></script>
+<!-- 全站橫幅：載在 shell 之前，wg-shell.jsx 在 render 時才讀 window.WGAnnounceBanner -->
+<script src="js/admin/announce/an-data.js"></script>
+<script type="text/babel" src="js/admin/announce/an-banner.jsx" data-presets="react"></script>
+<!-- 2026-09-27：每一頁的「？」頁面說明 -->
+<script type="text/babel" src="js/shared/wg-help.jsx?v=20261029a" data-presets="react"></script>
+<script type="text/babel" src="js/admin/shell/wg-shell.jsx" data-presets="react"></script>
+
+<!-- 身份與事件假資料（與任務管理頁同一份） -->
+<script src="js/admin/ticket/tk-data.js"></script>
+
+<!-- 設定頁的欄位設定（需求／災害／站點欄位）：比對表的欄位名稱與順序從這裡讀，不寫死（DUP-BE-410）。
+     st-data.js 會讀 WGBridge，所以 wg-bridge.js 要先載 -->
+<script src="js/shared/wg-bridge.js?v=20261026d"></script>
+<script src="js/admin/settings/st-data.js?v=20261026m"></script>
+
+<!-- 本頁：重複審核（規則見 dd-data.js 檔頭與 docs/重複審核.md）。看示範資料：網址加 ?demo=1 -->
+<script src="js/admin/dedup/dd-data.js?v=20261029a"></script>
+<script type="text/babel" src="js/admin/dedup/dd-app.jsx?v=20261029a" data-presets="react"></script>
+
+<script type="text/babel" data-presets="react">
+fetch('assets/logo/mark.svg')
+  .then((r) => r.text())
+  .then((svg) => { window.WGMark = svg.replace(/width="\d+"/, '').replace(/height="\d+"/, '').replace(/<svg([^>]*)>/, '<svg$1 style="width:100%;height:100%" preserveAspectRatio="xMidYMid meet">'); })
+  .catch(() => {})
+  .finally(() => { ReactDOM.createRoot(document.getElementById('root')).render(<window.DedupApp />); });
+</script>
+</body>
+</html>

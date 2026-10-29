@@ -10,7 +10,7 @@
  *    - 有 2 個以上身份才提示「從右上角切換身份」（只有一個身份時切換器不存在）
  *    - 找誰：團隊成員 → 團隊管理員；超級管理員 → 不寫找誰；其他 → 超級管理員
  *    - 下一步選項與 404 相同：wgNavFor() 前三項
- * 交付版：總覽儀表板、重複審核尚未交付，下一步先跳過它們（NOT_DELIVERED，同 404）。正式版直接取 wgNavFor() 前三項。
+ * 交付版：總覽儀表板尚未交付（重複審核 2026-10-29 已交付），下一步先跳過它們（NOT_DELIVERED，同 404）。正式版直接取 wgNavFor() 前三項。
  * 角色：交付版沒有角色視角列（WGRoleBar 回傳 null），用網址 ?as=ngo-member 等預覽，見 docs/角色與權限.md。
  * 🔒 不要用物件 rest 解構（Babel standalone _excluded 撞名白畫面）。 */
 (function () {
@@ -34,7 +34,7 @@
     const SUB = { dashboard: "整體狀況與數字", ticket: "任務單、指派與進度", map: "責任區、危險區與標示區",
       station: "資源站點與修改建議", dedup: "可能重複的任務單與站點", announce: "前台與後台的緊急公告",
       brief: "給志工的行前資訊", members: "全平台人員與權限", teams: "團隊與成員" };
-    const NOT_DELIVERED = ["dashboard", "dedup"];
+    const NOT_DELIVERED = ["dashboard"];   // 重複審核 2026-10-29 已交付
     const links = nav.filter(([id]) => NOT_DELIVERED.indexOf(id) < 0).slice(0, 3).map(([id, label, icon]) => ({
       key: id, label, icon, sub: SUB[id], onClick: () => window.wgNavigate(id, "forbidden"),
     }));

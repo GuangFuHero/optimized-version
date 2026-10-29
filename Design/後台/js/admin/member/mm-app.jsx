@@ -258,7 +258,7 @@
     //
     // 🔒 乾淨切：越權的路徑不 render 內容，不是 render 一個灰掉的版本。
     let content;
-    const isPlaceholder = CORE.some((c) => c[0] === view) || view === "settings" || view === "audit" || view === "dedup";   // 交付版：重複審核未交付，以佔位呈現
+    const isPlaceholder = CORE.some((c) => c[0] === view) || view === "settings" || view === "audit";   // 重複審核 2026-10-29 已獨立成頁（nav.js PAGES.dedup），不會落到這裡
     if (isPlaceholder) {
       content = <window.MMPlaceholder label={view === "settings" ? "設定" : (nav.find((n) => n[0] === view) || [])[1] || view} />;
     } else if (view === "members") {

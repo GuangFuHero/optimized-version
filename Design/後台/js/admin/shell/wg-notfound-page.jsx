@@ -3,7 +3,7 @@
  * 🔒 WGShell 的 active="notfound"：側欄沒有任何一項亮起（你不在任何一頁），頂欄標題寫「找不到這一頁」。
  * 🔒 下一步的選項走 wgNavFor()，依目前身份 —— 看不到的頁面這裡也不出現（乾淨切 2026-08-17 D-3）。
  *    只取前三項；其他頁面側欄都在。
- * 交付版：總覽儀表板、重複審核尚未交付（點了落到「建置中」佔位頁），所以下一步先跳過它們。
+ * 交付版：總覽儀表板尚未交付（重複審核 2026-10-29 已交付）（點了落到「建置中」佔位頁），所以下一步先跳過它們。
  *    正式版不需要 NOT_DELIVERED，直接取 wgNavFor() 的前三項。
  * 角色：交付版沒有角色視角列（WGRoleBar 回傳 null），用網址 ?as=gov 等預覽，見 docs/角色與權限.md。 */
 (function () {
@@ -21,7 +21,7 @@
     const SUB = { dashboard: "整體狀況與數字", ticket: "任務單、指派與進度", map: "責任區、危險區與標示區",
       station: "資源站點與修改建議", dedup: "可能重複的任務單與站點", announce: "前台與後台的緊急公告",
       brief: "給志工的行前資訊", members: "全平台人員與權限", teams: "團隊與成員" };
-    const NOT_DELIVERED = ["dashboard", "dedup"];
+    const NOT_DELIVERED = ["dashboard"];   // 重複審核 2026-10-29 已交付
     const links = nav.filter(([id]) => NOT_DELIVERED.indexOf(id) < 0).slice(0, 3).map(([id, label, icon]) => ({
       key: id, label, icon, sub: SUB[id], onClick: () => window.wgNavigate(id, "notfound"),
     }));
