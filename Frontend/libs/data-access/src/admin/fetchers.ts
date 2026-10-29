@@ -738,6 +738,8 @@ export function useCommitStationImport() {
             const form = new FormData();
             form.append('file', body.file);
             if (body.mapping) form.append('mapping', body.mapping);
+            if (body.decisions) form.append('decisions', body.decisions);
+            if (body.declined) form.append('declined', body.declined);
             return form;
           },
         })
