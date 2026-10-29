@@ -22,7 +22,7 @@ from app.models.geo import BuildingMapTicketMap, Station
 from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
-from app.models.ticket_task import TicketTask
+from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from tests.test_graphql.conftest import auth_header, test_db
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.real_dedup]
@@ -84,7 +84,10 @@ WATER = {"taskType": "supply", "taskName": "需要飲用水", "taskDescription":
 
 @pytest_asyncio.fixture(autouse=True)
 async def _clean_tables():
-    """No leftovers from other tests become candidates."""
+    """No leftovers from other tests become candidates.
+
+    A need's assignments and properties go first: another file may leave some, and they hold the need.
+    """
     async with test_db() as db:
         await db.execute(delete(BuildingMapTicketMap))
         await db.execute(
@@ -92,7 +95,16 @@ async def _clean_tables():
                 SecondaryLocation.geometry_uuid.in_(select(Tickets.uuid).union(select(Station.uuid)))
             )
         )
-        for model in (DedupAuditEvent, DuplicatePair, Photo, TicketTask, Tickets, Station):
+        for model in (
+            DedupAuditEvent,
+            DuplicatePair,
+            Photo,
+            TaskAssignment,
+            TaskProperty,
+            TicketTask,
+            Tickets,
+            Station,
+        ):
             for row in (await db.execute(select(model))).scalars().all():
                 await db.delete(row)
     yield
