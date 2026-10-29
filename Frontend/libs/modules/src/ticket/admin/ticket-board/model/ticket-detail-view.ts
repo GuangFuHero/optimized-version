@@ -55,12 +55,7 @@ export interface TicketDetailView {
   description: string | null;
 }
 
-const PRIORITY_LABELS: Record<string, string> = {
-  medium: '中優先',
-  low: '低優先',
-};
-
-/** A priority as words: the badge's for the top two, these below them. */
+/** A priority as words, as `TICKET_PRIORITY_LABELS` names it; a dash for one it does not know. */
 export function ticketPriorityLabel(priority: string): string {
   return getTicketPriorityLabel(priority) ?? '—';
 }

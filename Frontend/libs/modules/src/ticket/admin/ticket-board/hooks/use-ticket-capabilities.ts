@@ -16,7 +16,6 @@ export function useTicketCapabilities() {
     canAdd: has('ticket.add'),
     canImport: has('ticket.import'),
     canExport: has('ticket.export'),
-    canViewDetail: has('ticket.view_detail'),
   };
 }
 
