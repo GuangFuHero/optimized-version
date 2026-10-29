@@ -123,7 +123,7 @@ describe('floorState', () => {
     ).toBe('need');
   });
 
-  it('is in progress while every open need has somebody on it', () => {
+  it('needs help while a need is short of people, as the board counts it', () => {
     expect(
       floorState([
         ticket({
@@ -134,7 +134,7 @@ describe('floorState', () => {
           ],
         }),
       ]),
-    ).toBe('progress');
+    ).toBe('need');
   });
 
   it('counts a rescue need without a head count by whether anyone took it', () => {
@@ -514,6 +514,17 @@ describe("fillLabel (the prototype's fillState)", () => {
       open: 0,
       label: '1/1 完成',
     });
+  });
+
+  it('counts a need short of people as untaken, as the board column does', () => {
+    expect(
+      fillLabel([task({ status: 'pending', quantity: 6, assignedCount: 3 })]),
+    ).toEqual({ open: 1, label: '待承接 1／1' });
+    expect(
+      fillLabel([
+        task({ status: 'pending', quantity: null, assignedCount: 2 }),
+      ]),
+    ).toEqual({ open: 0, label: '在途 1／1' });
   });
 
   it('leaves out a stopped need, as nobody will take it', () => {

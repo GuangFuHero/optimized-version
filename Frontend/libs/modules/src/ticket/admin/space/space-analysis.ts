@@ -11,7 +11,7 @@ import type {
 
 import {
   needGap,
-  OPEN_TASK_STATUSES,
+  needIsWaiting,
   type TicketPriority,
 } from '../ticket-board/model/ticket-row';
 import { matchFloor, orderFloors } from './floors';
@@ -49,15 +49,12 @@ const isCancelled = (ticket: SpaceTicket) =>
   ticket.status === 'cancelled' || ticket.status === 'canceled';
 const isCompleted = (ticket: SpaceTicket) => ticket.status === 'completed';
 /**
- * 有需求還沒人接: an open need nobody is on. Claiming a need leaves it pending and moves only its
- * ticket to in_progress (backend ADR-293, `ticket_status.py`), so a pending need alone says
- * nothing about whether anyone took it.
+ * 有需求還沒人接: a need still short of people, by the board's rule (`needIsWaiting`). Claiming a
+ * need leaves it pending and moves only its ticket to in_progress (backend ADR-293,
+ * `ticket_status.py`), so a pending need alone says nothing about whether anyone took it.
  */
 const hasUntakenNeed = (ticket: SpaceTicket) =>
-  !isCompleted(ticket) &&
-  ticket.tasks.some(
-    (task) => OPEN_TASK_STATUSES.has(task.status) && task.assignedCount === 0,
-  );
+  !isCompleted(ticket) && ticket.tasks.some(needIsWaiting);
 
 /** A cancelled ticket doesn't count: a floor with only that has no tickets. */
 export function floorState(tickets: readonly SpaceTicket[]): FloorState {
@@ -136,20 +133,23 @@ export function analyzeSpace(
 }
 
 /**
- * A ticket's 承接進度 on a floor card, as the prototype's `fillState` reads it: needs nobody took
- * first, then needs on their way, then done. `open` is the untaken count, red on the card. A
+ * A ticket's 承接進度 on a floor card, as the prototype's `fillState` reads it: needs still short of
+ * people first, then needs on their way, then done. `open` counts the first by the board's rule
+ * (`needIsWaiting`), so a ticket reads the same here as in its row; it is red on the card. A
  * stopped need is left out, as the board's `needProgress` does, so it never holds a household at 在途.
  */
 export function fillLabel(
-  tasks: readonly { status: string; assignedCount: number }[],
+  tasks: readonly {
+    status: string;
+    quantity?: number | null;
+    assignedCount: number;
+  }[],
 ): { open: number; label: string } {
   const live = tasks.filter((task) => task.status !== 'canceled');
   const total = live.length;
   if (!total) return { open: 0, label: '尚無需求' };
   const done = live.filter((task) => task.status === 'fulfilled').length;
-  const open = live.filter(
-    (task) => task.assignedCount === 0 && task.status !== 'fulfilled',
-  ).length;
+  const open = live.filter(needIsWaiting).length;
   if (open) return { open, label: `待承接 ${open}／${total}` };
   if (done < total) return { open: 0, label: `在途 ${total - done}／${total}` };
   return { open: 0, label: `${total}/${total} 完成` };

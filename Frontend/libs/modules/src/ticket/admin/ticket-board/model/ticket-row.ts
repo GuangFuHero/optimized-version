@@ -123,6 +123,23 @@ export function needGap(task: {
     : 0;
 }
 
+/**
+ * A need still waiting for people: short of its quantity (`needGap`), or open with no quantity
+ * and nobody on it yet. The board's column, the drawer and a space's floor cards all read it.
+ */
+export function needIsWaiting(task: {
+  status: string;
+  quantity?: number | null;
+  assignedCount: number;
+}): boolean {
+  return (
+    needGap(task) > 0 ||
+    (OPEN_TASK_STATUSES.has(task.status) &&
+      task.quantity == null &&
+      task.assignedCount === 0)
+  );
+}
+
 function toTaskRow(task: TaskRowFields): TaskRow {
   const quantity = task.quantity ?? null;
   const gap = needGap(task);
@@ -233,13 +250,7 @@ export interface NeedProgress {
 export function needProgress(tasks: readonly TaskRow[]): NeedProgress {
   const live = tasks.filter((task) => task.status !== 'canceled');
   const total = live.length;
-  const waiting = live.filter(
-    (task) =>
-      task.gap > 0 ||
-      (OPEN_TASK_STATUSES.has(task.status) &&
-        task.quantity === null &&
-        task.assignedCount === 0),
-  ).length;
+  const waiting = live.filter(needIsWaiting).length;
   const fulfilled = live.filter((task) => task.status === 'fulfilled').length;
   let label: string | null = null;
   if (total > 0) {
