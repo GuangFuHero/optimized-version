@@ -75,6 +75,18 @@ export function canRemoveAssignee(
   return assignment.viewerCanUnassign && !task.recruitingStoppedAt;
 }
 
+/**
+ * Whether a need's card offers 寫進度備註: the caller may edit the ticket, and sees it in detail. A
+ * coarse ticket (`locationCell`) comes back with its notes withheld, so a save would replace a note
+ * the caller never saw — the same rule that keeps the edit form off its description.
+ */
+export function canWriteNeedNote(ticket: {
+  viewerCanEdit: boolean;
+  locationCell?: string | null;
+}): boolean {
+  return ticket.viewerCanEdit && !ticket.locationCell;
+}
+
 /** A member of the caller's team, as `GET /admin/teams/{uuid}/members` lists them. */
 export interface PickerMember {
   uuid: string;

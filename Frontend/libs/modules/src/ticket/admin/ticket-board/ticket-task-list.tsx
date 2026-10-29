@@ -41,6 +41,7 @@ import {
   assignPickerOptions,
   canAssignNeed,
   canRemoveAssignee,
+  canWriteNeedNote,
   needKindLine,
   needStatusLabel,
   needTakenLine,
@@ -90,8 +91,8 @@ type PendingAction =
  * where it stands and offers only what the backend lets the identity do to it (`taskActionsFor`:
  * 停止招募, 刪除需求), never a status to set (BE-034); each behind a confirmation. Where the need's
  * `viewerCanAssign` allows and it has room, 指派承接 adds a member of the caller's team; a place's
- * `viewerCanUnassign` offers × to take that person off. `ticket.edit` on the ticket writes each
- * need's 進度備註 and adds 再加一項需求 below them.
+ * `viewerCanUnassign` offers × to take that person off. `ticket.edit` on the ticket adds 再加一項需求
+ * below them, and writes each need's 進度備註 when the ticket isn't coarse (`canWriteNeedNote`).
  */
 export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
   const busyFor = useBusyKeys(onBusyChange);
@@ -147,7 +148,7 @@ export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
                 canAssign={canAssignNeed(task, ticket.status)}
                 team={team}
                 assignmentsHidden={!ticket.viewerCanViewHistory}
-                canEditNote={ticket.viewerCanEdit}
+                canEditNote={canWriteNeedNote(ticket)}
                 statusMenu={
                   <NeedStatusMenu
                     needName={task.taskName}

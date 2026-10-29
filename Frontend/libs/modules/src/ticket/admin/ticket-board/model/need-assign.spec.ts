@@ -4,6 +4,7 @@ import {
   assignPickerOptions,
   canAssignNeed,
   canRemoveAssignee,
+  canWriteNeedNote,
   needKindLine,
   needStatusLabel,
   needTakenLine,
@@ -92,6 +93,23 @@ describe('canRemoveAssignee', () => {
         { recruitingStoppedAt: '2026-10-29T10:00:00Z' },
         { viewerCanUnassign: true },
       ),
+    ).toBe(false);
+  });
+});
+
+describe('canWriteNeedNote', () => {
+  it('follows the ticket’s edit flag', () => {
+    expect(canWriteNeedNote({ viewerCanEdit: true, locationCell: null })).toBe(
+      true,
+    );
+    expect(canWriteNeedNote({ viewerCanEdit: false, locationCell: null })).toBe(
+      false,
+    );
+  });
+
+  it('is never offered on a coarse ticket, whose notes are withheld', () => {
+    expect(
+      canWriteNeedNote({ viewerCanEdit: true, locationCell: '8a4b1e2' }),
     ).toBe(false);
   });
 });
