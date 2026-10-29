@@ -3,7 +3,7 @@
 import uuid as _uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -97,4 +97,7 @@ class Notification(Base, UUIDPKMixin, TimestampMixin):
             "recipient_uuid",
             "created_at",
         ),
+        # `read` repeats `read_at`, kept for the unread index above; the database holds them together
+        # (ADR-439).
+        CheckConstraint("read = (read_at IS NOT NULL)", name="ck_notifications_read_matches_read_at"),
     )

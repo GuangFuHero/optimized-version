@@ -1531,7 +1531,7 @@ export type StationType = {
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
   /** True if this station has been flagged as a duplicate entry */
   isDuplicate: Scalars['Boolean']['output'];
-  /** True if the back office made this station (`source` is 'official'), as the `official` filter reads it, or if it was marked official before `source` said so (ADR-394) */
+  /** True if the back office made this station: `source` is 'official', as the `official` filter reads it (ADR-438) */
   isOfficial: Scalars['Boolean']['output'];
   /** True if this is a temporary station (e.g. emergency shelter) */
   isTemporary: Scalars['Boolean']['output'];

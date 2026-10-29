@@ -1390,7 +1390,7 @@ type StationType {
   isTemporary: Boolean!
 
   """
-  True if the back office made this station (`source` is 'official'), as the `official` filter reads it, or if it was marked official before `source` said so (ADR-394)
+  True if the back office made this station: `source` is 'official', as the `official` filter reads it (ADR-438)
   """
   isOfficial: Boolean!
 
