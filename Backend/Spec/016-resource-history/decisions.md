@@ -720,9 +720,11 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
 
 **白話**：前台的任務單詳情要有「操作紀錄」分頁（原型 `site-detail.jsx`），給每個看得到這張單的人看，包括訪客。
 內容是「發生了什麼」：建了單、加了一件需求、有志工報名、人數湊齊、建單者停止招募……不寫任何人的名字，
-承接只寫人數，聯絡方式不列。
+承接只寫人數。欄位有改就列，但聯絡方式這類不能給人看的，只說「改了」，不給值。
 
-**Date**: 2026-10-28（使用者在協調者分頁決定做，後端、前台都交給 e；Carol 的 6 題在 Discord #uiux 問，回覆前照下面的預設做）
+**Date**: 2026-10-28（使用者在協調者分頁決定做，後端、前台都交給 e；Carol 的 6 題在 Discord #uiux 問）。
+2026-10-29 Carol 在 #uiux 回覆，改第 2、4 點：欄位有改動都要列，包括聯絡方式；協調人員只寫「協調人員」，
+責任區的負責團隊在單的詳情上看得到就好，紀錄裡不寫。
 
 **Context**：
 
@@ -737,18 +739,25 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
    單還在就回，跟單筆查詢一樣（`ticket.view` 是公開的，ADR-027）；不存在或已刪除回 404。每個呼叫者一分鐘 60 次。
    回應對每個人都一樣，所以不讀呼叫者。
 2. **人只寫角色**：`requester`（操作者就是建單者）、`volunteer`（自己報名或釋出）、`staff`（其他登入的人）、
-   `system`（沒有操作者，ADR-136）。不給 uuid、暱稱，也不寫團隊名稱。
+   `system`（沒有操作者，ADR-136）。不給 uuid、暱稱，也不寫團隊名稱（Carol 第 7 題）。
 3. **承接只寫人數**：報名、釋出各一筆，附那件需求的名稱和事件之後的「已承接／需要」人數，從頭重播稽核紀錄算出來。
    承接狀態的變更（出發、完成）不列：人少的時候，那就等於某個志工的行蹤。
-4. **欄位**：
+4. **欄位有改動就列**（Carol 第 6 題）：
    - 照給值：工單的 `title`、`priority`、`task_type`、`disaster_types`；需求的 `task_name`、`quantity`、`task_type`
      （ADR-130 的公開層）。
-   - 只說改了、不給值，對每個人都一樣：說明（工單和需求的）、地點（地址、座標，合成一個 `location`）。
-   - 不列：聯絡人姓名／電話／email、受困與危險兩題、資料檢核（`audit_status`、`audit_note`）、需求的進度備註、
-     需求的動態欄位（`task_properties`），以及工單自己的 `status`（由需求推得，需求的事件已經說了）。
+   - 只說改了、不給值，對每個人都一樣：
+     - 工單：說明、地點（地址、座標，合成一個 `location`）、聯絡方式（姓名／電話／email 合成一個 `contact`）、
+       受困與危險兩題（`person_trapped`、`immediate_danger`）。
+     - 需求：說明、進度備註（`progress_note`）、細項（`task_properties` 的增、改、刪，合成一個 `properties`）。
+       同一次存檔改到需求本身和它的細項，是同一筆 `need_updated`。
+   - 不列：資料檢核（`audit_status`、`audit_note`：檢核員標「有問題」，原因只給工作人員看；Carol 2026-10-29 同意，
+     資料檢核員先只處理重複，內容檢核排到 11/01 之後）、
+     工單自己的 `status`（由需求推得，需求的事件已經說了）、需求的 `source`（建立時定了，沒有地方再改它）。
    - **PII 不用 `resolve_visibility`**：一般帳號的 `ticket.view_pii` 是 `all`（ADR-286），照它解鎖，任何登入的人
      都會在這裡讀到建單者的姓名和電話。單筆查詢的聯絡方式另外還要 `view_history` 或承接，這裡沒有那層。
-     `test_history_public.py` 的 `test_a_signed_in_account_never_reads_the_contact_details` 守著這條。
+     所以聯絡方式改了，對誰都只說改了。`test_history_public.py` 的
+     `test_a_signed_in_account_never_reads_the_contact_details` 守著這條：訪客和一般帳號都看得到「改了」，
+     看不到改前改後的值。
 5. **事件由後端分類，前端組句**（ADR-145）：`ticket_created`、`ticket_updated`、`need_added`、`need_updated`、
    `need_filled`、`need_stopped`、`need_reopened`、`need_removed`、`volunteer_joined`、`volunteer_left`。
    - 停止招募和湊齊人在稽核紀錄裡都是 `status` 變 `fulfilled`，看 `recruiting_stopped_at` 有沒有被填來分
@@ -761,5 +770,6 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
 ➕ 訪客和志工看得到一張單的進展，沒有人能從這裡知道誰去了哪裡。
 ➕ 員工的時間軸和它的權限都沒動。
 ➖ 每次請求都重播整張單的稽核紀錄才算得出人數。一張單通常幾十筆；超過 2000 筆截斷時人數可能不準，`meta.truncated` 會說。
-➖ 建單者本來就看得到承接者，這裡也看不到名字。名字留在詳情的承接者那裡（Carol 的第 6 題）。
-◾ Carol 的 6 題（人數、出發完成、地點說明聯絡方式、團隊名稱、資料檢核、建單者看名字）回覆後，照回覆改第 2～4 點。
+➖ 建單者本來就看得到承接者，這裡也看不到名字。名字留在詳情的承接者那裡（Carol 第 9 題）。
+◾ 題號是 2026-10-28 那則 #uiux 訊息的。Carol 回覆的第 4、5、8、9 題（寫人數、出發完成不列、資料檢核不列、
+  建單者也不看名字）跟原本的預設一樣；第 6、7 題已照改。

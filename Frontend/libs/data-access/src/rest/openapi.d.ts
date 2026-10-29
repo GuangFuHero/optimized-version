@@ -1639,7 +1639,8 @@ export interface paths {
      * @description What happened to this help request, newest first, without anyone's name (ADR-421).
      *
      *     No sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who
-     *     claimed a need is a count, who acted is a role, and contact details are left out.
+     *     claimed a need is a count, who acted is a role, and a change to the contact details is told
+     *     without them.
      */
     get: operations['ticket_public_history_api_v1_history_tickets__uuid__public_get'];
     put?: never;
@@ -3515,7 +3516,7 @@ export interface components {
       needs?: components['schemas']['PublicNeedResponse'][] | null;
       /**
        * Changes
-       * @description 改了什麼。地點、說明只有 changed=true；聯絡方式、檢核不列（ADR-421）
+       * @description 改了什麼。說明、地點、聯絡方式、受困／危險、進度備註、需求細項只有 changed=true；檢核不列（ADR-421）
        */
       changes?: components['schemas']['ChangeResponse'][];
     };

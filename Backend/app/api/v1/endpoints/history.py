@@ -91,7 +91,8 @@ async def ticket_public_history(
     """What happened to this help request, newest first, without anyone's name (ADR-421).
 
     No sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who
-    claimed a need is a count, who acted is a role, and contact details are left out.
+    claimed a need is a count, who acted is a role, and a change to the contact details is told
+    without them.
     """
     try:
         result = await history_public.load_public_timeline(db, uuid=str(uuid), limit=limit, offset=offset)

@@ -8,9 +8,11 @@ terms nobody can be found by:
 
 - **Who** is a role only: the requester, a volunteer, staff or the system. No name, no uuid.
 - **A claim** is a count: one more volunteer for 清淤泥, now 2 of 5 (the prototype's own wording).
-- **What changed** comes in values only for the public tier of `history_fields.py`. A change to the
-  description or the place is told as having happened, without the values, to everyone. Contact
-  details, the triage answers, the data check and anything below the public tier are not told at all.
+- **What changed** is told whenever a field moved (Carol, 2026-10-29), but in values only for the
+  public tier of `history_fields.py`. The rest is told as having changed, without the values, to
+  everyone: the description, the place, the contact details, the triage answers, a need's progress
+  note and its details. Only the data check is not told, nor the ticket's own status, which the events
+  of its needs already tell.
   `resolve_visibility` is deliberately not used: a plain account holds `ticket.view_pii` at `all`
   (ADR-286), so under it anyone signed in would read the requester's name and phone here.
 
@@ -49,14 +51,27 @@ _GEOMETRIES = "base_geometries"
 _LOCATIONS = "secondary_locations"
 _TASKS = "ticket_tasks"
 _ASSIGNMENTS = "task_assignments"
+_PROPERTIES = "task_properties"
 
 # Fields told with their values: the public tier of history_fields.py, less the ticket's own status
-# (worked out from its needs, whose events already say it) and the data check (ADR-421 point 5).
+# (worked out from its needs, whose events already say it), the data check (ADR-421 point 4) and a
+# need's source (set when it is filed, and never written again).
 _TICKET_FIELDS = ("title", "priority", "task_type", "disaster_types")
 _NEED_FIELDS = ("task_name", "quantity", "task_type")
-# Told as having changed, without the values (the detail tier, ADR-284).
-_TICKET_FACTS = {"description": "description"}
-_NEED_FACTS = {"task_description": "description"}
+# Told as having changed, without the values, column by the name it is told under: the detail tier
+# (ADR-284), and the contact details and triage answers, which no reader here may see (ADR-286).
+# The three contact columns are one change.
+_TICKET_FACTS = {
+    "description": "description",
+    "contact_name": "contact",
+    "contact_email": "contact",
+    "contact_phone": "contact",
+    "person_trapped_reported": "person_trapped",
+    "immediate_danger_reported": "immediate_danger",
+}
+_NEED_FACTS = {"task_description": "description", "progress_note": "progress_note"}
+# A need's details: rows of name, value and quantity, told as one change to the need.
+_PROPERTY_COLUMNS = ("property_name", "property_value", "quantity", "status", "comment")
 
 _OPEN = "pending"
 _FILLED = "fulfilled"
@@ -110,8 +125,13 @@ def _value_changes(row: AuditLog, fields: tuple[str, ...], facts: dict[str, str]
         for name in fields
         if old.get(name) != new.get(name)
     ]
-    changes += [_fact(name) for column, name in facts.items() if old.get(column) != new.get(column)]
-    return changes
+    moved = dict.fromkeys(name for column, name in facts.items() if old.get(column) != new.get(column))
+    return changes + [_fact(name) for name in moved]
+
+
+def _details_moved(row: AuditLog) -> bool:
+    old, new = row.old_values or {}, row.new_values or {}
+    return row.action != "UPDATE" or any(old.get(c) != new.get(c) for c in _PROPERTY_COLUMNS)
 
 
 def _need_status_kind(row: AuditLog) -> str | None:
@@ -158,11 +178,19 @@ class _Replay:
         changes = {c["field"]: c for row in ticket_rows for c in self._ticket_changes(row)}
         if changes:
             self._tell(at, ticket_rows[0], TICKET_UPDATED, changes=list(changes.values()))
+        # A need's details changed, by the need they belong to; told with whatever else the save did to it.
+        details = {
+            str(_values(r).get("task_uuid")): r
+            for r in rows
+            if r.table_name == _PROPERTIES and _details_moved(r)
+        }
         for row in rows:
             if row.table_name == _ASSIGNMENTS:
                 self._tell_claim(at, row)
             elif row.table_name == _TASKS:
-                self._tell_need(at, row)
+                self._tell_need(at, row, details=details.pop(str(row.row_id), None) is not None)
+        for need, row in details.items():
+            self._tell(at, row, NEED_UPDATED, need=self.needs[need].view(), changes=[_fact("properties")])
 
     def _apply(self, row: AuditLog) -> None:
         if row.table_name == _TASKS:
@@ -196,9 +224,10 @@ class _Replay:
         if kind is not None:
             self._tell(at, row, kind, need=self.needs[str(_values(row).get("task_uuid"))].view())
 
-    def _tell_need(self, at, row: AuditLog) -> None:
+    def _tell_need(self, at, row: AuditLog, *, details: bool) -> None:
         need = self.needs[str(row.row_id)].view()
         if row.action == "INSERT":
+            # Its details came with it.
             self._tell(at, row, NEED_ADDED, need=need)
             return
         kind = _need_status_kind(row)
@@ -206,7 +235,7 @@ class _Replay:
             # Stopping recruiting also lowers the headcount to whoever is coming; the stop says it all.
             self._tell(at, row, kind, need=need)
             return
-        changes = _value_changes(row, _NEED_FIELDS, _NEED_FACTS)
+        changes = _value_changes(row, _NEED_FIELDS, _NEED_FACTS) + ([_fact("properties")] if details else [])
         if changes:
             self._tell(at, row, NEED_UPDATED, need=need, changes=changes)
 

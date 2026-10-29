@@ -90,7 +90,10 @@ class PublicHistoryEventResponse(BaseModel):
     needs: list[PublicNeedResponse] | None = Field(default=None, description="建單時的需求（ticket_created）")
     changes: list[ChangeResponse] = Field(
         default_factory=list,
-        description="改了什麼。地點、說明只有 changed=true；聯絡方式、檢核不列（ADR-421）",
+        description=(
+            "改了什麼。說明、地點、聯絡方式、受困／危險、進度備註、需求細項只有 changed=true；"
+            "檢核不列（ADR-421）"
+        ),
     )
 
 

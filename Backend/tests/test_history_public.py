@@ -16,7 +16,7 @@ from app.core.permissions import Perm
 from app.models.audit import AuditLog
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
-from app.models.ticket_task import TicketTask
+from app.models.ticket_task import TaskProperty, TicketTask
 from tests.test_history_endpoints import _auth, _user_with
 
 URL = "/api/v1/history/tickets/{}/public"
@@ -24,6 +24,7 @@ URL = "/api/v1/history/tickets/{}/public"
 PHONE = "0912345678"
 NEW_PHONE = "0987654321"
 CONTACT = "王小姐"
+NEW_CONTACT = "陳先生"
 
 
 async def _ticket(db, owner: str) -> str:
@@ -158,7 +159,8 @@ async def test_a_guest_reads_what_happened_and_nobody_s_name(client, db_session,
 async def test_a_signed_in_account_never_reads_the_contact_details(client, db_session, redis):
     """A plain account holds ticket.view_pii at `all` (ADR-286); the public timeline still tells no contact.
 
-    Not filed with them, not changed to them: a change to the contact alone is not told at all.
+    Not filed with them, not changed to them: that the contact changed is told, to a guest and to an account
+    alike, and never what it was or became. Nor are the triage answers.
     """
     owner = await _user_with(db_session, redis, "建單者")
     reader = await _user_with(
@@ -175,8 +177,12 @@ async def test_a_signed_in_account_never_reads_the_contact_details(client, db_se
                 "UPDATE",
                 by=owner,
                 minute=1,
-                old={"contact_phone": PHONE},
-                new={"contact_phone": NEW_PHONE},
+                old={"contact_name": CONTACT, "contact_phone": PHONE, "person_trapped_reported": None},
+                new={
+                    "contact_name": NEW_CONTACT,
+                    "contact_phone": NEW_PHONE,
+                    "person_trapped_reported": True,
+                },
             ),
         ]
     )
@@ -186,8 +192,14 @@ async def test_a_signed_in_account_never_reads_the_contact_details(client, db_se
         resp = await client.get(URL.format(ticket), headers=headers)
 
         assert resp.status_code == 200
-        assert [e["kind"] for e in resp.json()["data"]] == ["ticket_created"]
-        for contact in (PHONE, NEW_PHONE, CONTACT):
+        updated, created = resp.json()["data"]
+        assert (updated["kind"], created["kind"]) == ("ticket_updated", "ticket_created")
+        # The name and the phone are one change.
+        assert updated["changes"] == [
+            {"field": "contact", "before": None, "after": None, "changed": True},
+            {"field": "person_trapped", "before": None, "after": None, "changed": True},
+        ]
+        for contact in (PHONE, NEW_PHONE, CONTACT, NEW_CONTACT):
             assert contact not in resp.text
 
 
@@ -343,6 +355,66 @@ async def test_the_place_and_the_description_are_told_as_changed_without_their_v
         ("location", True),
     ]
     for value in ("中正路", "中山路", "門牌"):
+        assert value not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_a_need_s_progress_note_and_details_are_told_as_changed_without_their_values(
+    client, db_session, redis
+):
+    """A save that rewrites the note and a detail is one event for the need; a detail added alone, another."""
+    owner = await _user_with(db_session, redis, "建單者")
+    coordinator = await _user_with(db_session, redis, "協調員")
+    ticket = await _ticket(db_session, owner)
+    need = await _need(db_session, ticket, owner)
+    tools = TaskProperty(uuid=uuidlib.uuid4(), task_uuid=need, property_name="工具", property_value="水桶")
+    gloves = TaskProperty(uuid=uuidlib.uuid4(), task_uuid=need, property_name="手套", property_value="10 雙")
+    db_session.add_all([tools, gloves])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            *_filed(ticket, need, owner),
+            _row(
+                need,
+                "ticket_tasks",
+                "UPDATE",
+                by=coordinator,
+                minute=1,
+                old={"task_name": "清淤泥", "progress_note": "已聯絡建單者"},
+                new={"task_name": "清淤泥", "progress_note": "明早八點到"},
+            ),
+            _row(
+                tools.uuid,
+                "task_properties",
+                "UPDATE",
+                by=coordinator,
+                minute=1,
+                old={"task_uuid": need, "property_name": "工具", "property_value": "鏟子"},
+                new={"task_uuid": need, "property_name": "工具", "property_value": "水桶"},
+            ),
+            _row(
+                gloves.uuid,
+                "task_properties",
+                "INSERT",
+                by=coordinator,
+                minute=2,
+                new={"task_uuid": need, "property_name": "手套", "property_value": "10 雙"},
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    resp = await client.get(URL.format(ticket))
+
+    events = resp.json()["data"]
+    assert [(e["kind"], e["actor_role"], [c["field"] for c in e["changes"]]) for e in events] == [
+        ("need_updated", "staff", ["properties"]),
+        ("need_updated", "staff", ["progress_note", "properties"]),
+        ("ticket_created", "requester", []),
+    ]
+    assert events[0]["need"] == {"name": "清淤泥", "matched": 0, "required": 5}
+    assert all(c["changed"] and c["after"] is None for e in events for c in e["changes"])
+    for value in ("已聯絡", "八點", "鏟子", "水桶", "10 雙"):
         assert value not in resp.text
 
 

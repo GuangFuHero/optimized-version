@@ -5540,7 +5540,7 @@
           "異動時間軸"
         ],
         "summary": "求助單的公開時間軸",
-        "description": "What happened to this help request, newest first, without anyone's name (ADR-421).\n\nNo sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who\nclaimed a need is a count, who acted is a role, and contact details are left out.",
+        "description": "What happened to this help request, newest first, without anyone's name (ADR-421).\n\nNo sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who\nclaimed a need is a count, who acted is a role, and a change to the contact details is told\nwithout them.",
         "operationId": "ticket_public_history_api_v1_history_tickets__uuid__public_get",
         "parameters": [
           {
@@ -10161,7 +10161,7 @@
             },
             "type": "array",
             "title": "Changes",
-            "description": "改了什麼。地點、說明只有 changed=true；聯絡方式、檢核不列（ADR-421）"
+            "description": "改了什麼。說明、地點、聯絡方式、受困／危險、進度備註、需求細項只有 changed=true；檢核不列（ADR-421）"
           }
         },
         "type": "object",
