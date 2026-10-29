@@ -99,7 +99,8 @@ type SetPasswordStage =
 // The design's floor for a reader up to ninety (design A1): 16px text, fields and buttons; 48px buttons.
 const BODY_TEXT = { fontSize: 16, lineHeight: 1.7, color: '#6A5F5B' } as const;
 const BIG_BUTTON = { minHeight: 48, fontSize: 16 } as const;
-const ALERT_TEXT = { fontSize: 16 } as const;
+// An Alert can hold a whole email, longer than a phone is wide.
+const ALERT_TEXT = { fontSize: 16, overflowWrap: 'anywhere' } as const;
 
 const CODE_INPUT = {
   htmlInput: { inputMode: 'numeric', autoComplete: 'one-time-code' },
@@ -284,6 +285,9 @@ export function AccountSecurityClient({
   const [setPasswordSuccessMessage, setSetPasswordSuccessMessage] =
     useState<string>();
   const [isSettingPassword, setIsSettingPassword] = useState(false);
+  // One more each time the password row is let go of (取消, or another row opened): an answer that
+  // comes back after it is for a row the person has left, and is dropped, as in `use-add-contact.ts`.
+  const passwordAttempt = useRef(0);
 
   const [contactPassword, setContactPassword] = useState('');
   const [contactOldCode, setContactOldCode] = useState('');
@@ -401,6 +405,7 @@ export function AccountSecurityClient({
       return;
     }
 
+    const asked = passwordAttempt.current;
     setIsChangingPassword(true);
     setPasswordError(undefined);
     setPasswordSuccess(undefined);
@@ -412,20 +417,32 @@ export function AccountSecurityClient({
       );
       const nextPassword = await createHashedCredentialAsync(newPassword);
 
+      // Let go of while the passwords were being worked out: nothing goes out for it.
+      if (asked !== passwordAttempt.current) {
+        return;
+      }
+
       await changePasswordAsync({
         old_password: currentPassword.hashedPassword,
         new_password: nextPassword.hashedPassword,
         salt_frontend: nextPassword.saltFrontend,
       });
 
+      // Changed whether or not the row is still open: the backend has ended the session either way.
       setPasswordSuccess('密碼已經改好，請重新登入。');
       signInAgain();
     } catch (error) {
+      if (asked !== passwordAttempt.current) {
+        return;
+      }
+
       setPasswordError(
         resolveAuthErrorMessage(error, '變更密碼失敗，請稍後再試。'),
       );
     } finally {
-      setIsChangingPassword(false);
+      if (asked === passwordAttempt.current) {
+        setIsChangingPassword(false);
+      }
     }
   }
 
@@ -452,6 +469,7 @@ export function AccountSecurityClient({
       return;
     }
 
+    const asked = passwordAttempt.current;
     setIsSettingPassword(true);
     setSetPasswordProblem(null);
     setSetPasswordNotice(undefined);
@@ -460,6 +478,10 @@ export function AccountSecurityClient({
     try {
       const createdPassword =
         await createHashedCredentialAsync(setPasswordValue);
+
+      if (asked !== passwordAttempt.current) {
+        return;
+      }
 
       await setPasswordAsync({
         password: createdPassword.hashedPassword,
@@ -475,6 +497,10 @@ export function AccountSecurityClient({
       // The backend ends the session on a password created, as on one changed.
       signInAgain();
     } catch (error) {
+      if (asked !== passwordAttempt.current) {
+        return;
+      }
+
       const code = error instanceof ApiError ? error.code : undefined;
 
       if (code === 'step_up_required' && !withCode) {
@@ -508,13 +534,18 @@ export function AccountSecurityClient({
         tone: 'error',
       });
     } finally {
-      setIsSettingPassword(false);
+      if (asked === passwordAttempt.current) {
+        setIsSettingPassword(false);
+      }
     }
   }
 
   /** A row closed, by 取消 or by another opening: what it was in the middle of is dropped. */
   function resetRow(row: SecurityRowKey) {
     if (row === 'password') {
+      passwordAttempt.current += 1;
+      setIsChangingPassword(false);
+      setIsSettingPassword(false);
       setOldPassword('');
       setNewPassword('');
       setNewPasswordConfirm('');

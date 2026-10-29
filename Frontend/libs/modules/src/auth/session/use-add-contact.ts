@@ -37,13 +37,14 @@ type StepUp = components['schemas']['StepUp'];
  * - `enter` (step 1): typing it, then 寄驗證碼.
  * - `password` (step 2): a password account says it is them before a code goes out (ADR-220).
  * - `old-code` (step 2): an account without a password gets a code at a contact it already has first.
+ *   The code is for `draft`, the contact it was asked for (ADR-164), whatever was typed after.
  * - `line` (step 2): an account with neither signs in at LINE again (ADR-361), when the person presses.
  * - `code` (step 3): the code went to the new contact.
  */
 export type AddContactStage =
   | { kind: 'enter' }
   | { kind: 'password' }
-  | { kind: 'old-code'; pending: boolean }
+  | { kind: 'old-code'; pending: boolean; draft: ContactDraft }
   | { kind: 'line' }
   | { kind: 'code'; type: AuthIdentityType; value: string };
 
@@ -148,7 +149,7 @@ export function useAddContact({
             setStage({ kind: 'enter' });
             setProblem({ message: ask.message, tone: 'error' });
           } else {
-            setStage(ask);
+            setStage(ask.kind === 'old-code' ? { ...ask, draft } : ask);
 
             if (resending) {
               setNotice(
@@ -237,12 +238,18 @@ export function useAddContact({
     }
   };
 
-  const submitOldCode = (code: string) =>
-    void request({ type, value }, 'old-code', { old_channel_code: code });
+  const submitOldCode = (code: string) => {
+    if (stage.kind === 'old-code') {
+      void request(stage.draft, 'old-code', { old_channel_code: code });
+    }
+  };
 
   /** 沒收到？重新寄一次 on the first code: asked again, and the backend says whether one went out. */
-  const resendOldCode = () =>
-    void request({ type, value }, 'send', undefined, { resending: true });
+  const resendOldCode = () => {
+    if (stage.kind === 'old-code') {
+      void request(stage.draft, 'send', undefined, { resending: true });
+    }
+  };
 
   /** 到 LINE 確認是我. */
   const proveAtLine = () => onReauthRef.current({ type, value });
@@ -347,16 +354,22 @@ export function useAddContact({
     setNotice(null);
   };
 
-  /** A different contact: the steps start over. */
+  /**
+   * A different kind, by 更換 or 新增: the steps start over. Typing only clears what was said about the
+   * last address: a 寄驗證碼 still out comes back to its step, as its code went out anyway.
+   */
   const change = (next: Partial<ContactDraft>) => {
-    if (next.type !== undefined) {
-      setType(next.type);
-    }
-
     if (next.value !== undefined) {
       setValue(next.value);
     }
 
+    if (next.type === undefined) {
+      setProblem(null);
+      setNotice(null);
+      return;
+    }
+
+    setType(next.type);
     cancel();
   };
 
