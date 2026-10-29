@@ -8,6 +8,7 @@ import type { BadgeTone } from '@rescue-frontend/ui';
 
 import { stationPoint } from '../../../../station/station-point';
 import { formatTicketStreet } from '../../../address';
+import { formatTicketTypeLabel } from '../../../status';
 
 export type { AuditStatus };
 
@@ -26,6 +27,16 @@ export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
  */
 export const NEED_TYPES = ['rescue', 'supply', 'medical', 'hr'] as const;
 export type NeedType = (typeof NEED_TYPES)[number];
+
+/**
+ * A need type as the admin board words it (the design's task kinds): 搜救 where the public site,
+ * through `formatTicketTypeLabel`, says 救援. 醫療 has no label in the design; it keeps the shared one.
+ */
+export function needTypeLabel(value?: string | null): string {
+  return value?.trim().toLowerCase() === 'rescue'
+    ? '搜救'
+    : formatTicketTypeLabel(value);
+}
 
 /** A ticket's audit state as the board badges it. */
 export const AUDIT_BADGES: Record<

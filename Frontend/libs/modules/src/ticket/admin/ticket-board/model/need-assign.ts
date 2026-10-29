@@ -3,8 +3,7 @@
  * when the card offers to assign or to take someone off.
  */
 
-import { formatTicketTypeLabel } from '../../../status';
-import { OPEN_TASK_STATUSES } from './ticket-row';
+import { needTypeLabel, OPEN_TASK_STATUSES } from './ticket-row';
 
 /** A need's status as its card names it (the prototype's `TK_TASK_STATUS`). */
 const NEED_STATUS_LABELS: Record<string, string> = {
@@ -23,7 +22,7 @@ export function needKindLine(task: {
   taskType: string;
   quantity?: number | null;
 }): string {
-  const kind = formatTicketTypeLabel(task.taskType);
+  const kind = needTypeLabel(task.taskType);
   return task.quantity != null ? `${kind} · 需 ${task.quantity}` : kind;
 }
 

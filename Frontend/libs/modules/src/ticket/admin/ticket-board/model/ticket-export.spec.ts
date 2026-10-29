@@ -13,7 +13,7 @@ describe('ticketExportFilename', () => {
   it('uses the format as the extension', () => {
     expect(
       ticketExportFilename('rescue', 'xlsx', new Date('2026-10-27T15:59:00Z')),
-    ).toBe('任務單-救援-20261027.xlsx');
+    ).toBe('任務單-搜救-20261027.xlsx');
   });
 
   it('exports the four task types', () => {

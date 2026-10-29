@@ -5,12 +5,13 @@ import { useDisasterTypes } from '@rescue-frontend/data-access/admin';
 import { designTokens } from '@rescue-frontend/ui';
 
 import { ChipRow } from '../../../admin/shared/chip-row';
-import { formatTicketTypeLabel, TICKET_STATUS_OPTIONS } from '../../status';
+import { TICKET_STATUS_OPTIONS } from '../../status';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
 import type { TicketFilters } from './model/ticket-filters';
 import {
   AUDIT_BADGES,
   NEED_TYPES,
+  needTypeLabel,
   TICKET_PRIORITIES,
   type AuditStatus,
   type TicketPriority,
@@ -82,7 +83,7 @@ export function TicketFilterPanel({
         value={filters.taskType}
         options={NEED_TYPES.map((t) => ({
           value: t as string,
-          label: formatTicketTypeLabel(t),
+          label: needTypeLabel(t),
         }))}
         onChange={(v) => set('taskType', v)}
       />

@@ -1,6 +1,5 @@
 import { taiwanDateParts } from '../../../../time';
-import { formatTicketTypeLabel } from '../../../status';
-import type { NeedType } from './ticket-row';
+import { needTypeLabel, type NeedType } from './ticket-row';
 
 export function ticketExportFilename(
   taskType: NeedType,
@@ -8,5 +7,5 @@ export function ticketExportFilename(
   now: Date,
 ): string {
   const { year, month, day } = taiwanDateParts(now);
-  return `任務單-${formatTicketTypeLabel(taskType)}-${year}${month}${day}.${format}`;
+  return `任務單-${needTypeLabel(taskType)}-${year}${month}${day}.${format}`;
 }

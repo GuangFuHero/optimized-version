@@ -1,5 +1,4 @@
-import { formatTicketTypeLabel } from '../../../status';
-import type { NeedType } from './ticket-row';
+import { needTypeLabel, type NeedType } from './ticket-row';
 
 /**
  * The import dialog's need-type chips, in the design's order (搜救／人力／物資), then 醫療, which
@@ -24,7 +23,7 @@ export function ticketImportCaption(taskType: string | null): string {
   const required = ['標題', '聯絡人', '緯度', '經度', '需求名稱'];
   if (taskType && !QUANTITY_OPTIONAL.has(taskType)) required.push('需求數量');
   const lead = taskType
-    ? `從「匯出」下載的「${formatTicketTypeLabel(taskType)}」檔案就是範本。`
+    ? `從「匯出」下載的「${needTypeLabel(taskType)}」檔案就是範本。`
     : '從「匯出」下載的檔案就是範本。';
   return `${lead}新的單必填：${required.join('、')}。位置用經緯度，沒有地址欄。`;
 }

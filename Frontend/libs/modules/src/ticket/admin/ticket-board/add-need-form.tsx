@@ -7,7 +7,6 @@ import { useCreateTicketTask } from '@rescue-frontend/data-access/admin';
 import { Button, Callout, TextInput } from '@rescue-frontend/ui';
 
 import { addNeedErrorMessage, type ClaimError } from '../../needs/claim-error';
-import { formatTicketTypeLabel } from '../../status';
 import { DuplicateNotice } from './duplicate-notice';
 import {
   buildNeedInput,
@@ -18,7 +17,7 @@ import {
   type NeedDraft,
   type NeedDraftErrors,
 } from './model/task-actions';
-import { NEED_TYPES } from './model/ticket-row';
+import { NEED_TYPES, needTypeLabel } from './model/ticket-row';
 
 const EMPTY_DRAFT: NeedDraft = {
   taskType: 'hr',
@@ -137,7 +136,7 @@ export function AddNeedForm({
       >
         {NEED_TYPES.map((type) => (
           <MenuItem key={type} value={type}>
-            {formatTicketTypeLabel(type)}
+            {needTypeLabel(type)}
           </MenuItem>
         ))}
       </TextField>
@@ -152,7 +151,7 @@ export function AddNeedForm({
       <TextInput
         label="數量"
         required={draft.taskType !== 'rescue'}
-        hint={draft.taskType === 'rescue' ? '救援可不填' : undefined}
+        hint={draft.taskType === 'rescue' ? '搜救可不填' : undefined}
         type="number"
         inputProps={{ min: 1, step: 1 }}
         value={draft.quantity}

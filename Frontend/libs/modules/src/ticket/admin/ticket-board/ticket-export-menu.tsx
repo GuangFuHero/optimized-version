@@ -8,9 +8,8 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { downloadBlob } from '../../../admin/shared/model/bulk-import';
-import { formatTicketTypeLabel } from '../../status';
 import { ticketExportFilename } from './model/ticket-export';
-import { NEED_TYPES, type NeedType } from './model/ticket-row';
+import { NEED_TYPES, needTypeLabel, type NeedType } from './model/ticket-row';
 
 type Format = 'csv' | 'xlsx';
 
@@ -33,7 +32,7 @@ export function TicketExportMenu() {
             blob as Blob,
             ticketExportFilename(taskType, format, new Date()),
           );
-          toast.success(`已匯出「${formatTicketTypeLabel(taskType)}」任務單`);
+          toast.success(`已匯出「${needTypeLabel(taskType)}」任務單`);
           setAnchor(null);
         },
         // The failure toasts globally; the menu closes so the toolbar isn't left with it open.
@@ -70,7 +69,7 @@ export function TicketExportMenu() {
               disabled={exportTickets.isPending}
               onClick={() => download(taskType, format.value)}
             >
-              {formatTicketTypeLabel(taskType)}・{format.label}
+              {needTypeLabel(taskType)}・{format.label}
             </MenuItem>
           )),
         )}

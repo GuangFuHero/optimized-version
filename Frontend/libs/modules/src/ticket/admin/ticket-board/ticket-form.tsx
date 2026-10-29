@@ -35,7 +35,6 @@ import { LocationPicker } from '../../../map/components/location-picker';
 import type { ClaimError } from '../../needs/claim-error';
 import { filledInputSx } from '../../../station/form/station-form-fields';
 import { PhotoLinkEditor } from '../../photos';
-import { formatTicketTypeLabel } from '../../status';
 import { DuplicateNotice } from './duplicate-notice';
 import {
   isForbidden,
@@ -47,7 +46,11 @@ import {
   ticketPriorityLabel,
   type DetailTicket,
 } from './model/ticket-detail-view';
-import { NEED_TYPES, TICKET_PRIORITIES } from './model/ticket-row';
+import {
+  NEED_TYPES,
+  needTypeLabel,
+  TICKET_PRIORITIES,
+} from './model/ticket-row';
 import {
   acknowledgeSuspects,
   changedUpdateInput,
@@ -678,7 +681,7 @@ function NeedRow({
         >
           {NEED_TYPES.map((type) => (
             <MenuItem key={type} value={type}>
-              {formatTicketTypeLabel(type)}
+              {needTypeLabel(type)}
             </MenuItem>
           ))}
         </TextField>

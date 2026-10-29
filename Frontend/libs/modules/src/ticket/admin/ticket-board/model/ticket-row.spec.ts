@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   needChipLabel,
+  needTypeLabel,
   needProgress,
   ticketAddressLine,
   toTaskRows,
@@ -247,5 +248,22 @@ describe('ticketAddressLine', () => {
     expect(ticketAddressLine({ isCoarse: true, address: null })).toBe(
       '約略位置（無檢視詳細位置權限）',
     );
+  });
+});
+
+describe('needTypeLabel', () => {
+  it("words the rescue type 搜救, as the design does, not the public site's 救援", () => {
+    expect(needTypeLabel('rescue')).toBe('搜救');
+    expect(needTypeLabel(' Rescue ')).toBe('搜救');
+  });
+
+  it('keeps the design labels for the other types, and 醫療 for the backend-only one', () => {
+    expect(needTypeLabel('hr')).toBe('人力');
+    expect(needTypeLabel('supply')).toBe('物資');
+    expect(needTypeLabel('medical')).toBe('醫療');
+  });
+
+  it('says 未提供 for no type', () => {
+    expect(needTypeLabel(null)).toBe('未提供');
   });
 });

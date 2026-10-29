@@ -35,7 +35,6 @@ import {
   downloadBlob,
   importSummary,
 } from '../../../admin/shared/model/bulk-import';
-import { formatTicketTypeLabel } from '../../status';
 import { NEED_KIND_ICONS } from './need-kind-icons';
 import { ticketExportFilename } from './model/ticket-export';
 import {
@@ -43,7 +42,7 @@ import {
   pastedCsvFile,
   ticketImportCaption,
 } from './model/ticket-import';
-import type { NeedType } from './model/ticket-row';
+import { needTypeLabel, type NeedType } from './model/ticket-row';
 
 const { color, typography } = designTokens;
 
@@ -132,7 +131,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
             blob as Blob,
             ticketExportFilename(taskType, 'csv', new Date()),
           );
-          toast.success(`已下載「${formatTicketTypeLabel(taskType)}」範本`);
+          toast.success(`已下載「${needTypeLabel(taskType)}」範本`);
         },
       },
     );
@@ -160,7 +159,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
   };
 
   const summary = preview ? importSummary(preview) : null;
-  const typeLabel = taskType ? formatTicketTypeLabel(taskType) : '';
+  const typeLabel = taskType ? needTypeLabel(taskType) : '';
   const pickFirst = taskType ? undefined : '先選這份檔案是哪一種需求';
 
   return (
@@ -226,7 +225,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
                     <TypeChip
                       key={type}
                       icon={KindIcon ? <KindIcon size={15} /> : undefined}
-                      label={formatTicketTypeLabel(type)}
+                      label={needTypeLabel(type)}
                       active={taskType === type}
                       // A preview still running would land after the switch cleared its file.
                       disabled={busy}

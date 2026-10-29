@@ -24,7 +24,7 @@ describe('needStatusLabel', () => {
 describe('needKindLine and needTakenLine', () => {
   it('reads the type and how many the need asks for', () => {
     expect(needKindLine({ taskType: 'hr', quantity: 4 })).toBe('人力 · 需 4');
-    expect(needKindLine({ taskType: 'rescue', quantity: null })).toBe('救援');
+    expect(needKindLine({ taskType: 'rescue', quantity: null })).toBe('搜救');
   });
 
   it('counts the people on the need against its quantity', () => {
