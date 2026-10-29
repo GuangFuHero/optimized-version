@@ -5405,7 +5405,7 @@
           "批量匯入匯出"
         ],
         "summary": "執行資源站點匯入",
-        "description": "Write the file row by row; failed rows come back as a downloadable report.",
+        "description": "Write the file row by row; failed and held rows come back as a downloadable report.",
         "operationId": "commit_station_import_api_v1_bulk_stations_import_commit_post",
         "security": [
           {
@@ -7585,6 +7585,30 @@
             ],
             "title": "Mapping",
             "description": "preview 確認過的欄位映射 JSON"
+          },
+          "decisions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decisions",
+            "description": "仍要建立的疑似重複列，JSON 陣列：[{line, acknowledged_duplicate_of}]，acknowledged_duplicate_of 是預覽給的 related_uuid。沒列的疑似重複列不建立（ADR-398）"
+          },
+          "declined": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declined",
+            "description": "選了不建立的疑似重複列，列號的 JSON 陣列，例如 [4, 9]：預覽的 suspects 扣掉 decisions 的列，沒決定的也算。這些列一律不建立，送出時引擎沒回答也一樣（ADR-398）"
           }
         },
         "type": "object",
@@ -7612,6 +7636,30 @@
             ],
             "title": "Mapping",
             "description": "preview 確認過的欄位映射 JSON"
+          },
+          "decisions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decisions",
+            "description": "仍要建立的疑似重複列，JSON 陣列：[{line, acknowledged_duplicate_of}]，acknowledged_duplicate_of 是預覽給的 related_uuid。沒列的疑似重複列不建立（ADR-398）"
+          },
+          "declined": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declined",
+            "description": "選了不建立的疑似重複列，列號的 JSON 陣列，例如 [4, 9]：預覽的 suspects 扣掉 decisions 的列，沒決定的也算。這些列一律不建立，送出時引擎沒回答也一樣（ADR-398）"
           }
         },
         "type": "object",
@@ -7776,6 +7824,32 @@
             "type": "array",
             "title": "Partial Rows",
             "description": "主資料已寫入、但後續步驟因權限失敗的列號——這幾列處於半完成狀態"
+          },
+          "suspected": {
+            "type": "integer",
+            "title": "Suspected",
+            "description": "疑似重複、沒確認也不在 declined 裡，所以沒建立的列數，不含跟著它沒建立的後續列（見 suspects 的 followers）。不算在 failed 裡，但在錯誤報告裡",
+            "default": 0
+          },
+          "suspects": {
+            "items": {
+              "$ref": "#/components/schemas/SuspectedRowResponse"
+            },
+            "type": "array",
+            "title": "Suspects",
+            "description": "沒確認也不在 declined 裡的疑似重複列，形狀同預覽（ADR-398）"
+          },
+          "dedup_checked": {
+            "type": "boolean",
+            "title": "Dedup Checked",
+            "description": "要新建的列都跟資料庫比過了。false 是這次沒比完，不代表沒有重複",
+            "default": true
+          },
+          "declined": {
+            "type": "integer",
+            "title": "Declined",
+            "description": "放在 declined、所以沒建立的列數，不含跟著它沒建立的後續列。不算在 failed、suspected 裡，但在錯誤報告裡（ADR-398）",
+            "default": 0
           }
         },
         "type": "object",
@@ -7853,6 +7927,26 @@
             "type": "array",
             "title": "Skipped Columns",
             "description": "設定裡有、但這種檔案存不下的動態欄位（ADR-118）"
+          },
+          "suspected": {
+            "type": "integer",
+            "title": "Suspected",
+            "description": "疑似重複的列數，不含跟著它的後續列（見 suspects 的 followers）；送出時沒確認就不建立，這些列和後續列都不算在 to_create、to_update 裡",
+            "default": 0
+          },
+          "suspects": {
+            "items": {
+              "$ref": "#/components/schemas/SuspectedRowResponse"
+            },
+            "type": "array",
+            "title": "Suspects",
+            "description": "每個疑似重複一筆，照列號排（ADR-398）"
+          },
+          "dedup_checked": {
+            "type": "boolean",
+            "title": "Dedup Checked",
+            "description": "要新建的列都跟資料庫比過了。false 是這次沒比完，不代表沒有重複",
+            "default": true
           }
         },
         "type": "object",
@@ -11448,6 +11542,158 @@
         "type": "object",
         "title": "StepUp",
         "description": "Extra proof required to REPLACE or DELETE a contact (ADR-086/159).\n\nWhich field is required is decided by the backend, never by the client: an account with\na password must send `password`; an SSO-only account must send `old_channel_code`, the\ncode delivered to the contact being changed.\n\n`password` is **already frontend-hashed**, exactly like every other password field on\nthis API, and carries the same `min_length=6` (ADR-166). `_require_step_up` feeds it to\n`verify_password` against a hash derived from the frontend hash, so a plaintext value\ncan only ever come back as \"wrong password\"."
+      },
+      "SuspectedRowResponse": {
+        "properties": {
+          "line": {
+            "type": "integer",
+            "title": "Line",
+            "description": "試算表的列號，表頭是第 1 列"
+          },
+          "row_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Title",
+            "description": "這一列自己的站點名稱或單標題，照檔案寫的；加到既有單的任務，是那張單的標題"
+          },
+          "row_task_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Task Name",
+            "description": "這一列自己的任務名稱；站點是 null"
+          },
+          "related_kind": {
+            "type": "string",
+            "title": "Related Kind",
+            "description": "`station` 或 `ticket_task`"
+          },
+          "related_uuid": {
+            "type": "string",
+            "title": "Related Uuid",
+            "description": "很像的那一筆。送出時放進 `decisions` 的 `acknowledged_duplicate_of`，這一列就仍會建立"
+          },
+          "related_ticket_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Ticket Uuid",
+            "description": "很像的是任務時，它所屬的單"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "很像的那一筆：站點名稱；任務則是它所屬單的標題"
+          },
+          "task_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Name",
+            "description": "很像的那一筆的任務名稱；站點是 null"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type",
+            "description": "站點類型或任務類型"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "站點營運狀態或任務狀態"
+          },
+          "distance_m": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance M",
+            "description": "這一列跟它相距幾公尺"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "followers": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Followers",
+            "description": "這一列建立一張新單時，同一張單後面幾列的列號：這一列不建立，它們也跟著不建立，也不算在 to_create、to_update 裡"
+          }
+        },
+        "type": "object",
+        "required": [
+          "line",
+          "row_title",
+          "row_task_name",
+          "related_kind",
+          "related_uuid",
+          "related_ticket_uuid",
+          "title",
+          "task_name",
+          "type",
+          "status",
+          "distance_m",
+          "created_at"
+        ],
+        "title": "SuspectedRowResponse",
+        "description": "A row that looks like something already there (ADR-398). No similarity, no contact details."
       },
       "SwitchIdentityRequest": {
         "properties": {

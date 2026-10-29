@@ -6,7 +6,7 @@ alone, so a signed-in citizen adds to their own ticket and nobody else's, while 
 keep whatever reach their ticket.edit has. A ticket that is completed takes a new need and is open
 again; a deleted one takes none.
 
-Bulk import adds its needs through `import_ticket_task`, which keeps the rule it had (ticket.add):
+Bulk import checks its needs with `validate_imported_task`, which keeps the rule it had (ticket.add):
 who may import what is the back office's to decide. Both work the ticket's status out afterwards,
 because a completed ticket turns away every claim (ADR-291), so a need added to it must reopen it.
 
@@ -129,19 +129,14 @@ async def _add(
 
 
 async def _import(db, actor: User, ticket_uuid: str, *, quantity: int | None = 3) -> str:
-    """Add a need the way a bulk import does."""
-    task = await ticket_service.import_ticket_task(
-        db,
-        actor=actor,
-        ticket_uuid=ticket_uuid,
-        task_type="hr",
-        task_name="搬家具",
-        task_description=None,
-        quantity=quantity,
-        source="import",
-        route_uuid=None,
+    """Add a need the way a bulk import does (`bulk_import._write_task`). It commits: id taken out first."""
+    fields = await ticket_service.validate_imported_task(
+        db, actor=actor, task_type="hr", task_name="搬家具", task_description=None, quantity=quantity
     )
-    return str(task.uuid)
+    task = await ticket_service.insert_added_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
+    task_uuid = str(task.uuid)
+    await db.commit()
+    return task_uuid
 
 
 async def _needs(db, ticket_uuid: str) -> int:

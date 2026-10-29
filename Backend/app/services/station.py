@@ -224,8 +224,9 @@ async def create_station(
     """Create a station (checkpoint 1 only — a new station has no prior owner to scope-check).
 
     Validate, insert, one commit that makes the station + address pair atomic, then notify.
-    Batch import calls this; the interactive GraphQL path goes through
-    `dedup_submission.submit_new_station`, which adds a duplicate check.
+    No duplicate check, and nothing in `app/` calls it any more: the GraphQL path goes through
+    `dedup_submission.submit_new_station`, and batch import through `bulk_import._create_station`
+    (ADR-398), both of which run the same two steps around one.
     """
     actor_uid = actor.uuid
     fields = await validate_station(
