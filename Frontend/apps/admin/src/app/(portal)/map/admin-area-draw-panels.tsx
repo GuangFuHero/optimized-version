@@ -33,6 +33,8 @@ export interface AreaFormValues {
   kind: RescueMapAreaKind | null;
   name: string;
   note: string;
+  /** 危險區 only: the agency or link the report came from. */
+  informationSource: string;
   teamUuid: string;
   /** 標示區 only: shown on the public map. Off to start with. */
   isPublic: boolean;
@@ -42,6 +44,7 @@ export const EMPTY_AREA_FORM: AreaFormValues = {
   kind: null,
   name: '',
   note: '',
+  informationSource: '',
   teamUuid: '',
   isPublic: false,
 };
@@ -493,6 +496,14 @@ export function AdminAreaFormPanel({
                 : '這一區的狀況、要注意什麼。這一區公開到前台，民眾也看得到。'
             }
           />
+          {kind === 'hazardous_zone' ? (
+            <TextField
+              label="資料來源（選填）"
+              value={values.informationSource}
+              onChange={(event) => set('informationSource', event.target.value)}
+              placeholder="例如：機關名稱或網址"
+            />
+          ) : null}
           {kind === 'mark_zone' ? (
             <Stack>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>

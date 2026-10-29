@@ -723,6 +723,13 @@ mutation AdminUpsertDisasterType($input: UpsertDisasterTypeInput!) {
     label
   }
 }
+# A 危險區's source, which the `areas` list does not carry; read when its detail opens.
+query AdminHazardousZoneSource($uuid: UUID!) {
+  hazardousZone(uuid: $uuid) {
+    uuid
+    informationSource
+  }
+}
 mutation AdminCreateArea($input: CreateAreaInput!) {
   createArea(input: $input) {
     uuid

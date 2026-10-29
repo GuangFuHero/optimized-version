@@ -25,6 +25,13 @@ import { designTokens } from '@rescue-frontend/ui';
 
 const { color, typography } = designTokens;
 
+/** What an area form changes: only what changed is sent. `informationSource` is a 危險區's alone. */
+export interface AreaChanges {
+  name?: string;
+  note?: string | null;
+  informationSource?: string | null;
+}
+
 /** What an admin may do to an area, and how. Absent for someone who may only look. */
 export interface AreaActions {
   canEdit: boolean;
@@ -37,7 +44,7 @@ export interface AreaActions {
   /** Whether the shape has a boundary that can be changed here: one polygon, with no hole. */
   canEditBounds: boolean;
   onEditBounds: () => void;
-  onSave: (changes: { name?: string; note?: string | null }) => void;
+  onSave: (changes: AreaChanges) => void;
   onPromote: () => void;
   onDelete: () => void;
   onAddTeam: (teamUuid: string) => void;
@@ -172,14 +179,17 @@ export function AreaTeamsSection({
   );
 }
 
-/** Name and note, the two a person may change here: only what changed is sent. */
+/** Name, note and, for a 危險區, its source: what a person may change here. Only what changed is sent. */
 export function AreaEditForm({
   item,
+  informationSource,
   onSave,
   onCancel,
 }: {
   item: AdminAreaListItem;
-  onSave: (changes: { name?: string; note?: string | null }) => void;
+  /** A 危險區's source as it stands; the list does not carry it, so the caller reads it. */
+  informationSource?: string | null;
+  onSave: (changes: AreaChanges) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(item.name ?? '');
@@ -188,7 +198,12 @@ export function AreaEditForm({
   const over = length > AREA_LABEL_NAME_MAX;
   const nameChanged = name.trim() !== (item.name ?? '');
   const noteChanged = note.trim() !== (item.note ?? '');
-  const canSave = length > 0 && !over && (nameChanged || noteChanged);
+  const [source, setSource] = useState(informationSource ?? '');
+  const hasSource = item.kind === 'hazardous_zone';
+  const sourceChanged =
+    hasSource && source.trim() !== (informationSource ?? '');
+  const canSave =
+    length > 0 && !over && (nameChanged || noteChanged || sourceChanged);
 
   return (
     <Stack spacing={1.5}>
@@ -211,6 +226,14 @@ export function AreaEditForm({
         multiline
         minRows={3}
       />
+      {hasSource ? (
+        <TextField
+          label="資料來源（選填）"
+          value={source}
+          onChange={(event) => setSource(event.target.value)}
+          placeholder="例如：機關名稱或網址"
+        />
+      ) : null}
       <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
         <Button variant="outlined" onClick={onCancel}>
           取消
@@ -222,6 +245,9 @@ export function AreaEditForm({
             onSave({
               ...(nameChanged ? { name: name.trim() } : {}),
               ...(noteChanged ? { note: note.trim() || null } : {}),
+              ...(sourceChanged
+                ? { informationSource: source.trim() || null }
+                : {}),
             })
           }
         >
@@ -310,7 +336,7 @@ export function AreaDetailFooter({
       <AreaConfirmDialog
         open={confirm === 'promote'}
         title={`把「${name}」升為危險區？`}
-        body="升級後這一區會變成危險區，一律公開到前台，沒有辦法改回標示區。只有按下後的 5 秒內可以復原。"
+        body="升級後這一區會變成危險區，一律公開到前台，沒有辦法改回標示區。"
         confirmLabel="升為危險區"
         onClose={() => setConfirm(null)}
         onConfirm={() => {

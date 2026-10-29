@@ -3602,6 +3602,19 @@ export type AdminUpsertDisasterTypeMutation = {
   };
 };
 
+export type AdminHazardousZoneSourceQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type AdminHazardousZoneSourceQuery = {
+  __typename?: 'Query';
+  hazardousZone?: {
+    __typename?: 'HazardousZoneType';
+    uuid: string;
+    informationSource?: string | null;
+  } | null;
+};
+
 export type AdminCreateAreaMutationVariables = Exact<{
   input: CreateAreaInput;
 }>;
@@ -9292,6 +9305,58 @@ export const AdminUpsertDisasterTypeDocument = {
 } as unknown as DocumentNode<
   AdminUpsertDisasterTypeMutation,
   AdminUpsertDisasterTypeMutationVariables
+>;
+export const AdminHazardousZoneSourceDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminHazardousZoneSource' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'hazardousZone' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'informationSource' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminHazardousZoneSourceQuery,
+  AdminHazardousZoneSourceQueryVariables
 >;
 export const AdminCreateAreaDocument = {
   kind: 'Document',

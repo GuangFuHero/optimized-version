@@ -339,7 +339,12 @@ export function AdminMapPageClient() {
         note: values.note.trim() || null,
         ...(kind === 'team_zone' ? { teamUuid: values.teamUuid } : {}),
         ...(kind === 'mark_zone' ? { isPublic: values.isPublic } : {}),
-        ...(kind === 'hazardous_zone' ? { status: DEFAULT_HAZARD_STATUS } : {}),
+        ...(kind === 'hazardous_zone'
+          ? {
+              status: DEFAULT_HAZARD_STATUS,
+              informationSource: values.informationSource.trim() || null,
+            }
+          : {}),
       };
       const backToForm = () => {
         setHeldPoints(null);

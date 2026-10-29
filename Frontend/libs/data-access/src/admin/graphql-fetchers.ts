@@ -956,6 +956,23 @@ export function useUpsertDisasterType() {
   });
 }
 
+export function useHazardousZoneSource(
+  variables: documents.AdminHazardousZoneSourceQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    queryKey: ['admin', 'areas', 'hazardousZoneSource', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminHazardousZoneSourceDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+    enabled: Boolean(variables.uuid) && options.enabled !== false,
+  });
+}
+
 export function useCreateArea() {
   return useMutation({
     mutationFn: (variables: documents.AdminCreateAreaMutationVariables) =>
@@ -967,12 +984,17 @@ export function useCreateArea() {
 }
 
 export function useUpdateArea() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (variables: documents.AdminUpdateAreaMutationVariables) =>
       adminGraphqlClient
         .mutation(documents.AdminUpdateAreaDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ['admin', 'areas', 'hazardousZoneSource'],
+      }),
   });
 }
 

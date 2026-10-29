@@ -29,6 +29,7 @@ import {
   type AreaActions,
 } from './admin-area-detail-actions';
 import { AreaSwatch } from './area-swatch';
+import { useHazardousZoneSource } from '@rescue-frontend/data-access/admin';
 import { designTokens } from '@rescue-frontend/ui';
 
 const { color, radius, typography } = designTokens;
@@ -442,6 +443,12 @@ export function AdminAreaDetailPanel({
   onSelectTicket: (ticket: RescueMapMarkerItem) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const isHazard = item.kind === 'hazardous_zone';
+  const source = useHazardousZoneSource(
+    { uuid: item.id },
+    { enabled: isHazard },
+  );
+  const informationSource = source.data?.hazardousZone?.informationSource;
 
   return (
     <Stack sx={{ flex: 1, minHeight: 0 }}>
@@ -496,9 +503,10 @@ export function AdminAreaDetailPanel({
         spacing={2.25}
         sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: 2 }}
       >
-        {editing && actions ? (
+        {editing && actions && !(isHazard && source.isPending) ? (
           <AreaEditForm
             item={item}
+            informationSource={informationSource}
             onCancel={() => setEditing(false)}
             onSave={(changes) => {
               setEditing(false);
@@ -509,6 +517,13 @@ export function AdminAreaDetailPanel({
           <Typography sx={{ ...typography.body[300], lineHeight: 1.7 }}>
             {item.note}
           </Typography>
+        ) : null}
+        {isHazard && !editing && informationSource ? (
+          <DetailSection title="資料來源">
+            <Typography sx={{ ...typography.body[300], lineHeight: 1.7 }}>
+              {informationSource}
+            </Typography>
+          </DetailSection>
         ) : null}
         {item.kind === 'team_zone' ? (
           <AreaTeamsSection item={item} actions={actions} />
