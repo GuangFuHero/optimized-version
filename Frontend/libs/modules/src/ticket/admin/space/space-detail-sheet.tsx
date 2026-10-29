@@ -14,11 +14,15 @@ import {
   SheetFrame,
   SheetLayout,
 } from '@rescue-frontend/ui';
-import { Layers, PencilLine, Trash2 } from 'lucide-react';
+import { Layers, PencilLine, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { formatTicketStatusLabel, getTicketStatusTone } from '../../status';
 import { matchFloor } from './floors';
+import {
+  householdActionsShown,
+  type SpaceHouseholdTarget,
+} from './household-input';
 import {
   FLOOR_STATE_LABEL,
   type FloorState,
@@ -61,6 +65,11 @@ export interface SpaceDetailSheetProps {
   onClose: () => void;
   /** A ticket card was clicked: the page opens its own ticket drawer over this sheet. */
   onOpenTicket?: (ticketUuid: string) => void;
+  /**
+   * 新增一戶 / 在這一層新增: the page opens its own ticket form for a household in this space, on
+   * `floor` when one was picked. Without it neither action shows.
+   */
+  onAddHousehold?: (space: SpaceHouseholdTarget, floor?: string) => void;
   onDeleted?: () => void;
 }
 
@@ -73,6 +82,7 @@ export function SpaceDetailSheet({
   uuid,
   onClose,
   onOpenTicket,
+  onAddHousehold,
   onDeleted,
 }: SpaceDetailSheetProps) {
   const { space, isLoading, error } = useSpace(uuid);
@@ -98,6 +108,25 @@ export function SpaceDetailSheet({
         canDelete={caps.canDelete}
         onEdit={() => setEditing(true)}
         onOpenTicket={onOpenTicket}
+        onAddHousehold={
+          onAddHousehold &&
+          householdActionsShown({
+            canAddTicket: caps.canAddTicket,
+            hasHandler: Boolean(onAddHousehold),
+          })
+            ? (floor?: string) =>
+                onAddHousehold(
+                  {
+                    uuid: space.building.uuid,
+                    name: space.building.name,
+                    floorLabels: space.building.floors.map(
+                      (floor) => floor.label,
+                    ),
+                  },
+                  floor,
+                )
+            : undefined
+        }
         onDeleted={() => {
           onClose();
           onDeleted?.();
@@ -137,6 +166,7 @@ function SpaceDetailContent({
   canDelete,
   onEdit,
   onOpenTicket,
+  onAddHousehold,
   onDeleted,
 }: {
   space: LoadedSpace;
@@ -144,6 +174,8 @@ function SpaceDetailContent({
   canDelete: boolean;
   onEdit: () => void;
   onOpenTicket?: (ticketUuid: string) => void;
+  /** Set only when the household actions show. */
+  onAddHousehold?: (floor?: string) => void;
   onDeleted: () => void;
 }) {
   const { building, analysis } = space;
@@ -183,6 +215,18 @@ function SpaceDetailContent({
         ) : undefined
       }
       closeLabel="關閉看各樓層"
+      actions={
+        onAddHousehold ? (
+          <Button
+            variant="outline"
+            size="sm"
+            startIcon={<Plus size={15} />}
+            onClick={() => onAddHousehold()}
+          >
+            新增一戶
+          </Button>
+        ) : undefined
+      }
       footer={
         <>
           {canDelete ? (
@@ -254,6 +298,11 @@ function SpaceDetailContent({
                   key={floor.label}
                   floor={floor}
                   onOpenTicket={onOpenTicket}
+                  onAdd={
+                    onAddHousehold
+                      ? () => onAddHousehold(floor.label)
+                      : undefined
+                  }
                 />
               ))}
               {!showAll && hiddenCount > 0 ? (
@@ -376,11 +425,14 @@ function FloorRow({
   floor,
   stateLabel,
   onOpenTicket,
+  onAdd,
 }: {
   floor: SpaceFloor;
   /** Null for the 「？」 row: it isn't a floor, so it has no state of its own. */
   stateLabel?: null;
   onOpenTicket?: (ticketUuid: string) => void;
+  /** 在這一層新增: a household's needs on this floor. */
+  onAdd?: () => void;
 }) {
   return (
     <Box
@@ -415,7 +467,17 @@ function FloorRow({
           minWidth: 0,
         }}
       >
-        {stateLabel === null ? null : <StateBadge state={floor.state} />}
+        {stateLabel === null && !onAdd ? null : (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {stateLabel === null ? null : <StateBadge state={floor.state} />}
+            <Box sx={{ flex: 1 }} />
+            {onAdd ? (
+              <Button variant="ghost" size="sm" onClick={onAdd}>
+                在這一層新增
+              </Button>
+            ) : null}
+          </Box>
+        )}
         {floor.tickets.map((ticket) => (
           <TicketCard key={ticket.uuid} ticket={ticket} onOpen={onOpenTicket} />
         ))}

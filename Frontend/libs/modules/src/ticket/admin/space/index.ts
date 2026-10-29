@@ -20,3 +20,8 @@ export {
   useSpaces,
   type LoadedSpace,
 } from './use-space-data';
+export {
+  householdLocation,
+  type SpaceHouseholdTarget,
+} from './household-input';
+export { orderFloors } from './floors';
