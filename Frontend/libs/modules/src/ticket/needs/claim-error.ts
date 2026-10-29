@@ -74,6 +74,31 @@ const RELEASE_WORDS: RefusalWords = {
   fallback: '釋出失敗，請稍後再試一次。',
 };
 
+/** `assign_task_actor`'s refusals to a coordinator assigning someone else (指派承接). */
+const ASSIGN_WORDS: RefusalWords = {
+  refusals: {
+    // Filled by a claim since the card was read: the cap binds a coordinator too (ADR-291).
+    'Task is full': '這筆需求已經額滿，無法再指派。',
+    'Task is no longer open': '這筆需求已經結束，無法再指派。',
+    'Actor already assigned to this task': '這位成員已經在這筆需求上了。',
+    // The member's account was removed since the list was read.
+    'User not found': '找不到這位成員的帳號。',
+    'Ticket task not found': '找不到這筆需求，可能已經被刪除。',
+  },
+  forbidden: '你的帳號沒有指派這筆需求的權限。',
+  fallback: '指派失敗，請稍後再試一次。',
+};
+
+/** `unassign_task_actor`'s refusals to a coordinator taking someone off a need. */
+const UNASSIGN_WORDS: RefusalWords = {
+  refusals: {
+    'Recruiting has stopped for this task':
+      '這筆需求已停止招募，承接名單已固定，無法移除。',
+  },
+  forbidden: '你的帳號沒有移除這位承接者的權限。',
+  fallback: '移除失敗，請稍後再試一次。',
+};
+
 /** `stop_recruiting`'s refusals. */
 const STOP_RECRUITING_WORDS: RefusalWords = {
   refusals: {
@@ -131,6 +156,22 @@ export function claimErrorMessage(error: ClaimError): string {
 
 export function releaseErrorMessage(error: ClaimError): string {
   return refusalMessage(error, RELEASE_WORDS);
+}
+
+export function assignErrorMessage(error: ClaimError): string {
+  return refusalMessage(error, ASSIGN_WORDS);
+}
+
+export function unassignErrorMessage(error: ClaimError): string {
+  return refusalMessage(error, UNASSIGN_WORDS);
+}
+
+/**
+ * Whether a refused removal found the place gone already — given back, or removed from another
+ * tab. What was asked for has happened, so the confirmation just closes.
+ */
+export function isAssignmentAlreadyGone(error: ClaimError): boolean {
+  return error.graphQLErrors?.[0]?.message === 'Task assignment not found';
 }
 
 export function stopRecruitingErrorMessage(error: ClaimError): string {
