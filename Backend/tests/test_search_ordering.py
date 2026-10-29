@@ -98,3 +98,25 @@ async def test_list_by_ticket_also_ends_on_the_primary_key():
         f"list_by_ticket ends on {_rendered(last)!r}, which is not unique — append the "
         f"primary key so the order is total (ADR-153)"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("term", _TERMS)
+@pytest.mark.parametrize("viewer_uuid", [None, "00000000-0000-0000-0000-000000000001"])
+async def test_needs_first_only_prepends_its_tier(term, viewer_uuid):
+    """NEEDS_FIRST (ADR-419) puts one key ahead of the order above and leaves the rest as it was.
+
+    The tier is built where the statement is executed, not in _order_by(), so this reads the
+    statement list_active hands the session: one key, then exactly what _order_by() gives,
+    still ending on the primary key.
+    """
+    db = CapturingSession()
+    await TicketRepository().list_active(
+        db, q=term, detail_filters=[], order="needs_first", viewer_uuid=viewer_uuid
+    )
+
+    # With a term, search_timeout sends its own statements around the list query.
+    listed = next(s for s in reversed(db.statements) if getattr(s, "_order_by_clauses", ()))
+    clauses = [_rendered(c) for c in listed._order_by_clauses]
+    assert clauses[1:] == [_rendered(c) for c in TicketRepository()._order_by(term)]
+    assert clauses[0].startswith("CASE"), f"expected the tier first, got {clauses[0]!r}"

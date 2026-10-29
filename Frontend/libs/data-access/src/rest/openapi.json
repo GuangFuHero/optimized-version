@@ -983,7 +983,7 @@
           "認證系統"
         ],
         "summary": "Set Password",
-        "description": "Create a first password identity for an SSO-only account, proof first.\n\nThere is no old password to check here, so before ADR-215 a session was the only thing\nbetween a caller and a brand-new credential. Revoking every session afterwards (ADR-160)\ndoes not close that on its own: the password outlives the session, and whoever minted it\nsigns straight back in with it. So the proof happens *before* the credential exists —\n`require_step_up_for_first_password` delivers a code to the account's own contact, and\nthe first call answers 422 asking for it back.\n\nThe revocation stays (ADR-160): it aligns with `/auth/change-password`, which has always\nrevoked, and it means a session that watched a password being set does not keep running\non the strength of it. The owner is told afterwards, because a first password on an\nSSO-only account is a new permanent way in and must not appear silently.",
+        "description": "Create a first password identity for an SSO-only account, proof first.\n\nThere is no old password to check here, so before ADR-215 a session was the only thing\nbetween a caller and a brand-new credential. Revoking every session afterwards (ADR-160)\ndoes not close that on its own: the password outlives the session, and whoever minted it\nsigns straight back in with it. So the proof happens *before* the credential exists —\n`require_step_up_for_first_password` delivers a code to the account's own contact, and\nthe first call answers 422 asking for it back.\n\nThe revocation stays (ADR-160): it aligns with `/auth/change-password`, which has always\nrevoked, and it means a session that watched a password being set does not keep running\non the strength of it. The owner is told afterwards, because a first password on an\nSSO-only account is a new permanent way in and must not appear silently.\n\nAn account with no verified email or phone is refused before any proof (ADR-401): a password\nsigns in with one of them, so it could never be used.",
         "operationId": "set_password_api_v1_auth_set_password_post",
         "security": [
           {
@@ -1081,7 +1081,7 @@
           "認證系統"
         ],
         "summary": "Reset Password",
-        "description": "Complete a logged-out reset: consume the code, write the new password, revoke all sessions.",
+        "description": "Complete a logged-out reset: consume the code, write the new password, revoke all sessions.\n\nEvery contact on the account is then told, as after `change-password` (ADR-218), not only\nthe one the code went to.",
         "operationId": "reset_password_api_v1_auth_reset_password_post",
         "requestBody": {
           "content": {
@@ -1766,7 +1766,7 @@
           "管理員 API"
         ],
         "summary": "List Users",
-        "description": "List users with every identity they hold, plus last login/activity and live sessions.\n\nFeature 010 replaced the single platform/team role pair with the full identity list\n(ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).\nBoth land in the same row. Built by PlatformUserDirectory (Spec/026).",
+        "description": "List users with every identity they hold, plus last login/activity and live sessions.\n\nFeature 010 replaced the single platform/team role pair with the full identity list\n(ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).\nBoth land in the same row. Built by PlatformUserDirectory (Spec/026). `q`, `platform_role`\nand `team_uuid` narrow it and combine (ADR-412, ADR-432).",
         "operationId": "list_users_api_v1_admin_users_get",
         "security": [
           {
@@ -1780,6 +1780,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Skip"
             }
@@ -1790,9 +1791,74 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 1,
               "default": 100,
               "title": "Limit"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100,
+                  "pattern": "^[^\\x00]*$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the nickname; full and half width match",
+              "title": "Q"
+            },
+            "description": "Part of the nickname; full and half width match"
+          },
+          {
+            "name": "platform_role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "super_admin",
+                    "data_auditor",
+                    "gov",
+                    "ngo",
+                    "user"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First that applies: super_admin, data_auditor, gov (in a gov team), ngo (in a team, none gov), user (no team, no other platform role)",
+              "title": "Platform Role"
+            },
+            "description": "First that applies: super_admin, data_auditor, gov (in a gov team), ngo (in a team, none gov), user (no team, no other platform role)"
+          },
+          {
+            "name": "team_uuid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only those holding a role in this team",
+              "title": "Team Uuid"
+            },
+            "description": "Only those holding a role in this team"
           },
           {
             "name": "X-WG-Realm",
@@ -4491,6 +4557,63 @@
         }
       }
     },
+    "/api/v1/admin/audit-logs/export": {
+      "post": {
+        "tags": [
+          "稽核紀錄"
+        ],
+        "summary": "匯出稽核紀錄（CSV）",
+        "description": "The same filters as the list, as one CSV file (ADR-414). Super admins only.\n\nA POST because every export is recorded (ADR-417): a write, so a browser signed in by cookie has\nto send it from one of our pages (ADR-327), and a link on another site cannot start one.",
+        "operationId": "export_audit_logs_api_v1_admin_audit_logs_export_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The filtered log, newest first",
+            "content": {
+              "text/csv": {}
+            }
+          },
+          "403": {
+            "description": "No audit.export at all (super admins only), or not from one of our pages"
+          },
+          "422": {
+            "description": "audit_export_too_large: too many rows, `matched` and `limit` say how many; or an unknown field or time zone in the body"
+          }
+        }
+      }
+    },
     "/api/v1/admin/teams/{team_uuid}/invites": {
       "post": {
         "tags": [
@@ -7067,6 +7190,11 @@
             "type": "array",
             "title": "Identities"
           },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
           "last_login_at": {
             "anyOf": [
               {
@@ -7107,7 +7235,8 @@
         "required": [
           "uuid",
           "name",
-          "platform_role"
+          "platform_role",
+          "created_at"
         ],
         "title": "AdminUserListItem",
         "description": "One row of the admin user list.\n\n`identities` replaces the old single-valued `team_uuid` / `team_role`: a user can now\nhold a role in several teams at once, so one column cannot describe them (ADR-073)."
@@ -7260,6 +7389,82 @@
         ],
         "title": "AttributionResponse",
         "description": "Schema for map tile source attribution metadata."
+      },
+      "AuditExportRequest": {
+        "properties": {
+          "table": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table"
+          },
+          "row_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Id"
+          },
+          "actor_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Uuid"
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          },
+          "tz": {
+            "type": "string",
+            "title": "Tz",
+            "description": "IANA time zone, e.g. Asia/Taipei",
+            "default": "UTC",
+            "examples": [
+              "Asia/Taipei"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AuditExportRequest",
+        "description": "The filters of an export, the same as the list's (ADR-414).\n\nAll optional; `from` and `to` bound `created_at`, as on the list. A field the export does not\nknow is refused, so a misspelled filter cannot export the whole log (ADR-428). `tz` is the IANA\nzone the file's times and name are written in (ADR-430)."
       },
       "AuditLogItem": {
         "properties": {
@@ -9793,6 +9998,7 @@
           "pre_departure.delete",
           "audit.view",
           "team.audit.view",
+          "audit.export",
           "rbac.view",
           "rbac.assign",
           "rbac.edit"

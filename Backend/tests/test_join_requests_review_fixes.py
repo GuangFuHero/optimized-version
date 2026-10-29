@@ -176,7 +176,10 @@ async def test_approving_while_the_team_is_suspended_settles_one_way(db):
 
 def test_data_auditors_read_applicant_details_masked():
     """ADR-359 point 5: what only reviewers read is replaced, everything else kept."""
-    from app.services.audit_log import REDACTED, redact_applicant_details
+    from app.services.audit_log import REDACTED, mask_values
+
+    def redact_applicant_details(table_name, values):
+        return mask_values(table_name, values, reads_applicant_details=False)
 
     values = {"status": "pending", "applicant_phone": "+886912345678", "reason": "我是…", "contact": None}
 
