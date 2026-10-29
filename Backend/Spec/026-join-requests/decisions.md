@@ -470,3 +470,26 @@ applicant reads it because it is theirs; nothing else about the team is shown (A
 **Consequences**:
 ➕ "My applications" can link to the team an approval founded.
 ➖ One more lookup per approved application listed; an applicant has a handful at most.
+
+---
+
+### ADR-423 The review list's `team_uuid` filter also matches the granted team
+
+> **Status: ACCEPTED (2026-10-29).** Popo, 2026-10-29, in the code review of #157.
+
+**In plain words**: filtering the review list by a team now also lists the new-team application that founded
+it, not only the applications that asked to join it.
+
+**Context**: `GET /api/v1/admin/role-requests?team_uuid=…` compared `team_uuid`, the team applied for. A
+new-team application has `team_uuid = null` (ADR-411), so once approved it was in the list without a filter and
+gone with the filter for the very team it founded. The reviewer asked whether that was meant.
+
+**Decision**: the filter matches when `team_uuid` **or** `granted_team_uuid` is the given team. For a member
+request the two are the same team once approved, so nothing else changes. Who may see a request is unchanged:
+a team admin still sees only member requests for their own team (ADR-354), so the founding application shows
+up for a reviewer holding `role_request.review`, not for the team's admin.
+
+**Consequences**:
+➕ "Everything about this team" is one filter, including how it came to be.
+➖ The filter no longer means "applied for" alone; a client wanting only that can drop rows whose `team_uuid`
+differs. None does: #146's queue reads pending requests, which have no granted team yet.
