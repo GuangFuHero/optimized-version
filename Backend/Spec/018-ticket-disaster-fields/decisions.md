@@ -731,7 +731,10 @@ floor 是 RF、nF、Bn     → 往下驗 room
   - 看得到精確點的單是圖釘，不算進格子。`view_detail` 是 `all` 的人回空清單，不跑 SQL。
   - `statuses` 收 `TicketStatus` enum 的清單（pending／in_progress／completed／cancelled）：地圖可以同時勾好幾個
     狀態，拼錯的值 GraphQL 直接擋。沒傳是全部；傳空清單是一張都不算（把狀態全取消勾選，地圖就是空的）。
+    前台要全部就不送 `statuses`，欄位說明寫明（Dan 2026-10-29 定後端維持這樣）。
     `tickets` 也收同一個 `statuses`，一格的清單跟它的筆數用同一份條件；原本的 `status` 留著給現有的呼叫端。
+  - 同一個狀態傳很多次只算一次：後端先去重、排好再查（HC 2026-10-28 在 #121 提出）。清單每換一種長度就是一句
+    新的 SQL，在每條連線上都要重新規劃；每一項也佔一個 driver 參數，超過 32,767 個整句失敗。去重後最多六種。
   - `urgentCount`：照前端現在的規則（`markers.ts` 的 `resolveTicketVariant`）：priority 去掉前後空白、轉小寫後
     不是 low／medium，而且不是 `in_progress`，就算急件。priority 寫入時不驗證，`High`、`urgent` 在地圖上是紅的，
     格子也要算進去。給數字不給 true／false，前端判斷 `> 0`。

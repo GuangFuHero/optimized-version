@@ -938,7 +938,7 @@ type Query {
     locationCell: String = null
 
     """
-    Only tickets in one of these statuses, as the map's filter ticks several; an empty list matches none, and leaving it out matches every status
+    Only tickets in one of these statuses, as the map's filter ticks several; a status given more than once counts once. Leave it out to match every status, as the site does when its filter means all of them: an empty list matches none
     """
     statuses: [TicketStatus!] = null
   ): TicketConnection!
@@ -951,7 +951,7 @@ type Query {
     zoom: Float = null
 
     """
-    Only tickets in one of these statuses, as the map's filter ticks several; an empty list matches none, and leaving it out matches every status
+    Only tickets in one of these statuses, as the map's filter ticks several; a status given more than once counts once. Leave it out to match every status, as the site does when its filter means all of them: an empty list matches none
     """
     statuses: [TicketStatus!] = null
   ): [TicketCellType!]!

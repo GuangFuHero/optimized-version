@@ -188,6 +188,16 @@ async def test_statuses_narrow_the_count_to_those_given(client):
     assert await _cells(client, {"statuses": []}) == {}
 
 
+async def test_a_status_given_many_times_counts_once(client):
+    """More repeats than the driver takes parameters, and both the count and the list still answer."""
+    await _ticket(HERE)
+    repeated = ["pending"] * 33_000
+
+    assert await _cells(client, {"statuses": repeated}) == {await _cell(HERE): (1, 0)}
+    listed = await _query(client, TICKETS, {"bounds": AREA, "statuses": repeated})
+    assert listed["tickets"]["pageInfo"]["totalCount"] == 1
+
+
 async def test_a_misspelled_status_is_refused(client):
     """An enum, so `in-progress` is turned away by GraphQL rather than silently counting nothing."""
     body = await _post(client, CELLS, {"bounds": AREA, "statuses": ["in-progress"]})

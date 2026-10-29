@@ -50,8 +50,9 @@ _ZOOM_DESCRIPTION = (
     "finer than resolution 8 whatever is sent"
 )
 _STATUSES_DESCRIPTION = (
-    "Only tickets in one of these statuses, as the map's filter ticks several; an empty list matches "
-    "none, and leaving it out matches every status"
+    "Only tickets in one of these statuses, as the map's filter ticks several; a status given more "
+    "than once counts once. Leave it out to match every status, as the site does when its filter means "
+    "all of them: an empty list matches none"
 )
 
 # The most rows one `tickets` page may ask for: the site's map asks for 200 at a time
@@ -74,6 +75,15 @@ async def _detail_filters(info: strawberry.types.Info) -> list:
         )
     )
     return scope_filter(scope, actor=user, model=Tickets)
+
+
+def _status_values(statuses: list[TicketStatus] | None) -> list[str] | None:
+    """`statuses` as values, each once and in one order.
+
+    Every length of the list is its own SQL statement, planned afresh on each connection, and each
+    entry is one driver parameter; repeats would add both without changing a single row.
+    """
+    return None if statuses is None else sorted({s.value for s in statuses})
 
 
 def _list_filters(need_type: str | None, open_needs_only: bool, audit_status: AuditStatus | None) -> list:
@@ -205,7 +215,7 @@ class RequestQuery:
             *_list_filters(need_type, open_needs_only, audit_status),
         ]
         detail_filters = await _detail_filters(info)
-        status_values = None if statuses is None else [s.value for s in statuses]
+        status_values = _status_values(statuses)
         # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
@@ -274,7 +284,7 @@ class RequestQuery:
             rows = await ticket_repository.count_by_cell(
                 db,
                 bounds=bounds,
-                statuses=None if statuses is None else [s.value for s in statuses],
+                statuses=_status_values(statuses),
                 extra_filters=scope_filter(scope, actor=info.context["user"], model=Tickets),
                 detail_filters=detail_filters,
                 coarse_resolution=coarse_resolution(zoom),
