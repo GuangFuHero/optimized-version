@@ -161,6 +161,8 @@ class RequestQuery:
         """
         if limit > TICKET_LIST_MAX_LIMIT:
             raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
+        if limit < 0 or skip < 0:
+            raise ValueError("limit and skip must not be negative")
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = [
@@ -260,6 +262,8 @@ class RequestQuery:
         """
         if limit > TICKET_LIST_MAX_LIMIT:
             raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
+        if limit < 0 or skip < 0:
+            raise ValueError("limit and skip must not be negative")
         scope = await check_permission(info, Perm.TICKET_VIEW)
         # Aliased: a ticket's own row in base_geometries is already in the FROM clause.
         building = aliased(BaseGeometry)

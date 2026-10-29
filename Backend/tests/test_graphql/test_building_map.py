@@ -53,6 +53,11 @@ BUILDING_TICKETS = "query ($uuid: UUID!) { buildingMapTickets(buildingMapUuid: $
 BUILDING_TICKETS_PAGE = """
 query ($uuid: UUID!, $limit: Int!) { buildingMapTickets(buildingMapUuid: $uuid, limit: $limit) { uuid } }
 """
+BUILDING_TICKETS_WINDOW = """
+query ($uuid: UUID!, $skip: Int! = 0, $limit: Int! = 100) {
+  buildingMapTickets(buildingMapUuid: $uuid, skip: $skip, limit: $limit) { uuid }
+}
+"""
 TICKET_BUILDING = "query ($uuid: UUID!) { ticket(uuid: $uuid) { buildingMapUuid } }"
 TICKETS_BUILDING = "query { tickets(limit: 200) { items { uuid buildingMapUuid } } }"
 CREATE_TICKET_BUILDING = """
@@ -497,6 +502,17 @@ async def test_building_map_tickets_take_at_most_a_tickets_page(client, coordina
     assert any("limit must be at most 200" in e["message"] for e in body["errors"]), body
     body = await _gql(client, BUILDING_TICKETS_PAGE, {"uuid": building["uuid"], "limit": 200}, token)
     assert body["data"]["buildingMapTickets"] == []
+
+
+@pytest.mark.parametrize("page", [{"limit": -1}, {"skip": -1}])
+async def test_a_negative_page_is_refused_by_name(client, coordinator_auth, login_user_auth, page):
+    """A negative `limit` or `skip` is named as such, not left to Postgres as "Unexpected error."."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+
+    body = await _gql(client, BUILDING_TICKETS_WINDOW, {"uuid": building["uuid"], **page}, token)
+    assert [e["message"] for e in body["errors"]] == ["limit and skip must not be negative"]
 
 
 async def test_a_deleted_building_lists_no_tickets(client, coordinator_auth, login_user_auth):
