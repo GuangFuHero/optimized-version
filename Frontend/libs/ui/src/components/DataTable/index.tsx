@@ -8,7 +8,7 @@ import {
   type RowData,
   type TableOptions,
 } from '@tanstack/react-table';
-import { Fragment, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { designTokens } from '../../theme';
 
@@ -36,12 +36,6 @@ export interface DataTableProps<TData extends RowData> {
   density?: DataTableDensity;
   minWidth?: number;
   empty?: ReactNode;
-  /**
-   * A full-width block under a row whose id is in `expandedRowIds`. It is not a row of its own:
-   * it takes no focus and its clicks never reach `onRowClick`.
-   */
-  renderExpanded?: (row: TData) => ReactNode;
-  expandedRowIds?: ReadonlySet<string>;
 }
 
 const ROW_PADDING: Record<DataTableDensity, string> = {
@@ -58,8 +52,6 @@ export function DataTable<TData extends RowData>({
   density = 'regular',
   minWidth,
   empty,
-  renderExpanded,
-  expandedRowIds,
 }: DataTableProps<TData>) {
   const table = useTable({
     features: dataTableFeatures,
@@ -127,70 +119,50 @@ export function DataTable<TData extends RowData>({
 
         {rows.length === 0
           ? empty
-          : rows.map((row) => {
-              const expanded =
-                renderExpanded !== undefined &&
-                (expandedRowIds?.has(row.id) ?? false);
-              return (
-                <Fragment key={row.id}>
+          : rows.map((row) => (
+              <Box
+                key={row.id}
+                role="row"
+                tabIndex={onRowClick ? 0 : undefined}
+                onClick={
+                  onRowClick ? () => onRowClick(row.original) : undefined
+                }
+                onKeyDown={
+                  onRowClick
+                    ? (event) => {
+                        // Only the row itself: an Enter on a button or field inside it is that
+                        // control's own.
+                        if (
+                          event.key === 'Enter' &&
+                          event.target === event.currentTarget
+                        )
+                          onRowClick(row.original);
+                      }
+                    : undefined
+                }
+                sx={[
+                  {
+                    ...gridSx,
+                    p: ROW_PADDING[density],
+                    cursor: onRowClick ? 'pointer' : 'default',
+                    transition: `background-color ${motion.transition.fast}`,
+                    '&:hover': { bgcolor: color.bg.neutral.subtle },
+                    '&:last-of-type': { borderBottom: 'none' },
+                  },
+                  ...(getRowSx ? [getRowSx(row.original)].flat() : []),
+                ]}
+              >
+                {row.getAllCells().map((cell) => (
                   <Box
-                    role="row"
-                    tabIndex={onRowClick ? 0 : undefined}
-                    onClick={
-                      onRowClick ? () => onRowClick(row.original) : undefined
-                    }
-                    onKeyDown={
-                      onRowClick
-                        ? (event) => {
-                            // Only the row itself: an Enter on a button or field inside it is that
-                            // control's own.
-                            if (
-                              event.key === 'Enter' &&
-                              event.target === event.currentTarget
-                            )
-                              onRowClick(row.original);
-                          }
-                        : undefined
-                    }
-                    sx={[
-                      {
-                        ...gridSx,
-                        p: ROW_PADDING[density],
-                        cursor: onRowClick ? 'pointer' : 'default',
-                        transition: `background-color ${motion.transition.fast}`,
-                        '&:hover': { bgcolor: color.bg.neutral.subtle },
-                        '&:last-of-type': { borderBottom: 'none' },
-                      },
-                      ...(expanded ? [{ borderBottom: 'none' }] : []),
-                      ...(getRowSx ? [getRowSx(row.original)].flat() : []),
-                    ]}
+                    key={cell.id}
+                    role="cell"
+                    sx={cellSx(cell.column.columnDef.meta)}
                   >
-                    {row.getAllCells().map((cell) => (
-                      <Box
-                        key={cell.id}
-                        role="cell"
-                        sx={cellSx(cell.column.columnDef.meta)}
-                      >
-                        <table.FlexRender cell={cell} />
-                      </Box>
-                    ))}
+                    <table.FlexRender cell={cell} />
                   </Box>
-                  {expanded ? (
-                    <Box
-                      role="row"
-                      sx={{
-                        p: ROW_PADDING[density],
-                        pt: 0,
-                        borderBottom: `1px solid ${color.border.default}`,
-                        '&:last-of-type': { borderBottom: 'none' },
-                      }}
-                    >
-                      <Box role="cell">{renderExpanded(row.original)}</Box>
-                    </Box>
-                  ) : null}
-                </Fragment>
-              );
-            })}
+                ))}
+              </Box>
+            ))}
       </Box>
     </Box>
   );
