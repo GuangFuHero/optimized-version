@@ -67,6 +67,11 @@ export function StationManagementPage() {
     [searchParams],
   );
   const filters = useMemo(() => parseStationFilters(params), [params]);
+  // The filters alone, as one string: the map frames its stations again only when this changes.
+  const filtersKey = useMemo(
+    () => writeStationFilters(new URLSearchParams(), filters).toString(),
+    [filters],
+  );
   const view: StationView = params.get('view') === 'map' ? 'map' : 'table';
   const caps = useStationCapabilities();
   const now = useNow();
@@ -199,6 +204,8 @@ export function StationManagementPage() {
             {view === 'map' ? (
               <StationMapView
                 rows={rows}
+                filtersKey={filtersKey}
+                loading={stations.isPending}
                 hasAnyStation={hasAnyStation}
                 now={now}
                 selectedUuid={selectedUuid}

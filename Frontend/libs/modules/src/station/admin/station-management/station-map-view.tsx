@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
   type Ref,
+  type RefObject,
 } from 'react';
 
 import { Map } from '../../../map';
@@ -25,6 +26,7 @@ import type {
   RescueMapControllerValue,
   RescueMapMarkerItem,
 } from '../../../map/types';
+import { decideStationFit } from './model/station-map-fit';
 import {
   getPresentStationTypes,
   getStationTypePinColor,
@@ -49,6 +51,10 @@ const OVERLAY_INSET = 12;
 
 interface StationMapViewProps {
   rows: StationRow[];
+  /** The filters `rows` were picked by, as one string: the map frames them again when it changes. */
+  filtersKey: string;
+  /** The stations for these filters are still being read. */
+  loading: boolean;
   hasAnyStation: boolean;
   now: Date;
   selectedUuid: string | null;
@@ -62,6 +68,8 @@ interface StationMapViewProps {
 
 export function StationMapView({
   rows,
+  filtersKey,
+  loading,
   hasAnyStation,
   now,
   selectedUuid,
@@ -72,6 +80,8 @@ export function StationMapView({
   onImport,
 }: StationMapViewProps) {
   const [leafletMap, setLeafletMap] = useState<LeafletMap | null>(null);
+  // Whether the map opened where this browser last left it; set with the map, before it is used.
+  const restoredRef = useRef(false);
   const zoom = useMapZoom(leafletMap);
   const markers = useMemo(
     () =>
@@ -83,7 +93,11 @@ export function StationMapView({
   const legend = useMemo(() => getPresentStationTypes(rows), [rows]);
   const selectedRow = rows.find((row) => row.uuid === selectedUuid) ?? null;
 
-  useFitStations(leafletMap, markers, selectedUuid);
+  useFitStations(leafletMap, markers, selectedUuid, {
+    filtersKey,
+    loading,
+    restoredRef,
+  });
   useFlyToSelected(leafletMap, markers, selectedUuid);
 
   // The zoom buttons step down below the card while it is open (prototype station-map.jsx:193-199).
@@ -182,7 +196,11 @@ export function StationMapView({
           showZoomControl
           clusterAppearance="solid"
           clusterMaxZoom={CLUSTER_MAX_ZOOM}
-          onMapReady={setLeafletMap}
+          viewMemoryKey="station"
+          onMapReady={(map, { restored }) => {
+            restoredRef.current = restored;
+            setLeafletMap(map);
+          }}
           onMapClick={onAddAt}
           renderControls={(controller) => (
             <SelectionSync
@@ -226,32 +244,49 @@ function useMapZoom(map: LeafletMap | null): number | null {
 }
 
 /**
- * Frames the filtered stations whenever the set of points changes — unless one is selected, which
- * the view is then following (prototype station-map.jsx:181-188).
+ * Frames the filtered stations once they are read, and again only when the filters change
+ * (`decideStationFit`): not over the view the map was left at, nor over a selected station.
  */
 function useFitStations(
   map: LeafletMap | null,
   markers: readonly RescueMapMarkerItem[],
   selectedUuid: string | null,
+  {
+    filtersKey,
+    loading,
+    restoredRef,
+  }: {
+    filtersKey: string;
+    loading: boolean;
+    restoredRef: RefObject<boolean>;
+  },
 ) {
-  const pointsKey = markers
-    .map((marker) => `${marker.position[0]},${marker.position[1]}`)
-    .join(';');
+  const framedKeyRef = useRef<string | null>(null);
   const selectedRef = useRef(selectedUuid);
   selectedRef.current = selectedUuid;
   const markersRef = useRef(markers);
   markersRef.current = markers;
 
   useEffect(() => {
-    if (!map || selectedRef.current) return;
+    if (!map) return;
     const points = markersRef.current.map((marker) => marker.position);
-    if (points.length === 0) return;
+    const step = decideStationFit({
+      filtersKey,
+      framedKey: framedKeyRef.current,
+      loading,
+      restored: restoredRef.current,
+      selected: Boolean(selectedRef.current),
+      pointCount: points.length,
+    });
+    if (step === 'wait') return;
+    framedKeyRef.current = filtersKey;
+    if (step === 'keep') return;
     if (points.length === 1) {
       map.setView(points[0], 15);
     } else {
       map.fitBounds(points, { padding: [48, 48] });
     }
-  }, [map, pointsKey]);
+  }, [map, filtersKey, loading, restoredRef]);
 }
 
 /** Brings a newly selected station into view, close enough to see it apart from its neighbours. */

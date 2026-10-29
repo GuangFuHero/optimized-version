@@ -1,0 +1,52 @@
+export interface StationFitInput {
+  /** The filters the shown stations were picked by, as one string. */
+  filtersKey: string;
+  /** The filters last framed, or left alone on purpose; null until the map first settles. */
+  framedKey: string | null;
+  /** The stations for `filtersKey` are still being read. */
+  loading: boolean;
+  /** The map opened where this browser last left it (MAP-VIEW-104). */
+  restored: boolean;
+  /** A station is selected: the view follows it instead. */
+  selected: boolean;
+  /** Shown stations that have a point. */
+  pointCount: number;
+}
+
+/**
+ * `frame`: fit the stations and count these filters as handled. `keep`: count them as handled and
+ * leave the view. `wait`: do nothing yet.
+ */
+export type StationFitStep = 'frame' | 'keep' | 'wait';
+
+/**
+ * Whether the station map frames its stations now (prototype station-map.jsx:106-198, MAP-VIEW-104).
+ *
+ * Only a change of filters frames again. The prototype compares the filtered stations themselves,
+ * but its data never changes on its own; here the list is read again after every add, edit or
+ * delete, and freshness moves with the clock, so comparing stations would pull the map back each
+ * time — and the first read after opening where the map was left would count as a change.
+ */
+export function decideStationFit({
+  filtersKey,
+  framedKey,
+  loading,
+  restored,
+  selected,
+  pointCount,
+}: StationFitInput): StationFitStep {
+  if (loading || framedKey === filtersKey) {
+    return 'wait';
+  }
+
+  // Opened where it was left: the first stations do not move it.
+  if (framedKey === null && restored) {
+    return 'keep';
+  }
+
+  if (selected || pointCount === 0) {
+    return 'keep';
+  }
+
+  return 'frame';
+}

@@ -266,8 +266,11 @@ interface MapProps {
   clusterAppearance?: RescueMapClusterAppearance;
   /** Opt-in: markers stop clustering above this zoom (read once). Default: they always cluster. */
   clusterMaxZoom?: number;
-  /** Opt-in: receives the Leaflet map once it is built, for callers that steer it themselves. */
-  onMapReady?: (map: LeafletMap) => void;
+  /**
+   * Opt-in: receives the Leaflet map once it is built, for callers that steer it themselves, and
+   * whether it opened where this browser last left it (`viewMemoryKey`).
+   */
+  onMapReady?: (map: LeafletMap, opening: { restored: boolean }) => void;
   /**
    * Which map this is, for it to open where this browser last left it (MAP-VIEW-104). Not given, it
    * remembers nothing and opens at the event's view.
@@ -316,6 +319,18 @@ export const Map = memo(function Map({
   openedUnderRef.current = openedUnder;
   const eventViewRef = useRef(eventView);
   eventViewRef.current = eventView;
+  const openingRef = useRef(opening);
+  openingRef.current = opening;
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
+
+  // The canvas is built once the opening is worked out (or at a position in the address), and reads
+  // this once, as it is built.
+  const handleMapReady = useCallback((map: LeafletMap) => {
+    onMapReadyRef.current?.(map, {
+      restored: openingRef.current?.restored ?? false,
+    });
+  }, []);
 
   const rememberView = useCallback(
     (view: RescueMapView) => {
@@ -484,7 +499,7 @@ export const Map = memo(function Map({
               clusterAppearance={clusterAppearance}
               clusterMaxZoom={clusterMaxZoom}
               zoomControlPosition={showZoomControl ? 'topright' : undefined}
-              onMapReady={onMapReady}
+              onMapReady={onMapReady ? handleMapReady : undefined}
               viewportStore={viewportStore}
               draftPoint={draftPoint}
               onDraftPointChange={onDraftPointChange}
