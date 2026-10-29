@@ -356,7 +356,7 @@ function SpaceEditForm({
         />
 
         {/* The backend's UpdateBuildingMapInput has no address (BE-036 gap); shown, not editable. */}
-        <Labeled label="地址" hint="地址目前不能改（後端還沒有）">
+        <Labeled label="地址" hint="地址建立後不能修改">
           {(id) => (
             <TextField
               id={id}

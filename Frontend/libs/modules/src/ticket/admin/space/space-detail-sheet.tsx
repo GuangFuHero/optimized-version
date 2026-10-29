@@ -348,7 +348,7 @@ function SpaceDetailContent({
                     mt: '-4px',
                   }}
                 >
-                  「？」＝通報的人不知道在幾樓（後端允許不填）
+                  「？」＝通報的人不知道在幾樓（樓層可以不填）
                 </Typography>
               </>
             ) : null}
