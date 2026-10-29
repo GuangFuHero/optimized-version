@@ -116,7 +116,7 @@ const OPEN_BLUE = designTokens.color.brand.secondary.default;
 const GREYED = designTokens.color.fg.neutral.muted;
 
 /**
- * One row of the page (design A1, 糖 10-27): its name and a line about it, opened to show what it asks.
+ * One row of the page (design A1): its name and a line about it, opened to show what it asks.
  * The whole row opens it, not only 打開; an open row turns blue, says 收起, and ends in 取消, which closes
  * it. A row that cannot be used here is grey, says why under it, and does not open.
  */
@@ -135,7 +135,7 @@ function SecurityRow({
   open: boolean;
   /** Why the row cannot be used here, shown under it in place of 打開. */
   blocked?: string | null;
-  /** The row's header, for the page to put focus back on (HC, #144). */
+  /** The row's header, for the page to put focus back on. */
   headerRef?: React.RefObject<HTMLButtonElement | null>;
   onOpen: () => void;
   onClose: () => void;
@@ -155,8 +155,13 @@ function SecurityRow({
       >
         {title}
       </Typography>
+      {/* An email in it can be longer than a phone is wide. */}
       <Typography
-        sx={{ ...BODY_TEXT, color: blocked ? GREYED : BODY_TEXT.color }}
+        sx={{
+          ...BODY_TEXT,
+          color: blocked ? GREYED : BODY_TEXT.color,
+          overflowWrap: 'anywhere',
+        }}
       >
         {summary}
       </Typography>
@@ -321,13 +326,13 @@ export function AccountSecurityClient({
     stillPending: (type) =>
       oldCodeStillPending(originalContactName(contacts, type)),
     onReauth: (draft) => void goProveAtLine('add_contact', draft),
-    // Done: back to the list, with what was done over it (design ⑫) and no warning about it (Seaweed,
-    // #144). The account's contacts are read again, the new one among them. Focus goes to the row's
-    // header: the button just pressed goes away with step 3 (HC, #144).
+    // The account's contacts are read again, the new one among them.
+    onChanged: () => router.refresh(),
+    // Done: back to the list, with what was done over it (design ⑫) and no warning about it. Focus goes
+    // to the row's header: the button just pressed goes away with step 3.
     onVerified: () => {
       setContactKind(null);
       contactHeader.current?.focus();
-      router.refresh();
     },
   });
   const resumeContact = contact.resume;
@@ -540,7 +545,7 @@ export function AccountSecurityClient({
   }
 
   async function handleLogoutAllAsync() {
-    // This tab is signed out by the person's choice too, as by 登出 in the menu (HC, #144).
+    // This tab is signed out by the person's choice too, as by 登出 in the menu.
     clearDraftsOnSignOut(sessionStorageOrNull());
     setIsLoggingOutAll(true);
 
@@ -763,8 +768,10 @@ export function AccountSecurityClient({
                       {held?.value ?? '還沒有'}
                     </Typography>
                   </Box>
+                  {/* Both can read 更換: the name says which, with the word on the button in it. */}
                   <Button
                     variant="outlined"
+                    aria-label={`${held ? '更換' : '新增'}${contactName(type)}`}
                     sx={{ minHeight: 44, minWidth: 88, fontSize: 16 }}
                     onClick={() => {
                       setContactKind(type);

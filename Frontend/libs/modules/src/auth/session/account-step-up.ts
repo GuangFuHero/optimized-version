@@ -89,8 +89,8 @@ export function cannotProveHere(
 
 /**
  * Why 設定登入密碼 is closed, or null when it is open. A password signs in with an email or a phone, so an
- * account with neither could not use one (Carol and 糖, 2026-10-27): it adds one first. Google only cannot
- * add one here either (`cannotProveHere`).
+ * account with neither could not use one: it adds one first. Google only cannot add one here either
+ * (`cannotProveHere`).
  */
 export function setPasswordBlocked(
   contacts: readonly AccountContact[],
@@ -127,7 +127,7 @@ export function replacedContact(
 }
 
 /**
- * 更換's warning, over its first button (design A1, 10-28): the contact that goes, with its address — the
+ * 更換's warning, over its first button (design A1): the contact that goes, with its address — the
  * person's own, from `/users/me`. 新增 has none.
  */
 export function replaceNotice(
@@ -139,7 +139,7 @@ export function replaceNotice(
   const notice = `換好之後，原本的 ${replaced.value} 就不能再用。`;
 
   // A password signs in with an email or a phone (`authenticate_password`), whichever the person
-  // types; only someone who types this kind has to change (Seaweed, #144).
+  // types; only someone who types this kind has to change.
   return signsInWithPassword
     ? `${notice}如果你是用${name}登入，以後登入要打新的${name}。`
     : notice;
@@ -147,7 +147,7 @@ export function replaceNotice(
 
 /**
  * The account's own email or phone typed again. The backend counts it as in use (`is_value_taken`) and
- * would say so only after the password or the first code, as if another account had it (HC, #144).
+ * would say so only after the password or the first code, as if another account had it.
  */
 export function sameAsCurrentContact(
   current: Pick<AccountContact, 'value'> | null,
@@ -233,8 +233,8 @@ export function addContactSteps(type: AuthIdentityType): readonly string[] {
 }
 
 /**
- * Where the first code went, without the address: the backend's sentence does not name it, and Carol kept
- * the design's four backend questions to V1 (design A2-4).
+ * Where the first code went, without the address: the backend's sentence does not name it, and naming it
+ * is one of the design's backend questions left out of V1 (design A2-4).
  */
 export function oldCodeSentText(name: string, pending: boolean): string {
   return pending
@@ -244,7 +244,7 @@ export function oldCodeSentText(name: string, pending: boolean): string {
 
 /**
  * 沒收到？重新寄一次 on the first code: the backend sends another only once the one out has run out
- * (ADR-165, `OTP_TTL_SECONDS`), so the person is told where to look again (design A1, 10-28). No address:
+ * (ADR-165, `OTP_TTL_SECONDS`), so the person is told where to look again (design A1). No address:
  * the backend does not give it.
  */
 export function oldCodeStillPending(name: string): string {
@@ -346,7 +346,7 @@ export type AddContactStep =
   | 'resend';
 
 /**
- * A refusal only step 1 gets past (HC, #144): the address is in use, which the backend can say at any step
+ * A refusal only step 1 gets past: the address is in use, which the backend can say at any step
  * — first at step 2 for a password account, or once someone else has claimed it while the code was out —
  * or no code is left to send again (`no_pending_contact`: it ran out, or was guessed wrong too often),
  * which only 寄驗證碼 starts afresh.

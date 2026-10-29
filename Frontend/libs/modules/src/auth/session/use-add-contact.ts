@@ -57,7 +57,9 @@ interface AddContactOptions {
   stillPending: (type: AuthIdentityType) => string;
   /** Only LINE can prove it is them (ADR-361): keep the contact and go to LINE. */
   onReauth: (draft: ContactDraft) => void;
-  /** The contact is on the account now. */
+  /** The account's contacts changed, whether or not the person is still waiting on it. */
+  onChanged: () => void;
+  /** The contact is on the account now, and the person is still on the step that asked for it. */
   onVerified: () => void;
 }
 
@@ -72,6 +74,7 @@ export function useAddContact({
   current,
   stillPending,
   onReauth,
+  onChanged,
   onVerified,
 }: AddContactOptions) {
   const [type, setType] = useState<AuthIdentityType>('email');
@@ -86,6 +89,9 @@ export function useAddContact({
   onReauthRef.current = onReauth;
   const stillPendingRef = useRef(stillPending);
   stillPendingRef.current = stillPending;
+  // One more on every 取消 and every other 更換 or 新增: an answer that comes back after it belongs to
+  // steps the person has left, and is dropped rather than put back on the page.
+  const attempt = useRef(0);
 
   const fail = (message: string) => setProblem({ message, tone: 'error' });
 
@@ -96,6 +102,7 @@ export function useAddContact({
       stepUp?: StepUp,
       { backFromLine = false, resending = false } = {},
     ) => {
+      const asked = attempt.current;
       const normalized = normalizeIdentityValue(draft.type, draft.value);
       setBusy(true);
       setProblem(null);
@@ -107,8 +114,17 @@ export function useAddContact({
           value: normalized,
           step_up: stepUp,
         });
+
+        if (asked !== attempt.current) {
+          return;
+        }
+
         setStage({ kind: 'code', type: draft.type, value: normalized });
       } catch (cause) {
+        if (asked !== attempt.current) {
+          return;
+        }
+
         const code = cause instanceof ApiError ? cause.code : undefined;
 
         if (code === 'step_up_reauth_required') {
@@ -154,7 +170,10 @@ export function useAddContact({
           tone: 'error',
         });
       } finally {
-        setBusy(false);
+        // 取消 already let go of it, and a newer request may be the one waiting now.
+        if (asked === attempt.current) {
+          setBusy(false);
+        }
       }
     },
     [],
@@ -193,6 +212,7 @@ export function useAddContact({
       return;
     }
 
+    const asked = attempt.current;
     setBusy(true);
 
     try {
@@ -200,8 +220,18 @@ export function useAddContact({
         saltIdentity,
         password,
       );
+
+      // Left while the password was being checked: nothing goes out for steps no longer on the page.
+      if (asked !== attempt.current) {
+        return;
+      }
+
       await request({ type, value }, 'password', { password: hashedPassword });
     } catch (cause) {
+      if (asked !== attempt.current) {
+        return;
+      }
+
       setBusy(false);
       fail(addContactErrorMessage(cause, 'password'));
     }
@@ -227,6 +257,7 @@ export function useAddContact({
       return;
     }
 
+    const asked = attempt.current;
     setBusy(true);
     setProblem(null);
     setNotice(null);
@@ -237,6 +268,13 @@ export function useAddContact({
         value: stage.value,
         code: code.trim(),
       });
+      // On the account whether or not the person is still here, so the list is read again either way.
+      onChanged();
+
+      if (asked !== attempt.current) {
+        return;
+      }
+
       setStage({ kind: 'enter' });
       setValue('');
       setNotice(
@@ -244,13 +282,19 @@ export function useAddContact({
       );
       onVerified();
     } catch (cause) {
+      if (asked !== attempt.current) {
+        return;
+      }
+
       if (startsOverAtFirstStep(cause)) {
         setStage({ kind: 'enter' });
       }
 
       fail(addContactErrorMessage(cause, 'code'));
     } finally {
-      setBusy(false);
+      if (asked === attempt.current) {
+        setBusy(false);
+      }
     }
   };
 
@@ -260,14 +304,24 @@ export function useAddContact({
       return;
     }
 
+    const asked = attempt.current;
     setBusy(true);
     setProblem(null);
     setNotice(null);
 
     try {
       await resendContactAsync({ type: stage.type, value: stage.value });
+
+      if (asked !== attempt.current) {
+        return;
+      }
+
       setNotice('驗證碼已經重新寄出。');
     } catch (cause) {
+      if (asked !== attempt.current) {
+        return;
+      }
+
       // The code ran out or was guessed wrong too often, or the address was taken meanwhile.
       if (startsOverAtFirstStep(cause)) {
         setStage({ kind: 'enter' });
@@ -275,13 +329,20 @@ export function useAddContact({
 
       fail(addContactErrorMessage(cause, 'resend'));
     } finally {
-      setBusy(false);
+      if (asked === attempt.current) {
+        setBusy(false);
+      }
     }
   };
 
-  /** 取消: back to step 1 with what was typed, as a code waits under the contact it went to. */
+  /**
+   * 取消: back to step 1 with what was typed, as a code waits under the contact it went to. Whatever was
+   * still on its way is let go of.
+   */
   const cancel = () => {
+    attempt.current += 1;
     setStage({ kind: 'enter' });
+    setBusy(false);
     setProblem(null);
     setNotice(null);
   };
