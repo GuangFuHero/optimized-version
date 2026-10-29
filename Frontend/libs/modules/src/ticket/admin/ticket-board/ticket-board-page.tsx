@@ -7,11 +7,9 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import { designTokens } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Upload } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
-import { ToolbarButton } from '../../../admin/shared/toolbar-button';
 import { useNow } from '../../../admin/shared/use-now';
 import { ViewSwitch, type BoardView } from '../../../admin/shared/view-switch';
 import { AdminHeaderSlot } from '../../../shell/admin/header';
@@ -20,6 +18,7 @@ import { useTicketRows } from './hooks/use-ticket-rows';
 import {
   countActiveFilters,
   EMPTY_TICKET_FILTERS,
+  listsEveryTicket,
   pageCountOf,
   parseTicketFilters,
   parseTicketPage,
@@ -31,7 +30,8 @@ import {
 } from './model/ticket-filters';
 import { toTicketStats } from './model/ticket-stats';
 import { TicketCreateSheet } from './ticket-create-sheet';
-import { TicketDetailSheet } from './ticket-detail-sheet';
+import type { TicketRow } from './model/ticket-row';
+import { DeleteTicketConfirm, TicketDetailSheet } from './ticket-detail-sheet';
 import { TicketMapView } from './ticket-map-view';
 import { TicketFilterPanel } from './ticket-filter-panel';
 import { TicketStatsStrip } from './ticket-stats-strip';
@@ -42,7 +42,7 @@ import { TicketToolbar } from './ticket-toolbar';
 
 const { color } = designTokens;
 
-const PAGE_HELP = '檢視並處理民眾送來的求助單';
+const PAGE_HELP = '檢視並處理各地點的任務單與需求';
 
 // The station page's frame: 12px 28px 28px around a centred 1200px column.
 const FRAME_GAP = '12px';
@@ -137,6 +137,16 @@ export function TicketBoardPage() {
   const [editingUuid, setEditingUuid] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  // 刪除任務單 from a row's ⋯: the drawer's own confirm, for that row's ticket.
+  const [deleting, setDeleting] = useState<TicketRow | null>(null);
+  // 編輯任務單 from a row's ⋯: the drawer, opened on that ticket, in its edit form.
+  const editTicket = useCallback(
+    (uuid: string) => {
+      setEditingUuid(uuid);
+      openTicket(uuid);
+    },
+    [openTicket],
+  );
 
   return (
     <>
@@ -172,13 +182,8 @@ export function TicketBoardPage() {
               onClear={() => setFilters(EMPTY_TICKET_FILTERS)}
               count={count}
               onCreate={caps.canAdd ? () => setCreating(true) : undefined}
+              onImport={() => setImportOpen(true)}
               exportControl={<TicketExportMenu />}
-              importControl={
-                <ToolbarButton onClick={() => setImportOpen(true)}>
-                  <Upload size={16} />
-                  匯入
-                </ToolbarButton>
-              }
             />
           </Stack>
         }
@@ -204,6 +209,7 @@ export function TicketBoardPage() {
                 rows={tickets.rows}
                 loading={tickets.isPending}
                 failed={tickets.error != null}
+                unfiltered={listsEveryTicket(filters)}
                 retrying={tickets.isFetching}
                 onRetry={() => {
                   void tickets.refetch();
@@ -216,6 +222,9 @@ export function TicketBoardPage() {
                   setParam('page', next > 1 ? String(next) : null)
                 }
                 onOpenTicket={openTicket}
+                onEditTicket={editTicket}
+                onDeleteTicket={setDeleting}
+                onCreate={caps.canAdd ? () => setCreating(true) : undefined}
               />
             )}
           </Box>
@@ -239,6 +248,22 @@ export function TicketBoardPage() {
           openTicket(null);
         }}
       />
+      {deleting ? (
+        <DeleteTicketConfirm
+          open
+          ticket={{ uuid: deleting.uuid, tasks: deleting.raw.tasks }}
+          title={deleting.title}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            // The drawer on the same ticket closes with it.
+            if (viewedUuid === deleting.uuid) {
+              setEditingUuid(null);
+              openTicket(null);
+            }
+            setDeleting(null);
+          }}
+        />
+      ) : null}
       <TicketCreateSheet
         open={creating && caps.canAdd}
         onClose={() => setCreating(false)}

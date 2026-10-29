@@ -5,33 +5,36 @@ import { TICKET_COLUMNS, visibleTicketColumns } from './ticket-columns';
 describe('ticket columns', () => {
   it('fixes one global column order', () => {
     expect(visibleTicketColumns().map((c) => c.id)).toEqual([
-      'expand',
       'priority',
-      'title',
-      'area',
-      'status',
+      'ticket',
       'needs',
-      'gap',
-      'audit',
       'updated',
-      'open',
+      'status',
+      'team',
+      'menu',
     ]);
   });
 
-  it('labels the columns', () => {
+  it('labels the columns as the design does', () => {
     const labels = Object.fromEntries(
       visibleTicketColumns().map((c) => [c.id, c.label]),
     );
     expect(labels).toMatchObject({
-      priority: '優先度',
-      title: '求助單',
-      area: '行政區',
+      priority: '優先級',
+      ticket: '任務',
+      needs: '需求 · 承接進度',
+      updated: '更新時間',
       status: '狀態',
-      needs: '需求',
-      gap: '志工缺口',
-      audit: '審核',
-      updated: '最後更新',
+      team: '指派 Team',
     });
+  });
+
+  it('never scrolls sideways: every flexible track can shrink to nothing', () => {
+    for (const column of TICKET_COLUMNS) {
+      if (column.width.includes('fr')) {
+        expect(column.width).toMatch(/^minmax\(0, /);
+      }
+    }
   });
 
   it('has unique ids', () => {

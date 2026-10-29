@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countActiveFilters,
   differsOnlyIn,
+  listsEveryTicket,
   EMPTY_TICKET_FILTERS,
   pageCountOf,
   parseTicketFilters,
@@ -217,5 +218,21 @@ describe('ticket filters', () => {
     expect(
       toExtentVariables({ ...EMPTY_TICKET_FILTERS, status: 'pending' }),
     ).toEqual({ status: 'pending' });
+  });
+});
+
+describe('listsEveryTicket', () => {
+  it('holds with no filter and no keyword the server takes', () => {
+    expect(listsEveryTicket(EMPTY_TICKET_FILTERS)).toBe(true);
+    expect(listsEveryTicket({ ...EMPTY_TICKET_FILTERS, q: '水' })).toBe(true);
+  });
+
+  it('fails with a filter or a keyword', () => {
+    expect(
+      listsEveryTicket({ ...EMPTY_TICKET_FILTERS, priority: 'high' }),
+    ).toBe(false);
+    expect(listsEveryTicket({ ...EMPTY_TICKET_FILTERS, q: '淹水' })).toBe(
+      false,
+    );
   });
 });

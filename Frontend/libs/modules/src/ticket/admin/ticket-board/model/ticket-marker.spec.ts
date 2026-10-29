@@ -154,7 +154,7 @@ describe('toCreatedTicketMarker', () => {
       created({ priority: 'low', title: ' ', description: null }),
     );
     expect(marker?.variant).toBe('in-progress');
-    expect(marker?.title).toBe('（未命名求助單）');
+    expect(marker?.title).toBe('（未命名任務單）');
     expect(marker?.subtitle).toBe('救災任務');
   });
 

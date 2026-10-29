@@ -33,7 +33,8 @@ import {
   formatTicketNeedCount,
 } from '../../needs/delete-ticket';
 import { PhotoThumb } from '../../photos';
-import { getTicketPriorityBadge, getTicketStatusTone } from '../../status';
+import { getTicketStatusTone } from '../../status';
+import { adminTicketPriorityBadge } from './model/ticket-priority';
 import {
   ticketDetailState,
   toTicketDetailView,
@@ -41,7 +42,12 @@ import {
   type TicketDetailView,
 } from './model/ticket-detail-view';
 import { isForbidden } from './model/task-actions';
-import { AUDIT_BADGES, toTaskRows, type AuditStatus } from './model/ticket-row';
+import {
+  AUDIT_BADGES,
+  toTaskRows,
+  type AuditStatus,
+  type TaskRowFields,
+} from './model/ticket-row';
 import { TicketAuditCard } from './ticket-audit-card';
 import { TicketForm } from './ticket-form';
 import { TicketHistoryPanel } from './ticket-history-panel';
@@ -229,7 +235,7 @@ function TicketDetailContent({
   onAuditBusyChange: (busy: boolean) => void;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const priority = getTicketPriorityBadge(ticket.priority);
+  const priority = adminTicketPriorityBadge(ticket.priority);
   const audit = AUDIT_BADGES[ticket.auditStatus as AuditStatus];
 
   return (
@@ -246,7 +252,7 @@ function TicketDetailContent({
                 size="md"
                 onClick={() => setDeleteOpen(true)}
               >
-                刪除求助單
+                刪除任務單
               </Button>
             ) : null}
             <Box sx={{ flex: 1 }} />
@@ -325,8 +331,11 @@ function TicketDetailContent({
   );
 }
 
-/** 刪除求助單: the ticket with all its needs; the people on them hear. */
-function DeleteTicketConfirm({
+/**
+ * 刪除任務單: the ticket with all its needs; the people on them hear. The drawer's footer and a
+ * board row's ⋯ both open it.
+ */
+export function DeleteTicketConfirm({
   open,
   ticket,
   title,
@@ -334,7 +343,7 @@ function DeleteTicketConfirm({
   onDeleted,
 }: {
   open: boolean;
-  ticket: DetailTicket;
+  ticket: { uuid: string; tasks: readonly TaskRowFields[] };
   title: string;
   onClose: () => void;
   onDeleted: () => void;
@@ -358,7 +367,7 @@ function DeleteTicketConfirm({
       }
       setError(
         isForbidden(refusal)
-          ? '你的帳號沒有刪除求助單的權限。'
+          ? '你的帳號沒有刪除任務單的權限。'
           : deleteTicketErrorMessage(refusal),
       );
     }
@@ -370,7 +379,7 @@ function DeleteTicketConfirm({
       onClose={onClose}
       onConfirm={() => void confirm()}
       onExited={() => setError(null)}
-      title="刪除求助單？"
+      title="刪除任務單？"
       confirmLabel={remove.isPending ? '刪除中…' : '刪除'}
       confirmTone="danger"
       error={error}

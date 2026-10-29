@@ -1,12 +1,13 @@
 import type {
   AdminTaskFieldsFragment,
-  AdminTicketFieldsFragment,
   AdminTicketMapPinsQuery,
+  AdminTicketsQuery,
   AuditStatus,
 } from '@rescue-frontend/data-access/admin';
 import type { BadgeTone } from '@rescue-frontend/ui';
 
 import { stationPoint } from '../../../../station/station-point';
+import { formatTicketStreet } from '../../../address';
 
 export type { AuditStatus };
 
@@ -38,7 +39,7 @@ export const AUDIT_BADGES: Record<
 };
 
 /** Shown wherever a ticket has no title. */
-export const UNTITLED_TICKET = '（未命名求助單）';
+export const UNTITLED_TICKET = '（未命名任務單）';
 
 /**
  * Need statuses that still take people: the backend's `OPEN_NEED_STATUSES`. `in_progress` is a
@@ -67,6 +68,9 @@ export type TaskRowFields = Pick<
   'uuid' | 'taskType' | 'taskName' | 'status' | 'quantity' | 'assignedCount'
 >;
 
+/** One ticket of the board's `tickets` page, as the list query selects it. */
+export type TicketListItem = AdminTicketsQuery['tickets']['items'][number];
+
 export interface TicketRow {
   uuid: string;
   title: string;
@@ -83,9 +87,15 @@ export interface TicketRow {
   /** The point is a coarse cell, not an exact address. */
   isCoarse: boolean;
   updatedAt: string | null;
+  /** The street line under the title; null when there is none or it is withheld (`isCoarse`). */
+  address: string | null;
+  /** How many photo links it has: the row shows a count, never the images. */
+  photoCount: number;
+  /** The 責任區 teams' names (`responsibleTeams`); empty when none, and when withheld. */
+  teamNames: string[];
   tasks: TaskRow[];
   volunteerGap: number;
-  raw: AdminTicketFieldsFragment & { tasks: AdminTaskFieldsFragment[] };
+  raw: TicketListItem;
 }
 
 function toTaskRow(task: TaskRowFields): TaskRow {
@@ -139,9 +149,7 @@ export function toTicketPin(ticket: TicketPinFields): TicketPin {
   };
 }
 
-export function toTicketRow(
-  ticket: AdminTicketFieldsFragment & { tasks: AdminTaskFieldsFragment[] },
-): TicketRow {
+export function toTicketRow(ticket: TicketListItem): TicketRow {
   const county = ticket.secondaryLocation?.county?.trim() ?? '';
   const town = ticket.secondaryLocation?.town?.trim() ?? '';
   const tasks = toTaskRows(ticket.tasks);
@@ -153,8 +161,62 @@ export function toTicketRow(
     town,
     isCoarse: !!ticket.locationCell,
     updatedAt: ticket.updatedAt ?? null,
+    address: formatTicketStreet(ticket.secondaryLocation),
+    photoCount: ticket.photos.length,
+    teamNames: ticket.responsibleTeams.map((team) => team.name),
     tasks,
     volunteerGap: tasks.reduce((sum, t) => sum + t.gap, 0),
     raw: ticket,
   };
+}
+
+/** 需求 · 承接進度 for one row: how many of its needs still wait for someone, and the bar's fill. */
+export interface NeedProgress {
+  /** Needs counted: every one but a cancelled one. */
+  total: number;
+  /** Still waiting: missing people (`gap`), or open with no quantity and nobody on it yet. */
+  waiting: number;
+  /** Needs with everyone they asked for (`fulfilled`). */
+  fulfilled: number;
+  /** The line over the bar; null when there is no need to count. */
+  label: string | null;
+  /** The bar's fill, 0–1: the share of needs not waiting. */
+  ratio: number;
+}
+
+/**
+ * The row's progress line, after the prototype's `fillState` (待承接 → 在途 → all done), on the
+ * board's own gap rule: a need waits while it is short of people. A cancelled need is left out,
+ * so it never holds a ticket at 在途 for good. `fulfilled` is 已滿足 (everyone it asked for, who
+ * may have yet to go), so the last stage says 已滿足, not 完成.
+ */
+export function needProgress(tasks: readonly TaskRow[]): NeedProgress {
+  const live = tasks.filter((task) => task.status !== 'canceled');
+  const total = live.length;
+  const waiting = live.filter(
+    (task) =>
+      task.gap > 0 ||
+      (OPEN_TASK_STATUSES.has(task.status) &&
+        task.quantity === null &&
+        task.assignedCount === 0),
+  ).length;
+  const fulfilled = live.filter((task) => task.status === 'fulfilled').length;
+  let label: string | null = null;
+  if (total > 0) {
+    if (waiting > 0) label = `待承接 ${waiting}／${total}`;
+    else if (fulfilled < total) label = `在途 ${total - fulfilled}／${total}`;
+    else label = `${total}／${total} 已滿足`;
+  }
+  return {
+    total,
+    waiting,
+    fulfilled,
+    label,
+    ratio: total > 0 ? (total - waiting) / total : 0,
+  };
+}
+
+/** A need as its chip names it: 「清淤人力 ×4」, or the name alone without a quantity. */
+export function needChipLabel(task: Pick<TaskRow, 'taskName' | 'quantity'>) {
+  return task.quantity ? `${task.taskName} ×${task.quantity}` : task.taskName;
 }

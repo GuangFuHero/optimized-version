@@ -111,6 +111,15 @@ export function countActiveFilters(filters: TicketFilters): number {
   ].filter(Boolean).length;
 }
 
+/**
+ * The list asks the server for every ticket in the viewer's scope: no filter, and no keyword the
+ * server takes (one too short is not sent). An empty list then means there are no tickets at all,
+ * not that none match — the two empty states the design tells apart.
+ */
+export function listsEveryTicket(filters: TicketFilters): boolean {
+  return Object.keys(toServerVariables(filters)).length === 0;
+}
+
 export const TICKET_PAGE_SIZE = 50;
 
 /** The `?page=` param as a page number: a whole number from 1, else 1. */

@@ -1,14 +1,11 @@
 export type TicketColumnId =
-  | 'expand'
   | 'priority'
-  | 'title'
-  | 'area'
-  | 'status'
+  | 'ticket'
   | 'needs'
-  | 'gap'
-  | 'audit'
   | 'updated'
-  | 'open';
+  | 'status'
+  | 'team'
+  | 'menu';
 
 export interface TicketColumn {
   id: TicketColumnId;
@@ -18,18 +15,24 @@ export interface TicketColumn {
   visible: boolean;
 }
 
-/** The board's one global column order. No per-viewer columns: every column is always shown. */
+/**
+ * The board's one global column order, as the prototype's `TK_COLUMNS` (tk-data.js). No
+ * per-viewer columns: every column is always shown. The flexible tracks are `minmax(0, …)` so the
+ * table never scrolls sideways (TM-FS-102): a value too wide is cut, with the whole on hover.
+ */
 export const TICKET_COLUMNS: readonly TicketColumn[] = [
-  { id: 'expand', label: '', width: '32px', visible: true },
-  { id: 'priority', label: '優先度', width: '96px', visible: true },
-  { id: 'title', label: '求助單', width: 'minmax(220px, 2fr)', visible: true },
-  { id: 'area', label: '行政區', width: '120px', visible: true },
-  { id: 'status', label: '狀態', width: '96px', visible: true },
-  { id: 'needs', label: '需求', width: '84px', visible: true },
-  { id: 'gap', label: '志工缺口', width: '96px', visible: true },
-  { id: 'audit', label: '審核', width: '96px', visible: true },
-  { id: 'updated', label: '最後更新', width: '130px', visible: true },
-  { id: 'open', label: '', width: '28px', visible: true },
+  { id: 'priority', label: '優先級', width: '104px', visible: true },
+  { id: 'ticket', label: '任務', width: 'minmax(0, 2.4fr)', visible: true },
+  {
+    id: 'needs',
+    label: '需求 · 承接進度',
+    width: 'minmax(0, 2fr)',
+    visible: true,
+  },
+  { id: 'updated', label: '更新時間', width: '92px', visible: true },
+  { id: 'status', label: '狀態', width: '92px', visible: true },
+  { id: 'team', label: '指派 Team', width: 'minmax(0, 1fr)', visible: true },
+  { id: 'menu', label: '', width: '44px', visible: true },
 ];
 
 export function visibleTicketColumns(): typeof TICKET_COLUMNS {

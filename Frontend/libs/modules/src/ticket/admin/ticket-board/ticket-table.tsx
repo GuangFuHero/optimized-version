@@ -1,39 +1,47 @@
 'use client';
 
-import { Box, IconButton, Typography } from '@mui/material';
+import { Box, Typography, type SxProps, type Theme } from '@mui/material';
 import {
   Badge,
   Button,
   Callout,
   DataTable,
   designTokens,
+  EmptyState,
   ListPagination,
   type DataTableProps,
 } from '@rescue-frontend/ui';
-import { ChevronDown, ChevronRight, MapPin, SearchX } from 'lucide-react';
-import { useState, type ReactNode, type SyntheticEvent } from 'react';
-
-import { Muted } from '../../../admin/shared/muted';
-import { FreshnessCell } from '../../../admin/shared/freshness-cell';
 import {
-  formatTicketStatusLabel,
-  formatTicketTypeLabel,
-  getTicketPriorityBadge,
-  getTicketStatusTone,
-} from '../../status';
+  CircleDashed,
+  ClipboardList,
+  Image as ImageIcon,
+  Plus,
+  SearchX,
+} from 'lucide-react';
+import type { ReactNode, SyntheticEvent } from 'react';
+
+import { FreshnessCell } from '../../../admin/shared/freshness-cell';
+import { Muted } from '../../../admin/shared/muted';
+import { NeedActionsMenu } from '../../needs/need-actions-menu';
+import type { NeedAction } from '../../needs/need-actions';
+import { formatTicketStatusLabel } from '../../status';
 import {
   visibleTicketColumns,
   type TicketColumnId,
 } from './model/ticket-columns';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
+import { adminTicketPriorityBadge } from './model/ticket-priority';
 import {
-  AUDIT_BADGES,
-  OPEN_TASK_STATUSES,
+  needChipLabel,
+  needProgress,
   type TaskRow,
   type TicketRow,
 } from './model/ticket-row';
 
 const { color, radius, typography } = designTokens;
+
+/** Needs shown as chips before the rest fold into +N; the whole list is on hover. */
+const CHIP_LIMIT = 3;
 
 interface TicketTableProps {
   /** The page on view, as the server cut it. */
@@ -43,11 +51,22 @@ interface TicketTableProps {
   failed: boolean;
   retrying: boolean;
   onRetry: () => void;
+  /**
+   * The list asks for every ticket (no filter, no keyword): empty, it says there are none yet
+   * rather than that none match.
+   */
+  unfiltered: boolean;
   now: Date;
   page: number;
   pageCount: number;
   onPageChange: (page: number) => void;
   onOpenTicket: (uuid: string) => void;
+  /** 編輯任務單 from a row's ⋯; offered only where the ticket's `viewerCanEdit` allows. */
+  onEditTicket: (uuid: string) => void;
+  /** 刪除任務單 from a row's ⋯; offered only where the ticket's `viewerCanDelete` allows. */
+  onDeleteTicket: (row: TicketRow) => void;
+  /** 新增任務 in the empty board; unset when the viewer may not add. */
+  onCreate?: () => void;
 }
 
 export function TicketTable({
@@ -56,83 +75,37 @@ export function TicketTable({
   failed,
   retrying,
   onRetry,
+  unfiltered,
   now,
   page,
   pageCount,
   onPageChange,
   onOpenTicket,
+  onEditTicket,
+  onDeleteTicket,
+  onCreate,
 }: TicketTableProps) {
-  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  const toggle = (uuid: string) =>
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (next.has(uuid)) next.delete(uuid);
-      else next.add(uuid);
-      return next;
-    });
-
   const renderCell = (id: TicketColumnId, row: TicketRow): ReactNode => {
     switch (id) {
-      case 'expand':
-        // No tasks, no toggle: an empty cell keeps the column's width, and a click there opens
-        // the row as anywhere else on it does.
-        return row.tasks.length > 0 ? (
-          <ExpandToggle
-            expanded={expandedIds.has(row.uuid)}
-            onToggle={() => toggle(row.uuid)}
-          />
-        ) : null;
       case 'priority':
         return <PriorityCell priority={row.priority} />;
-      case 'title':
-        return (
-          <Typography
-            noWrap
-            title={row.title}
-            sx={{ ...typography.label[400], color: color.fg.neutral.default }}
-          >
-            {row.title}
-          </Typography>
-        );
-      case 'area':
-        return <AreaCell area={row.area} />;
-      case 'status':
-        return (
-          <Badge tone={getTicketStatusTone(row.status)}>
-            {formatTicketStatusLabel(row.status)}
-          </Badge>
-        );
-      case 'needs': {
-        const open = row.tasks.filter((t) =>
-          OPEN_TASK_STATUSES.has(t.status),
-        ).length;
-        return <Muted cell>{`${open}/${row.tasks.length} 項`}</Muted>;
-      }
-      case 'gap':
-        return row.volunteerGap > 0 ? (
-          <Typography
-            noWrap
-            sx={{ ...typography.label[300], color: color.fg.warning }}
-          >
-            缺 {row.volunteerGap} 人
-          </Typography>
-        ) : (
-          <Muted cell>—</Muted>
-        );
-      case 'audit': {
-        const audit = AUDIT_BADGES[row.auditStatus];
-        return audit ? <Badge tone={audit.tone}>{audit.label}</Badge> : null;
-      }
+      case 'ticket':
+        return <TicketCell row={row} />;
+      case 'needs':
+        return <NeedsCell tasks={row.tasks} />;
       case 'updated':
         return <FreshnessCell updatedAt={row.updatedAt} now={now} />;
-      case 'open':
+      case 'status':
+        return <StatusCell status={row.status} />;
+      case 'team':
+        return <TeamCell row={row} />;
+      case 'menu':
         return (
-          <ChevronRight
-            size={18}
-            color={color.fg.neutral.muted}
-            style={{ display: 'block' }}
+          <RowMenu
+            row={row}
+            onOpen={() => onOpenTicket(row.uuid)}
+            onEdit={() => onEditTicket(row.uuid)}
+            onDelete={() => onDeleteTicket(row)}
           />
         );
     }
@@ -150,7 +123,7 @@ export function TicketTable({
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {failed ? (
         <Callout tone="danger">
-          無法載入求助單，請稍後再試
+          無法載入任務單，請稍後再試
           <Button
             variant="ghost"
             size="sm"
@@ -161,44 +134,41 @@ export function TicketTable({
           </Button>
         </Callout>
       ) : null}
+      {/* No minWidth: the table never scrolls sideways (TM-FS-102); its cells cut instead. */}
       <DataTable
         columns={columns}
         data={rows}
         getRowId={(row) => row.uuid}
         onRowClick={(row) => onOpenTicket(row.uuid)}
-        renderExpanded={(row) => <TaskLines tasks={row.tasks} />}
-        expandedRowIds={expandedIds}
-        density="compact"
-        minWidth={1080}
         empty={
-          <Box
-            sx={{ p: loading || failed ? 4 : '64px 24px', textAlign: 'center' }}
-          >
-            {loading ? (
-              <Muted cell>載入中…</Muted>
-            ) : failed ? (
-              <Muted cell>—</Muted>
-            ) : (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '12px',
-                }}
-              >
-                <SearchX size={38} color={color.fg.neutral.muted} />
-                <Typography
-                  sx={{
-                    ...typography.heading[600],
-                    color: color.fg.neutral.subtle,
-                  }}
-                >
-                  沒有符合條件的求助單
-                </Typography>
-              </Box>
-            )}
-          </Box>
+          loading || failed ? (
+            <Box sx={{ p: 4, textAlign: 'center' }}>
+              <Muted cell>{loading ? '載入中…' : '—'}</Muted>
+            </Box>
+          ) : unfiltered ? (
+            <EmptyState
+              icon={<ClipboardList />}
+              title="還沒有任何任務單"
+              description="民眾在前台報案，或後台人員按「新增任務」代為登錄後，任務單會出現在這裡。"
+              action={
+                onCreate ? (
+                  <Button
+                    size="sm"
+                    startIcon={<Plus size={15} />}
+                    onClick={onCreate}
+                  >
+                    新增任務
+                  </Button>
+                ) : null
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={<SearchX />}
+              title="沒有符合條件的任務單"
+              description="調整篩選或搜尋關鍵字再試。"
+            />
+          )
         }
       />
       {pageCount > 1 ? (
@@ -215,35 +185,33 @@ export function TicketTable({
   );
 }
 
-/** Toggles the row's tasks; its clicks and Enter stay in the cell so the row does not open. */
-function ExpandToggle({
-  expanded,
-  onToggle,
+/** One line of muted text, cut, with the whole on hover. */
+function CutText({
+  children,
+  title,
+  sx,
 }: {
-  expanded: boolean;
-  onToggle: () => void;
+  children: ReactNode;
+  title: string;
+  sx?: SxProps<Theme>;
 }) {
-  const stop = (event: SyntheticEvent) => event.stopPropagation();
-  const Icon = expanded ? ChevronDown : ChevronRight;
   return (
-    <IconButton
-      size="small"
-      aria-label={expanded ? '收合需求' : '展開需求'}
-      aria-expanded={expanded}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-      onKeyDown={stop}
-      sx={{ p: '4px', borderRadius: `${radius.sm}px` }}
+    <Typography
+      noWrap
+      title={title}
+      sx={[
+        { ...typography.body[300], color: color.fg.neutral.muted },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
     >
-      <Icon size={16} color={color.fg.neutral.subtle} />
-    </IconButton>
+      {children}
+    </Typography>
   );
 }
 
+/** 生命危急 solid red, 緊急 subtle warning; 一般 and 低 as plain muted words (prototype PriorityBadge). */
 function PriorityCell({ priority }: { priority: string }) {
-  const badge = getTicketPriorityBadge(priority);
+  const badge = adminTicketPriorityBadge(priority);
   if (badge) {
     return (
       <Badge tone={badge.tone} variant={badge.variant}>
@@ -251,76 +219,267 @@ function PriorityCell({ priority }: { priority: string }) {
       </Badge>
     );
   }
-  return <Muted cell>{ticketPriorityLabel(priority)}</Muted>;
+  return (
+    <Typography
+      noWrap
+      sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+    >
+      {ticketPriorityLabel(priority)}
+    </Typography>
+  );
 }
 
-function AreaCell({ area }: { area: string }) {
+/** 任務: the photo count (never the images), the title, and the street line under it. */
+function TicketCell({ row }: { row: TicketRow }) {
+  const address = row.isCoarse
+    ? '約略位置（無檢視詳細位置權限）'
+    : (row.address ?? '未提供地址');
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      {row.photoCount > 0 ? (
+        <Box
+          component="span"
+          title={`這張單有 ${row.photoCount} 張圖片（開啟詳情才會載入）`}
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            height: 18,
+            px: '7px',
+            mb: '2px',
+            borderRadius: `${radius.full}px`,
+            bgcolor: color.bg.neutral.subtle,
+            border: `1px solid ${color.border.default}`,
+            ...typography.data[300],
+            color: color.fg.neutral.muted,
+          }}
+        >
+          <ImageIcon size={10} />
+          {row.photoCount}
+        </Box>
+      ) : null}
+      <Typography
+        noWrap
+        title={row.title}
+        sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+      >
+        {row.title}
+      </Typography>
+      <CutText title={address}>{address}</CutText>
+    </Box>
+  );
+}
+
+/** 需求 · 承接進度: each need as 「名稱 ×數量」, then the 待承接 line and its bar. */
+function NeedsCell({ tasks }: { tasks: readonly TaskRow[] }) {
+  if (tasks.length === 0) {
+    return (
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: color.fg.neutral.muted,
+        }}
+      >
+        <CircleDashed size={15} />
+        <Typography
+          noWrap
+          sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+        >
+          尚無需求 · 待補列
+        </Typography>
+      </Box>
+    );
+  }
+  const progress = needProgress(tasks);
+  const full = tasks.map(needChipLabel).join('、');
   return (
     <Box
+      sx={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}
+    >
+      <Box
+        title={full}
+        sx={{
+          display: 'flex',
+          gap: '5px',
+          flexWrap: 'nowrap',
+          minWidth: 0,
+          overflow: 'hidden',
+        }}
+      >
+        {tasks.slice(0, CHIP_LIMIT).map((task) => (
+          <NeedChip key={task.uuid} task={task} />
+        ))}
+        {tasks.length > CHIP_LIMIT ? (
+          <Typography
+            component="span"
+            sx={{
+              ...typography.body[300],
+              color: color.fg.neutral.muted,
+              alignSelf: 'center',
+              flexShrink: 0,
+            }}
+          >
+            +{tasks.length - CHIP_LIMIT}
+          </Typography>
+        ) : null}
+      </Box>
+      {progress.label ? (
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '5px',
+            minWidth: 0,
+          }}
+        >
+          <Typography
+            noWrap
+            sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+          >
+            {progress.label}
+          </Typography>
+          <Box
+            role="presentation"
+            sx={{
+              height: 4,
+              borderRadius: '2px',
+              bgcolor: color.bg.neutral.sunken,
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              sx={{
+                height: '100%',
+                width: `${Math.round(progress.ratio * 100)}%`,
+                bgcolor: color.fg.neutral.subtle,
+              }}
+            />
+          </Box>
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+/** A need's chip; one that is met or cancelled is faded and struck through. */
+function NeedChip({ task }: { task: TaskRow }) {
+  const closed = task.status === 'fulfilled' || task.status === 'canceled';
+  return (
+    <Box
+      component="span"
       sx={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '4px',
-        minWidth: 0,
+        flexShrink: 0,
+        maxWidth: '100%',
+        height: 22,
+        px: '9px',
+        borderRadius: `${radius.full}px`,
+        bgcolor: color.bg.neutral.subtle,
+        border: `1px solid ${color.border.default}`,
+        opacity: closed ? 0.55 : 1,
       }}
     >
-      <MapPin
-        size={14}
-        color={color.fg.neutral.muted}
-        style={{ flexShrink: 0 }}
-      />
       <Typography
+        component="span"
         noWrap
-        sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+        sx={{
+          ...typography.data[300],
+          fontWeight: 600,
+          color: color.fg.neutral.subtle,
+          textDecoration: closed ? 'line-through' : 'none',
+        }}
       >
-        {area || '—'}
+        {needChipLabel(task)}
       </Typography>
     </Box>
   );
 }
 
-/** The expanded block: one line per need, under the ticket's title. */
-function TaskLines({ tasks }: { tasks: readonly TaskRow[] }) {
+/** 狀態: grey words; only 待處理 carries the small orange dot and reads darker. */
+function StatusCell({ status }: { status: string }) {
+  const pending = status === 'pending';
   return (
-    <Box
-      component="ul"
+    <Typography
+      noWrap
       sx={{
-        listStyle: 'none',
-        m: 0,
-        ml: '44px',
-        p: '8px 12px',
-        display: 'flex',
-        flexDirection: 'column',
+        ...typography.data[300],
+        display: 'inline-flex',
+        alignItems: 'center',
         gap: '6px',
-        borderRadius: `${radius.md}px`,
-        bgcolor: color.bg.neutral.subtle,
+        color: pending ? color.fg.neutral.default : color.fg.neutral.muted,
+        fontWeight: pending ? 600 : 400,
       }}
     >
-      {tasks.map((task) => (
+      {pending ? (
         <Box
-          component="li"
-          key={task.uuid}
+          component="span"
           sx={{
-            display: 'grid',
-            gridTemplateColumns: '56px minmax(0, 1fr) 96px 80px',
-            columnGap: '12px',
-            alignItems: 'center',
+            width: 6,
+            height: 6,
+            flexShrink: 0,
+            borderRadius: `${radius.full}px`,
+            bgcolor: color.bg.primary.default,
           }}
-        >
-          <Muted cell>{formatTicketTypeLabel(task.taskType)}</Muted>
-          <Typography
-            noWrap
-            title={task.taskName}
-            sx={{ ...typography.body[300], color: color.fg.neutral.default }}
-          >
-            {task.taskName}
-          </Typography>
-          <Muted cell>{formatTicketStatusLabel(task.status)}</Muted>
-          <Muted
-            cell
-          >{`${task.assignedCount}/${task.quantity ?? '—'} 人`}</Muted>
-        </Box>
-      ))}
+        />
+      ) : null}
+      {formatTicketStatusLabel(status)}
+    </Typography>
+  );
+}
+
+/**
+ * 指派 Team: the teams of the 責任區 the ticket lies in, read-only. Withheld from a viewer without
+ * detail on it, which is not the same as none.
+ */
+function TeamCell({ row }: { row: TicketRow }) {
+  if (row.isCoarse) {
+    return <CutText title="無權限檢視">無權限檢視</CutText>;
+  }
+  if (row.teamNames.length === 0) {
+    return <CutText title="未指派">未指派</CutText>;
+  }
+  const names = row.teamNames.join('、');
+  return (
+    <CutText title={names} sx={{ color: color.fg.neutral.subtle }}>
+      {names}
+    </CutText>
+  );
+}
+
+/**
+ * The row's ⋯: what the viewer may do to this one ticket, by its own `viewerCan*` flags. Its
+ * clicks stay in the cell (the menu is portalled, but React bubbles through it) so the row does
+ * not open under it.
+ */
+function RowMenu({
+  row,
+  onOpen,
+  onEdit,
+  onDelete,
+}: {
+  row: TicketRow;
+  onOpen: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const items: NeedAction[] = [{ label: '開啟', onSelect: onOpen }];
+  if (row.raw.viewerCanEdit) {
+    items.push({ label: '編輯任務單', onSelect: onEdit });
+  }
+  if (row.raw.viewerCanDelete) {
+    items.push({ label: '刪除任務單', onSelect: onDelete, tone: 'danger' });
+  }
+  const stop = (event: SyntheticEvent) => event.stopPropagation();
+  return (
+    <Box
+      onClick={stop}
+      onKeyDown={stop}
+      sx={{ display: 'flex', justifyContent: 'flex-end' }}
+    >
+      <NeedActionsMenu needName={row.title} items={items} sx={{ my: '-8px' }} />
     </Box>
   );
 }

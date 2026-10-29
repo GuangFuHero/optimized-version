@@ -169,7 +169,7 @@ describe('toTicketDetailView', () => {
       { ...ticket, title: '  ', description: ' ' },
       LABELS,
     );
-    expect(view.title).toBe('（未命名求助單）');
+    expect(view.title).toBe('（未命名任務單）');
     expect(view.description).toBeNull();
   });
 });

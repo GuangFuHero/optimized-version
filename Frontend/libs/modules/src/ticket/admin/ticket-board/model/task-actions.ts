@@ -148,7 +148,7 @@ export function auditErrorMessage(error: ClaimError): string {
   const message = graphqlMessage(error);
   if (message === STALE_AUDIT) return '內容已更新，請重新整理後再審核';
   if (message === AUDIT_NOTE_REQUIRED) return '標記有問題時請填寫原因。';
-  if (message === 'Ticket not found') return '這張求助單已經刪除了。';
+  if (message === 'Ticket not found') return '這張任務單已經刪除了。';
   if (isForbidden(error)) return '你的帳號沒有審核權限。';
   if (error.networkError) return '連線失敗，請確認網路後再試一次。';
   return '審核失敗，請稍後再試一次。';

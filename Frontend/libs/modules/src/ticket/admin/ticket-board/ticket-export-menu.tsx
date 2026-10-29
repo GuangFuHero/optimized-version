@@ -2,12 +2,12 @@
 
 import { Menu, MenuItem } from '@mui/material';
 import { useExportTickets } from '@rescue-frontend/data-access/admin';
+import { Button } from '@rescue-frontend/ui';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { downloadBlob } from '../../../admin/shared/model/bulk-import';
-import { ToolbarButton } from '../../../admin/shared/toolbar-button';
 import { formatTicketTypeLabel } from '../../status';
 import { ticketExportFilename } from './model/ticket-export';
 import { NEED_TYPES, type NeedType } from './model/ticket-row';
@@ -33,7 +33,7 @@ export function TicketExportMenu() {
             blob as Blob,
             ticketExportFilename(taskType, format, new Date()),
           );
-          toast.success(`已匯出「${formatTicketTypeLabel(taskType)}」求助單`);
+          toast.success(`已匯出「${formatTicketTypeLabel(taskType)}」任務單`);
           setAnchor(null);
         },
         // The failure toasts globally; the menu closes so the toolbar isn't left with it open.
@@ -43,16 +43,19 @@ export function TicketExportMenu() {
 
   return (
     <>
-      <ToolbarButton
-        title="匯出求助單（不套用列表上的篩選）"
+      {/* The prototype's brand outline, as tall as the toolbar's search box. */}
+      <Button
+        variant="outline"
+        title="匯出任務單（不套用列表上的篩選）"
         aria-haspopup="menu"
         aria-expanded={Boolean(anchor)}
         disabled={exportTickets.isPending}
         onClick={(event) => setAnchor(event.currentTarget)}
+        startIcon={<Download size={16} />}
+        sx={{ height: 42, minHeight: 42 }}
       >
-        <Download size={16} />
         {exportTickets.isPending ? '匯出中…' : '匯出'}
-      </ToolbarButton>
+      </Button>
       <Menu
         open={Boolean(anchor)}
         anchorEl={anchor}

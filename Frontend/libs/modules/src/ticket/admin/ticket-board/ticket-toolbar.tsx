@@ -1,10 +1,11 @@
 'use client';
 
-import { Box, Typography } from '@mui/material';
+import { Box, Menu, MenuItem, Typography } from '@mui/material';
 import { Button, designTokens } from '@rescue-frontend/ui';
-import { Plus } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ChevronDown, Plus, Upload } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 
+import { ToolbarButton } from '../../../admin/shared/toolbar-button';
 import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
 import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
 import { searchHint } from './model/ticket-filters';
@@ -21,14 +22,18 @@ interface TicketToolbarProps {
   onClear: () => void;
   /** Matching tickets; null while unknown (loading, or failed). */
   count: number | null;
-  /** 新增求助單; the button shows only when the viewer may add and this is set. */
+  /** 新增任務; the button shows only when the viewer may add and this is set. */
   onCreate?: () => void;
+  /** 匯入任務單; offered only when the viewer may import. */
+  onImport: () => void;
   /** Filled by the export task; shown only when the viewer may export. */
   exportControl?: ReactNode;
-  /** Filled by the import task; shown only when the viewer may import. */
-  importControl?: ReactNode;
 }
 
+/**
+ * The board's toolbar, per the prototype (tk-table.jsx): 篩選, the search box, the count, 匯出,
+ * and 新增任務 — split, its ▾ holding 匯入任務單.
+ */
 export function TicketToolbar({
   caps,
   query,
@@ -39,9 +44,10 @@ export function TicketToolbar({
   onClear,
   count,
   onCreate,
+  onImport,
   exportControl,
-  importControl,
 }: TicketToolbarProps) {
+  const canCreate = caps.canAdd && onCreate !== undefined;
   return (
     <Box
       sx={{
@@ -51,6 +57,8 @@ export function TicketToolbar({
         gap: '8px',
       }}
     >
+      {/* `q` matches the title, the description, and the needs' names and properties — never
+          the address or the contact, which it leaves out on purpose (tickets resolver). */}
       <ToolbarSearch
         query={query}
         onQueryChange={onQueryChange}
@@ -58,8 +66,8 @@ export function TicketToolbar({
         filterOpen={filterOpen}
         onToggleFilter={onToggleFilter}
         onClear={onClear}
-        placeholder="搜尋標題／內容…"
-        ariaLabel="搜尋求助單"
+        placeholder="搜尋標題／描述／需求…"
+        ariaLabel="搜尋任務單"
         hint={(draft) => searchHint(draft) ?? undefined}
       />
 
@@ -70,17 +78,89 @@ export function TicketToolbar({
           ml: 'auto',
         }}
       >
-        {count ?? '—'} 張
+        {count ?? '—'} 筆任務
       </Typography>
 
       {caps.canExport ? exportControl : null}
-      {caps.canImport ? importControl : null}
 
-      {caps.canAdd && onCreate ? (
-        <Button onClick={onCreate} startIcon={<Plus size={17} />}>
-          新增求助單
-        </Button>
+      {canCreate ? (
+        <CreateSplitButton
+          onCreate={onCreate}
+          onImport={caps.canImport ? onImport : undefined}
+        />
+      ) : caps.canImport ? (
+        <ToolbarButton onClick={onImport}>
+          <Upload size={16} />
+          匯入任務單
+        </ToolbarButton>
       ) : null}
+    </Box>
+  );
+}
+
+/** 新增任務, with a ▾ for 匯入任務單 when the viewer may import; the plain button otherwise. */
+function CreateSplitButton({
+  onCreate,
+  onImport,
+}: {
+  onCreate: () => void;
+  onImport?: () => void;
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const create = (
+    <Button
+      onClick={onCreate}
+      startIcon={<Plus size={17} />}
+      sx={
+        onImport
+          ? {
+              borderTopRightRadius: 0,
+              borderBottomRightRadius: 0,
+              '&:hover': { transform: 'none' },
+            }
+          : undefined
+      }
+    >
+      新增任務
+    </Button>
+  );
+  if (!onImport) return create;
+  return (
+    <Box sx={{ display: 'inline-flex' }}>
+      {create}
+      <Button
+        aria-label="更多新增方式"
+        aria-haspopup="menu"
+        aria-expanded={Boolean(anchor)}
+        onClick={(event) => setAnchor(event.currentTarget)}
+        sx={{
+          px: '12px',
+          borderTopLeftRadius: 0,
+          borderBottomLeftRadius: 0,
+          borderLeft: `1px solid ${color.bg.primary.hover}`,
+          '&:hover': { transform: 'none' },
+        }}
+      >
+        <ChevronDown size={17} />
+      </Button>
+      <Menu
+        open={Boolean(anchor)}
+        anchorEl={anchor}
+        onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          onClick={() => {
+            setAnchor(null);
+            onImport();
+          }}
+          sx={{ gap: '8px' }}
+        >
+          <Upload size={16} />
+          匯入任務單
+        </MenuItem>
+      </Menu>
     </Box>
   );
 }
