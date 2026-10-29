@@ -88,7 +88,7 @@ async def submit_new_ticket(
     submission = NewTicket(ticket=ticket_draft(fields), tasks=tuple(task_draft(f) for f in task_fields))
     acknowledged = {task_ref(i): t.acknowledged_duplicate_of for i, t in enumerate(tasks)}
 
-    await dedup_area_lock.lock_area_at(db, submission.ticket.location)
+    await dedup_area_lock.lock_area_at(db, submission.ticket.location, kind="ticket")
     pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
         db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
@@ -134,6 +134,7 @@ async def submit_help_request(
     )
     acknowledged = {task_ref(i): task.get("acknowledged_duplicate_of") for i, task in enumerate(tasks)}
 
+    await dedup_area_lock.lock_area_at(db, submission.ticket.location, kind="ticket")
     pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
         db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
@@ -197,7 +198,7 @@ async def submit_new_station(
     submission = NewStation(station=station_draft(fields))
     acknowledged = {"station": acknowledged_duplicate_of}
 
-    await dedup_area_lock.lock_area_at(db, submission.station.location)
+    await dedup_area_lock.lock_area_at(db, submission.station.location, kind="station")
     pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
         db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
