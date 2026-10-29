@@ -1,5 +1,8 @@
 import {
   ticketMapPinsQuery,
+  buildingMapQuery,
+  buildingMapsQuery,
+  buildingMapTicketsQuery,
   ticketQuery,
   ticketsExtentQuery,
   ticketsQuery,
@@ -34,6 +37,14 @@ describe('ticket write invalidation', () => {
         ticketsQuery({ zoom: 12 }).queryKey,
       ),
     ).toBe(false);
+  });
+
+  it('makes every space stale: a space works its status out from its tickets', () => {
+    expect(hits(keys, buildingMapsQuery({}).queryKey)).toBe(true);
+    expect(hits(keys, buildingMapQuery({ uuid: 'b-1' }).queryKey)).toBe(true);
+    expect(
+      hits(keys, buildingMapTicketsQuery({ buildingMapUuid: 'b-1' }).queryKey),
+    ).toBe(true);
   });
 
   it("makes only the written ticket's detail stale", () => {

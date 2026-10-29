@@ -16,8 +16,8 @@ export const ticketKeys = {
 };
 
 /**
- * The keys a ticket write makes stale: the lists and that ticket's own detail, needs
- * and history. Without its uuid (a write that names only a need, photo or assignment), every
+ * The keys a ticket write makes stale: the lists, every space and that ticket's own detail,
+ * needs and history. Without its uuid (a write that names only a need, photo or assignment), every
  * ticket's detail, needs and history — of which only the open sheet's are on screen.
  */
 export function ticketWriteKeys(ticketUuid?: string | null): unknown[][] {
@@ -28,5 +28,10 @@ export function ticketWriteKeys(ticketUuid?: string | null): unknown[][] {
         [...ticketKeys.histories(), { path: { uuid: ticketUuid } }],
       ]
     : [ticketKeys.details(), ticketKeys.tasks(), ticketKeys.histories()];
-  return [[...ticketKeys.lists()], ...own.map((k) => [...k])];
+  return [
+    [...ticketKeys.lists()],
+    // A space (BE-036) has no status of its own: its list row and floors read its tickets'.
+    ['admin', 'buildingMaps'],
+    ...own.map((k) => [...k]),
+  ];
 }
