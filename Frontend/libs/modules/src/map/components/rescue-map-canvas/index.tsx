@@ -30,6 +30,7 @@ import {
 } from '../../location-cells';
 import type {
   RescueMapArea,
+  RescueMapClusterAppearance,
   RescueMapControllerValue,
   RescueMapDraftArea,
   RescueMapDraftPoint,
@@ -39,7 +40,7 @@ import type {
   RescueMapViewportStoreSnapshot,
   RescueMapViewportStoreLike,
 } from '../../types';
-import { createMapMarkerIcon } from '../map-marker';
+import { createMapMarkerIcon, createMapMarkerTooltipHtml } from '../map-marker';
 
 import { designTokens } from '@rescue-frontend/ui';
 
@@ -64,6 +65,17 @@ interface RescueMapCanvasProps {
   onDraftPointChange?: (point: RescueMapDraftPoint | null) => void;
   /** Floats above the crosshair and goes where it goes. */
   draftPointAction?: ReactNode;
+  /** Cluster look; read once, when the map is built. Default: the site's gradient discs. */
+  clusterAppearance?: RescueMapClusterAppearance;
+  /**
+   * Highest zoom at which markers still cluster; read once, when the map is built. Default: they
+   * cluster at every zoom.
+   */
+  clusterMaxZoom?: number;
+  /** Where Leaflet's zoom buttons sit; read once. The `Map` decides whether they show. */
+  zoomControlPosition?: L.ControlPosition;
+  /** Hands the Leaflet map over once it is built, for callers that steer it themselves. */
+  onMapReady?: (map: L.Map) => void;
 }
 
 /**
@@ -125,29 +137,26 @@ interface MarkerClusterGroupLike extends L.LayerGroup {
   removeLayer(layer: L.Layer): this;
 }
 
-type MarkerClusterFactory = (options: {
+interface MarkerClusterOptions {
   animate: boolean;
   animateAddingMarkers: boolean;
   chunkedLoading: boolean;
   showCoverageOnHover: boolean;
   spiderfyOnMaxZoom: boolean;
+  disableClusteringAtZoom?: number;
   iconCreateFunction: (cluster: {
     getChildCount: () => number;
     getAllChildMarkers: () => Array<L.Marker & { __rescueDetailType?: string }>;
   }) => L.DivIcon;
-}) => MarkerClusterGroupLike;
+}
 
-type MarkerClusterConstructor = new (options: {
-  animate: boolean;
-  animateAddingMarkers: boolean;
-  chunkedLoading: boolean;
-  showCoverageOnHover: boolean;
-  spiderfyOnMaxZoom: boolean;
-  iconCreateFunction: (cluster: {
-    getChildCount: () => number;
-    getAllChildMarkers: () => Array<L.Marker & { __rescueDetailType?: string }>;
-  }) => L.DivIcon;
-}) => MarkerClusterGroupLike;
+type MarkerClusterFactory = (
+  options: MarkerClusterOptions,
+) => MarkerClusterGroupLike;
+
+type MarkerClusterConstructor = new (
+  options: MarkerClusterOptions,
+) => MarkerClusterGroupLike;
 
 /**
  * 畫成圖釘的：站點與精確座標的任務單。概略座標的單（`locationCell`）改由格子層畫 ——
@@ -159,9 +168,44 @@ function getPinnedMarkers(
   return markers.filter((marker) => !isCoarseTicket(marker));
 }
 
-/** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定。 */
+/** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定 —— 另加選用的 pin／tooltip。 */
 function getMarkerIconSignature(item: RescueMapMarkerItem): string {
-  return `${item.detailType}|${item.variant}|${item.label}`;
+  const base = `${item.detailType}|${item.variant}|${item.label}`;
+
+  if (!item.pin && !item.tooltip) {
+    return base;
+  }
+
+  const { pin, tooltip } = item;
+
+  return [
+    base,
+    pin ? `${pin.color}|${pin.dimmed ? 1 : 0}|${pin.selected ? 1 : 0}` : '',
+    tooltip ? `${tooltip.title}|${tooltip.subtitle ?? ''}` : '',
+  ].join('|');
+}
+
+/** Binds, rebinds or drops the opt-in hover tooltip (`item.tooltip`). */
+function syncMarkerTooltip(marker: L.Marker, item: RescueMapMarkerItem) {
+  const html = createMapMarkerTooltipHtml(item);
+
+  if (!html) {
+    marker.unbindTooltip();
+    return;
+  }
+
+  marker.unbindTooltip();
+  marker.bindTooltip(html, {
+    direction: 'top',
+    offset: [0, -18],
+    opacity: 1,
+    className: 'map-marker-tooltip',
+  });
+}
+
+/** A selected opt-in pin rises above its neighbours. */
+function getMarkerZIndexOffset(item: RescueMapMarkerItem): number {
+  return item.pin?.selected ? 1000 : 0;
 }
 
 function resolveClusterTone(
@@ -180,6 +224,28 @@ function resolveClusterTone(
   }
 
   return stationCount >= markers.length / 2 ? 'station' : 'ticket';
+}
+
+/**
+ * The opt-in `solid` cluster: a flat primary disc in a white ring, 40/46/52px at under 10, 10+ and
+ * 20+ (prototype `station-map.jsx` clusterHtml).
+ */
+function createSolidClusterIcon(
+  count: number,
+  leaflet: typeof import('leaflet'),
+): import('leaflet').DivIcon {
+  const dimension = count >= 20 ? 52 : count >= 10 ? 46 : 40;
+
+  return leaflet.divIcon({
+    className: 'map-marker-cluster-wrapper',
+    html: [
+      `<div class="map-marker-cluster map-marker-cluster--solid${count >= 100 ? ' map-marker-cluster--solid-dense' : ''}" style="width:${dimension}px;height:${dimension}px">`,
+      `<span class="map-marker-cluster__count">${count}</span>`,
+      '</div>',
+    ].join(''),
+    iconSize: [dimension, dimension],
+    iconAnchor: [dimension / 2, dimension / 2],
+  });
 }
 
 function createClusterIcon({
@@ -578,8 +644,13 @@ function syncMarkerLayer({
     if (!existing) {
       const marker = L.marker(item.position, {
         icon: createMapMarkerIcon(item, leaflet),
+        zIndexOffset: getMarkerZIndexOffset(item),
       }) as L.Marker & { __rescueDetailType?: string };
       marker.__rescueDetailType = item.detailType;
+
+      if (item.tooltip) {
+        syncMarkerTooltip(marker, item);
+      }
 
       marker.on('click', () => {
         const handle = handles.get(item.id);
@@ -600,6 +671,15 @@ function syncMarkerLayer({
 
     if (existing.iconSignature !== iconSignature) {
       existing.marker.setIcon(createMapMarkerIcon(item, leaflet));
+
+      if (item.pin || existing.item.pin) {
+        existing.marker.setZIndexOffset(getMarkerZIndexOffset(item));
+      }
+
+      if (item.tooltip || existing.item.tooltip) {
+        syncMarkerTooltip(existing.marker, item);
+      }
+
       existing.iconSignature = iconSignature;
     }
 
@@ -808,6 +888,10 @@ export function RescueMapCanvas({
   draftPoint,
   onDraftPointChange,
   draftPointAction,
+  clusterAppearance = 'default',
+  clusterMaxZoom,
+  zoomControlPosition,
+  onMapReady,
 }: RescueMapCanvasProps) {
   const externalViewportState =
     useSyncExternalStore<RescueMapViewportStoreSnapshot>(
@@ -845,6 +929,13 @@ export function RescueMapCanvas({
   const onLocationCellClickRef = useRef(onLocationCellClick);
   const onDraftPointChangeRef = useRef(onDraftPointChange);
   const initialViewportStateRef = useRef(externalViewportState);
+  // Read once, when the map is built.
+  const mapOptionsRef = useRef({
+    clusterAppearance,
+    clusterMaxZoom,
+    zoomControlPosition,
+    onMapReady,
+  });
 
   controllerRef.current = controller;
   onMapClickRef.current = onMapClick;
@@ -884,6 +975,12 @@ export function RescueMapCanvas({
     map.createPane(PUBLIC_ZONE_PANE).style.zIndex = '380';
     map.createPane(HAZARD_ZONE_PANE).style.zIndex = '390';
 
+    const mapOptions = mapOptionsRef.current;
+
+    if (mapOptions.zoomControlPosition) {
+      map.zoomControl?.setPosition(mapOptions.zoomControlPosition);
+    }
+
     const overlayLayer = L.layerGroup();
     const cellLayer = L.layerGroup();
     const markerHandles = markerHandlesRef.current;
@@ -917,38 +1014,51 @@ export function RescueMapCanvas({
         }
       ).markerClusterGroup;
 
+      const clusterOptions: MarkerClusterOptions = {
+        animate: false,
+        animateAddingMarkers: false,
+        chunkedLoading: true,
+        showCoverageOnHover: false,
+        spiderfyOnMaxZoom: true,
+        iconCreateFunction: (cluster) =>
+          mapOptions.clusterAppearance === 'solid'
+            ? createSolidClusterIcon(cluster.getChildCount(), L)
+            : createClusterIcon({
+                count: cluster.getChildCount(),
+                tone: resolveClusterTone(cluster.getAllChildMarkers()),
+                leaflet: L,
+              }),
+        ...(mapOptions.clusterMaxZoom === undefined
+          ? {}
+          : { disableClusteringAtZoom: mapOptions.clusterMaxZoom + 1 }),
+      };
       const markerLayer =
-        clusterFactory?.({
-          animate: false,
-          animateAddingMarkers: false,
-          chunkedLoading: true,
-          showCoverageOnHover: false,
-          spiderfyOnMaxZoom: true,
-          iconCreateFunction: (cluster) =>
-            createClusterIcon({
-              count: cluster.getChildCount(),
-              tone: resolveClusterTone(cluster.getAllChildMarkers()),
-              leaflet: L,
-            }),
-        }) ??
-        (clusterCtor
-          ? new clusterCtor({
-              animate: false,
-              animateAddingMarkers: false,
-              chunkedLoading: true,
-              showCoverageOnHover: false,
-              spiderfyOnMaxZoom: true,
-              iconCreateFunction: (cluster) =>
-                createClusterIcon({
-                  count: cluster.getChildCount(),
-                  tone: resolveClusterTone(cluster.getAllChildMarkers()),
-                  leaflet: L,
-                }),
-            })
-          : null);
+        clusterFactory?.(clusterOptions) ??
+        (clusterCtor ? new clusterCtor(clusterOptions) : null);
 
       if (!markerLayer) {
         return;
+      }
+
+      if (mapOptions.clusterAppearance === 'solid') {
+        markerLayer.on('clustermouseover', (event) => {
+          const cluster = (
+            event as L.LeafletEvent & {
+              layer: L.Marker & {
+                getChildCount: () => number;
+              };
+            }
+          ).layer;
+
+          cluster
+            .bindTooltip(`${cluster.getChildCount()} 個站點 · 點擊放大`, {
+              direction: 'top',
+              offset: [0, -22],
+              opacity: 1,
+              className: 'map-marker-tooltip',
+            })
+            .openTooltip();
+        });
       }
 
       markerLayer.addTo(mapRef.current);
@@ -1056,6 +1166,8 @@ export function RescueMapCanvas({
         // Ignore initial invalidation race during client mount.
       }
     });
+
+    mapOptions.onMapReady?.(map);
 
     return () => {
       window.clearTimeout(viewportSyncTimer);

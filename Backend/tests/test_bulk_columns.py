@@ -221,7 +221,7 @@ async def test_export_only_columns_are_writable_in_neither_direction(db):
     """Values the platform decides — a reviewer's verdict, a timestamp — are never imported."""
     columns = await station_columns(db, "shelter")
 
-    for header in ("uuid", "verification_status", "created_at", "updated_at"):
+    for header in ("uuid", "source", "verification_status", "is_official", "created_at", "updated_at"):
         column = _by_header(columns, header)
         assert (column.writable_on_create, column.writable_on_update) == (False, False), header
 

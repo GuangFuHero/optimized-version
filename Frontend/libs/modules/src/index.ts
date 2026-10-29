@@ -152,7 +152,11 @@ export {
   type SiteActionDrawerProps,
 } from './shell/site';
 
-export { StationCreateDrawer, StationDetailDrawer } from './station';
+export {
+  StationCreateDrawer,
+  StationDetailDrawer,
+  StationManagementPage,
+} from './station';
 
 export {
   TicketCreateDrawer,
