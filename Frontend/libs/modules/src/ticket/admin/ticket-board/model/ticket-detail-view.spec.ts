@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   adminTicketHref,
   disasterDetailRows,
+  disasterFieldRows,
   ticketDetailState,
   toTicketDetailView,
   type DetailTicket,
@@ -22,6 +23,8 @@ const ticket = {
   disasterDetails: [{ uuid: 'd-1', propertyName: '積水深度', value: '30cm' }],
   locationCell: null,
   updatedAt: '2026-10-21T08:30:00.123456+00:00',
+  createdAt: '2026-06-13T01:12:00+00:00',
+  responsibleTeams: [{ uuid: 'team-1', name: '光復鄉救援隊' }],
   secondaryLocation: {
     fullAddress: '花蓮縣光復鄉中正路12號',
     county: '花蓮縣',
@@ -158,6 +161,35 @@ describe('toTicketDetailView', () => {
     expect(view.disasterLabels).toEqual(['水災', 'x']);
   });
 
+  it('says when it was filed, in Taiwan time', () => {
+    expect(toTicketDetailView(ticket, LABELS).createdLabel).toBe(
+      '建立於 06/13 09:12',
+    );
+    expect(
+      toTicketDetailView({ ...ticket, createdAt: null }, LABELS).createdLabel,
+    ).toBeNull();
+  });
+
+  it('names the 責任區 teams, and withholds them on a coarse ticket', () => {
+    expect(toTicketDetailView(ticket, LABELS).teamNames).toEqual([
+      '光復鄉救援隊',
+    ]);
+    expect(
+      toTicketDetailView({ ...ticket, responsibleTeams: [] }, LABELS).teamNames,
+    ).toEqual([]);
+    expect(
+      toTicketDetailView(
+        {
+          ...ticket,
+          locationCell: '8a4ba0a6c4a7fff',
+          secondaryLocation: null,
+          responsibleTeams: [],
+        },
+        LABELS,
+      ).teamNames,
+    ).toBeNull();
+  });
+
   it('passes updatedAt through untouched', () => {
     expect(toTicketDetailView(ticket, LABELS).updatedAt).toBe(
       '2026-10-21T08:30:00.123456+00:00',
@@ -219,5 +251,51 @@ describe('disasterDetailRows', () => {
     expect(
       disasterDetailRows([{ propertyName: 'road_blocked', value: 'true' }], []),
     ).toEqual([{ label: 'road_blocked', value: 'true' }]);
+  });
+});
+
+describe('disasterFieldRows', () => {
+  const configs = [
+    {
+      propertyName: 'water_depth',
+      displayLabel: '積水深度',
+      dataType: 'number' as const,
+      unit: 'cm',
+    },
+    {
+      propertyName: 'power',
+      displayLabel: '電力',
+      dataType: 'single_select' as const,
+      unit: null,
+    },
+  ];
+
+  it('lists every configured field in its order, an empty one as null', () => {
+    expect(
+      disasterFieldRows([{ propertyName: 'power', value: '停電' }], configs),
+    ).toEqual([
+      { label: '積水深度', value: null },
+      { label: '電力', value: '停電' },
+    ]);
+  });
+
+  it('keeps an answer to a field no config names, after the configured ones', () => {
+    expect(
+      disasterFieldRows(
+        [
+          { propertyName: 'retired_field', value: '有' },
+          { propertyName: 'water_depth', value: '30' },
+        ],
+        configs,
+      ),
+    ).toEqual([
+      { label: '積水深度', value: '30 cm' },
+      { label: '電力', value: null },
+      { label: 'retired_field', value: '有' },
+    ]);
+  });
+
+  it('is empty with no config and no answer', () => {
+    expect(disasterFieldRows([], [])).toEqual([]);
   });
 });

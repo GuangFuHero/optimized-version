@@ -34,6 +34,7 @@ import { adminTicketPriorityBadge } from './model/ticket-priority';
 import {
   needChipLabel,
   needProgress,
+  type NeedProgress,
   type TaskRow,
   type TicketRow,
 } from './model/ticket-row';
@@ -210,7 +211,7 @@ function CutText({
 }
 
 /** 生命危急 solid red, 緊急 subtle warning; 一般 and 低 as plain muted words (prototype PriorityBadge). */
-function PriorityCell({ priority }: { priority: string }) {
+export function PriorityCell({ priority }: { priority: string }) {
   const badge = adminTicketPriorityBadge(priority);
   if (badge) {
     return (
@@ -325,40 +326,46 @@ function NeedsCell({ tasks }: { tasks: readonly TaskRow[] }) {
           </Typography>
         ) : null}
       </Box>
-      {progress.label ? (
+      <NeedProgressBar progress={progress} />
+    </Box>
+  );
+}
+
+/** 承接進度: the 待承接 line over its 4px bar (prototype `FillBar`); nothing with no need to count. */
+export function NeedProgressBar({ progress }: { progress: NeedProgress }) {
+  if (!progress.label) return null;
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '5px',
+        minWidth: 0,
+      }}
+    >
+      <Typography
+        noWrap
+        sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
+      >
+        {progress.label}
+      </Typography>
+      <Box
+        role="presentation"
+        sx={{
+          height: 4,
+          borderRadius: '2px',
+          bgcolor: color.bg.neutral.sunken,
+          overflow: 'hidden',
+        }}
+      >
         <Box
           sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '5px',
-            minWidth: 0,
+            height: '100%',
+            width: `${Math.round(progress.ratio * 100)}%`,
+            bgcolor: color.fg.neutral.subtle,
           }}
-        >
-          <Typography
-            noWrap
-            sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
-          >
-            {progress.label}
-          </Typography>
-          <Box
-            role="presentation"
-            sx={{
-              height: 4,
-              borderRadius: '2px',
-              bgcolor: color.bg.neutral.sunken,
-              overflow: 'hidden',
-            }}
-          >
-            <Box
-              sx={{
-                height: '100%',
-                width: `${Math.round(progress.ratio * 100)}%`,
-                bgcolor: color.fg.neutral.subtle,
-              }}
-            />
-          </Box>
-        </Box>
-      ) : null}
+        />
+      </Box>
     </Box>
   );
 }
@@ -399,7 +406,7 @@ function NeedChip({ task }: { task: TaskRow }) {
 }
 
 /** 狀態: grey words; only 待處理 carries the small orange dot and reads darker. */
-function StatusCell({ status }: { status: string }) {
+export function StatusCell({ status }: { status: string }) {
   const pending = status === 'pending';
   return (
     <Typography

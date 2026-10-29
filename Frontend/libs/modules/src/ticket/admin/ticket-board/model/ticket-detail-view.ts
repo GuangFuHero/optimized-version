@@ -3,6 +3,7 @@ import type {
   AdminTicketQuery,
 } from '@rescue-frontend/data-access/admin';
 
+import { taiwanDateParts } from '../../../../time';
 import { formatTicketStreet, formatTicketUnit } from '../../../address';
 import { formatTicketStatusLabel } from '../../../status';
 import { adminTicketPriorityLabel } from './ticket-priority';
@@ -48,6 +49,13 @@ export interface TicketDetailView {
   auditLabel: string;
   /** As the API returned it; the sheet formats it for display. */
   updatedAt: string | null;
+  /** The subtitle, 「建立於 06/13 09:12」 in Taiwan time; null without a creation time. */
+  createdLabel: string | null;
+  /**
+   * 指派 Team: the 責任區 teams' names (`responsibleTeams`), empty when none; null when withheld
+   * (a coarse ticket), which is not the same as none.
+   */
+  teamNames: string[] | null;
   location:
     | { kind: 'exact'; address: string; floorRoom: string | null }
     | { kind: 'coarse' };
@@ -63,7 +71,8 @@ export interface TicketDetailView {
     email: string | null;
   } | null;
   disasterLabels: string[];
-  disasterDetails: { label: string; value: string }[];
+  /** 現場災況: every configured field, a null value for one left empty (未填). */
+  disasterDetails: { label: string; value: string | null }[];
   description: string | null;
 }
 
@@ -116,6 +125,49 @@ export function disasterDetailRows(
   });
 }
 
+/**
+ * 現場災況 as the drawer lists it: every field configured for the ticket's disaster types, in their
+ * configured order, with a null value for one left empty (未填, TM-FS-110); then any answer to a
+ * field no loaded config names (a retired one), labelled by its key, so a value given is never
+ * dropped (TM-FS-109).
+ */
+export function disasterFieldRows(
+  details: readonly Pick<
+    DetailTicket['disasterDetails'][number],
+    'propertyName' | 'value'
+  >[],
+  configs: readonly DisasterFieldConfig[],
+): { label: string; value: string | null }[] {
+  const named = new Set(configs.map((config) => config.propertyName));
+  // Labelled and joined as disasterDetailRows does, keyed by field: one per field answered.
+  const answers = new Map(
+    [...new Set(details.map((detail) => detail.propertyName))].map((name) => [
+      name,
+      disasterDetailRows(
+        details.filter((detail) => detail.propertyName === name),
+        configs,
+      )[0],
+    ]),
+  );
+  return [
+    ...configs.map((config) => ({
+      label: config.displayLabel || config.propertyName,
+      value: answers.get(config.propertyName)?.value || null,
+    })),
+    ...[...answers]
+      .filter(([name]) => !named.has(name))
+      .map(([, row]) => ({ label: row.label, value: row.value || null })),
+  ];
+}
+
+/** 「建立於 06/13 09:12」, Taiwan time. */
+function createdLabel(iso: string | null | undefined): string | null {
+  const time = iso ? new Date(iso) : null;
+  if (!time || Number.isNaN(time.getTime())) return null;
+  const p = taiwanDateParts(time);
+  return `建立於 ${p.month}/${p.day} ${p.hour}:${p.minute}`;
+}
+
 export function toTicketDetailView(
   ticket: DetailTicket,
   disasterLabels: Record<string, string>,
@@ -131,6 +183,8 @@ export function toTicketDetailView(
       AUDIT_BADGES[ticket.auditStatus as AuditStatus]?.label ??
       ticket.auditStatus,
     updatedAt: ticket.updatedAt ?? null,
+    createdLabel: createdLabel(ticket.createdAt),
+    teamNames: coarse ? null : ticket.responsibleTeams.map((team) => team.name),
     detailHidden: coarse,
     location: coarse
       ? { kind: 'coarse' }
@@ -143,7 +197,7 @@ export function toTicketDetailView(
     disasterLabels: ticket.disasterTypes.map(
       (key) => disasterLabels[key] ?? key,
     ),
-    disasterDetails: disasterDetailRows(ticket.disasterDetails, disasterFields),
+    disasterDetails: disasterFieldRows(ticket.disasterDetails, disasterFields),
     description: text(ticket.description),
   };
 }
