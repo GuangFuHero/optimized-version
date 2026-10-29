@@ -15,7 +15,7 @@ export interface ClaimError {
 }
 
 /** What one action says for each way it can be refused. */
-interface RefusalWords {
+export interface RefusalWords {
   /** The backend's refusals for it (`services/ticket.py`), word for word. */
   refusals: Record<string, string>;
   /** A 403: the account may not do this at all. */
@@ -24,7 +24,7 @@ interface RefusalWords {
   fallback: string;
 }
 
-function refusalMessage(error: ClaimError, words: RefusalWords): string {
+export function refusalMessage(error: ClaimError, words: RefusalWords): string {
   // Before the connection: an HTTP 401 comes as a `networkError` too (`isUnauthorizedError`).
   if (isUnauthorizedError(error)) {
     return '登入已過期，請重新登入後再試一次。';

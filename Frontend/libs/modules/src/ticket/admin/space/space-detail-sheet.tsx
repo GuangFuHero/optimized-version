@@ -34,6 +34,7 @@ import {
   type SpaceTicket,
 } from './space-analysis';
 import { floorStateColor, StateBadge } from './space-badges';
+import { spaceErrorMessage } from './space-error';
 import { SpaceFormDrawer } from './space-form-drawer';
 import { deletedToast, deleteKeepsText, ticketsCut } from './space-partial';
 import {
@@ -395,7 +396,11 @@ function SpaceDetailContent({
         confirmIcon={<Trash2 size={16} />}
         confirmTone="danger"
         submitting={remove.isPending}
-        error={remove.error ? remove.error.message : undefined}
+        error={
+          remove.error ? spaceErrorMessage('delete', remove.error) : undefined
+        }
+        // Reopened, the dialog asks afresh: a refusal from the last try is no longer news.
+        onExited={() => remove.reset()}
       >
         {deleteKeepsText(kept, cut)}
       </Dialog>

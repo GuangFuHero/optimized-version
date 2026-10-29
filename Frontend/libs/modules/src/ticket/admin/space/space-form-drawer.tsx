@@ -46,6 +46,7 @@ import {
   type SpaceFormField,
   type SpaceFormValues,
 } from './space-form';
+import { spaceErrorMessage } from './space-error';
 import {
   useSpacePinLookup,
   useSpaces,
@@ -155,7 +156,7 @@ function CreateSpaceForm({
       onCreated?.(result.createBuildingMap.uuid);
       onClose();
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '開啟空間失敗。');
+      setSubmitError(spaceErrorMessage('create', error));
     }
   };
 
@@ -323,7 +324,7 @@ function SpaceEditForm({
       toast.success(`已更新「${values.name.trim()}」`);
       onClose();
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '更新空間失敗。');
+      setSubmitError(spaceErrorMessage('update', error));
     }
   };
 
