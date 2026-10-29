@@ -50,13 +50,16 @@ export interface AssignableNeed {
 /**
  * Whether the card offers 指派承接: the caller may assign to the need, and the backend would take
  * one more (`_lock_task_with_room`) — the need still open, its ticket too, and room left under its
- * quantity. A need stopped by hand is fulfilled, so it is not offered either.
+ * quantity. A need stopped by hand is fulfilled, so it is not offered either. The picker lists the
+ * caller's team, so an identity with none (a platform admin) has nobody to pick and isn't offered it.
  */
 export function canAssignNeed(
   task: AssignableNeed,
   ticketStatus: string,
+  caller: { hasTeam: boolean },
 ): boolean {
   return (
+    caller.hasTeam &&
     task.viewerCanAssign &&
     OPEN_TASK_STATUSES.has(task.status) &&
     !CLOSED_TICKET_STATUSES.has(ticketStatus) &&

@@ -145,7 +145,9 @@ export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
                 key={task.uuid}
                 ticketUuid={ticket.uuid}
                 task={task}
-                canAssign={canAssignNeed(task, ticket.status)}
+                canAssign={canAssignNeed(task, ticket.status, {
+                  hasTeam: team !== null,
+                })}
                 team={team}
                 assignmentsHidden={!ticket.viewerCanViewHistory}
                 canEditNote={canWriteNeedNote(ticket)}

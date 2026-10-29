@@ -45,39 +45,50 @@ describe('canAssignNeed', () => {
     assignedCount: 1,
     viewerCanAssign: true,
   };
+  const teamed = { hasTeam: true };
 
   it('offers an open need with room, to a caller who may assign to it', () => {
-    expect(canAssignNeed(open, 'pending')).toBe(true);
+    expect(canAssignNeed(open, 'pending', teamed)).toBe(true);
     expect(
-      canAssignNeed({ ...open, status: 'in_progress' }, 'in_progress'),
+      canAssignNeed({ ...open, status: 'in_progress' }, 'in_progress', teamed),
     ).toBe(true);
   });
 
   it('never offers it without ticket.assign over the need', () => {
-    expect(canAssignNeed({ ...open, viewerCanAssign: false }, 'pending')).toBe(
-      false,
-    );
+    expect(
+      canAssignNeed({ ...open, viewerCanAssign: false }, 'pending', teamed),
+    ).toBe(false);
   });
 
   it('never offers a full need: the cap binds a coordinator too', () => {
-    expect(canAssignNeed({ ...open, assignedCount: 3 }, 'pending')).toBe(false);
+    expect(
+      canAssignNeed({ ...open, assignedCount: 3 }, 'pending', teamed),
+    ).toBe(false);
   });
 
   it('has no cap on a need without a quantity', () => {
     expect(
-      canAssignNeed({ ...open, quantity: null, assignedCount: 40 }, 'pending'),
+      canAssignNeed(
+        { ...open, quantity: null, assignedCount: 40 },
+        'pending',
+        teamed,
+      ),
     ).toBe(true);
   });
 
   it('never offers a closed need, or one on a closed ticket', () => {
-    expect(canAssignNeed({ ...open, status: 'fulfilled' }, 'pending')).toBe(
-      false,
-    );
-    expect(canAssignNeed({ ...open, status: 'canceled' }, 'pending')).toBe(
-      false,
-    );
-    expect(canAssignNeed(open, 'completed')).toBe(false);
-    expect(canAssignNeed(open, 'cancelled')).toBe(false);
+    expect(
+      canAssignNeed({ ...open, status: 'fulfilled' }, 'pending', teamed),
+    ).toBe(false);
+    expect(
+      canAssignNeed({ ...open, status: 'canceled' }, 'pending', teamed),
+    ).toBe(false);
+    expect(canAssignNeed(open, 'completed', teamed)).toBe(false);
+    expect(canAssignNeed(open, 'cancelled', teamed)).toBe(false);
+  });
+
+  it('never offers it to an identity with no team, which has nobody to pick', () => {
+    expect(canAssignNeed(open, 'pending', { hasTeam: false })).toBe(false);
   });
 });
 
