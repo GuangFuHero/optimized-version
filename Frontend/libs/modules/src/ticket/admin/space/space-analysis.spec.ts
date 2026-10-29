@@ -255,6 +255,36 @@ describe('spaceSummary', () => {
     ).toBe('2 層 · 1 張任務單 · 都完成');
   });
 
+  it('says the building needs help when only a ticket off its floors does', () => {
+    expect(
+      spaceSummary(
+        analyzeSpace(floorLabelsFor(1, 0), [
+          ticket({ floor: '1F', status: 'completed' }),
+          ticket({ floor: null }),
+        ]),
+      ),
+    ).toBe('2 層 · 2 張任務單 · 還需要幫忙');
+    expect(
+      spaceSummary(
+        analyzeSpace(floorLabelsFor(1, 0), [
+          ticket({ floor: '1F', status: 'in_progress' }),
+          ticket({ floor: '9F' }),
+        ]),
+      ),
+    ).toBe('2 層 · 2 張任務單 · 還需要幫忙');
+  });
+
+  it('says it is in progress when only a ticket off its floors is', () => {
+    expect(
+      spaceSummary(
+        analyzeSpace(floorLabelsFor(1, 0), [
+          ticket({ floor: '1F', status: 'completed' }),
+          ticket({ floor: null, status: 'in_progress' }),
+        ]),
+      ),
+    ).toBe('2 層 · 2 張任務單 · 處理中');
+  });
+
   it('summarises an empty space', () => {
     expect(spaceSummary(analyzeSpace(floorLabelsFor(12, 1), []))).toBe(
       '14 層 · 0 張任務單',
@@ -432,6 +462,33 @@ describe('spaceRowVisible', () => {
       spaceRowVisible({
         row: row(),
         keyword: '',
+        hasFilters: true,
+        anyTicketPasses: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('with filters and a search needs both a passing ticket and the name', () => {
+    expect(
+      spaceRowVisible({
+        row: row({ name: '宏福苑 A 座' }),
+        keyword: '宏福',
+        hasFilters: true,
+        anyTicketPasses: false,
+      }),
+    ).toBe(false);
+    expect(
+      spaceRowVisible({
+        row: row(),
+        keyword: '宏福',
+        hasFilters: true,
+        anyTicketPasses: true,
+      }),
+    ).toBe(false);
+    expect(
+      spaceRowVisible({
+        row: row({ name: '宏福苑 A 座' }),
+        keyword: '宏福',
         hasFilters: true,
         anyTicketPasses: true,
       }),

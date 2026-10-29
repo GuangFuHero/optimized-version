@@ -160,16 +160,21 @@ export function floorsCaption(analysis: SpaceAnalysis): string {
   return `${analysis.floors.length} 層（含頂樓 RF）· ${analysis.members.length} 張任務單`;
 }
 
-/** One line for the whole building: 「14 層 · 6 張任務單 · 2 層還需要幫忙」. */
+/**
+ * One line for the whole building: 「14 層 · 6 張任務單 · 2 層還需要幫忙」. It follows `overall`, so a
+ * ticket off the building's floors that needs help never leaves it reading 都完成.
+ */
 export function spaceSummary(analysis: SpaceAnalysis): string {
+  const { counts, overall } = analysis;
   const parts = [
     `${analysis.floors.length} 層`,
     `${analysis.members.length} 張任務單`,
   ];
-  if (analysis.counts.need) parts.push(`${analysis.counts.need} 層還需要幫忙`);
-  else if (analysis.counts.progress)
-    parts.push(`${analysis.counts.progress} 層處理中`);
-  else if (analysis.members.length) parts.push('都完成');
+  if (overall === 'need')
+    parts.push(counts.need ? `${counts.need} 層還需要幫忙` : '還需要幫忙');
+  else if (overall === 'progress')
+    parts.push(counts.progress ? `${counts.progress} 層處理中` : '處理中');
+  else if (overall === 'done') parts.push('都完成');
   return parts.join(' · ');
 }
 
@@ -256,7 +261,7 @@ export function toSpaceListRow(
 /**
  * Whether a space shows in the filtered list (designer, §開啟空間 3): every space with nothing
  * chosen; with a search alone, a space whose name or address has it; with filters, a space with a
- * ticket that passes them, or with a search too, one the search names.
+ * ticket that passes them, and with a search too, one the search also names.
  */
 export function spaceRowVisible(input: {
   row: SpaceListRow;
@@ -272,6 +277,6 @@ export function spaceRowVisible(input: {
       text.toLowerCase().includes(keyword),
     );
 
-  if (hasFilters) return anyTicketPasses || named;
-  return keyword ? named : true;
+  if (keyword && !named) return false;
+  return hasFilters ? anyTicketPasses : true;
 }
