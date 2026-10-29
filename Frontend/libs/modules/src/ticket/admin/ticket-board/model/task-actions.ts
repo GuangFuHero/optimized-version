@@ -4,7 +4,6 @@
  */
 
 import type { ClaimError } from '../../../needs/claim-error';
-import type { TicketCapabilities } from '../hooks/use-ticket-capabilities';
 import {
   OPEN_TASK_STATUSES,
   type TaskRow,
@@ -15,26 +14,32 @@ export type TaskAction = 'stop' | 'delete';
 
 const CLOSED_TICKET_STATUSES = new Set<string>(['completed', 'cancelled']);
 
+/** The ticket's own flags (`viewerCan*`), scoped to that ticket. */
+export interface TicketTaskPerms {
+  viewerCanEdit: boolean;
+  viewerCanDelete: boolean;
+}
+
 /**
  * The entries of a need's ⋯. Stop recruiting follows the backend's own checks (`stop_recruiting`,
- * under `ticket.edit`): the need and its ticket still open, and somebody on it to keep. Delete is
- * `ticket.delete` alone (`delete_ticket_task`), whatever the need's state.
+ * under `ticket.edit` on its ticket): the need and its ticket still open, and somebody on it to keep. Delete is
+ * `ticket.delete` on its ticket alone (`delete_ticket_task`), whatever the need's state.
  */
 export function taskActionsFor(
   task: TaskRow,
   ticketStatus: TicketStatus,
-  caps: TicketCapabilities,
+  perms: TicketTaskPerms,
 ): TaskAction[] {
   const actions: TaskAction[] = [];
   if (
-    caps.canEdit &&
+    perms.viewerCanEdit &&
     OPEN_TASK_STATUSES.has(task.status) &&
     !CLOSED_TICKET_STATUSES.has(ticketStatus) &&
     task.assignedCount > 0
   ) {
     actions.push('stop');
   }
-  if (caps.canDelete) actions.push('delete');
+  if (perms.viewerCanDelete) actions.push('delete');
   return actions;
 }
 

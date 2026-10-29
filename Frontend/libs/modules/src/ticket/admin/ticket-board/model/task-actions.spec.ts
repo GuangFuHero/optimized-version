@@ -1,25 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import type { TicketCapabilities } from '../hooks/use-ticket-capabilities';
 import {
   auditErrorMessage,
   buildNeedInput,
   isStaleAudit,
   readCreateResult,
   taskActionsFor,
+  type TicketTaskPerms,
   validateNeedDraft,
 } from './task-actions';
 import type { TaskRow } from './ticket-row';
 
-const caps = (over: Partial<TicketCapabilities> = {}): TicketCapabilities => ({
-  canAdd: false,
-  canEdit: true,
-  canDelete: false,
-  canAudit: false,
-  canImport: false,
-  canExport: false,
-  canViewDetail: false,
-  canViewHistory: false,
+const perms = (over: Partial<TicketTaskPerms> = {}): TicketTaskPerms => ({
+  viewerCanEdit: true,
+  viewerCanDelete: false,
   ...over,
 });
 
@@ -38,33 +32,43 @@ const task = (over: Partial<TaskRow> = {}): TaskRow =>
 
 describe('taskActionsFor', () => {
   it('offers stop only on an open need with someone on it', () => {
-    expect(taskActionsFor(task(), 'in_progress', caps())).toContain('stop');
+    expect(taskActionsFor(task(), 'in_progress', perms())).toContain('stop');
     expect(
-      taskActionsFor(task({ assignedCount: 0 }), 'in_progress', caps()),
+      taskActionsFor(task({ assignedCount: 0 }), 'in_progress', perms()),
     ).not.toContain('stop');
     expect(
-      taskActionsFor(task({ status: 'fulfilled' }), 'in_progress', caps()),
+      taskActionsFor(task({ status: 'fulfilled' }), 'in_progress', perms()),
     ).not.toContain('stop');
-    expect(taskActionsFor(task(), 'completed', caps())).not.toContain('stop');
-    expect(taskActionsFor(task(), 'cancelled', caps())).not.toContain('stop');
+    expect(taskActionsFor(task(), 'completed', perms())).not.toContain('stop');
+    expect(taskActionsFor(task(), 'cancelled', perms())).not.toContain('stop');
     expect(
-      taskActionsFor(task(), 'in_progress', caps({ canEdit: false })),
+      taskActionsFor(task(), 'in_progress', perms({ viewerCanEdit: false })),
     ).not.toContain('stop');
+  });
+
+  it('offers nothing on a ticket where both flags are denied', () => {
+    expect(
+      taskActionsFor(
+        task(),
+        'pending',
+        perms({ viewerCanEdit: false, viewerCanDelete: false }),
+      ),
+    ).toEqual([]);
   });
 
   it('offers delete with ticket.delete only', () => {
     expect(
-      taskActionsFor(task(), 'pending', caps({ canDelete: false })),
+      taskActionsFor(task(), 'pending', perms({ viewerCanDelete: false })),
     ).not.toContain('delete');
     expect(
-      taskActionsFor(task(), 'pending', caps({ canDelete: true })),
+      taskActionsFor(task(), 'pending', perms({ viewerCanDelete: true })),
     ).toContain('delete');
     // Deleting is not limited to open needs.
     expect(
       taskActionsFor(
         task({ status: 'fulfilled' }),
         'completed',
-        caps({ canEdit: false, canDelete: true }),
+        perms({ viewerCanEdit: false, viewerCanDelete: true }),
       ),
     ).toEqual(['delete']);
   });

@@ -2120,6 +2120,10 @@ export type AdminTicketFieldsFragment = {
   updatedAt?: string | null;
   disasterTypes: Array<string>;
   locationCell?: string | null;
+  viewerCanEdit: boolean;
+  viewerCanDelete: boolean;
+  viewerCanAudit: boolean;
+  viewerCanViewHistory: boolean;
   secondaryLocation?: {
     __typename?: 'SecondaryLocationType';
     county?: string | null;
@@ -2230,6 +2234,10 @@ export type AdminTicketsQuery = {
       updatedAt?: string | null;
       disasterTypes: Array<string>;
       locationCell?: string | null;
+      viewerCanEdit: boolean;
+      viewerCanDelete: boolean;
+      viewerCanAudit: boolean;
+      viewerCanViewHistory: boolean;
       tasks: Array<{
         __typename?: 'TicketTaskType';
         uuid: string;
@@ -2314,6 +2322,10 @@ export type AdminTicketQuery = {
     updatedAt?: string | null;
     disasterTypes: Array<string>;
     locationCell?: string | null;
+    viewerCanEdit: boolean;
+    viewerCanDelete: boolean;
+    viewerCanAudit: boolean;
+    viewerCanViewHistory: boolean;
     changesSinceAudit?: Array<{
       __typename?: 'TicketAuditChangeType';
       entity: string;
@@ -2931,6 +2943,10 @@ export type AdminCreateTicketMutation = {
           updatedAt?: string | null;
           disasterTypes: Array<string>;
           locationCell?: string | null;
+          viewerCanEdit: boolean;
+          viewerCanDelete: boolean;
+          viewerCanAudit: boolean;
+          viewerCanViewHistory: boolean;
           secondaryLocation?: {
             __typename?: 'SecondaryLocationType';
             county?: string | null;
@@ -2965,6 +2981,10 @@ export type AdminUpdateTicketMutation = {
     updatedAt?: string | null;
     disasterTypes: Array<string>;
     locationCell?: string | null;
+    viewerCanEdit: boolean;
+    viewerCanDelete: boolean;
+    viewerCanAudit: boolean;
+    viewerCanViewHistory: boolean;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
       county?: string | null;
@@ -3009,6 +3029,10 @@ export type AdminAuditTicketMutation = {
     updatedAt?: string | null;
     disasterTypes: Array<string>;
     locationCell?: string | null;
+    viewerCanEdit: boolean;
+    viewerCanDelete: boolean;
+    viewerCanAudit: boolean;
+    viewerCanViewHistory: boolean;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
       county?: string | null;
@@ -3947,6 +3971,13 @@ export const AdminTicketFieldsFragmentDoc = {
               ],
             },
           },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
         ],
       },
     },
@@ -4396,6 +4427,13 @@ export const AdminTicketsDocument = {
               ],
             },
           },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
         ],
       },
     },
@@ -4762,6 +4800,13 @@ export const AdminTicketDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'town' } },
               ],
             },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
           },
         ],
       },
@@ -6631,6 +6676,13 @@ export const AdminCreateTicketDocument = {
               ],
             },
           },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
+          },
         ],
       },
     },
@@ -6743,6 +6795,13 @@ export const AdminUpdateTicketDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'town' } },
               ],
             },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
           },
         ],
       },
@@ -6933,6 +6992,13 @@ export const AdminAuditTicketDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'town' } },
               ],
             },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'viewerCanViewHistory' },
           },
         ],
       },

@@ -221,7 +221,6 @@ export function TicketBoardPage() {
       <TicketDetailSheet
         uuid={viewedUuid}
         editing={editingUuid !== null && editingUuid === viewedUuid}
-        caps={caps}
         now={now}
         onClose={() => {
           setEditingUuid(null);

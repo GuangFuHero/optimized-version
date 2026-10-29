@@ -35,11 +35,23 @@ const ticket = (
   locationCell: null,
   secondaryLocation: { county: '花蓮縣', town: '光復鄉' },
   updatedAt: '2026-10-21T00:00:00Z',
+  viewerCanEdit: true,
+  viewerCanDelete: true,
+  viewerCanAudit: true,
+  viewerCanViewHistory: true,
   ...over,
   tasks,
 });
 
 describe('toTicketRow', () => {
+  it('carries the ticket\'s own permission flags on raw', () => {
+    const row = toTicketRow(
+      ticket({ viewerCanEdit: false, viewerCanDelete: true }),
+    );
+    expect(row.raw.viewerCanEdit).toBe(false);
+    expect(row.raw.viewerCanDelete).toBe(true);
+  });
+
   it('gives an open need its missing people as gap', () => {
     const row = toTicketRow(ticket({}, [task()]));
     expect(row.tasks[0].gap).toBe(3);

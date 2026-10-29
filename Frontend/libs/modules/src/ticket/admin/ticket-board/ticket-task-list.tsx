@@ -24,7 +24,6 @@ import {
   getTicketStatusTone,
 } from '../../status';
 import { AddNeedForm } from './add-need-form';
-import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
 import { isForbidden, taskActionsFor } from './model/task-actions';
 import type { DetailTicket } from './model/ticket-detail-view';
 import { toTicketRow, type TaskRow } from './model/ticket-row';
@@ -41,7 +40,6 @@ const ASSIGNMENT_LABELS: Record<string, string> = {
 
 interface TicketTaskListProps {
   ticket: DetailTicket;
-  caps: TicketCapabilities;
   /** 再加一項需求 is sending (or not): the drawer holds its close meanwhile. */
   onAddBusyChange?(busy: boolean): void;
 }
@@ -50,11 +48,10 @@ type PendingAction = { kind: 'stop' | 'delete'; task: TaskRow };
 
 /**
  * The ticket's needs and who took them. Each need's ⋯ offers what the identity may do to it
- * (`taskActionsFor`), each behind a confirmation; `ticket.add` adds 再加一項需求 below them.
+ * (`taskActionsFor`), each behind a confirmation; `ticket.edit` on the ticket adds 再加一項需求 below them.
  */
 export function TicketTaskList({
   ticket,
-  caps,
   onAddBusyChange,
 }: TicketTaskListProps) {
   // One task model for the board: the detail ticket is a superset of the list's fragment.
@@ -82,7 +79,7 @@ export function TicketTaskList({
             const items: NeedAction[] = taskActionsFor(
               row,
               ticketRow.status,
-              caps,
+              ticket,
             ).map((action) =>
               action === 'stop'
                 ? { label: '停止招募', onSelect: () => request('stop', row) }
@@ -108,7 +105,7 @@ export function TicketTaskList({
           })}
         </Box>
       )}
-      {caps.canAdd ? (
+      {ticket.viewerCanEdit ? (
         <AddNeedForm ticketUuid={ticket.uuid} onBusyChange={onAddBusyChange} />
       ) : null}
       <StopRecruitingConfirm

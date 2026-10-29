@@ -24,6 +24,10 @@ fragment AdminTicketFields on TicketType {
     county
     town
   }
+  viewerCanEdit
+  viewerCanDelete
+  viewerCanAudit
+  viewerCanViewHistory
 }
 fragment AdminTaskFields on TicketTaskType {
   uuid

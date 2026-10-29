@@ -31,7 +31,6 @@ import {
 } from '../../needs/delete-ticket';
 import { PhotoThumb } from '../../photos';
 import { getTicketPriorityBadge, getTicketStatusTone } from '../../status';
-import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
 import {
   ticketDetailState,
   toTicketDetailView,
@@ -61,7 +60,6 @@ interface TicketDetailSheetProps {
   uuid: string | null;
   /** Show the ticket's edit form in place of its details. */
   editing: boolean;
-  caps: TicketCapabilities;
   now: Date;
   onClose: () => void;
   onEdit: (uuid: string) => void;
@@ -78,7 +76,6 @@ interface TicketDetailSheetProps {
 export function TicketDetailSheet({
   uuid,
   editing,
-  caps,
   now,
   onClose,
   onEdit,
@@ -111,7 +108,7 @@ export function TicketDetailSheet({
   const ticket = query.data?.ticket;
 
   let content: ReactNode;
-  if (state === 'ready' && ticket && editing && caps.canEdit) {
+  if (state === 'ready' && ticket && editing && ticket.viewerCanEdit) {
     // 取消 or a save: back to the details, in the same frame.
     content = (
       <TicketForm
@@ -130,9 +127,8 @@ export function TicketDetailSheet({
         key={ticket.uuid}
         ticket={ticket}
         view={toTicketDetailView(ticket, disasterLabels)}
-        caps={caps}
         now={now}
-        activeTab={caps.canViewHistory ? activeTab : 'info'}
+        activeTab={ticket.viewerCanViewHistory ? activeTab : 'info'}
         onTabChange={setActiveTab}
         onEdit={() => onEdit(ticket.uuid)}
         onDeleted={onDeleted}
@@ -205,7 +201,6 @@ export function TicketDetailSheet({
 function TicketDetailContent({
   ticket,
   view,
-  caps,
   now,
   activeTab,
   onTabChange,
@@ -216,7 +211,6 @@ function TicketDetailContent({
 }: {
   ticket: DetailTicket;
   view: TicketDetailView;
-  caps: TicketCapabilities;
   now: Date;
   activeTab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
@@ -235,9 +229,9 @@ function TicketDetailContent({
       title={view.title}
       closeLabel="關閉求助單詳情"
       footer={
-        caps.canDelete || caps.canEdit ? (
+        ticket.viewerCanDelete || ticket.viewerCanEdit ? (
           <>
-            {caps.canDelete ? (
+            {ticket.viewerCanDelete ? (
               <Button
                 variant="outline"
                 size="md"
@@ -247,7 +241,7 @@ function TicketDetailContent({
               </Button>
             ) : null}
             <Box sx={{ flex: 1 }} />
-            {caps.canEdit ? (
+            {ticket.viewerCanEdit ? (
               <Button
                 size="md"
                 startIcon={<PencilLine size={17} />}
@@ -281,7 +275,7 @@ function TicketDetailContent({
             )}
             <Badge tone={audit?.tone ?? 'neutral'}>{view.auditLabel}</Badge>
           </Box>
-          {caps.canViewHistory ? (
+          {ticket.viewerCanViewHistory ? (
             <Tabs
               aria-label="求助單詳情分頁"
               value={activeTab}
@@ -301,13 +295,12 @@ function TicketDetailContent({
         <TicketInfo
           ticket={ticket}
           view={view}
-          caps={caps}
-          now={now}
+            now={now}
           onNeedBusyChange={onNeedBusyChange}
           onAuditBusyChange={onAuditBusyChange}
         />
       )}
-      {caps.canDelete ? (
+      {ticket.viewerCanDelete ? (
         <DeleteTicketConfirm
           open={deleteOpen}
           ticket={ticket}
@@ -405,14 +398,12 @@ function DeleteTicketConfirm({
 function TicketInfo({
   ticket,
   view,
-  caps,
   now,
   onNeedBusyChange,
   onAuditBusyChange,
 }: {
   ticket: DetailTicket;
   view: TicketDetailView;
-  caps: TicketCapabilities;
   now: Date;
   onNeedBusyChange: (busy: boolean) => void;
   onAuditBusyChange: (busy: boolean) => void;
@@ -476,7 +467,7 @@ function TicketInfo({
           <Muted>（尚無照片）</Muted>
         )}
       </Block>
-      {caps.canAudit && ticket.auditContentHash ? (
+      {ticket.viewerCanAudit && ticket.auditContentHash ? (
         <Block label="審核">
           <TicketAuditCard ticket={ticket} onBusyChange={onAuditBusyChange} />
         </Block>
@@ -484,8 +475,7 @@ function TicketInfo({
       <Block label="需求">
         <TicketTaskList
           ticket={ticket}
-          caps={caps}
-          onAddBusyChange={onNeedBusyChange}
+            onAddBusyChange={onNeedBusyChange}
         />
       </Block>
     </Box>
