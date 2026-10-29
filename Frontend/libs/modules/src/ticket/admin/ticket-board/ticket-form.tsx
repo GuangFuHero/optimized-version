@@ -445,7 +445,8 @@ export function TicketForm(props: TicketFormProps) {
         </Section>
 
         {coarse ? null : (
-          <Section title="現場照片">
+          // The editor names itself, with its count: the heading stays for screen readers only.
+          <Section title="現場照片" titleHidden>
             <PhotoLinkEditor
               label="現場照片"
               hint="選填，貼上圖片網址"
@@ -621,7 +622,28 @@ function NeedRow({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+const VISUALLY_HIDDEN = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  p: 0,
+  m: '-1px',
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+} as const;
+
+function Section({
+  title,
+  titleHidden = false,
+  children,
+}: {
+  title: string;
+  /** Keep the heading for screen readers only, when the section's own content shows the name. */
+  titleHidden?: boolean;
+  children: ReactNode;
+}) {
   return (
     <Box
       component="section"
@@ -629,7 +651,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
     >
       <Typography
         component="h3"
-        sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+        sx={
+          titleHidden
+            ? VISUALLY_HIDDEN
+            : { ...typography.label[400], color: color.fg.neutral.default }
+        }
       >
         {title}
       </Typography>

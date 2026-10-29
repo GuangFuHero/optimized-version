@@ -1,6 +1,6 @@
 'use client';
 
-import { Typography } from '@mui/material';
+import { Typography, type SxProps, type Theme } from '@mui/material';
 import { designTokens } from '@rescue-frontend/ui';
 import type { ReactNode } from 'react';
 
@@ -19,17 +19,19 @@ export function Muted({
   children: ReactNode;
   inline?: boolean;
   cell?: boolean;
-  sx?: object;
+  sx?: SxProps<Theme>;
 }) {
   return (
     <Typography
       component={inline ? 'span' : 'p'}
       noWrap={cell}
-      sx={{
-        ...typography.body[300],
-        color: cell ? color.fg.neutral.subtle : color.fg.neutral.muted,
-        ...sx,
-      }}
+      sx={[
+        {
+          ...typography.body[300],
+          color: cell ? color.fg.neutral.subtle : color.fg.neutral.muted,
+        },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
     >
       {children}
     </Typography>

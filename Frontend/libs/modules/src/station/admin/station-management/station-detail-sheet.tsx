@@ -328,8 +328,6 @@ function StationInfo({
   );
 }
 
-/** A caption on the left, its value right-aligned, on the designer's ~48px rhythm. */
-
 function PhotoStrip({ photos }: { photos: DetailStation['photos'] }) {
   if (photos.length === 0) return <Muted inline>（尚無照片）</Muted>;
   return (

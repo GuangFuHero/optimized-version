@@ -9,6 +9,7 @@ import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDebounceCallback } from 'usehooks-ts';
 
 import { Map } from '../../../map';
 import type {
@@ -266,30 +267,27 @@ function useFocusSelected(
 /** The area the map shows, settled after each move; null until the map is built. */
 function useMapViewport(map: LeafletMap | null): MapViewport | null {
   const [viewport, setViewport] = useState<MapViewport | null>(null);
+  const settle = useDebounceCallback(setViewport, VIEWPORT_DEBOUNCE_MS);
   useEffect(() => {
     if (!map) return undefined;
-    const read = () => {
+    const read = (): MapViewport => {
       const bounds = map.getBounds();
-      setViewport({
+      return {
         west: bounds.getWest(),
         south: bounds.getSouth(),
         east: bounds.getEast(),
         north: bounds.getNorth(),
         zoom: map.getZoom(),
-      });
+      };
     };
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const schedule = () => {
-      clearTimeout(timer);
-      timer = setTimeout(read, VIEWPORT_DEBOUNCE_MS);
-    };
-    read();
-    map.on('moveend', schedule);
+    const onMoveEnd = () => settle(read());
+    setViewport(read());
+    map.on('moveend', onMoveEnd);
     return () => {
-      clearTimeout(timer);
-      map.off('moveend', schedule);
+      settle.cancel();
+      map.off('moveend', onMoveEnd);
     };
-  }, [map]);
+  }, [map, settle]);
   return viewport;
 }
 

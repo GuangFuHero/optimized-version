@@ -142,7 +142,13 @@ export function DataTable<TData extends RowData>({
                     onKeyDown={
                       onRowClick
                         ? (event) => {
-                            if (event.key === 'Enter') onRowClick(row.original);
+                            // Only the row itself: an Enter on a button or field inside it is that
+                            // control's own.
+                            if (
+                              event.key === 'Enter' &&
+                              event.target === event.currentTarget
+                            )
+                              onRowClick(row.original);
                           }
                         : undefined
                     }

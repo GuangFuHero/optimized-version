@@ -35,8 +35,9 @@ function addError(error: unknown): string {
 }
 
 /**
- * 再加一項需求 (`ticket.add`): a collapsed button that opens a small form under the ticket's needs.
- * A likely duplicate holds the create back behind `DuplicateNotice` until the user resends it.
+ * 再加一項需求, shown under `ticket.edit` on the ticket (its `viewerCanEdit`): a collapsed button
+ * that opens a small form under the ticket's needs. A likely duplicate holds the create back
+ * behind `DuplicateNotice` until the user resends it.
  */
 export function AddNeedForm({
   ticketUuid,

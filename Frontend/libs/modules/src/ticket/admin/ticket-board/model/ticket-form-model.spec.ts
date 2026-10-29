@@ -291,6 +291,38 @@ describe('toUpdateTicketInput', () => {
     });
   });
 
+  it('sends null for a cleared description and [] for cleared disaster types', () => {
+    const before = {
+      ...filled,
+      description: '一樓積水',
+      disasterTypes: ['flood', 'landslide'],
+    };
+    expect(
+      changedUpdateInput(
+        { ...before, description: '  ', disasterTypes: [] },
+        before,
+        stored,
+      ),
+    ).toEqual({ description: null, disasterTypes: [] });
+  });
+
+  it('resends a cleared address as the carried members alone, with no fullAddress', () => {
+    const before = { ...filled, fullAddress: '中正路12號', floor: '2F' };
+    const input = changedUpdateInput(
+      { ...before, fullAddress: '', floor: '', room: '' },
+      before,
+      stored,
+    );
+    expect(input).toEqual({
+      secondaryLocation: {
+        locationType: 'address',
+        buildingSection: 'A棟',
+        victimSpace: '主臥衣櫃',
+        accessStatus: 'restricted',
+      },
+    });
+  });
+
   it('never sends the description or address of a coarse ticket', () => {
     const before = { ...filled, description: '' };
     const input = changedUpdateInput(
@@ -351,6 +383,18 @@ describe('photoChanges', () => {
         ['A', 'B'],
       ),
     ).toEqual({ attach: ['B'], detach: ['p2'] });
+  });
+
+  it('detaches every photo when all are removed', () => {
+    expect(
+      photoChanges(
+        [
+          { uuid: 'p1', url: 'A' },
+          { uuid: 'p2', url: 'B' },
+        ],
+        [],
+      ),
+    ).toEqual({ attach: [], detach: ['p1', 'p2'] });
   });
 
   it('keeps everything when nothing moved', () => {

@@ -56,11 +56,23 @@ export function ToolbarSearch({
   useEffect(() => {
     latestOnQueryChange.current = onQueryChange;
   });
+  // The last query this box sent, as the page writes it to `?q=`.
+  const lastSent = useRef(query);
   const send = useCallback((value: string) => {
+    lastSent.current = value.trim();
     setBox((current) => ({ ...current, sent: value.trim() }));
     latestOnQueryChange.current(value);
   }, []);
   const sendQuery = useDebounceCallback(send, 300);
+
+  // `?q=` changed from elsewhere (back, a link): a query still waiting on the debounce was typed
+  // over what the URL now says, and sending it would undo the navigation.
+  useEffect(() => {
+    if (query !== lastSent.current) {
+      sendQuery.cancel();
+      lastSent.current = query;
+    }
+  }, [query, sendQuery]);
 
   const followed = followUrl(box, query);
   if (followed !== box) setBox(followed);
