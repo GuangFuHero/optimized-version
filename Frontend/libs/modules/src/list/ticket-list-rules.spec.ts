@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { RescueMapMarkerItem } from '../map/types';
 import type { TicketNeed } from '../ticket/needs';
 import {
+  countFloor,
+  listCountLabel,
   listTickets,
   pageFoldedAway,
   showsClosedTickets,
@@ -287,5 +289,28 @@ describe('pageFoldedAway', () => {
 
   it('is not set before a page is in', () => {
     expect(pageFoldedAway([], [])).toBe(false);
+  });
+});
+
+describe('countFloor', () => {
+  it('writes a count over the loaded pages as a floor while more pages wait', () => {
+    expect(countFloor(12, true)).toBe('12+');
+    expect(countFloor(12, false)).toBe('12');
+  });
+});
+
+describe('listCountLabel', () => {
+  it('says 共 N once everything is loaded, and N+ while more pages wait', () => {
+    expect(listCountLabel(37, { more: false, what: '需求' })).toBe(
+      '共 37 筆需求',
+    );
+    expect(listCountLabel(100, { more: true, what: '需求' })).toBe(
+      '100+ 筆需求',
+    );
+  });
+
+  it('counts stations without naming what', () => {
+    expect(listCountLabel(25, { more: false })).toBe('共 25 筆');
+    expect(listCountLabel(100, { more: true })).toBe('100+ 筆');
   });
 });

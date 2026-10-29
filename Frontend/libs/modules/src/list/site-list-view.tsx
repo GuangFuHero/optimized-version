@@ -40,6 +40,8 @@ import { resolveTicketSearch } from '../ticket/ticket-search';
 import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
 import {
+  countFloor,
+  listCountLabel,
   listTickets,
   pageFoldedAway,
   showsClosedTickets,
@@ -371,7 +373,8 @@ export function SiteListView() {
             direction="row"
             sx={{ ml: 'auto', alignItems: 'center', gap: 1.5 }}
           >
-            {/* The ticket side lists needs, so it counts them: the count matches the lines shown. */}
+            {/* The ticket side lists needs, so it counts them: the count matches the lines shown.
+                Either side counts the loaded pages, so while the list can load more it is a floor (N+). */}
             <Typography
               sx={{
                 fontSize: displayTextSize[13],
@@ -379,8 +382,13 @@ export function SiteListView() {
               }}
             >
               {ticketList
-                ? `共 ${ticketList.needCount} 筆需求`
-                : `共 ${controller.markers.length} 筆`}
+                ? listCountLabel(ticketList.needCount, {
+                    more: canLoadMore,
+                    what: '需求',
+                  })
+                : listCountLabel(controller.markers.length, {
+                    more: canLoadMore,
+                  })}
             </Typography>
             {ticketList &&
             ticketList.fullNeedCount > 0 &&
@@ -393,7 +401,8 @@ export function SiteListView() {
                     <VisibilityOffRoundedIcon sx={ACTION_ICON} />
                   )
                 }
-                label={`含已滿額（${ticketList.fullNeedCount}）`}
+                // Pages left unloaded once the list stops hold finished tickets, all full needs.
+                label={`含已滿額（${countFloor(ticketList.fullNeedCount, hasNextPage)}）`}
                 aria-pressed={showFullNeeds}
                 onClick={() => setShowFullNeeds((current) => !current)}
                 // Greyed while off, as the prototype has it — but in readable greys, since it

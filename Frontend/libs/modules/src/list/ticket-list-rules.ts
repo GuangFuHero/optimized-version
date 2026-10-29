@@ -160,3 +160,24 @@ export function pageFoldedAway(
 
   return page.size > 0 && !listed.some(({ marker }) => page.has(marker.id));
 }
+
+/**
+ * A count over the loaded pages. While more pages wait to load it is only a floor, so it reads N+
+ * (user, 2026-10-30): scrolling down used to raise a count that looked like a total.
+ */
+export function countFloor(count: number, more: boolean): string {
+  return more ? `${count}+` : `${count}`;
+}
+
+/**
+ * The list's count: 共 N 筆需求 once everything is loaded, N+ 筆需求 while more pages wait; stations
+ * name nothing (共 N 筆, N+ 筆).
+ */
+export function listCountLabel(
+  count: number,
+  { more, what = '' }: { more: boolean; what?: string },
+): string {
+  return more
+    ? `${countFloor(count, more)} 筆${what}`
+    : `共 ${count} 筆${what}`;
+}
