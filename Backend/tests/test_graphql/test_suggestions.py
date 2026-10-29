@@ -667,8 +667,8 @@ async def test_a_merge_whose_reviewer_is_gone_reads_a_null_reviewer(
 # ---------------------------------------------------------------------------
 
 MINE = """
-query($limit: Int) {
-    myStationSuggestions(limit: $limit) {
+query($limit: Int, $skip: Int) {
+    myStationSuggestions(limit: $limit, skip: $skip) {
         uuid targetType fieldName previousValue newValue comment status appliedValue
         submittedAt decidedAt station { uuid opHour }
     }
@@ -676,9 +676,10 @@ query($limit: Int) {
 """
 
 
-async def _mine(client, token, limit=None):
-    """Helper: the caller's suggestions, by field name."""
-    body = await _gql(client, token, MINE, {"limit": limit} if limit else {})
+async def _mine(client, token, limit=None, skip=None):
+    """Helper: the caller's suggestions, latest activity first."""
+    variables = {k: v for k, v in {"limit": limit, "skip": skip}.items() if v is not None}
+    body = await _gql(client, token, MINE, variables)
     assert "errors" not in body, body
     return body["data"]["myStationSuggestions"]
 
@@ -770,6 +771,84 @@ async def test_a_revoked_suggestion_keeps_what_was_applied_and_dates_the_revoke(
 
 
 @pytest.mark.asyncio
+async def test_an_approved_property_suggestion_shows_the_value_applied(
+    client, auditor_auth, login_user_auth, sample_station, sample_station_property
+):
+    """A property's approval is read from the merge too, with the reviewer's value."""
+    _, token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, token, "station_property", sample_station_property, "quantity", "10")
+    await _merge(client, auditor_token, sample_station, [_decide(sample_station_property, "quantity", "12")])
+
+    row = (await _mine(client, token))[0]
+
+    assert (row["status"], row["newValue"], row["appliedValue"]) == ("approved", "10", "12")
+
+
+@pytest.mark.asyncio
+async def test_a_suggestion_decided_before_merges_were_kept_is_dated_by_its_last_change(
+    client, login_user_auth, sample_station
+):
+    """Rows decided before merges were recorded have no merge: their last change dates them."""
+    _, token = login_user_auth
+    await _create(client, token, "station", sample_station, "op_hour", "24h")
+    await _create(client, token, "station", sample_station, "name", "光復國小")
+    then = datetime(2026, 9, 20, 8, 0, tzinfo=UTC)
+    async with test_db() as db:
+        for field, status in (("op_hour", "approved"), ("name", "rejected")):
+            await db.execute(
+                update(StationUpdateSuggestion)
+                .where(StationUpdateSuggestion.field_name == field)
+                .values(status=status, updated_at=then)
+            )
+
+    rows = {r["fieldName"]: r for r in await _mine(client, token)}
+
+    for field, status in (("op_hour", "approved"), ("name", "rejected")):
+        assert rows[field]["status"] == status
+        assert datetime.fromisoformat(rows[field]["decidedAt"]) == then
+        assert rows[field]["appliedValue"] is None  # nothing records what an old approval wrote
+
+
+@pytest.mark.asyncio
+async def test_an_old_comment_approval_keeps_the_reviewers_note_from_the_submitter(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """A merge from before ADR-332 could write a station's internal note; its submitter is not shown it.
+
+    The op_hour approved in the same merge still reads its value, so only the note is held back.
+    """
+    user_uuid, token = login_user_auth
+    auditor_uuid, _ = auditor_auth
+    async with test_db() as db:
+        merge = StationSuggestionMerge(
+            station_uuid=sample_station,
+            reviewed_by=auditor_uuid,
+            changes=[
+                {"target_type": "station", "target_uuid": sample_station, "field_name": field,
+                 "before": before, "after": after}
+                for field, before, after in (
+                    ("comment", "Test station", "內部：負責人電話另存"),
+                    ("op_hour", "08:00-18:00", "24h"),
+                )
+            ],
+        )
+        db.add(merge)
+        await db.flush()
+        for field, value in (("comment", "請更新備註"), ("op_hour", "24h")):
+            db.add(StationUpdateSuggestion(
+                target_type="station", target_uuid=sample_station, field_name=field, new_value=value,
+                status="approved", created_by=user_uuid, reviewed_by=auditor_uuid, merge_uuid=merge.uuid,
+            ))
+
+    rows = {r["fieldName"]: r for r in await _mine(client, token)}
+
+    assert (rows["comment"]["status"], rows["comment"]["appliedValue"]) == ("approved", None)
+    assert rows["comment"]["decidedAt"]
+    assert rows["op_hour"]["appliedValue"] == "24h"
+
+
+@pytest.mark.asyncio
 async def test_sending_again_moves_a_suggestion_up_and_records_the_value_then(
     client, login_user_auth, sample_station
 ):
@@ -821,7 +900,7 @@ async def test_a_deleted_station_leaves_the_suggestion_without_one(client, login
 
 @pytest.mark.asyncio
 async def test_my_suggestions_need_a_sign_in_and_a_sane_limit(client, login_user_auth, sample_station):
-    """A guest has no suggestions of its own; a limit outside 1-100 is refused."""
+    """A guest has no suggestions of its own; a limit outside 1-100, or a negative skip, is refused."""
     _, token = login_user_auth
     await _create(client, token, "station", sample_station, "name", "光復國小")
     await _create(client, token, "station", sample_station, "op_hour", "24h")
@@ -832,3 +911,20 @@ async def test_my_suggestions_need_a_sign_in_and_a_sane_limit(client, login_user
     for limit in (0, 101):
         body = await _gql(client, token, MINE, {"limit": limit})
         assert "limit must be between 1 and 100" in body["errors"][0]["message"]
+    body = await _gql(client, token, MINE, {"skip": -1})
+    assert "skip must not be negative" in body["errors"][0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_skip_reaches_the_suggestions_past_one_page(client, login_user_auth, sample_station):
+    """Past the first page, `skip` goes on from where it ended, in the same order."""
+    _, token = login_user_auth
+    await _create(client, token, "station", sample_station, "name", "光復國小")
+    await _create(client, token, "station", sample_station, "op_hour", "24h")
+
+    everything = [r["fieldName"] for r in await _mine(client, token)]
+    pages = [(await _mine(client, token, limit=1, skip=skip))[0]["fieldName"] for skip in (0, 1)]
+
+    assert everything == ["op_hour", "name"]
+    assert pages == everything
+    assert await _mine(client, token, skip=2) == []

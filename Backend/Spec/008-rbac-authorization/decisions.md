@@ -1543,10 +1543,11 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
    - 欄位沒有值記 `''`，所以 `NULL` 只表示這欄上線前送出的舊資料。舊資料不回填：當時的值沒有記在任何地方。
    - 在欄位通過 `coerce_and_validate`（確定是可建議的欄位）之後才讀，不會抄出其他欄位。站點的內部備註
      `comment` 已經不能建議（ADR-332 第 5 條），不會被記進來。
-2. **`Query.myStationSuggestions(limit: Int = 100)`**：
+2. **`Query.myStationSuggestions(limit: Int = 100, skip: Int = 0)`**：
    - 只要登入、不看 capability，只回 `created_by = 呼叫者`、沒被軟刪的，做法同 `myTickets`。被收回
      `station.contribute` 只擋新的建議，不擋讀以前送過的。
-   - 依 `updated_at` 新到舊：再送一次或被審過都會往前。`limit` 只收 1–100。
+   - 依 `updated_at` 新到舊：再送一次或被審過都會往前。`limit` 只收 1–100，`skip` 不能是負數；超過 100 筆用
+     `skip` 往後翻（HC 2026-10-29 review）。
 3. **每筆給的欄位**：
    - `targetType`、`fieldName`、`previousValue`、`newValue`、`comment`、`status`。
    - `station`：跟 `station` 查詢同一套規則（`station.view`＋checkpoint 2）；站點已刪除或在範圍外是 `null`。
@@ -1554,6 +1555,8 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
    - `appliedValue`：採用（或採用後被撤銷）的那筆，審核者實際寫入的值；審核者可以改值，所以可能跟 `newValue`
      不同。取自決定那一筆的合併紀錄（`changes` 裡同一欄位的 `after`）。
    - `submittedAt`（第一次送出，`created_at`）、`decidedAt`（審核時間；被撤銷的是撤銷時間；待審是 `null`）。
+   - 合併紀錄出現前就審過的舊建議沒有合併紀錄：`decidedAt` 用那一筆最後更新的時間（`updated_at`），
+     `appliedValue` 是 `null`，因為沒有地方記當時寫了什麼（HC 2026-10-29 review）。
 4. **不給審核者和審核備註**：
    - `reviewed_by`：後台的人是誰不給民眾。
    - `review_note`：一次審核共用一段，每一筆都寫進去，是寫給審核紀錄的；管理平台的輸入框寫「會記在這次審核

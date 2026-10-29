@@ -40,12 +40,12 @@ class MyStationSuggestionType:
     status: str = strawberry.field(description="'pending', 'approved', 'rejected', or 'revoked'")
     applied_value: str | None = strawberry.field(
         description="Approved or revoked: the value the reviewer wrote, which may differ from newValue. "
-        "Otherwise null"
+        "Otherwise null, as for an approval from before merges were recorded"
     )
     submitted_at: datetime = strawberry.field(description="When it was first sent")
     decided_at: datetime | None = strawberry.field(
         description="When it was approved or rejected, or for a revoked one when the approval was undone; "
-        "null while pending"
+        "for one decided before merges were recorded, when the row last changed. Null while pending"
     )
 
 
@@ -67,9 +67,12 @@ def _applied_value(item: suggestion_service.MySuggestion) -> str | None:
 
 
 def _decided_at(item: suggestion_service.MySuggestion) -> datetime | None:
-    """When the row got its present status: the merge, or the revoke for a revoked row."""
+    """When the row got its present status: the merge, or the revoke for a revoked row.
+
+    A row decided before merges were recorded has none, so its last change stands in.
+    """
     if item.merge is None:
-        return None
+        return None if item.suggestion.status == "pending" else item.suggestion.updated_at
     if item.suggestion.status == "revoked":
         return item.merge.revoked_at
     return item.merge.created_at
@@ -95,18 +98,20 @@ class SuggestionQuery:
 
     @strawberry.field
     async def my_station_suggestions(
-        self, info: strawberry.types.Info, limit: int = MY_SUGGESTIONS_MAX_LIMIT
+        self, info: strawberry.types.Info, limit: int = MY_SUGGESTIONS_MAX_LIMIT, skip: int = 0
     ) -> list[MyStationSuggestionType]:
         """The suggestions the caller sent, latest activity first — the site's 我回報的站點 (ADR-420).
 
         Sign-in only, no capability: every row is the caller's own. A resubmit or a decision moves a
-        row up. At most MY_SUGGESTIONS_MAX_LIMIT rows.
+        row up. At most MY_SUGGESTIONS_MAX_LIMIT rows a page; `skip` reaches the older ones.
         """
         if not 1 <= limit <= MY_SUGGESTIONS_MAX_LIMIT:
             raise ValueError(f"limit must be between 1 and {MY_SUGGESTIONS_MAX_LIMIT}")
+        if skip < 0:
+            raise ValueError("skip must not be negative")
         actor = require_authenticated(info)
         db = info.context["db"]
-        items = await suggestion_service.list_my_station_suggestions(db, actor=actor, limit=limit)
+        items = await suggestion_service.list_my_station_suggestions(db, actor=actor, limit=limit, skip=skip)
 
         # As `station` decides: station.view is public, so this is the scope check only.
         scope = await check_permission(info, Perm.STATION_VIEW)

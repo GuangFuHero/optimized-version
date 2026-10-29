@@ -947,10 +947,10 @@ export type MyRoleRequestsType = {
 
 export type MyStationSuggestionType = {
   __typename?: 'MyStationSuggestionType';
-  /** Approved or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null */
+  /** Approved or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded */
   appliedValue?: Maybe<Scalars['String']['output']>;
   comment?: Maybe<Scalars['String']['output']>;
-  /** When it was approved or rejected, or for a revoked one when the approval was undone; null while pending */
+  /** When it was approved or rejected, or for a revoked one when the approval was undone; for one decided before merges were recorded, when the row last changed. Null while pending */
   decidedAt?: Maybe<Scalars['DateTime']['output']>;
   fieldName: Scalars['String']['output'];
   /** The value suggested, the latest if sent again */
@@ -1121,6 +1121,7 @@ export type QueryHazardousZonesArgs = {
 
 export type QueryMyStationSuggestionsArgs = {
   limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
 };
 
 export type QueryNormalizeAddressArgs = {

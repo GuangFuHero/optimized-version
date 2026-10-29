@@ -145,7 +145,8 @@ async def create_station_suggestion(
 class MySuggestion:
     """One of the caller's suggestions, with the merge that decided it and the station it is about.
 
-    `station` is None once the station is deleted; `merge` is None while the row is pending.
+    `station` is None once the station is deleted; `merge` is None while the row is pending, and for
+    a row decided before merges were recorded.
     """
 
     suggestion: StationUpdateSuggestion
@@ -153,8 +154,10 @@ class MySuggestion:
     station: Station | None
 
 
-async def list_my_station_suggestions(db: AsyncSession, *, actor: User, limit: int) -> list[MySuggestion]:
-    """The suggestions `actor` sent — the site's 我回報的站點 (ADR-420).
+async def list_my_station_suggestions(
+    db: AsyncSession, *, actor: User, limit: int, skip: int = 0
+) -> list[MySuggestion]:
+    """The suggestions `actor` sent — the site's 我回報的站點 (ADR-420), `skip` rows in.
 
     Latest activity first: a resubmit or a decision moves a row up, both setting `updated_at`. No
     capability check, as for the caller's own tickets: losing station.contribute stops new
@@ -170,6 +173,7 @@ async def list_my_station_suggestions(db: AsyncSession, *, actor: User, limit: i
                     StationUpdateSuggestion.delete_at.is_(None),
                 )
                 .order_by(StationUpdateSuggestion.updated_at.desc(), StationUpdateSuggestion.uuid.desc())
+                .offset(skip)
                 .limit(limit)
             )
         ).all()

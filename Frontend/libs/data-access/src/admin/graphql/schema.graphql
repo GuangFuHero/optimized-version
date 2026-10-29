@@ -865,7 +865,7 @@ type MyStationSuggestionType {
   status: String!
 
   """
-  Approved or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null
+  Approved or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded
   """
   appliedValue: String
 
@@ -873,7 +873,7 @@ type MyStationSuggestionType {
   submittedAt: DateTime!
 
   """
-  When it was approved or rejected, or for a revoked one when the approval was undone; null while pending
+  When it was approved or rejected, or for a revoked one when the approval was undone; for one decided before merges were recorded, when the row last changed. Null while pending
   """
   decidedAt: DateTime
 }
@@ -999,7 +999,7 @@ type Query {
   briefings(state: BriefingState = null, tag: String = null, status: BriefingStatusFilter! = PUBLISHED): [BriefingType!]!
   briefing(uuid: UUID!): BriefingType
   suggestableFields(targetType: String!): [SuggestableFieldType!]!
-  myStationSuggestions(limit: Int! = 100): [MyStationSuggestionType!]!
+  myStationSuggestions(limit: Int! = 100, skip: Int! = 0): [MyStationSuggestionType!]!
   areas(bounds: BoundsInput = null, includePrivate: Boolean! = false, skip: Int! = 0, limit: Int! = 50): AreaConnection!
   teamZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): TeamZoneConnection!
   teamZone(uuid: UUID!): TeamZoneType
