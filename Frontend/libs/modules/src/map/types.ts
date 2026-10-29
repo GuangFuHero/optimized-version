@@ -114,6 +114,8 @@ export interface RescueMapArea {
   name: string | null;
   comment?: string | null;
   polygons: [number, number][][][];
+  /** The area the admin 互助地圖 list has picked: drawn heavier so it stands out. */
+  highlighted?: boolean;
 }
 
 /** A 危險區, on the 封閉區域 layer. */
@@ -124,6 +126,11 @@ export interface RescueMapPublicZone extends RescueMapArea {
   kind: 'team_zone' | 'mark_zone';
   /** The teams a 責任區 is assigned to, public since ADR-311's 10-11 revision; none for a 標示區. */
   teams: readonly string[];
+  /**
+   * False for a 標示區 the public map does not show. Only the admin 互助地圖 asks for those
+   * (`includePrivate`), and draws them dashed.
+   */
+  isPublic?: boolean;
 }
 
 export interface RescueMapOverlayLayerMeta {

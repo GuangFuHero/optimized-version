@@ -53,7 +53,11 @@ export { SiteListView } from './list';
 
 export { Map, readRescueMapMarkers } from './map';
 export { hasRescueMapDetailItem } from './map/location-cells';
+export { AREA_KIND_LABELS, type RescueMapAreaKind } from './map/areas';
+export { PUBLIC_ZONE_COLORS } from './map/constants';
 export type {
+  RescueMapClosureArea,
+  RescueMapPublicZone,
   RescueMapBaseLayer,
   RescueMapControllerValue,
   RescueMapDataType,
@@ -64,8 +68,14 @@ export type {
 } from './map/types';
 
 export {
+  countInsideArea,
+  isInArea,
+  useAdminMapAreas,
   useAdminMapLiveMarkers,
+  viewOfArea,
+  type AdminMapAreas,
   type AdminMapLiveMarkers,
+  type AreaContents,
 } from './map/admin';
 
 export {

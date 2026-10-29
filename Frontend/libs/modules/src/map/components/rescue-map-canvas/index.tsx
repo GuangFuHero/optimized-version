@@ -230,18 +230,32 @@ const HAZARD_ZONE_STYLE: L.PathOptions = {
   fillOpacity: 0.6,
 };
 
-/** 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx`, 2026-10-23). */
+/** The edge of the area picked in the admin list: heavier, so it stands out among the rest. */
+const HIGHLIGHTED_WEIGHT = 5;
+
+function getHazardZoneStyle(area: RescueMapArea): L.PathOptions {
+  return area.highlighted
+    ? { ...HAZARD_ZONE_STYLE, weight: HIGHLIGHTED_WEIGHT }
+    : HAZARD_ZONE_STYLE;
+}
+
+/**
+ * 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx`, 2026-10-23). A
+ * 標示區 the public cannot see (admin only) is drawn dashed and fainter, so an admin can tell it apart.
+ */
 function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
   const zoneColor = PUBLIC_ZONE_COLORS[zone.kind];
+  const hidden = zone.isPublic === false;
 
   return {
     pane: PUBLIC_ZONE_PANE,
     interactive: false,
     color: zoneColor,
-    weight: 2.5,
+    weight: zone.highlighted ? HIGHLIGHTED_WEIGHT : 2.5,
     opacity: 0.95,
     fillColor: zoneColor,
-    fillOpacity: 0.14,
+    fillOpacity: hidden ? 0.06 : 0.14,
+    ...(hidden ? { dashArray: '8 6' } : {}),
   };
 }
 
@@ -1243,7 +1257,7 @@ export function RescueMapCanvas({
       overlayLayer,
       areas: controller.closureAreas,
       handles: closureAreaHandlesRef.current,
-      style: () => HAZARD_ZONE_STYLE,
+      style: getHazardZoneStyle,
     });
     queueAreaLabelsRef.current?.();
   }, [controller.closureAreas]);

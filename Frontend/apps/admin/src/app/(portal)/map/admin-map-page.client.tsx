@@ -3,19 +3,29 @@
 import { ClipboardList, X, MapPin } from 'lucide-react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useCapability } from '@rescue-frontend/data-access/admin';
 import {
+  countInsideArea,
   createSiteMapViewportStore,
   dedupeMarkersById,
+  isInArea,
   Map,
   StationCreateDrawer,
   TicketCreateDrawer,
+  useAdminMapAreas,
   useAdminMapLiveMarkers,
+  viewOfArea,
   type RescueMapMarkerItem,
   type RescueMapRouteState,
 } from '@rescue-frontend/modules';
+
+import {
+  AdminAreaDetailPanel,
+  AdminAreaListPanel,
+  toAdminAreaListItems,
+} from './admin-area-list-panel';
 
 type CreateMode = 'idle' | 'station' | 'ticket';
 
@@ -187,6 +197,8 @@ function AdminMapCreateControls({
 export function AdminMapPageClient() {
   const canCreateStation = useCapability('station.add').data ?? false;
   const canCreateTicket = useCapability('ticket.add').data ?? false;
+  // The area layer and its list are for those who may see work zones; the rest see the map alone.
+  const canViewZones = useCapability('work_zone.view').data ?? false;
   const [viewportStore] = useState(() => createSiteMapViewportStore({}));
   const [routeState, setRouteState] = useState<RescueMapRouteState>({});
   const liveMarkers = useAdminMapLiveMarkers(viewportStore);
@@ -198,6 +210,102 @@ export function AdminMapPageClient() {
   const markers = useMemo(
     () => dedupeMarkersById([...liveMarkers.markers, ...createdMarkers]),
     [createdMarkers, liveMarkers.markers],
+  );
+  const areas = useAdminMapAreas({ enabled: canViewZones });
+  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const closureAreas = useMemo(
+    () =>
+      areas.closureAreas.map((area) => ({
+        ...area,
+        highlighted: area.id === selectedAreaId,
+      })),
+    [areas.closureAreas, selectedAreaId],
+  );
+  const publicZones = useMemo(
+    () =>
+      areas.publicZones.map((zone) => ({
+        ...zone,
+        highlighted: zone.id === selectedAreaId,
+      })),
+    [areas.publicZones, selectedAreaId],
+  );
+  // No API counts what lies in an area, so the list counts the markers the map has loaded.
+  const areaListItems = useMemo(
+    () =>
+      toAdminAreaListItems({
+        closureAreas: areas.closureAreas,
+        publicZones: areas.publicZones,
+        countContents: (area) => countInsideArea(area, markers),
+      }),
+    [areas.closureAreas, areas.publicZones, markers],
+  );
+  const selectedAreaItem =
+    areaListItems.find((item) => item.id === selectedAreaId) ?? null;
+  const selectedAreaTickets = useMemo(() => {
+    const area = [...areas.closureAreas, ...areas.publicZones].find(
+      (candidate) => candidate.id === selectedAreaId,
+    );
+
+    return area
+      ? markers.filter(
+          (marker) =>
+            marker.detailType === 'ticket' && isInArea(marker.position, area),
+        )
+      : [];
+  }, [areas.closureAreas, areas.publicZones, markers, selectedAreaId]);
+  const handleBackToAreaList = useCallback(() => {
+    setSelectedAreaId(null);
+    setRouteState((current) => ({ ...current, selectedMarkerId: undefined }));
+  }, []);
+  // Opens the ticket's detail the way a pin does, and brings the map to it.
+  const handleSelectAreaTicket = useCallback(
+    (ticket: RescueMapMarkerItem) => {
+      setRouteState((current) => ({
+        ...current,
+        selectedMarkerId: ticket.id,
+      }));
+      viewportStore.setState({
+        ...viewportStore.getSnapshot(),
+        position: {
+          center: ticket.position,
+          zoom: viewportStore.getSnapshot().position?.zoom ?? 16,
+        },
+      });
+    },
+    [viewportStore],
+  );
+  useEffect(() => {
+    if (!selectedAreaId) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleBackToAreaList();
+      }
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [handleBackToAreaList, selectedAreaId]);
+  const handleSelectArea = useCallback(
+    (areaId: string) => {
+      const area = [...areas.closureAreas, ...areas.publicZones].find(
+        (candidate) => candidate.id === areaId,
+      );
+      const view = area ? viewOfArea(area) : null;
+
+      setSelectedAreaId(areaId);
+
+      if (view) {
+        viewportStore.setState({
+          position: { center: view.center, zoom: view.zoom },
+          bbox: view.bbox,
+        });
+      }
+    },
+    [areas.closureAreas, areas.publicZones, viewportStore],
   );
   const [createMode, setCreateMode] = useState<CreateMode>('idle');
   const [pendingPosition, setPendingPosition] = useState<
@@ -224,6 +332,7 @@ export function AdminMapPageClient() {
 
   const handleMapClick = (position: [number, number]) => {
     if (createMode === 'idle') {
+      setSelectedAreaId(null);
       return;
     }
 
@@ -246,27 +355,80 @@ export function AdminMapPageClient() {
 
   return (
     <>
-      <Box sx={{ width: '100%', height: '100%', minHeight: '100dvh' }}>
-        <Map
-          markers={markers}
-          routeState={routeState}
-          onRouteStateChange={handleRouteStateChange}
-          viewportStore={viewportStore}
-          showScale
-          onMapClick={handleMapClick}
-          renderControls={() =>
-            canCreateStation || canCreateTicket ? (
-              <AdminMapCreateControls
-                mode={createMode}
-                pendingPosition={pendingPosition}
-                canCreateStation={canCreateStation}
-                canCreateTicket={canCreateTicket}
-                onToggleMode={setCreateMode}
-                onCancel={resetCreateFlow}
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { mobile: 'column', tablet: 'row' },
+          width: '100%',
+          height: '100%',
+          minHeight: '100dvh',
+        }}
+      >
+        <Box
+          sx={{
+            position: 'relative',
+            flex: 1,
+            minWidth: 0,
+            minHeight: '60dvh',
+          }}
+        >
+          <Map
+            markers={markers}
+            closureAreas={closureAreas}
+            publicZones={publicZones}
+            routeState={routeState}
+            onRouteStateChange={handleRouteStateChange}
+            viewportStore={viewportStore}
+            showScale
+            onMapClick={handleMapClick}
+            renderControls={() =>
+              canCreateStation || canCreateTicket ? (
+                <AdminMapCreateControls
+                  mode={createMode}
+                  pendingPosition={pendingPosition}
+                  canCreateStation={canCreateStation}
+                  canCreateTicket={canCreateTicket}
+                  onToggleMode={setCreateMode}
+                  onCancel={resetCreateFlow}
+                />
+              ) : null
+            }
+          />
+        </Box>
+        {canViewZones ? (
+          <Box
+            component="aside"
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              width: { mobile: '100%', tablet: 360 },
+              flexShrink: 0,
+              position: { tablet: 'sticky' },
+              top: 0,
+              height: { tablet: '100dvh' },
+              borderLeft: { tablet: '1px solid #DCC1B1' },
+              bgcolor: '#F6FAFF',
+            }}
+          >
+            {selectedAreaItem ? (
+              <AdminAreaDetailPanel
+                item={selectedAreaItem}
+                tickets={selectedAreaTickets}
+                selectedTicketId={routeState.selectedMarkerId}
+                onBack={handleBackToAreaList}
+                onSelectTicket={handleSelectAreaTicket}
               />
-            ) : null
-          }
-        />
+            ) : (
+              <AdminAreaListPanel
+                items={areaListItems}
+                selectedId={selectedAreaId}
+                isLoading={areas.isFetching && !areas.hasFetchedOnce}
+                hasError={areas.error !== null}
+                onSelect={handleSelectArea}
+              />
+            )}
+          </Box>
+        ) : null}
       </Box>
 
       <StationCreateDrawer
