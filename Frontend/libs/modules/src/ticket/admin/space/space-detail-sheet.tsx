@@ -182,17 +182,18 @@ function SpaceDetailContent({
   const kept = space.tickets.length;
   const cut = ticketsCut(space.tickets.length);
 
-  const confirmDelete = () => {
-    remove.mutate(
-      { uuid: building.uuid },
-      {
-        onSuccess: () => {
-          setConfirming(false);
-          toast(deletedToast(building.name, kept, cut));
-          onDeleted();
-        },
-      },
-    );
+  // Awaited, not mutate's own onSuccess: the delete's refetch finds the space gone and unmounts
+  // this content first, and TanStack drops a mutate callback once its caller has unmounted, which
+  // left the sheet open on 找不到這一棟 with no toast.
+  const confirmDelete = async () => {
+    try {
+      await remove.mutateAsync({ uuid: building.uuid });
+    } catch {
+      return; // The dialog shows `remove.error`.
+    }
+    setConfirming(false);
+    toast(deletedToast(building.name, kept, cut));
+    onDeleted();
   };
 
   return (
