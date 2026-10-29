@@ -83,7 +83,10 @@
    但 cookie 沒被清，重新載入後又是登入狀態、身分變成預設，畫面沒有說明。
 4. **改回預設身分時 Redis 連不上會回 503 `session_store_unavailable`**：照既有處理，稍後重試，不要當成登出。
 5. **新通知類型 `team_suspended`**：`ref_type = "team"`，暫停時該隊全員各收一則（操作的超管除外）。
+   前台要把它加進 `Frontend/libs/modules/src/notification/site-notices.ts` 的通知類型清單，否則不會顯示。
 6. **前台 server 端的 refresh 會把 `identity_reset` 當成登出**：`libs/modules/src/server/session-refresh.ts` 把 refresh 的 401 一律當成 `refused`，
    `libs/modules/src/session/shared-refresh.ts` 再把這個結果快取 30 秒。閒置後回來的人，如果第一個碰到收回身分的是 refresh，
    這 30 秒內的請求都會被當成登出，畫面可能被反覆重新載入。這兩處要把 `identity_reset` 跟登出分開。
    **後端最好跟這個前端改動同一次部署**，不要後端先上。
+7. **step-up 開始時身分剛被收回**：`GET /auth/oauth/{provider}/start?purpose=step_up` 不再送去登入頁，
+   而是回原頁並帶 `step_up_error=identity_reset`，cookie 不清（ADR-424）。頁面照第 1 點提示、refresh 後再讓使用者重試。

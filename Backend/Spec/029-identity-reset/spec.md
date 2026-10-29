@@ -2,11 +2,22 @@
 
 **Date**: 2026-10-28
 **Feature**: 029-identity-reset
-**Status**：設計中，尚未實作。
+**Status**：已實作（PR #154）。
 **Base**: `main` @ `48c3edaaf`，分支 `feat/identity-reset`
 **來源**：前端 10/28 對後台「團隊／成員與權限」的提問第 6 項。
-**Decisions**: `decisions.md`（ADR-402～405；資安檢查後補 ADR-415）
+**Decisions**: `decisions.md`（ADR-402～405；資安檢查後補 ADR-415；code review 後補 ADR-424）
 **部分取代**：ADR-096（Spec 010）、ADR-328（Spec 023）、ADR-357 第 4 點（Spec 026）。
+
+## 決策紀錄
+
+本 Spec 推翻 ADR-096（身分失效 = 登出），所以把誰、何時、在哪裡決定的寫在這裡。
+
+| 決定 | 誰 | 何時 | 在哪裡 | ADR |
+|---|---|---|---|---|
+| 身分收回不登出，session 改回預設身分，回 `identity_reset` | Popo | 2026-10-28 | 回覆前端 10/28 對後台「團隊／成員與權限」的六項提問（第 6 項） | 402～404 |
+| 五種操作中只有團隊暫停發通知 | Popo | 2026-10-28 | 同上 | 405 |
+| refresh 只認現役 token、名稱只取 session 自己的身分 | Popo | 2026-10-28 | 本分支的資安檢查（實測舊 refresh token 能改 session） | 415 |
+| step-up 開始時遇到 `identity_reset` 回原頁、不登出 | Popo | 2026-10-29 | PR #154 code review（jujuyuzu） | 424 |
 
 ## 概述
 
