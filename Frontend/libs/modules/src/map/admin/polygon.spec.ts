@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  editableOutline,
   polygonAreaKm2,
   polygonSelfIntersects,
   toGeoJsonPolygon,
@@ -97,5 +98,28 @@ describe('toGeoJsonPolygon', () => {
         ],
       ],
     });
+  });
+});
+
+describe('editableOutline', () => {
+  const ring: [number, number][] = [
+    [0, 0],
+    [0, 1],
+    [1, 1],
+    [1, 0],
+  ];
+
+  it('drops the closing point GeoJSON repeats', () => {
+    expect(editableOutline([[[...ring, ring[0]]]])).toEqual(ring);
+  });
+
+  it('keeps an outline that is not closed as it is', () => {
+    expect(editableOutline([[ring]])).toEqual(ring);
+  });
+
+  it('has none for a shape of several parts or with a hole', () => {
+    expect(editableOutline([[ring], [ring]])).toBeNull();
+    expect(editableOutline([[ring, ring]])).toBeNull();
+    expect(editableOutline([])).toBeNull();
   });
 });

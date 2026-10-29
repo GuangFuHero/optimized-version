@@ -31,6 +31,9 @@ export interface AreaActions {
   teamOptions: readonly AreaTeamOption[];
   /** Sent at once, not on save: the switch is a setting, and takes effect as it is pressed. */
   onTogglePublic: (isPublic: boolean) => void;
+  /** Whether the shape has a boundary that can be changed here: one polygon, with no hole. */
+  canEditBounds: boolean;
+  onEditBounds: () => void;
   onSave: (changes: { name?: string; note?: string | null }) => void;
   onPromote: () => void;
   onDelete: () => void;
@@ -261,6 +264,20 @@ export function AreaDetailFooter({
         {actions.canEdit ? (
           <Button variant="outlined" disabled={editing} onClick={onEdit}>
             編輯
+          </Button>
+        ) : null}
+        {actions.canEdit ? (
+          <Button
+            variant="outlined"
+            disabled={editing || !actions.canEditBounds}
+            title={
+              actions.canEditBounds
+                ? undefined
+                : '這一區的形狀有好幾塊或中間挖空，這裡還不能調整範圍'
+            }
+            onClick={actions.onEditBounds}
+          >
+            調整範圍
           </Button>
         ) : null}
       </Stack>

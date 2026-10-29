@@ -11,13 +11,16 @@ export {
   type AdminMapFilters,
 } from './map-filter';
 export {
+  boundaryChange,
   countInsideArea,
   isInArea,
   viewOfArea,
   type AreaContents,
+  type BoundaryChange,
   type AreaView,
 } from './area-geometry';
 export {
+  editableOutline,
   polygonAreaKm2,
   polygonSelfIntersects,
   toGeoJsonPolygon,

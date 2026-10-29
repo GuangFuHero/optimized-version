@@ -127,6 +127,17 @@ export interface RescueMapDraftArea {
   invalid: boolean;
 }
 
+/**
+ * An area whose boundary an admin is changing on 互助地圖: its corners, with a handle on each to drag
+ * or click away, and a plus between each two to add one. `onChange` gets the corners as they are
+ * once a handle is let go; a corner is not reported while it is dragged.
+ */
+export interface RescueMapEditArea {
+  points: [number, number][];
+  invalid: boolean;
+  onChange: (points: [number, number][]) => void;
+}
+
 /** A 危險區, on the 封閉區域 layer. */
 export type RescueMapClosureArea = RescueMapArea;
 

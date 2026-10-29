@@ -46,6 +46,7 @@ import type {
   RescueMapDetailItem,
   RescueMapDraftArea,
   RescueMapDraftPoint,
+  RescueMapEditArea,
   RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapPublicZone,
@@ -230,6 +231,8 @@ interface MapProps {
   onMapClick?: (position: [number, number]) => void;
   /** 後台正在圈選、尚未儲存的區域外框。 */
   draftArea?: RescueMapDraftArea | null;
+  /** 後台正在調整邊界的區域：每個轉角一個把手。 */
+  editArea?: RescueMapEditArea | null;
   /** 顯示在地圖上的暫存圖釘。 */
   previewMarker?: RescueMapMarkerItem | null;
   /** 覆寫地圖互動游標。 */
@@ -278,6 +281,7 @@ export const Map = memo(function Map({
   onMapClick,
   previewMarker,
   draftArea,
+  editArea,
   cursor,
   draftPoint,
   onDraftPointChange,
@@ -437,6 +441,7 @@ export const Map = memo(function Map({
             onLocationCellClick={handleLocationCellClick}
             previewMarker={previewMarker}
             draftArea={draftArea}
+            editArea={editArea}
             cursor={cursor}
             onMapClick={onMapClick}
             layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}

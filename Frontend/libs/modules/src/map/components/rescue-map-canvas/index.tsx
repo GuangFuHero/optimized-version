@@ -34,6 +34,7 @@ import type {
   RescueMapControllerValue,
   RescueMapDraftArea,
   RescueMapDraftPoint,
+  RescueMapEditArea,
   RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapPublicZone,
@@ -54,6 +55,8 @@ interface RescueMapCanvasProps {
   previewMarker?: RescueMapMarkerItem | null;
   /** The outline being drawn: see `Map`'s prop of the same name. */
   draftArea?: RescueMapDraftArea | null;
+  /** The boundary being changed: see `Map`'s prop of the same name. */
+  editArea?: RescueMapEditArea | null;
   cursor?: string;
   onMapClick?: (position: [number, number]) => void;
   layoutKey: string;
@@ -874,12 +877,35 @@ function syncLocationCellLayer({
   return labels;
 }
 
+/** A corner of a boundary being changed: a white dot with a dark rim, big enough to grab. */
+function createEditCornerIcon(invalid: boolean): L.DivIcon {
+  const stroke = invalid ? '#D32F2F' : '#151C22';
+
+  return L.divIcon({
+    className: 'rescue-map-edit-corner',
+    html: `<span style="display:block;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid ${stroke};box-sizing:border-box;cursor:move"></span>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+}
+
+/** The plus between two corners: a click puts a new corner there, to drag where it should go. */
+function createEditMidpointIcon(): L.DivIcon {
+  return L.divIcon({
+    className: 'rescue-map-edit-midpoint',
+    html: '<span style="display:flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#fff;border:1.5px solid #64748B;color:#64748B;font:700 11px/1 sans-serif;box-sizing:border-box;cursor:copy">+</span>',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+}
+
 export function RescueMapCanvas({
   controller,
   onMarkerClick,
   onLocationCellClick,
   previewMarker,
   draftArea,
+  editArea,
   cursor,
   onMapClick,
   layoutKey,
@@ -910,6 +936,7 @@ export function RescueMapCanvas({
   const cellLabelsRef = useRef<LocationCellLabel[]>([]);
   const previewMarkerRef = useRef<L.Marker | null>(null);
   const draftAreaLayerRef = useRef<L.LayerGroup | null>(null);
+  const editAreaLayerRef = useRef<L.LayerGroup | null>(null);
   const draftMarkerRef = useRef<L.Marker | null>(null);
   const draftBubbleRef = useRef<L.Marker | null>(null);
   // While the crosshair is dragged, the map autopans: that move is not the person moving the map.
@@ -1472,6 +1499,94 @@ export function RescueMapCanvas({
       layer.remove();
     };
   }, [draftArea]);
+
+  // The boundary being changed. A corner is dragged on the map's own layers and reported once it is
+  // let go: reported on every step, the corners would be made again under the hand that holds one.
+  useEffect(() => {
+    const map = mapRef.current;
+
+    editAreaLayerRef.current?.remove();
+    editAreaLayerRef.current = null;
+
+    if (!map || !editArea) {
+      return;
+    }
+
+    const { points, invalid, onChange } = editArea;
+    const stroke = invalid ? '#D32F2F' : '#151C22';
+    const layer = L.layerGroup();
+    const corners = points.map((point): [number, number] => [...point]);
+    const outline = L.polygon(corners, {
+      interactive: false,
+      color: stroke,
+      weight: 2.5,
+      dashArray: '6 6',
+      fillColor: stroke,
+      fillOpacity: 0.18,
+    }).addTo(layer);
+    // A click comes right after the drag is let go; it is not a click on the corner.
+    let justDragged = false;
+
+    corners.forEach((corner, index) => {
+      const handle = L.marker(corner, {
+        draggable: true,
+        keyboard: false,
+        icon: createEditCornerIcon(invalid),
+        zIndexOffset: 1000,
+      }).addTo(layer);
+
+      handle.on('drag', () => {
+        const { lat, lng } = handle.getLatLng();
+        corners[index] = [lat, lng];
+        outline.setLatLngs(corners);
+      });
+      handle.on('dragend', () => {
+        justDragged = true;
+        window.setTimeout(() => {
+          justDragged = false;
+        }, 50);
+        onChange(corners.map((point): [number, number] => [...point]));
+      });
+      handle.on('click', () => {
+        // A boundary keeps three corners at the least.
+        if (!justDragged && corners.length > 3) {
+          onChange(
+            corners
+              .filter((_, other) => other !== index)
+              .map((point): [number, number] => [...point]),
+          );
+        }
+      });
+    });
+
+    corners.forEach((corner, index) => {
+      const next = corners[(index + 1) % corners.length];
+      const middle: [number, number] = [
+        (corner[0] + next[0]) / 2,
+        (corner[1] + next[1]) / 2,
+      ];
+
+      L.marker(middle, {
+        keyboard: false,
+        icon: createEditMidpointIcon(),
+      })
+        .on('click', () =>
+          onChange([
+            ...corners.slice(0, index + 1),
+            middle,
+            ...corners.slice(index + 1),
+          ]),
+        )
+        .addTo(layer);
+    });
+
+    layer.addTo(map);
+    editAreaLayerRef.current = layer;
+
+    return () => {
+      layer.remove();
+    };
+  }, [editArea]);
 
   const draftLat = draftPoint?.lat;
   const draftLng = draftPoint?.lng;

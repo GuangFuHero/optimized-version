@@ -112,3 +112,26 @@ export function toGeoJsonPolygon(points: readonly LatLng[]) {
     coordinates: [[...ring, ring[0]]],
   };
 }
+
+/**
+ * The corners of an area that can have its boundary changed here: one polygon with no hole, as an
+ * outline without the closing point GeoJSON repeats. A shape of several parts, or with a hole in
+ * it, has no such outline (`null`), and keeps the boundary it has.
+ */
+export function editableOutline(
+  polygons: readonly (readonly (readonly LatLng[])[])[],
+): LatLng[] | null {
+  if (polygons.length !== 1 || polygons[0].length !== 1) {
+    return null;
+  }
+
+  const ring = polygons[0][0].map(([lat, lng]): LatLng => [lat, lng]);
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+
+  if (ring.length > 1 && first[0] === last[0] && first[1] === last[1]) {
+    ring.pop();
+  }
+
+  return ring.length >= 3 ? ring : null;
+}

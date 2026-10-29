@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { countInsideArea, isInArea, viewOfArea } from './area-geometry';
+import {
+  boundaryChange,
+  countInsideArea,
+  isInArea,
+  viewOfArea,
+} from './area-geometry';
 import type { RescueMapMarkerItem } from '../types';
 
 // A square from (0,0) to (10,10) with a hole from (4,4) to (6,6).
@@ -98,5 +103,55 @@ describe('viewOfArea', () => {
 
   it('has no view for an area with nothing drawn', () => {
     expect(viewOfArea({ polygons: [] })).toBeNull();
+  });
+});
+
+describe('boundaryChange', () => {
+  const left: [number, number][] = [
+    [0, 0],
+    [0, 5],
+    [10, 5],
+    [10, 0],
+  ];
+  const wider: [number, number][] = [
+    [0, 0],
+    [0, 8],
+    [10, 8],
+    [10, 0],
+  ];
+  const narrower: [number, number][] = [
+    [0, 0],
+    [0, 2],
+    [10, 2],
+    [10, 0],
+  ];
+  const markers = [
+    marker('in-both', [5, 1], 'ticket'),
+    marker('only-before', [5, 3], 'ticket'),
+    marker('only-after', [5, 7], 'ticket'),
+    marker('outside', [5, 9], 'ticket'),
+    marker('a-station', [5, 1], 'station'),
+  ];
+
+  it('counts what comes in when the boundary grows', () => {
+    expect(
+      boundaryChange({ polygons: [[left]] }, { polygons: [[wider]] }, markers),
+    ).toEqual({ inside: 3, added: 1, removed: 0 });
+  });
+
+  it('counts what goes out when the boundary shrinks', () => {
+    expect(
+      boundaryChange(
+        { polygons: [[left]] },
+        { polygons: [[narrower]] },
+        markers,
+      ),
+    ).toEqual({ inside: 1, added: 0, removed: 1 });
+  });
+
+  it('leaves stations out of it', () => {
+    expect(
+      boundaryChange({ polygons: [[left]] }, { polygons: [[left]] }, markers),
+    ).toEqual({ inside: 2, added: 0, removed: 0 });
   });
 });

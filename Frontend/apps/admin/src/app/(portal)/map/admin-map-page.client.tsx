@@ -1,8 +1,6 @@
 'use client';
 
-import { ClipboardList, X, MapPin } from 'lucide-react';
-
-import { Box, ButtonBase, Stack, Typography } from '@mui/material';
+import { Box, Stack } from '@mui/material';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -20,30 +18,31 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import {
   AREA_KIND_LABELS,
+  boundaryChange,
+  editableOutline,
   DEFAULT_ADMIN_MAP_FILTERS,
   filterMarkers,
   isFiltering,
   areaErrorMessage,
   countInsideArea,
   createSiteMapViewportStore,
-  dedupeMarkersById,
   isInArea,
   Map,
   polygonAreaKm2,
   polygonSelfIntersects,
   toGeoJsonPolygon,
-  StationCreateDrawer,
-  TicketCreateDrawer,
   useAdminMapAreas,
   useAdminMapLiveMarkers,
   viewOfArea,
   type AdminMapFilters,
   type RescueMapDraftArea,
+  type RescueMapEditArea,
   type RescueMapMarkerItem,
   type RescueMapRouteState,
 } from '@rescue-frontend/modules';
 
 import type { AreaActions } from './admin-area-detail-actions';
+import { AdminAreaBoundsPanel } from './admin-area-bounds-panel';
 import { AdminMapFilterBar } from './admin-map-filter-bar';
 import { AdminMapLegend } from './admin-map-legend';
 import {
@@ -57,8 +56,6 @@ import {
   AdminAreaListPanel,
   toAdminAreaListItems,
 } from './admin-area-list-panel';
-
-type CreateMode = 'idle' | 'station' | 'ticket';
 
 // 危險區 has no status in the UI (Carol: skip it; areas can be edited and deleted directly, so no
 // open/closed state is needed). The backend still refuses a blank one, and nothing reads it, so this
@@ -83,141 +80,13 @@ function haveSameNonViewportState(
   );
 }
 
-function formatCoordinate(value: number) {
-  return value.toFixed(6);
-}
-
-function ControlChip({
-  label,
-  active,
-  icon,
-  onClick,
-}: {
-  label: string;
-  active?: boolean;
-  icon: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <ButtonBase
-      disableRipple
-      onClick={onClick}
-      sx={{
-        height: 38,
-        px: 1.5,
-        borderRadius: '999px',
-        border: `1px solid ${active ? '#E3791E' : '#DCC1B1'}`,
-        bgcolor: active ? '#FFF1E5' : '#F6FAFF',
-        color: active ? '#7A3E00' : '#151C22',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 0.75,
-      }}
-    >
-      <Box sx={{ display: 'grid', placeItems: 'center' }}>{icon}</Box>
-      <Typography sx={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
-        {label}
-      </Typography>
-    </ButtonBase>
-  );
-}
-
-function AdminMapCreateControls({
-  mode,
-  pendingPosition,
-  canCreateStation,
-  canCreateTicket,
-  onToggleMode,
-  onCancel,
-}: {
-  mode: CreateMode;
-  canCreateStation: boolean;
-  canCreateTicket: boolean;
-  pendingPosition: [number, number] | null;
-  onToggleMode: (mode: CreateMode) => void;
-  onCancel: () => void;
-}) {
-  const helperText =
-    mode === 'station'
-      ? '點擊地圖放置新站點圖釘'
-      : mode === 'ticket'
-        ? '點擊地圖放置新任務圖釘'
-        : '選擇新增模式後，直接點地圖落點';
-
-  return (
-    <Box
-      sx={{
-        p: 1,
-        borderRadius: 4,
-        bgcolor: 'rgba(246, 250, 255, 0.94)',
-        backdropFilter: 'blur(8px)',
-        border: '1px solid #DCC1B1',
-        boxShadow: '0 12px 30px rgba(21, 28, 34, 0.12)',
-      }}
-    >
-      <Stack spacing={1}>
-        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-          {canCreateStation ? (
-            <ControlChip
-              label="新增站點"
-              active={mode === 'station'}
-              icon={<Box component={MapPin} sx={{ width: 18, height: 18 }} />}
-              onClick={() =>
-                onToggleMode(mode === 'station' ? 'idle' : 'station')
-              }
-            />
-          ) : null}
-          {canCreateTicket ? (
-            <ControlChip
-              label="新增任務"
-              active={mode === 'ticket'}
-              icon={
-                <Box component={ClipboardList} sx={{ width: 18, height: 18 }} />
-              }
-              onClick={() =>
-                onToggleMode(mode === 'ticket' ? 'idle' : 'ticket')
-              }
-            />
-          ) : null}
-          {mode !== 'idle' ? (
-            <ControlChip
-              label="取消"
-              icon={<Box component={X} sx={{ width: 18, height: 18 }} />}
-              onClick={onCancel}
-            />
-          ) : null}
-        </Stack>
-        <Typography sx={{ fontSize: 12, color: '#564337' }}>
-          {helperText}
-        </Typography>
-        {pendingPosition ? (
-          <Typography sx={{ fontSize: 12, color: '#7A3E00', fontWeight: 700 }}>
-            目前落點：{formatCoordinate(pendingPosition[0])},{' '}
-            {formatCoordinate(pendingPosition[1])}
-          </Typography>
-        ) : null}
-      </Stack>
-    </Box>
-  );
-}
-
 export function AdminMapPageClient() {
-  const canCreateStation = useCapability('station.add').data ?? false;
-  const canCreateTicket = useCapability('ticket.add').data ?? false;
   // The area layer and its list are for those who may see work zones; the rest see the map alone.
   const canViewZones = useCapability('work_zone.view').data ?? false;
   const [viewportStore] = useState(() => createSiteMapViewportStore({}));
   const [routeState, setRouteState] = useState<RescueMapRouteState>({});
   const liveMarkers = useAdminMapLiveMarkers(viewportStore);
-  // One made here stays on the map until the view fetches it too; from then on the fetched one,
-  // being fresher, is the one shown.
-  const [createdMarkers, setCreatedMarkers] = useState<
-    readonly RescueMapMarkerItem[]
-  >([]);
-  const markers = useMemo(
-    () => dedupeMarkersById([...liveMarkers.markers, ...createdMarkers]),
-    [createdMarkers, liveMarkers.markers],
-  );
+  const markers = liveMarkers.markers;
   // What the map shows. A way of looking, not of choosing: the area list counts all `markers`.
   const [filters, setFilters] = useState<AdminMapFilters>(
     DEFAULT_ADMIN_MAP_FILTERS,
@@ -240,9 +109,26 @@ export function AdminMapPageClient() {
   const [teamOverrides, setTeamOverrides] = useState<
     Record<string, { names: string[]; uuids: string[] }>
   >({});
+  // A boundary saved and waiting its 5 seconds is drawn where it was moved to.
+  const [geometryOverrides, setGeometryOverrides] = useState<
+    Record<string, [number, number][][][]>
+  >({});
+  // Changing the boundary of an area: its corners as they began, and as they are now.
+  const [editing, setEditing] = useState<{
+    areaId: string;
+    original: [number, number][];
+    points: [number, number][];
+  } | null>(null);
   const visibleClosureAreas = useMemo(
-    () => areas.closureAreas.filter((area) => !hiddenAreaIds.has(area.id)),
-    [areas.closureAreas, hiddenAreaIds],
+    () =>
+      areas.closureAreas
+        .filter((area) => !hiddenAreaIds.has(area.id))
+        .map((area) =>
+          geometryOverrides[area.id]
+            ? { ...area, polygons: geometryOverrides[area.id] }
+            : area,
+        ),
+    [areas.closureAreas, geometryOverrides, hiddenAreaIds],
   );
   const visiblePublicZones = useMemo(
     () =>
@@ -250,33 +136,41 @@ export function AdminMapPageClient() {
         .filter((zone) => !hiddenAreaIds.has(zone.id))
         .map((zone) => {
           const override = teamOverrides[zone.id];
+          const shaped = geometryOverrides[zone.id]
+            ? { ...zone, polygons: geometryOverrides[zone.id] }
+            : zone;
 
           return override
-            ? { ...zone, teams: override.names, teamUuids: override.uuids }
-            : zone;
+            ? { ...shaped, teams: override.names, teamUuids: override.uuids }
+            : shaped;
         }),
-    [areas.publicZones, hiddenAreaIds, teamOverrides],
+    [areas.publicZones, geometryOverrides, hiddenAreaIds, teamOverrides],
   );
   // A fresh answer from the backend has the changes in it: what was shown ahead is not needed.
   useEffect(() => {
     setHiddenAreaIds(new Set());
     setTeamOverrides({});
+    setGeometryOverrides({});
   }, [areas.closureAreas, areas.publicZones]);
   const closureAreas = useMemo(
     () =>
-      visibleClosureAreas.map((area) => ({
-        ...area,
-        highlighted: area.id === selectedAreaId,
-      })),
-    [visibleClosureAreas, selectedAreaId],
+      visibleClosureAreas
+        .filter((area) => area.id !== editing?.areaId)
+        .map((area) => ({
+          ...area,
+          highlighted: area.id === selectedAreaId,
+        })),
+    [editing?.areaId, visibleClosureAreas, selectedAreaId],
   );
   const publicZones = useMemo(
     () =>
-      visiblePublicZones.map((zone) => ({
-        ...zone,
-        highlighted: zone.id === selectedAreaId,
-      })),
-    [visiblePublicZones, selectedAreaId],
+      visiblePublicZones
+        .filter((zone) => zone.id !== editing?.areaId)
+        .map((zone) => ({
+          ...zone,
+          highlighted: zone.id === selectedAreaId,
+        })),
+    [editing?.areaId, visiblePublicZones, selectedAreaId],
   );
   // No API counts what lies in an area, so the list counts the markers the map has loaded.
   const areaListItems = useMemo(
@@ -324,7 +218,8 @@ export function AdminMapPageClient() {
     [viewportStore],
   );
   useEffect(() => {
-    if (!selectedAreaId) {
+    // While its boundary is changed, Esc is for that: back to the area, not out of it.
+    if (!selectedAreaId || editing) {
       return;
     }
 
@@ -337,7 +232,7 @@ export function AdminMapPageClient() {
     window.addEventListener('keydown', closeOnEscape);
 
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [handleBackToAreaList, selectedAreaId]);
+  }, [editing, handleBackToAreaList, selectedAreaId]);
   const handleSelectArea = useCallback(
     (areaId: string) => {
       const area = [...visibleClosureAreas, ...visiblePublicZones].find(
@@ -370,6 +265,8 @@ export function AdminMapPageClient() {
   // The outline of an area sent for creation, kept on the map through the 5 seconds it can be undone.
   const [heldPoints, setHeldPoints] = useState<[number, number][] | null>(null);
   const isDrawing = drawStep !== 'idle';
+  // While a boundary is drawn or changed, nothing else on the page is to be started or opened.
+  const isBusy = isDrawing || editing !== null;
   const outline = heldPoints ?? (isDrawing ? drawPoints : []);
   const crosses = useMemo(() => polygonSelfIntersects(outline), [outline]);
   const draftArea = useMemo<RescueMapDraftArea | null>(
@@ -473,6 +370,72 @@ export function AdminMapPageClient() {
     },
     [areas, createArea, drawPoints],
   );
+  // Changing the boundary of the area on show (FE-021 item 5, MAP-ZD-191 to 199).
+  const editedArea = useMemo(
+    () =>
+      editing
+        ? ([...visibleClosureAreas, ...visiblePublicZones].find(
+            (area) => area.id === editing.areaId,
+          ) ?? null)
+        : null,
+    [editing, visibleClosureAreas, visiblePublicZones],
+  );
+  const editedItem = editing
+    ? areaListItems.find((item) => item.id === editing.areaId)
+    : undefined;
+  const editCrosses = useMemo(
+    () => (editing ? polygonSelfIntersects(editing.points) : false),
+    [editing],
+  );
+  const editChange = useMemo(
+    () =>
+      editing
+        ? boundaryChange(
+            { polygons: [[editing.original]] },
+            { polygons: [[editing.points]] },
+            markers,
+          )
+        : { inside: 0, added: 0, removed: 0 },
+    [editing, markers],
+  );
+  const editChanged =
+    editing !== null &&
+    (editing.points.length !== editing.original.length ||
+      editing.points.some(
+        (point, index) =>
+          point[0] !== editing.original[index][0] ||
+          point[1] !== editing.original[index][1],
+      ));
+  const editArea = useMemo<RescueMapEditArea | null>(
+    () =>
+      editing
+        ? {
+            points: editing.points,
+            invalid: editCrosses,
+            onChange: (points) =>
+              setEditing((current) =>
+                current ? { ...current, points } : null,
+              ),
+          }
+        : null,
+    [editCrosses, editing],
+  );
+  const cancelEditing = useCallback(() => setEditing(null), []);
+  useEffect(() => {
+    if (!editing) {
+      return;
+    }
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setEditing(null);
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editing]);
   // The rest of what an admin does to an area (FE-021 items 5-9), for those who may.
   const canEditZone = useCapability('work_zone.edit').data ?? false;
   const canDeleteZone = useCapability('work_zone.delete').data ?? false;
@@ -494,6 +457,10 @@ export function AdminMapPageClient() {
       areas.reload();
     };
     const label = `${AREA_KIND_LABELS[area.kind]}「${area.name ?? ''}」`;
+    const shape = [...visibleClosureAreas, ...visiblePublicZones].find(
+      (candidate) => candidate.id === area.id,
+    );
+    const outline = shape ? editableOutline(shape.polygons) : null;
     const changeTeams = (
       next: { names: string[]; uuids: string[] },
       message: string,
@@ -520,6 +487,16 @@ export function AdminMapPageClient() {
       canEdit: canEditZone,
       canDelete: canDeleteZone,
       canAssign: canAssignZone,
+      canEditBounds: outline !== null,
+      onEditBounds: () => {
+        if (outline) {
+          setEditing({
+            areaId: area.id,
+            original: outline,
+            points: outline.map((point): [number, number] => [...point]),
+          });
+        }
+      },
       teamOptions: activeTeams,
       onTogglePublic: (isPublic) =>
         void updateArea
@@ -611,32 +588,55 @@ export function AdminMapPageClient() {
     removeZoneFromTeam,
     selectedAreaId,
     updateArea,
+    visibleClosureAreas,
+    visiblePublicZones,
   ]);
-  const [createMode, setCreateMode] = useState<CreateMode>('idle');
-  const [pendingPosition, setPendingPosition] = useState<
-    [number, number] | null
-  >(null);
-  const [stationDrawerOpen, setStationDrawerOpen] = useState(false);
-  const [ticketDrawerOpen, setTicketDrawerOpen] = useState(false);
+  // Saving the new boundary: shown at once, sent after the 5 seconds in which it can be taken back.
+  const saveBoundary = useCallback(() => {
+    if (!editing || !editedArea) {
+      return;
+    }
 
-  const currentInitialPosition = useMemo(
-    () => pendingPosition,
-    [pendingPosition],
-  );
+    const { areaId, points } = editing;
+    const name = editedArea.name ? `「${editedArea.name}」` : '這個區域';
+
+    setGeometryOverrides((current) => ({ ...current, [areaId]: [[points]] }));
+    setEditing(null);
+    holdRequest({
+      message: `已調整${name}的範圍`,
+      onUndo: () =>
+        setGeometryOverrides((current) => {
+          const { [areaId]: _undone, ...rest } = current;
+
+          return rest;
+        }),
+      send: () =>
+        updateArea
+          .mutateAsync({
+            uuid: areaId,
+            input: { geometry: toGeoJsonPolygon(points) },
+          })
+          .then(
+            () => areas.reload(),
+            (error: unknown) => {
+              toast.error(areaErrorMessage(error));
+              areas.reload();
+            },
+          ),
+    });
+  }, [areas, editedArea, editing, updateArea]);
   const handleRouteStateChange = useCallback(
     (next: RescueMapRouteState) => {
       const { position, bbox, ...picked } = next;
       // A pin tapped while drawing is a corner missed, not a ticket to open.
-      const rest = isDrawing
-        ? { ...picked, selectedMarkerId: undefined }
-        : picked;
+      const rest = isBusy ? { ...picked, selectedMarkerId: undefined } : picked;
 
       viewportStore.setState({ position, bbox });
       setRouteState((current) =>
         haveSameNonViewportState(current, rest) ? current : rest,
       );
     },
-    [isDrawing, viewportStore],
+    [isBusy, viewportStore],
   );
 
   const handleMapClick = (position: [number, number]) => {
@@ -645,26 +645,11 @@ export function AdminMapPageClient() {
       return;
     }
 
-    if (createMode === 'idle') {
-      setSelectedAreaId(null);
+    if (editing) {
       return;
     }
 
-    setPendingPosition(position);
-
-    if (createMode === 'station') {
-      setStationDrawerOpen(true);
-      return;
-    }
-
-    if (createMode === 'ticket') {
-      setTicketDrawerOpen(true);
-    }
-  };
-
-  const resetCreateFlow = () => {
-    setCreateMode('idle');
-    setPendingPosition(null);
+    setSelectedAreaId(null);
   };
 
   return (
@@ -696,6 +681,7 @@ export function AdminMapPageClient() {
             showScale
             onMapClick={handleMapClick}
             draftArea={draftArea}
+            editArea={editArea}
             cursor={drawStep === 'drawing' ? 'crosshair' : undefined}
             renderControls={() => (
               <Box
@@ -722,23 +708,11 @@ export function AdminMapPageClient() {
                     shownTickets={shownTickets}
                     shownStations={shownStations}
                     isFiltered={isFiltering(filters)}
-                    disabled={isDrawing}
+                    disabled={isBusy}
                   />
-                  {!isDrawing && (canCreateStation || canCreateTicket) ? (
-                    <Box sx={{ maxWidth: { mobile: '100%', tablet: 420 } }}>
-                      <AdminMapCreateControls
-                        mode={createMode}
-                        pendingPosition={pendingPosition}
-                        canCreateStation={canCreateStation}
-                        canCreateTicket={canCreateTicket}
-                        onToggleMode={setCreateMode}
-                        onCancel={resetCreateFlow}
-                      />
-                    </Box>
-                  ) : null}
                 </Stack>
                 {/* Put away while drawing: what is wanted then is the counts, not the colours. */}
-                {!isDrawing ? (
+                {!isBusy ? (
                   <Box
                     sx={{
                       position: 'absolute',
@@ -791,6 +765,31 @@ export function AdminMapPageClient() {
                 onCancel={cancelDrawing}
                 onSubmit={submitArea}
               />
+            ) : editing && editedArea ? (
+              <AdminAreaBoundsPanel
+                name={editedArea.name}
+                isTeamZone={editedItem?.kind === 'team_zone'}
+                teams={editedItem?.teams ?? []}
+                cornerCount={editing.points.length}
+                change={editChange}
+                areaKm2={polygonAreaKm2(editing.points)}
+                crosses={editCrosses}
+                changed={editChanged}
+                onReset={() =>
+                  setEditing((current) =>
+                    current
+                      ? {
+                          ...current,
+                          points: current.original.map(
+                            (point): [number, number] => [...point],
+                          ),
+                        }
+                      : null,
+                  )
+                }
+                onCancel={cancelEditing}
+                onSave={saveBoundary}
+              />
             ) : selectedAreaItem ? (
               <AdminAreaDetailPanel
                 item={selectedAreaItem}
@@ -814,31 +813,6 @@ export function AdminMapPageClient() {
           </Box>
         ) : null}
       </Box>
-
-      <StationCreateDrawer
-        open={stationDrawerOpen}
-        official
-        onClose={() => {
-          setStationDrawerOpen(false);
-          resetCreateFlow();
-        }}
-        initialPosition={currentInitialPosition}
-        onCreatedMarker={(marker) => {
-          setCreatedMarkers((current) => [marker, ...current]);
-        }}
-      />
-
-      <TicketCreateDrawer
-        open={ticketDrawerOpen}
-        onClose={() => {
-          setTicketDrawerOpen(false);
-          resetCreateFlow();
-        }}
-        initialPosition={currentInitialPosition}
-        onCreatedMarker={(marker) => {
-          setCreatedMarkers((current) => [marker, ...current]);
-        }}
-      />
     </>
   );
 }

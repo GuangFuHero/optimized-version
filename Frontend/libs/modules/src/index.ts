@@ -62,6 +62,7 @@ export { PUBLIC_ZONE_COLORS } from './map/constants';
 export type {
   RescueMapClosureArea,
   RescueMapDraftArea,
+  RescueMapEditArea,
   RescueMapPublicZone,
   RescueMapBaseLayer,
   RescueMapControllerValue,
@@ -78,7 +79,9 @@ export {
   ADMIN_MAP_STATION_TYPES,
   ADMIN_MAP_STATUSES,
   areaErrorMessage,
+  boundaryChange,
   countInsideArea,
+  editableOutline,
   DEFAULT_ADMIN_MAP_FILTERS,
   filterMarkers,
   isFiltering,
@@ -94,6 +97,7 @@ export {
   type AdminMapAreas,
   type AdminMapLiveMarkers,
   type AreaContents,
+  type BoundaryChange,
 } from './map/admin';
 
 export {
