@@ -69,7 +69,7 @@ describe('teamPickerOptions', () => {
 describe('inviteHint', () => {
   it('says an invite only picks the team, in the words of the identity picked', () => {
     expect(inviteHint('government')).toBe(
-      '如果單位已經給你邀請碼，掃碼會直接帶到那個團隊，不用自己找；一樣要等管理員核准。',
+      '如果單位已經給你邀請碼，掃碼會直接帶到那個單位，不用自己找；一樣要等管理員核准。',
     );
     expect(inviteHint('ngo')).toBe(
       '如果團隊已經給你邀請碼，掃碼會直接帶到那個團隊，不用自己找；一樣要等管理員核准。',

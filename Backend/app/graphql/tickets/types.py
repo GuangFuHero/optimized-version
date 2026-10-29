@@ -165,6 +165,16 @@ class TicketListOrder(enum.Enum):
     NEEDS_FIRST = "needs_first"
 
 
+@strawberry.enum
+class TicketStatus(enum.Enum):
+    """A ticket's status, to filter on: worked out from its needs in app/services/ticket_status.py."""
+
+    pending = "pending"
+    in_progress = "in_progress"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
 @strawberry.type(description="One move of a ticket's audit status")
 class TicketAuditEntryType:
     """An entry of `TicketType.auditHistory`, built by `ticket_audit.audit_history`."""
@@ -1019,6 +1029,24 @@ class TicketType:
             return None
         return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
 
+    @strawberry.field(
+        description=(
+            "The building map this ticket was filed under (createTicket's buildingMapUuid). Null when "
+            "it was not filed under one, when that building map is deleted, and to a caller without "
+            "ticket.view_detail here"
+        )
+    )
+    async def building_map_uuid(self, info: strawberry.types.Info) -> UUID | None:
+        """Return the ticket's building, or null when out of detail scope: naming it names the place.
+
+        The ticket was given the building's point (place_ticket), so knowing the building is
+        knowing the exact point `geometry` withholds. Decided before the lookup, as the address
+        is, so a page of tickets a guest reads costs no query here.
+        """
+        if not await self._detail_visible(info):
+            return None
+        return await info.context["loaders"]["building_map_by_ticket"].load(str(self.uuid))
+
     @strawberry.field
     async def disaster_details(self, info: strawberry.types.Info) -> list["TicketDisasterDetailType"]:
         """Resolve this ticket's disaster-specific field values.
@@ -1103,6 +1131,22 @@ class TicketConnection:
 
     items: list[TicketType]
     page_info: PageInfo
+
+
+@strawberry.type(description="How many tickets one H3 cell holds, of those its caller is shown as the cell")
+class TicketCellType:
+    """A row of `ticketCells`: one cell on the guest map and the number to write in it (ADR-387)."""
+
+    cell: str = strawberry.field(
+        description="H3 index (hex), the same value TicketType.locationCell carries for these tickets"
+    )
+    ticket_count: int
+    urgent_count: int = strawberry.field(
+        description=(
+            "Of those, how many are urgent: a priority other than 'low' or 'medium' (trimmed, any case), "
+            "and not 'in_progress' — the rule the site colours a ticket urgent by"
+        )
+    )
 
 
 @strawberry.input

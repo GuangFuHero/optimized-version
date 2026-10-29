@@ -120,7 +120,8 @@ STATION_COLUMNS: tuple[ColumnSpec, ...] = (
     _c("op_hour", max_length=100),
     _c("level", INTEGER),
     _c("comment", TEXT),
-    _create_only(_c("source", max_length=50)),  # not in UpdateStationInput
+    # An imported station is always official (ADMIN-026), so the file's value is never used.
+    _readonly(_c("source", max_length=50)),
     _c("visibility", ENUM, enum_options=_VISIBILITY_OPTIONS, max_length=50),
     _c("latitude", FLOAT, required_on_create=True),
     _c("longitude", FLOAT, required_on_create=True),

@@ -201,3 +201,15 @@ async def test_a_page_holds_at_most_200_rows(client):
     res = await client.post("/graphql", json={"query": LIST, "variables": {"limit": 201}})
 
     assert [error["message"] for error in res.json()["errors"]] == ["limit must be at most 200"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("page", [{"limit": -1}, {"skip": -1}])
+async def test_a_negative_page_is_refused_by_name(client, page):
+    """A negative `limit` or `skip` is named as such, not left to Postgres as "Unexpected error."."""
+    query = (
+        "query($skip: Int! = 0, $limit: Int! = 50) { tickets(skip: $skip, limit: $limit) { items { uuid } } }"
+    )
+    res = await client.post("/graphql", json={"query": query, "variables": page})
+
+    assert [error["message"] for error in res.json()["errors"]] == ["limit and skip must not be negative"]
