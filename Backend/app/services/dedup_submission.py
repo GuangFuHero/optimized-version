@@ -11,8 +11,10 @@ including one whose acknowledgement names nothing, is checked and can still be h
 create, the scored pairs are carded in the same commit.
 
 Every engine call happens before anything is written, so a failed call can roll back the
-transaction. Every new ticket comes through here, the site's help request included. Batch
-import does not; it calls `create_ticket` / `create_station` directly.
+transaction. Before the engine is asked, the submission's area is locked, so a near-simultaneous
+submission there waits for this one to commit and then sees it (ADR-396). Every new ticket comes
+through here, the site's help request included. Batch import does not; it calls `create_ticket` /
+`create_station` directly.
 """
 
 from dataclasses import dataclass
@@ -26,7 +28,7 @@ from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 from app.services import dedup as dedup_service
-from app.services import dedup_review
+from app.services import dedup_area_lock, dedup_review
 from app.services import station as station_service
 from app.services import ticket as ticket_service
 from app.services.dedup_snapshot import (
@@ -86,6 +88,7 @@ async def submit_new_ticket(
     submission = NewTicket(ticket=ticket_draft(fields), tasks=tuple(task_draft(f) for f in task_fields))
     acknowledged = {task_ref(i): t.acknowledged_duplicate_of for i, t in enumerate(tasks)}
 
+    await dedup_area_lock.lock_area_at(db, submission.ticket.location, kind="ticket")
     pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
         db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
@@ -131,6 +134,7 @@ async def submit_help_request(
     )
     acknowledged = {task_ref(i): task.get("acknowledged_duplicate_of") for i, task in enumerate(tasks)}
 
+    await dedup_area_lock.lock_area_at(db, submission.ticket.location, kind="ticket")
     pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
         db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
@@ -166,6 +170,7 @@ async def submit_new_task(
     submission = NewTask(ticket_uuid=ticket_uuid, task=task_draft(fields))
     acknowledged = {task_ref(0): task.acknowledged_duplicate_of}
 
+    await dedup_area_lock.lock_area_of_ticket(db, ticket_uuid)
     pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
         db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
@@ -193,6 +198,7 @@ async def submit_new_station(
     submission = NewStation(station=station_draft(fields))
     acknowledged = {"station": acknowledged_duplicate_of}
 
+    await dedup_area_lock.lock_area_at(db, submission.station.location, kind="station")
     pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
         db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
