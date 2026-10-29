@@ -19,8 +19,10 @@ import {
   readStepUpRequired,
   replacedContact,
   replaceNotice,
+  sameAsCurrentContact,
   setPasswordBlocked,
   setPasswordErrorMessage,
+  startsOverAtFirstStep,
   stripAccountStepUpReturn,
 } from './account-step-up';
 
@@ -138,6 +140,17 @@ describe('a contact of a kind the account already has', () => {
     expect(newCodeSentText('email', 'new@gmail.com', email)).toBe(
       '驗證碼已經寄到你新的電子郵件 new@gmail.com。完成後，原本的 wang@yahoo.com.tw 就不能再用。',
     );
+  });
+
+  it("is the account's own when typed again, which the backend would call another account's", () => {
+    expect(sameAsCurrentContact(email, 'email', ' Wang@Yahoo.com.tw ')).toBe(
+      '這就是你現在的電子郵件，請輸入新的電子郵件。',
+    );
+    expect(sameAsCurrentContact(phone, 'phone', '0912345678')).toBe(
+      '這就是你現在的手機，請輸入新的手機。',
+    );
+    expect(sameAsCurrentContact(email, 'email', 'new@gmail.com')).toBeNull();
+    expect(sameAsCurrentContact(null, 'phone', '0912345678')).toBeNull();
   });
 
   it('is said to be replaced once it is done', () => {
@@ -324,6 +337,23 @@ describe('error messages', () => {
     expect(
       addContactErrorMessage(refusal(409, 'identifier_taken'), 'send'),
     ).toBe('這個電子郵件或手機已經是別的帳號在用，請換一個');
+  });
+
+  it('goes back to step 1 when only it can get past the refusal', () => {
+    // The address is what is wrong, at whichever step the backend first sees it.
+    expect(startsOverAtFirstStep(refusal(409, 'identifier_taken'))).toBe(true);
+    // No code left to send again: only 寄驗證碼 starts a new one.
+    expect(startsOverAtFirstStep(refusal(404, 'no_pending_contact'))).toBe(
+      true,
+    );
+    expect(startsOverAtFirstStep(refusal(400, 'code_invalid'))).toBe(false);
+    expect(startsOverAtFirstStep(new Error('offline'))).toBe(false);
+  });
+
+  it('says a code that cannot be sent again starts over at 寄驗證碼', () => {
+    expect(
+      addContactErrorMessage(refusal(404, 'no_pending_contact'), 'resend'),
+    ).toBe('這組驗證碼已經不能用了，請再按一次「寄驗證碼」。');
   });
 
   it('points an account with nothing to receive a code at adding a contact first', () => {

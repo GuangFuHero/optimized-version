@@ -20,7 +20,10 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '@rescue-frontend/data-access';
 import { designTokens } from '@rescue-frontend/ui';
 
-import { continueSignedOut } from '../../session/end-expired-session';
+import {
+  continueSignedOut,
+  sessionStorageOrNull,
+} from '../../session/end-expired-session';
 import {
   authHref,
   newPasswordProblem,
@@ -67,6 +70,7 @@ import {
   type AccountStepUpAction,
   type StepUpProblem,
 } from './account-step-up';
+import { clearDraftsOnSignOut } from './sign-out-drafts';
 import { useAddContact } from './use-add-contact';
 import { useContactDraft, type ContactDraft } from './use-contact-draft';
 
@@ -121,6 +125,7 @@ function SecurityRow({
   summary,
   open,
   blocked,
+  headerRef,
   onOpen,
   onClose,
   children,
@@ -130,11 +135,15 @@ function SecurityRow({
   open: boolean;
   /** Why the row cannot be used here, shown under it in place of 打開. */
   blocked?: string | null;
+  /** The row's header, for the page to put focus back on (HC, #144). */
+  headerRef?: React.RefObject<HTMLButtonElement | null>;
   onOpen: () => void;
   onClose: () => void;
   children: React.ReactNode;
 }) {
   const contentId = useId();
+  const ownHeader = useRef<HTMLButtonElement>(null);
+  const header = headerRef ?? ownHeader;
   const heading = (
     <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
       <Typography
@@ -170,6 +179,7 @@ function SecurityRow({
       ) : (
         <>
           <ButtonBase
+            ref={header}
             aria-expanded={open}
             aria-controls={open ? contentId : undefined}
             onClick={open ? onClose : onOpen}
@@ -201,7 +211,15 @@ function SecurityRow({
           {open ? (
             <Stack id={contentId} spacing={2} sx={{ px: 3, pb: 3 }}>
               {children}
-              <Button variant="text" sx={BIG_BUTTON} onClick={onClose}>
+              {/* 取消 goes with the row it closes: focus stays on the row, not the top of the page. */}
+              <Button
+                variant="text"
+                sx={BIG_BUTTON}
+                onClick={() => {
+                  onClose();
+                  header.current?.focus();
+                }}
+              >
                 取消
               </Button>
             </Stack>
@@ -269,6 +287,7 @@ export function AccountSecurityClient({
   const [openRow, setOpenRow] = useState<SecurityRowKey | null>(null);
   // Which contact 電子郵件和手機 is changing — its 更換 or 新增 pressed — or null for the list.
   const [contactKind, setContactKind] = useState<AuthIdentityType | null>(null);
+  const contactHeader = useRef<HTMLButtonElement>(null);
 
   const { keep: keepContactDraft, take: takeContactDraft } =
     useContactDraft(userId);
@@ -298,14 +317,16 @@ export function AccountSecurityClient({
   const contact = useAddContact({
     hasPassword: signsInWithPassword,
     saltIdentity,
-    replaces: (type) => replacedContact(contacts, type) !== null,
+    current: (type) => replacedContact(contacts, type),
     stillPending: (type) =>
       oldCodeStillPending(originalContactName(contacts, type)),
     onReauth: (draft) => void goProveAtLine('add_contact', draft),
     // Done: back to the list, with what was done over it (design ⑫) and no warning about it (Seaweed,
-    // #144). The account's contacts are read again, the new one among them.
+    // #144). The account's contacts are read again, the new one among them. Focus goes to the row's
+    // header: the button just pressed goes away with step 3 (HC, #144).
     onVerified: () => {
       setContactKind(null);
+      contactHeader.current?.focus();
       router.refresh();
     },
   });
@@ -519,6 +540,8 @@ export function AccountSecurityClient({
   }
 
   async function handleLogoutAllAsync() {
+    // This tab is signed out by the person's choice too, as by 登出 in the menu (HC, #144).
+    clearDraftsOnSignOut(sessionStorageOrNull());
     setIsLoggingOutAll(true);
 
     try {
@@ -696,6 +719,7 @@ export function AccountSecurityClient({
         summary={contactLine}
         open={contactRowOpen}
         blocked={googleOnly ? '你是用 Google 登入，暫時不能在這裡新增。' : null}
+        headerRef={contactHeader}
         onOpen={() => openOnly('contact')}
         onClose={() => closeRow('contact')}
       >
@@ -870,8 +894,10 @@ export function AccountSecurityClient({
         {contact.stage.kind === 'line' ? (
           <>
             <Typography sx={BODY_TEXT}>{LINE_TEXT}</Typography>
+            {/* No field in this step: the button takes the focus 寄驗證碼 had. */}
             <Button
               variant="contained"
+              autoFocus
               sx={BIG_BUTTON}
               onClick={contact.proveAtLine}
             >

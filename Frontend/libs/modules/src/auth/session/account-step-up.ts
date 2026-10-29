@@ -7,9 +7,12 @@
  * (`role-request/use-phone-verification.ts`, `apply-return.ts`, `phone-verify-error.ts`).
  */
 
+import { ApiError } from '@rescue-frontend/data-access';
+
 import { stripQueryKeys, type ReturnQuery } from '../../route/return-query';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import type { AuthIdentityType } from '../login';
+import { normalizeIdentityValue } from '../login/utils/identity-validation';
 import type { AccountContact, LoginMethod } from './account-security-view';
 
 export const ACCOUNT_SECURITY_PATH = '/account/security';
@@ -140,6 +143,31 @@ export function replaceNotice(
   return signsInWithPassword
     ? `${notice}如果你是用${name}登入，以後登入要打新的${name}。`
     : notice;
+}
+
+/**
+ * The account's own email or phone typed again. The backend counts it as in use (`is_value_taken`) and
+ * would say so only after the password or the first code, as if another account had it (HC, #144).
+ */
+export function sameAsCurrentContact(
+  current: Pick<AccountContact, 'value'> | null,
+  type: AuthIdentityType,
+  value: string,
+): string | null {
+  if (!current) {
+    return null;
+  }
+
+  try {
+    if (normalizeIdentityValue(type, value) !== current.value) {
+      return null;
+    }
+  } catch {
+    // Not a phone number at all: the field's own check says so.
+    return null;
+  }
+
+  return `這就是你現在的${CONTACT_NAMES[type]}，請輸入新的${CONTACT_NAMES[type]}。`;
 }
 
 /** The row's line while closed: the account's email and phone, its own, in full. */
@@ -317,6 +345,18 @@ export type AddContactStep =
   | 'code'
   | 'resend';
 
+/**
+ * A refusal only step 1 gets past (HC, #144): the address is in use, which the backend can say at any step
+ * — first at step 2 for a password account, or once someone else has claimed it while the code was out —
+ * or no code is left to send again (`no_pending_contact`: it ran out, or was guessed wrong too often),
+ * which only 寄驗證碼 starts afresh.
+ */
+export function startsOverAtFirstStep(cause: unknown): boolean {
+  const code = cause instanceof ApiError ? cause.code : undefined;
+
+  return code === 'identifier_taken' || code === 'no_pending_contact';
+}
+
 const ADD_CONTACT_STEP_UP_INVALID: Partial<Record<AddContactStep, string>> = {
   password: '密碼不正確，請重新輸入',
   'old-code': '驗證碼不正確或已過期，請重新輸入',
@@ -334,7 +374,7 @@ export function addContactErrorMessage(
       rate_limited: '嘗試太多次，請稍後再試。',
       code_invalid:
         '驗證碼不正確或已過期，請重新輸入，或按「沒收到？重新寄一次」',
-      no_pending_contact: '驗證碼已過期，請按「沒收到？重新寄一次」',
+      no_pending_contact: '這組驗證碼已經不能用了，請再按一次「寄驗證碼」。',
       no_proof_channel: '你的帳號沒有可以收驗證碼的地方，請稍後再試。',
       step_up_invalid:
         ADD_CONTACT_STEP_UP_INVALID[step] ?? '確認是你本人沒有成功，請再試一次',

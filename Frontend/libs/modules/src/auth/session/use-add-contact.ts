@@ -22,6 +22,8 @@ import {
   lineProofExpired,
   lineReturnError,
   readStepUpRequired,
+  sameAsCurrentContact,
+  startsOverAtFirstStep,
   type AccountStepUpReturn,
   type AddContactStep,
   type StepUpProblem,
@@ -49,8 +51,8 @@ interface AddContactOptions {
   hasPassword: boolean;
   /** Any verified contact of the account, to look the password's salt up by. */
   saltIdentity: string | null;
-  /** Whether the account already has one of this kind, which the new one replaces (`replacedContact`). */
-  replaces: (type: AuthIdentityType) => boolean;
+  /** The one of this kind the account already has, which the new one replaces (`replacedContact`). */
+  current: (type: AuthIdentityType) => { value: string } | null;
   /** What to say when the first code is still good, by where it went (`oldCodeStillPending`). */
   stillPending: (type: AuthIdentityType) => string;
   /** Only LINE can prove it is them (ADR-361): keep the contact and go to LINE. */
@@ -67,7 +69,7 @@ interface AddContactOptions {
 export function useAddContact({
   hasPassword,
   saltIdentity,
-  replaces,
+  current,
   stillPending,
   onReauth,
   onVerified,
@@ -143,6 +145,10 @@ export function useAddContact({
           return;
         }
 
+        if (startsOverAtFirstStep(cause)) {
+          setStage({ kind: 'enter' });
+        }
+
         setProblem({
           message: addContactErrorMessage(cause, step),
           tone: 'error',
@@ -160,6 +166,14 @@ export function useAddContact({
 
     if (validation !== true) {
       fail(validation);
+      return;
+    }
+
+    // Before the password or the first code: the backend would only say it is in use, after them.
+    const own = sameAsCurrentContact(current(type), type, value);
+
+    if (own) {
+      fail(own);
       return;
     }
 
@@ -226,10 +240,14 @@ export function useAddContact({
       setStage({ kind: 'enter' });
       setValue('');
       setNotice(
-        contactAddedText(stage.type, stage.value, replaces(stage.type)),
+        contactAddedText(stage.type, stage.value, current(stage.type) !== null),
       );
       onVerified();
     } catch (cause) {
+      if (startsOverAtFirstStep(cause)) {
+        setStage({ kind: 'enter' });
+      }
+
       fail(addContactErrorMessage(cause, 'code'));
     } finally {
       setBusy(false);
@@ -250,6 +268,11 @@ export function useAddContact({
       await resendContactAsync({ type: stage.type, value: stage.value });
       setNotice('驗證碼已經重新寄出。');
     } catch (cause) {
+      // The code ran out or was guessed wrong too often, or the address was taken meanwhile.
+      if (startsOverAtFirstStep(cause)) {
+        setStage({ kind: 'enter' });
+      }
+
       fail(addContactErrorMessage(cause, 'resend'));
     } finally {
       setBusy(false);
