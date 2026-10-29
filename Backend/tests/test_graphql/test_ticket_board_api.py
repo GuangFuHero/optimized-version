@@ -290,3 +290,76 @@ async def test_ticket_stats_count_statuses_and_the_volunteer_gap(client, redis):
         "gapPeople": 5,
         "gapNeeds": 2,
     }
+
+
+EXTENT = """
+query($q: String, $d: String) {
+    ticketsExtent(q: $q, disasterType: $d) { count minLat maxLat minLng maxLng }
+    tickets(q: $q, disasterType: $d, limit: 200) { items { geometry locationCell } pageInfo { totalCount } }
+}
+"""
+
+
+def _box(items) -> dict:
+    """The box around the points `tickets` returned."""
+    lngs = [i["geometry"]["coordinates"][0] for i in items]
+    lats = [i["geometry"]["coordinates"][1] for i in items]
+    return {"minLat": min(lats), "maxLat": max(lats), "minLng": min(lngs), "maxLng": max(lngs)}
+
+
+def _close(extent: dict, box: dict) -> bool:
+    return all(abs(extent[k] - box[k]) < 1e-9 for k in box)
+
+
+@pytest.mark.asyncio
+async def test_tickets_extent_counts_what_tickets_lists_and_frames_its_points(client, redis):
+    """Same filters, same count; the box is the exact points' to a caller with ticket.view_detail."""
+    _, token = await _create_user_with_grants(
+        redis, [(Perm.TICKET_VIEW, "all"), (Perm.TICKET_VIEW_DETAIL, "all")]
+    )
+    tag = uuid_mod.uuid4().hex[:10]
+    author = await _user()
+    await _ticket(author, f"{tag} a", disasters=["flood"], point=(121.40, 23.60))
+    await _ticket(author, f"{tag} b", disasters=["flood"], point=(121.55, 23.75))
+    await _ticket(author, f"{tag} c", disasters=["fire"], point=(121.90, 24.10))
+
+    data = await _gql(client, token, EXTENT, {"q": tag, "d": "flood"})
+    extent, listed = data["ticketsExtent"], data["tickets"]
+    assert extent["count"] == listed["pageInfo"]["totalCount"] == 2
+    assert _close(extent, {"minLat": 23.60, "maxLat": 23.75, "minLng": 121.40, "maxLng": 121.55})
+    assert _close(extent, _box(listed["items"]))
+
+    data = await _gql(client, token, EXTENT, {"q": tag})
+    assert data["ticketsExtent"]["count"] == data["tickets"]["pageInfo"]["totalCount"] == 3
+
+
+@pytest.mark.asyncio
+async def test_tickets_extent_of_a_coarse_caller_uses_cell_centres(client):
+    """Anonymous, every row is a cell: the box is the centres `tickets` shows, not the exact points."""
+    tag = uuid_mod.uuid4().hex[:10]
+    author = await _user()
+    await _ticket(author, f"{tag} a", point=(121.4012, 23.6034))
+    await _ticket(author, f"{tag} b", point=(121.5567, 23.7589))
+
+    resp = await client.post("/graphql", json={"query": EXTENT, "variables": {"q": tag}})
+    body = resp.json()
+    assert "errors" not in body, body
+    extent, listed = body["data"]["ticketsExtent"], body["data"]["tickets"]
+    assert extent["count"] == listed["pageInfo"]["totalCount"] == 2
+    assert all(i["locationCell"] for i in listed["items"])
+    assert _close(extent, _box(listed["items"]))
+    assert not _close(extent, {"minLat": 23.6034, "maxLat": 23.7589, "minLng": 121.4012, "maxLng": 121.5567})
+
+
+@pytest.mark.asyncio
+async def test_tickets_extent_is_empty_when_nothing_matches(client, redis):
+    """No match: a count of 0 and no box."""
+    _, token = await _create_user_with_grants(redis, [(Perm.TICKET_VIEW, "all")])
+    data = await _gql(client, token, EXTENT, {"q": uuid_mod.uuid4().hex[:10]})
+    assert data["ticketsExtent"] == {
+        "count": 0,
+        "minLat": None,
+        "maxLat": None,
+        "minLng": None,
+        "maxLng": None,
+    }

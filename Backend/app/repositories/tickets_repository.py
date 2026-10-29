@@ -119,9 +119,7 @@ class TicketRepository(GenericRepository[Tickets]):
         list keeps none, so unticking every status shows nothing. With `status` too, both apply.
         """
         conditions = [self.model.delete_at.is_(None), *extra_filters]
-        # NULL-safe: `created_by = :me` is NULL on a row with no author, and NOT NULL is
-        # still NULL — such a row would match neither branch below and silently vanish.
-        seen = func.coalesce(and_(*detail_filters), false()) if detail_filters else None
+        seen = self._seen(detail_filters)
         if coarse_only or location_cell is not None:
             conditions.append(false() if seen is None else not_(seen))
         if location_cell is not None:
@@ -174,6 +172,15 @@ class TicketRepository(GenericRepository[Tickets]):
                     )
                 )
         return conditions
+
+    @staticmethod
+    def _seen(detail_filters):
+        """Whether the caller sees a row's exact point, as an expression; None when every row is seen.
+
+        NULL-safe: `created_by = :me` is NULL on a row with no author, and NOT NULL is still NULL —
+        such a row would match neither branch of a seen/not-seen pair and silently vanish.
+        """
+        return func.coalesce(and_(*detail_filters), false()) if detail_filters else None
 
     def _column_conditions(
         self,
@@ -399,6 +406,52 @@ class TicketRepository(GenericRepository[Tickets]):
             .order_by(cell)
         )
         return [(cell, count, urgent_count) for cell, count, urgent_count in rows]
+
+    async def extent_active(
+        self,
+        db: AsyncSession,
+        *,
+        status: str | None = None,
+        statuses: list[str] | None = None,
+        priority: str | None = None,
+        q: str | None = None,
+        disaster_type: str | None = None,
+        extra_filters=(),
+        detail_filters,
+        coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
+        location_cell: str | None = None,
+    ) -> tuple[int, float | None, float | None, float | None, float | None]:
+        """Count the active tickets count_active() counts, and the box around the points shown of them.
+
+        Returns `(count, min_lat, max_lat, min_lng, max_lng)`, the four None when nothing matches. One
+        statement over `_active_conditions`, so the count is count_active()'s for the same arguments.
+        A row the caller is shown as a cell gives its cell centre at `coarse_resolution`, as
+        list_active() shows it — never its point, so the box says no more than the rows do.
+        """
+        conditions = self._active_conditions(
+            status=status,
+            statuses=statuses,
+            priority=priority,
+            q=q,
+            disaster_type=disaster_type,
+            extra_filters=extra_filters,
+            detail_filters=detail_filters,
+            coarse_resolution=coarse_resolution,
+            location_cell=location_cell,
+        )
+        seen = self._seen(detail_filters)
+        coarse = h3_centroid(self.model.geometry, coarse_resolution)
+        shown = self.model.geometry if seen is None else case((seen, self.model.geometry), else_=coarse)
+        points = select(shown.label("point")).where(*conditions).subquery()
+        lat, lng = func.ST_Y(points.c.point), func.ST_X(points.c.point)
+        row = (
+            await db.execute(
+                select(func.count(), func.min(lat), func.max(lat), func.min(lng), func.max(lng)).select_from(
+                    points
+                )
+            )
+        ).one()
+        return int(row[0]), row[1], row[2], row[3], row[4]
 
     async def stats(self, db: AsyncSession, *, extra_filters=()) -> dict[str, int]:
         """Counts by status and the volunteer gap over the active tickets `extra_filters` leaves.

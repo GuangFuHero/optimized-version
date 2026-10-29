@@ -965,6 +965,31 @@ type Query {
     """
     statuses: [TicketStatus!] = null
   ): [TicketCellType!]!
+  ticketsExtent(
+    status: String = null
+    priority: String = null
+    q: String = null
+
+    """As on `tickets`: only tickets with a need of this type"""
+    needType: String = null
+
+    """As on `tickets`: with needType, only a need still taking volunteers"""
+    openNeedsOnly: Boolean! = false
+
+    """Only tickets at this audit status"""
+    auditStatus: AuditStatus = null
+
+    """As on `tickets`: only the tickets this caller is shown as this H3 cell"""
+    locationCell: String = null
+
+    """
+    Only tickets in one of these statuses, as the map's filter ticks several; a status given more than once counts once. Leave it out to match every status, as the site does when its filter means all of them: an empty list matches none
+    """
+    statuses: [TicketStatus!] = null
+
+    """Only tickets filed under this disaster type (a disaster_types key)"""
+    disasterType: String = null
+  ): TicketsExtentType!
   ticketStats: TicketStatsType!
   ticket(
     uuid: UUID!
@@ -1988,6 +2013,26 @@ type TicketType {
   """
   responsibleTeams: [AssignedTeamType!]!
   disasterDetails: [TicketDisasterDetailType!]!
+}
+
+"""
+How many tickets match a `tickets` filter, and the box their map points span
+"""
+type TicketsExtentType {
+  """The `tickets` totalCount for the same filters"""
+  count: Int!
+
+  """Southern edge of the box around the points shown; null when none match"""
+  minLat: Float
+
+  """Northern edge; null when none match"""
+  maxLat: Float
+
+  """Western edge; null when none match"""
+  minLng: Float
+
+  """Eastern edge; null when none match"""
+  maxLng: Float
 }
 
 enum TriState {

@@ -1228,6 +1228,19 @@ class TicketStatsType:
     gap_needs: int = strawberry.field(description="How many open needs are short of people (gapPeople > 0)")
 
 
+@strawberry.type(description="How many tickets match a `tickets` filter, and the box their map points span")
+class TicketsExtentType:
+    """`ticketsExtent`: what a map needs to frame every matching ticket without loading them."""
+
+    count: int = strawberry.field(description="The `tickets` totalCount for the same filters")
+    min_lat: float | None = strawberry.field(
+        description="Southern edge of the box around the points shown; null when none match"
+    )
+    max_lat: float | None = strawberry.field(description="Northern edge; null when none match")
+    min_lng: float | None = strawberry.field(description="Western edge; null when none match")
+    max_lng: float | None = strawberry.field(description="Eastern edge; null when none match")
+
+
 @strawberry.type
 class TicketConnection:
     """Paginated list of tickets with page metadata."""

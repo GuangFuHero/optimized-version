@@ -1039,6 +1039,7 @@ export type Query = {
   ticketStats: TicketStatsType;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
+  ticketsExtent: TicketsExtentType;
   zonesByTeam: TeamZoneConnection;
 };
 
@@ -1206,6 +1207,18 @@ export type QueryTicketsArgs = {
   status?: InputMaybe<Scalars['String']['input']>;
   statuses?: InputMaybe<Array<TicketStatus>>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
+};
+
+export type QueryTicketsExtentArgs = {
+  auditStatus?: InputMaybe<AuditStatus>;
+  disasterType?: InputMaybe<Scalars['String']['input']>;
+  locationCell?: InputMaybe<Scalars['String']['input']>;
+  needType?: InputMaybe<Scalars['String']['input']>;
+  openNeedsOnly?: Scalars['Boolean']['input'];
+  priority?: InputMaybe<Scalars['String']['input']>;
+  q?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  statuses?: InputMaybe<Array<TicketStatus>>;
 };
 
 export type QueryZonesByTeamArgs = {
@@ -1900,6 +1913,21 @@ export type TicketType = {
   viewerCanEdit: Scalars['Boolean']['output'];
   /** Whether the caller holds ticket.view_history over this ticket, so a page offers the timeline only where reading it would be allowed */
   viewerCanViewHistory: Scalars['Boolean']['output'];
+};
+
+/** How many tickets match a `tickets` filter, and the box their map points span */
+export type TicketsExtentType = {
+  __typename?: 'TicketsExtentType';
+  /** The `tickets` totalCount for the same filters */
+  count: Scalars['Int']['output'];
+  /** Northern edge; null when none match */
+  maxLat?: Maybe<Scalars['Float']['output']>;
+  /** Eastern edge; null when none match */
+  maxLng?: Maybe<Scalars['Float']['output']>;
+  /** Southern edge of the box around the points shown; null when none match */
+  minLat?: Maybe<Scalars['Float']['output']>;
+  /** Western edge; null when none match */
+  minLng?: Maybe<Scalars['Float']['output']>;
 };
 
 export const TriState = {
