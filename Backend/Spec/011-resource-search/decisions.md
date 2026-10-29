@@ -757,3 +757,59 @@ alembic 走 subprocess 而非 in-process，有兩個原因：`alembic/env.py` �
 ◾ 對 production 零行為差異，純測試基礎建設。
 ➖ 只釘名稱，所以 ADR-149 的「DDL 與 `create_all` 產出逐字相符」這條通則仍然沒有自動守衛；型別與 nullability 的漂移抓不到，還是靠人工與 `autogenerate` 的幽靈 diff。
 ➖ suite 多一次真實的 migration run（session-scoped，兩支測試共用，實測 3.5s），且執行者需要 `CREATE DATABASE` 權限。
+
+---
+
+### ADR-419 `tickets` 加 `order: NEEDS_FIRST`：還缺人的單在前、搜救優先，排在相關度之前
+
+**白話**：前台列表要讓志工先看到還需要人的單，有搜救需求的排最前面，已經滿額或完成的排最後。原本只能排已經載入的那
+一頁，現在由後端對全部的單排好再分頁。
+
+**Context**：
+
+- `tickets` 只有一種排序：新到舊，有 `q` 時相關度在前（ADR-083／147／153）。前台列表（#101）照原型
+  （`site-data.js:613-650`）分三層，但只能排已載入的 100 張；第 2 頁以後的搜救單、還缺人的舊單，要捲到才看得到。
+- 單的 `status` 由需求算出（`services/ticket_status.py`）：`pending`／`in_progress` 表示還有需求收人，`completed`
+  表示沒有。`cancelled` 只剩很早以前手動取消的舊資料（刪掉的單不回傳），它的需求可能還寫 `pending`，但不收人。
+- 前台把「自己承接的需求」也當成還收人（2026-10-23 使用者定）：搶到最後一個名額的人，那張單不該掉到最後。
+
+**Decision**：
+
+1. `tickets` 加參數 `order: TicketListOrder`，預設 `NEWEST`（原本的排序，不變）；`NEEDS_FIRST` 在原本的排序**前面**
+   多一個鍵，搜尋時也排在相關度前面：
+   - 0：單還收人，而且有搜救（`task_type = 'rescue'`）需求還收人；或登入者在這張單的搜救需求上有承接；
+   - 1：單還收人；或登入者在這張單有任何承接；
+   - 2：其他。
+2. 實作：需求先依 `ticket_uuid` 彙總成一列（訪客只算「有開放搜救」，登入者再加上自己的承接），`LEFT JOIN` 回 tickets，
+   用 `CASE` 排。**不在 `ORDER BY` 裡逐列寫 `EXISTS`**：Postgres 把 CASE 裡的關聯子查詢估成每列都跑一次，大約
+   8,500 張單起估計成本就超過 `jit_above_cost`（預設 100,000），每次查詢多花 150～300 ms 編 JIT；實際只算一次。
+3. `count_active` 不變：排序不影響筆數。分頁照舊 offset，最後一個鍵仍是主鍵（ADR-153）。
+4. 只讀列表本來就給任何人看的東西：單的狀態、需求的類型與狀態；加上登入者自己的承接。
+
+**實測**（2026-10-29，本機 Postgres 16.4，`alembic upgrade head` 的乾淨庫，每張單 1～3 個需求、約 15% 搜救、
+四分之一已完成；`EXPLAIN ANALYZE` 跑 `list_active` 實際送出的 SQL，暖機後 3 次）：
+
+| 20,000 張單、39,938 個需求，第 1 頁 100 筆 | 執行時間 | JIT |
+|---|---|---|
+| `NEWEST`（原本） | 16–23 ms | 否 |
+| `NEEDS_FIRST`，訪客 | 28–35 ms | 否 |
+| `NEEDS_FIRST`，訪客第 10 頁 | 32–33 ms | 否 |
+| `NEEDS_FIRST`，登入（含自己的承接） | 33–39 ms | 否 |
+| 改寫前（`ORDER BY` 裡逐列 `EXISTS`），訪客／登入 | 319–335／892–947 ms | 是 |
+| `NEWEST`＋`q`（原本就有） | 70–75 ms | 是 |
+| `NEEDS_FIRST`＋`q` | 80–85 ms | 是 |
+
+搜尋時的 JIT 是原本的搜尋條件（`WHERE` 裡的 `EXISTS`）造成的，`NEWEST` 也一樣，不在這次範圍。
+
+**否決的做法**：
+
+- **把層存成 `tickets` 的欄位**（由 `recompute_ticket_status` 一起寫，再建 index）：要 migration 和回填；「自己承接的」
+  依呼叫者而不同，存不進去。上面的數字不需要。
+- **cursor（keyset）分頁**：層會隨承接改變，cursor 一樣會跳過剛移動的那張；offset 的重複由前台去重。
+
+**Consequences**：
+➕ 前台列表第一頁就是全部單裡最該先看的那些。
+➕ 預設不變，管理平台和其他呼叫者不受影響。
+➖ 兩次載入之間有人把一張單的最後一個名額接走，它會移到第 2 層，下一頁可能漏看一張；新單進來時可能重複一張
+  （新到舊本來就會）。
+➖ 登入者看到的順序跟訪客不同（自己承接的單排得比較前面）。

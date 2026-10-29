@@ -27,6 +27,7 @@ from app.graphql.tickets.types import (
     TaskAssignmentType,
     TaskPropertyType,
     TicketConnection,
+    TicketListOrder,
     TicketTaskType,
     TicketType,
     ticket_detail_visible,
@@ -124,6 +125,16 @@ class RequestQuery:
         audit_status: Annotated[
             AuditStatus | None, strawberry.argument(description="Only tickets at this audit status")
         ] = None,
+        order: Annotated[
+            TicketListOrder,
+            strawberry.argument(
+                description=(
+                    "NEWEST (default): newest first, best match first when searching. NEEDS_FIRST: "
+                    "tickets still taking people first, one with an open rescue need ahead, then as "
+                    "NEWEST; a need the signed-in caller claimed counts as open"
+                )
+            ),
+        ] = TicketListOrder.NEWEST,
     ) -> TicketConnection:
         """List tickets with optional bbox, status, priority, need-type, audit and keyword filters, paginated.
 
@@ -157,10 +168,14 @@ class RequestQuery:
         At most TICKET_LIST_MAX_LIMIT rows a page. A row reads whom to call as `ticket` does —
         to the requester, the coordinators and whoever claimed one of its needs (ADR-286 point 1)
         — and its triage answers take ticket.view_history besides ticket.view_pii (point 6).
+
+        `order` NEEDS_FIRST is the site list's (ADR-419). It reads only what the list already shows
+        anyone — each ticket's status, each need's type and status — and the caller's own claims.
         """
         if limit > TICKET_LIST_MAX_LIMIT:
             raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
         db = info.context["db"]
+        user = info.context["user"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = [
             *scope_filter(scope, actor=info.context["user"], model=Tickets),
@@ -194,6 +209,8 @@ class RequestQuery:
                 extra_filters=extra_filters,
                 detail_filters=detail_filters,
                 coarse_resolution=resolution,
+                order=order.value,
+                viewer_uuid=None if user is None else str(user.uuid),
             )
         return TicketConnection(
             items=[TicketType.from_model(m, coarse_resolution=resolution, listed=True) for m in items],
