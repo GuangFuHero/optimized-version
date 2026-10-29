@@ -695,6 +695,20 @@ export function useExportStations() {
   });
 }
 
+/** Rows each need type's export would hold, keyed by type; a type with none is absent. */
+export const ticketExportCountsQuery = () =>
+  queryOptions({
+    queryKey: ticketKeys.exportCounts(),
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/bulk/tickets/export/counts', { signal })
+        .then(responseData),
+  });
+
+export function useTicketExportCounts(options: { enabled?: boolean } = {}) {
+  return useQuery({ ...ticketExportCountsQuery(), enabled: options.enabled });
+}
+
 export interface ExportTicketsInput {
   params: paths['/api/v1/bulk/tickets/export']['get']['parameters'];
 }

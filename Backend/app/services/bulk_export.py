@@ -14,7 +14,7 @@ happening to agree (ADR-119).
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -315,6 +315,27 @@ def _contact_fields(ticket: Tickets, *, visible: bool) -> dict[str, str]:
         "contact_email": _text(mask_email(ticket.contact_email)),
         "contact_phone": _text(mask_phone(ticket.contact_phone)),
     }
+
+
+async def count_ticket_exports(db: AsyncSession, *, actor: User) -> dict[str, int]:
+    """Count the rows each task type's export would hold, so a page can show them first.
+
+    The same rows `export_tickets` writes — one per (ticket, task) pair in the caller's
+    ticket.export scope — grouped by `task_type`; a type with no rows is left out.
+    """
+    async with stable_actor(db, actor):
+        scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
+        rows = await db.execute(
+            select(TicketTask.task_type, func.count())
+            .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
+            .where(
+                TicketTask.delete_at.is_(None),
+                Tickets.delete_at.is_(None),
+                *scope_filter(scope, actor=actor, model=Tickets),
+            )
+            .group_by(TicketTask.task_type)
+        )
+        return {task_type: count for task_type, count in rows.all()}
 
 
 async def export_tickets(

@@ -5156,6 +5156,68 @@
         }
       }
     },
+    "/api/v1/bulk/tickets/export/counts": {
+      "get": {
+        "tags": [
+          "批量匯入匯出"
+        ],
+        "summary": "各任務型別匯出會有幾列",
+        "description": "Count each task type's export rows in the caller's scope; a type with none is left out.",
+        "operationId": "count_ticket_exports_api_v1_bulk_tickets_export_counts_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Count Ticket Exports Api V1 Bulk Tickets Export Counts Get"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission Denied"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/bulk/tickets/export": {
       "get": {
         "tags": [

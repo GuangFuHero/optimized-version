@@ -1533,6 +1533,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/bulk/tickets/export/counts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 各任務型別匯出會有幾列
+     * @description Count each task type's export rows in the caller's scope; a type with none is left out.
+     */
+    get: operations['count_ticket_exports_api_v1_bulk_tickets_export_counts_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/bulk/tickets/export': {
     parameters: {
       query?: never;
@@ -7218,6 +7238,46 @@ export interface operations {
         };
         content: {
           'application/json': unknown;
+        };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  count_ticket_exports_api_v1_bulk_tickets_export_counts_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: number;
+          };
         };
       };
       /** @description Permission Denied */

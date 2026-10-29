@@ -14,7 +14,7 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import { Button, designTokens } from '@rescue-frontend/ui';
 import { Download } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -22,38 +22,26 @@ import {
   getStationTypeLabel,
   STATION_TYPE_OPTIONS,
 } from '../../type-options';
+import {
+  ExportFormatChoice,
+  exportOptionSx,
+  exportPaperSx,
+  ExportSectionLabel,
+  type ExportFormat,
+} from '../../../admin/shared/export-popover-parts';
 import { downloadBlob } from '../../../admin/shared/model/bulk-import';
 import { useStationRows } from './hooks/use-station-rows';
 import { countExportableByType, exportFilename } from './model/import';
 import { EMPTY_FILTERS } from './model/station-filters';
 
-const { color, focusRing, radius, shadow, typography } = designTokens;
-
-type Format = 'csv' | 'xlsx';
-
-const FORMATS: { value: Format; label: string }[] = [
-  { value: 'csv', label: 'CSV' },
-  { value: 'xlsx', label: 'Excel' },
-];
-
-/** A bordered radio choice; the checked one takes the primary subtle fill. */
-function optionSx(active: boolean) {
-  return {
-    m: 0,
-    pr: '12px',
-    borderRadius: `${radius.md}px`,
-    border: `1px solid ${active ? color.bg.primary.default : color.border.default}`,
-    bgcolor: active ? color.bg.primary.subtle : color.bg.neutral.default,
-    '& .MuiRadio-root': { p: '7px', ml: '3px' },
-  };
-}
+const { color, focusRing, radius, typography } = designTokens;
 
 export function StationExportMenu() {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [stationType, setStationType] = useState<string>(
     STATION_TYPE_OPTIONS[0].value,
   );
-  const [format, setFormat] = useState<Format>('csv');
+  const [format, setFormat] = useState<ExportFormat>('csv');
   const exportStations = useExportStations();
   // The page already loads the unfiltered list, so this reads the cache.
   const { rows } = useStationRows(EMPTY_FILTERS);
@@ -108,16 +96,7 @@ export function StationExportMenu() {
         onClose={() => setAnchor(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{
-          paper: {
-            sx: {
-              mt: '8px',
-              borderRadius: `${radius.lg}px`,
-              boxShadow: shadow.lg,
-              border: `1px solid ${color.border.default}`,
-            },
-          },
-        }}
+        slotProps={{ paper: { sx: exportPaperSx } }}
       >
         <Box
           sx={{
@@ -129,7 +108,7 @@ export function StationExportMenu() {
             gap: '12px',
           }}
         >
-          <SectionLabel>匯出哪一種站點</SectionLabel>
+          <ExportSectionLabel>匯出哪一種站點</ExportSectionLabel>
           <RadioGroup
             aria-label="匯出哪一種站點"
             value={stationType}
@@ -144,7 +123,7 @@ export function StationExportMenu() {
                   value={option.value}
                   control={<Radio size="small" />}
                   sx={[
-                    optionSx(stationType === option.value),
+                    exportOptionSx(stationType === option.value),
                     { '& .MuiFormControlLabel-label': { flex: 1 } },
                   ]}
                   label={
@@ -178,35 +157,7 @@ export function StationExportMenu() {
             })}
           </RadioGroup>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <SectionLabel>格式</SectionLabel>
-            <RadioGroup
-              row
-              aria-label="格式"
-              value={format}
-              onChange={(e) => setFormat(e.target.value as Format)}
-              sx={{ gap: '8px' }}
-            >
-              {FORMATS.map((option) => (
-                <FormControlLabel
-                  key={option.value}
-                  value={option.value}
-                  control={<Radio size="small" />}
-                  label={option.label}
-                  sx={[
-                    optionSx(format === option.value),
-                    {
-                      pr: '16px',
-                      '& .MuiFormControlLabel-label': {
-                        ...typography.body[300],
-                        color: color.fg.neutral.default,
-                      },
-                    },
-                  ]}
-                />
-              ))}
-            </RadioGroup>
-          </Box>
+          <ExportFormatChoice value={format} onChange={setFormat} />
 
           <Typography
             sx={{
@@ -235,13 +186,5 @@ export function StationExportMenu() {
         </Box>
       </Popover>
     </>
-  );
-}
-
-function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <Typography sx={{ ...typography.label[400], flexShrink: 0 }}>
-      {children}
-    </Typography>
   );
 }

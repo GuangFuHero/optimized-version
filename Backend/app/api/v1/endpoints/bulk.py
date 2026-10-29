@@ -73,6 +73,19 @@ async def export_stations(
 
 
 @router.get(
+    "/tickets/export/counts",
+    summary="各任務型別匯出會有幾列",
+    responses={403: {"description": "Permission Denied"}},
+)
+async def count_ticket_exports(
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+) -> dict[str, int]:
+    """Count each task type's export rows in the caller's scope; a type with none is left out."""
+    return await bulk_export.count_ticket_exports(db, actor=current_user)
+
+
+@router.get(
     "/tickets/export",
     summary="匯出求助單（CSV / XLSX）",
     responses={403: {"description": "Permission Denied"}},
