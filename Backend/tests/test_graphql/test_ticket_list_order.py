@@ -79,6 +79,11 @@ async def _claim(actor_uuid: str, need_uuid: str) -> None:
         db.add(TaskAssignment(task_uuid=need_uuid, actor_uuid=actor_uuid))
 
 
+async def _delete_need(need_uuid: str) -> None:
+    async with graphql_db() as db:
+        (await db.get(TicketTask, need_uuid)).delete_at = NOW
+
+
 async def _titles(client, *, headers=None, **variables) -> list[str]:
     variables.setdefault("limit", 50)
     res = await client.post("/graphql", json={"query": LIST, "variables": variables}, headers=headers or {})
@@ -130,26 +135,71 @@ async def test_without_an_order_the_list_stays_newest_first(client, redis):
 
 
 @pytest.mark.asyncio
-async def test_a_need_the_viewer_claimed_counts_as_open_for_them(client, redis):
+async def test_a_need_the_viewer_claimed_counts_as_open_for_them_alone(client, redis):
     """Taking the last place does not send the ticket to the end of the claimer's own list.
 
-    The viewer is on the filled rescue needs of 搜救已滿 and 已完成, so for them both have a live
-    rescue need and join 搜救缺人 in the first tier. A guest sees the plain order.
+    One volunteer is on the filled rescue need of 搜救已滿, another on 已完成's. Each sees their
+    own ticket join 搜救缺人 in the first tier and the other's where a guest does: one
+    volunteer's claims move nothing in anybody else's list.
     """
+    author_uuid, _ = await _create_user_with_role(redis, "Login User")
+    viewer_uuid, viewer_token = await _create_user_with_role(redis, "Login User")
+    other_uuid, other_token = await _create_user_with_role(redis, "Login User")
+    lng, lat = _spot()
+    needs = await _file(lng, lat, author_uuid, FIVE)
+    await _claim(viewer_uuid, needs["搜救已滿"][("rescue", "fulfilled")])
+    await _claim(other_uuid, needs["已完成"][("rescue", "fulfilled")])
+    bounds = _bounds(lng, lat)
+
+    mine = await _titles(client, headers=auth_header(viewer_token), bounds=bounds, order="NEEDS_FIRST")
+    theirs = await _titles(client, headers=auth_header(other_token), bounds=bounds, order="NEEDS_FIRST")
+    guest = await _titles(client, bounds=bounds, order="NEEDS_FIRST")
+
+    assert mine == ["搜救已滿", "搜救缺人", "一般缺人", "已完成", "舊的取消"]
+    assert theirs == ["已完成", "搜救缺人", "一般缺人", "搜救已滿", "舊的取消"]
+    assert guest == NEEDS_FIRST_FOR_A_GUEST
+
+
+@pytest.mark.asyncio
+async def test_a_claim_does_not_lift_a_ticket_cancelled_by_hand(client, redis):
+    """A ticket cancelled by hand takes nobody, so an old claim on it leaves it last, as for a guest."""
     author_uuid, _ = await _create_user_with_role(redis, "Login User")
     viewer_uuid, viewer_token = await _create_user_with_role(redis, "Login User")
     lng, lat = _spot()
     needs = await _file(lng, lat, author_uuid, FIVE)
-    await _claim(viewer_uuid, needs["搜救已滿"][("rescue", "fulfilled")])
-    await _claim(viewer_uuid, needs["已完成"][("rescue", "fulfilled")])
+    await _claim(viewer_uuid, needs["舊的取消"][("rescue", "pending")])
 
     mine = await _titles(
         client, headers=auth_header(viewer_token), bounds=_bounds(lng, lat), order="NEEDS_FIRST"
     )
-    guest = await _titles(client, bounds=_bounds(lng, lat), order="NEEDS_FIRST")
 
-    assert mine == ["已完成", "搜救已滿", "搜救缺人", "一般缺人", "舊的取消"]
-    assert guest == NEEDS_FIRST_FOR_A_GUEST
+    assert mine == NEEDS_FIRST_FOR_A_GUEST
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_need_does_not_count(client, redis):
+    """A ticket whose only open rescue need was deleted sorts with the other open tickets."""
+    author_uuid, _ = await _create_user_with_role(redis, "Login User")
+    lng, lat = _spot()
+    needs = await _file(
+        lng,
+        lat,
+        author_uuid,
+        [
+            {
+                "title": "搜救刪掉了",
+                "status": "pending",
+                "ago": 0,
+                "needs": [("rescue", "pending"), ("supply", "pending")],
+            },
+            {"title": "搜救缺人", "status": "pending", "ago": 10, "needs": [("rescue", "pending")]},
+        ],
+    )
+    await _delete_need(needs["搜救刪掉了"][("rescue", "pending")])
+
+    titles = await _titles(client, bounds=_bounds(lng, lat), order="NEEDS_FIRST")
+
+    assert titles == ["搜救缺人", "搜救刪掉了"]
 
 
 @pytest.mark.asyncio

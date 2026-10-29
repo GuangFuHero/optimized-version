@@ -201,12 +201,14 @@ class TicketRepository(GenericRepository[Tickets]):
         The site list's order (ADR-419, prototype `site-data.js:613-650`). A ticket's status says
         whether any need is open (services/ticket_status.py); one cancelled by hand before statuses
         were derived takes nobody, whatever its needs read. A need the viewer claimed counts as
-        open for them, as on the site, so taking the last place does not send the ticket down.
+        open for them, as on the site, so taking the last place does not send the ticket down —
+        unless the ticket is cancelled, which nobody is working on any more.
         """
         open_ticket = self.model.status.in_(OPEN_TICKET_STATUSES)
+        live = self.model.status != "cancelled"
         whens = [(and_(open_ticket, needs.c.rescue_open), 0)]
         if viewer:
-            whens += [(needs.c.rescue_mine, 0), (or_(open_ticket, needs.c.mine), 1)]
+            whens += [(and_(live, needs.c.rescue_mine), 0), (or_(open_ticket, and_(live, needs.c.mine)), 1)]
         else:
             whens.append((open_ticket, 1))
         return case(*whens, else_=2)
