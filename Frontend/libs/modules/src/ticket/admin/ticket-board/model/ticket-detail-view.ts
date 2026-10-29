@@ -3,7 +3,7 @@ import type { AdminTicketQuery } from '@rescue-frontend/data-access/admin';
 import { formatTicketStreet, formatTicketUnit } from '../../../address';
 import {
   formatTicketStatusLabel,
-  getTicketPriorityBadge,
+  getTicketPriorityLabel,
 } from '../../../status';
 import { AUDIT_BADGES, UNTITLED_TICKET, type AuditStatus } from './ticket-row';
 
@@ -62,9 +62,7 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 /** A priority as words: the badge's for the top two, these below them. */
 export function ticketPriorityLabel(priority: string): string {
-  return (
-    getTicketPriorityBadge(priority)?.label ?? PRIORITY_LABELS[priority] ?? '—'
-  );
+  return getTicketPriorityLabel(priority) ?? '—';
 }
 
 const text = (value: string | null | undefined) => value?.trim() || null;

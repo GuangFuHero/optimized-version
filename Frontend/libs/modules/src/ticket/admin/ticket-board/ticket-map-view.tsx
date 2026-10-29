@@ -23,6 +23,7 @@ import {
   resolveMapSelection,
   TICKET_PRIORITY_PIN_COLORS,
   toTicketMarker,
+  withMarkerSelected,
 } from './model/ticket-marker';
 import type { TicketPriority, TicketRow } from './model/ticket-row';
 
@@ -64,12 +65,17 @@ export function TicketMapView({
   const rows = tickets.rows;
   const hidden =
     tickets.totalCount !== null ? tickets.totalCount - rows.length : 0;
-  const markers = useMemo(
+  // Built once per load; a selection change swaps only the marker whose look changes.
+  const rowMarkers = useMemo(
     () =>
       rows
-        .map((row) => toTicketMarker(row, row.uuid === selectedUuid))
+        .map((row) => toTicketMarker(row))
         .filter((m): m is RescueMapMarkerItem => m !== null),
-    [rows, selectedUuid],
+    [rows],
+  );
+  const markers = useMemo(
+    () => rowMarkers.map((m) => withMarkerSelected(m, m.id === selectedUuid)),
+    [rowMarkers, selectedUuid],
   );
 
   return (

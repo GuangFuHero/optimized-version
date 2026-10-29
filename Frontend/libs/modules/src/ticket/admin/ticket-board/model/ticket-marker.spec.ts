@@ -8,6 +8,7 @@ import {
   TICKET_PRIORITY_PIN_COLORS,
   toCreatedTicketMarker,
   toTicketMarker,
+  withMarkerSelected,
 } from './ticket-marker';
 
 const row = (over: Partial<TicketRow> = {}): TicketRow =>
@@ -25,48 +26,47 @@ const row = (over: Partial<TicketRow> = {}): TicketRow =>
 
 describe('toTicketMarker', () => {
   it('colours the pin by priority', () => {
-    expect(
-      toTicketMarker(row({ priority: 'critical' }), false)?.pin?.color,
-    ).toBe(TICKET_PRIORITY_PIN_COLORS.critical);
-    expect(toTicketMarker(row({ priority: 'low' }), false)?.pin?.color).toBe(
+    expect(toTicketMarker(row({ priority: 'critical' }))?.pin?.color).toBe(
+      TICKET_PRIORITY_PIN_COLORS.critical,
+    );
+    expect(toTicketMarker(row({ priority: 'low' }))?.pin?.color).toBe(
       TICKET_PRIORITY_PIN_COLORS.low,
     );
   });
 
   it('dims completed and cancelled tickets', () => {
-    expect(
-      toTicketMarker(row({ status: 'completed' }), false)?.pin?.dimmed,
-    ).toBe(true);
-    expect(
-      toTicketMarker(row({ status: 'cancelled' }), false)?.pin?.dimmed,
-    ).toBe(true);
-    expect(
-      toTicketMarker(row({ status: 'in_progress' }), false)?.pin?.dimmed,
-    ).toBe(false);
+    expect(toTicketMarker(row({ status: 'completed' }))?.pin?.dimmed).toBe(
+      true,
+    );
+    expect(toTicketMarker(row({ status: 'cancelled' }))?.pin?.dimmed).toBe(
+      true,
+    );
+    expect(toTicketMarker(row({ status: 'in_progress' }))?.pin?.dimmed).toBe(
+      false,
+    );
   });
 
   it('is a ticket marker', () => {
-    const marker = toTicketMarker(row(), true);
+    const marker = toTicketMarker(row());
     expect(marker).toMatchObject({
       id: 't1',
       detailType: 'ticket',
       position: [23.6, 121.4],
       tooltip: { title: '淹水' },
     });
-    expect(marker?.pin?.selected).toBe(true);
+    expect(marker?.pin?.selected).toBe(false);
   });
 
   it('passes the coarse cell through', () => {
     const marker = toTicketMarker(
       row({ isCoarse: true, locationCell: '8a2a1072b59ffff' }),
-      false,
     );
     expect(marker?.locationCell).toBe('8a2a1072b59ffff');
     expect(marker?.position).toEqual([23.6, 121.4]);
   });
 
   it('skips a ticket without a point', () => {
-    expect(toTicketMarker(row({ position: null }), false)).toBeNull();
+    expect(toTicketMarker(row({ position: null }))).toBeNull();
   });
 
   it('has four distinct priority colours', () => {
@@ -146,5 +146,20 @@ describe('toCreatedTicketMarker', () => {
 
   it('gives no marker to a ticket without a point', () => {
     expect(toCreatedTicketMarker(created({ geometry: null }))).toBeNull();
+  });
+});
+
+describe('withMarkerSelected', () => {
+  it('marks a marker selected without touching the original', () => {
+    const marker = toTicketMarker(row())!;
+    const selected = withMarkerSelected(marker, true);
+    expect(selected.pin?.selected).toBe(true);
+    expect(selected.pin?.color).toBe(marker.pin?.color);
+    expect(marker.pin?.selected).toBe(false);
+  });
+
+  it('returns the same marker when nothing changes', () => {
+    const marker = toTicketMarker(row())!;
+    expect(withMarkerSelected(marker, false)).toBe(marker);
   });
 });

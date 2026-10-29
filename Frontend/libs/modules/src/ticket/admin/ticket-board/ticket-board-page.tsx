@@ -109,7 +109,10 @@ export function TicketBoardPage() {
     [statsQuery.data],
   );
   // The ticket on view lives in the URL (?ticket=<uuid>) so links can open it.
-  const openTicket = (uuid: string | null) => setParam('ticket', uuid);
+  const openTicket = useCallback(
+    (uuid: string | null) => setParam('ticket', uuid),
+    [setParam],
+  );
   // Mounted for any ?ticket=, in the current rows or not, so a pasted link always opens.
   const viewedUuid = params.get('ticket');
   const [editingUuid, setEditingUuid] = useState<string | null>(null);

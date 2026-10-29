@@ -29,10 +29,7 @@ export function isTicketClosed(row: TicketRow): boolean {
 }
 
 /** A map marker for a ticket, or null when the ticket has no point. */
-export function toTicketMarker(
-  row: TicketRow,
-  selected: boolean,
-): RescueMapMarkerItem | null {
+export function toTicketMarker(row: TicketRow): RescueMapMarkerItem | null {
   if (!row.position) return null;
   return {
     id: row.uuid,
@@ -49,10 +46,22 @@ export function toTicketMarker(
     pin: {
       color: TICKET_PRIORITY_PIN_COLORS[row.priority],
       dimmed: isTicketClosed(row),
-      selected,
+      selected: false,
     },
     tooltip: { title: row.title, subtitle: row.area },
   };
+}
+
+/**
+ * The marker as the selection draws it. The marker itself is returned when nothing changes, so
+ * the map keeps its layer and only a pin whose look changes is redrawn.
+ */
+export function withMarkerSelected(
+  marker: RescueMapMarkerItem,
+  selected: boolean,
+): RescueMapMarkerItem {
+  if (!marker.pin || marker.pin.selected === selected) return marker;
+  return { ...marker, pin: { ...marker.pin, selected } };
 }
 
 /**
