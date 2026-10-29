@@ -126,3 +126,19 @@ main 上同樣的請求只回 `identity_revoked`，不寫入、不帶名稱。
 
 ---
 
+
+## ADR-424：step-up 開始時遇到 `identity_reset`，回原頁、不登出
+
+**Date**: 2026-10-29　**Status**: Accepted（Popo，10/29；PR #154 code review）
+
+**背景**：`GET /auth/oauth/{provider}/start?purpose=step_up` 是瀏覽器整頁跳轉，回不了 JSON，
+所以 `_account_stepping_up` 把「refresh 修得好的」以外的 401 一律當成登出：清 cookie、送去登入頁。
+ADR-402 之後 `identity_reset` 也落在這一類。身分剛被收回就按 step-up 的人會被登出，跟 ADR-402、404 不一致。
+
+**決定**：
+- step-up 開始時遇到 `identity_reset`，**回原頁**並帶 `step_up_error=identity_reset`，**不清 cookie**。
+  session 已經改成預設身分（ADR-402），頁面 refresh 後就能重試。
+- `return_to` 不是本站路徑時照舊送去登入頁（`oauth_request_invalid`），不跳到外部網址。
+- 真的登出（session 不在了）照舊送去登入頁、清 cookie。
+
+**理由**：跟一般請求一樣只用一種方式表達「身分被收回」，前端用同一套提示。
