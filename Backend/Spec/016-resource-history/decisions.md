@@ -713,3 +713,53 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
 ◾ 取代 ADR-142「地址放 PII 層」、ADR-141「座標看 `view_pii`」與 ADR-130 分級表中地址、座標、
    自由文字的歸屬；ADR-142 的「不做半遮」與 ADR-141 的「不吐座標」照舊。
 ◾ `title` 仍公開、仍可能寫進門牌 —— 與 ADR-281 記下的已知缺口相同。
+
+---
+
+### ADR-421 求助單的公開時間軸：只說發生什麼，不說是誰
+
+**白話**：前台的任務單詳情要有「操作紀錄」分頁（原型 `site-detail.jsx`），給每個看得到這張單的人看，包括訪客。
+內容是「發生了什麼」：建了單、加了一件需求、有志工報名、人數湊齊、建單者停止招募……不寫任何人的名字，
+承接只寫人數，聯絡方式不列。
+
+**Date**: 2026-10-28（使用者在協調者分頁決定做，後端、前台都交給 e；Carol 的 6 題在 Discord #uiux 問，回覆前照下面的預設做）
+
+**Context**：
+
+- 現有的時間軸 `GET /history/tickets/{uuid}` 要 `ticket.view_history`。它寫出每個操作者的暱稱，也寫出誰承接了哪件需求。
+  ADR-127 不把它給訪客，是怕工作人員的名字和審核時間外流；ADR-286 刻意不公開承接者，是怕有人跟著某個志工
+  一件一件追。一般帳號的 `view_history` 是 `own`，所以前台現在沒有任何人看得到別人單的紀錄。
+- 原型的紀錄本來就是匿名的：「志工報名成功，目前 2/5 人」「志工釋出名額…」「媒合單已刪除」。
+
+**Decision**：
+
+1. **另開 `GET /history/tickets/{uuid}/public`**，不改現有端點（它的 403 是管理平台和測試在靠的）。不用登入；
+   單還在就回，跟單筆查詢一樣（`ticket.view` 是公開的，ADR-027）；不存在或已刪除回 404。每個呼叫者一分鐘 60 次。
+   回應對每個人都一樣，所以不讀呼叫者。
+2. **人只寫角色**：`requester`（操作者就是建單者）、`volunteer`（自己報名或釋出）、`staff`（其他登入的人）、
+   `system`（沒有操作者，ADR-136）。不給 uuid、暱稱，也不寫團隊名稱。
+3. **承接只寫人數**：報名、釋出各一筆，附那件需求的名稱和事件之後的「已承接／需要」人數，從頭重播稽核紀錄算出來。
+   承接狀態的變更（出發、完成）不列：人少的時候，那就等於某個志工的行蹤。
+4. **欄位**：
+   - 照給值：工單的 `title`、`priority`、`task_type`、`disaster_types`；需求的 `task_name`、`quantity`、`task_type`
+     （ADR-130 的公開層）。
+   - 只說改了、不給值，對每個人都一樣：說明（工單和需求的）、地點（地址、座標，合成一個 `location`）。
+   - 不列：聯絡人姓名／電話／email、受困與危險兩題、資料檢核（`audit_status`、`audit_note`）、需求的進度備註、
+     需求的動態欄位（`task_properties`），以及工單自己的 `status`（由需求推得，需求的事件已經說了）。
+   - **PII 不用 `resolve_visibility`**：一般帳號的 `ticket.view_pii` 是 `all`（ADR-286），照它解鎖，任何登入的人
+     都會在這裡讀到建單者的姓名和電話。單筆查詢的聯絡方式另外還要 `view_history` 或承接，這裡沒有那層。
+     `test_history_public.py` 的 `test_a_signed_in_account_never_reads_the_contact_details` 守著這條。
+5. **事件由後端分類，前端組句**（ADR-145）：`ticket_created`、`ticket_updated`、`need_added`、`need_updated`、
+   `need_filled`、`need_stopped`、`need_reopened`、`need_removed`、`volunteer_joined`、`volunteer_left`。
+   - 停止招募和湊齊人在稽核紀錄裡都是 `status` 變 `fulfilled`，看 `recruiting_stopped_at` 有沒有被填來分
+     （這欄在員工的時間軸裡排除，ADR-143）。
+   - 同一筆交易是同一件事（ADR-134）：建單連同它的需求是一筆 `ticket_created`；一次存檔改到工單的幾張表，是一筆
+     `ticket_updated`。
+   - 刪除、還原工單不列：刪掉的單本來就查不到。
+
+**Consequences**：
+➕ 訪客和志工看得到一張單的進展，沒有人能從這裡知道誰去了哪裡。
+➕ 員工的時間軸和它的權限都沒動。
+➖ 每次請求都重播整張單的稽核紀錄才算得出人數。一張單通常幾十筆；超過 2000 筆截斷時人數可能不準，`meta.truncated` 會說。
+➖ 建單者本來就看得到承接者，這裡也看不到名字。名字留在詳情的承接者那裡（Carol 的第 6 題）。
+◾ Carol 的 6 題（人數、出發完成、地點說明聯絡方式、團隊名稱、資料檢核、建單者看名字）回覆後，照回覆改第 2～4 點。

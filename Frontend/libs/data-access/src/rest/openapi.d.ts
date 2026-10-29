@@ -1627,6 +1627,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/history/tickets/{uuid}/public': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 求助單的公開時間軸
+     * @description What happened to this help request, newest first, without anyone's name (ADR-421).
+     *
+     *     No sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who
+     *     claimed a need is a count, who acted is a role, and contact details are left out.
+     */
+    get: operations['ticket_public_history_api_v1_history_tickets__uuid__public_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/history/stations/{uuid}': {
     parameters: {
       query?: never;
@@ -3462,6 +3485,71 @@ export interface components {
       status: string | null;
       /** Comment */
       comment: string | null;
+    };
+    /**
+     * PublicHistoryEventResponse
+     * @description What happened to a ticket, and in what role, with nobody's name (ADR-421).
+     */
+    PublicHistoryEventResponse: {
+      /**
+       * Kind
+       * @description ticket_created / ticket_updated / need_added / need_updated / need_filled / need_stopped / need_reopened / need_removed / volunteer_joined / volunteer_left
+       */
+      kind: string;
+      /**
+       * At
+       * Format: date-time
+       */
+      at: string;
+      /**
+       * Actor Role
+       * @description requester / volunteer / staff / system
+       */
+      actor_role: string;
+      /** @description 這個事件的需求（需求與承接事件） */
+      need?: components['schemas']['PublicNeedResponse'] | null;
+      /**
+       * Needs
+       * @description 建單時的需求（ticket_created）
+       */
+      needs?: components['schemas']['PublicNeedResponse'][] | null;
+      /**
+       * Changes
+       * @description 改了什麼。地點、說明只有 changed=true；聯絡方式、檢核不列（ADR-421）
+       */
+      changes?: components['schemas']['ChangeResponse'][];
+    };
+    /**
+     * PublicHistoryResponse
+     * @description The standard envelope around a page of the public timeline.
+     */
+    PublicHistoryResponse: {
+      /**
+       * Success
+       * @default true
+       */
+      success: boolean;
+      /** Data */
+      data: components['schemas']['PublicHistoryEventResponse'][];
+      meta: components['schemas']['HistoryMeta'];
+    };
+    /**
+     * PublicNeedResponse
+     * @description A need as it stood right after the event: its name and how many are coming of how many asked.
+     */
+    PublicNeedResponse: {
+      /** Name */
+      name: string | null;
+      /**
+       * Matched
+       * @description 已承接人數
+       */
+      matched: number;
+      /**
+       * Required
+       * @description 需要人數；沒填為 null
+       */
+      required: number | null;
     };
     /**
      * RefreshRequest
@@ -7425,6 +7513,54 @@ export interface operations {
         content: {
           'application/json': components['schemas']['HTTPValidationError'];
         };
+      };
+    };
+  };
+  ticket_public_history_api_v1_history_tickets__uuid__public_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path: {
+        uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PublicHistoryResponse'];
+        };
+      };
+      /** @description Not Found（不存在或已刪除） */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+      /** @description rate_limited */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
