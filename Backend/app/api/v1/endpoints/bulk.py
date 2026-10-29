@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.tabular import TableFormatError
 from app.models.auth import User
-from app.schemas.bulk import BulkImportResponse, BulkPreviewResponse
+from app.schemas.bulk import BulkImportResponse, BulkPreviewResponse, TicketExportCountsResponse
 from app.services import bulk_export, bulk_import
 from app.services.bulk_export import CSV_FORMAT, SUPPORTED_FORMATS, BulkExportError
 from app.services.bulk_import import BulkImportError
@@ -80,9 +80,16 @@ async def export_stations(
 async def count_ticket_exports(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
-) -> dict[str, int]:
-    """Count each task type's export rows in the caller's scope; a type with none is left out."""
-    return await bulk_export.count_ticket_exports(db, actor=current_user)
+) -> TicketExportCountsResponse:
+    """Count each task type's export rows in the caller's scope, with the most one export may hold.
+
+    A type with no rows is left out. A count over `max_rows` is still the real one, so a page can
+    say that type's export will be refused before anyone asks for it.
+    """
+    return TicketExportCountsResponse(
+        counts=await bulk_export.count_ticket_exports(db, actor=current_user),
+        max_rows=bulk_export.MAX_EXPORT_ROWS,
+    )
 
 
 @router.get(
@@ -95,14 +102,22 @@ async def export_tickets(
     file_format: str = Query(
         CSV_FORMAT, alias="format", description=f"檔案格式：{' / '.join(SUPPORTED_FORMATS)}"
     ),
+    template: bool = Query(
+        False,
+        description=(
+            "只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export"
+        ),
+    ),
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Export one task type's rows; contact fields are masked per row (ADR-109)."""
+    """Export one task type's rows; contact fields are masked per row (ADR-109).
+
+    With `template`, the header row alone, for an importer to fill in.
+    """
+    write = bulk_export.ticket_import_template if template else bulk_export.export_tickets
     try:
-        exported = await bulk_export.export_tickets(
-            db, actor=current_user, task_type=task_type, file_format=file_format
-        )
+        exported = await write(db, actor=current_user, task_type=task_type, file_format=file_format)
     except BulkExportError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _as_response(exported)

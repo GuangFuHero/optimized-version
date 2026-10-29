@@ -695,7 +695,10 @@ export function useExportStations() {
   });
 }
 
-/** Rows each need type's export would hold, keyed by type; a type with none is absent. */
+/**
+ * Rows each need type's export would hold (`counts`, keyed by type; a type with none is absent), and
+ * `max_rows`, past which that type's export is refused.
+ */
 export const ticketExportCountsQuery = () =>
   queryOptions({
     queryKey: ticketKeys.exportCounts(),

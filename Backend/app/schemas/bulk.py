@@ -5,6 +5,13 @@ from pydantic import BaseModel, Field
 from app.services.bulk_import import ImportOutcome, PreviewResult
 
 
+class TicketExportCountsResponse(BaseModel):
+    """How many rows each task type's export would hold, and the most one export may hold."""
+
+    counts: dict[str, int] = Field(description="任務型別 → 匯出會有幾列；沒有列的型別不列")
+    max_rows: int = Field(description="單次匯出的上限；筆數超過的型別，匯出會被拒絕")
+
+
 class RowErrorResponse(BaseModel):
     """One problem with one row, addressed the way the user sees the file."""
 

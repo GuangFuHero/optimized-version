@@ -1542,7 +1542,10 @@ export interface paths {
     };
     /**
      * 各任務型別匯出會有幾列
-     * @description Count each task type's export rows in the caller's scope; a type with none is left out.
+     * @description Count each task type's export rows in the caller's scope, with the most one export may hold.
+     *
+     *     A type with no rows is left out. A count over `max_rows` is still the real one, so a page can
+     *     say that type's export will be refused before anyone asks for it.
      */
     get: operations['count_ticket_exports_api_v1_bulk_tickets_export_counts_get'];
     put?: never;
@@ -1563,6 +1566,8 @@ export interface paths {
     /**
      * 匯出求助單（CSV / XLSX）
      * @description Export one task type's rows; contact fields are masked per row (ADR-109).
+     *
+     *     With `template`, the header row alone, for an importer to fill in.
      */
     get: operations['export_tickets_api_v1_bulk_tickets_export_get'];
     put?: never;
@@ -4166,6 +4171,24 @@ export interface components {
        * @enum {string}
        */
       status: 'active' | 'suspended';
+    };
+    /**
+     * TicketExportCountsResponse
+     * @description How many rows each task type's export would hold, and the most one export may hold.
+     */
+    TicketExportCountsResponse: {
+      /**
+       * Counts
+       * @description 任務型別 → 匯出會有幾列；沒有列的型別不列
+       */
+      counts: {
+        [key: string]: number;
+      };
+      /**
+       * Max Rows
+       * @description 單次匯出的上限；筆數超過的型別，匯出會被拒絕
+       */
+      max_rows: number;
     };
     /**
      * TicketForReviewResponse
@@ -7275,9 +7298,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': {
-            [key: string]: number;
-          };
+          'application/json': components['schemas']['TicketExportCountsResponse'];
         };
       };
       /** @description Permission Denied */
@@ -7305,6 +7326,8 @@ export interface operations {
         task_type: string;
         /** @description 檔案格式：csv / xlsx */
         format?: string;
+        /** @description 只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export */
+        template?: boolean;
       };
       header?: {
         'X-WG-Realm'?: string | null;

@@ -45,7 +45,8 @@ export function TicketExportMenu() {
   const [format, setFormat] = useState<ExportFormat>('csv');
   const exportTickets = useExportTickets();
   // Counted only while the popover is open; a ticket write marks it stale with the lists.
-  const counts = useTicketExportCounts({ enabled: Boolean(anchor) }).data;
+  const counts = useTicketExportCounts({ enabled: Boolean(anchor) }).data
+    ?.counts;
 
   const types: NeedType[] =
     (counts?.medical ?? 0) > 0 ? [...LISTED_TYPES, 'medical'] : LISTED_TYPES;
