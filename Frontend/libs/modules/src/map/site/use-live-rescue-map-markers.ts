@@ -5,6 +5,7 @@ import {
   GetTicketDocument,
   GetTicketsWithNeedsDocument,
   PageInfoFieldsFragmentDoc,
+  TicketListOrder,
   TicketNeedFieldsFragmentDoc,
   createUrqlClient,
   useFragment,
@@ -124,6 +125,8 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
           q: ticketQuery,
           skip,
           limit: LIST_PAGE_SIZE,
+          // The list's order across every page, not only the loaded ones (backend ADR-419).
+          order: TicketListOrder.NeedsFirst,
         }, IMPERATIVE_QUERY_CONTEXT)
         .toPromise();
 
@@ -174,9 +177,9 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     void loadPage(0, false);
   }, [loadPage]);
 
-  // A ticket filed through 請求協助 is the newest there is, so it goes first, where the first page
-  // would put it. Not into stations, nor past a status filter or a search: changing any of them
-  // reloads the list.
+  // A ticket filed through 請求協助 is the newest there is, so it goes first; the list's sort then
+  // puts it at the top of its tier, where the first page would. Not into stations, nor past a status
+  // filter or a search: changing any of them reloads the list.
   useEffect(() => {
     if (activeDataType !== 'ticket' || ticketStatus || ticketQuery) {
       return;

@@ -10,6 +10,12 @@ function isClosedTicket(status: string | null | undefined): boolean {
   );
 }
 
+function isCancelledTicket(status: string | null | undefined): boolean {
+  return normalizeTicketStatusSelection(status ? [status] : []).includes(
+    'cancelled',
+  );
+}
+
 /**
  * Whether the status filter asks for finished or cancelled tickets. Someone who picks those wants to
  * see them, full needs and all, as 含已滿額 shows them (prototype `site-data.js:661-668`).
@@ -48,10 +54,17 @@ function needStanding(
 /**
  * The order the prototype gives tickets (`site-data.js:613-650`): those still short of people
  * first, and among them one with an open rescue need. The viewer's own claim counts as open here,
- * so taking the last place does not send the card they just used down the list. Past that the
- * server's order stands — newest first, or best match when searching — as the sort is stable.
+ * so taking the last place does not send the card they just used down the list. The backend sends
+ * every page in this order already (`order: NEEDS_FIRST`, its ADR-419); sorting again keeps it once
+ * a ticket filed or claimed here changes in place. Past that the server's order stands — newest
+ * first, or best match when searching — as the sort is stable. A ticket cancelled by hand stays
+ * last whatever the viewer claimed on it: nobody works it any more, and the backend ranks it so.
  */
 function ticketRank(marker: RescueMapMarkerItem): number {
+  if (isCancelledTicket(marker.ticketMeta?.status)) {
+    return 2;
+  }
+
   const live = (marker.needs ?? []).filter(
     (need) => needStanding(need, marker.ticketMeta?.status) !== 'full',
   );

@@ -239,4 +239,19 @@ describe('listTickets', () => {
 
     expect(ids(list.tickets)).toEqual(['claimed', 'other']);
   });
+
+  it('keeps a ticket cancelled by hand last, even for the viewer who claimed on it', () => {
+    // Nobody works a cancelled ticket; the backend's NEEDS_FIRST keeps it last too (ADR-419).
+    const mineRescue = need({
+      uuid: 'mine',
+      taskType: 'rescue',
+      myAssignment: { uuid: 'assignment-1' },
+    });
+    const list = listTickets(
+      [ticket('cancelled', [mineRescue], 'cancelled'), ticket('other', [OPEN])],
+      { showFull: false },
+    );
+
+    expect(ids(list.tickets)).toEqual(['other', 'cancelled']);
+  });
 });
