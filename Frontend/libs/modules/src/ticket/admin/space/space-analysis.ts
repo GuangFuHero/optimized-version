@@ -135,6 +135,32 @@ export function analyzeSpace(
   return { floors, noFloor, offList, members, counts, overall };
 }
 
+/**
+ * A ticket's 承接進度 on a floor card, as the prototype's `fillState` reads it: needs nobody took
+ * first, then needs on their way, then done. `open` is the untaken count, red on the card.
+ */
+export function fillLabel(
+  tasks: readonly { status: string; assignedCount: number }[],
+): { open: number; label: string } {
+  const total = tasks.length;
+  if (!total) return { open: 0, label: '尚無需求' };
+  const done = tasks.filter((task) => task.status === 'fulfilled').length;
+  const open = tasks.filter(
+    (task) =>
+      task.assignedCount === 0 &&
+      task.status !== 'fulfilled' &&
+      task.status !== 'canceled',
+  ).length;
+  if (open) return { open, label: `待承接 ${open}／${total}` };
+  if (done < total) return { open: 0, label: `在途 ${total - done}／${total}` };
+  return { open: 0, label: `${total}/${total} 完成` };
+}
+
+/** Under 各樓層: 「14 層（含頂樓 RF）· 6 張任務單」. */
+export function floorsCaption(analysis: SpaceAnalysis): string {
+  return `${analysis.floors.length} 層（含頂樓 RF）· ${analysis.members.length} 張任務單`;
+}
+
 /** One line for the whole building: 「14 層 · 6 張任務單 · 2 層還需要幫忙」. */
 export function spaceSummary(analysis: SpaceAnalysis): string {
   const parts = [
@@ -164,6 +190,10 @@ export interface SpaceListRow {
   priority: SpacePriority | null;
   /** People still missing on those tickets' open needs, as a ticket row counts its 志工缺口. */
   volunteerGap: number;
+  /** Its tickets that count (all but the cancelled). */
+  ticketCount: number;
+  /** Floors still needing help. */
+  needFloors: number;
   /** Its most recently updated ticket's time; null with none. */
   updatedAt: string | null;
   lngLat: [number, number] | null;
@@ -217,6 +247,8 @@ export function toSpaceListRow(
         sum + ticket.tasks.reduce((gap, task) => gap + needGap(task), 0),
       0,
     ),
+    ticketCount: members.length,
+    needFloors: analysis.counts.need,
     updatedAt,
     lngLat: pointOf(building.geometry),
   };

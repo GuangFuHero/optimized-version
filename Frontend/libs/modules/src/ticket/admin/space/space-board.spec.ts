@@ -42,6 +42,8 @@ function row(overrides: Partial<SpaceListRow> = {}): SpaceListRow {
     status: 'need',
     priority: 'medium',
     volunteerGap: 0,
+    ticketCount: 0,
+    needFloors: 0,
     updatedAt: null,
     lngLat: null,
     ...overrides,

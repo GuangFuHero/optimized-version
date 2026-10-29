@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { floorLabelsFor } from './floors';
 import {
   analyzeSpace,
+  fillLabel,
+  floorsCaption,
   floorState,
   spaceRowVisible,
   spaceSummary,
@@ -84,6 +86,8 @@ function row(overrides: Partial<SpaceListRow> = {}): SpaceListRow {
     status: 'empty',
     priority: null,
     volunteerGap: 0,
+    ticketCount: 0,
+    needFloors: 0,
     updatedAt: null,
     lngLat: [121.4, 23.6],
     ...overrides,
@@ -432,5 +436,50 @@ describe('spaceRowVisible', () => {
         anyTicketPasses: true,
       }),
     ).toBe(true);
+  });
+});
+
+describe("fillLabel (the prototype's fillState)", () => {
+  it('counts needs nobody took, then needs on their way, then done', () => {
+    expect(
+      fillLabel([
+        task({ status: 'pending', assignedCount: 0 }),
+        task({ status: 'pending', assignedCount: 1 }),
+      ]),
+    ).toEqual({ open: 1, label: '待承接 1／2' });
+    expect(
+      fillLabel([
+        task({ status: 'pending', assignedCount: 1 }),
+        task({ status: 'fulfilled' }),
+      ]),
+    ).toEqual({ open: 0, label: '在途 1／2' });
+    expect(fillLabel([task({ status: 'fulfilled' })])).toEqual({
+      open: 0,
+      label: '1/1 完成',
+    });
+  });
+
+  it('leaves out a stopped need, as nobody will take it', () => {
+    expect(
+      fillLabel([
+        task({ status: 'canceled', assignedCount: 0 }),
+        task({ status: 'fulfilled' }),
+      ]),
+    ).toEqual({ open: 0, label: '在途 1／2' });
+  });
+
+  it('says so when there are no needs', () => {
+    expect(fillLabel([])).toEqual({ open: 0, label: '尚無需求' });
+  });
+});
+
+describe('floorsCaption', () => {
+  it('counts every floor, roof included, and the tickets that count', () => {
+    const a = analyzeSpace(floorLabelsFor(12, 1), [
+      ticket({ floor: '3F' }),
+      ticket({ floor: '3F', status: 'cancelled' }),
+    ]);
+
+    expect(floorsCaption(a)).toBe('14 層（含頂樓 RF）· 1 張任務單');
   });
 });

@@ -113,10 +113,12 @@ describe('a teardrop pin (`pin`)', () => {
     expect(html).not.toContain('map-pin--square');
   });
 
-  it('is square for a space (designer: only a space is square)', () => {
-    expect(pinHtml({ pin: { ...pin, shape: 'square' } })).toContain(
-      'class="map-pin map-pin--square"',
-    );
+  it('is square for a space, with a building drawn in it (designer: only a space is square)', () => {
+    const html = pinHtml({ pin: { ...pin, shape: 'square' } });
+
+    expect(html).toContain('class="map-pin map-pin--square"');
+    expect(html).toContain('<svg');
+    expect(pinHtml({ pin })).not.toContain('<svg');
   });
 
   it('escapes the colour it is handed', () => {

@@ -19,6 +19,8 @@ const row = (patch: Partial<SpaceListRow> = {}): SpaceListRow => ({
   status: 'need',
   priority: 'critical',
   volunteerGap: 2,
+  ticketCount: 2,
+  needFloors: 1,
   updatedAt: '2026-10-29T08:00:00Z',
   lngLat: [121.425, 23.668],
   ...patch,
@@ -43,10 +45,14 @@ describe('toSpaceMarker', () => {
       color: TICKET_PRIORITY_PIN_COLORS.critical,
       dimmed: false,
     });
+    // The prototype's tipHtml: its tickets, and how many floors still need help.
     expect(marker?.tooltip).toEqual({
-      title: '林森61',
-      subtitle: '花蓮縣光復鄉林森路61號',
+      title: '空間：林森61',
+      subtitle: '2 張任務單 · 1 層還需要幫忙',
     });
+    expect(
+      toSpaceMarker(row({ ticketCount: 3, needFloors: 0 }))?.tooltip?.subtitle,
+    ).toBe('3 張任務單');
   });
 
   it('is grey when the space has no ticket that counts, and faded when all are done', () => {

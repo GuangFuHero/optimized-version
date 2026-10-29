@@ -56,9 +56,13 @@ export function toSpaceMarker(row: SpaceListRow): RescueMapMarkerItem | null {
       dimmed: row.status === 'done',
       selected: false,
     },
-    tooltip: row.address
-      ? { title: row.name, subtitle: row.address }
-      : { title: row.name },
+    // The prototype's tipHtml for a space.
+    tooltip: {
+      title: `空間：${row.name}`,
+      subtitle: `${row.ticketCount} 張任務單${
+        row.needFloors ? ` · ${row.needFloors} 層還需要幫忙` : ''
+      }`,
+    },
   };
 }
 
