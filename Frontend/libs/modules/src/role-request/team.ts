@@ -46,7 +46,7 @@ export function teamNoun(role: RoleRequestRole | null): string {
 /**
  * Said under the identities once one names a team (prototype `site-actions.jsx`; JOIN-101,
  * `Design/前台/docs/加入團隊.md`): an invite picks the team, and its admins still approve (Spec 026).
- * The identity's word both times: 那個單位 for a government applicant (the designer, 2026-10-28).
+ * The identity's word both times: 那個單位 for a government applicant (the designer).
  */
 export function inviteHint(role: RoleRequestRole | null): string | null {
   if (!teamTypeForRole(role)) {

@@ -279,8 +279,7 @@ export function RoleRequestDrawer({
                 撤回這筆申請
               </Button>
               {/* Not 「團隊已經用邀請碼讓你加入」 any more: a scan is an application too, and only one
-                  waits at a time (Spec 026), so this one goes first. Worded by the designer, 2026-10-28
-                  (prototype `site-actions.jsx:455`). */}
+                  waits at a time (Spec 026), so this one goes first. Worded by the designer. */}
               <Typography
                 sx={{
                   mt: 1,
