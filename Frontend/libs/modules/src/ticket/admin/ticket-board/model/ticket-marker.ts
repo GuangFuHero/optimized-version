@@ -30,7 +30,7 @@ export const TICKET_PRIORITY_PIN_COLORS: Record<TicketPriority, string> = {
 
 /**
  * The map legend: one entry per pin colour, in priority order, naming every priority drawn in it
- * (中優先、低優先 share one).
+ * (一般、低 share one).
  */
 export function ticketPriorityLegend(
   label: (priority: TicketPriority) => string,

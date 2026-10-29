@@ -88,7 +88,7 @@ describe('toTicketDetailView', () => {
     expect(toTicketDetailView(ticket, LABELS)).toMatchObject({
       title: '家中淹水需要清淤',
       statusLabel: '待處理',
-      priorityLabel: '高優先',
+      priorityLabel: '緊急',
       auditLabel: '待審核',
       description: '一樓積水約 30 公分',
       contact: { name: '王小明', phone: '0912345678', email: null },

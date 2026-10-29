@@ -17,7 +17,7 @@ import type {
   RescueMapMarkerItem,
 } from '../../../map/types';
 import { stationPoint } from '../../../station/station-point';
-import { getTicketPriorityBadge } from '../../status';
+import { adminTicketPriorityBadge } from './model/ticket-priority';
 import { useTicketPins } from './hooks/use-ticket-pins';
 import {
   framingMove,
@@ -385,7 +385,7 @@ function CellTicketList({
         sx={{ m: 0, p: 0, listStyle: 'none', overflowY: 'auto' }}
       >
         {rows.map((row) => {
-          const badge = getTicketPriorityBadge(row.priority);
+          const badge = adminTicketPriorityBadge(row.priority);
           return (
             <Box component="li" key={row.uuid}>
               <ButtonBase

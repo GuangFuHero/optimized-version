@@ -4,10 +4,8 @@ import type {
 } from '@rescue-frontend/data-access/admin';
 
 import { formatTicketStreet, formatTicketUnit } from '../../../address';
-import {
-  formatTicketStatusLabel,
-  getTicketPriorityLabel,
-} from '../../../status';
+import { formatTicketStatusLabel } from '../../../status';
+import { adminTicketPriorityLabel } from './ticket-priority';
 import { AUDIT_BADGES, UNTITLED_TICKET, type AuditStatus } from './ticket-row';
 
 export type DetailTicket = NonNullable<AdminTicketQuery['ticket']>;
@@ -69,9 +67,9 @@ export interface TicketDetailView {
   description: string | null;
 }
 
-/** A priority as words, as `TICKET_PRIORITY_LABELS` names it; a dash for one it does not know. */
+/** A priority as the board names it (生命危急／緊急／一般／低); a dash for one it does not know. */
 export function ticketPriorityLabel(priority: string): string {
-  return getTicketPriorityLabel(priority) ?? '—';
+  return adminTicketPriorityLabel(priority) ?? '—';
 }
 
 const text = (value: string | null | undefined) => value?.trim() || null;
