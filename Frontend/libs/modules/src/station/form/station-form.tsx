@@ -13,11 +13,11 @@ import {
 import { Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { toast } from 'sonner';
 
+import { applyReverseGeocode } from '../../admin/shared/model/address-fill';
 import { useAuthSession } from '../../session/auth-session';
 import { getStationTypeLabel } from '../type-options';
 import { StationFormFields } from './station-form-fields';
 import {
-  applyReverseGeocode,
   buildCreateInput,
   buildUpdateInput,
   emptyStationForm,

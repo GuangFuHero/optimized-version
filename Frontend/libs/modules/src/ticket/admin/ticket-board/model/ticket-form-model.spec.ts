@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  acknowledgeSuspects,
   applyReverseGeocode,
+  updateAddressFields,
+} from '../../../../admin/shared/model/address-fill';
+import {
+  acknowledgeSuspects,
   changedUpdateInput,
   emptyTicketForm,
   photoChanges,
   ticketFormFromTicket,
   toCreateTicketInput,
   toUpdateTicketInput,
-  updateTicketForm,
   validateTicketForm,
   type TicketFormValues,
 } from './ticket-form-model';
@@ -394,16 +396,17 @@ describe('applyReverseGeocode', () => {
     expect(floorOnly.floor).toBe('5樓');
   });
 
-  it("replaces an earlier pin's line the user left as it was", () => {
+  it("keeps an earlier pin's line when the pin moves, as the station form does", () => {
     const first = applyReverseGeocode(filled, found);
     const moved = applyReverseGeocode(first, {
       ...found,
       fullAddress: '花蓮縣光復鄉糖廠街21號',
       addressToken: 'token-2',
     });
+    expect(moved).toBe(first);
     expect(moved).toMatchObject({
-      fullAddress: '花蓮縣光復鄉糖廠街21號',
-      addressToken: 'token-2',
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+      addressToken: 'token-1',
     });
   });
 
@@ -420,7 +423,7 @@ describe('applyReverseGeocode', () => {
   });
 });
 
-describe('updateTicketForm', () => {
+describe('updateAddressFields on the ticket form', () => {
   const looked = {
     ...filled,
     fullAddress: '花蓮縣光復鄉糖廠街19號',
@@ -428,7 +431,7 @@ describe('updateTicketForm', () => {
   };
 
   it('drops the token once the line is edited, so the backend stores it unverified', () => {
-    const form = updateTicketForm(looked, {
+    const form = updateAddressFields(looked, {
       fullAddress: '花蓮縣光復鄉糖廠街21號',
     });
     expect(form.addressToken).toBe('');
@@ -438,7 +441,7 @@ describe('updateTicketForm', () => {
   });
 
   it('keeps the token while other fields change', () => {
-    expect(updateTicketForm(looked, { room: '3' }).addressToken).toBe(
+    expect(updateAddressFields(looked, { room: '3' }).addressToken).toBe(
       'token-1',
     );
   });

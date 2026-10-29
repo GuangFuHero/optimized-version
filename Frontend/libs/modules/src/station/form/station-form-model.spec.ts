@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { applyReverseGeocode } from '../../admin/shared/model/address-fill';
 import {
-  applyReverseGeocode,
   buildCreateInput,
   buildUpdateInput,
   emptyStationForm,
@@ -173,35 +173,6 @@ describe('station form address', () => {
       addressToken: '',
       locationType: 'address',
     });
-  });
-
-  it('fills the line and its token from a lookup only while the line is blank', () => {
-    expect(applyReverseGeocode(filled, found)).toMatchObject({
-      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
-      addressToken: 'token-1',
-    });
-    const typed = { ...filled, fullAddress: '我打的地址' };
-    expect(applyReverseGeocode(typed, found)).toEqual(typed);
-  });
-
-  it('fills a 樓 or 室 the lookup split off, unless one is already typed', () => {
-    const next = applyReverseGeocode(
-      { ...filled, floor: '1F' },
-      { ...found, floor: '5樓', room: '502室' },
-    );
-    expect(next).toMatchObject({ floor: '1F', room: '502室' });
-  });
-
-  it('ignores a lookup that found nothing', () => {
-    expect(
-      applyReverseGeocode(filled, {
-        status: 'not_found',
-        fullAddress: null,
-        floor: null,
-        room: null,
-        addressToken: null,
-      }),
-    ).toEqual(filled);
   });
 });
 

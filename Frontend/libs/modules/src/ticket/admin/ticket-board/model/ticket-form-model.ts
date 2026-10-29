@@ -5,7 +5,6 @@
 
 import type {
   AccessStatus,
-  AdminReverseGeocodeQuery,
   CreateTicketInput,
   SecondaryLocationInput,
   UpdateTicketInput,
@@ -109,39 +108,6 @@ export function ticketFormFromTicket(ticket: DetailTicket): TicketFormValues {
     room: read(location?.room),
     photoUrls: ticket.photos.map((photo) => photo.url),
     needs: [],
-  };
-}
-
-type AddressLookup = AdminReverseGeocodeQuery['reverseGeocode'];
-
-/** Fields typed into the form. A new address line no longer matches the lookup's token. */
-export function updateTicketForm(
-  values: TicketFormValues,
-  patch: Partial<TicketFormValues>,
-): TicketFormValues {
-  const next = { ...values, ...patch };
-  if ('fullAddress' in patch && !('addressToken' in patch))
-    next.addressToken = '';
-  return next;
-}
-
-/**
- * What a pin's lookup found, filled in only where the form is still blank: the line with its token,
- * and a 樓 or 室 the lookup split off. A typed line is never replaced; a line an earlier pin's lookup
- * filled in and the user left alone (its token still held) gives way to the new pin's.
- */
-export function applyReverseGeocode(
-  values: TicketFormValues,
-  lookup: AddressLookup,
-): TicketFormValues {
-  if (lookup.status !== 'found' || !lookup.fullAddress) return values;
-  if (values.fullAddress.trim() && !values.addressToken) return values;
-  return {
-    ...values,
-    fullAddress: lookup.fullAddress,
-    addressToken: lookup.addressToken ?? '',
-    floor: values.floor.trim() ? values.floor : (lookup.floor ?? values.floor),
-    room: values.room.trim() ? values.room : (lookup.room ?? values.room),
   };
 }
 

@@ -27,6 +27,10 @@ import {
 } from '@rescue-frontend/ui';
 import { Check, Plus, Trash2 } from 'lucide-react';
 
+import {
+  applyReverseGeocode,
+  updateAddressFields,
+} from '../../../admin/shared/model/address-fill';
 import { Muted } from '../../../admin/shared/muted';
 import { LocationPicker } from '../../../map/components/location-picker';
 import type { ClaimError } from '../../needs/claim-error';
@@ -46,7 +50,6 @@ import {
 } from './model/ticket-detail-view';
 import {
   acknowledgeSuspects,
-  applyReverseGeocode,
   changedUpdateInput,
   emptyNeed,
   emptyTicketForm,
@@ -56,7 +59,6 @@ import {
   TICKET_PRIORITIES,
   ticketFormFromTicket,
   toCreateTicketInput,
-  updateTicketForm,
   validateTicketForm,
   type TicketFormErrors,
   type TicketFormValues,
@@ -154,7 +156,7 @@ export function TicketForm(props: TicketFormProps) {
   useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
 
   const change = (patch: Partial<TicketFormValues>, cleared: string[]) => {
-    setValues((current) => updateTicketForm(current, patch));
+    setValues((current) => updateAddressFields(current, patch));
     setErrors((current) => {
       const next = { ...current };
       for (const key of cleared) delete next[key as keyof TicketFormErrors];
