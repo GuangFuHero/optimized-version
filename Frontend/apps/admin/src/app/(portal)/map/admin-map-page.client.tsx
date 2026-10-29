@@ -20,6 +20,9 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import {
   AREA_KIND_LABELS,
+  DEFAULT_ADMIN_MAP_FILTERS,
+  filterMarkers,
+  isFiltering,
   areaErrorMessage,
   countInsideArea,
   createSiteMapViewportStore,
@@ -34,12 +37,15 @@ import {
   useAdminMapAreas,
   useAdminMapLiveMarkers,
   viewOfArea,
+  type AdminMapFilters,
   type RescueMapDraftArea,
   type RescueMapMarkerItem,
   type RescueMapRouteState,
 } from '@rescue-frontend/modules';
 
 import type { AreaActions } from './admin-area-detail-actions';
+import { AdminMapFilterBar } from './admin-map-filter-bar';
+import { AdminMapLegend } from './admin-map-legend';
 import {
   AdminAreaDrawPanel,
   AdminAreaFormPanel,
@@ -54,7 +60,11 @@ import {
 
 type CreateMode = 'idle' | 'station' | 'ticket';
 
-// Until the choices are settled with the backend; see `submitArea`.
+// 危險區 has no status in the UI (Carol: skip it; areas can be edited and deleted directly, so no
+// open/closed state is needed). The backend still refuses a blank one, and nothing reads it, so this
+// fixed value is sent on create and on promote.
+const NO_AREAS: never[] = [];
+
 const DEFAULT_HAZARD_STATUS = 'dangerous';
 
 // Everything but where the map looks: the view goes to its own store, so panning does not
@@ -137,86 +147,55 @@ function AdminMapCreateControls({
   return (
     <Box
       sx={{
-        position: 'absolute',
-        inset: 0,
-        zIndex: 1400,
-        pointerEvents: 'none',
+        p: 1,
+        borderRadius: 4,
+        bgcolor: 'rgba(246, 250, 255, 0.94)',
+        backdropFilter: 'blur(8px)',
+        border: '1px solid #DCC1B1',
+        boxShadow: '0 12px 30px rgba(21, 28, 34, 0.12)',
       }}
     >
-      <Stack
-        spacing={1}
-        sx={{
-          position: 'absolute',
-          top: 16,
-          left: 16,
-          pointerEvents: 'auto',
-          maxWidth: { mobile: 'calc(100vw - 32px)', tablet: 420 },
-        }}
-      >
-        <Box
-          sx={{
-            p: 1,
-            borderRadius: 4,
-            bgcolor: 'rgba(246, 250, 255, 0.94)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid #DCC1B1',
-            boxShadow: '0 12px 30px rgba(21, 28, 34, 0.12)',
-          }}
-        >
-          <Stack spacing={1}>
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ flexWrap: 'wrap', rowGap: 1 }}
-            >
-              {canCreateStation ? (
-                <ControlChip
-                  label="新增站點"
-                  active={mode === 'station'}
-                  icon={
-                    <Box component={MapPin} sx={{ width: 18, height: 18 }} />
-                  }
-                  onClick={() =>
-                    onToggleMode(mode === 'station' ? 'idle' : 'station')
-                  }
-                />
-              ) : null}
-              {canCreateTicket ? (
-                <ControlChip
-                  label="新增任務"
-                  active={mode === 'ticket'}
-                  icon={
-                    <Box
-                      component={ClipboardList}
-                      sx={{ width: 18, height: 18 }}
-                    />
-                  }
-                  onClick={() =>
-                    onToggleMode(mode === 'ticket' ? 'idle' : 'ticket')
-                  }
-                />
-              ) : null}
-              {mode !== 'idle' ? (
-                <ControlChip
-                  label="取消"
-                  icon={<Box component={X} sx={{ width: 18, height: 18 }} />}
-                  onClick={onCancel}
-                />
-              ) : null}
-            </Stack>
-            <Typography sx={{ fontSize: 12, color: '#564337' }}>
-              {helperText}
-            </Typography>
-            {pendingPosition ? (
-              <Typography
-                sx={{ fontSize: 12, color: '#7A3E00', fontWeight: 700 }}
-              >
-                目前落點：{formatCoordinate(pendingPosition[0])},{' '}
-                {formatCoordinate(pendingPosition[1])}
-              </Typography>
-            ) : null}
-          </Stack>
-        </Box>
+      <Stack spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+          {canCreateStation ? (
+            <ControlChip
+              label="新增站點"
+              active={mode === 'station'}
+              icon={<Box component={MapPin} sx={{ width: 18, height: 18 }} />}
+              onClick={() =>
+                onToggleMode(mode === 'station' ? 'idle' : 'station')
+              }
+            />
+          ) : null}
+          {canCreateTicket ? (
+            <ControlChip
+              label="新增任務"
+              active={mode === 'ticket'}
+              icon={
+                <Box component={ClipboardList} sx={{ width: 18, height: 18 }} />
+              }
+              onClick={() =>
+                onToggleMode(mode === 'ticket' ? 'idle' : 'ticket')
+              }
+            />
+          ) : null}
+          {mode !== 'idle' ? (
+            <ControlChip
+              label="取消"
+              icon={<Box component={X} sx={{ width: 18, height: 18 }} />}
+              onClick={onCancel}
+            />
+          ) : null}
+        </Stack>
+        <Typography sx={{ fontSize: 12, color: '#564337' }}>
+          {helperText}
+        </Typography>
+        {pendingPosition ? (
+          <Typography sx={{ fontSize: 12, color: '#7A3E00', fontWeight: 700 }}>
+            目前落點：{formatCoordinate(pendingPosition[0])},{' '}
+            {formatCoordinate(pendingPosition[1])}
+          </Typography>
+        ) : null}
       </Stack>
     </Box>
   );
@@ -239,6 +218,18 @@ export function AdminMapPageClient() {
     () => dedupeMarkersById([...liveMarkers.markers, ...createdMarkers]),
     [createdMarkers, liveMarkers.markers],
   );
+  // What the map shows. A way of looking, not of choosing: the area list counts all `markers`.
+  const [filters, setFilters] = useState<AdminMapFilters>(
+    DEFAULT_ADMIN_MAP_FILTERS,
+  );
+  const shownMarkers = useMemo(
+    () => filterMarkers(markers, filters),
+    [filters, markers],
+  );
+  const shownTickets = shownMarkers.filter(
+    (marker) => marker.detailType === 'ticket',
+  ).length;
+  const shownStations = shownMarkers.length - shownTickets;
   const areas = useAdminMapAreas({ enabled: canViewZones });
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   // What is shown ahead of the backend while a change waits its 5 seconds: a deleted area is gone,
@@ -448,8 +439,6 @@ export function AdminMapPageClient() {
         note: values.note.trim() || null,
         ...(kind === 'team_zone' ? { teamUuid: values.teamUuid } : {}),
         ...(kind === 'mark_zone' ? { isPublic: values.isPublic } : {}),
-        // The backend wants a status for every 危險區 and Notion names no choices for it, so one
-        // is sent until the choices are settled (not asked for in the design either).
         ...(kind === 'hazardous_zone' ? { status: DEFAULT_HAZARD_STATUS } : {}),
       };
       const backToForm = () => {
@@ -698,9 +687,9 @@ export function AdminMapPageClient() {
           }}
         >
           <Map
-            markers={markers}
-            closureAreas={closureAreas}
-            publicZones={publicZones}
+            markers={shownMarkers}
+            closureAreas={filters.layers.areas ? closureAreas : NO_AREAS}
+            publicZones={filters.layers.areas ? publicZones : NO_AREAS}
             routeState={routeState}
             onRouteStateChange={handleRouteStateChange}
             viewportStore={viewportStore}
@@ -708,18 +697,61 @@ export function AdminMapPageClient() {
             onMapClick={handleMapClick}
             draftArea={draftArea}
             cursor={drawStep === 'drawing' ? 'crosshair' : undefined}
-            renderControls={() =>
-              !isDrawing && (canCreateStation || canCreateTicket) ? (
-                <AdminMapCreateControls
-                  mode={createMode}
-                  pendingPosition={pendingPosition}
-                  canCreateStation={canCreateStation}
-                  canCreateTicket={canCreateTicket}
-                  onToggleMode={setCreateMode}
-                  onCancel={resetCreateFlow}
-                />
-              ) : null
-            }
+            renderControls={() => (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 1400,
+                  pointerEvents: 'none',
+                }}
+              >
+                <Stack
+                  spacing={1}
+                  sx={{
+                    position: 'absolute',
+                    top: 12,
+                    left: 12,
+                    pointerEvents: 'auto',
+                    maxWidth: 'calc(100vw - 56px)',
+                  }}
+                >
+                  <AdminMapFilterBar
+                    filters={filters}
+                    onChange={setFilters}
+                    shownTickets={shownTickets}
+                    shownStations={shownStations}
+                    isFiltered={isFiltering(filters)}
+                    disabled={isDrawing}
+                  />
+                  {!isDrawing && (canCreateStation || canCreateTicket) ? (
+                    <Box sx={{ maxWidth: { mobile: '100%', tablet: 420 } }}>
+                      <AdminMapCreateControls
+                        mode={createMode}
+                        pendingPosition={pendingPosition}
+                        canCreateStation={canCreateStation}
+                        canCreateTicket={canCreateTicket}
+                        onToggleMode={setCreateMode}
+                        onCancel={resetCreateFlow}
+                      />
+                    </Box>
+                  ) : null}
+                </Stack>
+                {/* Put away while drawing: what is wanted then is the counts, not the colours. */}
+                {!isDrawing ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      left: 12,
+                      bottom: 28,
+                      pointerEvents: 'auto',
+                    }}
+                  >
+                    <AdminMapLegend />
+                  </Box>
+                ) : null}
+              </Box>
+            )}
           />
         </Box>
         {canViewZones ? (

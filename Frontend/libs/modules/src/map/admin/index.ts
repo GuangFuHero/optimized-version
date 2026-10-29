@@ -1,5 +1,16 @@
 export { areaErrorMessage } from './area-errors';
 export {
+  activeFilterCount,
+  ADMIN_MAP_PRIORITIES,
+  ADMIN_MAP_STATION_TYPES,
+  ADMIN_MAP_STATUSES,
+  DEFAULT_ADMIN_MAP_FILTERS,
+  filterMarkers,
+  isFiltering,
+  toggleValue,
+  type AdminMapFilters,
+} from './map-filter';
+export {
   countInsideArea,
   isInArea,
   viewOfArea,

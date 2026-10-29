@@ -73,8 +73,17 @@ export type {
 } from './map/types';
 
 export {
+  activeFilterCount,
+  ADMIN_MAP_PRIORITIES,
+  ADMIN_MAP_STATION_TYPES,
+  ADMIN_MAP_STATUSES,
   areaErrorMessage,
   countInsideArea,
+  DEFAULT_ADMIN_MAP_FILTERS,
+  filterMarkers,
+  isFiltering,
+  toggleValue,
+  type AdminMapFilters,
   isInArea,
   polygonAreaKm2,
   polygonSelfIntersects,
