@@ -51,6 +51,22 @@ export function framingStep(
 }
 
 /**
+ * What a decided framing request does: move the map, then load the view once it settles there;
+ * or keep the view (an open ticket, no match, no box) and load the current view straight away.
+ */
+export function framingMove(
+  step: 'frame' | 'skip',
+  extent: TicketExtent,
+):
+  | { kind: 'stay' }
+  | { kind: 'move'; framing: Exclude<MapFraming, { kind: 'none' }> } {
+  const framing = step === 'frame' ? framingOf(extent) : null;
+  return framing && framing.kind !== 'none'
+    ? { kind: 'move', framing }
+    : { kind: 'stay' };
+}
+
+/**
  * Bringing the open ticket into view, decided once per ticket when its detail lands: go to its
  * point unless its pin is already among those on the map. Null while there is nothing to decide.
  */

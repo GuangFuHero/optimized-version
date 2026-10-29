@@ -19,7 +19,7 @@ import { stationPoint } from '../../../station/station-point';
 import { getTicketPriorityBadge } from '../../status';
 import { useTicketPins } from './hooks/use-ticket-pins';
 import {
-  framingOf,
+  framingMove,
   framingStep,
   selectedFocusStep,
   ticketMapNotice,
@@ -199,13 +199,15 @@ function useFrameMatching(
     if (step === 'done') return;
     framedRef.current = request;
     askedRef.current = false;
-    const framing = step === 'frame' ? framingOf(box) : null;
-    if (!framing || framing.kind === 'none') {
+    const move = framingMove(step, box);
+    // Kept, the view is final: the pins load the current view now, not on a moveend.
+    if (move.kind === 'stay') {
       setReady(true);
       return;
     }
     // Leaflet ends every setView and fitBounds, even one that does not move, with moveend.
     map.once('moveend', () => setReady(true));
+    const { framing } = move;
     if (framing.kind === 'point') {
       map.setView(latLng(framing.point), FOCUS_ZOOM);
     } else {

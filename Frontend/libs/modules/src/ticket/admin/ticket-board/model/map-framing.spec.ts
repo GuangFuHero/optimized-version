@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  framingMove,
   framingOf,
   framingStep,
   selectedFocusStep,
@@ -69,6 +70,43 @@ describe('framingStep', () => {
   it('keeps the view on an open ticket, and counts the request as done', () => {
     expect(framingStep(null, 'a#0', true)).toBe('skip');
     expect(framingStep('a#0', 'a#0', true)).toBe('done');
+  });
+});
+
+describe('framingMove', () => {
+  const box = {
+    count: 3,
+    minLat: 22.6,
+    maxLat: 25.0,
+    minLng: 120.3,
+    maxLng: 121.6,
+  };
+  const nullEdges = {
+    count: 2,
+    minLat: null,
+    maxLat: null,
+    minLng: null,
+    maxLng: null,
+  };
+
+  it('moves to the box when framing', () => {
+    expect(framingMove('frame', box)).toEqual({
+      kind: 'move',
+      framing: framingOf(box),
+    });
+  });
+
+  // Each 'stay' loads the current view at once: no setView, so no moveend to wait for.
+  it('stays when the open ticket keeps the view', () => {
+    expect(framingMove('skip', box)).toEqual({ kind: 'stay' });
+  });
+
+  it('stays when nothing matches', () => {
+    expect(framingMove('frame', { count: 0 })).toEqual({ kind: 'stay' });
+  });
+
+  it('stays when the box has no edges', () => {
+    expect(framingMove('frame', nullEdges)).toEqual({ kind: 'stay' });
   });
 });
 
