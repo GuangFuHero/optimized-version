@@ -150,7 +150,7 @@ capability already allows; a separate capability would always be granted with it
 | Operation | Change |
 |---|---|
 | `submitRoleRequest(input)` | `input` gains `teamUuid`, `newTeamName`, `name`, `email`; loses `contact`. Phone is not in the input: it is the account's verified phone |
-| `myRoleRequests` | Each request gains `team { uuid, name }`, `newTeamName`, `viaInvite`, `applicantName`, `applicantPhone` (masked), `applicantEmail`. `canApply` keeps its name: no pending request and `role_request.add` on; it no longer requires having no back-office identity (ADR-351) |
+| `myRoleRequests` | Each request gains `team { uuid, name }`, `grantedTeam { uuid, name, type }` (ADR-418), `newTeamName`, `viaInvite`, `applicantName`, `applicantPhone` (masked), `applicantEmail`. `canApply` keeps its name: no pending request and `role_request.add` on; it no longer requires having no back-office identity (ADR-351) |
 | `roleRequestTeams(type: GOV \| NGO)` *(new)* | The public team directory: active teams only, `[{ uuid, name, type }]`, by name; `type` optional. Signed in, no capability. Nothing else about a team (tax ID, contact, members) — `team.view` is not widened (ADR-357 point 5) |
 | `withdrawRoleRequest` | Unchanged |
 
@@ -181,7 +181,7 @@ REST so that "returns 404" is a real HTTP status (ADR-353).
 
 | Method and path | Change |
 |---|---|
-| `GET /api/v1/admin/role-requests` | Gated as in [Permissions](#permissions) instead of `role_request.review` alone. New filters: `team_uuid`, `kind` (`member` / `new_team` / `data_auditor`). Items gain `team_uuid`, `team_name`, `new_team_name`, `via_invite` and `applicant_details` (ADR-359 point 1). Still oldest first |
+| `GET /api/v1/admin/role-requests` | Gated as in [Permissions](#permissions) instead of `role_request.review` alone. New filters: `team_uuid` (the team applied for or the one granted, ADR-423), `kind` (`member` / `new_team` / `data_auditor`). Items gain `team_uuid`, `team_name`, `new_team_name`, `granted_team_uuid` (ADR-411), `via_invite` and `applicant_details` (ADR-359 point 1). Still oldest first |
 | `POST …/{uuid}/approve` | Works for every kind (below). A team admin outside the request's team, or on a new-team / data auditor request, gets 404, so the request's existence is not given away. A request naming no team (Spec 019) gets 409 (ADR-359 point 2) |
 | `POST …/{uuid}/reject` | `note` becomes required: `A reason is required` (422) |
 | `GET /api/v1/admin/users` | Items gain `real_name`, filled only for `role_request.review` holders (data auditors also hold `user.view`, ADR-355 point 5) |
@@ -248,10 +248,10 @@ Chinese as Spec 019 does.
 3. **Submit**: `submitRoleRequest(input: { requestedRole, reason, name, email, teamUuid | newTeamName })`.
    `contact` is gone. `name` is prefilled from the nickname but is kept on the request only; the nickname never
    changes. A verified account email is used instead of the typed one, so show it read-only.
-4. **The card**: `myRoleRequests.requests[]` gains `team { uuid name type }`, `newTeamName`, `viaInvite`,
-   `applicantName`, `applicantPhone` (masked), `applicantEmail`. `canApply` now means "none pending and not
-   paused"; a team member can apply to another team (`hasBackofficeIdentity` no longer hides the entry), but
-   only a plain user may choose 資料檢核員 — submitting that answers
+4. **The card**: `myRoleRequests.requests[]` gains `team { uuid name type }`, `grantedTeam { uuid name type }`
+   (the team an approval handed out, ADR-418), `newTeamName`, `viaInvite`, `applicantName`,
+   `applicantPhone` (masked), `applicantEmail`. `canApply` now means "none pending and not paused";
+   a team member can apply to another team (`hasBackofficeIdentity` no longer hides the entry), but only a plain user may choose 資料檢核員 — submitting that answers
    `Only an account without a back-office identity can apply`.
 5. **One pending request per account**, invite scans included: `You already have a pending request`. To ask a
    second team, withdraw the first.
@@ -283,7 +283,7 @@ Chinese as Spec 019 does.
 ### Back office — 成員與權限 (super admin)
 
 - **審核佇列**: the same list returns every request; filter with `kind=member|new_team|data_auditor` and
-  `team_uuid`. Approving a new-team application creates the team; the response's `granted_team_uuid` names it
+  `team_uuid` (it also lists the new-team application that founded that team, ADR-423). Approving a new-team application creates the team; the response's `granted_team_uuid` names it
   (`team_uuid` stays what was applied for, so it is `null` for a new team).
 - **Teams**: `POST /api/v1/admin/teams/{uuid}/status`. Suspending signs the team's identities out at their
   next request (401) and removes the team from the switcher; restoring brings them back. There is no
