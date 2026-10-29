@@ -171,7 +171,9 @@ class DedupEngine(Protocol):
 5. `engine.score` 也走 1、2 兩項，而且跟 `check` 一樣在**建立任何東西之前**呼叫（ADR-313）：逾時可能在查詢中途切斷連線，
    這時要整個 transaction rollback，只有還沒寫入時這麼做才不會弄丟新單。
 6. 問 engine 之前，先依送出位置鎖住所在區域（h3 第 8 級格子加周圍一圈），同一區域的送出排隊，後面那筆才查得到前面那筆（ADR-396）。
-   最多等 `AREA_LOCK_TIMEOUT_MS`（500 ms），等不到就不帶鎖照常往下走（fail-open）。engine 的半徑不能超過 `AREA_LOCK_MAX_RADIUS_M`（500 m），由守門測試把關。
+   四個進入點都要鎖，包含前台的請求協助（ADR-419）。站點與工單用不同的 key，彼此不排隊（ADR-422）。
+   全部 key 合計最多等 `AREA_LOCK_TIMEOUT_MS`（500 ms，ADR-420），等不到就不帶鎖照常往下走（fail-open），log 只寫約 250 m 的位置（ADR-421）。
+   engine 的半徑不能超過 `AREA_LOCK_MAX_RADIUS_M`（500 m），由守門測試把關。
 
 ---
 
@@ -305,6 +307,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 - **ADR-313（2026-10-13，PR #73 審查）**：`engine.score` 補上跟 `check` 一樣的保護並移到建立之前；score 失敗時後端自己確認對方存在才寫卡；確認的 uuid 先正規化。
 - **Spec 改號（2026-10-14）**：本 Spec 由 020 改為 022、Chi 的快層由 019 改為 021，避開 Dennis 的 `019-role-requests`、`020-volunteer-claim`。
 - **ADR-396（2026-10-27，PR #132 回報）**：同一區域幾乎同時送出時兩筆都會建立且不提示；改為查詢前依地點取 advisory lock，最多等 500 ms，等不到照常建立。
+- **ADR-419~422（2026-10-29，PR #140 review）**：請求協助也鎖；500 ms 改成合計期限；log 位置四捨五入到約 250 m；站點與工單分開排隊。
 
 ---
 
