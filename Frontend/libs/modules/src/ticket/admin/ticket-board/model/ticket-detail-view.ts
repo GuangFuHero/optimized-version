@@ -1,4 +1,7 @@
-import type { AdminTicketQuery } from '@rescue-frontend/data-access/admin';
+import type {
+  AdminTicketPropertyConfigsQuery,
+  AdminTicketQuery,
+} from '@rescue-frontend/data-access/admin';
 
 import { formatTicketStreet, formatTicketUnit } from '../../../address';
 import {
@@ -8,6 +11,12 @@ import {
 import { AUDIT_BADGES, UNTITLED_TICKET, type AuditStatus } from './ticket-row';
 
 export type DetailTicket = NonNullable<AdminTicketQuery['ticket']>;
+
+/** What the drawer reads from a disaster-specific field's config: its label and its unit. */
+export type DisasterFieldConfig = Pick<
+  AdminTicketPropertyConfigsQuery['ticketPropertyConfigs'][number],
+  'propertyName' | 'displayLabel' | 'dataType' | 'unit'
+>;
 
 /** A link that opens a ticket's drawer on the board, e.g. from an admin notification. */
 export function adminTicketHref(uuid: string): string {
@@ -44,6 +53,11 @@ export interface TicketDetailView {
   location:
     | { kind: 'exact'; address: string; floorRoom: string | null }
     | { kind: 'coarse' };
+  /**
+   * The viewer lacks ticket.view_detail here (a coarse ticket): contact, description and photos
+   * arrive empty because they are withheld, not because there are none.
+   */
+  detailHidden: boolean;
   /** Null on a coarse ticket (no detail permission) and when no contact field is filled. */
   contact: {
     name: string | null;
@@ -71,9 +85,43 @@ function contactOf(ticket: DetailTicket): TicketDetailView['contact'] {
   return contact.name || contact.phone || contact.email ? contact : null;
 }
 
+/**
+ * A ticket's disaster-specific answers as the drawer lists them: one row per field, in the order
+ * the fields first appear, labelled as `ticketPropertyConfigs` names them (the raw key when no
+ * config is loaded for it). A multi-select arrives as one detail per chosen value; those join
+ * under the one label. A number takes its config's unit.
+ */
+export function disasterDetailRows(
+  details: readonly Pick<
+    DetailTicket['disasterDetails'][number],
+    'propertyName' | 'value'
+  >[],
+  configs: readonly DisasterFieldConfig[],
+): { label: string; value: string }[] {
+  const byName = new Map(
+    configs.map((config) => [config.propertyName, config]),
+  );
+  const grouped = new Map<string, string[]>();
+  for (const detail of details) {
+    const values = grouped.get(detail.propertyName) ?? [];
+    if (detail.value) values.push(detail.value);
+    grouped.set(detail.propertyName, values);
+  }
+  return [...grouped].map(([name, values]) => {
+    const config = byName.get(name);
+    const unit =
+      config?.dataType === 'number' && config.unit ? config.unit : null;
+    return {
+      label: config?.displayLabel || name,
+      value: values.map((v) => (unit ? `${v} ${unit}` : v)).join('、'),
+    };
+  });
+}
+
 export function toTicketDetailView(
   ticket: DetailTicket,
   disasterLabels: Record<string, string>,
+  disasterFields: readonly DisasterFieldConfig[] = [],
 ): TicketDetailView {
   // BE-026: a coarse ticket is one the viewer may not see in detail — no address, no contact.
   const coarse = Boolean(ticket.locationCell);
@@ -85,6 +133,7 @@ export function toTicketDetailView(
       AUDIT_BADGES[ticket.auditStatus as AuditStatus]?.label ??
       ticket.auditStatus,
     updatedAt: ticket.updatedAt ?? null,
+    detailHidden: coarse,
     location: coarse
       ? { kind: 'coarse' }
       : {
@@ -96,10 +145,7 @@ export function toTicketDetailView(
     disasterLabels: ticket.disasterTypes.map(
       (key) => disasterLabels[key] ?? key,
     ),
-    disasterDetails: ticket.disasterDetails.map((detail) => ({
-      label: detail.propertyName,
-      value: detail.value,
-    })),
+    disasterDetails: disasterDetailRows(ticket.disasterDetails, disasterFields),
     description: text(ticket.description),
   };
 }

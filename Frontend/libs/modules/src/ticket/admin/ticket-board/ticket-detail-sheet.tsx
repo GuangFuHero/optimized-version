@@ -7,6 +7,7 @@ import {
   useDeleteTicket,
   useDisasterTypes,
   useTicket,
+  useTicketPropertyConfigs,
 } from '@rescue-frontend/data-access/admin';
 import {
   Badge,
@@ -40,11 +41,7 @@ import {
   type TicketDetailView,
 } from './model/ticket-detail-view';
 import { isForbidden } from './model/task-actions';
-import {
-  AUDIT_BADGES,
-  toTicketRow,
-  type AuditStatus,
-} from './model/ticket-row';
+import { AUDIT_BADGES, toTaskRows, type AuditStatus } from './model/ticket-row';
 import { TicketAuditCard } from './ticket-audit-card';
 import { TicketForm } from './ticket-form';
 import { TicketHistoryPanel } from './ticket-history-panel';
@@ -108,6 +105,12 @@ export function TicketDetailSheet({
 
   const state = ticketDetailState(query);
   const ticket = query.data?.ticket;
+  // Labels for the disaster-specific answers. Active fields only: inactive ones need
+  // dynamic_field.edit, and an answer to a retired field falls back to its key.
+  const disasterFields = useTicketPropertyConfigs(
+    { disasterTypes: ticket?.disasterTypes ?? [], includeInactive: false },
+    { enabled: Boolean(ticket?.disasterDetails.length) },
+  );
 
   let content: ReactNode;
   if (state === 'ready' && ticket && editing && ticket.viewerCanEdit) {
@@ -128,7 +131,11 @@ export function TicketDetailSheet({
         // A fresh drawer per ticket: no half-typed need or audit note carried to the next one.
         key={ticket.uuid}
         ticket={ticket}
-        view={toTicketDetailView(ticket, disasterLabels)}
+        view={toTicketDetailView(
+          ticket,
+          disasterLabels,
+          disasterFields.data?.ticketPropertyConfigs,
+        )}
         now={now}
         activeTab={ticket.viewerCanViewHistory ? activeTab : 'info'}
         onTabChange={setActiveTab}
@@ -334,10 +341,7 @@ function DeleteTicketConfirm({
 }) {
   const remove = useDeleteTicket();
   const [error, setError] = useState<string | null>(null);
-  const needs = toTicketRow(
-    // The detail ticket is a superset of the list's fragment.
-    ticket as unknown as Parameters<typeof toTicketRow>[0],
-  ).tasks;
+  const needs = toTaskRows(ticket.tasks);
 
   const confirm = async () => {
     if (remove.isPending) return;
@@ -426,7 +430,9 @@ function TicketInfo({
         )}
       </DetailRow>
       <DetailRow label="聯絡人">
-        {view.contact ? (
+        {view.detailHidden ? (
+          <Muted inline>無權限檢視</Muted>
+        ) : view.contact ? (
           [view.contact.name, view.contact.phone, view.contact.email]
             .filter(Boolean)
             .join('\n')
@@ -447,10 +453,16 @@ function TicketInfo({
         </DetailRow>
       ))}
       <DetailRow label="說明">
-        {view.description ?? <Muted inline>—</Muted>}
+        {view.detailHidden ? (
+          <Muted inline>無權限檢視</Muted>
+        ) : (
+          (view.description ?? <Muted inline>—</Muted>)
+        )}
       </DetailRow>
       <DetailBlock label="現場照片">
-        {ticket.photos.length ? (
+        {view.detailHidden ? (
+          <Muted inline>無權限檢視</Muted>
+        ) : ticket.photos.length ? (
           <Box
             sx={{
               display: 'grid',

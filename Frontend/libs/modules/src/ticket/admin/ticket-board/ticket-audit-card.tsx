@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  invalidateTicketWrite,
   useAuditTicket,
   type AuditVerdict,
 } from '@rescue-frontend/data-access/admin';
@@ -81,7 +82,7 @@ export function TicketAuditCard({
       setError(auditErrorMessage(refusal));
       // The ticket changed under the verdict: reload it, so the next try carries the new hash.
       if (isStaleAudit(refusal)) {
-        void queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] });
+        void invalidateTicketWrite(queryClient, ticket.uuid);
       }
     }
   }

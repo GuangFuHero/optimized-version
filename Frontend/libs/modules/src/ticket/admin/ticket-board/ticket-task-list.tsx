@@ -3,6 +3,7 @@
 import { Box, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  invalidateTicketWrite,
   useDeleteTicketTask,
   useStopTaskRecruiting,
 } from '@rescue-frontend/data-access/admin';
@@ -27,7 +28,11 @@ import {
 import { AddNeedForm } from './add-need-form';
 import { isForbidden, taskActionsFor } from './model/task-actions';
 import type { DetailTicket } from './model/ticket-detail-view';
-import { toTicketRow, type TaskRow } from './model/ticket-row';
+import {
+  toTaskRows,
+  type TaskRow,
+  type TicketStatus,
+} from './model/ticket-row';
 
 const { color, radius, typography } = designTokens;
 
@@ -55,12 +60,8 @@ export function TicketTaskList({
   ticket,
   onAddBusyChange,
 }: TicketTaskListProps) {
-  // One task model for the board: the detail ticket is a superset of the list's fragment.
-  const ticketRow = useMemo(
-    () => toTicketRow(ticket as unknown as Parameters<typeof toTicketRow>[0]),
-    [ticket],
-  );
-  const rows = ticketRow.tasks;
+  // One task model for the board, read off the drawer's ticket as off a list row.
+  const rows = useMemo(() => toTaskRows(ticket.tasks), [ticket.tasks]);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -79,7 +80,8 @@ export function TicketTaskList({
             const row = rows[index];
             const items: NeedAction[] = taskActionsFor(
               row,
-              ticketRow.status,
+              // The schema types it as a plain string; the backend stores only the listed values.
+              ticket.status as TicketStatus,
               ticket,
             ).map((action) =>
               action === 'stop'
@@ -94,6 +96,7 @@ export function TicketTaskList({
               <TaskCard
                 key={task.uuid}
                 task={task}
+                assignmentsHidden={!ticket.viewerCanViewHistory}
                 actions={
                   <NeedActionsMenu
                     needName={task.taskName}
@@ -111,11 +114,13 @@ export function TicketTaskList({
       ) : null}
       <StopRecruitingConfirm
         open={dialogOpen && pending?.kind === 'stop'}
+        ticketUuid={ticket.uuid}
         task={pending?.kind === 'stop' ? pending.task : null}
         onClose={() => setDialogOpen(false)}
       />
       <DeleteNeedConfirm
         open={dialogOpen && pending?.kind === 'delete'}
+        ticketUuid={ticket.uuid}
         task={pending?.kind === 'delete' ? pending.task : null}
         needs={rows}
         onClose={() => setDialogOpen(false)}
@@ -126,13 +131,20 @@ export function TicketTaskList({
 
 interface ConfirmProps {
   open: boolean;
+  /** The need's ticket, whose loads a refusal makes stale. */
+  ticketUuid: string;
   /** Kept while the dialog fades out, so it keeps its content. */
   task: TaskRow | null;
   onClose: () => void;
 }
 
 /** 停止招募: the need's list is fixed at the people on it. `Dialog` refuses to close mid-request. */
-function StopRecruitingConfirm({ open, task, onClose }: ConfirmProps) {
+function StopRecruitingConfirm({
+  open,
+  ticketUuid,
+  task,
+  onClose,
+}: ConfirmProps) {
   const stop = useStopTaskRecruiting();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +157,7 @@ function StopRecruitingConfirm({ open, task, onClose }: ConfirmProps) {
       onClose();
     } catch (caught) {
       // A refusal usually means the need changed meanwhile: read the ticket again.
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] });
+      void invalidateTicketWrite(queryClient, ticketUuid);
       setError(stopRecruitingErrorMessage(caught as ClaimError));
     }
   };
@@ -173,6 +185,7 @@ function StopRecruitingConfirm({ open, task, onClose }: ConfirmProps) {
 /** 刪除需求, with the site's own explanation of what deleting it does. */
 function DeleteNeedConfirm({
   open,
+  ticketUuid,
   task,
   needs,
   onClose,
@@ -191,7 +204,7 @@ function DeleteNeedConfirm({
       const refusal = caught as ClaimError;
       // Gone already, from another tab or with its ticket, is what was asked for.
       if (isNeedAlreadyGone(refusal)) {
-        void queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] });
+        void invalidateTicketWrite(queryClient, ticketUuid);
         onClose();
         return;
       }
@@ -240,9 +253,12 @@ function DialogText({ children }: { children: ReactNode }) {
 
 function TaskCard({
   task,
+  assignmentsHidden,
   actions = null,
 }: {
   task: DetailTask;
+  /** No ticket.view_history here: `assignments` arrives empty though `assignedCount` is public. */
+  assignmentsHidden: boolean;
   actions?: ReactNode;
 }) {
   return (
@@ -297,7 +313,11 @@ function TaskCard({
           </Badge>
         ) : null}
       </Box>
-      {task.assignments.length ? (
+      {assignmentsHidden && task.assignedCount > 0 ? (
+        <Box sx={{ mt: '8px' }}>
+          <Muted inline>承接的志工：無權限檢視</Muted>
+        </Box>
+      ) : task.assignments.length ? (
         <Box
           component="ul"
           sx={{

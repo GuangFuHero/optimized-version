@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   adminTicketHref,
+  disasterDetailRows,
   ticketDetailState,
   toTicketDetailView,
   type DetailTicket,
@@ -92,6 +93,7 @@ describe('toTicketDetailView', () => {
       description: '一樓積水約 30 公分',
       contact: { name: '王小明', phone: '0912345678', email: null },
       disasterDetails: [{ label: '積水深度', value: '30cm' }],
+      detailHidden: false,
     });
   });
 
@@ -101,6 +103,7 @@ describe('toTicketDetailView', () => {
       LABELS,
     );
     expect(view.location).toEqual({ kind: 'coarse' });
+    expect(view.detailHidden).toBe(true);
   });
 
   it('has no contact on a coarse ticket, whatever the contact fields hold', () => {
@@ -168,5 +171,53 @@ describe('toTicketDetailView', () => {
     );
     expect(view.title).toBe('（未命名求助單）');
     expect(view.description).toBeNull();
+  });
+});
+
+describe('disasterDetailRows', () => {
+  const configs = [
+    {
+      propertyName: 'water_depth',
+      displayLabel: '積水深度',
+      dataType: 'number' as const,
+      unit: 'cm',
+    },
+    {
+      propertyName: 'hazards',
+      displayLabel: '現場危險',
+      dataType: 'multi_select' as const,
+      unit: null,
+    },
+  ];
+
+  it('labels a field by its config and gives a number its unit', () => {
+    expect(
+      disasterDetailRows(
+        [{ propertyName: 'water_depth', value: '30' }],
+        configs,
+      ),
+    ).toEqual([{ label: '積水深度', value: '30 cm' }]);
+  });
+
+  it('groups a multi-select under one label, in first-seen order', () => {
+    expect(
+      disasterDetailRows(
+        [
+          { propertyName: 'hazards', value: '漏電' },
+          { propertyName: 'water_depth', value: '30' },
+          { propertyName: 'hazards', value: '瓦斯味' },
+        ],
+        configs,
+      ),
+    ).toEqual([
+      { label: '現場危險', value: '漏電、瓦斯味' },
+      { label: '積水深度', value: '30 cm' },
+    ]);
+  });
+
+  it('falls back to the key when no config is loaded for the field', () => {
+    expect(
+      disasterDetailRows([{ propertyName: 'road_blocked', value: 'true' }], []),
+    ).toEqual([{ label: 'road_blocked', value: 'true' }]);
   });
 });
