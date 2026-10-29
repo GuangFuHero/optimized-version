@@ -198,6 +198,7 @@ export function TicketBoardPage() {
               onClear={() => setFilters(EMPTY_TICKET_FILTERS)}
               count={count}
               spaceCount={spaceRows.length}
+              moreSpaces={spaceData.moreSpaces}
               spaceControl={<OpenSpaceButton />}
               onCreate={caps.canAdd ? () => setCreating(true) : undefined}
               onImport={() => setImportOpen(true)}

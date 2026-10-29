@@ -25,6 +25,8 @@ interface TicketToolbarProps {
   count: number | null;
   /** The spaces listed with the tickets, counted after them: 「13 筆任務 · 1 個空間」. */
   spaceCount?: number;
+  /** The spaces list stopped at its limit: the count reads 「200+ 個空間」. */
+  moreSpaces?: boolean;
   /** 開啟空間 (BE-036); it decides itself whether the viewer may see it. */
   spaceControl?: ReactNode;
   /** 新增任務; the button shows only when the viewer may add and this is set. */
@@ -49,6 +51,7 @@ export function TicketToolbar({
   onClear,
   count,
   spaceCount = 0,
+  moreSpaces = false,
   spaceControl,
   onCreate,
   onImport,
@@ -85,7 +88,9 @@ export function TicketToolbar({
           ml: 'auto',
         }}
       >
-        {count === null ? '— 筆任務' : boardCountLine(count, spaceCount)}
+        {count === null
+          ? '— 筆任務'
+          : boardCountLine(count, spaceCount, moreSpaces)}
       </Typography>
 
       {caps.canExport ? exportControl : null}

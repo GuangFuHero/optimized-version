@@ -39,6 +39,7 @@ import {
   type AddressNote,
 } from '../../address-lookup';
 import { floorLabelsFor, floorSummary } from './floors';
+import { strandedHeading, ticketsCut } from './space-partial';
 import type { SpaceTicket } from './space-analysis';
 import {
   emptySpaceForm,
@@ -341,6 +342,10 @@ export function SpaceEditLayout({
         : [],
     [above, below, building.floors, tickets],
   );
+  const cut = ticketsCut(tickets.length);
+  const floorsCut =
+    (above !== null && above < building.floorsAboveGround) ||
+    (below !== null && below < building.floorsBelowGround);
 
   const submit = async () => {
     if (Object.keys(errors).length) return;
@@ -406,12 +411,17 @@ export function SpaceEditLayout({
 
         {stranded.length ? (
           <Callout tone="warning">
-            <strong>{`有 ${stranded.length} 張任務單在要拿掉的樓層`}</strong>
+            <strong>{strandedHeading(stranded.length, cut)}</strong>
             <br />
             {stranded
               .map(({ ticket, floor }) => `#${ticket.propertyName}（${floor}）`)
               .join('、')}
             。儲存後它們不會不見，會列在「樓層不在這棟的樓層裡」，樓層照原本寫的留著。
+          </Callout>
+        ) : floorsCut && cut ? (
+          <Callout tone="info">
+            這一棟的任務單超過 200 張，只檢查了前 200
+            張：要拿掉的樓層上可能還有單。
           </Callout>
         ) : null}
 

@@ -30,6 +30,7 @@ import {
   type SpaceTicket,
 } from './space-analysis';
 import { SpaceEditLayout } from './space-form-drawer';
+import { deleteKeepsText, ticketsCut } from './space-partial';
 import {
   useSpace,
   useSpaceCapabilities,
@@ -194,6 +195,7 @@ function SpaceDetailContent({
   const shownFloors = showAll ? analysis.floors : withTickets;
   const hiddenCount = analysis.floors.length - withTickets.length;
   const count = analysis.members.length;
+  const cut = ticketsCut(space.tickets.length);
 
   const confirmDelete = () => {
     remove.mutate(
@@ -260,6 +262,11 @@ function SpaceDetailContent({
       }
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {cut ? (
+          <Callout tone="info">
+            這一棟的任務單超過 200 張，只算了前 200 張：樓層狀態可能不完整。
+          </Callout>
+        ) : null}
         <StateTiles counts={analysis.counts} />
 
         {count === 0 ? (
@@ -368,9 +375,7 @@ function SpaceDetailContent({
         submitting={remove.isPending}
         error={remove.error ? remove.error.message : undefined}
       >
-        {count
-          ? `這個空間會從列表與地圖上消失。底下 ${count} 張任務單會保留，變回一般任務單（不再歸在這個空間），樓層與戶別照舊寫在單上。`
-          : '這個空間會從列表與地圖上消失。它底下還沒有任何任務單。'}
+        {deleteKeepsText(count, cut)}
       </Dialog>
     </SheetLayout>
   );

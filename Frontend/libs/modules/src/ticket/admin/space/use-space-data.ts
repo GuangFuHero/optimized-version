@@ -98,6 +98,8 @@ export function useSpaces(bounds?: BoundsInput) {
 
   return {
     spaces,
+    /** The list stopped at its limit: there are spaces past it. */
+    moreSpaces: buildings.data?.buildingMaps.pageInfo.hasNextPage ?? false,
     isLoading: buildings.isPending || ticketsLoading,
     error:
       buildings.error ?? tickets.find((query) => query.error)?.error ?? null,
