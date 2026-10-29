@@ -132,12 +132,12 @@ def build_password_set_sms(masked_value: str, *, changed: bool = False, at: date
     """Return the SMS telling the account its password was set or changed.
 
     A change says when, on a Taiwan clock, and what to do if it was not the owner: 糖's copy (uiux,
-    2026-10-27), shortened to stay one point. `at` is when it changed, now if not given.
+    version B chosen 2026-10-28), one point. `at` is when it changed, now if not given.
     """
     if changed:
         when = (at or datetime.now(UTC)).astimezone(_TAIWAN).strftime("%m/%d %H:%M")
-        return (f"{_SENDER_IDENTITY_ZH} 你的密碼在 {when} 變更了。如果不是你自己改的，"
-                "請到登入頁按「忘記密碼」重設，再到「帳號安全」登出所有裝置。")
+        return (f"{_SENDER_IDENTITY_ZH} 你的密碼在 {when} 變更了。"
+                "如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設。")
     return (f"{_SENDER_IDENTITY_ZH} 您的帳號（{masked_value}）的登入密碼已設定，所有裝置都已登出。"
             "若非本人操作，請立即以第三方登入進入帳號並變更密碼。")
 

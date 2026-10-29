@@ -14,19 +14,17 @@ from app.messaging.email import (
 )
 
 CHANGED_AT = datetime(2026, 10, 28, 6, 5, tzinfo=UTC)  # 14:05 in Taiwan
-CHANGED_COPY = (
-    "你的密碼在 2026/10/28 14:05 變更了。如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設，"
-    "再到「帳號安全」按「登出所有裝置」。"
-)
+CHANGED_COPY = "你的密碼在 2026/10/28 14:05 變更了。如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設。"
 
 
 def test_a_changed_password_email_says_when_in_taiwan_time_and_what_to_do():
-    """糖's copy (uiux, 2026-10-27), in both bodies; the subject stays."""
+    """糖's copy (uiux, 2026-10-28, as the SMS's version B), in both bodies; the subject stays."""
     subject, html, text = build_password_set_email("o***r@x.com", changed=True, at=CHANGED_AT)
     assert "已變更" in subject
     assert CHANGED_COPY in text
     assert "你的密碼在 2026/10/28 14:05 變更了" in html
     assert "第三方登入" not in text
+    assert "登出所有裝置" not in text
 
 
 def test_a_first_password_email_keeps_its_copy():

@@ -451,7 +451,7 @@ def build_password_set_email(
     someone, this message is where the owner sees what it bought.
 
     A change says when, on a Taiwan clock, and what to do if it was not the owner (糖's copy, uiux,
-    2026-10-27). `at` is when it changed, now if not given.
+    2026-10-27, one step as the SMS since 2026-10-28). `at` is when it changed, now if not given.
     """
     if changed:
         return _password_changed_email(at or datetime.now(UTC))
@@ -484,11 +484,9 @@ def _password_changed_email(at: datetime) -> tuple[str, str, str]:
     """`build_password_set_email` for a change: when it happened, and what to do if it was not you."""
     when = at.astimezone(_TAIWAN).strftime("%Y/%m/%d %H:%M")
     heading = "您的帳號密碼已變更 Password changed"
-    zh = (f"你的密碼在 {when} 變更了。如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設，"
-          "再到「帳號安全」按「登出所有裝置」。")
+    zh = f"你的密碼在 {when} 變更了。如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設。"
     en = (f"Your password was changed at {when}, Taiwan time. If it wasn't you, go to the sign-in page "
-          "right away and reset it with 「忘記密碼」 (Forgot password), then choose 「登出所有裝置」 "
-          "(Sign out all devices) under 「帳號安全」 (Account security).")
+          "right away and reset it with 「忘記密碼」 (Forgot password).")
     html = _render_email(h1=heading, notices=[_notice(zh, en)], footer_lines=[_FOOTER_BRAND])
     return f"【{_BRAND_ZH}】{heading}", html, f"{zh}\n\n{en}\n"
 

@@ -32,10 +32,9 @@ def test_build_verification_sms_has_code():
 
 
 def test_a_changed_password_sms_says_when_in_taiwan_time_and_what_to_do():
-    """糖's copy (uiux, 2026-10-27), shortened to one point; the time is Taiwan's."""
+    """糖's copy (uiux, 2026-10-28, version B): one point, the time Taiwan's, one step."""
     assert build_password_set_sms("09****678", changed=True, at=CHANGED_AT) == (
-        "島嶼守望 你的密碼在 10/28 14:05 變更了。如果不是你自己改的，"
-        "請到登入頁按「忘記密碼」重設，再到「帳號安全」登出所有裝置。"
+        "島嶼守望 你的密碼在 10/28 14:05 變更了。如果不是你自己改的，請馬上到登入頁按「忘記密碼」重設。"
     )
 
 
