@@ -15,7 +15,7 @@ import math
 import uuid as _uuid
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,12 +56,15 @@ class Comparison:
 
     `suspects` are the rows held unless the importer files them anyway; `pairs` are the
     acknowledgements that named something real, to be carded when their row is created.
-    `complete` is False when a row to create went uncompared.
+    `complete` is False when a row to create went uncompared. `declined` are the rows the importer
+    chose not to create, each with what the engine found for it this time, or None: they are held
+    whatever it found, and are not suspects.
     """
 
     suspects: Mapping[int, Suspect]
     pairs: Mapping[int, dedup_service.AcknowledgedPair]
     complete: bool
+    declined: Mapping[int, Suspect | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -97,13 +100,15 @@ async def compare(
     drafts: list[RowDraft] | None,
     decisions: Mapping[int, str],
     now: datetime,
+    declined: frozenset[int] = frozenset(),
 ) -> Comparison:
     """Ask the engine about every submission once, and settle each row's decision. Writes nothing.
 
     A decision files its row anyway only when it names the suspect the engine finds for that
     line now (ADR-400); otherwise the row is held like any other. After the engine first fails,
     it is not asked about the rest of the file: each call may wait out `ENGINE_TIMEOUT_S`, and the
-    rows land fail-open either way, decisions carded unscored as for a single create.
+    rows land fail-open either way, decisions carded unscored as for a single create. A line in
+    `declined` is held even then (ADR-398); one that creates nothing is ignored, as a decision is.
 
     `drafts` is None when rows to create could not be put to the engine at all. Must run before
     the import writes anything: every engine call is guarded on that (`dedup._guarded`).
@@ -112,10 +117,11 @@ async def compare(
         return Comparison(suspects={}, pairs={}, complete=False)
     suspects: dict[int, Suspect] = {}
     pairs: dict[int, dedup_service.AcknowledgedPair] = {}
+    declining: dict[int, Suspect | None] = {}
     complete = True
     for draft in drafts:
         named = dedup_service.acknowledged_uuids(
-            {draft_ref: decisions.get(line) for draft_ref, line in draft.lines.items()}
+            {ref: decisions.get(line) for ref, line in draft.lines.items() if line not in declined}
         )
         found = None
         if complete:
@@ -133,7 +139,10 @@ async def compare(
         for suspect in found:
             if suspect.draft_ref in draft.lines and suspect.draft_ref not in filed:
                 suspects[draft.lines[suspect.draft_ref]] = suspect
-    return Comparison(suspects=suspects, pairs=pairs, complete=complete)
+        for line in draft.lines.values():
+            if line in declined:
+                declining[line] = suspects.pop(line, None)
+    return Comparison(suspects=suspects, pairs=pairs, complete=complete, declined=declining)
 
 
 def held_with(comparison: Comparison, drafts: list[RowDraft] | None) -> dict[int, int]:
@@ -141,7 +150,7 @@ def held_with(comparison: Comparison, drafts: list[RowDraft] | None) -> dict[int
     return {
         line: draft.first_line
         for draft in drafts or []
-        if draft.first_line in comparison.suspects
+        if draft.first_line in comparison.suspects or draft.first_line in comparison.declined
         for line in draft.followers
     }
 
@@ -149,14 +158,18 @@ def held_with(comparison: Comparison, drafts: list[RowDraft] | None) -> dict[int
 async def describe(
     db: AsyncSession, comparison: Comparison, drafts: list[RowDraft] | None
 ) -> tuple[SuspectedRow, ...]:
-    """Each suspected row with a summary of what it looks like, in line order.
+    """Each row the engine suspected, declined or not, with a summary of what it looks like, in line order.
 
     One query per kind, as the review queue reads its cards (ADR-340).
     """
-    if not comparison.suspects:
+    flagged = {
+        **comparison.suspects,
+        **{line: suspect for line, suspect in comparison.declined.items() if suspect is not None},
+    }
+    if not flagged:
         return ()
     related = defaultdict(set)
-    for suspect in comparison.suspects.values():
+    for suspect in flagged.values():
         related[suspect.related_kind].add(_canonical(suspect.related_uuid))
     summaries: dict[str, dict] = {}
     for kind, uuids in related.items():
@@ -165,8 +178,8 @@ async def describe(
     followers = {draft.first_line: draft.followers for draft in drafts or [] if draft.first_line is not None}
 
     rows = []
-    for line in sorted(comparison.suspects):
-        suspect = comparison.suspects[line]
+    for line in sorted(flagged):
+        suspect = flagged[line]
         summary = summaries.get(_canonical(suspect.related_uuid), {})
         is_task = suspect.related_kind == "ticket_task"
         row = own.get(line, _Line())

@@ -125,6 +125,7 @@ class ImportOutcome:
     suspected: int = 0
     suspects: tuple[SuspectedRow, ...] = ()
     dedup_checked: bool = True
+    declined: int = 0
 
 
 # --- shared plumbing ---
@@ -927,7 +928,8 @@ async def _commit(
 
     A suspected row the importer did not file anyway is held (ADR-398), with the lines attaching
     to the ticket it creates: not written, and put in the report beside the failures, though not
-    counted as ones. Reviewers hear once about every pair card the import left.
+    counted as ones. So is a row the importer declined, and it is counted apart, not as a suspect.
+    Reviewers hear once about every pair card the import left.
     """
     failures: dict[int, list[RowError]] = {plan.index: list(plan.errors) for plan in plans if not plan.ok}
     held = await _hold(
@@ -949,8 +951,9 @@ async def _commit(
         error_report=_as_report(table, failures | held, filename=filename),
         partial_rows=tuple(partial),
         suspected=len(comparison.suspects),
-        suspects=suspects,
+        suspects=tuple(row for row in suspects if row.line not in comparison.declined),
         dedup_checked=comparison.complete,
+        declined=len(comparison.declined),
     )
 
 
@@ -965,24 +968,32 @@ async def _hold(
 ) -> dict[int, list[RowError]]:
     """Record the hint each held row was shown, and say in its report line why it was not created.
 
-    A hint shown and nothing created is the hint taken (ADR-303), as for a single create. A line
-    held with its ticket's first line says which line that is; it was shown no hint of its own.
+    A hint shown and nothing created is the hint taken (ADR-303), as for a single create. A declined
+    row the engine suspected again is held as a suspected one is; otherwise it was shown no hint this
+    time, and nothing is recorded. A line held with its ticket's first line says which line that is.
     """
-    if not comparison.suspects:
+    if not comparison.suspects and not comparison.declined:
         return {}
     shown = {row.line: row for row in suspects}
     actor_uuid = str(actor.uuid)
     held = {}
     for plan in plans:
-        suspect = comparison.suspects.get(plan.line)
+        declined = plan.line in comparison.declined
+        suspect = comparison.declined[plan.line] if declined else comparison.suspects.get(plan.line)
         if suspect is not None:
             await dedup_service.record_suspect_shown(
                 db, suspect=suspect, actor_uuid=actor_uuid, entry=_DEDUP_ENTRY
             )
-            held[plan.index] = [_error(plan.line, "-", _held_message(shown.get(plan.line)))]
+            message = _held_message(shown.get(plan.line))
+        elif declined:
+            message = "選了不建立，未建立"
         elif plan.line in following:
-            message = f"同一張單的第 {following[plan.line]} 列疑似重複，未建立，這一列跟著未建立"
-            held[plan.index] = [_error(plan.line, "-", message)]
+            first = following[plan.line]
+            why = "選了不建立" if first in comparison.declined else "疑似重複，未建立"
+            message = f"同一張單的第 {first} 列{why}，這一列跟著未建立"
+        else:
+            continue
+        held[plan.index] = [_error(plan.line, "-", message)]
     await db.commit()
     return held
 
@@ -1060,11 +1071,13 @@ async def commit_stations(
     station_type: str,
     mapping: dict[str, str] | None = None,
     decisions: dict[int, str] | None = None,
+    declined: frozenset[int] = frozenset(),
 ) -> ImportOutcome:
     """Import a station file: matched rows are updated, unmatched ones created (ADR-106).
 
     Every new station is put to the fast dedup layer before any row is written. A suspected one
-    is created only when `decisions` maps its line to what it was shown to look like (ADR-398).
+    is created only when `decisions` maps its line to what it was shown to look like (ADR-398). A
+    line in `declined` is not created, whatever the engine says this time.
     """
     async with stable_actor(db, actor):
         await require_scope(actor, Perm.STATION_IMPORT, db)
@@ -1075,7 +1088,12 @@ async def commit_stations(
             db, actor=actor, plans=plans, columns=columns, station_type=station_type
         )
         comparison = await bulk_dedup.compare(
-            db, actor=actor, drafts=drafts, decisions=decisions or {}, now=datetime.now(UTC)
+            db,
+            actor=actor,
+            drafts=drafts,
+            decisions=decisions or {},
+            now=datetime.now(UTC),
+            declined=declined,
         )
         suspects = await bulk_dedup.describe(db, comparison, drafts)
 
@@ -1112,11 +1130,12 @@ async def commit_tickets(
     task_type: str,
     mapping: dict[str, str] | None = None,
     decisions: dict[int, str] | None = None,
+    declined: frozenset[int] = frozenset(),
 ) -> ImportOutcome:
     """Import a ticket file: one row is one ticket plus one task (ADR-120).
 
     Every new task is put to the fast dedup layer before any row is written, as for stations
-    (`commit_stations`, ADR-398).
+    (`commit_stations`, ADR-398). A declined first line holds the lines after it.
     """
     async with stable_actor(db, actor):
         await require_scope(actor, Perm.TICKET_IMPORT, db)
@@ -1125,7 +1144,12 @@ async def commit_tickets(
         plans, index = await _plan_tickets(db, task_type=task_type, rows=rows, columns=columns)
         drafts = await _ticket_drafts(db, actor=actor, plans=plans, columns=columns, task_type=task_type)
         comparison = await bulk_dedup.compare(
-            db, actor=actor, drafts=drafts, decisions=decisions or {}, now=datetime.now(UTC)
+            db,
+            actor=actor,
+            drafts=drafts,
+            decisions=decisions or {},
+            now=datetime.now(UTC),
+            declined=declined,
         )
         suspects = await bulk_dedup.describe(db, comparison, drafts)
 

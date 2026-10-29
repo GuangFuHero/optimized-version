@@ -336,6 +336,63 @@ async def test_a_decision_naming_anything_but_the_hint_still_holds_the_row(db, e
     assert await _count(db, DuplicatePair) == 0
 
 
+@pytest.mark.asyncio
+async def test_a_declined_row_is_not_created_when_the_engine_fails_at_commit(db, engine):
+    """The rows after a failed check land unchecked, but not one the importer chose not to create."""
+    actor = await _station_importer(db)
+    engine.fail = True
+    raw, filename = _stations([_station_row("大進國小"), _station_row("光復國民小學")])
+
+    outcome = await commit_stations(
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter", declined=frozenset({3})
+    )
+
+    assert await _station_names(db) == ["大進國小"]
+    assert (outcome.created, outcome.failed, outcome.suspected, outcome.declined) == (1, 0, 0, 1)
+    assert outcome.dedup_checked is False
+    (held,) = _report_rows(outcome)
+    assert held["name"] == "光復國民小學"
+    assert held["error"].endswith("-: 選了不建立，未建立")
+    assert await _count(db, DedupAuditEvent) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_declined_row_the_engine_flags_again_is_reported_as_before_and_counted_apart(db, engine):
+    """Its hint is recorded as shown and its report line says what it looks like; not a suspect again."""
+    actor = await _station_importer(db)
+    school = await _existing_station(db, actor, "光復國小")
+    engine.suspects = _suspect_stations_named("光復國民小學", related=school)
+    raw, filename = _stations([_station_row("光復國民小學"), _station_row("大進國小")])
+
+    outcome = await commit_stations(
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter", declined=frozenset({2})
+    )
+
+    assert (outcome.created, outcome.suspected, outcome.suspects, outcome.declined) == (1, 0, (), 1)
+    (held,) = _report_rows(outcome)
+    assert "疑似重複，未建立：很像「光復國小」" in held["error"]
+    events = (await db.execute(select(DedupAuditEvent.event_type, DedupAuditEvent.primary_uuid))).all()
+    assert [(event, str(uuid)) for event, uuid in events] == [("hint_shown", school)]
+
+
+@pytest.mark.asyncio
+async def test_declining_a_line_that_creates_nothing_changes_nothing(db, engine):
+    """An update, or a line the file does not have, as a decision for one is ignored."""
+    actor = await _station_importer(db)
+    imported = _station_row("光復國小")
+    await commit_stations(
+        db, actor=actor, raw=_stations([imported])[0], filename="s.csv", station_type="shelter"
+    )
+    await db.refresh(actor)
+    raw, filename = _stations([imported])
+
+    outcome = await commit_stations(
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter", declined=frozenset({2, 9})
+    )
+
+    assert (outcome.updated, outcome.declined, outcome.error_report) == (1, 0, None)
+
+
 # --- the real engine ---------------------------------------------------------------------
 
 SHELTER = "光復國小臨時收容所"
@@ -592,6 +649,24 @@ async def test_a_held_first_line_holds_the_lines_after_it_and_says_why(db, engin
     assert (first["task_name"], second["task_name"]) == ("送水", "救人")
     assert "疑似重複，未建立" in first["error"]
     assert "第 2 列疑似重複，未建立，這一列跟著未建立" in second["error"]
+
+
+@pytest.mark.asyncio
+async def test_a_declined_first_line_holds_the_lines_after_it_when_the_engine_fails(db, engine):
+    """As a held first line does, each report line saying the importer chose so."""
+    actor = await _ticket_importer(db)
+    engine.fail = True
+    raw, filename = _ticket_on_two_lines()
+
+    outcome = await commit_tickets(
+        db, actor=actor, raw=raw, filename=filename, task_type="rescue", declined=frozenset({2})
+    )
+
+    assert await _count(db, Tickets) == 0
+    assert (outcome.created, outcome.updated, outcome.failed, outcome.declined) == (0, 0, 0, 1)
+    first, second = _report_rows(outcome)
+    assert first["error"].endswith("-: 選了不建立，未建立")
+    assert second["error"].endswith("-: 同一張單的第 2 列選了不建立，這一列跟著未建立")
 
 
 @pytest.mark.asyncio

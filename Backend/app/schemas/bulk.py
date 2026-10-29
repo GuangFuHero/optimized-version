@@ -123,15 +123,22 @@ class BulkImportResponse(BaseModel):
     suspected: int = Field(
         default=0,
         description=(
-            "疑似重複、沒確認所以沒建立的列數，不含跟著它沒建立的後續列（見 suspects 的 followers）。"
-            "不算在 failed 裡，但在錯誤報告裡"
+            "疑似重複、沒確認也不在 declined 裡，所以沒建立的列數，不含跟著它沒建立的後續列"
+            "（見 suspects 的 followers）。不算在 failed 裡，但在錯誤報告裡"
         ),
     )
     suspects: list[SuspectedRowResponse] = Field(
-        default_factory=list, description="沒建立的疑似重複列，形狀同預覽（ADR-398）"
+        default_factory=list, description="沒確認也不在 declined 裡的疑似重複列，形狀同預覽（ADR-398）"
     )
     dedup_checked: bool = Field(
         default=True, description="要新建的列都跟資料庫比過了。false 是這次沒比完，不代表沒有重複"
+    )
+    declined: int = Field(
+        default=0,
+        description=(
+            "放在 declined、所以沒建立的列數，不含跟著它沒建立的後續列。不算在 failed、suspected 裡，"
+            "但在錯誤報告裡（ADR-398）"
+        ),
     )
 
     @classmethod
@@ -150,4 +157,5 @@ class BulkImportResponse(BaseModel):
             suspected=outcome.suspected,
             suspects=[SuspectedRowResponse.of(row) for row in outcome.suspects],
             dedup_checked=outcome.dedup_checked,
+            declined=outcome.declined,
         )
