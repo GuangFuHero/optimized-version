@@ -145,3 +145,18 @@ export function listTickets(
 
   return { tickets, fullNeedCount, needCount };
 }
+
+/**
+ * Whether none of the newest page's tickets is listed. The backend sends tickets still taking
+ * people first (`order: NEEDS_FIRST`), so once a whole page folds away every later page would too —
+ * finished tickets, whose needs are all full — and the list stops asking for them: asking fetched
+ * every finished ticket to show none. 含已滿額 lists them, and the asking resumes.
+ */
+export function pageFoldedAway(
+  pageIds: readonly string[],
+  listed: readonly ListedTicket[],
+): boolean {
+  const page = new Set(pageIds);
+
+  return page.size > 0 && !listed.some(({ marker }) => page.has(marker.id));
+}

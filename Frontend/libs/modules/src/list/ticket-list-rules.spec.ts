@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import type { TicketNeed } from '../ticket/needs';
-import { listTickets, showsClosedTickets } from './ticket-list-rules';
+import {
+  listTickets,
+  pageFoldedAway,
+  showsClosedTickets,
+} from './ticket-list-rules';
 
 function need(overrides: Partial<TicketNeed> = {}): TicketNeed {
   return {
@@ -253,5 +257,35 @@ describe('listTickets', () => {
     );
 
     expect(ids(list.tickets)).toEqual(['other', 'cancelled']);
+  });
+});
+
+describe('pageFoldedAway', () => {
+  const markers = [
+    ticket('open', [OPEN]),
+    ticket('done-1', [FILLED], 'completed'),
+    ticket('done-2', [FILLED], 'completed'),
+  ];
+
+  it('is set once every ticket of the newest page folds away', () => {
+    const { tickets } = listTickets(markers, { showFull: false });
+
+    expect(pageFoldedAway(['done-1', 'done-2'], tickets)).toBe(true);
+  });
+
+  it('is not set while a ticket of that page is still listed', () => {
+    const { tickets } = listTickets(markers, { showFull: false });
+
+    expect(pageFoldedAway(['open', 'done-1'], tickets)).toBe(false);
+  });
+
+  it('is not set with 含已滿額 on, which lists them all', () => {
+    const { tickets } = listTickets(markers, { showFull: true });
+
+    expect(pageFoldedAway(['done-1', 'done-2'], tickets)).toBe(false);
+  });
+
+  it('is not set before a page is in', () => {
+    expect(pageFoldedAway([], [])).toBe(false);
   });
 });
