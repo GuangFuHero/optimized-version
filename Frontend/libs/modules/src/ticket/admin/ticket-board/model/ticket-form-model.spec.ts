@@ -192,6 +192,71 @@ describe('toCreateTicketInput', () => {
   });
 });
 
+describe('a household in a space (BE-036)', () => {
+  const space = { uuid: 'b1', name: '林森61', floorLabels: ['RF', '3F', '1F'] };
+  const household: TicketFormValues = {
+    ...filled,
+    point: null,
+    fullAddress: '',
+    floor: '3F',
+    room: ' A ',
+  };
+
+  it('opens on the floor it was asked for', () => {
+    expect(emptyTicketForm(null, '3F').floor).toBe('3F');
+    expect(emptyTicketForm().floor).toBe('');
+  });
+
+  it('needs no point: the space has one', () => {
+    expect(
+      validateTicketForm(household, 'create', space).point,
+    ).toBeUndefined();
+    expect(validateTicketForm(household, 'create').point).toBeDefined();
+  });
+
+  it('files under the space with its floor and 戶別, and no point of its own', () => {
+    const input = toCreateTicketInput(household, new Map(), space);
+
+    expect(input.buildingMapUuid).toBe('b1');
+    expect(input.secondaryLocation).toEqual({
+      locationType: 'address',
+      floor: '3F',
+      room: 'A',
+    });
+    expect('geometry' in input).toBe(false);
+  });
+
+  it('never sends a point or an address, even one left from a pin', () => {
+    const input = toCreateTicketInput(
+      {
+        ...household,
+        point: { lat: 25, lng: 121.5, source: 'manual' },
+        fullAddress: '花蓮縣光復鄉林森路61號',
+        floor: '',
+      },
+      new Map(),
+      space,
+    );
+
+    expect('geometry' in input).toBe(false);
+    expect(input.secondaryLocation).toEqual({
+      locationType: 'address',
+      floor: null,
+      room: 'A',
+    });
+  });
+
+  it('still carries the duplicate acknowledgements', () => {
+    const input = toCreateTicketInput(
+      household,
+      new Map([[0, 'other']]),
+      space,
+    );
+
+    expect(input.tasks?.[0]?.acknowledgedDuplicateOf).toBe('other');
+  });
+});
+
 describe('acknowledgeSuspects', () => {
   it('adds one suspect per need and skips the ticket-level ones', () => {
     const acked = acknowledgeSuspects(new Map([[0, 'old']]), [

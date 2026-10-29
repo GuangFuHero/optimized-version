@@ -19,6 +19,10 @@ import type { PickedPoint } from '../../../../map/components/location-picker';
 import { stationPoint } from '../../../../station/station-point';
 import { PHOTO_LINK_MAX } from '../../../photos/photo-links';
 import {
+  householdLocation,
+  type SpaceHouseholdTarget,
+} from '../../space/household-input';
+import {
   buildNeedDraftInput,
   validateNeedDraft,
   type DuplicateSuspect,
@@ -63,10 +67,12 @@ export function emptyNeed(): NeedDraft {
 
 /**
  * A blank create form, pinned at `seed` when the form opens from a point picked on a map: the pin's
- * address lookup runs for it as for any other pin.
+ * address lookup runs for it as for any other pin. `floor` starts a household in a space on the
+ * floor it was added from (在這一層新增).
  */
 export function emptyTicketForm(
   seed: { lat: number; lng: number } | null = null,
+  floor = '',
 ): TicketFormValues {
   return {
     title: '',
@@ -79,7 +85,7 @@ export function emptyTicketForm(
     point: seed ? { lat: seed.lat, lng: seed.lng, source: 'seed' } : null,
     fullAddress: '',
     addressToken: '',
-    floor: '',
+    floor,
     room: '',
     photoUrls: [],
     needs: [emptyNeed()],
@@ -137,9 +143,11 @@ export function updateTicketForm(
   return moved ? afterPinMove(next) : next;
 }
 
+/** `space`: a household filed in a 開啟空間 space, which needs no point of its own. */
 export function validateTicketForm(
   values: TicketFormValues,
   mode: 'create' | 'edit',
+  space?: SpaceHouseholdTarget,
 ): TicketFormErrors {
   const errors: TicketFormErrors = {};
   const title = values.title.trim();
@@ -152,8 +160,8 @@ export function validateTicketForm(
   if (mode === 'edit') return errors;
 
   if (!values.contactName.trim()) errors.contactName = '請填寫現場聯絡人';
-  // 地標必填: rescuers navigate by this point (tk-form.jsx).
-  if (!values.point) errors.point = '請在地圖上標記地標位置';
+  // 地標必填: rescuers navigate by this point (tk-form.jsx). A household in a space takes the space's.
+  if (!values.point && !space) errors.point = '請在地圖上標記地標位置';
   if (values.needs.length > TICKET_NEEDS_MAX) {
     errors.needs = `需求最多 ${TICKET_NEEDS_MAX} 項`;
   } else if (sentNeeds(values).length === 0) {
@@ -182,13 +190,23 @@ function secondaryLocation(values: TicketFormValues): SecondaryLocationInput {
 
 /**
  * `createTicket`'s input. `acknowledged` maps a sent need's index to the suspect the user has
- * confirmed it is not a duplicate of.
+ * confirmed it is not a duplicate of. In a `space` the ticket is filed under the building, which
+ * gives it its point and address: only the floor and 戶別 go, and never a point (the backend
+ * refuses both together).
  */
 export function toCreateTicketInput(
   values: TicketFormValues,
   acknowledged: Map<number, string> = new Map(),
+  space?: SpaceHouseholdTarget,
 ): CreateTicketInput {
   const location = secondaryLocation(values);
+  const household = space
+    ? householdLocation({
+        buildingUuid: space.uuid,
+        floor: values.floor.trim(),
+        room: values.room,
+      })
+    : null;
   const optional = (value: string) => value.trim() || undefined;
   const input: CreateTicketInput = {
     title: values.title.trim(),
@@ -198,10 +216,14 @@ export function toCreateTicketInput(
     contactName: values.contactName.trim(),
     contactPhone: optional(values.contactPhone),
     contactEmail: optional(values.contactEmail),
-    geometry: values.point
-      ? { type: 'Point', coordinates: [values.point.lng, values.point.lat] }
-      : undefined,
-    secondaryLocation: Object.keys(location).length ? location : undefined,
+    geometry:
+      values.point && !household
+        ? { type: 'Point', coordinates: [values.point.lng, values.point.lat] }
+        : undefined,
+    secondaryLocation:
+      household?.secondaryLocation ??
+      (Object.keys(location).length ? location : undefined),
+    buildingMapUuid: household?.buildingMapUuid,
     photoUrls: values.photoUrls,
     tasks: sentNeeds(values).map((need, index) => {
       const draft = buildNeedDraftInput(need);

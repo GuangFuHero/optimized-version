@@ -35,6 +35,8 @@ import { LocationPicker } from '../../../map/components/location-picker';
 import type { ClaimError } from '../../needs/claim-error';
 import { filledInputSx } from '../../../station/form/station-form-fields';
 import { PhotoLinkEditor } from '../../photos';
+import { orderFloors } from '../space/floors';
+import type { SpaceHouseholdTarget } from '../space/household-input';
 import { DuplicateNotice } from './duplicate-notice';
 import {
   isForbidden,
@@ -75,6 +77,13 @@ export type TicketFormProps = (
       mode: 'create';
       /** A point picked on a map before the form opened: the pin starts there. */
       initialPoint?: { lat: number; lng: number } | null;
+      /**
+       * 新增一戶 (BE-036): a household filed in this space, which gives it its point and address;
+       * the form asks only its floor (one of the space's, or unknown) and 戶別.
+       */
+      space?: SpaceHouseholdTarget;
+      /** The floor 在這一層新增 was pressed on. */
+      initialFloor?: string;
       /** The ticket just created, before `onDone`. */
       onCreated?(ticket: AdminTicketFieldsFragment): void;
     }
@@ -109,12 +118,13 @@ function saveError(error: unknown, mode: 'create' | 'edit'): string {
 export function TicketForm(props: TicketFormProps) {
   const { mode, onDone, onCancel, onBusyChange } = props;
   const ticket = props.mode === 'edit' ? props.ticket : null;
+  const space = props.mode === 'create' ? props.space : undefined;
   const coarse = ticket ? isCoarseTicket(ticket) : false;
   const formId = useId();
   const [values, setValues] = useState<TicketFormValues>(() =>
     props.mode === 'edit'
       ? ticketFormFromTicket(props.ticket)
-      : emptyTicketForm(props.initialPoint),
+      : emptyTicketForm(props.initialPoint, props.initialFloor),
   );
   const [errors, setErrors] = useState<TicketFormErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +224,7 @@ export function TicketForm(props: TicketFormProps) {
 
   async function create(acknowledged: Map<number, string>) {
     const { createTicket: result } = await createTicket.mutateAsync({
-      input: toCreateTicketInput(values, acknowledged),
+      input: toCreateTicketInput(values, acknowledged, space),
     });
     const read = readCreateResult(result);
     if (read.kind === 'duplicates') {
@@ -277,7 +287,7 @@ export function TicketForm(props: TicketFormProps) {
   const missing = ticketFormErrorSummary(errors);
 
   const submit = () => {
-    const next = validateTicketForm(values, mode);
+    const next = validateTicketForm(values, mode, space);
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     if (ticket) void run(() => save(ticket));
@@ -317,7 +327,15 @@ export function TicketForm(props: TicketFormProps) {
             error={errors.title}
             onChange={(event) => set('title', event.target.value)}
           />
-          {coarse ? (
+          {space ? (
+            <HouseholdLocation
+              space={space}
+              floor={values.floor}
+              room={values.room}
+              onFloorChange={(floor) => set('floor', floor)}
+              onRoomChange={(room) => set('room', room)}
+            />
+          ) : coarse ? (
             // A coarse ticket hides its address from this viewer: blank fields saved over it
             // would replace the real one.
             <Muted>約略位置（無檢視詳細位置權限），無法修改地址</Muted>
@@ -350,36 +368,38 @@ export function TicketForm(props: TicketFormProps) {
               />
             </Box>
           )}
-          <FieldBlock
-            label="地標"
-            required={mode === 'create'}
-            hint={
-              mode === 'create'
-                ? errors.point
-                  ? undefined
-                  : '點地圖任一處或拖曳大頭針調整；救援端以此座標導航'
-                : '建立後無法修改地標'
-            }
-          >
-            {mode === 'create' ? (
-              <>
-                <LocationPicker
-                  value={values.point}
-                  onChange={(point) => set('point', point)}
-                  invalid={Boolean(errors.point)}
-                />
-                {errors.point ? <ErrorText>{errors.point}</ErrorText> : null}
-              </>
-            ) : values.point ? (
-              // Shown, not editable: the point can't change after the ticket is created.
-              <Box inert sx={{ pointerEvents: 'none' }}>
-                <LocationPicker
-                  value={values.point}
-                  onChange={() => undefined}
-                />
-              </Box>
-            ) : null}
-          </FieldBlock>
+          {space ? null : (
+            <FieldBlock
+              label="地標"
+              required={mode === 'create'}
+              hint={
+                mode === 'create'
+                  ? errors.point
+                    ? undefined
+                    : '點地圖任一處或拖曳大頭針調整；救援端以此座標導航'
+                  : '建立後無法修改地標'
+              }
+            >
+              {mode === 'create' ? (
+                <>
+                  <LocationPicker
+                    value={values.point}
+                    onChange={(point) => set('point', point)}
+                    invalid={Boolean(errors.point)}
+                  />
+                  {errors.point ? <ErrorText>{errors.point}</ErrorText> : null}
+                </>
+              ) : values.point ? (
+                // Shown, not editable: the point can't change after the ticket is created.
+                <Box inert sx={{ pointerEvents: 'none' }}>
+                  <LocationPicker
+                    value={values.point}
+                    onChange={() => undefined}
+                  />
+                </Box>
+              ) : null}
+            </FieldBlock>
+          )}
           {mode === 'create' ? (
             <>
               <Box
@@ -589,7 +609,13 @@ export function TicketForm(props: TicketFormProps) {
 
   return (
     <SheetLayout
-      title={mode === 'create' ? '新增任務' : '編輯任務單'}
+      title={
+        space
+          ? `新增一戶：${space.name}`
+          : mode === 'create'
+            ? '新增任務'
+            : '編輯任務單'
+      }
       closeLabel={mode === 'create' ? '關閉新增任務' : '關閉編輯任務單'}
       onClose={cancel}
       footer={
@@ -723,6 +749,64 @@ function NeedRow({
         onChange={(event) => onChange('description', event.target.value)}
       />
     </Box>
+  );
+}
+
+/**
+ * Where a household in a space is (BE-036 point 3): the space gives the point and the address, so
+ * only the floor, from the space's own floors or unknown, and a free-text 戶別 (302、早餐店).
+ */
+function HouseholdLocation({
+  space,
+  floor,
+  room,
+  onFloorChange,
+  onRoomChange,
+}: {
+  space: SpaceHouseholdTarget;
+  floor: string;
+  room: string;
+  onFloorChange: (floor: string) => void;
+  onRoomChange: (room: string) => void;
+}) {
+  const floors = orderFloors(space.floorLabels);
+  return (
+    <>
+      <Muted>{`🏢 ${space.name}：位置與地址用這一棟的`}</Muted>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: '12px',
+        }}
+      >
+        <TextField
+          select
+          fullWidth
+          size="small"
+          label="樓層"
+          value={floors.includes(floor) ? floor : ''}
+          onChange={(event) => onFloorChange(event.target.value)}
+          slotProps={{
+            select: { displayEmpty: true },
+            inputLabel: { shrink: true },
+          }}
+        >
+          <MenuItem value="">不知道在幾樓</MenuItem>
+          {floors.map((label) => (
+            <MenuItem key={label} value={label}>
+              {label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextInput
+          label="戶別"
+          placeholder="例：302、早餐店"
+          value={room}
+          onChange={(event) => onRoomChange(event.target.value)}
+        />
+      </Box>
+    </>
   );
 }
 
