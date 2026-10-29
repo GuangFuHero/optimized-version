@@ -50,25 +50,26 @@ from app.services import station as station_service
 
 
 def _has_pending_suggestion():
-    """EXISTS clause: the station, or one of its active properties, has a pending suggestion."""
-    return exists(
+    """EXISTS clause: the station, or one of its active properties, has a pending suggestion.
+
+    Two EXISTS, one per target, rather than one EXISTS with the two targets OR-ed inside: each
+    half then reaches its rows through an index (the pending suggestions by `target_uuid`, and a
+    station's properties by `station_uuid`), where the single one compared every station with
+    every pending suggestion (ADR-394).
+    """
+    suggestion = StationUpdateSuggestion
+    pending = (suggestion.status == "pending", suggestion.delete_at.is_(None))
+    on_station = exists(
+        select(1).where(*pending, suggestion.target_uuid == cast(Station.uuid, String)).correlate(Station)
+    )
+    on_property = exists(
         select(1)
-        .select_from(StationUpdateSuggestion)
-        .outerjoin(
-            StationProperty,
-            (cast(StationProperty.uuid, String) == StationUpdateSuggestion.target_uuid)
-            & StationProperty.delete_at.is_(None),
-        )
-        .where(
-            StationUpdateSuggestion.status == "pending",
-            StationUpdateSuggestion.delete_at.is_(None),
-            or_(
-                StationUpdateSuggestion.target_uuid == cast(Station.uuid, String),
-                StationProperty.station_uuid == Station.uuid,
-            ),
-        )
+        .select_from(StationProperty)
+        .join(suggestion, suggestion.target_uuid == cast(StationProperty.uuid, String))
+        .where(StationProperty.station_uuid == Station.uuid, StationProperty.delete_at.is_(None), *pending)
         .correlate(Station)
     )
+    return or_(on_station, on_property)
 
 
 # Rows a page of `stations` may hold (ADR-394): above every limit a caller sends today, so it

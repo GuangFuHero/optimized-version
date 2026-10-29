@@ -7,6 +7,7 @@ box nobody else puts a station in.
 """
 
 import uuid as uuid_mod
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
@@ -14,7 +15,7 @@ from sqlalchemy import select
 from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
-from app.models.station_property import StationUpdateSuggestion
+from app.models.station_property import StationProperty, StationUpdateSuggestion
 from app.models.team import Team
 from tests.conftest import token_for
 from tests.test_graphql.conftest import auth_header
@@ -130,6 +131,19 @@ async def test_exportable_counts_what_station_export_would_include(client, redis
 
 
 @pytest.mark.asyncio
+async def test_a_station_with_no_type_is_never_exportable(client, redis):
+    """The export asks for one type (`station_type` is required), so a station with none is in no export."""
+    lng, lat, bounds = _box()
+    _, gov_token = await _team_identity(redis, "gov", [(Perm.STATION_EXPORT, "team")])
+    await _station((lng, lat))
+    await _station((lng, lat), type=None)
+
+    by_type = (await _facets(client, gov_token, bounds=bounds))["byType"]
+
+    assert [(t["type"], t["count"], t["exportable"]) for t in by_type] == [("shelter", 1, 1), (None, 1, 0)]
+
+
+@pytest.mark.asyncio
 async def test_the_review_count_is_the_callers_own_queue(client, coordinator_auth, login_user_auth):
     """Stations with a pending suggestion that the caller holds station.review over; none without it."""
     coordinator_uuid, coordinator_token = coordinator_auth
@@ -158,3 +172,38 @@ async def test_the_review_count_is_the_callers_own_queue(client, coordinator_aut
         0,
         0,
     )
+
+
+@pytest.mark.asyncio
+async def test_the_review_count_takes_a_suggestion_on_a_property_unless_the_property_is_gone(
+    client, coordinator_auth
+):
+    """The station's own suggestions and its properties' are counted apart (ADR-394); a deleted one isn't."""
+    coordinator_uuid, coordinator_token = coordinator_auth
+    lng, lat, bounds = _box()
+    live, gone = await _station((lng, lat)), await _station((lng, lat))
+    async with db_ctx() as db:
+        for station, deleted in ((live, None), (gone, datetime.now(UTC))):
+            item = StationProperty(
+                station_uuid=station,
+                property_type="supply",
+                property_name="飲用水",
+                created_by=coordinator_uuid,
+                delete_at=deleted,
+            )
+            db.add(item)
+            await db.flush()
+            db.add(
+                StationUpdateSuggestion(
+                    target_type="station_property",
+                    target_uuid=str(item.uuid),
+                    field_name="quantity",
+                    new_value="5",
+                    status="pending",
+                    created_by=coordinator_uuid,
+                )
+            )
+
+    facets = await _facets(client, coordinator_token, bounds=bounds)
+
+    assert facets["pendingReviewCount"] == 1

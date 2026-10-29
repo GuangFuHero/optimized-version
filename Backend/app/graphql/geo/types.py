@@ -193,7 +193,10 @@ class StationType:
     )
     is_official: bool = strawberry.field(
         default=False,
-        description="True if this station is operated by a government or official body",
+        description=(
+            "True if the back office made this station (`source` is 'official'), as the `official` "
+            "filter reads it, or if it was marked official before `source` said so (ADR-394)"
+        ),
     )
     operational_status: str = strawberry.field(
         default="active",
@@ -424,7 +427,8 @@ class StationType:
             verification_status=m.verification_status,
             is_duplicate=m.is_duplicate,
             is_temporary=m.is_temporary,
-            is_official=m.is_official,
+            # `source` defines official; the old column still holds what the seed marked (ADR-394).
+            is_official=m.source == "official" or m.is_official,
             operational_status=m.operational_status,
             status_changed_at=m.status_changed_at,
             supply_status=m.supply_status,
@@ -475,7 +479,12 @@ class StationTypeCountType:
     type: str | None = strawberry.field(description="The station type; null for stations with none")
     count: int
     exportable: int = strawberry.field(
-        description="How many of them the caller's station export would include: none without station.export"
+        description=(
+            "How many of them the caller's station export of this type would include: none without "
+            "station.export, and none on the row with no type, which the export can't ask for. It follows "
+            "this request's filters, while the export takes the type alone, so the two agree only when no "
+            "other filter is given"
+        )
     )
 
 
@@ -484,7 +493,12 @@ class StationAreaCountType:
     """How many of the counted stations have their address in one 縣市 and 鄉鎮市區."""
 
     county: str
-    town: str | None
+    town: str | None = strawberry.field(
+        description=(
+            "Null for the stations in this 縣市 whose address names no 鄉鎮市區. No filter selects just "
+            "those: `county` alone matches the whole 縣市"
+        )
+    )
     count: int
 
 
@@ -496,7 +510,10 @@ class StationFacetsType:
     by_status: list[StationStatusCountType]
     by_type: list[StationTypeCountType]
     areas: list[StationAreaCountType] = strawberry.field(
-        description="Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none"
+        description=(
+            "Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none, and one with a "
+            "縣市 but no 鄉鎮市區 is in a row whose `town` is null"
+        )
     )
     pending_review_count: int = strawberry.field(
         description="Stations with a pending suggestion that the caller holds station.review over"

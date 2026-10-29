@@ -1357,6 +1357,7 @@ export type StationAreaCountType = {
   __typename?: 'StationAreaCountType';
   count: Scalars['Int']['output'];
   county: Scalars['String']['output'];
+  /** Null for the stations in this 縣市 whose address names no 鄉鎮市區. No filter selects just those: `county` alone matches the whole 縣市 */
   town?: Maybe<Scalars['String']['output']>;
 };
 
@@ -1373,7 +1374,7 @@ export type StationCreated = {
 
 export type StationFacetsType = {
   __typename?: 'StationFacetsType';
-  /** Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none */
+  /** Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none, and one with a 縣市 but no 鄉鎮市區 is in a row whose `town` is null */
   areas: Array<StationAreaCountType>;
   byStatus: Array<StationStatusCountType>;
   byType: Array<StationTypeCountType>;
@@ -1512,7 +1513,7 @@ export type StationType = {
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
   /** True if this station has been flagged as a duplicate entry */
   isDuplicate: Scalars['Boolean']['output'];
-  /** True if this station is operated by a government or official body */
+  /** True if the back office made this station (`source` is 'official'), as the `official` filter reads it, or if it was marked official before `source` said so (ADR-394) */
   isOfficial: Scalars['Boolean']['output'];
   /** True if this is a temporary station (e.g. emergency shelter) */
   isTemporary: Scalars['Boolean']['output'];
@@ -1566,7 +1567,7 @@ export type StationType = {
 export type StationTypeCountType = {
   __typename?: 'StationTypeCountType';
   count: Scalars['Int']['output'];
-  /** How many of them the caller's station export would include: none without station.export */
+  /** How many of them the caller's station export of this type would include: none without station.export, and none on the row with no type, which the export can't ask for. It follows this request's filters, while the export takes the type alone, so the two agree only when no other filter is given */
   exportable: Scalars['Int']['output'];
   /** The station type; null for stations with none */
   type?: Maybe<Scalars['String']['output']>;

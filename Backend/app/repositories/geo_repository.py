@@ -1,6 +1,6 @@
 """Repositories for stations, map areas, building maps, station properties, and crowd sourcing."""
 
-from sqlalchemy import and_, exists, func, or_, select, true
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
@@ -188,8 +188,11 @@ class StationRepository(GenericRepository[Station]):
     async def count_by_type(
         self, db: AsyncSession, *, exportable_filters, **filters
     ) -> list[tuple[str | None, int, int]]:
-        """Matching stations per type, and how many of them `exportable_filters` keeps (ADR-394)."""
-        exportable = and_(true(), *exportable_filters).label("exportable")
+        """Matching stations per type, and how many of them `exportable_filters` keeps (ADR-394).
+
+        A station with no type is never exportable: the export takes one type, and none can't be asked for.
+        """
+        exportable = and_(self.model.type.is_not(None), *exportable_filters).label("exportable")
         rows = self._matching([self.model.type.label("type"), exportable], **filters)
         async with search_timeout(db, normalize_query(filters.get("q"))):
             result = await db.execute(

@@ -764,6 +764,9 @@ alembic 走 subprocess 而非 in-process，有兩個原因：`alembic/env.py` �
 
 **白話**：管理平台的站點頁不用再把所有站點抓下來，在瀏覽器裡篩選和計數；後端直接照條件回一頁，數字另外一次拿齊。
 
+HC 2026-10-26 在 #129 的 review 提四點（待審數太慢、官方標示看哪一欄、seed 沒有 official、`town` 是 null 的區域），
+Dan 2026-10-27 決定：官方一律看 `source`，其餘照 HC 的建議改，等 #97 合了再一起改。
+
 **Context**：
 - #97 的 `/stations` 把呼叫者看得到的站點全部抓下來（每頁 200、最多 5,000），用來：
   - 在瀏覽器篩行政區、官方認定、成立時間、更新時間並排序；
@@ -778,13 +781,21 @@ alembic 走 subprocess 而非 in-process，有兩個原因：`alembic/env.py` �
   - `county`、`town`：用 `EXISTS` 查 `secondary_locations`，跟關鍵字搜尋碰地址的方式一樣，不 JOIN，免得一個站點
     出現兩次。沒有地址的站點不屬於任何行政區。只給 `town` 會回錯誤 `town needs county`，因為鄉鎮市區的名字會在
     不同縣市重複（中正區、東區）。
-  - `official`：true 是 `source = 'official'`，也就是管理平台建立或匯入的站點，前台的「官方」標示也看這欄；
-    false 是其他的，包含 `source` 是 NULL 的。`is_official` 沒有任何程式會寫，所以不看它。
+  - `official`：true 是 `source = 'official'`，也就是管理平台建立或匯入的站點；false 是其他的，包含 `source` 是
+    NULL 的。「官方」從這裡起一律看 `source`：
+    - 前台的「官方」標示讀的是 GraphQL 的 `isOfficial`。它原本直接是 `is_official` 欄位，現在改成
+      `source = 'official'`，或舊的 `is_official` 是 true。
+    - `is_official` 只有 seed 寫過，app 不寫它。篩選不看它；之後 3NF 那支（F1）會讓它跟著 `source`。
+    - mock seed 的 17 個官方站點，`source` 從 `gov` 改成 `official`，篩選和標示在 staging 重灌 seed 後一致。
   - `createdAfter`／`createdBefore`、`updatedAfter`／`updatedBefore`：半開區間 `[after, before)`，相鄰的兩段不會
     重複算到同一個站點。成立第幾週、新鮮度門檻（24 小時／72 小時）都是前端的顯示規則，由前端算出時間點再傳進來。
   - `orderBy: StationOrder`：`DEFAULT` 是現在的順序（搜尋時依相關度，然後最新建立的在前）；
     `OPEN_FIRST_RECENTLY_UPDATED` 是開設中的在前，再依最近更新排，最後用 uuid 收尾讓分頁穩定（ADR-153）。
     它連相關度也一起取代，因為管理平台的列表搜不搜尋都用同一種排序。
+    換頁照舊用 `skip`／`limit`：兩次載入之間有人改了站點（營運狀態、更新時間都會變），後面的頁會移一格，可能漏
+    一列或重複一列，重新載入前不會修正。不改成 cursor（keyset）：排序鍵本身會隨編輯改變，cursor 一樣會漏掉剛被改
+    的那一列（同 ADR-419 的判斷），而且 #97 的換頁也要跟著改。popo 2026-10-27 在 #129 提出，Dan 2026-10-29 決定
+    維持 offset、寫明這一點。
   - `limit` 上限 1,000，超過回 `limit must be at most 1000`，寫法跟 tickets 的 200 一樣（`TICKET_LIST_MAX_LIMIT`）。
     1,000 是為了比現在所有呼叫端都大：最大的是後端測試的 500，前台送 200。
 - **`stationFacets`**：
@@ -795,9 +806,21 @@ alembic 走 subprocess 而非 in-process，有兩個原因：`alembic/env.py` �
     - `areas`：縣市、鄉鎮市區和筆數；
     - `pendingReviewCount`。
   - `exportable` 照呼叫者的 `station.export` scope 算，跟匯出 endpoint 的列篩選一致（`require_scope` →
-    `scope_filter`，gov 團隊的 team 會放寬成 all，ADR-285）。
+    `scope_filter`，gov 團隊的 team 會放寬成 all，ADR-285）。它跟著這次請求的篩選走，匯出只收類型，所以只有沒帶
+    其他篩選時兩者才相等。沒有類型的那一列一律是 0：匯出必須指定類型，要不到它們。popo 2026-10-27 在 #129 提出，
+    Dan 2026-10-29 照改。
   - `pendingReviewCount` 是有待審建議、而且呼叫者有 `station.review` 的站點數。
   - 訪客或沒有權限的人，這兩項都是 0，不回錯誤。
+  - `areas` 裡 `town` 是 null 的那一列，是這個縣市裡地址沒填鄉鎮市區的站點。沒有篩選能只選它們（只給 `county`
+    是整個縣市）；留著這一列，是因為拿掉的話，一個縣市的站點如果都沒填鄉鎮，這個縣市就從選項裡消失，各列加起來也
+    對不上縣市的總數。欄位說明寫明了。
+- **「有待審建議」拆成兩個 `EXISTS`**（`_has_pending_suggestion`，`hasPendingSuggestions` 和 `pendingReviewCount`
+  共用）：一個比建議指向站點本身，走只含待審的 `target_uuid` 索引；一個從站點的屬性（`station_uuid` 索引）接到
+  指向屬性的建議。原本把兩種目標用 `OR` 放在同一個 `EXISTS` 裡，Postgres 只能拿每個站點去比每一筆待審建議。
+  2026-10-29 在 5433 的臨時資料庫量（2 萬個站點、4 萬個屬性、1 千筆待審建議，一半指向站點、一半指向屬性；量完
+  刪掉），五次的中位數：計數從 2,565 ms 到 46 ms，一頁 50 筆從 2,477 ms 到 41 ms，兩種寫法回的列一樣。
+- **#97 的 `reviewableOnly`** 也放進 `_station_filters`，`stationFacets` 一樣收。「呼叫者有某個權限的站點」只留一個
+  函式 `_held_over(info, perm)`，`reviewableOnly`、`exportable`、`pendingReviewCount` 都用它。
   - 一次請求就能填好統計列、行政區選項、匯出筆數和審查按鈕的數字。統計列要不要跟著篩選變由頁面決定：不帶
     篩選參數就是全部的數字。
 

@@ -1148,6 +1148,10 @@ type SecondaryLocationType {
 
 type StationAreaCountType {
   county: String!
+
+  """
+  Null for the stations in this 縣市 whose address names no 鄉鎮市區. No filter selects just those: `county` alone matches the whole 縣市
+  """
   town: String
   count: Int!
 }
@@ -1166,7 +1170,9 @@ type StationFacetsType {
   byStatus: [StationStatusCountType!]!
   byType: [StationTypeCountType!]!
 
-  """Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none"""
+  """
+  Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none, and one with a 縣市 but no 鄉鎮市區 is in a row whose `town` is null
+  """
   areas: [StationAreaCountType!]!
 
   """
@@ -1360,7 +1366,9 @@ type StationType {
   """True if this is a temporary station (e.g. emergency shelter)"""
   isTemporary: Boolean!
 
-  """True if this station is operated by a government or official body"""
+  """
+  True if the back office made this station (`source` is 'official'), as the `official` filter reads it, or if it was marked official before `source` said so (ADR-394)
+  """
   isOfficial: Boolean!
 
   """
@@ -1460,7 +1468,7 @@ type StationTypeCountType {
   count: Int!
 
   """
-  How many of them the caller's station export would include: none without station.export
+  How many of them the caller's station export of this type would include: none without station.export, and none on the row with no type, which the export can't ask for. It follows this request's filters, while the export takes the type alone, so the two agree only when no other filter is given
   """
   exportable: Int!
 }

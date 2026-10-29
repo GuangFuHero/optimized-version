@@ -91,7 +91,7 @@ async def test_a_page_holds_at_most_1000_stations(client):
 
 @pytest.mark.asyncio
 async def test_official_keeps_the_stations_the_back_office_made(client):
-    """`source = 'official'` is what the back office writes and the site's 官方 badge reads."""
+    """`source = 'official'` is what the back office writes, and what defines official (ADR-394)."""
     lng, lat, bounds = _box()
     official = await _station((lng, lat), source="official")
     user = await _station((lng, lat), source="user")
@@ -99,6 +99,21 @@ async def test_official_keeps_the_stations_the_back_office_made(client):
 
     assert await _uuids(client, bounds=bounds, official=True) == [official]
     assert sorted(await _uuids(client, bounds=bounds, official=False)) == sorted([user, unknown])
+
+
+@pytest.mark.asyncio
+async def test_the_official_badge_follows_source_and_keeps_the_old_flag(client):
+    """The site's 官方 badge reads `isOfficial`: official by `source`, or marked so before (ADR-394)."""
+    lng, lat, bounds = _box()
+    made = await _station((lng, lat), source="official", is_official=False)
+    marked = await _station((lng, lat), source="gov", is_official=True)
+    user = await _station((lng, lat), source="user", is_official=False)
+    query = "query($bounds: BoundsInput) { stations(bounds: $bounds) { items { uuid isOfficial } } }"
+
+    resp = await client.post("/graphql", json={"query": query, "variables": {"bounds": bounds}})
+
+    badges = {item["uuid"]: item["isOfficial"] for item in resp.json()["data"]["stations"]["items"]}
+    assert badges == {made: True, marked: True, user: False}
 
 
 @pytest.mark.asyncio
