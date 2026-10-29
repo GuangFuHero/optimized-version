@@ -13,16 +13,63 @@ import { collectAllPages } from './collect-pages';
 import * as documents from './graphql/__generated__/graphql';
 import { ticketKeys, ticketWriteKeys } from './ticket-query-keys';
 
+/** Every space's tickets: `buildingMapTicketsQuery`, one per space (BE-036). */
+const SPACE_TICKETS_KEY = ['admin', 'buildingMaps', 'tickets'] as const;
+
 /**
- * After a ticket write: refetch the lists and that ticket's sheet where they are on
- * screen; anything else is only marked stale, never reloaded now.
+ * The spaces' ticket loads a ticket write can move: a space keeps no state of its own and works
+ * it out from these. Only those, never every space, as the board keeps one mounted per space:
+ *
+ * - a write naming its ticket: the spaces whose tickets hold it;
+ * - a new household: the space it was filed in, which doesn't hold it yet;
+ * - a write naming only a need, photo or assignment: it comes from an open ticket's sheet, so the
+ *   spaces holding a ticket whose detail is on screen.
+ */
+export function spaceTicketKeysForWrite(
+  queryClient: QueryClient,
+  ticketUuid?: string | null,
+  buildingMapUuid?: string | null,
+): unknown[][] {
+  const cache = queryClient.getQueryCache();
+  const written = new Set<string>();
+  if (ticketUuid) written.add(ticketUuid);
+  else {
+    for (const query of cache.findAll({
+      queryKey: ticketKeys.details(),
+      type: 'active',
+    })) {
+      const uuid = (query.queryKey[3] as { uuid?: string } | undefined)?.uuid;
+      if (uuid) written.add(uuid);
+    }
+  }
+
+  const keys: unknown[][] = buildingMapUuid
+    ? [[...SPACE_TICKETS_KEY, { buildingMapUuid }]]
+    : [];
+  for (const query of cache.findAll({ queryKey: SPACE_TICKETS_KEY })) {
+    const data = query.state.data as
+      | { buildingMapTickets?: { uuid: string }[] }
+      | undefined;
+    if (data?.buildingMapTickets?.some((ticket) => written.has(ticket.uuid)))
+      keys.push([...query.queryKey]);
+  }
+  return keys;
+}
+
+/**
+ * After a ticket write: refetch the lists, that ticket's sheet and the spaces it moves
+ * where they are on screen; anything else is only marked stale, never reloaded now.
  */
 export function invalidateTicketWrite(
   queryClient: QueryClient,
   ticketUuid?: string | null,
+  buildingMapUuid?: string | null,
 ) {
   return Promise.all(
-    ticketWriteKeys(ticketUuid).map((queryKey) =>
+    [
+      ...ticketWriteKeys(ticketUuid),
+      ...spaceTicketKeysForWrite(queryClient, ticketUuid, buildingMapUuid),
+    ].map((queryKey) =>
       queryClient.invalidateQueries({ queryKey, refetchType: 'active' }),
     ),
   );
@@ -625,6 +672,9 @@ export function useCreateTicket() {
         queryClient,
         data.createTicket.__typename === 'TicketCreated'
           ? data.createTicket.ticket.uuid
+          : null,
+        data.createTicket.__typename === 'TicketCreated'
+          ? data.createTicket.ticket.buildingMapUuid
           : null,
       ),
   });
