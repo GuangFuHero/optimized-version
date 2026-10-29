@@ -20,3 +20,6 @@ uvx --from fonttools pyftsubset \
   --text="<SUBTITLE>" --name-IDs="*" --name-languages="*" \
   --output-file=Frontend/apps/demo/assets/share-card/NotoSansTC-Regular.subset.otf
 ```
+
+Then raise the version in `SITE_SHARE_CARD.url` (`libs/modules/src/point-share/share-card.ts`), as for any
+change to the card, or LINE and Facebook go on showing the copy they kept.

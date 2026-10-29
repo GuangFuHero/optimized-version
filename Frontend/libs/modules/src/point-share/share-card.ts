@@ -4,7 +4,10 @@
  * `metadataBase` makes it absolute on the site's origin.
  *
  * `?v=` is the card's version: LINE, Facebook and the CDN keep an image by its full URL, so a card
- * redrawn under the same one would not show. Raise it whenever the card changes; the route ignores it.
+ * redrawn under the same one would not show. Raise it whenever anything the card is drawn from changes,
+ * not only the route: its title and subtitle, the logo `apps/demo/public/wan-guard.svg` (the favicon
+ * too), the design tokens' colours it reads, and the fonts in `apps/demo/assets/share-card/`. The
+ * route ignores it.
  */
 export const SITE_SHARE_CARD = {
   url: '/share-card.png?v=1',

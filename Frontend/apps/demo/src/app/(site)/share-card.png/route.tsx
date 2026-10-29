@@ -14,8 +14,11 @@ export const dynamic = 'force-static';
 const { color } = designTokens;
 
 // The fonts beside this card hold only these characters (`assets/share-card/README.md`). Change a
-// word and subset them again, or it is drawn as an empty box. Any change to the card also raises the
-// version in `SITE_SHARE_CARD.url`, or what LINE and Facebook keep goes on showing the old one.
+// word and subset them again, or it is drawn as an empty box.
+//
+// Any change to what the card is drawn from raises the version in `SITE_SHARE_CARD.url`, or what LINE
+// and Facebook keep goes on showing the old card: these two lines, the logo `public/wan-guard.svg`
+// (the favicon too), the design tokens' colours read below, and the fonts in `assets/share-card/`.
 const TITLE = '島嶼守望';
 const SUBTITLE = '檢視救災任務與站點資訊。';
 

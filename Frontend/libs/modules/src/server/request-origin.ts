@@ -50,16 +50,31 @@ export function originFromHeaders(
   return FALLBACK_ORIGIN;
 }
 
+let toldUnconfigured = false;
+
 /**
  * The site's origin, which the links and the card a page hands out are built on: `SITE_APP_URL` where
  * the deploy names it, as staging and production do, so that no request header can point them at another
  * host; without it, in local development, the one the request came in on.
+ *
+ * A production build without a usable `SITE_APP_URL` says so once in the container's log, and still
+ * serves the page: a deploy file that drops it, or gives it no scheme, would otherwise go back to
+ * trusting the request's host without anyone noticing.
  */
 export function siteOrigin(
   configured: string | undefined,
   requestHeaders: Pick<Headers, 'get'>,
 ): string {
-  return toOrigin(configured) ?? originFromHeaders(requestHeaders);
+  const origin = toOrigin(configured);
+
+  if (!origin && process.env.NODE_ENV === 'production' && !toldUnconfigured) {
+    toldUnconfigured = true;
+    console.warn(
+      "SITE_APP_URL is not set to a URL: link previews and shared links take the request's host, which a client can forge.",
+    );
+  }
+
+  return origin ?? originFromHeaders(requestHeaders);
 }
 
 export async function requestOriginAsync() {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { originFromHeaders, siteOrigin } from './request-origin';
 
@@ -97,5 +97,42 @@ describe('siteOrigin', () => {
     expect(siteOrigin('localhost:3000', spoofed)).toBe(
       'https://attacker.example',
     );
+  });
+});
+
+describe('siteOrigin without SITE_APP_URL in production', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  // A fresh copy each time: the module says it once per process.
+  async function freshSiteOrigin(nodeEnv: string) {
+    vi.stubEnv('NODE_ENV', nodeEnv);
+    vi.resetModules();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { siteOrigin: fresh } = await import('./request-origin');
+
+    return { fresh, warn };
+  }
+
+  const request = new Headers({ host: 'demo:3000' });
+
+  it('says so once in the log, and still answers', async () => {
+    const { fresh, warn } = await freshSiteOrigin('production');
+
+    expect(fresh(undefined, request)).toBe('http://demo:3000');
+    expect(fresh('staging.example', request)).toBe('http://demo:3000');
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it('says nothing with a site configured, or outside production', async () => {
+    const configured = await freshSiteOrigin('production');
+    configured.fresh('https://staging.example', request);
+    expect(configured.warn).not.toHaveBeenCalled();
+
+    const development = await freshSiteOrigin('development');
+    development.fresh(undefined, request);
+    expect(development.warn).not.toHaveBeenCalled();
   });
 });
