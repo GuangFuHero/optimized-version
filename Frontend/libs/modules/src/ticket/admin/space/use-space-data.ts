@@ -76,7 +76,10 @@ function loadedSpace(
 
 /**
  * Every space with its tickets, ready to list. The tickets query doesn't return buildings, and a
- * building carries no status, so each space's tickets are loaded to work its row out.
+ * building carries no status, so each space's tickets are loaded to work its row out. That is one
+ * request a space; coming back to the window doesn't send them all again. A ticket or space write
+ * still refreshes the spaces it can move (`spaceTicketKeysForWrite`, `buildingMapWriteKeys`), and
+ * others' changes show on the board's next load.
  */
 export function useSpaces(bounds?: BoundsInput) {
   const buildings = useBuildingMaps(bounds ? { bounds } : {});
@@ -84,9 +87,11 @@ export function useSpaces(bounds?: BoundsInput) {
   // Combined outside the render, so the result keeps its identity until a query's does change:
   // spreading each query's data into the memo's deps changed their count with the spaces.
   const tickets = useQueries({
-    queries: items.map((building) =>
-      buildingMapTicketsQuery({ buildingMapUuid: building.uuid }),
-    ),
+    queries: items.map((building) => ({
+      ...buildingMapTicketsQuery({ buildingMapUuid: building.uuid }),
+      refetchOnWindowFocus: false,
+      staleTime: SPACE_TICKETS_STALE_MS,
+    })),
     combine: combineSpaceTickets,
   });
 
@@ -108,6 +113,9 @@ export function useSpaces(bounds?: BoundsInput) {
 }
 
 const NO_BUILDINGS: AdminBuildingMapFieldsFragment[] = [];
+
+/** How long a space's tickets stand on the board before a remount loads them again. */
+const SPACE_TICKETS_STALE_MS = 5 * 60_000;
 
 function combineSpaceTickets<T>(
   results: { data: T | undefined; isPending: boolean; error: Error | null }[],
