@@ -748,7 +748,8 @@ export interface paths {
      *
      *     Feature 010 replaced the single platform/team role pair with the full identity list
      *     (ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).
-     *     Both land in the same row. Built by PlatformUserDirectory (Spec/026).
+     *     Both land in the same row. Built by PlatformUserDirectory (Spec/026). `q`, `platform_role`
+     *     and `team_uuid` narrow it and combine (ADR-412, ADR-432).
      */
     get: operations['list_users_api_v1_admin_users_get'];
     put?: never;
@@ -2061,6 +2062,11 @@ export interface components {
       platform_role: string | null;
       /** Identities */
       identities?: components['schemas']['IdentitySummary'][];
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
       /** Last Login At */
       last_login_at?: string | null;
       /** Last Activity At */
@@ -5525,6 +5531,14 @@ export interface operations {
       query?: {
         skip?: number;
         limit?: number;
+        /** @description Part of the nickname; full and half width match */
+        q?: string | null;
+        /** @description First that applies: super_admin, data_auditor, gov (in a gov team), ngo (in a team, none gov), user (no team, no other platform role) */
+        platform_role?:
+          | ('super_admin' | 'data_auditor' | 'gov' | 'ngo' | 'user')
+          | null;
+        /** @description Only those holding a role in this team */
+        team_uuid?: string | null;
       };
       header?: {
         'X-WG-Realm'?: string | null;

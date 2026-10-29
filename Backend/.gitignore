@@ -43,6 +43,11 @@ ENV/
 # Logs
 *.log
 
+# coverage.py data and reports (`pytest --cov`)
+.coverage
+.coverage.*
+htmlcov/
+
 # GEMINI.md
 GEMINI.md
 

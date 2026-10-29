@@ -1766,7 +1766,7 @@
           "管理員 API"
         ],
         "summary": "List Users",
-        "description": "List users with every identity they hold, plus last login/activity and live sessions.\n\nFeature 010 replaced the single platform/team role pair with the full identity list\n(ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).\nBoth land in the same row. Built by PlatformUserDirectory (Spec/026).",
+        "description": "List users with every identity they hold, plus last login/activity and live sessions.\n\nFeature 010 replaced the single platform/team role pair with the full identity list\n(ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).\nBoth land in the same row. Built by PlatformUserDirectory (Spec/026). `q`, `platform_role`\nand `team_uuid` narrow it and combine (ADR-412, ADR-432).",
         "operationId": "list_users_api_v1_admin_users_get",
         "security": [
           {
@@ -1780,6 +1780,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Skip"
             }
@@ -1790,9 +1791,74 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 1,
               "default": 100,
               "title": "Limit"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100,
+                  "pattern": "^[^\\x00]*$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the nickname; full and half width match",
+              "title": "Q"
+            },
+            "description": "Part of the nickname; full and half width match"
+          },
+          {
+            "name": "platform_role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "super_admin",
+                    "data_auditor",
+                    "gov",
+                    "ngo",
+                    "user"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First that applies: super_admin, data_auditor, gov (in a gov team), ngo (in a team, none gov), user (no team, no other platform role)",
+              "title": "Platform Role"
+            },
+            "description": "First that applies: super_admin, data_auditor, gov (in a gov team), ngo (in a team, none gov), user (no team, no other platform role)"
+          },
+          {
+            "name": "team_uuid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only those holding a role in this team",
+              "title": "Team Uuid"
+            },
+            "description": "Only those holding a role in this team"
           },
           {
             "name": "X-WG-Realm",
@@ -7124,6 +7190,11 @@
             "type": "array",
             "title": "Identities"
           },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
           "last_login_at": {
             "anyOf": [
               {
@@ -7164,7 +7235,8 @@
         "required": [
           "uuid",
           "name",
-          "platform_role"
+          "platform_role",
+          "created_at"
         ],
         "title": "AdminUserListItem",
         "description": "One row of the admin user list.\n\n`identities` replaces the old single-valued `team_uuid` / `team_role`: a user can now\nhold a role in several teams at once, so one column cannot describe them (ADR-073)."
