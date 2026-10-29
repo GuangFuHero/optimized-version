@@ -12,6 +12,7 @@ from uuid import UUID
 
 import strawberry
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
@@ -31,7 +32,7 @@ from app.graphql.tickets.types import (
     TicketType,
     ticket_detail_visible,
 )
-from app.models.geo import BuildingMapTicketMap
+from app.models.geo import BaseGeometry, BuildingMapTicketMap
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 from app.repositories.tickets_repository import (
@@ -160,6 +161,8 @@ class RequestQuery:
         """
         if limit > TICKET_LIST_MAX_LIMIT:
             raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
+        if limit < 0 or skip < 0:
+            raise ValueError("limit and skip must not be negative")
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = [
@@ -253,13 +256,24 @@ class RequestQuery:
 
         Only rows whose detail the caller may see are returned, because naming a ticket's
         building reveals its exact location; an anonymous caller gets an empty list.
+
+        At most TICKET_LIST_MAX_LIMIT rows a page, as `tickets`. A deleted building lists none: its
+        tickets stay, untied from it, as their `buildingMapUuid` says.
         """
+        if limit > TICKET_LIST_MAX_LIMIT:
+            raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
+        if limit < 0 or skip < 0:
+            raise ValueError("limit and skip must not be negative")
         scope = await check_permission(info, Perm.TICKET_VIEW)
+        # Aliased: a ticket's own row in base_geometries is already in the FROM clause.
+        building = aliased(BaseGeometry)
         query = (
             select(Tickets)
             .join(BuildingMapTicketMap, BuildingMapTicketMap.ticket_uuid == Tickets.uuid)
+            .join(building, building.uuid == BuildingMapTicketMap.building_map_uuid)
             .where(
                 BuildingMapTicketMap.building_map_uuid == building_map_uuid,
+                building.delete_at.is_(None),
                 Tickets.delete_at.is_(None),
                 *scope_filter(scope, actor=info.context["user"], model=Tickets),
                 *await _detail_filters(info),

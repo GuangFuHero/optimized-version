@@ -1007,6 +1007,24 @@ class TicketType:
             return None
         return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
 
+    @strawberry.field(
+        description=(
+            "The building map this ticket was filed under (createTicket's buildingMapUuid). Null when "
+            "it was not filed under one, when that building map is deleted, and to a caller without "
+            "ticket.view_detail here"
+        )
+    )
+    async def building_map_uuid(self, info: strawberry.types.Info) -> UUID | None:
+        """Return the ticket's building, or null when out of detail scope: naming it names the place.
+
+        The ticket was given the building's point (place_ticket), so knowing the building is
+        knowing the exact point `geometry` withholds. Decided before the lookup, as the address
+        is, so a page of tickets a guest reads costs no query here.
+        """
+        if not await self._detail_visible(info):
+            return None
+        return await info.context["loaders"]["building_map_by_ticket"].load(str(self.uuid))
+
     @strawberry.field
     async def disaster_details(self, info: strawberry.types.Info) -> list["TicketDisasterDetailType"]:
         """Resolve this ticket's disaster-specific field values.
