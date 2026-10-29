@@ -13,6 +13,7 @@ import {
 import { ChevronDown, ChevronRight, MapPin, SearchX } from 'lucide-react';
 import { useState, type ReactNode, type SyntheticEvent } from 'react';
 
+import { Muted } from '../../../admin/shared/muted';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
 import {
   formatTicketStatusLabel,
@@ -109,7 +110,7 @@ export function TicketTable({
         const open = row.tasks.filter((t) =>
           OPEN_TASK_STATUSES.has(t.status),
         ).length;
-        return <Muted>{`${open}/${row.tasks.length} 項`}</Muted>;
+        return <Muted cell>{`${open}/${row.tasks.length} 項`}</Muted>;
       }
       case 'gap':
         return row.volunteerGap > 0 ? (
@@ -120,7 +121,7 @@ export function TicketTable({
             缺 {row.volunteerGap} 人
           </Typography>
         ) : (
-          <Muted>—</Muted>
+          <Muted cell>—</Muted>
         );
       case 'audit': {
         const audit = AUDIT_BADGES[row.auditStatus];
@@ -176,9 +177,9 @@ export function TicketTable({
             sx={{ p: loading || failed ? 4 : '64px 24px', textAlign: 'center' }}
           >
             {loading ? (
-              <Muted>載入中…</Muted>
+              <Muted cell>載入中…</Muted>
             ) : failed ? (
-              <Muted>—</Muted>
+              <Muted cell>—</Muted>
             ) : (
               <Box
                 sx={{
@@ -252,7 +253,7 @@ function PriorityCell({ priority }: { priority: string }) {
       </Badge>
     );
   }
-  return <Muted>{ticketPriorityLabel(priority)}</Muted>;
+  return <Muted cell>{ticketPriorityLabel(priority)}</Muted>;
 }
 
 function AreaCell({ area }: { area: string }) {
@@ -308,7 +309,7 @@ function TaskLines({ tasks }: { tasks: readonly TaskRow[] }) {
             alignItems: 'center',
           }}
         >
-          <Muted>{formatTicketTypeLabel(task.taskType)}</Muted>
+          <Muted cell>{formatTicketTypeLabel(task.taskType)}</Muted>
           <Typography
             noWrap
             title={task.taskName}
@@ -316,21 +317,12 @@ function TaskLines({ tasks }: { tasks: readonly TaskRow[] }) {
           >
             {task.taskName}
           </Typography>
-          <Muted>{formatTicketStatusLabel(task.status)}</Muted>
-          <Muted>{`${task.assignedCount}/${task.quantity ?? '—'} 人`}</Muted>
+          <Muted cell>{formatTicketStatusLabel(task.status)}</Muted>
+          <Muted
+            cell
+          >{`${task.assignedCount}/${task.quantity ?? '—'} 人`}</Muted>
         </Box>
       ))}
     </Box>
-  );
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return (
-    <Typography
-      noWrap
-      sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
-    >
-      {children}
-    </Typography>
   );
 }

@@ -19,6 +19,8 @@ import {
 } from '@rescue-frontend/ui';
 import { PencilLine } from 'lucide-react';
 
+import { DetailBlock, DetailRow } from '../../../admin/shared/detail-rows';
+import { Muted } from '../../../admin/shared/muted';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
 import {
   isTicketAlreadyGone,
@@ -157,7 +159,7 @@ export function TicketDetailSheet({
           </>
         }
       >
-        <Muted>載入失敗，請重試</Muted>
+        <Muted inline>載入失敗，請重試</Muted>
       </SheetLayout>
     );
   } else if (state === 'missing') {
@@ -174,7 +176,7 @@ export function TicketDetailSheet({
           </>
         }
       >
-        <Muted>找不到這張求助單，或你沒有檢視權限</Muted>
+        <Muted inline>找不到這張求助單，或你沒有檢視權限</Muted>
       </SheetLayout>
     );
   } else {
@@ -380,7 +382,7 @@ function DeleteTicketConfirm({
         >
           {title}
         </Typography>
-        <Muted>{formatTicketNeedCount(needs.length)}</Muted>
+        <Muted inline>{formatTicketNeedCount(needs.length)}</Muted>
       </Box>
       <Typography
         sx={{
@@ -410,42 +412,44 @@ function TicketInfo({
 }) {
   return (
     <Box sx={{ '& > :first-of-type': { borderTop: 'none', pt: 0 } }}>
-      <Row label="最後更新">
+      <DetailRow label="最後更新">
         <FreshnessCell updatedAt={view.updatedAt} now={now} />
-      </Row>
-      <Row label="位置">
+      </DetailRow>
+      <DetailRow label="位置">
         {view.location.kind === 'coarse' ? (
-          <Muted>約略位置（無檢視詳細位置權限）</Muted>
+          <Muted inline>約略位置（無檢視詳細位置權限）</Muted>
         ) : (
           <>
             {view.location.address}
             {view.location.floorRoom ? `\n${view.location.floorRoom}` : null}
           </>
         )}
-      </Row>
-      <Row label="聯絡人">
+      </DetailRow>
+      <DetailRow label="聯絡人">
         {view.contact ? (
           [view.contact.name, view.contact.phone, view.contact.email]
             .filter(Boolean)
             .join('\n')
         ) : (
-          <Muted>—</Muted>
+          <Muted inline>—</Muted>
         )}
-      </Row>
-      <Row label="災害類型">
+      </DetailRow>
+      <DetailRow label="災害類型">
         {view.disasterLabels.length ? (
           view.disasterLabels.join('、')
         ) : (
-          <Muted>—</Muted>
+          <Muted inline>—</Muted>
         )}
-      </Row>
+      </DetailRow>
       {view.disasterDetails.map((detail, index) => (
-        <Row key={`${detail.label}-${index}`} label={detail.label}>
+        <DetailRow key={`${detail.label}-${index}`} label={detail.label}>
           {detail.value || '—'}
-        </Row>
+        </DetailRow>
       ))}
-      <Row label="說明">{view.description ?? <Muted>—</Muted>}</Row>
-      <Block label="現場照片">
+      <DetailRow label="說明">
+        {view.description ?? <Muted inline>—</Muted>}
+      </DetailRow>
+      <DetailBlock label="現場照片">
         {ticket.photos.length ? (
           <Box
             sx={{
@@ -464,91 +468,19 @@ function TicketInfo({
             ))}
           </Box>
         ) : (
-          <Muted>（尚無照片）</Muted>
+          <Muted inline>（尚無照片）</Muted>
         )}
-      </Block>
+      </DetailBlock>
       {ticket.viewerCanAudit && ticket.auditContentHash ? (
-        <Block label="審核">
+        <DetailBlock label="審核">
           <TicketAuditCard ticket={ticket} onBusyChange={onAuditBusyChange} />
-        </Block>
+        </DetailBlock>
       ) : null}
-      <Block label="需求">
+      <DetailBlock label="需求">
         <TicketTaskList ticket={ticket} onAddBusyChange={onNeedBusyChange} />
-      </Block>
+      </DetailBlock>
     </Box>
   );
 }
-
-const ROW_BORDER = `1px solid ${color.border.default}`;
 
 /** A caption on the left, its value right-aligned, as the station drawer's rows. */
-function Row({ label, children }: { label: ReactNode; children: ReactNode }) {
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        gap: '16px',
-        minHeight: 48,
-        boxSizing: 'border-box',
-        py: '12px',
-        borderTop: ROW_BORDER,
-      }}
-    >
-      <Caption>{label}</Caption>
-      <Box
-        component="span"
-        sx={{
-          ...typography.body[400],
-          color: color.fg.neutral.default,
-          textAlign: 'right',
-          minWidth: 0,
-          overflowWrap: 'anywhere',
-          whiteSpace: 'pre-line',
-        }}
-      >
-        {children}
-      </Box>
-    </Box>
-  );
-}
-
-/** A row whose value is too wide to sit beside its caption: the caption over it. */
-function Block({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <Box sx={{ py: '12px', borderTop: ROW_BORDER }}>
-      <Box sx={{ mb: '8px' }}>
-        <Caption>{label}</Caption>
-      </Box>
-      {children}
-    </Box>
-  );
-}
-
-function Caption({ children }: { children: ReactNode }) {
-  return (
-    <Typography
-      component="span"
-      sx={{
-        ...typography.body[300],
-        fontSize: 15,
-        color: color.fg.neutral.muted,
-        flexShrink: 0,
-      }}
-    >
-      {children}
-    </Typography>
-  );
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return (
-    <Typography
-      component="span"
-      sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
-    >
-      {children}
-    </Typography>
-  );
-}

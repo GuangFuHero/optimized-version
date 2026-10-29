@@ -17,6 +17,7 @@ import {
   timelineTimeFormatter,
 } from '@rescue-frontend/ui';
 
+import { Muted } from '../../../admin/shared/muted';
 import type { ClaimError } from '../../needs/claim-error';
 import { auditErrorMessage, isStaleAudit } from './model/task-actions';
 import type { DetailTicket } from './model/ticket-detail-view';
@@ -108,7 +109,7 @@ export function TicketAuditCard({
           {badge?.label ?? ticket.auditStatus}
         </Badge>
         {ticket.auditedAt ? (
-          <Muted>
+          <Muted inline>
             {`審核於 ${timelineTimeFormatter.format(new Date(ticket.auditedAt))}`}
           </Muted>
         ) : null}
@@ -193,16 +194,5 @@ export function TicketAuditCard({
         )}
       </Box>
     </Box>
-  );
-}
-
-function Muted({ children }: { children: string }) {
-  return (
-    <Typography
-      component="span"
-      sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
-    >
-      {children}
-    </Typography>
   );
 }

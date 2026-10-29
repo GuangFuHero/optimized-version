@@ -9,6 +9,7 @@ import {
 import { Badge, designTokens, Dialog } from '@rescue-frontend/ui';
 import { useMemo, useState, type ReactNode } from 'react';
 
+import { Muted } from '../../../admin/shared/muted';
 import {
   deleteNeedErrorMessage,
   isNeedAlreadyGone,
@@ -71,7 +72,7 @@ export function TicketTaskList({
   return (
     <>
       {ticket.tasks.length === 0 ? (
-        <Muted>（尚無需求）</Muted>
+        <Muted inline>（尚無需求）</Muted>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {ticket.tasks.map((task, index) => {
@@ -287,7 +288,9 @@ function TaskCard({
           mt: '6px',
         }}
       >
-        <Muted>{`${task.assignedCount}/${task.quantity ?? '—'} 人`}</Muted>
+        <Muted
+          inline
+        >{`${task.assignedCount}/${task.quantity ?? '—'} 人`}</Muted>
         {task.recruitingStoppedAt ? (
           <Badge tone="warning" size="sm">
             已停止招募
@@ -320,7 +323,7 @@ function TaskCard({
               }}
             >
               <span>{assignment.actorName ?? '志工'}</span>
-              <Muted>
+              <Muted inline>
                 {ASSIGNMENT_LABELS[assignment.status ?? ''] ??
                   assignment.status ??
                   '—'}
@@ -330,16 +333,5 @@ function TaskCard({
         </Box>
       ) : null}
     </Box>
-  );
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return (
-    <Typography
-      component="span"
-      sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
-    >
-      {children}
-    </Typography>
   );
 }

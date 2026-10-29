@@ -27,6 +27,7 @@ import {
 } from '@rescue-frontend/ui';
 import { Check, Plus, Trash2 } from 'lucide-react';
 
+import { Muted } from '../../../admin/shared/muted';
 import { LocationPicker } from '../../../map/components/location-picker';
 import type { ClaimError } from '../../needs/claim-error';
 import { PhotoLinkEditor } from '../../photos';
@@ -635,14 +636,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       </Typography>
       {children}
     </Box>
-  );
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return (
-    <Typography sx={{ ...typography.body[300], color: color.fg.neutral.muted }}>
-      {children}
-    </Typography>
   );
 }
 
