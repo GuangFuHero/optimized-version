@@ -53,7 +53,8 @@ type Result = components['schemas']['BulkImportResponse'];
 const PASTE_PREVIEW_DEBOUNCE_MS = 600;
 
 /**
- * 匯入任務單, as the design draws it: 1 · the need type the file holds, 2 · the file, chosen or
+ * 匯入任務單 (ADMIN-025 MVP 6; the ticket design has none, so it follows the station import,
+ * `station-v2/station-import.jsx`): 1 · the need type the file holds, 2 · the file, chosen or
  * pasted as CSV text, with that type's template (its 匯出), then the preview and 確認匯入.
  */
 export function TicketImportDialog({ onClose }: { onClose: () => void }) {

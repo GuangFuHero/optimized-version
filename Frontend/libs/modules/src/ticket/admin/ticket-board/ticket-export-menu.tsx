@@ -34,7 +34,11 @@ const { color, focusRing, radius, typography } = designTokens;
 /** The prototype's three kinds, in its order; 醫療 (not in the prototype) joins only once it has rows. */
 const LISTED_TYPES: NeedType[] = ['rescue', 'hr', 'supply'];
 
-/** 匯出: pick a need type and a format. The export covers the viewer's scope, not the list filters. */
+/**
+ * 匯出: pick a need type and a format. The export covers the viewer's scope, not the list filters.
+ * The ticket design has no export; this is the station export's popover
+ * (`station-v2/station-export-dialog.jsx`), with need types in place of station types.
+ */
 export function TicketExportMenu() {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [taskType, setTaskType] = useState<NeedType>(LISTED_TYPES[0]);
@@ -67,7 +71,7 @@ export function TicketExportMenu() {
 
   return (
     <>
-      {/* The prototype's brand outline, as tall as the toolbar's search box. */}
+      {/* The station toolbar's brand outline, as tall as the toolbar's search box. */}
       <Button
         variant="outline"
         title="匯出任務單（不套用列表上的篩選）"
