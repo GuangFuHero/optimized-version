@@ -72,6 +72,22 @@ describe('validateTicketForm', () => {
     expect(validateTicketForm({ ...blank, title: '標題' }, 'edit')).toEqual({});
   });
 
+  it('keeps an address the ticket had on edit, but asks none of a ticket without one', () => {
+    const loaded = { ...filled, fullAddress: '中正路12號' };
+    const cleared = { ...loaded, fullAddress: '  ' };
+    expect(
+      validateTicketForm(cleared, 'edit', undefined, loaded).fullAddress,
+    ).toBe('請填寫地址');
+    expect(
+      validateTicketForm(loaded, 'edit', undefined, loaded).fullAddress,
+    ).toBeUndefined();
+    // A coarse ticket comes with its address withheld, so it loads blank.
+    const blank = { ...filled, fullAddress: '' };
+    expect(
+      validateTicketForm(blank, 'edit', undefined, blank).fullAddress,
+    ).toBeUndefined();
+  });
+
   it('caps the title at 200 characters', () => {
     expect(
       validateTicketForm({ ...filled, title: 'a'.repeat(201) }, 'create').title,

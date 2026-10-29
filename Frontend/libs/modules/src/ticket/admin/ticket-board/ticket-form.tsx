@@ -132,6 +132,8 @@ export function TicketForm(props: TicketFormProps) {
       ? ticketFormFromTicket(props.ticket)
       : emptyTicketForm(props.initialPoint),
   );
+  // The form as the ticket filled it: an address it had stays required on edit.
+  const [loaded] = useState(values);
   const [errors, setErrors] = useState<TicketFormErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [suspects, setSuspects] = useState<DuplicateSuspect[] | null>(null);
@@ -285,7 +287,7 @@ export function TicketForm(props: TicketFormProps) {
   const missing = ticketFormErrorSummary(errors);
 
   const submit = () => {
-    const next = validateTicketForm(values, mode, space);
+    const next = validateTicketForm(values, mode, space, loaded);
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     if (ticket) void run(() => save(ticket));
@@ -353,7 +355,9 @@ export function TicketForm(props: TicketFormProps) {
             >
               <TextInput
                 label="地址"
-                required={mode === 'create'}
+                required={
+                  mode === 'create' || Boolean(loaded.fullAddress.trim())
+                }
                 placeholder="例：花蓮縣光復鄉中正路一段31號"
                 hint={lookup.isFetching ? '正在根據座標解析地址…' : undefined}
                 error={errors.fullAddress}

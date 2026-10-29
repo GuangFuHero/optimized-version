@@ -141,11 +141,16 @@ export function updateTicketForm(
   return moved ? afterPinMove(next) : next;
 }
 
-/** `space`: a household filed in a 開啟空間 space, which needs no point of its own. */
+/**
+ * `space`: a household filed in a 開啟空間 space, which needs no point of its own. `loaded`: on
+ * edit, the form as the ticket filled it — an address it had can't be saved blank, which would
+ * leave only the carried-over members. A coarse ticket loads without one, so it's never asked.
+ */
 export function validateTicketForm(
   values: TicketFormValues,
   mode: 'create' | 'edit',
   space?: SpaceHouseholdTarget,
+  loaded?: Pick<TicketFormValues, 'fullAddress'>,
 ): TicketFormErrors {
   const errors: TicketFormErrors = {};
   const title = values.title.trim();
@@ -155,7 +160,11 @@ export function validateTicketForm(
     errors.title = `標題最多 ${TICKET_TITLE_MAX} 字`;
   if (values.photoUrls.length > PHOTO_LINK_MAX)
     errors.photoUrls = `照片最多 ${PHOTO_LINK_MAX} 張`;
-  if (mode === 'edit') return errors;
+  if (mode === 'edit') {
+    if (loaded?.fullAddress.trim() && !values.fullAddress.trim())
+      errors.fullAddress = '請填寫地址';
+    return errors;
+  }
 
   // 地址必填 (tk-form.jsx); a household in a space takes the building's.
   if (!values.fullAddress.trim() && !space) errors.fullAddress = '請填寫地址';
