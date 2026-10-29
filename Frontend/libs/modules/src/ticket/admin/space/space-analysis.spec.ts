@@ -83,7 +83,6 @@ function row(overrides: Partial<SpaceListRow> = {}): SpaceListRow {
     summary: '4 層 · 0 張任務單',
     status: 'empty',
     priority: null,
-    openNeeds: 0,
     volunteerGap: 0,
     updatedAt: null,
     lngLat: [121.4, 23.6],
@@ -274,7 +273,6 @@ describe('toSpaceListRow', () => {
       status: 'empty',
       priority: null,
       updatedAt: null,
-      openNeeds: 0,
       lngLat: [121.4, 23.6],
     });
   });
@@ -322,7 +320,6 @@ describe('toSpaceListRow', () => {
     );
     const r = toSpaceListRow(building(), a);
 
-    expect(r.openNeeds).toBe(2);
     expect(r.updatedAt).toBe('2026-10-29T05:00:00Z');
   });
 
@@ -348,6 +345,21 @@ describe('toSpaceListRow', () => {
     );
 
     expect(toSpaceListRow(building(), a).volunteerGap).toBe(4);
+  });
+
+  it('takes the latest update by time, not by how it is written', () => {
+    const a = analyzeSpace(
+      ['1F', 'RF'],
+      [
+        // 10:00 in Taiwan is 02:00 UTC: earlier, though it sorts later as text.
+        ticket({ floor: '1F', updatedAt: '2026-10-29T10:00:00+08:00' }),
+        ticket({ floor: '1F', updatedAt: '2026-10-29T03:00:00Z' }),
+      ],
+    );
+
+    expect(toSpaceListRow(building(), a).updatedAt).toBe(
+      '2026-10-29T03:00:00Z',
+    );
   });
 
   it('has no point when the building has none', () => {

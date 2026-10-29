@@ -5,6 +5,7 @@ import {
   buildingMapsQuery,
   buildingMapTicketsQuery,
   spaceTicketKeysForWrite,
+  ticketDetailUuid,
   ticketQuery,
   ticketsExtentQuery,
   ticketsQuery,
@@ -151,5 +152,17 @@ describe('what a space write refreshes', () => {
     expect(hits(keys, ticketsQuery({ skip: 0, limit: 50 }).queryKey)).toBe(
       true,
     );
+  });
+});
+
+describe('ticketDetailUuid', () => {
+  it("reads back the ticket a detail query is for, and nothing else's", () => {
+    expect(ticketDetailUuid(ticketQuery({ uuid: 't-1' }).queryKey)).toBe('t-1');
+    expect(ticketDetailUuid(ticketsQuery({ skip: 0 }).queryKey)).toBeNull();
+    expect(
+      ticketDetailUuid(
+        buildingMapTicketsQuery({ buildingMapUuid: 'b' }).queryKey,
+      ),
+    ).toBeNull();
   });
 });

@@ -10,18 +10,12 @@ import {
   type TicketFilters,
 } from '../ticket-board/model/ticket-filters';
 import {
+  PRIORITY_RANK,
   spaceRowVisible,
+  timeOf,
   type SpaceListRow,
-  type SpacePriority,
   type SpaceTicket,
 } from './space-analysis';
-
-const PRIORITY_RANK: Record<SpacePriority, number> = {
-  critical: 4,
-  high: 3,
-  medium: 2,
-  low: 1,
-};
 
 /** One ticket against the board's filters, as the server applies them; the search is not one. */
 export function spaceTicketPasses(
@@ -48,7 +42,9 @@ export function sortSpaceRows(rows: readonly SpaceListRow[]): SpaceListRow[] {
     (a, b) =>
       rank(b) - rank(a) ||
       b.volunteerGap - a.volunteerGap ||
-      (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''),
+      // Two spaces without tickets have no time: -Infinity minus itself is NaN, so 0 then.
+      timeOf(b.updatedAt) - timeOf(a.updatedAt) ||
+      0,
   );
 }
 

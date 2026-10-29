@@ -16,6 +16,22 @@ export const ticketKeys = {
 };
 
 /**
+ * The ticket a detail query is for, read back from its key (`[...ticketKeys.details(), { uuid }]`,
+ * as `ticketQuery` builds it); null for any other key.
+ */
+export function ticketDetailUuid(queryKey: readonly unknown[]): string | null {
+  const prefix = ticketKeys.details();
+  if (!prefix.every((part, index) => queryKey[index] === part)) return null;
+  const variables = queryKey[prefix.length];
+  return variables &&
+    typeof variables === 'object' &&
+    'uuid' in variables &&
+    typeof variables.uuid === 'string'
+    ? variables.uuid
+    : null;
+}
+
+/**
  * The keys a ticket write makes stale: the lists and that ticket's own detail, needs and history.
  * Without its uuid (a write that names only a need, photo or assignment), every
  * ticket's detail, needs and history — of which only the open sheet's are on screen.

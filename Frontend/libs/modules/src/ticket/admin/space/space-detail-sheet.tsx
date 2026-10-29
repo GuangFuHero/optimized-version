@@ -17,6 +17,7 @@ import {
 import { Layers, PencilLine, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { Muted } from '../../../admin/shared/muted';
 import { formatTicketStatusLabel, getTicketStatusTone } from '../../status';
 import { matchFloor } from './floors';
 import {
@@ -584,13 +585,5 @@ function TicketCard({
         {formatTicketStatusLabel(ticket.status)}
       </Badge>
     </ButtonBase>
-  );
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return (
-    <Typography sx={{ ...typography.body[300], color: color.fg.neutral.muted }}>
-      {children}
-    </Typography>
   );
 }

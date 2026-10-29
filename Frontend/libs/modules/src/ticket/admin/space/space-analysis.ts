@@ -9,7 +9,11 @@ import type {
   AdminSpaceTicketFieldsFragment,
 } from '@rescue-frontend/data-access/admin';
 
-import { OPEN_TASK_STATUSES } from '../ticket-board/model/ticket-row';
+import {
+  needGap,
+  OPEN_TASK_STATUSES,
+  type TicketPriority,
+} from '../ticket-board/model/ticket-row';
 import { matchFloor, orderFloors } from './floors';
 
 export type SpaceTicket = AdminSpaceTicketFieldsFragment;
@@ -24,9 +28,17 @@ export const FLOOR_STATE_LABEL: Record<FloorState, string> = {
   empty: '沒有任務單',
 };
 
-export type SpacePriority = 'critical' | 'high' | 'medium' | 'low';
+/** When an ISO time is, to compare by: never by its text, whose offset may differ. */
+export function timeOf(iso: string | null | undefined): number {
+  const time = iso ? Date.parse(iso) : NaN;
+  return Number.isNaN(time) ? -Infinity : time;
+}
 
-const PRIORITY_RANK: Record<SpacePriority, number> = {
+/** A space's priority is one of its tickets'. */
+export type SpacePriority = TicketPriority;
+
+/** Higher is more urgent; spaces sort by it as tickets do. */
+export const PRIORITY_RANK: Record<SpacePriority, number> = {
   critical: 4,
   high: 3,
   medium: 2,
@@ -150,8 +162,6 @@ export interface SpaceListRow {
   status: FloorState;
   /** The most urgent of its tickets not yet completed; of all of them once all are; null with none. */
   priority: SpacePriority | null;
-  /** Needs still recruiting on tickets not yet completed. */
-  openNeeds: number;
   /** People still missing on those tickets' open needs, as a ticket row counts its 志工缺口. */
   volunteerGap: number;
   /** Its most recently updated ticket's time; null with none. */
@@ -188,7 +198,7 @@ export function toSpaceListRow(
   const live = members.filter((ticket) => !isCompleted(ticket));
   const updatedAt = members.reduce<string | null>(
     (latest, ticket) =>
-      ticket.updatedAt && (!latest || ticket.updatedAt > latest)
+      ticket.updatedAt && timeOf(ticket.updatedAt) > timeOf(latest)
         ? ticket.updatedAt
         : latest,
     null,
@@ -202,21 +212,9 @@ export function toSpaceListRow(
     summary: spaceSummary(analysis),
     status: analysis.overall,
     priority: highestPriority(live.length ? live : members),
-    openNeeds: live.reduce(
-      (sum, ticket) =>
-        sum + ticket.tasks.filter((task) => task.status === 'pending').length,
-      0,
-    ),
     volunteerGap: live.reduce(
       (sum, ticket) =>
-        sum +
-        ticket.tasks.reduce(
-          (gap, task) =>
-            OPEN_TASK_STATUSES.has(task.status) && task.quantity != null
-              ? gap + Math.max(0, task.quantity - task.assignedCount)
-              : gap,
-          0,
-        ),
+        sum + ticket.tasks.reduce((gap, task) => gap + needGap(task), 0),
       0,
     ),
     updatedAt,

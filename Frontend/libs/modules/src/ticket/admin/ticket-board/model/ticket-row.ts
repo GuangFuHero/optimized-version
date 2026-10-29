@@ -111,12 +111,21 @@ export interface TicketRow {
   raw: TicketListItem;
 }
 
+/** People a need still misses: only an open need with a quantity has any. */
+export function needGap(task: {
+  status: string;
+  quantity?: number | null;
+  assignedCount: number;
+}): number {
+  const quantity = task.quantity ?? null;
+  return OPEN_TASK_STATUSES.has(task.status) && quantity !== null
+    ? Math.max(0, quantity - task.assignedCount)
+    : 0;
+}
+
 function toTaskRow(task: TaskRowFields): TaskRow {
   const quantity = task.quantity ?? null;
-  const gap =
-    OPEN_TASK_STATUSES.has(task.status) && quantity !== null
-      ? Math.max(0, quantity - task.assignedCount)
-      : 0;
+  const gap = needGap(task);
   return {
     uuid: task.uuid,
     taskType: task.taskType,

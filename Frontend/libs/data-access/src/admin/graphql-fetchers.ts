@@ -11,7 +11,11 @@ import {
 import { adminGraphqlClient, graphqlResponseData } from './client';
 import { collectAllPages } from './collect-pages';
 import * as documents from './graphql/__generated__/graphql';
-import { ticketKeys, ticketWriteKeys } from './ticket-query-keys';
+import {
+  ticketDetailUuid,
+  ticketKeys,
+  ticketWriteKeys,
+} from './ticket-query-keys';
 
 /** Every space's tickets: `buildingMapTicketsQuery`, one per space (BE-036). */
 const SPACE_TICKETS_KEY = ['admin', 'buildingMaps', 'tickets'] as const;
@@ -72,7 +76,7 @@ export function spaceTicketKeysForWrite(
       queryKey: ticketKeys.details(),
       type: 'active',
     })) {
-      const uuid = (query.queryKey[3] as { uuid?: string } | undefined)?.uuid;
+      const uuid = ticketDetailUuid(query.queryKey);
       if (uuid) written.add(uuid);
     }
   }
@@ -80,12 +84,14 @@ export function spaceTicketKeysForWrite(
   const keys: unknown[][] = buildingMapUuid
     ? [[...SPACE_TICKETS_KEY, { buildingMapUuid }]]
     : [];
-  for (const query of cache.findAll({ queryKey: SPACE_TICKETS_KEY })) {
-    const data = query.state.data as
-      | { buildingMapTickets?: { uuid: string }[] }
-      | undefined;
-    if (data?.buildingMapTickets?.some((ticket) => written.has(ticket.uuid)))
-      keys.push([...query.queryKey]);
+  for (const [
+    queryKey,
+    data,
+  ] of queryClient.getQueriesData<documents.AdminBuildingMapTicketsQuery>({
+    queryKey: SPACE_TICKETS_KEY,
+  })) {
+    if (data?.buildingMapTickets.some((ticket) => written.has(ticket.uuid)))
+      keys.push([...queryKey]);
   }
   return keys;
 }

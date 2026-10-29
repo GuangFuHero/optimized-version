@@ -18,7 +18,6 @@ const row = (patch: Partial<SpaceListRow> = {}): SpaceListRow => ({
   summary: '8 層 · 2 張任務單 · 1 層還需要幫忙',
   status: 'need',
   priority: 'critical',
-  openNeeds: 1,
   volunteerGap: 2,
   updatedAt: '2026-10-29T08:00:00Z',
   lngLat: [121.425, 23.668],

@@ -41,7 +41,6 @@ function row(overrides: Partial<SpaceListRow> = {}): SpaceListRow {
     summary: '',
     status: 'need',
     priority: 'medium',
-    openNeeds: 0,
     volunteerGap: 0,
     updatedAt: null,
     lngLat: null,
@@ -90,7 +89,8 @@ describe('sortSpaceRows', () => {
       row({
         id: 'crit-old',
         priority: 'critical',
-        updatedAt: '2026-10-29T01:00:00Z',
+        // 00:30 UTC: older than crit-new's 05:00, though it sorts later as text.
+        updatedAt: '2026-10-29T08:30:00+08:00',
       }),
       row({
         id: 'crit-new',
