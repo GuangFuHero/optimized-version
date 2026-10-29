@@ -26,6 +26,7 @@ from app.repositories.geo_repository import (
     station_property_repository,
     station_repository,
 )
+from app.repositories.team_repository import team_repository
 from app.services.address import apply_address, point_of, unverify_if_moved
 from app.services.authz import require_gov_team, require_scope
 from app.services.geo_validation import (
@@ -307,6 +308,28 @@ async def delete_station(db: AsyncSession, *, actor: User, uuid: str) -> None:
     await station_repository.soft_delete(db, db_obj=station)
 
 
+async def _require_station_assigner(db: AsyncSession, actor: User) -> None:
+    """The gate on handing out stations: station.assign, from a gov team or a platform identity.
+
+    Checked as a capability alone, like work_zone.assign: assigning is a gov-wide action, and
+    checked against the station a `team` grant would 404 on exactly the unassigned stations
+    gov is there to hand out.
+    """
+    await require_scope(actor, Perm.STATION_ASSIGN, db)
+    await require_gov_team(db, actor, detail="Only gov teams may assign stations.")
+
+
+async def list_assignable_teams(db: AsyncSession, *, actor: User) -> list[Team]:
+    """Every team a station can be handed to — the active ones, whoever's they are (ADR-285).
+
+    Behind the same gate as assign_station, so the picker is offered exactly where the
+    assignment would succeed. It is not team.view: a gov member hands stations to teams it
+    cannot otherwise browse, and sees only what `AssignedTeamType` shows of them.
+    """
+    await _require_station_assigner(db, actor)
+    return await team_repository.list_active(db, extra_filters=(Team.status == "active",))
+
+
 async def assign_station(
     db: AsyncSession, *, actor: User, station_uuid: str, team_uuid: str | None
 ) -> Station:
@@ -316,18 +339,13 @@ async def assign_station(
     tells nobody. Otherwise the new team's admins hear they got it and the old team's admins
     that they lost it.
 
-    Checked as a capability alone, like work_zone.assign: assigning is a gov-wide action, and
-    checked against the station a `team` grant would 404 on exactly the unassigned stations
-    gov is there to hand out.
-
     The station row stays locked FOR UPDATE until the write commits, so a second assignment
     racing this one reads the team this one left it with. Without the lock both would read
     the same old team: it would hear "unassigned" twice, and the team in between would never
     hear it lost the station. Authorization runs first, so a caller who is refused never
     takes the lock.
     """
-    await require_scope(actor, Perm.STATION_ASSIGN, db)
-    await require_gov_team(db, actor, detail="Only gov teams may assign stations.")
+    await _require_station_assigner(db, actor)
     station = await db.scalar(
         select(Station).where(Station.uuid == station_uuid, Station.delete_at.is_(None)).with_for_update()
     )
