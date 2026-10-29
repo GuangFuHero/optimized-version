@@ -780,6 +780,8 @@ ADR-112 的整個循環是「照著它說的改、重新上傳、完成」，而
 UTC 10-26 19:29），批次匯入也算在內。Dan 10-27 同意取代 ADR-299 的這一點、更新的列不比、量過時間後不降列數上限。
 2026-10-28 Chi 在 #148 的 review 提出：「仍要建立」的列也寫 `hint_shown`、記下入口、檔內很像的兩列其實進不了審核
 佇列；Dan 10-29 照改（第 2、4 點和 ➖）。
+2026-10-29 接管理平台匯入畫面的人要逐筆並排「這一列」和「很像的那一筆」，Dan 10-29 同意 `suspects` 多帶這一列
+自己的名稱（第 3 點），地址先不帶。
 同一份檔案裡很像的列怎麼辦，Carol 10-27 在 Discord #uiux 定「先只跟資料庫比」；畫面上的其他題照建議。
 HC 10-27 在 #148 的 review 提三點，Dan 10-27 照改：確認只認那一列這次比到的那一筆（ADR-400，`Spec/022`）；
 新單的領頭列被擋時，預覽就把同張單的後續列算成跟著擋；引擎第一次失敗就不再問。
@@ -813,7 +815,9 @@ Notion 票：https://app.notion.com/p/406bc24b8353813d9f1afba3465ab9e2
    原本就有的那一筆。審核佇列只列配對卡（`dedup_review.list_pairs`），所以這兩列也不會進審核佇列。
 3. **預覽**：每份要比的送去 `dedup.try_check_submission`（savepoint、一定 rollback、逾時、fail-open）。預覽不寫
    `hint_shown`，維持「預覽什麼都不寫」（ADR-112、114）。回應多三個欄位：
-   - `suspects`：每個疑似一筆、照列號排：`line`、`related_kind`、`related_uuid`、`related_ticket_uuid`，加上對方的
+   - `suspects`：每個疑似一筆、照列號排：`line`；這一列自己的 `row_title`（站點名稱或單標題；加到既有單的任務是
+     那張單的標題）和 `row_task_name`，讓畫面不用再讀一次檔案（XLSX 在瀏覽器讀不了）就能把兩筆並排；`related_kind`、
+     `related_uuid`、`related_ticket_uuid`，加上對方的
      `title`（站點名稱，或任務所屬單的標題）、`task_name`、`type`、`status`、`distance_m`、`created_at`。不給相似度
      （數字的意思會隨引擎版本變），不給聯絡資料。單筆路徑只回 uuid、畫面自己查；批次一次幾百列，所以摘要由後端
      一次查好（`DuplicatePairRepository.entity_summaries`，審核佇列用的同一支）。每個登入的人都有 `station.view`、

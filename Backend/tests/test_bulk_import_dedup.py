@@ -153,6 +153,21 @@ async def test_a_preview_names_the_station_a_new_row_looks_like(db, engine):
 
 
 @pytest.mark.asyncio
+async def test_a_suspected_station_row_comes_back_with_its_own_name(db, engine):
+    """So the importer can set the row beside what it looks like without reading the file again."""
+    actor = await _station_importer(db)
+    school = await _existing_station(db, actor, "光復國小")
+    engine.suspects = _suspect_stations_named("光復國民小學", related=school)
+    raw, filename = _stations([_station_row("大進國小"), _station_row("光復國民小學")])
+
+    preview = await preview_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+
+    assert [(s.line, s.row_title, s.row_task_name, s.title) for s in preview.suspects] == [
+        (3, "光復國民小學", None, "光復國小")
+    ]
+
+
+@pytest.mark.asyncio
 async def test_a_preview_asks_only_about_rows_it_would_create_and_records_nothing(db, engine):
     """An update is the same station (ADR-106); the hint is recorded at commit, not here."""
     actor = await _station_importer(db)
@@ -502,6 +517,29 @@ async def test_a_ticket_preview_asks_about_each_new_task_with_its_ticket(db, eng
         for s in preview.suspects
     ] == [(3, "ticket_task", dry_tasks["送水"], dry, "中山路缺水", "送水", "pending")]
     assert (preview.to_create, preview.to_update, preview.suspected) == (1, 2, 1)
+
+
+@pytest.mark.asyncio
+async def test_a_suspected_task_row_comes_back_with_its_own_ticket_and_task(db, engine):
+    """A new ticket's line under the title the file gives it; a task added to a ticket under that ticket's."""
+    actor = await _ticket_importer(db)
+    await _existing_ticket(db, actor, "民生街淹水", "0911111111", "抽水")
+    dry, dry_tasks = await _existing_ticket(db, actor, "中山路缺水", "0922222222", "送水", "清淤")
+    engine.suspects = _suspect_tasks_named({name: (dry_tasks[name], dry) for name in ("送水", "清淤")})
+    raw, filename = _tickets(
+        [
+            _ticket_row("中正路受困", "救人", phone="0933333333"),
+            _ticket_row("中正路受困", "送水", phone="0933333333"),
+            _ticket_row("民生街淹水", "清淤", phone="0911111111"),
+        ]
+    )
+
+    preview = await preview_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    assert [(s.line, s.row_title, s.row_task_name, s.task_name) for s in preview.suspects] == [
+        (3, "中正路受困", "送水", "送水"),
+        (4, "民生街淹水", "清淤", "清淤"),
+    ]
 
 
 async def _task_names(db, title: str) -> list[str]:

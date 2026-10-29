@@ -27,6 +27,7 @@ from app.dedup_engine.contract import (
     NewTicket,
     Submission,
     Suspect,
+    task_ref,
 )
 from app.models.auth import User
 from app.repositories.dedup_repository import duplicate_pair_repository
@@ -67,12 +68,16 @@ class Comparison:
 class SuspectedRow:
     """A row that looks like something already there, with what the importer is shown of it.
 
-    For a task, `title` is its ticket's; for a station, its name. No similarity: what the number
-    means changes with the engine's version. No contact details. `followers` are the lines held
-    with it, when it is the line that creates a new ticket.
+    `row_title` and `row_task_name` are the row's own, so it can be set beside the one it looks
+    like without reading the file again: a station's name, or a task's name under its ticket's
+    title. For a task, `title` is its ticket's; for a station, its name. No similarity: what the
+    number means changes with the engine's version. No contact details. `followers` are the lines
+    held with it, when it is the line that creates a new ticket.
     """
 
     line: int
+    row_title: str | None
+    row_task_name: str | None
     related_kind: str
     related_uuid: str
     related_ticket_uuid: str | None
@@ -156,7 +161,7 @@ async def describe(
     summaries: dict[str, dict] = {}
     for kind, uuids in related.items():
         summaries |= await duplicate_pair_repository.entity_summaries(db, kind, uuids)
-    where = await _locations(db, drafts or [])
+    own = await _lines(db, drafts or [])
     followers = {draft.first_line: draft.followers for draft in drafts or [] if draft.first_line is not None}
 
     rows = []
@@ -164,10 +169,13 @@ async def describe(
         suspect = comparison.suspects[line]
         summary = summaries.get(_canonical(suspect.related_uuid), {})
         is_task = suspect.related_kind == "ticket_task"
-        at = where.get(line)
+        row = own.get(line, _Line())
+        at = row.at
         rows.append(
             SuspectedRow(
                 line=line,
+                row_title=row.title,
+                row_task_name=row.task_name,
                 related_kind=suspect.related_kind,
                 related_uuid=suspect.related_uuid,
                 related_ticket_uuid=suspect.related_ticket_uuid,
@@ -187,25 +195,39 @@ async def describe(
     return tuple(rows)
 
 
-async def _locations(db: AsyncSession, drafts: list[RowDraft]) -> dict[int, GeoPoint]:
-    """Where each line's submission is. A task added to a ticket is at that ticket."""
-    where: dict[int, GeoPoint] = {}
-    added: dict[int, str] = {}
+@dataclass(frozen=True)
+class _Line:
+    """What one line of the file submits: where it is, and the names the file gives it."""
+
+    at: GeoPoint | None = None
+    title: str | None = None
+    task_name: str | None = None
+
+
+async def _lines(db: AsyncSession, drafts: list[RowDraft]) -> dict[int, _Line]:
+    """Each line's submission. A task added to a ticket is at that ticket, under its title."""
+    lines: dict[int, _Line] = {}
+    added: dict[int, tuple[str, str]] = {}
     for draft in drafts:
         submission = draft.submission
-        for line in draft.lines.values():
+        if isinstance(submission, NewTicket):
+            task_names = {task_ref(i): task.task_name for i, task in enumerate(submission.tasks)}
+        for draft_ref, line in draft.lines.items():
             if isinstance(submission, NewStation):
-                where[line] = submission.station.location
+                lines[line] = _Line(submission.station.location, submission.station.name)
             elif isinstance(submission, NewTicket):
-                where[line] = submission.ticket.location
+                ticket = submission.ticket
+                lines[line] = _Line(ticket.location, ticket.title, task_names.get(draft_ref))
             elif isinstance(submission, NewTask):
-                added[line] = _canonical(submission.ticket_uuid)
+                added[line] = (_canonical(submission.ticket_uuid), submission.task.task_name)
     if added:
-        tickets = await duplicate_pair_repository.entity_summaries(db, "ticket", set(added.values()))
-        for line, ticket_uuid in added.items():
-            if ticket_uuid in tickets:
-                where[line] = GeoPoint(tickets[ticket_uuid]["longitude"], tickets[ticket_uuid]["latitude"])
-    return where
+        uuids = {ticket_uuid for ticket_uuid, _ in added.values()}
+        tickets = await duplicate_pair_repository.entity_summaries(db, "ticket", uuids)
+        for line, (ticket_uuid, task_name) in added.items():
+            ticket = tickets.get(ticket_uuid)
+            at = GeoPoint(ticket["longitude"], ticket["latitude"]) if ticket else None
+            lines[line] = _Line(at, ticket["title"] if ticket else None, task_name)
+    return lines
 
 
 def _metres_between(at: GeoPoint, lon: float, lat: float) -> int:

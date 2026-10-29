@@ -4015,6 +4015,16 @@ export interface components {
        */
       line: number;
       /**
+       * Row Title
+       * @description 這一列自己的站點名稱或單標題，照檔案寫的；加到既有單的任務，是那張單的標題
+       */
+      row_title: string | null;
+      /**
+       * Row Task Name
+       * @description 這一列自己的任務名稱；站點是 null
+       */
+      row_task_name: string | null;
+      /**
        * Related Kind
        * @description `station` 或 `ticket_task`
        */
@@ -4031,12 +4041,12 @@ export interface components {
       related_ticket_uuid: string | null;
       /**
        * Title
-       * @description 站點名稱；任務則是它所屬單的標題
+       * @description 很像的那一筆：站點名稱；任務則是它所屬單的標題
        */
       title: string | null;
       /**
        * Task Name
-       * @description 任務名稱；站點是 null
+       * @description 很像的那一筆的任務名稱；站點是 null
        */
       task_name: string | null;
       /**

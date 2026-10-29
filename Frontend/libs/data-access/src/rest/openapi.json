@@ -11314,6 +11314,30 @@
             "title": "Line",
             "description": "試算表的列號，表頭是第 1 列"
           },
+          "row_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Title",
+            "description": "這一列自己的站點名稱或單標題，照檔案寫的；加到既有單的任務，是那張單的標題"
+          },
+          "row_task_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Task Name",
+            "description": "這一列自己的任務名稱；站點是 null"
+          },
           "related_kind": {
             "type": "string",
             "title": "Related Kind",
@@ -11346,7 +11370,7 @@
               }
             ],
             "title": "Title",
-            "description": "站點名稱；任務則是它所屬單的標題"
+            "description": "很像的那一筆：站點名稱；任務則是它所屬單的標題"
           },
           "task_name": {
             "anyOf": [
@@ -11358,7 +11382,7 @@
               }
             ],
             "title": "Task Name",
-            "description": "任務名稱；站點是 null"
+            "description": "很像的那一筆的任務名稱；站點是 null"
           },
           "type": {
             "anyOf": [
@@ -11420,6 +11444,8 @@
         "type": "object",
         "required": [
           "line",
+          "row_title",
+          "row_task_name",
           "related_kind",
           "related_uuid",
           "related_ticket_uuid",

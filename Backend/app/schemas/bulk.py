@@ -20,13 +20,17 @@ class SuspectedRowResponse(BaseModel):
     """A row that looks like something already there (ADR-398). No similarity, no contact details."""
 
     line: int = Field(description="試算表的列號，表頭是第 1 列")
+    row_title: str | None = Field(
+        description="這一列自己的站點名稱或單標題，照檔案寫的；加到既有單的任務，是那張單的標題"
+    )
+    row_task_name: str | None = Field(description="這一列自己的任務名稱；站點是 null")
     related_kind: str = Field(description="`station` 或 `ticket_task`")
     related_uuid: str = Field(
         description="很像的那一筆。送出時放進 `decisions` 的 `acknowledged_duplicate_of`，這一列就仍會建立"
     )
     related_ticket_uuid: str | None = Field(description="很像的是任務時，它所屬的單")
-    title: str | None = Field(description="站點名稱；任務則是它所屬單的標題")
-    task_name: str | None = Field(description="任務名稱；站點是 null")
+    title: str | None = Field(description="很像的那一筆：站點名稱；任務則是它所屬單的標題")
+    task_name: str | None = Field(description="很像的那一筆的任務名稱；站點是 null")
     type: str | None = Field(description="站點類型或任務類型")
     status: str | None = Field(description="站點營運狀態或任務狀態")
     distance_m: int | None = Field(description="這一列跟它相距幾公尺")
