@@ -50,7 +50,8 @@
 ## Task 4：團隊暫停通知（ADR-405）
 
 - [x] 測試：隊員與隊長各收一則 `team_suspended`（一人兩個角色只收一則）；操作的超管在隊上也不收；
-  恢復、重複暫停不發；通知失敗時暫停照樣成功（原本 main 上申請人通知失敗會 500）。
+  恢復、重複暫停不發；通知失敗時暫停照樣成功（原本 main 上申請人通知失敗會 500）；
+  申請人通知失敗時隊員照樣收到、隊員通知失敗時申請人照樣收到（各自一個 try，#154 review）。
 
 ## Task 5：ADR 標註、合約檔與文件
 
@@ -72,12 +73,17 @@
    - 讀 `revoked_identity.role`、`revoked_identity.team`，顯示「你的 <團隊><角色>身分已被收回」。`role` 是內部代號（`member`、`admin`、`data_auditor`…），要轉成畫面上的名稱。兩欄可能是 `null`（角色已刪除，或後端判斷不該透露），這時顯示「你目前使用的身分已被收回」。
    - 丟掉記住的身分，refresh（瀏覽器版 `POST /auth/session/refresh` 直接打就好；Bearer 版不要帶 `identity`）。
    - **不要自動重送**原本的請求，讓使用者自己決定。
+   - **同一次收回只提示一次**：同時送出的幾個請求（或 refresh）可能都收到 `identity_reset`，不能每個回應提示一次。
    - refresh 後畫面要**明確顯示現在用的是哪個身分**：後台會自動換成他的另一個後台身分（例如乙隊），使用者沒注意到就會用錯的身分做事。
    - 後台 refresh 後如果收到 403 `back_office_identity_required`，顯示既有的「沒有管理權限」頁。
 2. **五種情況都會收到 `identity_reset`**：團隊暫停、被移出團隊、平台角色被換、角色被撤銷、角色被刪除。
    只有團隊暫停另外發通知，其他四種只能靠這個錯誤碼提示。
 3. **`identity_revoked` 不會再出現**：現有處理可以留著，下一版再拿掉。
    **現在的前端會把 `identity_reset` 當成登出**（`apps/admin/src/app/providers.tsx` 的 401 一律 `endExpiredSession()`），
-   但 cookie 沒被清，重新載入後又是登入狀態、身分變成預設，畫面沒有說明。後端先上線不會壞，但要等前端改了才有提示。
+   但 cookie 沒被清，重新載入後又是登入狀態、身分變成預設，畫面沒有說明。
 4. **改回預設身分時 Redis 連不上會回 503 `session_store_unavailable`**：照既有處理，稍後重試，不要當成登出。
 5. **新通知類型 `team_suspended`**：`ref_type = "team"`，暫停時該隊全員各收一則（操作的超管除外）。
+6. **前台 server 端的 refresh 會把 `identity_reset` 當成登出**：`libs/modules/src/server/session-refresh.ts` 把 refresh 的 401 一律當成 `refused`，
+   `libs/modules/src/session/shared-refresh.ts` 再把這個結果快取 30 秒。閒置後回來的人，如果第一個碰到收回身分的是 refresh，
+   這 30 秒內的請求都會被當成登出，畫面可能被反覆重新載入。這兩處要把 `identity_reset` 跟登出分開。
+   **後端最好跟這個前端改動同一次部署**，不要後端先上。

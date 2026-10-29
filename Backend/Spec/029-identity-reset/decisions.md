@@ -27,6 +27,7 @@ ADR-328 把這個情況命名為 `identity_revoked` 並清 cookie；ADR-357 把�
   回 401 `identity_reset`，不清 cookie。
 - **當下那個請求不執行**。
 - `identity_revoked` 保留在 `ErrorCode` 裡，後端不再回。
+- **收回身分不會登出對方**。要讓對方立刻登出，請另外用強制登出（`POST /admin/users/{uuid}/revoke-sessions`）。
 
 **為什麼這次不算「靜默降權」**：
 1. 不是靜默：一定會先收到 `identity_reset`，前端必須顯示提示，回應裡帶著被收回的是哪個身分（ADR-404）。

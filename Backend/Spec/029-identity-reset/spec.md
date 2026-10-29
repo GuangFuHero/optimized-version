@@ -102,8 +102,9 @@
 **不清 cookie**：`identity_reset` 不在 `_SIGNED_OUT` 裡。cookie 要留著給下一步的 refresh 用。
 
 **之後的請求**：session 的身分已經改了，舊 token 的身分跟 session 對不上，
-其他分頁或並行請求會收到既有的 `access_token_stale`，前端照常 refresh，不會再收到 `identity_reset`。
-所以每次收回，提示只會出現一次。
+之後才到、帶同一把舊 token 的請求會收到既有的 `access_token_stale`，前端照常 refresh，不會再收到 `identity_reset`。
+但**同時送出**的幾個請求（或幾個 refresh）都在 session 改好之前讀到舊身分，可能每一個都收到 `identity_reset`
+（#154 review 本機實測：8 個並行請求有 2 個、6 個並行 refresh 全部）。前端要自己只提示一次，不能每個回應提示一次。
 
 ## 2. 身分收回：refresh（ADR-403）
 

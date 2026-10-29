@@ -197,7 +197,7 @@ Spec 029 之前這等於登出（ADR-096 回 401 `identity_revoked`、清 cookie
 1. 一般請求或 refresh 發現 token（或 session）的身分解析不到 → 先把 **session 的身分改成預設身分**（`default_for_user`）。
 2. 回 401 `identity_reset`，帶 `revoked_identity: {role, team}`，**不清 cookie**；這個請求不執行，refresh 也不 rotate（ADR-402～404）。
 3. 客戶端不帶身分再 refresh 一次，就拿到預設身分的 token。後台請求再由 `X-WG-Realm: admin` 換成他其他的後台身分。
-4. 同一把舊 token 的其他請求只會收到 `access_token_stale`，所以提示只出現一次。
+4. 之後才到、帶同一把舊 token 的請求只會收到 `access_token_stale`；同時送出的幾個請求則可能都收到 `identity_reset`，前端要自己只提示一次。
 
 refresh 這條路只讓 session 目前那一把 refresh token 改 session，名稱也只取自 session 自己的身分；已經換發過的舊 token 照常交給 `rotate()` 判斷是不是被盜用（ADR-415）。改 session 時 Redis 連不上回 503，不登出。
 
