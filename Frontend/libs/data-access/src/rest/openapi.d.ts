@@ -2138,7 +2138,9 @@ export interface components {
      * AuditExportRequest
      * @description The filters of an export, the same as the list's (ADR-414).
      *
-     *     All optional; `from` and `to` bound `created_at`, as on the list.
+     *     All optional; `from` and `to` bound `created_at`, as on the list. A field the export does not
+     *     know is refused, so a misspelled filter cannot export the whole log (ADR-428). `tz` is the IANA
+     *     zone the file's times and name are written in (ADR-430).
      */
     AuditExportRequest: {
       /** Table */
@@ -2151,6 +2153,13 @@ export interface components {
       from?: string | null;
       /** To */
       to?: string | null;
+      /**
+       * Tz
+       * @description IANA time zone, e.g. Asia/Taipei
+       * @default UTC
+       * @example Asia/Taipei
+       */
+      tz: string;
     };
     /**
      * AuditLogItem
@@ -6861,7 +6870,7 @@ export interface operations {
         };
         content?: never;
       };
-      /** @description audit_export_too_large: too many rows; `matched` and `limit` say how many */
+      /** @description audit_export_too_large: too many rows, `matched` and `limit` say how many; or an unknown field or time zone in the body */
       422: {
         headers: {
           [name: string]: unknown;

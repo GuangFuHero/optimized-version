@@ -4543,7 +4543,7 @@
             "description": "No audit.export at all (super admins only), or not from one of our pages"
           },
           "422": {
-            "description": "audit_export_too_large: too many rows; `matched` and `limit` say how many"
+            "description": "audit_export_too_large: too many rows, `matched` and `limit` say how many; or an unknown field or time zone in the body"
           }
         }
       }
@@ -7378,11 +7378,21 @@
               }
             ],
             "title": "To"
+          },
+          "tz": {
+            "type": "string",
+            "title": "Tz",
+            "description": "IANA time zone, e.g. Asia/Taipei",
+            "default": "UTC",
+            "examples": [
+              "Asia/Taipei"
+            ]
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "AuditExportRequest",
-        "description": "The filters of an export, the same as the list's (ADR-414).\n\nAll optional; `from` and `to` bound `created_at`, as on the list."
+        "description": "The filters of an export, the same as the list's (ADR-414).\n\nAll optional; `from` and `to` bound `created_at`, as on the list. A field the export does not\nknow is refused, so a misspelled filter cannot export the whole log (ADR-428). `tz` is the IANA\nzone the file's times and name are written in (ADR-430)."
       },
       "AuditLogItem": {
         "properties": {
