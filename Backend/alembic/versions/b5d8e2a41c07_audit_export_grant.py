@@ -27,7 +27,8 @@ _KEY = "audit.export"
 def upgrade() -> None:
     """Register the key if missing, then grant it to super_admin at `all` if missing."""
     op.execute(
-        f"INSERT INTO permissions (uuid, key) VALUES (gen_random_uuid(), '{_KEY}') ON CONFLICT (key) DO NOTHING"
+        f"INSERT INTO permissions (uuid, key) VALUES (gen_random_uuid(), '{_KEY}') "
+        "ON CONFLICT (key) DO NOTHING"
     )
     op.execute(
         "INSERT INTO role_permission_assign (uuid, role_uuid, permission_uuid, scope) "

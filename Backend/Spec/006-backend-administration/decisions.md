@@ -73,6 +73,7 @@ ADR-308 是所有分支上第一個沒被佔用的號碼（`feat/dedup-engine-in
 5. **一律是平台視角**（含 IP）。申請人資料的遮罩規則跟畫面一樣：沒有 `role_request.review` 的人看到 `[redacted]`
    （ADR-359 第 5 點）。種子資料的超管都有，只有在 `/admin/rbac` 另外授權時才會遇到。
 6. **時間一律是 UTC**：`created_at` 用 ISO 格式並帶 `+00:00`，檔名也是 UTC。前端交接要說明，Excel 打開看到的時間比台灣時間早 8 小時。
+   **已被 ADR-430 改掉**：預設仍是 UTC，但可以帶 `tz` 指定時區。
 
 **Consequences**：
 ➕ 超管可以把一段時間的紀錄帶去做外部分析。
@@ -94,7 +95,93 @@ ADR-308 是所有分支上第一個沒被佔用的號碼（`feat/dedup-engine-in
 `row_id` 是這次匯出的新 id、`new_values = {rows, filters}`，操作人、IP、身分跟其他紀錄一樣取自這個請求。
 寫法跟強制登出的紀錄一樣（ADR-191）：`action` 不是 INSERT／UPDATE／DELETE，不會被當成資料異動。
 被拒絕的匯出（403、超過上限的 422）不記錄：沒有檔案流出去。
+**超過上限的 422 已被 ADR-429 改成要記錄**；403 仍不記錄。
 
 **Consequences**：
 ➕ 事後查得到誰帶走了哪些資料。
 ➖ 匯出紀錄本身也會出現在之後的匯出檔裡。
+
+---
+
+### ADR-428 匯出不認得的欄位要擋掉
+
+**白話**：匯出的 JSON 裡出現不認得的欄位（例如把 `table` 打成 `table_name`）就回 422，不會當作沒篩選、把整份紀錄匯出去。
+
+**Date**: 2026-10-29（PR #155 code review）
+
+**Context**：`AuditExportRequest` 原本照 Pydantic 預設，不認得的欄位直接忽略。打錯一個篩選欄位名稱，
+結果就是「沒有篩選」：匯出全部資料表、整個時間範圍，匯出紀錄（ADR-417）也記成沒篩選。
+
+**Decision**：`AuditExportRequest` 設 `extra="forbid"`，多出來的欄位回 422，在讀任何紀錄之前就擋下，也不留匯出紀錄（ADR-429 只記錄「讀了才發現太多」的情況）。
+`from`／`to` 照舊也接受欄位本名 `since`／`until`（`populate_by_name`），這兩個不算不認得。
+
+**Consequences**：
+➕ 打錯字是 422，不是一份比預期大很多的檔案。
+➖ 前端之後如果想在 body 多帶別的東西（例如追蹤用的欄位），要先在這裡加上。
+
+---
+
+### ADR-429 超過一萬筆被拒的匯出也要留紀錄
+
+**白話**：想匯出超過一萬筆被拒絕時，也寫一筆匯出紀錄，記下篩選條件和符合幾筆。只有「根本沒有匯出權限」（403）不記錄。
+
+**Date**: 2026-10-29（PR #155 code review）
+
+**Context**：ADR-417 的理由是「沒有檔案流出去就不記錄」。但事後查「誰想拿稽核資料」時，
+一次想拉超過一個檔案上限的嘗試，正是要看到的東西；原本這種嘗試不留任何痕跡。
+
+**Decision**：
+1. 超過上限時，先寫一筆 `EXPORT` 紀錄再回 422。紀錄的 `new_values` 跟成功時同一個形狀：`rows = 0`、`matched` = 符合幾筆、`filters`、`tz`（ADR-430）。
+2. 成功的匯出也多記 `matched`（等於 `rows`）。`matched` 大於 `rows` 就是被拒的那種，不需要另外的欄位區分。
+3. 403（沒有 `audit.export` 或範圍不是 `all`）、422 的欄位錯誤（ADR-428）、時區錯誤（ADR-430）仍不記錄：這些都在讀紀錄之前就擋下，不是「對紀錄的嘗試」。
+4. 取代 ADR-417「超過上限的 422 不記錄」那一句。
+
+**Consequences**：
+➕ 事後查得到誰試過拉一大段紀錄，即使沒成功。
+➖ 有人一直按會留下很多筆被拒的紀錄；前端預設帶時間範圍（ADR-414 第 4 點）可以減少這種情況。
+
+---
+
+### ADR-430 匯出可以指定時區，預設仍是 UTC
+
+**白話**：匯出時可以帶 `tz`（例如 `Asia/Taipei`），檔案裡的時間和檔名就用那個時區寫，時間後面仍帶時差（`+08:00`）。不帶就是 UTC，跟原本一樣。
+
+**Date**: 2026-10-29（PR #155 code review）
+
+**Context**：ADR-414 第 6 點讓檔案一律用 UTC，台灣的人用 Excel 打開，每一列都早 8 小時，檔名也是。
+分析網址的 `tz` 參數（`app/api/v1/endpoints/analytics.py::_parse_tz`）已經是同樣的作法。
+
+**Decision**：
+1. `AuditExportRequest` 加 `tz`，IANA 時區名稱，預設 `"UTC"`。不認得的名稱（`Mars/Olympus`）、格式不對的（空字串、`../etc/passwd`、`+08:00`）都回 422，在讀紀錄之前就擋下。
+2. `created_at` 換成那個時區再寫 ISO，保留時差；檔名的時間也用那個時區。
+3. `old_values`／`new_values` 裡面的時間不轉：那是資料表當時存的原始內容，改了就不是原始紀錄。
+4. 匯出紀錄（ADR-417）多記 `tz`。
+5. 取代 ADR-414 第 6 點的「時間一律是 UTC」。
+
+**Consequences**：
+➕ 前端帶 `Asia/Taipei`，Excel 打開就是台灣時間。
+➖ 同一個檔案裡 `created_at` 跟 JSON 欄位裡的時間可能是不同時區，看的人要注意時差。
+
+---
+
+### ADR-431 稽核紀錄裡的邀請連結 token 一律遮掉
+
+**白話**：`team_invites` 的紀錄裡，邀請連結的 `token` 在稽核列表和匯出檔裡都顯示成 `[redacted]`，不管是誰看。
+
+**Date**: 2026-10-29（PR #155 code review；列表 API 是既有問題，Popo 決定在 #155 一起修）
+
+**Context**：邀請連結在 24 小時內任何登入的人都能用（ADR-353），連結帶的就是 `token`。
+稽核觸發器把整列存進 `audit_logs`，所以 `token` 會出現在稽核列表 API（ADR-358）和匯出檔（ADR-414）。
+匯出檔本來就是拿去外面用、會被轉傳的東西；拿到檔案的人就能用這個 token 替那個團隊送出加入申請。
+做分析用不到 token 的值。
+
+**Decision**：
+1. `app/services/audit_log.py` 的遮罩函式改成一個 `mask_values(table_name, values, reads_applicant_details=...)`，列表 API 和匯出共用：
+   - `_SECRET_KEYS`（目前只有 `team_invites.token`）對所有人都遮；
+   - `_APPLICANT_KEYS` 照舊只對沒有 `role_request.review` 的人遮（ADR-359 第 5 點）。
+2. 團隊管理員、資料稽核員、超管看列表都一樣看不到 token。團隊管理員要邀請連結，本來就從建立邀請的 API 拿。
+3. 原本的 `redact_applicant_details` 併進 `mask_values`，不留兩個函式，免得之後只改到其中一邊。
+
+**Consequences**：
+➕ 下載的檔案、畫面上的紀錄都不再是一把可用的邀請連結。
+➖ 要從稽核紀錄對出「是哪一條連結」只能用 `row_id`（邀請的 uuid），uuid 本來就不能變成連結（ADR-353）。

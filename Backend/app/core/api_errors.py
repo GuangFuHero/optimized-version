@@ -123,10 +123,10 @@ class ErrorCode(StrEnum):
     # Throttling
     RATE_LIMITED = "rate_limited"
 
-
     # Audit log export (ADR-414): more changes match than one file carries. The answer carries
     # `matched` and `limit`, so the page can say how far over it is and ask for a narrower range.
     AUDIT_EXPORT_TOO_LARGE = "audit_export_too_large"
+
 
 class ApiError(HTTPException):
     """An HTTPException that also carries a stable `code` for clients to branch on."""

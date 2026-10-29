@@ -2,8 +2,9 @@
 
 from datetime import datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AuditLogItem(BaseModel):
@@ -26,13 +27,27 @@ class AuditLogItem(BaseModel):
 class AuditExportRequest(BaseModel):
     """The filters of an export, the same as the list's (ADR-414).
 
-    All optional; `from` and `to` bound `created_at`, as on the list.
+    All optional; `from` and `to` bound `created_at`, as on the list. A field the export does not
+    know is refused, so a misspelled filter cannot export the whole log (ADR-428). `tz` is the IANA
+    zone the file's times and name are written in (ADR-430).
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     table: str | None = None
     row_id: UUID | None = None
     actor_uuid: UUID | None = None
     since: datetime | None = Field(None, alias="from")
     until: datetime | None = Field(None, alias="to")
+    tz: str = Field("UTC", description="IANA time zone, e.g. Asia/Taipei", examples=["Asia/Taipei"])
+
+    @field_validator("tz")
+    @classmethod
+    def _known_zone(cls, tz: str) -> str:
+        # ZoneInfo refuses an unknown name with ZoneInfoNotFoundError and a malformed one ('', '..')
+        # with ValueError; both are the client's mistake.
+        try:
+            ZoneInfo(tz)
+        except (ZoneInfoNotFoundError, ValueError) as err:
+            raise ValueError(f"Unknown time zone: {tz!r}") from err
+        return tz

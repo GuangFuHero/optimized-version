@@ -10,6 +10,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, literal_column, or_, select
@@ -51,6 +52,9 @@ _APPLICANT_KEYS = {
     "user_identities": ("provider_subject",),
 }
 REDACTED = "[redacted]"
+# Values no reader of the log needs and every reader could misuse (ADR-431): an invite link's
+# token lets anyone signed in file join requests to that team for 24 hours. Masked for everyone.
+_SECRET_KEYS = {"team_invites": ("token",)}
 
 # Tables whose rows name the team in a `team_uuid` column (ADR-358 point 4).
 _TEAM_COLUMN_TABLES = ("user_role_assign", "user_permission_assign", "team_invites", "team_zone_assign")
@@ -89,10 +93,16 @@ async def _team_reach(db: AsyncSession, actor: User) -> str | None:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
 
 
-def redact_applicant_details(table_name: str, values: dict | None) -> dict | None:
-    """The row's values with what only reviewers read replaced (see _APPLICANT_KEYS)."""
-    keys = _APPLICANT_KEYS.get(table_name)
-    if values is None or keys is None:
+def mask_values(table_name: str, values: dict | None, *, reads_applicant_details: bool) -> dict | None:
+    """The row's values as this reader may see them, on screen and in a file alike.
+
+    Secrets (_SECRET_KEYS) are always replaced; what only reviewers read (_APPLICANT_KEYS) is
+    replaced unless `reads_applicant_details`.
+    """
+    keys = _SECRET_KEYS.get(table_name, ())
+    if not reads_applicant_details:
+        keys += _APPLICANT_KEYS.get(table_name, ())
+    if values is None or not keys:
         return values
     return {key: (REDACTED if key in keys and value is not None else value) for key, value in values.items()}
 
@@ -166,35 +176,39 @@ def _cell(value) -> str:
     return str(value)
 
 
-async def export_audit_logs(db: AsyncSession, *, actor: User, filters: AuditFilters) -> bytes:
-    """The filtered log as CSV, newest first (ADR-414). audit.export at `all`, else 403.
+async def export_audit_logs(db: AsyncSession, *, actor: User, filters: AuditFilters, tz: ZoneInfo) -> bytes:
+    """The filtered log as CSV, newest first (ADR-414), times in `tz` (ADR-430).
 
-    Each file handed out is recorded (ADR-417); a refused one is not.
+    audit.export at `all`, else 403 and nothing recorded. Every other attempt is recorded, a file
+    handed out (ADR-417) and one refused for being over the cap (ADR-429) alike.
 
-    Always the platform view, with the IP. Applicant details are masked exactly as on screen for
-    a holder without role_request.review, which the seed never makes but /admin/rbac could.
+    Always the platform view, with the IP. Values are masked exactly as on screen (`mask_values`).
     """
     if await resolve_scope(actor, Perm.AUDIT_EXPORT, db) != Scope.ALL:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
     count = await db.scalar(_filtered(select(func.count()).select_from(AuditLog), filters))
     if count > MAX_EXPORT_ROWS:
+        await _record_export(db, actor_uuid=actor.uuid, filters=filters, tz=tz, matched=count, rows=0)
         raise AuditExportTooLarge(count, MAX_EXPORT_ROWS)
     query = _filtered(select(AuditLog, User.name).outerjoin(User, User.uuid == AuditLog.user_uuid), filters)
     rows = (await db.execute(query.order_by(AuditLog.created_at.desc(), AuditLog.uuid))).all()
     reads_details = await _reads_applicant_details(db, actor)
     content = write_csv(
-        EXPORT_COLUMNS, [_export_row(row, actor_name, reads_details) for row, actor_name in rows]
+        EXPORT_COLUMNS, [_export_row(row, actor_name, reads_details, tz) for row, actor_name in rows]
     )
     # After the file is built: recording it commits, which expires the rows just written out.
-    await _record_export(db, actor_uuid=actor.uuid, filters=filters, rows=len(rows))
+    await _record_export(db, actor_uuid=actor.uuid, filters=filters, tz=tz, matched=count, rows=len(rows))
     return content
 
 
-async def _record_export(db: AsyncSession, *, actor_uuid, filters: AuditFilters, rows: int) -> None:
+async def _record_export(
+    db: AsyncSession, *, actor_uuid, filters: AuditFilters, tz: ZoneInfo, matched: int, rows: int
+) -> None:
     """Write who exported what (ADR-417): a download touches no table, so no trigger records it.
 
     Shaped like the session-kick row (ADR-191): `action` is EXPORT, not a DML verb, so it is never
-    counted as a change; `row_id` is a fresh id for this one export.
+    counted as a change; `row_id` is a fresh id for this one export. `matched` over `rows` is an
+    attempt refused for being over the cap (ADR-429).
     """
     identity = request_identity.get()
     db.add(
@@ -204,6 +218,8 @@ async def _record_export(db: AsyncSession, *, actor_uuid, filters: AuditFilters,
             row_id=uuid.uuid4(),
             new_values={
                 "rows": rows,
+                "matched": matched,
+                "tz": tz.key,
                 "filters": {
                     "table": filters.table,
                     "row_id": _cell(filters.row_id) or None,
@@ -220,13 +236,9 @@ async def _record_export(db: AsyncSession, *, actor_uuid, filters: AuditFilters,
     await db.commit()
 
 
-def _export_row(row: AuditLog, actor_name: str | None, reads_details: bool) -> dict[str, str]:
-    old, new = row.old_values, row.new_values
-    if not reads_details:
-        old = redact_applicant_details(row.table_name, old)
-        new = redact_applicant_details(row.table_name, new)
+def _export_row(row: AuditLog, actor_name: str | None, reads_details: bool, tz: ZoneInfo) -> dict[str, str]:
     values = {
-        "created_at": row.created_at,
+        "created_at": row.created_at.astimezone(tz),
         "table_name": row.table_name,
         "action": row.action,
         "row_id": row.row_id,
@@ -234,7 +246,7 @@ def _export_row(row: AuditLog, actor_name: str | None, reads_details: bool) -> d
         "actor_name": actor_name,
         "client_ip": row.client_ip,
         "context": row.context,
-        "old_values": old,
-        "new_values": new,
+        "old_values": mask_values(row.table_name, row.old_values, reads_applicant_details=reads_details),
+        "new_values": mask_values(row.table_name, row.new_values, reads_applicant_details=reads_details),
     }
     return {key: _cell(value) for key, value in values.items()}
