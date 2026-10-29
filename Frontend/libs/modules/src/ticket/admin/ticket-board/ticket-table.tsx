@@ -25,7 +25,6 @@ import {
   type TicketColumnId,
 } from './model/ticket-columns';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
-import { pageOf } from './model/ticket-filters';
 import {
   AUDIT_BADGES,
   OPEN_TASK_STATUSES,
@@ -35,21 +34,19 @@ import {
 
 const { color, radius, typography } = designTokens;
 
-/** The board's one wording for a capped load: the table and the map both show it. */
-export const TRUNCATED_NOTICE = '只載入前 5,000 張求助單，請用篩選縮小範圍。';
-
 export { AUDIT_BADGES };
 
 interface TicketTableProps {
+  /** The page on view, as the server cut it. */
   rows: readonly TicketRow[];
   loading: boolean;
-  truncated: boolean;
   /** The tickets did not load: an error with 重試, never 「沒有符合條件」. */
   failed: boolean;
   retrying: boolean;
   onRetry: () => void;
   now: Date;
   page: number;
+  pageCount: number;
   onPageChange: (page: number) => void;
   onOpenTicket: (uuid: string) => void;
 }
@@ -57,12 +54,12 @@ interface TicketTableProps {
 export function TicketTable({
   rows,
   loading,
-  truncated,
   failed,
   retrying,
   onRetry,
   now,
   page,
+  pageCount,
   onPageChange,
   onOpenTicket,
 }: TicketTableProps) {
@@ -76,7 +73,6 @@ export function TicketTable({
       else next.add(uuid);
       return next;
     });
-  const paged = pageOf(rows, page);
 
   const renderCell = (id: TicketColumnId, row: TicketRow): ReactNode => {
     switch (id) {
@@ -166,10 +162,9 @@ export function TicketTable({
           </Button>
         </Callout>
       ) : null}
-      {truncated ? <Callout tone="warning">{TRUNCATED_NOTICE}</Callout> : null}
       <DataTable
         columns={columns}
-        data={paged.items}
+        data={rows}
         getRowId={(row) => row.uuid}
         onRowClick={(row) => onOpenTicket(row.uuid)}
         renderExpanded={(row) => <TaskLines tasks={row.tasks} />}
@@ -207,12 +202,12 @@ export function TicketTable({
           </Box>
         }
       />
-      {paged.pageCount > 1 ? (
+      {pageCount > 1 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
           <ListPagination
             showPageNumbers
-            page={paged.page}
-            pageCount={paged.pageCount}
+            page={page}
+            pageCount={pageCount}
             onPageChange={onPageChange}
           />
         </Box>

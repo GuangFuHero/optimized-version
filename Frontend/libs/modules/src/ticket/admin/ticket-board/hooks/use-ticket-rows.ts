@@ -1,23 +1,35 @@
 'use client';
 
-import { useAllTickets } from '@rescue-frontend/data-access/admin';
+import {
+  useTickets,
+  type AdminTicketsQueryVariables,
+} from '@rescue-frontend/data-access/admin';
 import { useMemo } from 'react';
 
-import { toServerVariables, type TicketFilters } from '../model/ticket-filters';
 import { toTicketRow, type TicketRow } from '../model/ticket-row';
 
 const NO_ROWS: readonly TicketRow[] = [];
 
+/**
+ * One load of `tickets` as board rows: a list page, or the map's visible area. The last result
+ * stays on screen while the next page or area loads.
+ */
 export function useTicketRows(
-  filters: TicketFilters,
+  variables: AdminTicketsQueryVariables,
   options: { enabled?: boolean } = {},
 ) {
-  const query = useAllTickets(toServerVariables(filters), options);
-  const rows = useMemo(() => query.data?.items.map(toTicketRow), [query.data]);
+  const query = useTickets(variables, { ...options, keepPrevious: true });
+  const rows = useMemo(
+    () => query.data?.tickets.items.map(toTicketRow),
+    [query.data],
+  );
   return {
     rows: rows ?? NO_ROWS,
-    truncated: query.data?.truncated ?? false,
+    /** Every ticket matching the variables, not just the ones loaded; null until known. */
+    totalCount: query.data?.tickets.pageInfo.totalCount ?? null,
     isPending: query.isPending,
+    /** The rows are the previous load's, kept on screen while this one runs. */
+    isPlaceholderData: query.isPlaceholderData,
     error: query.error as unknown,
     isFetching: query.isFetching,
     refetch: query.refetch,

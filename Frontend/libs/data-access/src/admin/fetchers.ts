@@ -9,7 +9,11 @@ import {
 import type { components, paths } from '../rest/openapi';
 import { adminRestClient } from './client';
 import { responseData } from '../rest/openapi-client';
-import type { AdminQueryOptions } from './graphql-fetchers';
+import {
+  invalidateTicketWrite,
+  type AdminQueryOptions,
+} from './graphql-fetchers';
+import { ticketKeys } from './ticket-query-keys';
 
 export const currentUserQuery = () =>
   queryOptions({
@@ -202,7 +206,7 @@ export interface TicketHistoryParams {
 
 export const ticketHistoryQuery = (params: TicketHistoryParams) =>
   queryOptions({
-    queryKey: ['admin', 'tickets', 'TicketHistory', params],
+    queryKey: [...ticketKeys.histories(), params],
     queryFn: ({ signal }) =>
       adminRestClient
         .GET('/api/v1/history/tickets/{uuid}', { params, signal })
@@ -767,7 +771,6 @@ export function useCommitTicketImport() {
           },
         })
         .then(responseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }

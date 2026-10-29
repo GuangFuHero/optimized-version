@@ -1,12 +1,7 @@
-import type { AllTicketsQueryVariables } from '@rescue-frontend/data-access/admin';
+import type { AdminTicketsQueryVariables } from '@rescue-frontend/data-access/admin';
 import { AuditStatus as AuditStatusValues } from '@rescue-frontend/data-access/admin';
 
-import type {
-  AuditStatus,
-  TicketPriority,
-  TicketRow,
-  TicketStatus,
-} from './ticket-row';
+import type { AuditStatus, TicketPriority, TicketStatus } from './ticket-row';
 import { resolveTicketSearch } from '../../../ticket-search';
 import { TICKET_STATUS_OPTIONS } from '../../../status';
 
@@ -23,7 +18,7 @@ export interface TicketFilters {
   /** A need type, sent to the server as `needType`. */
   taskType: string | null;
   audit: AuditStatus | null;
-  /** A disaster type; the server has no such filter, so it runs on the client. */
+  /** A disaster type, sent to the server as `disasterType`. */
   disaster: string | null;
   q: string;
 }
@@ -82,16 +77,17 @@ export function writeTicketFilters(
   return next;
 }
 
-/** The filters the `tickets` query can apply itself. */
+/** The filters as `tickets` query variables: the server applies every one of them. */
 export function toServerVariables(
   filters: TicketFilters,
-): AllTicketsQueryVariables {
+): AdminTicketsQueryVariables {
   const search = resolveTicketSearch(filters.q);
   return {
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.priority ? { priority: filters.priority } : {}),
     ...(filters.taskType ? { needType: filters.taskType } : {}),
     ...(filters.audit ? { auditStatus: filters.audit } : {}),
+    ...(filters.disaster ? { disasterType: filters.disaster } : {}),
     ...(search.kind === 'query' ? { q: search.q } : {}),
   };
 }
@@ -113,29 +109,62 @@ export function countActiveFilters(filters: TicketFilters): number {
   ].filter(Boolean).length;
 }
 
-/** The `tickets` query has no disaster filter, so it runs here over every loaded ticket. */
-export function applyClientFilters(
-  rows: readonly TicketRow[],
-  filters: TicketFilters,
-): TicketRow[] {
-  return rows.filter(
-    (r) => !filters.disaster || r.disasterTypes.includes(filters.disaster),
-  );
-}
-
 export const TICKET_PAGE_SIZE = 50;
 
-/** One page of `rows`, with `page` clamped into 1..pageCount. */
-export function pageOf<T>(
-  rows: readonly T[],
+/** One board page: the filters plus that page's window. Pages count from 1. */
+export function toPageVariables(
+  filters: TicketFilters,
   page: number,
-): { items: T[]; page: number; pageCount: number } {
-  const pageCount = Math.max(1, Math.ceil(rows.length / TICKET_PAGE_SIZE));
-  const clamped = Math.min(Math.max(1, Math.trunc(page) || 1), pageCount);
-  const start = (clamped - 1) * TICKET_PAGE_SIZE;
+): AdminTicketsQueryVariables {
+  const index = Math.max(1, Math.trunc(page) || 1) - 1;
   return {
-    items: rows.slice(start, start + TICKET_PAGE_SIZE),
-    page: clamped,
-    pageCount,
+    ...toServerVariables(filters),
+    skip: index * TICKET_PAGE_SIZE,
+    limit: TICKET_PAGE_SIZE,
+  };
+}
+
+export function pageCountOf(totalCount: number): number {
+  return Math.max(1, Math.ceil(totalCount / TICKET_PAGE_SIZE));
+}
+
+/** The map's load: the most the `tickets` query hands back at once. */
+export const TICKET_MAP_LIMIT = 200;
+
+/** The part of the world the map shows, in degrees, and its zoom. */
+export interface MapViewport {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  zoom: number;
+}
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+/**
+ * Bounds snap outward to about 10 m, so a nudge of the map reuses the cached load and the edge
+ * never cuts off a ticket that is on screen.
+ */
+const SNAP = 1e4;
+const down = (value: number) => Math.floor(value * SNAP) / SNAP;
+const up = (value: number) => Math.ceil(value * SNAP) / SNAP;
+
+/** The tickets inside `viewport` that match the filters, up to the map's limit. */
+export function toMapVariables(
+  filters: TicketFilters,
+  viewport: MapViewport,
+): AdminTicketsQueryVariables {
+  return {
+    ...toServerVariables(filters),
+    bounds: {
+      minLat: clamp(down(viewport.south), -90, 90),
+      maxLat: clamp(up(viewport.north), -90, 90),
+      minLng: clamp(down(viewport.west), -180, 180),
+      maxLng: clamp(up(viewport.east), -180, 180),
+    },
+    zoom: Math.round(viewport.zoom),
+    skip: 0,
+    limit: TICKET_MAP_LIMIT,
   };
 }

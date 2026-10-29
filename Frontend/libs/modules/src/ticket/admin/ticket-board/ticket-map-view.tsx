@@ -1,10 +1,10 @@
 'use client';
 
 import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
-import { Badge, Callout, designTokens } from '@rescue-frontend/ui';
+import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Map } from '../../../map';
 import type {
@@ -12,41 +12,58 @@ import type {
   RescueMapMarkerItem,
 } from '../../../map/types';
 import { getTicketPriorityBadge } from '../../status';
+import { useTicketRows } from './hooks/use-ticket-rows';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
+import {
+  toMapVariables,
+  type MapViewport,
+  type TicketFilters,
+} from './model/ticket-filters';
 import {
   resolveMapSelection,
   TICKET_PRIORITY_PIN_COLORS,
   toTicketMarker,
 } from './model/ticket-marker';
 import type { TicketPriority, TicketRow } from './model/ticket-row';
-import { TRUNCATED_NOTICE } from './ticket-table';
 
 const { color, radius, shadow, typography } = designTokens;
 
 const MAP_HEIGHT = 560;
 const CLUSTER_MAX_ZOOM = 14;
 const OVERLAY_INSET = 12;
+/** A pan or zoom settles this long before the map asks for the tickets in view. */
+const VIEWPORT_DEBOUNCE_MS = 300;
 
 const LEGEND: { priority: TicketPriority; label: string }[] = (
   ['critical', 'high', 'medium', 'low'] as const
 ).map((priority) => ({ priority, label: ticketPriorityLabel(priority) }));
 
 interface TicketMapViewProps {
-  rows: TicketRow[];
-  /** Only the first 5,000 tickets loaded: warned above the map, as the table does. */
-  truncated: boolean;
+  /** The board's filters: the map loads only matching tickets inside its view. */
+  filters: TicketFilters;
   selectedUuid: string | null;
   onOpenTicket: (uuid: string) => void;
 }
 
-/** Browse-only: pins by priority; a click on a pin opens the ticket, a click on the map does nothing. */
+/**
+ * Browse-only: pins by priority; a click on a pin opens the ticket, a click on the map does nothing.
+ * Loads the matching tickets inside the view, again each time the map settles after a move.
+ */
 export function TicketMapView({
-  rows,
-  truncated,
+  filters,
   selectedUuid,
   onOpenTicket,
 }: TicketMapViewProps) {
   const [leafletMap, setLeafletMap] = useState<LeafletMap | null>(null);
+  const viewport = useMapViewport(leafletMap);
+  const variables = useMemo(
+    () => (viewport ? toMapVariables(filters, viewport) : {}),
+    [filters, viewport],
+  );
+  const tickets = useTicketRows(variables, { enabled: viewport !== null });
+  const rows = tickets.rows;
+  const hidden =
+    tickets.totalCount !== null ? tickets.totalCount - rows.length : 0;
   const markers = useMemo(
     () =>
       rows
@@ -54,11 +71,26 @@ export function TicketMapView({
         .filter((m): m is RescueMapMarkerItem => m !== null),
     [rows, selectedUuid],
   );
-  useFitTickets(leafletMap, markers);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {truncated ? <Callout tone="warning">{TRUNCATED_NOTICE}</Callout> : null}
+      {tickets.error != null ? (
+        <Callout tone="danger">
+          無法載入求助單，請稍後再試
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={tickets.isFetching}
+            onClick={() => void tickets.refetch()}
+          >
+            重試
+          </Button>
+        </Callout>
+      ) : hidden > 0 ? (
+        <Callout tone="warning">
+          {`此範圍有 ${tickets.totalCount} 張求助單，只顯示 ${rows.length} 張，請放大地圖。`}
+        </Callout>
+      ) : null}
       <Box
         sx={{
           position: 'relative',
@@ -89,27 +121,34 @@ export function TicketMapView({
   );
 }
 
-/** Frames the filtered tickets whenever the set of points changes. */
-function useFitTickets(
-  map: LeafletMap | null,
-  markers: readonly RescueMapMarkerItem[],
-) {
-  const pointsKey = markers
-    .map((marker) => `${marker.position[0]},${marker.position[1]}`)
-    .join(';');
-  const markersRef = useRef(markers);
-  markersRef.current = markers;
-
+/** The area the map shows, settled after each move; null until the map is built. */
+function useMapViewport(map: LeafletMap | null): MapViewport | null {
+  const [viewport, setViewport] = useState<MapViewport | null>(null);
   useEffect(() => {
-    if (!map) return;
-    const points = markersRef.current.map((marker) => marker.position);
-    if (points.length === 0) return;
-    if (points.length === 1) {
-      map.setView(points[0], 15);
-    } else {
-      map.fitBounds(points, { padding: [48, 48] });
-    }
-  }, [map, pointsKey]);
+    if (!map) return undefined;
+    const read = () => {
+      const bounds = map.getBounds();
+      setViewport({
+        west: bounds.getWest(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        north: bounds.getNorth(),
+        zoom: map.getZoom(),
+      });
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(read, VIEWPORT_DEBOUNCE_MS);
+    };
+    read();
+    map.on('moveend', schedule);
+    return () => {
+      clearTimeout(timer);
+      map.off('moveend', schedule);
+    };
+  }, [map]);
+  return viewport;
 }
 
 /**

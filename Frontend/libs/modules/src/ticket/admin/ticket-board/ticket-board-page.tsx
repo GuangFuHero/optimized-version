@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Stack } from '@mui/material';
+import { useTicketStats } from '@rescue-frontend/data-access/admin';
 import { designTokens, SheetFrame } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Upload } from 'lucide-react';
@@ -15,14 +16,15 @@ import {
 import { useTicketCapabilities } from './hooks/use-ticket-capabilities';
 import { useTicketRows } from './hooks/use-ticket-rows';
 import {
-  applyClientFilters,
   countActiveFilters,
   EMPTY_TICKET_FILTERS,
+  pageCountOf,
   parseTicketFilters,
+  toPageVariables,
   writeTicketFilters,
   type TicketFilters,
 } from './model/ticket-filters';
-import { ticketStats } from './model/ticket-stats';
+import { toTicketStats } from './model/ticket-stats';
 import { TICKET_SHEET_WIDTH, TicketDetailSheet } from './ticket-detail-sheet';
 import { TicketMapView } from './ticket-map-view';
 import { TicketFilterPanel } from './ticket-filter-panel';
@@ -90,15 +92,33 @@ export function TicketBoardPage() {
     [params, replaceParams],
   );
 
-  const tickets = useTicketRows(filters);
-  // The stats strip counts the whole board, whatever the filters.
-  const unfiltered = useTicketRows(EMPTY_TICKET_FILTERS);
-  const loadedRows = tickets.rows;
-  const rows = useMemo(
-    () => applyClientFilters(loadedRows, filters),
-    [loadedRows, filters],
+  // One page from the server. Loaded in the map view too: its total is the header's count.
+  const pageVariables = useMemo(
+    () => toPageVariables(filters, page),
+    [filters, page],
   );
-  const stats = useMemo(() => ticketStats(unfiltered.rows), [unfiltered.rows]);
+  const tickets = useTicketRows(pageVariables);
+  const count = tickets.totalCount ?? 0;
+  const pageCount = pageCountOf(count);
+  // A page past the end (a pasted link, or the last ticket on it deleted) moves to the last one.
+  useEffect(() => {
+    if (tickets.totalCount === null || tickets.isPlaceholderData) return;
+    if (page > pageCount) {
+      setParam('page', pageCount > 1 ? String(pageCount) : null);
+    }
+  }, [
+    tickets.totalCount,
+    tickets.isPlaceholderData,
+    page,
+    pageCount,
+    setParam,
+  ]);
+  // The stats strip counts the whole board in the caller's scope, whatever the filters.
+  const statsQuery = useTicketStats();
+  const stats = useMemo(
+    () => (statsQuery.data ? toTicketStats(statsQuery.data.ticketStats) : null),
+    [statsQuery.data],
+  );
   // The ticket on view lives in the URL (?ticket=<uuid>) so links can open it.
   const openTicket = (uuid: string | null) => setParam('ticket', uuid);
   // Mounted for any ?ticket=, in the current rows or not, so a pasted link always opens.
@@ -116,7 +136,7 @@ export function TicketBoardPage() {
     <>
       <AdminHeaderSlot>
         <StationViewSwitch
-          count={rows.length}
+          count={count}
           view={view}
           help={PAGE_HELP}
           onChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
@@ -135,11 +155,7 @@ export function TicketBoardPage() {
             }}
           >
             {/* A failed count is unknown, not zero: it shows as loading does. */}
-            <TicketStatsStrip
-              stats={stats}
-              loading={unfiltered.isPending || unfiltered.error != null}
-              truncated={unfiltered.truncated}
-            />
+            <TicketStatsStrip stats={stats} />
             <TicketToolbar
               caps={caps}
               query={filters.q}
@@ -148,7 +164,7 @@ export function TicketBoardPage() {
               filterOpen={filterOpen}
               onToggleFilter={() => setFilterOpen((open) => !open)}
               onClear={() => setFilters(EMPTY_TICKET_FILTERS)}
-              count={rows.length}
+              count={count}
               onCreate={caps.canAdd ? () => setCreating(true) : undefined}
               exportControl={<TicketExportMenu />}
               importControl={
@@ -173,24 +189,23 @@ export function TicketBoardPage() {
           <Box sx={COLUMN_SX}>
             {view === 'map' ? (
               <TicketMapView
-                rows={rows}
-                truncated={tickets.truncated}
+                filters={filters}
                 selectedUuid={viewedUuid}
                 onOpenTicket={openTicket}
               />
             ) : (
               <TicketTable
-                rows={rows}
+                rows={tickets.rows}
                 loading={tickets.isPending}
-                truncated={tickets.truncated}
                 failed={tickets.error != null}
                 retrying={tickets.isFetching}
                 onRetry={() => {
                   void tickets.refetch();
-                  if (unfiltered.error != null) void unfiltered.refetch();
+                  if (statsQuery.error != null) void statsQuery.refetch();
                 }}
                 now={now}
-                page={page}
+                page={Math.min(page, pageCount)}
+                pageCount={pageCount}
                 onPageChange={(next) =>
                   setParam('page', next > 1 ? String(next) : null)
                 }

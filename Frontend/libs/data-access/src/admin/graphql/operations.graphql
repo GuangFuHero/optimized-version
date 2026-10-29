@@ -93,6 +93,8 @@ query AdminTickets(
   $q: String
   $needType: String
   $auditStatus: AuditStatus
+  $disasterType: String
+  $zoom: Float
   $skip: Int = 0
   $limit: Int = 50
 ) {
@@ -103,6 +105,8 @@ query AdminTickets(
     q: $q
     needType: $needType
     auditStatus: $auditStatus
+    disasterType: $disasterType
+    zoom: $zoom
     skip: $skip
     limit: $limit
   ) {
@@ -115,6 +119,17 @@ query AdminTickets(
     pageInfo {
       ...AdminPageInfo
     }
+  }
+}
+query AdminTicketStats {
+  ticketStats {
+    total
+    pending
+    inProgress
+    completed
+    cancelled
+    gapPeople
+    gapNeeds
   }
 }
 query AdminTicket($uuid: UUID!) {

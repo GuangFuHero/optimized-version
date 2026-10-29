@@ -1,4 +1,6 @@
-import type { TicketRow, TicketStatus } from './ticket-row';
+import type { AdminTicketStatsQuery } from '@rescue-frontend/data-access/admin';
+
+import type { TicketStatus } from './ticket-row';
 
 export interface TicketStats {
   total: number;
@@ -9,27 +11,19 @@ export interface TicketStats {
   gapNeeds: number;
 }
 
-/** A completed or cancelled ticket needs nobody, so its needs never count as a gap. */
-const CLOSED: ReadonlySet<TicketStatus> = new Set(['completed', 'cancelled']);
-
-export function ticketStats(rows: readonly TicketRow[]): TicketStats {
-  const byStatus: Record<TicketStatus, number> = {
-    pending: 0,
-    in_progress: 0,
-    completed: 0,
-    cancelled: 0,
+/** The backend's `ticketStats` (the whole board in the caller's scope), keyed the way the strip reads it. */
+export function toTicketStats(
+  stats: AdminTicketStatsQuery['ticketStats'],
+): TicketStats {
+  return {
+    total: stats.total,
+    byStatus: {
+      pending: stats.pending,
+      in_progress: stats.inProgress,
+      completed: stats.completed,
+      cancelled: stats.cancelled,
+    },
+    gapPeople: stats.gapPeople,
+    gapNeeds: stats.gapNeeds,
   };
-  let gapPeople = 0;
-  let gapNeeds = 0;
-  for (const row of rows) {
-    byStatus[row.status] += 1;
-    if (CLOSED.has(row.status)) continue;
-    for (const task of row.tasks) {
-      if (task.gap > 0) {
-        gapPeople += task.gap;
-        gapNeeds += 1;
-      }
-    }
-  }
-  return { total: rows.length, byStatus, gapPeople, gapNeeds };
 }
