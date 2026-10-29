@@ -1081,7 +1081,7 @@
           "認證系統"
         ],
         "summary": "Reset Password",
-        "description": "Complete a logged-out reset: consume the code, write the new password, revoke all sessions.",
+        "description": "Complete a logged-out reset: consume the code, write the new password, revoke all sessions.\n\nEvery contact on the account is then told, as after `change-password` (ADR-218), not only\nthe one the code went to.",
         "operationId": "reset_password_api_v1_auth_reset_password_post",
         "requestBody": {
           "content": {

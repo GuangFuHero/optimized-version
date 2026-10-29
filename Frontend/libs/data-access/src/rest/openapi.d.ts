@@ -527,6 +527,9 @@ export interface paths {
     /**
      * Reset Password
      * @description Complete a logged-out reset: consume the code, write the new password, revoke all sessions.
+     *
+     *     Every contact on the account is then told, as after `change-password` (ADR-218), not only
+     *     the one the code went to.
      */
     post: operations['reset_password_api_v1_auth_reset_password_post'];
     delete?: never;
