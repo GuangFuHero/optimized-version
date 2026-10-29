@@ -17,6 +17,40 @@ import { ticketKeys, ticketWriteKeys } from './ticket-query-keys';
 const SPACE_TICKETS_KEY = ['admin', 'buildingMaps', 'tickets'] as const;
 
 /**
+ * What a space write makes stale, and no more: the board keeps every space's tickets mounted, one
+ * query each, so a blanket refresh would reload them all. A new space has no tickets yet, and an
+ * edit changes only the building, so neither touches tickets; a deletion unlinks that space's
+ * tickets, which fall back to the ticket lists as ordinary ones.
+ */
+export function buildingMapWriteKeys(
+  write: 'create' | 'update' | 'delete',
+  uuid?: string,
+): unknown[][] {
+  const list = ['admin', 'buildingMaps', 'list'];
+  if (write === 'create' || !uuid) return [list];
+  const one = ['admin', 'buildingMaps', 'one', { uuid }];
+  if (write === 'update') return [list, one];
+  return [
+    list,
+    one,
+    [...SPACE_TICKETS_KEY, { buildingMapUuid: uuid }],
+    ['admin', 'tickets'],
+  ];
+}
+
+function invalidateBuildingMapWrite(
+  queryClient: QueryClient,
+  write: 'create' | 'update' | 'delete',
+  uuid?: string,
+) {
+  return Promise.all(
+    buildingMapWriteKeys(write, uuid).map((queryKey) =>
+      queryClient.invalidateQueries({ queryKey }),
+    ),
+  );
+}
+
+/**
  * The spaces' ticket loads a ticket write can move: a space keeps no state of its own and works
  * it out from these. Only those, never every space, as the board keeps one mounted per space:
  *
@@ -903,8 +937,7 @@ export function useCreateBuildingMap() {
         .mutation(documents.AdminCreateBuildingMapDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'buildingMaps'] }),
+    onSuccess: () => invalidateBuildingMapWrite(queryClient, 'create'),
   });
 }
 
@@ -918,8 +951,8 @@ export function useUpdateBuildingMap() {
         .mutation(documents.AdminUpdateBuildingMapDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'buildingMaps'] }),
+    onSuccess: (_, variables) =>
+      invalidateBuildingMapWrite(queryClient, 'update', variables.uuid),
   });
 }
 
@@ -934,11 +967,8 @@ export function useDeleteBuildingMap() {
         .mutation(documents.AdminDeleteBuildingMapDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'buildingMaps'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
-      ]),
+    onSuccess: (_, variables) =>
+      invalidateBuildingMapWrite(queryClient, 'delete', variables.uuid),
   });
 }
 

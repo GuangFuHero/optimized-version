@@ -1,5 +1,7 @@
 import {
   ticketMapPinsQuery,
+  buildingMapQuery,
+  buildingMapWriteKeys,
   buildingMapsQuery,
   buildingMapTicketsQuery,
   spaceTicketKeysForWrite,
@@ -118,5 +120,36 @@ describe('the spaces a ticket write refreshes', () => {
 
     expect(spaces(spaceTicketKeysForWrite(queryClient))).toEqual(['C']);
     unsubscribe();
+  });
+});
+
+describe('what a space write refreshes', () => {
+  const spaceTickets = (uuid: string) =>
+    buildingMapTicketsQuery({ buildingMapUuid: uuid }).queryKey;
+
+  it('a new space: only the list, never any space’s tickets', () => {
+    const keys = buildingMapWriteKeys('create');
+
+    expect(hits(keys, buildingMapsQuery({}).queryKey)).toBe(true);
+    expect(hits(keys, spaceTickets('b-1'))).toBe(false);
+  });
+
+  it('an edit: the list and that space, not the tickets of any', () => {
+    const keys = buildingMapWriteKeys('update', 'b-1');
+
+    expect(hits(keys, buildingMapsQuery({}).queryKey)).toBe(true);
+    expect(hits(keys, buildingMapQuery({ uuid: 'b-1' }).queryKey)).toBe(true);
+    expect(hits(keys, buildingMapQuery({ uuid: 'b-2' }).queryKey)).toBe(false);
+    expect(hits(keys, spaceTickets('b-1'))).toBe(false);
+  });
+
+  it('a deletion: that space and its tickets, and the ticket lists its tickets fall back to', () => {
+    const keys = buildingMapWriteKeys('delete', 'b-1');
+
+    expect(hits(keys, spaceTickets('b-1'))).toBe(true);
+    expect(hits(keys, spaceTickets('b-2'))).toBe(false);
+    expect(hits(keys, ticketsQuery({ skip: 0, limit: 50 }).queryKey)).toBe(
+      true,
+    );
   });
 });
