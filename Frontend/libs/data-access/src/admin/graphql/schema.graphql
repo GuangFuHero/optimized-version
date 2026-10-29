@@ -890,7 +890,8 @@ input PromoteMarkZoneInput {
 }
 
 type Query {
-  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, reviewableOnly: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, reviewableOnly: Boolean! = false, county: String = null, town: String = null, official: Boolean = null, createdAfter: DateTime = null, createdBefore: DateTime = null, updatedAfter: DateTime = null, updatedBefore: DateTime = null, orderBy: StationOrder! = DEFAULT, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stationFacets(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, reviewableOnly: Boolean! = false, county: String = null, town: String = null, official: Boolean = null, createdAfter: DateTime = null, createdBefore: DateTime = null, updatedAfter: DateTime = null, updatedBefore: DateTime = null): StationFacetsType!
   assignableStationTeams: [AssignedTeamType!]!
   station(uuid: UUID!): StationType
   hazardousZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): HazardousZoneConnection!
@@ -1173,6 +1174,16 @@ type SecondaryLocationType {
   poleNote: String
 }
 
+type StationAreaCountType {
+  county: String!
+
+  """
+  Null for the stations in this 縣市 whose address names no 鄉鎮市區. No filter selects just those: `county` alone matches the whole 縣市
+  """
+  town: String
+  count: Int!
+}
+
 type StationConnection {
   items: [StationType!]!
   pageInfo: PageInfo!
@@ -1182,10 +1193,31 @@ type StationCreated {
   station: StationType!
 }
 
+type StationFacetsType {
+  total: Int!
+  byStatus: [StationStatusCountType!]!
+  byType: [StationTypeCountType!]!
+
+  """
+  Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none, and one with a 縣市 but no 鄉鎮市區 is in a row whose `town` is null
+  """
+  areas: [StationAreaCountType!]!
+
+  """
+  Stations with a pending suggestion that the caller holds station.review over
+  """
+  pendingReviewCount: Int!
+}
+
 enum StationOperationalStatus {
   active
   temporarily_closed
   permanently_closed
+}
+
+enum StationOrder {
+  DEFAULT
+  OPEN_FIRST_RECENTLY_UPDATED
 }
 
 type StationPropertyConfigType {
@@ -1259,6 +1291,14 @@ type StationPropertyType {
   """
   pendingSuggestedFields: [String!]!
   crowdSourcings: [CrowdSourcingType!]!
+}
+
+type StationStatusCountType {
+  """
+  An operationalStatus value: active, temporarily_closed or permanently_closed
+  """
+  status: String!
+  count: Int!
 }
 
 type StationSuggestionMergeType {
@@ -1354,7 +1394,9 @@ type StationType {
   """True if this is a temporary station (e.g. emergency shelter)"""
   isTemporary: Boolean!
 
-  """True if this station is operated by a government or official body"""
+  """
+  True if the back office made this station (`source` is 'official'), as the `official` filter reads it, or if it was marked official before `source` said so (ADR-394)
+  """
   isOfficial: Boolean!
 
   """
@@ -1446,6 +1488,17 @@ type StationType {
   Merges applied to this station, newest first; empty without station.review over this station
   """
   suggestionMerges: [StationSuggestionMergeType!]!
+}
+
+type StationTypeCountType {
+  """The station type; null for stations with none"""
+  type: String
+  count: Int!
+
+  """
+  How many of them the caller's station export of this type would include: none without station.export, and none on the row with no type, which the export can't ask for. It follows this request's filters, while the export takes the type alone, so the two agree only when no other filter is given
+  """
+  exportable: Int!
 }
 
 input SubmitRoleRequestInput {

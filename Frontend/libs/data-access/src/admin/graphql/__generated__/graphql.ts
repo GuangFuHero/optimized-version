@@ -1017,6 +1017,7 @@ export type Query = {
   reverseGeocode: AddressLookupType;
   roleRequestTeams: Array<RoleRequestTeam>;
   station?: Maybe<StationType>;
+  stationFacets: StationFacetsType;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stations: StationConnection;
   suggestableFields: Array<SuggestableFieldType>;
@@ -1116,6 +1117,24 @@ export type QueryStationArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+export type QueryStationFacetsArgs = {
+  assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
+  bounds?: InputMaybe<BoundsInput>;
+  county?: InputMaybe<Scalars['String']['input']>;
+  createdAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  createdBefore?: InputMaybe<Scalars['DateTime']['input']>;
+  hasPendingSuggestions?: Scalars['Boolean']['input'];
+  official?: InputMaybe<Scalars['Boolean']['input']>;
+  operationalStatus?: InputMaybe<StationOperationalStatus>;
+  q?: InputMaybe<Scalars['String']['input']>;
+  reviewableOnly?: Scalars['Boolean']['input'];
+  stationType?: InputMaybe<Scalars['String']['input']>;
+  town?: InputMaybe<Scalars['String']['input']>;
+  unassignedOnly?: Scalars['Boolean']['input'];
+  updatedAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  updatedBefore?: InputMaybe<Scalars['DateTime']['input']>;
+};
+
 export type QueryStationPropertyConfigsArgs = {
   includeInactive?: Scalars['Boolean']['input'];
   stationType: Scalars['String']['input'];
@@ -1124,14 +1143,22 @@ export type QueryStationPropertyConfigsArgs = {
 export type QueryStationsArgs = {
   assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   bounds?: InputMaybe<BoundsInput>;
+  county?: InputMaybe<Scalars['String']['input']>;
+  createdAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  createdBefore?: InputMaybe<Scalars['DateTime']['input']>;
   hasPendingSuggestions?: Scalars['Boolean']['input'];
   limit?: Scalars['Int']['input'];
+  official?: InputMaybe<Scalars['Boolean']['input']>;
   operationalStatus?: InputMaybe<StationOperationalStatus>;
+  orderBy?: StationOrder;
   q?: InputMaybe<Scalars['String']['input']>;
   reviewableOnly?: Scalars['Boolean']['input'];
   skip?: Scalars['Int']['input'];
   stationType?: InputMaybe<Scalars['String']['input']>;
+  town?: InputMaybe<Scalars['String']['input']>;
   unassignedOnly?: Scalars['Boolean']['input'];
+  updatedAfter?: InputMaybe<Scalars['DateTime']['input']>;
+  updatedBefore?: InputMaybe<Scalars['DateTime']['input']>;
 };
 
 export type QuerySuggestableFieldsArgs = {
@@ -1336,6 +1363,14 @@ export type SecondaryLocationType = {
   village?: Maybe<Scalars['String']['output']>;
 };
 
+export type StationAreaCountType = {
+  __typename?: 'StationAreaCountType';
+  count: Scalars['Int']['output'];
+  county: Scalars['String']['output'];
+  /** Null for the stations in this 縣市 whose address names no 鄉鎮市區. No filter selects just those: `county` alone matches the whole 縣市 */
+  town?: Maybe<Scalars['String']['output']>;
+};
+
 export type StationConnection = {
   __typename?: 'StationConnection';
   items: Array<StationType>;
@@ -1347,6 +1382,17 @@ export type StationCreated = {
   station: StationType;
 };
 
+export type StationFacetsType = {
+  __typename?: 'StationFacetsType';
+  /** Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none, and one with a 縣市 but no 鄉鎮市區 is in a row whose `town` is null */
+  areas: Array<StationAreaCountType>;
+  byStatus: Array<StationStatusCountType>;
+  byType: Array<StationTypeCountType>;
+  /** Stations with a pending suggestion that the caller holds station.review over */
+  pendingReviewCount: Scalars['Int']['output'];
+  total: Scalars['Int']['output'];
+};
+
 export const StationOperationalStatus = {
   Active: 'active',
   PermanentlyClosed: 'permanently_closed',
@@ -1355,6 +1401,12 @@ export const StationOperationalStatus = {
 
 export type StationOperationalStatus =
   (typeof StationOperationalStatus)[keyof typeof StationOperationalStatus];
+export const StationOrder = {
+  Default: 'DEFAULT',
+  OpenFirstRecentlyUpdated: 'OPEN_FIRST_RECENTLY_UPDATED',
+} as const;
+
+export type StationOrder = (typeof StationOrder)[keyof typeof StationOrder];
 export type StationPropertyConfigType = {
   __typename?: 'StationPropertyConfigType';
   /** Which control the form renders for this field */
@@ -1402,6 +1454,13 @@ export type StationPropertyType = {
   uuid: Scalars['UUID']['output'];
   /** Credibility weight applied during score aggregation [0.0–2.0], default 1.0 */
   weightings: Scalars['Float']['output'];
+};
+
+export type StationStatusCountType = {
+  __typename?: 'StationStatusCountType';
+  count: Scalars['Int']['output'];
+  /** An operationalStatus value: active, temporarily_closed or permanently_closed */
+  status: Scalars['String']['output'];
 };
 
 export type StationSuggestionMergeType = {
@@ -1464,7 +1523,7 @@ export type StationType = {
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
   /** True if this station has been flagged as a duplicate entry */
   isDuplicate: Scalars['Boolean']['output'];
-  /** True if this station is operated by a government or official body */
+  /** True if the back office made this station (`source` is 'official'), as the `official` filter reads it, or if it was marked official before `source` said so (ADR-394) */
   isOfficial: Scalars['Boolean']['output'];
   /** True if this is a temporary station (e.g. emergency shelter) */
   isTemporary: Scalars['Boolean']['output'];
@@ -1513,6 +1572,15 @@ export type StationType = {
   viewerCanViewPii: Scalars['Boolean']['output'];
   /** Who can see this station: 'public' or 'restricted' */
   visibility?: Maybe<Scalars['String']['output']>;
+};
+
+export type StationTypeCountType = {
+  __typename?: 'StationTypeCountType';
+  count: Scalars['Int']['output'];
+  /** How many of them the caller's station export of this type would include: none without station.export, and none on the row with no type, which the export can't ask for. It follows this request's filters, while the export takes the type alone, so the two agree only when no other filter is given */
+  exportable: Scalars['Int']['output'];
+  /** The station type; null for stations with none */
+  type?: Maybe<Scalars['String']['output']>;
 };
 
 export type SubmitRoleRequestInput = {

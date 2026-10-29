@@ -2023,7 +2023,7 @@ export interface components {
       name: string | null;
       /**
        * Kind
-       * @description user / system / crawler / gov / ngo（後三者僅建立事件，ADR-137）
+       * @description user / system / crawler / gov / ngo / official（後四者僅建立事件，ADR-137）
        */
       kind: string;
       /**
