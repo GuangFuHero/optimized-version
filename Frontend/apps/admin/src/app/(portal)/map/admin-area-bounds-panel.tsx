@@ -120,6 +120,11 @@ export function AdminAreaBoundsPanel({
             張任務單會進到範圍內，負責單位的清單會立刻多出這幾張。
           </Typography>
         ) : null}
+        {!changed ? (
+          <Typography sx={{ fontSize: 12, color: '#564337' }}>
+            移動或增減轉角後，才能儲存或回到原本範圍。
+          </Typography>
+        ) : null}
         <Typography sx={{ fontSize: 12, color: '#564337' }}>
           數量只算目前地圖畫面內已載入的任務單。儲存後 5 秒內可以復原。
         </Typography>

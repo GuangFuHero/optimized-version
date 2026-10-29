@@ -240,11 +240,13 @@ export function AreaDetailFooter({
 
   return (
     <>
+      {/* Up to four buttons in 360px: they wrap, rather than push the last off the panel. */}
       <Stack
         direction="row"
-        spacing={1}
         sx={{
           alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 1,
           px: 2.25,
           py: 1.5,
           borderTop: '1px solid #DCC1B1',
