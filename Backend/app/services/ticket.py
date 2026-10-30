@@ -391,8 +391,8 @@ async def validate_help_request(
                     "task_name": task["task_name"],
                     "task_description": task.get("task_description"),
                     "quantity": task.get("quantity"),
-                    # The site's own request, a citizen's whoever files it (ADR-397), unlike
-                    # createTicket's tasks, which follow the identity (ADR-438).
+                    # The site's own request, a citizen's whoever files it, unlike createTicket's
+                    # tasks, which follow the identity.
                     "source": USER,
                 }
             )

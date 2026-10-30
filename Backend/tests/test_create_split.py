@@ -265,7 +265,7 @@ async def test_validate_ticket_task_writes_nothing_and_needs_no_ticket(db):
     """Validation stands alone: a new ticket's tasks are validated before the ticket exists."""
     actor = await _actor(db, Perm.TICKET_ADD)
     fields = await ticket_service.validate_ticket_task(db, actor=actor, **_task_fields())
-    # The actor's role is not the site's `user`, so the task is official (ADR-438).
+    # The actor's role is not the site's `user`, so the task is official.
     assert fields.values == {**_task_fields(), "source": "official"}
     assert await _rows(db, TicketTask) == 0
 

@@ -124,7 +124,7 @@ class Station(BaseGeometry):
     op_hour: Mapped[str | None] = mapped_column(String(100))
     level: Mapped[int] = mapped_column(default=0)
     comment: Mapped[str | None] = mapped_column(String)
-    # Who made it: `official` in the back office, `user` on the site (ADR-438); NULL is not known.
+    # Who made it: `official` in the back office, `user` on the site; NULL is not known.
     source: Mapped[str | None] = mapped_column(String(50))
     visibility: Mapped[str | None] = mapped_column(String(50))
     verification_status: Mapped[str | None] = mapped_column(String(50))
@@ -132,7 +132,7 @@ class Station(BaseGeometry):
     dedup_group_id: Mapped[str | None] = mapped_column(String)
     is_temporary: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Worked out by the database from `source`, so the two cannot disagree (ADR-438, 3NF audit F1).
+    # Worked out by the database from `source`, so the two cannot disagree.
     is_official: Mapped[bool] = mapped_column(
         Boolean, Computed("COALESCE(source = 'official', false)", persisted=True)
     )

@@ -165,7 +165,7 @@ async def test_a_new_row_creates_all_three_layers(db):
     prop = (await db.execute(select(TaskProperty).where(TaskProperty.task_uuid == task.uuid))).scalar_one()
 
     assert task.task_name == "送水"
-    assert task.source == "official"  # only the back office imports (ADR-438)
+    assert task.source == "official"  # only the back office imports
     assert prop.property_value == "4"
 
 

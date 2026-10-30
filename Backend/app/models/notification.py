@@ -97,7 +97,6 @@ class Notification(Base, UUIDPKMixin, TimestampMixin):
             "recipient_uuid",
             "created_at",
         ),
-        # `read` repeats `read_at`, kept for the unread index above; the database holds them together
-        # (ADR-439).
+        # `read` repeats `read_at`, kept for the unread index above; the database holds them together.
         CheckConstraint("read = (read_at IS NOT NULL)", name="ck_notifications_read_matches_read_at"),
     )
