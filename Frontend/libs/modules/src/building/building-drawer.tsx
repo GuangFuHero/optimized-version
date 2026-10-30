@@ -16,7 +16,11 @@ import {
   summarizeTickets,
   type BuildingTicket,
 } from './summary';
-import { useBuilding, type BuildingMap } from './use-building';
+import {
+  BUILDING_TICKET_LIMIT,
+  useBuilding,
+  type BuildingMap,
+} from './use-building';
 
 const { color, radius } = designTokens;
 
@@ -81,6 +85,8 @@ interface BuildingDrawerContentProps {
   uuid: string;
   building: BuildingMap;
   tickets: readonly BuildingTicket[];
+  /** As many tickets came back as are asked for: older ones may be left out. */
+  mayHoldMore: boolean;
   isAuthenticated: boolean;
   scrollRef: RefObject<HTMLDivElement | null>;
   onOpenTicket: (marker: RescueMapMarkerItem) => void;
@@ -90,6 +96,7 @@ function BuildingDrawerContent({
   uuid,
   building,
   tickets,
+  mayHoldMore,
   isAuthenticated,
   scrollRef,
   onOpenTicket,
@@ -200,6 +207,20 @@ function BuildingDrawerContent({
         </Typography>
       </Box>
 
+      {/* The counts above and the floors below are of what came back; said, or a building with
+          more would look like one with fewer people in it (Seaweed, 2026-10-30). */}
+      {mayHoldMore ? (
+        <Typography
+          sx={{
+            fontSize: displayTextSize[12],
+            lineHeight: 1.6,
+            color: color.fg.neutral.subtle,
+          }}
+        >
+          {`只列出最新的 ${BUILDING_TICKET_LIMIT} 張單，這一棟可能還有更早的單沒有列在這裡。`}
+        </Typography>
+      ) : null}
+
       <Stack spacing={1}>
         {groups.floors.map(({ floor, tickets: list }) => (
           <FloorSection
@@ -270,7 +291,8 @@ export function BuildingDrawer({
   }, [buildingUuid]);
 
   const uuid = buildingUuid ?? shownUuid;
-  const { building, tickets, fetching, error, hasData } = useBuilding(uuid);
+  const { building, tickets, mayHoldMore, fetching, error, hasData } =
+    useBuilding(uuid);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyText = {
     fontSize: displayTextSize[13],
@@ -296,6 +318,7 @@ export function BuildingDrawer({
         uuid={uuid}
         building={building}
         tickets={tickets}
+        mayHoldMore={mayHoldMore}
         isAuthenticated={isAuthenticated}
         scrollRef={scrollRef}
         onOpenTicket={onOpenTicket}
