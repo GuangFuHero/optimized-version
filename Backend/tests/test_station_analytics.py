@@ -199,14 +199,15 @@ async def test_operating_station_count_is_a_running_total_of_active_stations(db)
     await db.flush()
 
     def count(**kwargs):
-        return station_analytics.get_operating_station_count(
-            db,
-            x_granularity="day",
-            start_date=None,
-            end_date=None,
-            tz=UTC_TZ,
-            **{"x": None, **kwargs},
-        )
+        args = {
+            "x": None,
+            "x_granularity": "day",
+            "start_date": None,
+            "end_date": None,
+            "tz": UTC_TZ,
+            **kwargs,
+        }
+        return station_analytics.get_operating_station_count(db, **args)
 
     assert await count() == [{"count": 3}]
     assert await count(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)) == [{"count": 3}]
