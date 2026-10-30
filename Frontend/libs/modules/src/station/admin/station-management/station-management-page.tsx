@@ -21,6 +21,7 @@ import {
   countActiveFilters,
   EMPTY_FILTERS,
   parseStationFilters,
+  stationFiltersKey,
   writeStationFilters,
   type StationFilters,
 } from './model/station-filters';
@@ -67,6 +68,10 @@ export function StationManagementPage() {
     [searchParams],
   );
   const filters = useMemo(() => parseStationFilters(params), [params]);
+  // The filters alone, as one string: the map frames its stations again only when this changes.
+  const filtersKey = useMemo(() => stationFiltersKey(filters), [filters]);
+  // The filters the page opened with, by a link or a reload; changed here, they are the page's own.
+  const [openedFiltersKey] = useState(filtersKey);
   const view: StationView = params.get('view') === 'map' ? 'map' : 'table';
   const caps = useStationCapabilities();
   const now = useNow();
@@ -199,6 +204,9 @@ export function StationManagementPage() {
             {view === 'map' ? (
               <StationMapView
                 rows={rows}
+                filtersKey={filtersKey}
+                loading={stations.isPending}
+                filtersFromLink={filtersKey === openedFiltersKey}
                 hasAnyStation={hasAnyStation}
                 now={now}
                 selectedUuid={selectedUuid}

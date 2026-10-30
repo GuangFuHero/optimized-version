@@ -1176,6 +1176,7 @@ export type QueryTicketsArgs = {
   limit?: Scalars['Int']['input'];
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
+  order?: TicketListOrder;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
@@ -1694,6 +1695,13 @@ export type TicketDisasterDetailType = {
   value: Scalars['String']['output'];
 };
 
+export const TicketListOrder = {
+  NeedsFirst: 'NEEDS_FIRST',
+  Newest: 'NEWEST',
+} as const;
+
+export type TicketListOrder =
+  (typeof TicketListOrder)[keyof typeof TicketListOrder];
 export type TicketPropertyConfigType = {
   __typename?: 'TicketPropertyConfigType';
   /** Which control the form renders for this field */
@@ -2462,6 +2470,7 @@ export type GetTicketsWithNeedsQueryVariables = Exact<{
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
+  order?: InputMaybe<TicketListOrder>;
 }>;
 
 export type GetTicketsWithNeedsQuery = {
@@ -4691,6 +4700,17 @@ export const GetTicketsWithNeedsDocument = {
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'zoom' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'order' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'TicketListOrder' },
+          },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -4750,6 +4770,14 @@ export const GetTicketsWithNeedsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'zoom' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'order' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'order' },
                 },
               },
             ],

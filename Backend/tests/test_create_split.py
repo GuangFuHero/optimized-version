@@ -1,8 +1,9 @@
 """Ticket, station and ticket-task creation split into validate → insert → commit.
 
 A deduplicated create must validate before the dedup check and insert without committing, so the
-new row, its pair card and its audit row land in one transaction. Batch import still calls
-`create_*`, so these tests also pin that `create_*` keeps its signature and behaviour.
+new row, its pair card and its audit row land in one transaction. `create_*` were kept for
+batch import (ADR-299), which since ADR-398 validates and inserts itself; these tests still pin
+that `create_*` keep their signature and behaviour.
 """
 
 import inspect
@@ -31,7 +32,7 @@ pytestmark = pytest.mark.asyncio
 POINT = {"type": "Point", "coordinates": [121.5601, 23.6701]}
 ADDRESS = {"location_type": "address", "full_address": "花蓮縣光復鄉"}
 
-# The keyword names batch import and the GraphQL resolvers call `create_*` with.
+# The keyword names `create_*` take, as batch import called them until ADR-398.
 CREATE_TICKET_PARAMS = [
     "db", "actor", "geometry", "title", "description", "contact_name", "contact_email",
     "contact_phone", "priority", "task_type", "disaster_types",
@@ -165,7 +166,7 @@ async def test_create_ticket_behaves_as_before(db):
 
 
 async def test_create_ticket_keeps_its_signature():
-    """Batch import calls create_ticket by these keyword names."""
+    """Scripts call create_ticket by these keyword names (scripts/verify/history_timeline.py)."""
     assert list(inspect.signature(ticket_service.create_ticket).parameters) == CREATE_TICKET_PARAMS
 
 
@@ -232,7 +233,7 @@ async def test_create_station_behaves_as_before_and_still_notifies(db, monkeypat
 
 
 async def test_create_station_keeps_its_signature():
-    """Batch import calls create_station by these keyword names."""
+    """Unchanged since batch import called it by these keyword names (ADR-299)."""
     assert list(inspect.signature(station_service.create_station).parameters) == CREATE_STATION_PARAMS
 
 
