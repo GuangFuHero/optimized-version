@@ -42,11 +42,17 @@ import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
 import {
   listTickets,
+  pageFoldedAway,
   showsClosedTickets,
   type ListedTicket,
 } from './ticket-list-rules';
 
-import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  RowAction,
+  safeAreaBottom,
+} from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -67,6 +73,7 @@ export function SiteListView() {
     hasFetchedOnce,
     hasNextPage,
     loadNextPage,
+    pageIds,
     loadTicketMarker,
     replaceTicket,
   } = usePaginatedRescueMapMarkers(state);
@@ -107,6 +114,9 @@ export function SiteListView() {
     marker: RescueMapMarkerItem;
     needs?: ListedTicket['needs'];
   }[] = ticketList?.tickets ?? controller.markers.map((marker) => ({ marker }));
+  // Past a page that folded away entirely, only finished tickets are left to fetch (含已滿額 off).
+  const canLoadMore =
+    hasNextPage && !(ticketList && pageFoldedAway(pageIds, ticketList.tickets));
   const searchTooShort =
     dataType === 'ticket' &&
     resolveTicketSearch(state.search).kind === 'too-short';
@@ -254,7 +264,7 @@ export function SiteListView() {
   useEffect(() => {
     const target = loadMoreRef.current;
 
-    if (!target || !hasNextPage) {
+    if (!target || !canLoadMore) {
       return;
     }
 
@@ -273,7 +283,7 @@ export function SiteListView() {
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasNextPage, loadNextPage]);
+  }, [canLoadMore, loadNextPage]);
 
   const closeDetail = () => {
     setDetailOpen(false);
@@ -424,10 +434,7 @@ export function SiteListView() {
             px: { mobile: 2, tablet: 3 },
             pt: 2,
             // On a phone the last card scrolls clear of the floating 請求協助 (52px, 16px up).
-            pb: {
-              mobile: 'calc(84px + env(safe-area-inset-bottom, 0px))',
-              tablet: 2,
-            },
+            pb: { mobile: safeAreaBottom(84), tablet: 2 },
           }}
         >
           {searchTooShort ? (
@@ -444,12 +451,13 @@ export function SiteListView() {
             </Typography>
           ) : null}
           {/* Not while a page is on its way: every search reloads the list, and it would read
-              as empty between keystrokes. Nor while pages remain: the rows so far may all have
-              folded away (含已滿額), and only the sentinel below can ask for the next page. */}
+              as empty between keystrokes. Nor while a later page may still list something: the
+              rows so far may all have folded away (含已滿額), and only the sentinel below can ask
+              for the next page. */}
           {listRows.length === 0 &&
           hasFetchedOnce &&
           !isFetching &&
-          !hasNextPage ? (
+          !canLoadMore ? (
             <Stack
               sx={{
                 height: '100%',

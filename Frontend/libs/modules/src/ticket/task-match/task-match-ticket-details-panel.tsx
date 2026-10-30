@@ -14,6 +14,7 @@ import {
 } from '@rescue-frontend/data-access';
 
 import { BuildingTicketNavigation } from '../../building/building-navigation';
+import { responsibleTeamsText } from '../../map/areas';
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
@@ -205,6 +206,10 @@ export function TaskMatchTicketDetailsPanel({
   const unit = formatTicketUnit(ticketData?.ticket?.secondaryLocation);
   // Null to a guest, as the exact location is.
   const buildingUuid = ticketData?.ticket?.buildingMapUuid;
+  // Empty when the ticket lies in no 責任區, and to a guest, who sees the coarse branch anyway (ADR-422).
+  const responsible = responsibleTeamsText(
+    ticketData?.ticket?.responsibleTeams.map((team) => team.name) ?? [],
+  );
 
   return (
     <Stack spacing={2}>
@@ -357,6 +362,18 @@ export function TaskMatchTicketDetailsPanel({
                       }}
                     >
                       {unit}
+                    </Typography>
+                  ) : null}
+                  {/* Who answers for this place, as the map's 責任區 label writes it (ADR-422). */}
+                  {responsible ? (
+                    <Typography
+                      sx={{
+                        color: detailPalette.text,
+                        fontSize: displayTextSize[13],
+                        lineHeight: '20px',
+                      }}
+                    >
+                      {responsible}
                     </Typography>
                   ) : null}
                   <Typography

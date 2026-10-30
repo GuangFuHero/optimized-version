@@ -351,6 +351,18 @@ async def test_a_malformed_mapping_is_a_400(client, db_session, redis):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["mapping", "decisions", "declined"])
+async def test_json_too_deep_to_read_is_a_400(client, db_session, redis, field):
+    """A value the parser cannot read is malformed like any other, not a server error."""
+    headers = await _importer(db_session, redis)
+
+    resp = await _commit(client, headers, [_row("光復國小")], **{field: "[" * 100_000})
+
+    assert resp.status_code == 400
+    assert "JSON" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_a_mapping_that_is_not_an_object_is_a_400(client, db_session, redis):
     """The mapping has to be an object of header pairs."""
     headers = await _importer(db_session, redis)
@@ -399,3 +411,99 @@ async def test_ticket_preview_and_commit_are_wired_up(client, db_session, redis)
 
     assert preview.json()["to_create"] == 1
     assert commit.json()["created"] == 1
+
+
+# --- the fast dedup layer (ADR-398) ---
+
+
+async def _commit(client, headers, rows, **data):
+    return await client.post(
+        f"{BASE}/stations/import/commit?station_type=shelter", headers=headers, files=_upload(rows), data=data
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_suspected_row_comes_back_from_preview_and_lands_with_its_decision(client, db_session, redis):
+    """The preview names what the row looks like; the commit's `decisions` files it anyway."""
+    headers = await _importer(db_session, redis)
+    await _commit(client, headers, [_row("光復國小臨時收容所")])
+
+    preview = await client.post(
+        f"{BASE}/stations/import/preview?station_type=shelter",
+        headers=headers,
+        files=_upload([_row("光復國小臨時收容處")]),
+    )
+    body = preview.json()
+    (suspect,) = body["suspects"]
+    assert (body["to_create"], body["suspected"], body["dedup_checked"]) == (0, 1, True)
+    assert {k: suspect[k] for k in ("line", "related_kind", "title", "task_name", "distance_m")} == {
+        "line": 2,
+        "related_kind": "station",
+        "title": "光復國小臨時收容所",
+        "task_name": None,
+        "distance_m": 0,
+    }
+    decisions = json.dumps([{"line": 2, "acknowledged_duplicate_of": suspect["related_uuid"]}])
+    commit = await _commit(client, headers, [_row("光復國小臨時收容處")], decisions=decisions)
+
+    assert (commit.json()["created"], commit.json()["suspected"]) == (1, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "decisions",
+    [
+        "not json",
+        json.dumps({"2": "x"}),
+        json.dumps([{"line": "2", "acknowledged_duplicate_of": "x"}]),
+        json.dumps([{"line": True, "acknowledged_duplicate_of": "x"}]),
+        json.dumps([{"line": 2}]),
+        json.dumps(
+            [{"line": 2, "acknowledged_duplicate_of": "x"}, {"line": 2, "acknowledged_duplicate_of": "y"}]
+        ),
+    ],
+    ids=["not-json", "not-a-list", "line-not-a-number", "line-a-bool", "no-uuid", "a-line-twice"],
+)
+async def test_malformed_decisions_are_a_400(client, db_session, redis, decisions):
+    """The caller's mistake, said before anything is written."""
+    headers = await _importer(db_session, redis)
+
+    resp = await _commit(client, headers, [_row("光復國小")], decisions=decisions)
+
+    assert resp.status_code == 400
+    assert "decisions" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_declined_row_is_not_created_and_counted_apart(client, db_session, redis):
+    """`declined` names the rows the importer chose not to create; the response counts them."""
+    headers = await _importer(db_session, redis)
+
+    commit = await _commit(client, headers, [_row("光復國小"), _row("大進國小")], declined=json.dumps([3]))
+
+    body = commit.json()
+    assert (body["created"], body["failed"], body["suspected"], body["declined"]) == (1, 0, 0, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("declined", "decisions", "says"),
+    [
+        ("not json", None, "declined"),
+        (json.dumps({"2": True}), None, "declined"),
+        (json.dumps(["2"]), None, "declined"),
+        (json.dumps([True]), None, "declined"),
+        (json.dumps([2, 2]), None, "第 2 列"),
+        (json.dumps([2]), json.dumps([{"line": 2, "acknowledged_duplicate_of": "x"}]), "第 2 列"),
+    ],
+    ids=["not-json", "not-a-list", "line-not-a-number", "line-a-bool", "a-line-twice", "also-in-decisions"],
+)
+async def test_malformed_declined_is_a_400(client, db_session, redis, declined, decisions, says):
+    """As for `decisions`; a line both filed anyway and declined is the caller's mistake too."""
+    headers = await _importer(db_session, redis)
+    data = {"declined": declined} | ({"decisions": decisions} if decisions else {})
+
+    resp = await _commit(client, headers, [_row("光復國小")], **data)
+
+    assert resp.status_code == 400
+    assert says in resp.json()["detail"]
