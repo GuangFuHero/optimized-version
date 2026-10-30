@@ -176,7 +176,7 @@ def _parse_tz(tz: str) -> ZoneInfo:
 
 def _ticket_filters(
     task_type: TicketTaskType | None = Query(
-        None, description="Only tickets of this task type (the ticket's own `task_type`)."
+        None, description="Only tickets of this task type; the volunteer metrics read each need's own type."
     ),
     ticket_status: TicketStatus | None = Query(
         None, alias="status", description="Only tickets with this status."

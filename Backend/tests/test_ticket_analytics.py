@@ -14,6 +14,7 @@ import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 
+from app.core import search
 from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.dedup import DedupAuditEvent, DuplicatePair
@@ -23,7 +24,7 @@ from app.models.ticket_task import TaskAssignment, TicketTask
 from app.schemas.analytics import ChartStyle, TicketTaskType
 from app.services import ticket as ticket_service
 from app.services import ticket_analytics
-from app.services.analytics_common import MAX_TREND_DAYS, UNCATEGORIZED_LABEL
+from app.services.analytics_common import MAX_TREND_DAYS, UNCATEGORIZED_LABEL, AnalyticsInputError
 from app.services.chart_render import _render_pivoted, chart_series, render_chart, resolve
 
 UTC_TZ = ZoneInfo("UTC")
@@ -859,6 +860,18 @@ async def test_volunteer_totals_read_the_latest_audit_entry_when_entries_share_a
     await db.flush()
 
     assert await _volunteers(db, "needed", end_date=date(2026, 9, 2)) == [{"count": 9}]
+
+
+@pytest.mark.asyncio
+async def test_a_trend_over_the_statement_ceiling_is_refused_as_a_bad_request(db, monkeypatch):
+    """A trend too costly for the ceiling is cancelled and surfaces as the 400-type input error."""
+    monkeypatch.setattr(search, "SEARCH_STATEMENT_TIMEOUT_MS", 1)
+    await _seed_trend(db)
+
+    with pytest.raises(AnalyticsInputError, match="逾時"):
+        await _volunteers(
+            db, "gap", x="date", start_date=date(2026, 1, 1), end_date=date(2026, 1, 1) + timedelta(days=365)
+        )
 
 
 def test_task_type_filter_values_are_the_ticket_task_types():

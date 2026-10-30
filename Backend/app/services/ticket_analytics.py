@@ -63,6 +63,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql.expression import ColumnClause
 from sqlalchemy.sql.visitors import replacement_traverse
 
+from app.core.search import statement_ceiling
 from app.models.audit import AuditLog
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.request import Tickets
@@ -71,6 +72,7 @@ from app.services.analytics_common import (
     DEFAULT_TREND_DAYS,
     MAX_TREND_DAYS,
     AnalyticsInputError,
+    AnalyticsTimeoutError,
     category_expr,
     local_bounds,
     resolve_granularity,
@@ -558,7 +560,8 @@ def _versions_at(table: str, live, days):
     (it predates auditing) shows its current values.
     """
     a = AuditLog
-    # Entries of one transaction share created_at, so physical order (append-only) breaks the tie.
+    # Entries of one transaction share created_at; physical order breaks the tie, which usually but
+    # not always follows write order.
     in_order = [a.created_at, literal_column("ctid")]
     entries = (
         select(
@@ -712,7 +715,10 @@ async def get_volunteer_metric(
     if group_cols:
         query = query.group_by(*group_cols)
 
-    rows = [dict(row._mapping) for row in await db.execute(query)]
+    async with statement_ceiling(
+        db, refusal="這段期間的志工趨勢計算逾時已中止，請縮短日期範圍", error=AnalyticsTimeoutError
+    ):
+        rows = [dict(row._mapping) for row in await db.execute(query)]
     if x == "date":
         day_of = {t: datetime.combine(day, time.min) for day, t in instants}
         rows = [{"x": day_of[row["t"]], "count": row["count"]} for row in rows]
