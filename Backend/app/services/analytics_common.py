@@ -18,8 +18,9 @@ from app.core.search import StatementTimeoutError
 UNCATEGORIZED_LABEL = "uncategorized"
 
 # A day-by-day trend evaluates every need once per day, so its span is capped at this many days.
-# The cap bounds days, not rows: the cost also grows with the audited needs and claims, which is
-# why the trend runs under the statement ceiling as well. The default is what the dashboard opens on.
+# The cap bounds days, not rows: the cost also grows with the needs and claims in the audit log,
+# which is why the trend runs under the statement ceiling as well. The default is what the dashboard
+# opens on.
 MAX_TREND_DAYS = 366
 DEFAULT_TREND_DAYS = 30
 

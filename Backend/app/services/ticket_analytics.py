@@ -552,29 +552,29 @@ def _as_of_instants(
     ]
 
 
-def _versions_at(table: str, live, days):
+def _versions_at(table: str, live, days, *, of_live_rows: bool = False):
     """`table`'s rows as they stood at each instant of `days`, from audit_logs: columns t, row_id, doc.
 
     `doc` is the row's JSON in the newest audit entry made before `t`; a row deleted by then is left
     out. A row with no entry yet shows the state its first entry started from, and one never audited
-    (it predates auditing) shows its current values.
+    (it predates auditing) shows its current values. `of_live_rows` reads the entries of the rows
+    still in `table` only, by row_id, so the cost follows those rows and not the size of the ledger.
     """
     a = AuditLog
     # Entries of one transaction share created_at; physical order breaks the tie, which usually but
     # not always follows write order.
-    in_order = [a.created_at, literal_column("ctid")]
-    entries = (
-        select(
-            a.row_id,
-            a.created_at.label("from_at"),
-            func.lead(a.created_at).over(partition_by=a.row_id, order_by=in_order).label("to_at"),
-            a.new_values.label("doc"),
-            a.old_values.label("before"),
-            func.row_number().over(partition_by=a.row_id, order_by=in_order).label("n"),
-        )
-        .where(a.table_name == table)
-        .subquery()
-    )
+    in_order = [a.created_at, literal_column("audit_logs.ctid")]
+    entries = select(
+        a.row_id,
+        a.created_at.label("from_at"),
+        func.lead(a.created_at).over(partition_by=a.row_id, order_by=in_order).label("to_at"),
+        a.new_values.label("doc"),
+        a.old_values.label("before"),
+        func.row_number().over(partition_by=a.row_id, order_by=in_order).label("n"),
+    ).where(a.table_name == table)
+    if of_live_rows:
+        entries = entries.join(live, live.uuid == a.row_id)
+    entries = entries.subquery()
     no_time = cast(null(), DateTime(timezone=True))
     history = union_all(
         select(entries.c.row_id, entries.c.from_at, entries.c.to_at, entries.c.doc),
@@ -656,7 +656,7 @@ async def get_volunteer_metric(
     instants = _as_of_instants(x, start_date, end_date, tz)
     days = values(column("t", DateTime(timezone=True)), name="days").data([(t,) for _, t in instants])
     need, claim = (
-        _versions_at("ticket_tasks", TicketTask, days),
+        _versions_at("ticket_tasks", TicketTask, days, of_live_rows=True),
         _versions_at("task_assignments", TaskAssignment, days),
     )
 
@@ -715,9 +715,10 @@ async def get_volunteer_metric(
     if group_cols:
         query = query.group_by(*group_cols)
 
-    async with statement_ceiling(
-        db, refusal="這段期間的志工趨勢計算逾時已中止，請縮短日期範圍", error=AnalyticsTimeoutError
-    ):
+    refusal = "志工人數計算逾時已中止"
+    if x == "date":
+        refusal += "，趨勢請縮短日期範圍"
+    async with statement_ceiling(db, refusal=refusal, error=AnalyticsTimeoutError):
         rows = [dict(row._mapping) for row in await db.execute(query)]
     if x == "date":
         day_of = {t: datetime.combine(day, time.min) for day, t in instants}

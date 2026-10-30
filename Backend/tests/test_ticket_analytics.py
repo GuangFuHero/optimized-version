@@ -868,10 +868,53 @@ async def test_a_trend_over_the_statement_ceiling_is_refused_as_a_bad_request(db
     monkeypatch.setattr(search, "SEARCH_STATEMENT_TIMEOUT_MS", 1)
     await _seed_trend(db)
 
-    with pytest.raises(AnalyticsInputError, match="逾時"):
+    with pytest.raises(AnalyticsInputError, match="逾時.*趨勢請縮短日期範圍"):
         await _volunteers(
             db, "gap", x="date", start_date=date(2026, 1, 1), end_date=date(2026, 1, 1) + timedelta(days=365)
         )
+
+
+@pytest.mark.asyncio
+async def test_a_total_over_the_statement_ceiling_is_not_told_to_shorten_the_range(db, monkeypatch):
+    """A total or a by-category view has no range to shorten, so the refusal must not suggest one."""
+    monkeypatch.setattr(search, "SEARCH_STATEMENT_TIMEOUT_MS", 1)
+    await _seed_trend(db)
+
+    for x in (None, "category"):
+        with pytest.raises(AnalyticsInputError, match="逾時") as refused:
+            await _volunteers(db, "gap", x=x)
+        assert "日期範圍" not in str(refused.value)
+
+
+@pytest.mark.asyncio
+async def test_audit_entries_of_rows_no_longer_in_ticket_tasks_are_not_read(db):
+    """The need history is read for the rows still in ticket_tasks only; a stray entry changes nothing."""
+    owner = await _make_user(db)
+    ticket = _make_ticket(owner)
+    db.add(ticket)
+    await db.flush()
+    need = _need(str(ticket.uuid), owner, quantity=3, created_at=_utc(9, 1))
+    db.add(need)
+    await db.flush()
+    _record(db, need, (_utc(9, 1), {"quantity": 3}))
+    db.add(
+        AuditLog(
+            table_name="ticket_tasks",
+            action="INSERT",
+            row_id=uuid.uuid4(),
+            new_values={
+                "ticket_uuid": str(ticket.uuid),
+                "quantity": 50,
+                "status": "pending",
+                "task_type": "rescue",
+                "created_at": _utc(9, 1).isoformat(),
+            },
+            created_at=_utc(9, 1),
+        )
+    )
+    await db.flush()
+
+    assert await _volunteers(db, "needed", end_date=date(2026, 9, 2)) == [{"count": 3}]
 
 
 def test_task_type_filter_values_are_the_ticket_task_types():
