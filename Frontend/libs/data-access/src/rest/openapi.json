@@ -6158,10 +6158,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type (the ticket's own `task_type`).",
+              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type (the ticket's own `task_type`)."
+            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
           },
           {
             "name": "status",
@@ -6391,10 +6391,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type (the ticket's own `task_type`).",
+              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type (the ticket's own `task_type`)."
+            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
           },
           {
             "name": "status",
@@ -6595,10 +6595,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type (the ticket's own `task_type`).",
+              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type (the ticket's own `task_type`)."
+            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
           },
           {
             "name": "status",
