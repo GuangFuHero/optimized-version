@@ -372,8 +372,7 @@ class TicketTaskType:
         default="user",
         description=(
             "Origin of this task: 'user' when the site's identity made it, 'official' when a back-office "
-            "one did. Tasks made before that rule keep what they had, 'gov' or 'import', as do the mock "
-            "seed's, which writes 'gov'"
+            "one did. Tasks made before that rule keep what they had, 'gov' or 'import'"
         ),
     )
     recruiting_stopped_at: datetime | None = strawberry.field(
