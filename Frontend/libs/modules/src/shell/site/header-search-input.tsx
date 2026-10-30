@@ -3,7 +3,13 @@
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import { Box, InputBase } from '@mui/material';
 import { usePathname } from 'next/navigation';
-import { startTransition, useEffect, useState, type ChangeEvent } from 'react';
+import {
+  startTransition,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from 'react';
 
 import { designTokens, Icons } from '@rescue-frontend/ui';
 
@@ -33,8 +39,17 @@ function SiteHeaderSearchField({
   value,
   onChange,
 }: SiteHeaderSearchFieldProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
     <Box
+      // The input is one line tall in a 40px box: a tap on the rest of the box, or on the icon, would
+      // not reach it on a phone. Anywhere but the clear button focuses it (design, 2026-10-30).
+      onClick={(event) => {
+        if (!(event.target as HTMLElement).closest('button')) {
+          inputRef.current?.focus();
+        }
+      }}
       sx={{
         width: '100%',
         maxWidth: compact ? 'none' : 520,
@@ -44,6 +59,7 @@ function SiteHeaderSearchField({
         display: 'flex',
         alignItems: 'center',
         gap: 1,
+        cursor: 'text',
         borderRadius: `${radius.full}px`,
         bgcolor: color.bg.neutral.subtle,
         // Inset ring rather than a border, matching the design system's `Input`: the ring can
@@ -56,6 +72,7 @@ function SiteHeaderSearchField({
       }}
     >
       <InputBase
+        inputRef={inputRef}
         value={value ?? ''}
         onChange={onChange}
         placeholder="搜尋站點、任務或地點"
