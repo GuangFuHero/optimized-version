@@ -7,7 +7,8 @@ status codes a caller actually sees, not what a service function returns.
 """
 
 import json
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -18,12 +19,16 @@ from shapely.geometry import Point
 from app.api.v1.endpoints.analytics import _in_catalog_unit
 from app.core.permissions import Perm
 from app.models.auth import User
+from app.models.dedup import DuplicatePair
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TaskAssignment, TicketTask
-from app.schemas.analytics import TicketYMetric
+from app.schemas.analytics import TicketTaskType, TicketYMetric
 from app.services import chart_render
+from app.services.analytics_common import MAX_TREND_DAYS
+from app.services.ticket import TASK_TYPES
 from tests.conftest import auth_headers_for
 
 TICKETS_URL = "/api/v1/analytics/tickets/chart"
@@ -149,19 +154,14 @@ async def test_valid_timezone_is_accepted(client, db_session, redis):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_count_requires_a_date_range(client, db_session, redis):
-    """H3: unbounded this is an O(n^2) self-join, so the dates are mandatory."""
+async def test_duplicate_count_needs_no_date_range(client, db_session, redis):
+    """It reads the AI review's cards instead of self-joining tickets, so an open range is fine."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_URL, params={"y": "duplicate_count"}, headers=headers)
-    assert res.status_code == 400
-    assert "start_date" in res.json()["detail"]
-
-    res = await client.get(
-        TICKETS_URL,
-        params={"y": "duplicate_count", "start_date": "2026-08-01", "end_date": "2026-08-31"},
-        headers=headers,
-    )
-    assert res.status_code == 200
+    for url in (TICKETS_URL, TICKETS_DATA_URL, TICKETS_VALUE_URL):
+        res = await client.get(url, params={"y": "duplicate_count"}, headers=headers)
+        assert res.status_code == 200
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "duplicate_count"}, headers=headers)
+    assert res.json() == {"value": 0}
 
 
 @pytest.mark.asyncio
@@ -222,7 +222,7 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
     assert res.status_code == 200
 
     body = res.json()
-    assert set(body) == {"tickets", "stations", "default_style"}
+    assert set(body) == {"tickets", "stations", "filters", "default_style"}
     # Named rather than counted, so adding a metric doesn't fail this test for no reason —
     # but a metric silently disappearing from the frontend's dropdowns still does.
     assert set(body["tickets"]) == {
@@ -237,18 +237,21 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
         "net_backlog_change",
         "task_completion_distribution",
         "duplicate_count",
+        "volunteers_needed",
+        "volunteers_matched",
+        "volunteer_gap",
     }
     assert set(body["stations"]) == {
         "station_count",
         "station_status_count",
         "station_freshness_trend",
+        "operating_station_count",
     }
-    # These two fields are how the frontend keeps duplicate_count's cost under control
-    # without waiting for a 400 — see chart_render.CATALOG.
-    assert body["tickets"]["duplicate_count"]["requires_date_range"] is True
-    assert body["tickets"]["duplicate_count"]["max_range_days"] == 120
-    assert body["tickets"]["total_tickets"]["requires_date_range"] is False
+    # Only the volunteer trend is capped, so the frontend can clamp its date picker rather than
+    # wait for a 400; no metric refuses an open range any more.
+    assert body["tickets"]["volunteer_gap"]["max_range_days"] == MAX_TREND_DAYS
     assert body["tickets"]["total_tickets"]["max_range_days"] is None
+    assert all(not spec["requires_date_range"] for spec in {**body["tickets"], **body["stations"]}.values())
     assert body["tickets"]["total_tickets"]["allowed_x"] == ["category", "date", "none"]
     # station_status_count is grouping-only: ungrouped it would just repeat station_count.
     assert body["stations"]["station_status_count"]["allowed_x"] == ["category"]
@@ -257,6 +260,25 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
     assert body["tickets"]["total_tickets"]["unit"] == "件"
     assert body["tickets"]["completion_rate"]["unit"] == "%"
     assert all(spec["description"] for spec in {**body["tickets"], **body["stations"]}.values())
+    # The new labels and what the descriptions promise: the dashboard's default range, running
+    # totals up to today, and where the duplicate count comes from.
+    assert body["tickets"]["duplicate_count"]["label"] == "疑似重複的單"
+    assert "AI 重複審核" in body["tickets"]["duplicate_count"]["description"]
+    assert "近 30 天" in body["tickets"]["total_tickets"]["description"]
+    assert "近 30 天" in body["stations"]["station_count"]["description"]
+    for y, label in (
+        ("volunteers_needed", "志工需求人數"),
+        ("volunteers_matched", "已媒合志工人數"),
+        ("volunteer_gap", "志工缺口"),
+    ):
+        assert (body["tickets"][y]["label"], body["tickets"][y]["unit"]) == (label, "人")
+        assert "截至今日" in body["tickets"][y]["description"]
+    assert body["tickets"]["volunteer_gap"]["allowed_x"] == ["category", "date", "none"]
+    assert body["tickets"]["volunteers_needed"]["allowed_x"] == ["category", "none"]
+    assert "沿用現在" in body["tickets"]["volunteer_gap"]["description"]
+    operating = body["stations"]["operating_station_count"]
+    assert (operating["label"], operating["unit"]) == ("營運中站點數", "站")
+    assert "截至今日" in operating["description"]
     # default_style is what the chart endpoints use when `style` is omitted.
     assert body["default_style"]["palette"][0] == "#E3791E"
     assert body["default_style"]["legend"] == "bottom"
@@ -270,20 +292,23 @@ async def test_catalog_still_requires_authentication(client):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_count_rejects_a_range_wider_than_the_cap(client, db_session, redis):
-    """Supplying the dates isn't enough — the span between them is what costs.
-
-    This is a self-join, and no statement_timeout or rate limit is deployed, so the cap is
-    all that stops one request holding a connection for as long as it likes.
-    """
+async def test_volunteer_gap_trend_rejects_a_range_wider_than_the_cap(client, db_session, redis):
+    """A day-by-day trend runs once per day, and no statement_timeout or rate limit is deployed."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
-        TICKETS_URL,
-        params={"y": "duplicate_count", "start_date": "1900-01-01", "end_date": "2999-12-31"},
+        TICKETS_DATA_URL,
+        params={"y": "volunteer_gap", "x": "date", "start_date": "1900-01-01", "end_date": "2999-12-31"},
         headers=headers,
     )
     assert res.status_code == 400
-    assert "120 days" in res.json()["detail"]
+    assert f"{MAX_TREND_DAYS} days" in res.json()["detail"]
+    # A total reads one instant, so the span between the dates costs nothing.
+    res = await client.get(
+        TICKETS_VALUE_URL,
+        params={"y": "volunteer_gap", "start_date": "1900-01-01", "end_date": "2999-12-31"},
+        headers=headers,
+    )
+    assert res.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -603,11 +628,10 @@ async def test_value_rejects_a_metric_with_no_single_number(client, db_session, 
 
 @pytest.mark.asyncio
 async def test_value_keeps_the_metrics_own_input_rules(client, db_session, redis):
-    """duplicate_count's mandatory date range applies to the number as much as the chart."""
+    """A bad timezone is a 400 on a volunteer total as on any other number."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_VALUE_URL, params={"y": "duplicate_count"}, headers=headers)
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "volunteer_gap", "tz": ""}, headers=headers)
     assert res.status_code == 400
-    assert "start_date" in res.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -843,11 +867,15 @@ async def test_data_reports_the_grouping_it_applied(client, db_session, redis):
 
 @pytest.mark.asyncio
 async def test_data_keeps_the_metrics_own_input_rules(client, db_session, redis):
-    """duplicate_count's mandatory date range and a bad tz are 400s here as on the chart."""
+    """An inverted trend range and a bad tz are 400s here as on the chart."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_DATA_URL, params={"y": "duplicate_count"}, headers=headers)
+    res = await client.get(
+        TICKETS_DATA_URL,
+        params={"y": "volunteer_gap", "x": "date", "start_date": "2026-09-02", "end_date": "2026-09-01"},
+        headers=headers,
+    )
     assert res.status_code == 400
-    assert "start_date" in res.json()["detail"]
+    assert "end_date" in res.json()["detail"]
 
     res = await client.get(TICKETS_DATA_URL, params={"y": "total_tickets", "tz": ""}, headers=headers)
     assert res.status_code == 400
@@ -906,3 +934,387 @@ async def test_data_durations_are_days_as_numbers(client, db_session, redis):
         "x_values": ["搜救"],
         "series": [{"name": "平均（天）", "values": [1.5]}, {"name": "中位數（天）", "values": [1.5]}],
     }
+
+
+# --- volunteers, filters and the catalog's filter values ---
+
+
+async def _filed(db, owner, *, county=None, town=None, village=None, task_type="rescue", status="pending"):
+    """A ticket, with an address when `county` is given."""
+    ticket = _ticket(owner, task_type)
+    ticket.status = status
+    db.add(ticket)
+    await db.flush()
+    if county:
+        db.add(
+            SecondaryLocation(
+                geometry_uuid=ticket.uuid, location_type="address", county=county, town=town, village=village
+            )
+        )
+    await db.flush()
+    return ticket
+
+
+async def _total(client, headers, url=TICKETS_VALUE_URL, y="total_tickets", **filters) -> int:
+    res = await client.get(url, params={"y": y, **filters}, headers=headers)
+    assert res.status_code == 200, res.text
+    return res.json()["value"]
+
+
+@pytest.mark.asyncio
+async def test_volunteer_metrics_over_value_data_and_chart(client, db_session, redis):
+    """A need for 5 with 2 people on it: needed 5, matched 2, gap 3; x=date only applies to the gap."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    ticket = await _filed(db_session, user_uuid, task_type="hr")
+    yesterday = datetime.now(UTC) - timedelta(days=1)
+    need = TicketTask(
+        ticket_uuid=ticket.uuid,
+        task_type="hr",
+        task_name="task",
+        source="user",
+        created_by=user_uuid,
+        status="pending",
+        quantity=5,
+        created_at=yesterday,
+    )
+    other = User(name="volunteer")
+    db_session.add_all([need, other])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            TaskAssignment(task_uuid=need.uuid, actor_uuid=actor, assigned_at=yesterday)
+            for actor in (user_uuid, str(other.uuid))
+        ]
+    )
+    await db_session.commit()
+
+    assert await _total(client, headers, y="volunteers_needed") == 5
+    assert await _total(client, headers, y="volunteers_matched") == 2
+    assert await _total(client, headers, y="volunteer_gap") == 3
+
+    by_type = (
+        await client.get(TICKETS_DATA_URL, params={"y": "volunteer_gap", "x": "category"}, headers=headers)
+    ).json()
+    assert (by_type["x_values"], by_type["series"]) == (["人力"], [{"name": "志工缺口", "values": [3]}])
+    # The totals have no date form, so the x is ignored rather than rejected.
+    ignored = await client.get(
+        TICKETS_DATA_URL, params={"y": "volunteers_needed", "x": "date"}, headers=headers
+    )
+    assert ignored.status_code == 200
+    assert ignored.json()["x"] is None
+
+    today = datetime.now(UTC).date()
+    trend = {
+        "y": "volunteer_gap",
+        "x": "date",
+        "start_date": str(today - timedelta(days=2)),
+        "end_date": str(today),
+    }
+    data = (await client.get(TICKETS_DATA_URL, params=trend, headers=headers)).json()
+    assert data["x"] == "date"
+    assert data["series"] == [{"name": "志工缺口", "values": [0, 3, 3]}]
+    figure = await client.get(TICKETS_URL, params={**trend, "chart_type": "line"}, headers=headers)
+    assert figure.status_code == 200
+    assert figure.json()["data"][0]["y"] == [0, 3, 3]
+
+
+@pytest.mark.asyncio
+async def test_ticket_filters_by_task_type_and_status(client, db_session, redis):
+    """task_type and status each narrow the count, and combine."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    await _filed(db_session, user_uuid, task_type="rescue", status="pending")
+    await _filed(db_session, user_uuid, task_type="supply", status="in_progress")
+    await _filed(db_session, user_uuid, task_type="supply", status="completed")
+    await db_session.commit()
+
+    assert await _total(client, headers) == 3
+    assert await _total(client, headers, task_type="supply") == 2
+    assert await _total(client, headers, status="completed") == 1
+    assert await _total(client, headers, task_type="supply", status="in_progress") == 1
+    assert await _total(client, headers, task_type="medical") == 0
+    assert await _total(client, headers, status="cancelled") == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("params", [{"task_type": "bogus"}, {"status": "bogus"}, {"status": "active"}])
+async def test_ticket_filter_values_outside_the_vocabulary_are_rejected(client, db_session, redis, params):
+    """An unknown task type or status is a 422, not a silent empty result."""
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "total_tickets", **params}, headers=headers)
+    assert res.status_code == 422
+
+
+def test_task_type_filter_lists_the_task_types_a_need_can_have():
+    """The filter's enum is a second copy of the vocabulary; this catches the two drifting apart."""
+    assert {t.value for t in TicketTaskType} == TASK_TYPES
+
+
+@pytest.mark.asyncio
+async def test_ticket_area_filters_by_city_town_or_village(client, db_session, redis):
+    """Each part of the address narrows on its own, they combine, and only an address row counts."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    await _filed(db_session, user_uuid, county="花蓮縣", town="光復鄉", village="大馬村")
+    await _filed(db_session, user_uuid, county="花蓮縣", town="光復鄉", village="大進村")
+    await _filed(db_session, user_uuid, county="花蓮縣", town="鳳林鎮", village="大馬村")
+    pole = await _filed(db_session, user_uuid, county="宜蘭縣", town="冬山鄉", village="冬山村")
+    await _filed(db_session, user_uuid)  # no address at all
+    # A second address row of the first ticket must not count it twice; a pole row is not an address.
+    db_session.add(
+        SecondaryLocation(geometry_uuid=pole.uuid, location_type="pole", county="臺北市", town="中正區")
+    )
+    await db_session.commit()
+
+    assert await _total(client, headers) == 5
+    assert await _total(client, headers, county="花蓮縣") == 3
+    assert await _total(client, headers, county="花蓮縣", town="光復鄉") == 2
+    assert await _total(client, headers, town="光復鄉") == 2
+    assert await _total(client, headers, village="大馬村") == 2  # the same name in two towns
+    assert await _total(client, headers, town="光復鄉", village="大馬村") == 1
+    assert await _total(client, headers, county="宜蘭縣") == 1
+    assert await _total(client, headers, county="臺北市") == 0  # the pole row is not an address
+    assert await _total(client, headers, county="花蓮縣", village="冬山村") == 0
+    assert await _total(client, headers, county="") == 5  # blank means no filter
+
+
+@pytest.mark.asyncio
+async def test_a_ticket_with_two_address_rows_is_counted_once(client, db_session, redis):
+    """The address filter asks whether a matching row exists; it does not join."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    ticket = await _filed(db_session, user_uuid, county="花蓮縣", town="光復鄉", village="大馬村")
+    db_session.add(
+        SecondaryLocation(geometry_uuid=ticket.uuid, location_type="address", county="花蓮縣", town="光復鄉")
+    )
+    await db_session.commit()
+
+    assert await _total(client, headers, county="花蓮縣") == 1
+
+
+@pytest.mark.asyncio
+async def test_filters_narrow_the_callers_scope_and_never_widen_it(client, db_session, redis):
+    """Someone with `own` scope who filters on a place still sees only their own tickets there."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW, scope="own")
+    stranger = User(name="somebody else")
+    db_session.add(stranger)
+    await db_session.flush()
+    await _filed(db_session, user_uuid, county="花蓮縣", task_type="supply")
+    await _filed(db_session, str(stranger.uuid), county="花蓮縣", task_type="supply")
+    await _filed(db_session, str(stranger.uuid), county="宜蘭縣", task_type="supply")
+    await db_session.commit()
+
+    assert await _total(client, headers, county="花蓮縣", task_type="supply") == 1
+    assert await _total(client, headers, county="宜蘭縣") == 0
+    assert await _total(client, headers, y="volunteers_needed", county="花蓮縣") == 0
+
+
+@pytest.mark.asyncio
+async def test_filters_apply_to_the_chart_and_data_endpoints_too(client, db_session, redis):
+    """The filters ride on all three endpoints, not only /value."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    await _filed(db_session, user_uuid, county="花蓮縣")
+    await _filed(db_session, user_uuid, county="宜蘭縣")
+    await db_session.commit()
+
+    params = {"y": "total_tickets", "county": "花蓮縣"}
+    chart = (await client.get(TICKETS_URL, params=params, headers=headers)).json()
+    data = (await client.get(TICKETS_DATA_URL, params=params, headers=headers)).json()
+    assert chart["data"][0]["y"] == [1]
+    assert data["series"][0]["values"] == [1]
+
+
+@pytest.mark.asyncio
+async def test_station_filters_and_the_operating_count(client, db_session, redis):
+    """Stations filter by type, status and area; the operating count is the active ones, undated."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.STATION_VIEW)
+    specs = [
+        ("shelter", "active", "花蓮縣", "光復鄉", "大馬村"),
+        ("shelter", "temporarily_closed", "花蓮縣", "光復鄉", "大進村"),
+        ("water", "active", "宜蘭縣", "冬山鄉", "冬山村"),
+        ("water", "permanently_closed", None, None, None),
+    ]
+    for kind, operational_status, county, town, village in specs:
+        station = Station(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid,
+            level=1,
+            source="user",
+            visibility="public",
+            type=kind,
+            operational_status=operational_status,
+        )
+        db_session.add(station)
+        await db_session.flush()
+        if county:
+            db_session.add(
+                SecondaryLocation(
+                    geometry_uuid=station.uuid,
+                    location_type="address",
+                    county=county,
+                    town=town,
+                    village=village,
+                )
+            )
+    await db_session.commit()
+
+    async def total(y="station_count", **filters):
+        return await _total(client, headers, url=STATIONS_VALUE_URL, y=y, **filters)
+
+    assert await total() == 4
+    assert await total(station_type="water") == 2
+    assert await total(status="active") == 2
+    assert await total(station_type="water", status="active") == 1
+    assert await total(county="花蓮縣") == 2
+    assert await total(village="冬山村") == 1
+    # Operating stations: active ones only, wherever and whenever they were made.
+    old = {"start_date": "2001-01-01", "end_date": "2001-01-02"}
+    assert await total(y="operating_station_count") == 2
+    assert await total(y="operating_station_count", **old) == 2
+    assert await total(y="operating_station_count", station_type="water") == 1
+    # ...and a status filter that contradicts it leaves nothing.
+    assert await total(y="operating_station_count", status="permanently_closed") == 0
+    res = await client.get(
+        STATIONS_URL, params={"y": "operating_station_count", "x": "category"}, headers=headers
+    )
+    assert dict(zip(res.json()["data"][0]["x"], res.json()["data"][0]["y"], strict=True)) == {
+        "收容所": 1,
+        "water": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_station_status_outside_the_vocabulary_is_rejected(client, db_session, redis):
+    """A ticket status is not a station status: 422."""
+    headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
+    res = await client.get(
+        STATIONS_VALUE_URL, params={"y": "station_count", "status": "pending"}, headers=headers
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_duplicate_count_over_the_endpoints_counts_pending_cards(client, db_session, redis):
+    """The number the dashboard shows: tickets named by a card waiting for review."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    first, second = await _filed(db_session, user_uuid), await _filed(db_session, user_uuid)
+    low, high = sorted((uuid.UUID(str(first.uuid)), uuid.UUID(str(second.uuid))), key=lambda u: u.int)
+    db_session.add(
+        DuplicatePair(
+            entity_kind="ticket",
+            low_uuid=low,
+            high_uuid=high,
+            method="fast_rule",
+            engine_version="fast-v1",
+            source_layer="fast",
+            status="dup_ignored",
+        )
+    )
+    await db_session.commit()
+
+    assert await _total(client, headers, y="duplicate_count") == 2
+    data = (await client.get(TICKETS_DATA_URL, params={"y": "duplicate_count"}, headers=headers)).json()
+    assert data["series"] == [{"name": "疑似重複的單", "values": [2]}]
+    assert (
+        await _total(client, headers, y="duplicate_count", start_date="2001-01-01", end_date="2001-01-02")
+        == 0
+    )
+
+
+def _option_values(options: list[dict]) -> list[str]:
+    return [option["value"] for option in options]
+
+
+@pytest.mark.asyncio
+async def test_catalog_publishes_the_filter_values(client, db_session, redis):
+    """The catalog lists each filter's values, with display names, from the live rows."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW, Perm.STATION_VIEW)
+    await _filed(db_session, user_uuid, county="花蓮縣", town="光復鄉", village="大馬村")
+    await _filed(db_session, user_uuid, county="花蓮縣", town="光復鄉", village="大進村")
+    await _filed(db_session, user_uuid, county="花蓮縣", town="鳳林鎮")
+    await _filed(db_session, user_uuid, county="宜蘭縣")
+    gone = await _filed(db_session, user_uuid, county="臺北市", town="中正區")
+    gone.delete_at = datetime.now(UTC)
+    for kind in ("shelter", "water", "water", None):
+        station = Station(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid,
+            level=1,
+            source="user",
+            visibility="public",
+            type=kind,
+        )
+        db_session.add(station)
+        await db_session.flush()
+        if kind == "water":
+            db_session.add(
+                SecondaryLocation(
+                    geometry_uuid=station.uuid,
+                    location_type="address",
+                    county="南投縣",
+                    town="埔里鎮",
+                    village="南村",
+                )
+            )
+    await db_session.commit()
+
+    filters = (await client.get(CATALOG_URL, headers=headers)).json()["filters"]
+    assert set(filters) == {"tickets", "stations"}
+    tickets, stations = filters["tickets"], filters["stations"]
+    assert tickets["types"] == [
+        {"value": "rescue", "label": "搜救"},
+        {"value": "supply", "label": "物資"},
+        {"value": "medical", "label": "醫療"},
+        {"value": "hr", "label": "人力"},
+    ]
+    assert tickets["statuses"] == [
+        {"value": "pending", "label": "待處理"},
+        {"value": "in_progress", "label": "進行中"},
+        {"value": "completed", "label": "已完成"},
+        {"value": "cancelled", "label": "已取消"},
+    ]
+    # Counties, towns and villages as they stand on live tickets, nested for cascading menus.
+    assert tickets["areas"] == [
+        {
+            "county": "宜蘭縣",
+            "towns": [],
+        },
+        {
+            "county": "花蓮縣",
+            "towns": [
+                {"town": "光復鄉", "villages": ["大進村", "大馬村"]},
+                {"town": "鳳林鎮", "villages": []},
+            ],
+        },
+    ]
+    assert stations["types"] == [
+        {"value": "shelter", "label": "收容所"},
+        {"value": "water", "label": "water"},
+    ]
+    assert stations["statuses"] == [
+        {"value": "active", "label": "營運中"},
+        {"value": "temporarily_closed", "label": "暫停營運"},
+        {"value": "permanently_closed", "label": "永久關閉"},
+    ]
+    assert stations["areas"] == [
+        {"county": "南投縣", "towns": [{"town": "埔里鎮", "villages": ["南村"]}]},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_catalog_filter_values_come_only_from_what_the_caller_may_chart(client, db_session, redis):
+    """Where tickets are filed is not for a caller who cannot chart tickets, nor beyond their own scope."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW, scope="own")
+    stranger = User(name="somebody else")
+    db_session.add(stranger)
+    await db_session.flush()
+    await _filed(db_session, user_uuid, county="花蓮縣")
+    await _filed(db_session, str(stranger.uuid), county="宜蘭縣")
+    await db_session.commit()
+
+    filters = (await client.get(CATALOG_URL, headers=headers)).json()["filters"]
+    assert [area["county"] for area in filters["tickets"]["areas"]] == ["花蓮縣"]
+    # No station.view: none of the station values, though the fixed vocabularies are public.
+    assert filters["stations"]["areas"] == [] and filters["stations"]["types"] == []
+
+    station_only = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
+    filters = (await client.get(CATALOG_URL, headers=station_only)).json()["filters"]
+    assert filters["tickets"]["areas"] == []
+    assert _option_values(filters["tickets"]["types"]) == ["rescue", "supply", "medical", "hr"]

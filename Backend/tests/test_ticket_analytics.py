@@ -2,10 +2,11 @@
 
 Covers the trickiest pieces: the four-way bucket classification (exposed as
 get_ticket_count(bucket=...)), date-grouping on top of a bucket filter, age-distribution
-bucketing, duplicate-ticket detection, and the "ignore x when it doesn't apply" behavior
-in app.services.chart_render.resolve().
+bucketing, the volunteer totals and trend, duplicate-ticket counting from the AI review's pairs,
+and the "ignore x when it doesn't apply" behavior in app.services.chart_render.resolve().
 """
 
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -14,11 +15,13 @@ from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 
 from app.models.auth import User
+from app.models.dedup import DedupAuditEvent, DuplicatePair
+from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.schemas.analytics import ChartStyle
 from app.services import ticket_analytics
-from app.services.analytics_common import UNCATEGORIZED_LABEL
+from app.services.analytics_common import MAX_TREND_DAYS, UNCATEGORIZED_LABEL
 from app.services.chart_render import _render_pivoted, chart_series, render_chart, resolve
 
 UTC_TZ = ZoneInfo("UTC")
@@ -264,43 +267,6 @@ async def test_age_distribution_buckets_and_excludes_completed(db):
     assert counts == {"<24h": 1, "24-48h": 1, "48-72h": 1, ">72h": 1}
 
 
-@pytest.mark.asyncio
-async def test_duplicate_count_flags_nearby_same_category_tickets(db):
-    """Flag tickets that are close in space, time, and category.
-
-    Two tickets sharing task_type, close in space and time, flag each other; an
-    unrelated ticket (different category) does not.
-    """
-    user_uuid = await _make_user(db)
-    now = datetime.now(UTC)
-
-    # ~50m apart, same category, created minutes apart -> both should be flagged.
-    near_a = _make_ticket(user_uuid, task_type="rescue", lon=121.50000, lat=25.00000)
-    near_a.created_at = now
-    near_b = _make_ticket(user_uuid, task_type="rescue", lon=121.50050, lat=25.00000)
-    near_b.created_at = now + timedelta(minutes=10)
-
-    # Far away (~1km+), same category -> not flagged.
-    far = _make_ticket(user_uuid, task_type="rescue", lon=121.51000, lat=25.00000)
-    far.created_at = now
-
-    db.add_all([near_a, near_b, far])
-    await db.commit()
-
-    # A date range is mandatory for this metric (see
-    # test_duplicate_count_requires_a_date_range) — window it around the fixtures.
-    today = now.date()
-    rows = await ticket_analytics.get_duplicate_count(
-        db,
-        x=None,
-        x_granularity="day",
-        start_date=today - timedelta(days=1),
-        end_date=today + timedelta(days=1),
-        tz=UTC_TZ,
-    )
-    assert rows == [{"count": 2}]
-
-
 def test_resolve_ignores_inapplicable_x_instead_of_rejecting():
     """An x that doesn't apply to the chosen y/chart_type is silently dropped."""
     # task_completion_distribution has no x form at all -> x=date is ignored.
@@ -431,39 +397,6 @@ async def test_ticket_count_completed_by_date_skips_unstamped(db):
     assert all(r["x"] is not None for r in rows)
 
 
-@pytest.mark.asyncio
-async def test_duplicate_count_requires_a_date_range(db):
-    """duplicate_count refuses an unbounded query — it's an O(n^2) self-join (H3)."""
-    with pytest.raises(ValueError, match="requires both start_date and end_date"):
-        await ticket_analytics.get_duplicate_count(
-            db,
-            x=None,
-            x_granularity="day",
-            start_date=None,
-            end_date=None,
-            tz=UTC_TZ,
-        )
-    with pytest.raises(ValueError, match="requires both start_date and end_date"):
-        await ticket_analytics.get_duplicate_count(
-            db,
-            x=None,
-            x_granularity="day",
-            start_date=date(2026, 8, 1),
-            end_date=None,
-            tz=UTC_TZ,
-        )
-    # With both bounds it runs normally.
-    rows = await ticket_analytics.get_duplicate_count(
-        db,
-        x=None,
-        x_granularity="day",
-        start_date=date(2026, 8, 1),
-        end_date=date(2026, 8, 31),
-        tz=UTC_TZ,
-    )
-    assert rows == [{"count": 0}]
-
-
 def _count_rows(*pairs) -> list[dict]:
     return [{"x": x, "count": count} for x, count in pairs]
 
@@ -514,3 +447,418 @@ def test_resolve_forced_x_fallback_is_deterministic():
     for _ in range(5):
         assert resolve("tickets", "net_backlog_change", "category", None) == ("date", "line")
         assert resolve("stations", "station_freshness_trend", "category", None) == ("date", "line")
+
+
+# --- volunteers ---
+
+
+def _utc(month: int, day: int, hour: int = 0) -> datetime:
+    return datetime(2026, month, day, hour, tzinfo=UTC)
+
+
+def _need(ticket_uuid: str, user_uuid: str, *, quantity: int | None, **columns) -> TicketTask:
+    """A need created in the past; `columns` overrides any TicketTask column."""
+    task = _make_task(ticket_uuid, user_uuid, status=columns.pop("status", "pending"))
+    task.quantity = quantity
+    task.created_at = columns.pop("created_at", datetime.now(UTC) - timedelta(days=10))
+    for name, value in columns.items():
+        setattr(task, name, value)
+    return task
+
+
+def _taken(
+    task: TicketTask, actors: list[str], *, at: datetime | None = None, status: str = "accepted"
+) -> list:
+    """One assignment per actor on `task`, made in the past unless `at` says when."""
+    return [
+        TaskAssignment(
+            task_uuid=task.uuid,
+            actor_uuid=actor,
+            status=status,
+            assigned_at=at or datetime.now(UTC) - timedelta(days=1),
+        )
+        for actor in actors
+    ]
+
+
+async def _volunteers(db, metric, *, x=None, start_date=None, end_date=None, tz=UTC_TZ, extra_filters=None):
+    return await ticket_analytics.get_volunteer_metric(
+        db,
+        metric=metric,
+        x=x,
+        x_granularity="day",
+        start_date=start_date,
+        end_date=end_date,
+        tz=tz,
+        extra_filters=extra_filters,
+    )
+
+
+@pytest.mark.asyncio
+async def test_volunteer_totals_count_standing_needs_that_give_a_quantity(db):
+    """Needed sums quantity, matched counts accepted claims, gap is what the open needs still lack.
+
+    A full need and a stopped one are matched but have no gap; a need with no quantity, a
+    canceled one, one merged into another and one on a deleted ticket count in none of the three.
+    """
+    owner = await _make_user(db)
+    people = [await _make_user(db) for _ in range(5)]
+    ticket, deleted = _make_ticket(owner, task_type="hr"), _make_ticket(owner, task_type="hr")
+    deleted.delete_at = datetime.now(UTC)
+    db.add_all([ticket, deleted])
+    await db.flush()
+    t = str(ticket.uuid)
+    gone = dict(status="canceled", canceled_at=datetime.now(UTC), delete_at=datetime.now(UTC))
+    open_need = _need(t, owner, quantity=5)
+    full = _need(t, owner, quantity=4, status="fulfilled", completed_at=datetime.now(UTC))
+    stopped = _need(
+        t,
+        owner,
+        quantity=3,
+        status="fulfilled",
+        completed_at=datetime.now(UTC),
+        recruiting_stopped_at=datetime.now(UTC),
+    )
+    no_quantity = _need(t, owner, quantity=None)
+    canceled = _need(t, owner, quantity=7, **gone)
+    db.add_all([open_need, full, stopped, no_quantity, canceled, _need(str(deleted.uuid), owner, quantity=9)])
+    await db.flush()
+    db.add(_need(t, owner, quantity=2, merged_into_uuid=open_need.uuid, **gone))
+    db.add_all(
+        [
+            *_taken(open_need, people[:2]),
+            *_taken(open_need, people[2:3], status="completed"),  # not an accepted claim
+            *_taken(full, people[:4]),
+            *_taken(stopped, people[:3]),
+            *_taken(no_quantity, people[:2]),
+        ]
+    )
+    await db.flush()
+
+    assert await _volunteers(db, "needed") == [{"count": 12}]
+    assert await _volunteers(db, "matched") == [{"count": 9}]
+    assert await _volunteers(db, "gap") == [{"count": 3}]
+    # Running totals: a created-in-range start_date does not narrow them.
+    assert await _volunteers(db, "needed", start_date=date.today() + timedelta(days=1)) == [{"count": 12}]
+
+
+@pytest.mark.asyncio
+async def test_volunteer_totals_are_zero_with_no_needs(db):
+    """With nothing to count a total is 0, and a grouping has no rows."""
+    for metric in ("needed", "matched", "gap"):
+        assert await _volunteers(db, metric) == [{"count": 0}]
+        assert await _volunteers(db, metric, x="category") == []
+
+
+@pytest.mark.asyncio
+async def test_volunteer_totals_by_category_follow_the_tickets_task_type(db):
+    """x=category groups by the ticket's task_type, a missing one labelled."""
+    owner = await _make_user(db)
+    people = [await _make_user(db) for _ in range(2)]
+    tickets = [_make_ticket(owner, task_type=kind) for kind in ("supply", "supply", "medical", None)]
+    db.add_all(tickets)
+    await db.flush()
+    needs = [
+        _need(str(ticket.uuid), owner, quantity=quantity)
+        for ticket, quantity in zip(tickets, (3, 4, 5, 6), strict=True)
+    ]
+    db.add_all(needs)
+    await db.flush()
+    db.add_all(_taken(needs[0], people) + _taken(needs[2], people[:1]))
+    await db.flush()
+
+    rows = await _volunteers(db, "gap", x="category")
+    assert {r["x"]: r["count"] for r in rows} == {"supply": 5, "medical": 4, UNCATEGORIZED_LABEL: 6}
+    rows = await _volunteers(db, "matched", x="category")
+    assert {r["x"]: r["count"] for r in rows} == {"supply": 2, "medical": 1, UNCATEGORIZED_LABEL: 0}
+
+
+@pytest.mark.asyncio
+async def test_volunteer_totals_stay_inside_the_callers_filters(db):
+    """The caller's row filters narrow the totals, as they do every other metric."""
+    mine, theirs, nobody = await _make_user(db), await _make_user(db), await _make_user(db)
+    own, other = _make_ticket(mine), _make_ticket(theirs)
+    db.add_all([own, other])
+    await db.flush()
+    db.add_all([_need(str(own.uuid), mine, quantity=2), _need(str(other.uuid), theirs, quantity=8)])
+    await db.flush()
+
+    assert await _volunteers(db, "needed", extra_filters=[Tickets.created_by == mine]) == [{"count": 2}]
+    assert await _volunteers(db, "needed", extra_filters=[Tickets.created_by == nobody]) == [{"count": 0}]
+
+
+async def _seed_trend(db) -> None:
+    """Four needs whose timestamps tell a September story, read back day by day below.
+
+    A stays open; B is created on the 2nd and filled on the 4th; C is canceled on the 3rd;
+    D is stopped by hand on the 3rd, at the two people it had.
+    """
+    owner = await _make_user(db)
+    people = [await _make_user(db) for _ in range(5)]
+    ticket = _make_ticket(owner, task_type="hr")
+    db.add(ticket)
+    await db.flush()
+    t = str(ticket.uuid)
+    a = _need(t, owner, quantity=10, created_at=_utc(9, 1, 9))
+    b = _need(t, owner, quantity=5, status="fulfilled", created_at=_utc(9, 2, 9), completed_at=_utc(9, 4, 8))
+    c = _need(
+        t,
+        owner,
+        quantity=4,
+        status="canceled",
+        created_at=_utc(9, 1, 9),
+        canceled_at=_utc(9, 3, 8),
+        delete_at=_utc(9, 3, 8),
+    )
+    d = _need(
+        t,
+        owner,
+        quantity=2,
+        status="fulfilled",
+        created_at=_utc(9, 1, 9),
+        completed_at=_utc(9, 3, 12),
+        recruiting_stopped_at=_utc(9, 3, 12),
+    )
+    db.add_all([a, b, c, d])
+    await db.flush()
+    db.add_all(
+        [
+            *_taken(a, people[:1], at=_utc(9, 2, 10)),
+            *_taken(a, people[1:3], at=_utc(9, 3, 10)),
+            *_taken(b, people, at=_utc(9, 3, 12)),
+            *_taken(d, people[:2], at=_utc(9, 2, 9)),
+        ]
+    )
+    await db.flush()
+
+
+@pytest.mark.asyncio
+async def test_volunteer_gap_trend_is_the_gap_at_the_end_of_each_day(db):
+    """Each day's gap is read as of that day's end from the need and claim timestamps."""
+    await _seed_trend(db)
+
+    rows = await _volunteers(db, "gap", x="date", start_date=date(2026, 9, 1), end_date=date(2026, 9, 5))
+    assert [(r["x"], r["count"]) for r in rows] == [
+        (datetime(2026, 9, 1), 16),  # A 10, C 4, D 2; B not yet created
+        (datetime(2026, 9, 2), 18),  # A 9 (one taken), C 4, D 0 (both taken), B 5
+        (datetime(2026, 9, 3), 7),  # A 7; C canceled, D stopped, B has its five
+        (datetime(2026, 9, 4), 7),  # B filled that morning
+        (datetime(2026, 9, 5), 7),
+    ]
+    # The last day agrees with the running total as of that day, and with today's.
+    assert await _volunteers(db, "gap", end_date=date(2026, 9, 5)) == [{"count": 7}]
+    assert await _volunteers(db, "gap") == [{"count": 7}]
+
+
+@pytest.mark.asyncio
+async def test_volunteer_totals_can_be_read_as_of_an_earlier_day(db):
+    """end_date reads a total as of the end of that day instead of now."""
+    await _seed_trend(db)
+
+    assert await _volunteers(db, "needed", end_date=date(2026, 9, 1)) == [{"count": 16}]
+    assert await _volunteers(db, "needed", end_date=date(2026, 9, 2)) == [{"count": 21}]
+    assert await _volunteers(db, "matched", end_date=date(2026, 9, 2)) == [{"count": 3}]
+    assert await _volunteers(db, "matched", end_date=date(2026, 9, 3)) == [{"count": 10}]
+    # Today: C was canceled, so A, B and D remain.
+    assert await _volunteers(db, "needed") == [{"count": 17}]
+
+
+@pytest.mark.asyncio
+async def test_volunteer_trend_days_follow_the_callers_timezone(db):
+    """17:00 UTC on the 1st is already the 2nd in Taipei, so the need shows from the 2nd there."""
+    owner = await _make_user(db)
+    ticket = _make_ticket(owner)
+    db.add(ticket)
+    await db.flush()
+    db.add(_need(str(ticket.uuid), owner, quantity=3, created_at=_utc(9, 1, 17)))
+    await db.flush()
+    span = dict(x="date", start_date=date(2026, 9, 1), end_date=date(2026, 9, 2))
+
+    assert [r["count"] for r in await _volunteers(db, "gap", **span)] == [3, 3]
+    assert [r["count"] for r in await _volunteers(db, "gap", tz=ZoneInfo("Asia/Taipei"), **span)] == [0, 3]
+
+
+@pytest.mark.asyncio
+async def test_volunteer_trend_defaults_to_thirty_days_and_is_capped(db):
+    """Without start_date the trend covers 30 days; an inverted or over-wide range is refused."""
+    days = await _volunteers(db, "gap", x="date", end_date=date(2026, 9, 30))
+    assert [r["x"] for r in days] == [datetime(2026, 9, 1) + timedelta(days=i) for i in range(30)]
+    assert [r["count"] for r in days] == [0] * 30
+
+    with pytest.raises(ValueError, match="at most"):
+        await _volunteers(
+            db,
+            "gap",
+            x="date",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 1) + timedelta(days=MAX_TREND_DAYS),
+        )
+    with pytest.raises(ValueError, match="on or after start_date"):
+        await _volunteers(db, "gap", x="date", start_date=date(2026, 9, 2), end_date=date(2026, 9, 1))
+    # The widest span allowed still runs.
+    assert (
+        len(
+            await _volunteers(
+                db,
+                "gap",
+                x="date",
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 1, 1) + timedelta(days=MAX_TREND_DAYS - 1),
+            )
+        )
+        == MAX_TREND_DAYS
+    )
+
+
+# --- duplicate_count, from the AI review's pairs ---
+
+
+def _pair(kind: str, a, b, *, status: str = "dup_ignored", created_at: datetime | None = None, **columns):
+    low, high = sorted((uuid.UUID(str(a)), uuid.UUID(str(b))), key=lambda u: u.int)
+    pair = DuplicatePair(
+        entity_kind=kind,
+        low_uuid=low,
+        high_uuid=high,
+        method="fast_rule",
+        engine_version="fast-v1",
+        source_layer="fast",
+        status=status,
+        **columns,
+    )
+    if created_at is not None:
+        pair.created_at = created_at
+    return pair
+
+
+async def _duplicates(db, *, x=None, start_date=None, end_date=None, extra_filters=None):
+    return await ticket_analytics.get_duplicate_count(
+        db,
+        x=x,
+        x_granularity="day",
+        start_date=start_date,
+        end_date=end_date,
+        tz=UTC_TZ,
+        extra_filters=extra_filters,
+    )
+
+
+async def _tickets_with_a_need(db, user_uuid: str, n: int, **ticket_columns) -> list[tuple[str, str]]:
+    """`n` tickets, each with one need; the (ticket uuid, need uuid) of each."""
+    tickets = [_make_ticket(user_uuid, **ticket_columns) for _ in range(n)]
+    db.add_all(tickets)
+    await db.flush()
+    needs = [_make_task(str(ticket.uuid), user_uuid) for ticket in tickets]
+    db.add_all(needs)
+    await db.flush()
+    return [(str(ticket.uuid), str(need.uuid)) for ticket, need in zip(tickets, needs, strict=True)]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_count_counts_each_ticket_with_a_pending_card_once(db):
+    """Need cards and ticket cards both count; a ticket named by two cards is still one."""
+    user_uuid = await _make_user(db)
+    a, b, c, d, e, f, g, h, i, j, k, m, n = await _tickets_with_a_need(db, user_uuid, 13)
+    station = Station(
+        geometry=from_shape(Point(121.5, 25.0), srid=4326),
+        created_by=user_uuid,
+        level=1,
+        source="user",
+        type="shelter",
+        operational_status="active",
+    )
+    other_station = Station(
+        geometry=from_shape(Point(121.5, 25.0), srid=4326),
+        created_by=user_uuid,
+        level=1,
+        source="user",
+        type="shelter",
+        operational_status="active",
+    )
+    db.add_all([station, other_station])
+    await db.flush()
+    resolved = _pair("ticket_task", h[1], i[1])
+    db.add_all(
+        [
+            _pair("ticket_task", a[1], b[1]),  # counts a and b
+            _pair("ticket_task", a[1], c[1], status="suggested"),  # c too; a is not counted twice
+            _pair("ticket", d[0], e[0]),  # a ticket card: the sides are the tickets
+            _pair("ticket_task", f[1], g[1], status="confirmed_duplicate"),  # settled
+            _pair("ticket_task", j[1], k[1], status="not_duplicate"),  # settled
+            resolved,  # pending by status, but a merge already resolved it
+            _pair("ticket_task", m[1], n[1], delete_at=datetime.now(UTC)),  # soft-deleted card
+            _pair("station", station.uuid, other_station.uuid),  # not about tickets
+        ]
+    )
+    await db.flush()
+    db.add(
+        DedupAuditEvent(
+            entity_kind="ticket_task", event_type="merged", pair_uuid=resolved.uuid, source_layer="manual"
+        )
+    )
+    await db.flush()
+
+    assert await _duplicates(db) == [{"count": 5}]  # a, b, c, d, e
+
+
+@pytest.mark.asyncio
+async def test_duplicate_count_leaves_out_tickets_that_are_gone(db):
+    """A ticket cancelled by a merge is soft-deleted; a card still pending on it flags nothing."""
+    user_uuid = await _make_user(db)
+    (a, a_need), (b, b_need) = await _tickets_with_a_need(db, user_uuid, 2)
+    ticket = await db.get(Tickets, b)
+    ticket.delete_at = datetime.now(UTC)
+    db.add(_pair("ticket_task", a_need, b_need))
+    await db.flush()
+
+    assert await _duplicates(db) == [{"count": 0}]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_count_dates_a_ticket_by_its_cards(db):
+    """The range filters on the card's created_at, and x=date puts a ticket on its earliest card."""
+    user_uuid = await _make_user(db)
+    a, b, c = await _tickets_with_a_need(db, user_uuid, 3)
+    db.add_all(
+        [
+            _pair("ticket_task", a[1], b[1], created_at=_utc(9, 1, 10)),
+            _pair("ticket_task", a[1], c[1], created_at=_utc(9, 3, 10)),
+        ]
+    )
+    await db.flush()
+
+    assert await _duplicates(db, start_date=date(2026, 9, 3), end_date=date(2026, 9, 3)) == [
+        {"count": 2}
+    ]  # a, c
+    assert await _duplicates(db, start_date=date(2026, 9, 2), end_date=date(2026, 9, 2)) == [{"count": 0}]
+    by_day = await _duplicates(db, x="date")
+    assert sorted((r["x"], r["count"]) for r in by_day) == [
+        (datetime(2026, 9, 1), 2),
+        (datetime(2026, 9, 3), 1),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_count_by_category_follows_the_tickets_task_type(db):
+    """x=category groups a flagged ticket by its task_type."""
+    user_uuid = await _make_user(db)
+    a, b = await _tickets_with_a_need(db, user_uuid, 2, task_type="supply")
+    c, d = await _tickets_with_a_need(db, user_uuid, 2, task_type="medical")
+    db.add_all([_pair("ticket_task", a[1], b[1]), _pair("ticket_task", c[1], d[1])])
+    await db.flush()
+
+    rows = await _duplicates(db, x="category")
+    assert {r["x"]: r["count"] for r in rows} == {"supply": 2, "medical": 2}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_count_needs_both_tickets_of_a_card_inside_the_callers_filters(db):
+    """Counting a ticket whose twin the caller cannot see would show that the twin exists."""
+    mine, theirs = await _make_user(db), await _make_user(db)
+    (own_a, own_a_need), (own_b, own_b_need) = await _tickets_with_a_need(db, mine, 2)
+    ((_, other_need),) = await _tickets_with_a_need(db, theirs, 1)
+    db.add_all([_pair("ticket_task", own_a_need, own_b_need), _pair("ticket_task", own_a_need, other_need)])
+    await db.flush()
+
+    assert await _duplicates(db) == [{"count": 3}]
+    assert await _duplicates(db, extra_filters=[Tickets.created_by == mine]) == [{"count": 2}]
+    assert await _duplicates(db, extra_filters=[Tickets.created_by == theirs]) == [{"count": 0}]

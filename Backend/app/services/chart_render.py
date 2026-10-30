@@ -21,7 +21,7 @@ from functools import partial
 import plotly.graph_objects as go
 
 from app.schemas.analytics import ChartStyle
-from app.services.analytics_common import MAX_DUPLICATE_RANGE_DAYS, AnalyticsInputError
+from app.services.analytics_common import MAX_TREND_DAYS, AnalyticsInputError
 
 # --- Y-metric catalog. `label`/`unit`/`description` are the zh-TW glossary the dashboard shows
 # (the backend is the only source of these — the frontend must not keep its own copy).
@@ -29,13 +29,15 @@ from app.services.analytics_common import MAX_DUPLICATE_RANGE_DAYS, AnalyticsInp
 # and/or "category" — ordered because resolve() falls back to its first entry for the
 # "forced shape" metrics, the ones that are only meaningful grouped one way.
 # `requires_date_range` and `max_range_days` (both optional) mark a metric that refuses an
-# unbounded or over-wide query. See GET /api/v1/analytics/catalog for the JSON version. ---
+# unbounded or over-wide query. See GET /api/v1/analytics/catalog for the JSON version.
+# Descriptions say what the dashboard shows: it opens on the last 30 days, so a metric over a
+# range says so, and a running total says it counts up to today. ---
 
 _TICKET_CATALOG = {
     "total_tickets": {
         "label": "任務單總數",
         "unit": "件",
-        "description": "期間內建立的任務單",
+        "description": "期間內建立的任務單；預設近 30 天",
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "line", "pie"),
@@ -43,7 +45,7 @@ _TICKET_CATALOG = {
     "ongoing_tickets": {
         "label": "進行中",
         "unit": "件",
-        "description": "已指派、尚未完成",
+        "description": "已指派、尚未完成；預設近 30 天",
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "line", "pie"),
@@ -51,7 +53,7 @@ _TICKET_CATALOG = {
     "unassigned_tickets": {
         "label": "未指派",
         "unit": "件",
-        "description": "尚無人接手",
+        "description": "尚無人接手；預設近 30 天",
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "line", "pie"),
@@ -59,7 +61,7 @@ _TICKET_CATALOG = {
     "completed_tickets": {
         "label": "已完成",
         "unit": "件",
-        "description": "子任務全部完成",
+        "description": "子任務全部完成；預設近 30 天",
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "line", "pie"),
@@ -67,7 +69,7 @@ _TICKET_CATALOG = {
     "canceled_tickets": {
         "label": "已取消",
         "unit": "件",
-        "description": "重複、誤報或不再需要",
+        "description": "重複、誤報或不再需要；預設近 30 天",
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "line", "pie"),
@@ -75,7 +77,7 @@ _TICKET_CATALOG = {
     "completion_rate": {
         "label": "完成率",
         "unit": "%",
-        "description": "已完成 ÷（總數 − 已取消）",
+        "description": "已完成 ÷（總數 − 已取消）；預設近 30 天",
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "line"),
@@ -83,7 +85,7 @@ _TICKET_CATALOG = {
     "age_distribution": {
         "label": "未結案等待時間",
         "unit": "件",
-        "description": "未完成任務單自建立至今的時長",
+        "description": "未完成任務單自建立至今的時長；預設近 30 天",
         "allowed_x": (None,),  # forced shape: always grouped by age bucket internally
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar",),
@@ -92,7 +94,7 @@ _TICKET_CATALOG = {
     "time_to_completion": {
         "label": "處理時長",
         "unit": "天",
-        "description": "建立到完成的平均與中位數",
+        "description": "建立到完成的平均與中位數；預設近 30 天",
         "allowed_x": (None, "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar",),
@@ -100,7 +102,7 @@ _TICKET_CATALOG = {
     "net_backlog_change": {
         "label": "積壓變化",
         "unit": "件",
-        "description": "新增 − 完成 − 取消；大於 0 表示待辦增加",
+        "description": "新增 − 完成 − 取消；大於 0 表示待辦增加；預設近 30 天",
         "allowed_x": ("date",),  # forced shape: always date-grouped
         "default_chart_type": "line",
         "allowed_chart_types": ("line", "bar"),
@@ -108,24 +110,48 @@ _TICKET_CATALOG = {
     "task_completion_distribution": {
         "label": "子任務完成比例",
         "unit": "項",
-        "description": "以子任務計，非任務單",
+        "description": "以子任務計，非任務單；預設近 30 天",
         "allowed_x": (None,),  # forced shape: fixed completed/remaining pie
         "default_chart_type": "pie",
         "allowed_chart_types": ("pie",),
         "grouping": "completion",  # /data's `x`, since x=None still returns grouped rows
     },
     "duplicate_count": {
-        "label": "疑似重複",
+        "label": "疑似重複的單",
         "unit": "件",
-        "description": "位置、類型、時間相近的任務單",
+        "description": "AI 重複審核標出、還沒審完的任務單，一張只算一次；預設近 30 天",
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),
-        # Self-join, so cost grows with the rows in range; get_duplicate_count rejects a
-        # missing or over-wide range. Published here so the frontend can clamp its date
-        # picker rather than discovering the limits through a 400.
-        "requires_date_range": True,
-        "max_range_days": MAX_DUPLICATE_RANGE_DAYS,
+    },
+    "volunteers_needed": {
+        "label": "志工需求人數",
+        "unit": "人",
+        "description": "未取消任務的志工需求人數加總（沒填人數的不計）；截至今日",
+        "allowed_x": (None, "category"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "pie"),
+    },
+    "volunteers_matched": {
+        "label": "已媒合志工人數",
+        "unit": "人",
+        "description": "已接下任務的志工人數（沒填人數的任務不計）；截至今日",
+        "allowed_x": (None, "category"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "pie"),
+    },
+    "volunteer_gap": {
+        "label": "志工缺口",
+        "unit": "人",
+        "description": (
+            "還在招募的任務尚缺幾人；截至今日。趨勢為每天結束時的缺口，"
+            "過去的日子沿用現在的需求人數與任務狀態，只依各項時間推算"
+        ),
+        "allowed_x": (None, "date", "category"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "line", "pie"),
+        # Only the daily trend is capped; the other shapes read one instant.
+        "max_range_days": MAX_TREND_DAYS,
     },
 }
 
@@ -133,7 +159,7 @@ _STATION_CATALOG = {
     "station_count": {
         "label": "站點數",
         "unit": "站",
-        "description": "已登錄的資源站點",
+        "description": "已登錄的資源站點；預設近 30 天",
         "allowed_x": (None, "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),
@@ -141,7 +167,7 @@ _STATION_CATALOG = {
     "station_status_count": {
         "label": "站點狀態",
         "unit": "站",
-        "description": "營運中／暫停／永久關閉",
+        "description": "營運中／暫停／永久關閉；預設近 30 天",
         # Forced shape, like station_freshness_trend below: ungrouped, "how many stations
         # per status" collapses to one 100% slice repeating station_count. So "category" is
         # the only allowed value and any other `x` falls back to it.
@@ -152,10 +178,18 @@ _STATION_CATALOG = {
     "station_freshness_trend": {
         "label": "站點新增與關閉",
         "unit": "站",
-        "description": "每期新增與關閉的站點數",
+        "description": "每期新增與關閉的站點數；預設近 30 天",
         "allowed_x": ("date",),  # forced shape: always date-grouped
         "default_chart_type": "line",
         "allowed_chart_types": ("line", "bar"),
+    },
+    "operating_station_count": {
+        "label": "營運中站點數",
+        "unit": "站",
+        "description": "目前營運中的站點，截至今日",
+        "allowed_x": (None, "category"),
+        "default_chart_type": "bar",
+        "allowed_chart_types": ("bar", "pie"),
     },
 }
 
@@ -176,9 +210,18 @@ _CATEGORY_LABEL = {
     "completed": "已完成",
     "remaining": "未完成",
     "shelter": "收容所",
+    "pending": "待處理",
+    "in_progress": "進行中",
+    "cancelled": "已取消",
     "uncategorized": "未分類",
 }
 _CATEGORY_ORDER = {k: i for i, k in enumerate(_CATEGORY_LABEL)}
+
+
+def display_name(value: str) -> str:
+    """The zh-TW name for a raw category or option value, or the value itself when it has none."""
+    return _CATEGORY_LABEL.get(value, value)
+
 
 # Per-metric axis rules the style input must not be able to break.
 _METRIC_LAYOUT = {
@@ -275,12 +318,16 @@ _SERIES_BUILDERS = {
         "time_to_completion": _time_to_completion_series,
         "net_backlog_change": _net_backlog_change_series,
         "task_completion_distribution": partial(_count_series, series_label="子任務"),
-        "duplicate_count": partial(_count_series, series_label="疑似重複"),
+        "duplicate_count": partial(_count_series, series_label="疑似重複的單"),
+        "volunteers_needed": partial(_count_series, series_label="志工需求"),
+        "volunteers_matched": partial(_count_series, series_label="已媒合志工"),
+        "volunteer_gap": partial(_count_series, series_label="志工缺口"),
     },
     "stations": {
         "station_count": partial(_count_series, series_label="站點"),
         "station_status_count": partial(_count_series, series_label="站點"),
         "station_freshness_trend": _station_freshness_trend_series,
+        "operating_station_count": partial(_count_series, series_label="營運中站點"),
     },
 }
 

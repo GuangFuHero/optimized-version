@@ -25,8 +25,13 @@ CLOSED_OPERATIONAL_STATUSES = ("temporarily_closed", "permanently_closed")
 
 
 async def get_station_count(
-    db: AsyncSession, *,
-    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
+    db: AsyncSession,
+    *,
+    x: str | None,
+    x_granularity: str,
+    start_date: date | None,
+    end_date: date | None,
+    tz: ZoneInfo,
     extra_filters: list | None = None,
 ) -> list[dict]:
     """Count of active stations, overall or grouped by `type` (x="category").
@@ -54,9 +59,40 @@ async def get_station_count(
     return [dict(row._mapping) for row in result]
 
 
+async def get_operating_station_count(
+    db: AsyncSession,
+    *,
+    x: str | None,
+    x_granularity: str,
+    start_date: date | None,
+    end_date: date | None,
+    tz: ZoneInfo,
+    extra_filters: list | None = None,
+) -> list[dict]:
+    """Count of stations operating now, overall or grouped by `type` (x="category").
+
+    A running total, not what was created in a range, so the dates are ignored: a station's
+    status keeps no history to read an earlier day from.
+    """
+    return await get_station_count(
+        db,
+        x=x,
+        x_granularity=x_granularity,
+        start_date=None,
+        end_date=None,
+        tz=tz,
+        extra_filters=[*(extra_filters or []), Station.operational_status == "active"],
+    )
+
+
 async def get_station_status_count(
-    db: AsyncSession, *,
-    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
+    db: AsyncSession,
+    *,
+    x: str | None,
+    x_granularity: str,
+    start_date: date | None,
+    end_date: date | None,
+    tz: ZoneInfo,
     extra_filters: list | None = None,
 ) -> list[dict]:
     """Count of active stations grouped by `operational_status` (x="category").
@@ -84,8 +120,13 @@ async def get_station_status_count(
 
 
 async def get_station_freshness_trend(
-    db: AsyncSession, *,
-    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
+    db: AsyncSession,
+    *,
+    x: str | None,
+    x_granularity: str,
+    start_date: date | None,
+    end_date: date | None,
+    tz: ZoneInfo,
     extra_filters: list | None = None,
 ) -> list[dict]:
     """Per day/week: newly added stations vs newly closed stations.
@@ -107,9 +148,9 @@ async def get_station_freshness_trend(
     lower, upper = local_bounds(start_date, end_date, tz)
 
     added_period = func.date_trunc(granularity, func.timezone(tz.key, Station.created_at))
-    added_query = select(
-        added_period.label("x"), func.count(Station.uuid).label("added_count")
-    ).where(Station.delete_at.is_(None), *(extra_filters or []))
+    added_query = select(added_period.label("x"), func.count(Station.uuid).label("added_count")).where(
+        Station.delete_at.is_(None), *(extra_filters or [])
+    )
     if lower is not None:
         added_query = added_query.where(Station.created_at >= lower)
     if upper is not None:
@@ -118,9 +159,7 @@ async def get_station_freshness_trend(
     added_rows = (await db.execute(added_query)).all()
 
     closed_period = func.date_trunc(granularity, func.timezone(tz.key, Station.status_changed_at))
-    closed_query = select(
-        closed_period.label("x"), func.count(Station.uuid).label("closed_count")
-    ).where(
+    closed_query = select(closed_period.label("x"), func.count(Station.uuid).label("closed_count")).where(
         Station.delete_at.is_(None),
         Station.operational_status.in_(CLOSED_OPERATIONAL_STATUSES),
         Station.status_changed_at.is_not(None),

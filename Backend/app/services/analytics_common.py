@@ -15,10 +15,11 @@ from sqlalchemy import func
 # shows an honest "uncategorized" bar instead of a blank one.
 UNCATEGORIZED_LABEL = "uncategorized"
 
-# Widest start->end span accepted by ticket_analytics.get_duplicate_count, whose self-join
-# grows with the rows in range. With no statement_timeout and no rate limit deployed, this
-# cap is the only thing stopping one request from holding a connection indefinitely.
-MAX_DUPLICATE_RANGE_DAYS = 120
+# A day-by-day trend runs its query once per day, so its span is capped: with no
+# statement_timeout and no rate limit deployed, this is the only thing stopping one request
+# from holding a connection indefinitely. The default is what the dashboard opens on.
+MAX_TREND_DAYS = 366
+DEFAULT_TREND_DAYS = 30
 
 # Outermost dates local_bounds can convert. Not a domain rule — these are the limits of what
 # the conversion and the driver can represent. `end_date + timedelta(days=1)` runs off
