@@ -1,4 +1,8 @@
-import type { PointShareLink, PointShareTarget } from './types';
+import type {
+  PointShareChannel,
+  PointShareLink,
+  PointShareTarget,
+} from './types';
 
 export function createPointShareLinks(
   target: PointShareTarget,
@@ -34,6 +38,22 @@ export function createPointShareLinks(
       href: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
     },
   ];
+}
+
+/**
+ * Whether a channel's tile hands the link to the device's own share sheet instead of opening the
+ * channel's share page: Facebook's, on a touch screen that has the sheet. There Facebook's app takes
+ * every `facebook.com` link but `/dialog/*` (its apple-app-site-association), `sharer.php` included,
+ * and opens on its feed with nothing to post. Picked from the sheet, Facebook is the app's own share,
+ * which posts the link with its card. A computer keeps the share page.
+ */
+export function sharesThroughDeviceSheet(
+  channel: PointShareChannel,
+  device: { canShareNatively: boolean; touchScreen: boolean },
+): boolean {
+  return (
+    channel === 'facebook' && device.canShareNatively && device.touchScreen
+  );
 }
 
 export async function copyPointShareUrl(url: string) {
