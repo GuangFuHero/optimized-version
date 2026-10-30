@@ -18,7 +18,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import Link from 'next/link';
-import type { MouseEvent, ReactNode } from 'react';
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import { useQuery } from 'urql';
 
 import {
@@ -108,12 +108,11 @@ interface SiteNotifyDrawerProps {
   onClose: () => void;
 }
 
-function Notice({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
+function Notice({ children }: { children: ReactNode }) {
   return (
     <Stack
       sx={{ alignItems: 'center', gap: 1.5, py: 4, px: 2, textAlign: 'center' }}
     >
-      {icon}
       <Typography
         sx={{
           color: color.fg.neutral.subtle,
@@ -124,6 +123,112 @@ function Notice({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
       >
         {children}
       </Typography>
+    </Stack>
+  );
+}
+
+// What brings a notice, one short line each: in a phone's drawer a paragraph would not show three.
+const EMPTY_REASONS = [
+  { icon: VolunteerActivismRoundedIcon, text: '有人承接了你建立的求助' },
+  { icon: DoNotDisturbOnRoundedIcon, text: '你承接的任務有異動' },
+  { icon: VerifiedRoundedIcon, text: '你的申請有審核結果' },
+];
+
+/**
+ * No notice yet (prototype `SiteNotifyEmpty`): what the drawer is for and what will bring something,
+ * so an empty drawer does not read as a broken one. No button: notices come from what others do.
+ * It stands in for the drawer's subtitle, which would say the same again.
+ */
+function SiteNotifyEmpty() {
+  return (
+    <Stack
+      role="status"
+      sx={{
+        alignItems: 'center',
+        gap: 2,
+        pt: 6,
+        px: 2,
+        pb: 4,
+        textAlign: 'center',
+      }}
+    >
+      <Box
+        aria-hidden
+        sx={{
+          display: 'grid',
+          placeItems: 'center',
+          width: 64,
+          height: 64,
+          borderRadius: '50%',
+          bgcolor: color.bg.neutral.subtle,
+          color: color.fg.neutral.muted,
+        }}
+      >
+        <NotificationsOffRoundedIcon sx={{ fontSize: 28 }} />
+      </Box>
+      <Box>
+        <Typography
+          sx={{
+            color: color.fg.neutral.default,
+            fontSize: displayTextSize[16],
+            lineHeight: 1.4,
+            fontWeight: 700,
+          }}
+        >
+          目前沒有通知
+        </Typography>
+        <Typography
+          sx={{
+            mt: 0.5,
+            color: color.fg.neutral.subtle,
+            fontSize: displayTextSize[13],
+            lineHeight: 1.6,
+            textWrap: 'pretty',
+          }}
+        >
+          有新動態時會出現在這裡。
+        </Typography>
+      </Box>
+      <Stack
+        component="ul"
+        sx={{
+          m: 0,
+          px: 2,
+          py: 1.5,
+          gap: 1,
+          width: '100%',
+          maxWidth: 300,
+          listStyle: 'none',
+          textAlign: 'left',
+          borderRadius: `${radius.md}px`,
+          bgcolor: color.bg.neutral.subtle,
+        }}
+      >
+        {EMPTY_REASONS.map(({ icon: Icon, text }) => (
+          <Stack
+            key={text}
+            component="li"
+            direction="row"
+            sx={{
+              alignItems: 'center',
+              gap: 1,
+              color: color.fg.neutral.subtle,
+              fontSize: displayTextSize[13],
+              lineHeight: 1.5,
+            }}
+          >
+            <Icon
+              aria-hidden
+              sx={{
+                fontSize: 16,
+                flexShrink: 0,
+                color: color.fg.neutral.muted,
+              }}
+            />
+            {text}
+          </Stack>
+        ))}
+      </Stack>
     </Stack>
   );
 }
@@ -231,7 +336,10 @@ function SiteNoticeRow({
  */
 function SiteNotifyContent({
   onClose,
-}: Pick<SiteNotifyDrawerProps, 'onClose'>) {
+  onEmpty,
+}: Pick<SiteNotifyDrawerProps, 'onClose'> & {
+  onEmpty: (empty: boolean) => void;
+}) {
   const route = useSiteRouteState();
   const queryClient = useQueryClient();
   const [requests] = useQuery({
@@ -275,8 +383,20 @@ function SiteNotifyContent({
   const listsSettled =
     Boolean(requests.data || requests.error) &&
     Boolean(claims.data || claims.error);
+  const notices = list.data
+    ? readSiteNotices(list.data.pages.flatMap((page) => page.items))
+    : null;
+  // Told once the notices are in, and not taken back while they load again at the next opening:
+  // the subtitle would come and go each time.
+  const empty = notices && listsSettled ? notices.length === 0 : null;
 
-  if (!list.data || !listsSettled) {
+  useEffect(() => {
+    if (empty !== null) {
+      onEmpty(empty);
+    }
+  }, [empty, onEmpty]);
+
+  if (!notices || !listsSettled) {
     return list.isError ? (
       <Notice>讀不到通知，請稍後再試一次。</Notice>
     ) : (
@@ -288,9 +408,6 @@ function SiteNotifyContent({
     requests: requests.data?.myTickets ?? [],
     claims: claims.data?.myTaskAssignments ?? [],
   };
-  const notices = readSiteNotices(
-    list.data.pages.flatMap((page) => page.items),
-  );
   const unread = notices.filter((notice) => !notice.read);
 
   const openNotice = (
@@ -336,15 +453,7 @@ function SiteNotifyContent({
       ) : null}
 
       {notices.length === 0 ? (
-        <Notice
-          icon={
-            <NotificationsOffRoundedIcon
-              sx={{ fontSize: 28, color: color.fg.neutral.muted }}
-            />
-          }
-        >
-          目前沒有通知。有人承接你建立的需求、你承接的任務有異動，或申請有結果時，這裡會出現。
-        </Notice>
+        <SiteNotifyEmpty />
       ) : (
         notices.map((notice) => {
           const ticketUuid =
@@ -387,14 +496,21 @@ function SiteNotifyContent({
  * first. The site's action drawer, as 我的任務 is: a sheet from the bottom on a phone.
  */
 export function SiteNotifyDrawer({ open, onClose }: SiteNotifyDrawerProps) {
+  // While the empty state is shown, it says what the subtitle would, so the subtitle goes.
+  const [empty, setEmpty] = useState(false);
+
   return (
     <SiteActionDrawer
       open={open}
       title="通知"
-      subtitle="有人承接你的需求、你承接的任務有異動、申請審核有結果，都會出現在這裡。"
+      subtitle={
+        empty
+          ? undefined
+          : '有人承接你的需求、你承接的任務有異動、申請審核有結果，都會出現在這裡。'
+      }
       onClose={onClose}
     >
-      <SiteNotifyContent onClose={onClose} />
+      <SiteNotifyContent onClose={onClose} onEmpty={setEmpty} />
     </SiteActionDrawer>
   );
 }
