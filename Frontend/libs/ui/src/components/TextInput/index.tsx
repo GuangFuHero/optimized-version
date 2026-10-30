@@ -72,6 +72,8 @@ export function TextInput({
         startAdornment={leadingIcon}
         endAdornment={trailing}
         sx={{
+          // What autofill is painted over with (the theme's `MuiInputBase`).
+          '--wg-field-bg': color.bg.neutral.subtle,
           gap: '8px',
           minHeight: 48,
           px: '16px',

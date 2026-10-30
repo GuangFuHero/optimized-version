@@ -42,7 +42,7 @@ declare module '@mui/material/styles' {
   }
 }
 
-const { focusRing } = designTokens;
+const { color, focusRing } = designTokens;
 
 export const theme = extendTheme({
   breakpoints: {
@@ -154,10 +154,24 @@ export const theme = extendTheme({
     // 🔒 A focused input smaller than 16px makes iOS Safari zoom the whole page in, and the user has
     // to pinch back out — worse than small text. `site.css` pins inputs to 16px below its 767px
     // cutoff for exactly this reason; `down('tablet')` is that same cutoff.
+    //
+    // Autofill paints the input in the browser's own yellow or blue, a square inside the field's
+    // rounded edge, and changes the text colour. It is painted over with the field's own background
+    // and text colour: white and the default text unless the field says otherwise through
+    // `--wg-field-bg` / `--wg-field-fg`, as one on a tinted fill does.
     MuiInputBase: {
       styleOverrides: {
         input: ({ theme: t }) => ({
           [t.breakpoints.down('tablet')]: { fontSize: IOS_NO_ZOOM_INPUT_PX },
+          '&:-webkit-autofill, &:-webkit-autofill:hover, &:-webkit-autofill:focus, &:-webkit-autofill:active':
+            {
+              WebkitTextFillColor: `var(--wg-field-fg, ${color.fg.neutral.default})`,
+              caretColor: `var(--wg-field-fg, ${color.fg.neutral.default})`,
+              WebkitBoxShadow: `0 0 0 100px var(--wg-field-bg, ${color.bg.neutral.default}) inset`,
+              boxShadow: `0 0 0 100px var(--wg-field-bg, ${color.bg.neutral.default}) inset`,
+              borderRadius: 'inherit',
+              transition: 'background-color 9999s ease-out 0s',
+            },
         }),
       },
     },

@@ -53,7 +53,6 @@ export function AuthField({
   required = false,
 }: AuthFieldProps) {
   const authPalette = getAuthColorScheme(useTheme());
-  const autofillBackground = authPalette.fieldBackground;
 
   return (
     <Stack spacing={0.5} sx={{ width: '100%' }}>
@@ -90,6 +89,9 @@ export function AuthField({
           endAdornment={endAdornment}
           notched={false}
           sx={{
+            // What autofill is painted over with (the theme's `MuiInputBase`).
+            '--wg-field-bg': authPalette.fieldBackground,
+            '--wg-field-fg': authPalette.textPrimary,
             height: 40,
             borderRadius: '16px',
             bgcolor: authPalette.fieldBackground,
@@ -121,15 +123,6 @@ export function AuthField({
                 color: authPalette.textMuted,
                 opacity: 1,
               },
-              '&:-webkit-autofill, &:-webkit-autofill:hover, &:-webkit-autofill:focus':
-                {
-                  WebkitTextFillColor: authPalette.textPrimary,
-                  caretColor: authPalette.textPrimary,
-                  WebkitBoxShadow: `0 0 0 100px ${autofillBackground} inset`,
-                  boxShadow: `0 0 0 100px ${autofillBackground} inset`,
-                  borderRadius: 'inherit',
-                  transition: 'background-color 9999s ease-out 0s',
-                },
             },
             '& .MuiOutlinedInput-input.MuiInputBase-inputAdornedEnd': {
               pr: 1,

@@ -103,6 +103,8 @@ function SiteHeaderSearchField({
           ) : null
         }
         sx={{
+          // The box's fill, for autofill to be painted over with (the theme's `MuiInputBase`).
+          '--wg-field-bg': color.bg.neutral.subtle,
           minWidth: 0,
           flex: 1,
           color: color.fg.neutral.default,
