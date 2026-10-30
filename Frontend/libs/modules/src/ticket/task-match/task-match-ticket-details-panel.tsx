@@ -13,6 +13,7 @@ import {
   useFragment,
 } from '@rescue-frontend/data-access';
 
+import { BuildingTicketNavigation } from '../../building/building-navigation';
 import { responsibleTeamsText } from '../../map/areas';
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
@@ -132,9 +133,15 @@ function DetailRow({
 export function TaskMatchTicketDetailsPanel({
   marker,
   isAuthenticated = false,
+  onOpenBuilding,
+  onSelectTicket,
 }: {
   marker: RescueMapMarkerItem;
   isAuthenticated?: boolean;
+  /** For a ticket filed inside a building: open the building's drawer (現場分區). */
+  onOpenBuilding?: (buildingUuid: string) => void;
+  /** Open another ticket of the same building, from 上一張／下一張. */
+  onSelectTicket?: (marker: RescueMapMarkerItem) => void;
 }) {
   // The backend withheld this ticket's detail (ADR-281): the point is a cell centre, and the
   // free text, notes and photos came back empty. Rows for them are left out rather than shown as
@@ -197,6 +204,8 @@ export function TaskMatchTicketDetailsPanel({
       .join(' / ') || '未提供';
   const street = formatTicketStreet(ticketData?.ticket?.secondaryLocation);
   const unit = formatTicketUnit(ticketData?.ticket?.secondaryLocation);
+  // Null to a guest, as the exact location is.
+  const buildingUuid = ticketData?.ticket?.buildingMapUuid;
   // Empty when the ticket lies in no 責任區, and to a guest, who sees the coarse branch anyway (ADR-422).
   const responsible = responsibleTeamsText(
     ticketData?.ticket?.responsibleTeams.map((team) => team.name) ?? [],
@@ -377,6 +386,14 @@ export function TaskMatchTicketDetailsPanel({
                     緯度 {marker.position[0].toFixed(6)} / 經度{' '}
                     {marker.position[1].toFixed(6)}
                   </Typography>
+                  {buildingUuid && onOpenBuilding && onSelectTicket ? (
+                    <BuildingTicketNavigation
+                      buildingUuid={buildingUuid}
+                      ticketUuid={marker.id}
+                      onOpenBuilding={onOpenBuilding}
+                      onSelectTicket={onSelectTicket}
+                    />
+                  ) : null}
                 </Stack>
               }
             />
