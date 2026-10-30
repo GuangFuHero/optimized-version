@@ -115,8 +115,21 @@ describe('floorLabelOf', () => {
     ]) {
       expect(labelOf(written)).toBe('3F');
     }
-    for (const written of ['地下一樓', '地下1樓', 'B1樓', '-1', '負一']) {
+    for (const written of [
+      '地下一樓',
+      '地下1樓',
+      'B1樓',
+      'B1F',
+      '-1',
+      '負一',
+    ]) {
       expect(labelOf(written)).toBe('B1');
+    }
+  });
+
+  it('names no floor when other words follow the number: 2號 is a door, 4-5樓 two floors', () => {
+    for (const written of ['2號', '4-5樓', '3樓之1', '二樓301室', '地下1號']) {
+      expect(labelOf(written)).toBeNull();
     }
   });
 
@@ -186,6 +199,17 @@ describe('groupByFloor', () => {
     const groups = groupByFloor(BUILDING, tickets, (ticket) => ticket.floor);
 
     expect(groups.unplaced.map((ticket) => ticket.id)).toEqual(['b', 'e', 'f']);
+  });
+
+  it('leaves unplaced a ticket whose floor says more than a floor, rather than on the wrong one', () => {
+    const written = [
+      { id: 'j', floor: '2號' },
+      { id: 'k', floor: '4-5樓' },
+    ];
+    const groups = groupByFloor(BUILDING, written, (ticket) => ticket.floor);
+
+    expect(groups.floors.flatMap((group) => group.tickets)).toEqual([]);
+    expect(groups.unplaced.map((ticket) => ticket.id)).toEqual(['j', 'k']);
   });
 
   it('puts a ticket on the floor its words name: 頂樓 on the roof, 三樓 on 3F', () => {

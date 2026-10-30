@@ -105,15 +105,20 @@ function cjkNumber(text: string): number | null {
   return tens === undefined || ones === undefined ? null : tens * 10 + ones;
 }
 
+// A floor's number, then a word for floor or nothing: 2號 is a door and 4-5樓 two floors, and
+// either taken as 2F or 4F would put the ticket on a floor it is not on (Seaweed, 2026-10-30).
+const WRITTEN_NUMBER =
+  /^(?:(\d+)|([零〇○一二三四五六七八九十兩]+))(?:樓|F|層)?$/;
+
 /**
  * The floor a written one counts as, below ground negative (prototype `parseFloorToken`,
- * `site-data.js:802-818`): 3, 3樓 and 第三層 are 3; B1, 地下一樓 and -1 are −1. Null without one.
+ * `site-data.js:802-818`): 3, 3樓 and 第三層 are 3; B1, 地下一樓 and -1 are −1. Null without one, or
+ * with more than a floor written after it.
  */
 function writtenFloorNumber(text: string): number | null {
   const below = BELOW_PREFIX.test(text);
   const rest = text.replace(BELOW_PREFIX, '').replace(/^第/, '');
-  const digits = /^\d+/.exec(rest)?.[0];
-  const cjk = /^[零〇○一二三四五六七八九十兩]+/.exec(rest)?.[0];
+  const [, digits, cjk] = WRITTEN_NUMBER.exec(rest) ?? [];
   const n = digits ? Number(digits) : cjk ? cjkNumber(cjk) : null;
 
   if (n === null || n <= 0) {
