@@ -5902,7 +5902,7 @@
           "數據分析 API"
         ],
         "summary": "Get Analytics Catalog",
-        "description": "Machine-readable y-metric catalog: valid `x` values and chart types per metric.\n\nThe source of truth behind the \"ignore x when it doesn't apply\" behavior on both\nchart endpoints below — build x/y dropdowns from this response instead of\nhardcoding the rules client-side.\n\nAuthentication only, no capability: the response is a static description of this\nAPI's own shape and contains no records. Gating it on ticket.view (as it originally\nwas) locked a station-only role out of the station catalog it is allowed to chart.",
+        "description": "Machine-readable y-metric catalog: valid `x` values and chart types per metric.\n\nThe source of truth behind the \"ignore x when it doesn't apply\" behavior on both\nchart endpoints below — build x/y dropdowns from this response instead of\nhardcoding the rules client-side.\n\nAuthentication only, no capability: the metric specs are a static description of this\nAPI's own shape. Gating it on ticket.view (as it originally was) locked a station-only\nrole out of the station catalog it is allowed to chart. The filter values that come from\nrows (areas, station types) are narrowed to the caller's own scope per domain, and left\nempty for a domain they cannot chart.",
         "operationId": "get_analytics_catalog_api_v1_analytics_catalog_get",
         "security": [
           {
@@ -6147,6 +6147,96 @@
             "description": "JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{\"title\": {\"text\": \"Custom title\"}}'."
           },
           {
+            "name": "task_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketTaskType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets of this task type (the ticket's own `task_type`).",
+              "title": "Task Type"
+            },
+            "description": "Only tickets of this task type (the ticket's own `task_type`)."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets with this status.",
+              "title": "Status"
+            },
+            "description": "Only tickets with this status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
             "name": "X-WG-Realm",
             "in": "header",
             "required": false,
@@ -6291,6 +6381,96 @@
             "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
           },
           {
+            "name": "task_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketTaskType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets of this task type (the ticket's own `task_type`).",
+              "title": "Task Type"
+            },
+            "description": "Only tickets of this task type (the ticket's own `task_type`)."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets with this status.",
+              "title": "Status"
+            },
+            "description": "Only tickets with this status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
             "name": "X-WG-Realm",
             "in": "header",
             "required": false,
@@ -6351,9 +6531,9 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/TicketYMetric",
-              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
             },
-            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
           },
           {
             "name": "start_date",
@@ -6404,6 +6584,96 @@
               "title": "Tz"
             },
             "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "task_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketTaskType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets of this task type (the ticket's own `task_type`).",
+              "title": "Task Type"
+            },
+            "description": "Only tickets of this task type (the ticket's own `task_type`)."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets with this status.",
+              "title": "Status"
+            },
+            "description": "Only tickets with this status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
           },
           {
             "name": "X-WG-Realm",
@@ -6642,6 +6912,96 @@
             "description": "JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{\"title\": {\"text\": \"Custom title\"}}'."
           },
           {
+            "name": "station_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations of this type; GET /analytics/catalog lists the values.",
+              "title": "Station Type"
+            },
+            "description": "Only stations of this type; GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations with this operational status.",
+              "title": "Status"
+            },
+            "description": "Only stations with this operational status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
             "name": "X-WG-Realm",
             "in": "header",
             "required": false,
@@ -6786,6 +7146,96 @@
             "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
           },
           {
+            "name": "station_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations of this type; GET /analytics/catalog lists the values.",
+              "title": "Station Type"
+            },
+            "description": "Only stations of this type; GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations with this operational status.",
+              "title": "Status"
+            },
+            "description": "Only stations with this operational status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
             "name": "X-WG-Realm",
             "in": "header",
             "required": false,
@@ -6846,9 +7296,9 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/StationYMetric",
-              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
             },
-            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
           },
           {
             "name": "start_date",
@@ -6899,6 +7349,96 @@
               "title": "Tz"
             },
             "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "station_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations of this type; GET /analytics/catalog lists the values.",
+              "title": "Station Type"
+            },
+            "description": "Only stations of this type; GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations with this operational status.",
+              "title": "Status"
+            },
+            "description": "Only stations with this operational status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
           },
           {
             "name": "X-WG-Realm",
@@ -7278,6 +7818,50 @@
         ],
         "title": "ApplicantDetails",
         "description": "What the applicant sent (Spec 026, ADR-355), for the reviewer to call and confirm.\n\nSeparate from `applicant_name`, which is the account's nickname."
+      },
+      "AreaCounty": {
+        "properties": {
+          "county": {
+            "type": "string",
+            "title": "County"
+          },
+          "towns": {
+            "items": {
+              "$ref": "#/components/schemas/AreaTown"
+            },
+            "type": "array",
+            "title": "Towns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "county",
+          "towns"
+        ],
+        "title": "AreaCounty",
+        "description": "A 縣市 and the 鄉鎮市區 in it."
+      },
+      "AreaTown": {
+        "properties": {
+          "town": {
+            "type": "string",
+            "title": "Town"
+          },
+          "villages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Villages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "town",
+          "villages"
+        ],
+        "title": "AreaTown",
+        "description": "A 鄉鎮市區 and the 村里 in it."
       },
       "AssignRoleRequest": {
         "properties": {
@@ -8043,6 +8627,14 @@
             "type": "object",
             "title": "Stations"
           },
+          "filters": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DomainFilters"
+            },
+            "type": "object",
+            "title": "Filters",
+            "description": "Allowed filter values per domain ('tickets', 'stations')."
+          },
           "default_style": {
             "$ref": "#/components/schemas/ChartStyle",
             "description": "What the chart endpoints render with when `style` is omitted."
@@ -8052,6 +8644,7 @@
         "required": [
           "tickets",
           "stations",
+          "filters",
           "default_style"
         ],
         "title": "CatalogResponse",
@@ -8644,6 +9237,42 @@
         "title": "DirectGrant",
         "description": "One per-user grant and the identity it binds to (NULL team = the platform identity)."
       },
+      "DomainFilters": {
+        "properties": {
+          "types": {
+            "items": {
+              "$ref": "#/components/schemas/FilterOption"
+            },
+            "type": "array",
+            "title": "Types",
+            "description": "Values for `task_type` (tickets) or `station_type` (stations)."
+          },
+          "statuses": {
+            "items": {
+              "$ref": "#/components/schemas/FilterOption"
+            },
+            "type": "array",
+            "title": "Statuses",
+            "description": "Values for `status`."
+          },
+          "areas": {
+            "items": {
+              "$ref": "#/components/schemas/AreaCounty"
+            },
+            "type": "array",
+            "title": "Areas",
+            "description": "Values for `county`, `town` and `village`. A 村里 name can repeat across towns, so send `town` (and `county`) with it to pin one."
+          }
+        },
+        "type": "object",
+        "required": [
+          "types",
+          "statuses",
+          "areas"
+        ],
+        "title": "DomainFilters",
+        "description": "The values a domain's filter params accept, drawn from the rows the caller may chart."
+      },
       "DuplicatePairDecision": {
         "properties": {
           "note": {
@@ -9165,6 +9794,27 @@
         ],
         "title": "ErrorReportResponse",
         "description": "The failed rows rendered back in the uploaded format, base64-encoded.\n\nCarried inline rather than behind a download URL: the endpoints are stateless (ADR-114),\nand the report describes *this* run — after a commit, re-deriving it from the same file\nwould not produce the same answer, because some of those rows now exist."
+      },
+      "FilterOption": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "description": "What to send as the query param."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Display name (zh-TW); the value itself when it has no glossary entry."
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "FilterOption",
+        "description": "One allowed value of a filter, with the zh-TW name to show for it."
       },
       "ForgotPasswordRequest": {
         "properties": {
@@ -11488,12 +12138,23 @@
         "title": "SignedInUser",
         "description": "The account a browser just signed in as."
       },
+      "StationStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "temporarily_closed",
+          "permanently_closed"
+        ],
+        "title": "StationStatus",
+        "description": "A station's operational status, for the station `status` filter."
+      },
       "StationYMetric": {
         "type": "string",
         "enum": [
           "station_count",
           "station_status_count",
-          "station_freshness_trend"
+          "station_freshness_trend",
+          "operating_station_count"
         ],
         "title": "StationYMetric",
         "description": "What to measure (the Y axis) for a station chart — see app/services/station_analytics.py."
@@ -12173,6 +12834,28 @@
         "title": "TicketForReviewResponse",
         "description": "A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).\n\nSend `version` back unchanged when resolving: it says what the reviewer saw (ADR-374)."
       },
+      "TicketStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed",
+          "cancelled"
+        ],
+        "title": "TicketStatus",
+        "description": "A ticket's status, for the ticket `status` filter."
+      },
+      "TicketTaskType": {
+        "type": "string",
+        "enum": [
+          "rescue",
+          "supply",
+          "medical",
+          "hr"
+        ],
+        "title": "TicketTaskType",
+        "description": "A ticket's task type, for the `task_type` filter — the kinds in app.services.ticket.TASK_TYPES."
+      },
       "TicketYMetric": {
         "type": "string",
         "enum": [
@@ -12186,7 +12869,10 @@
           "time_to_completion",
           "net_backlog_change",
           "task_completion_distribution",
-          "duplicate_count"
+          "duplicate_count",
+          "volunteers_needed",
+          "volunteers_matched",
+          "volunteer_gap"
         ],
         "title": "TicketYMetric",
         "description": "What to measure (the Y axis) for a ticket/task chart — see app/services/ticket_analytics.py."
@@ -12658,7 +13344,7 @@
           "requires_date_range": {
             "type": "boolean",
             "title": "Requires Date Range",
-            "description": "When true, `start_date` and `end_date` are mandatory for this y-metric and omitting either is a 400 — the underlying query is too expensive to run unbounded. Currently only `duplicate_count`."
+            "description": "When true, `start_date` and `end_date` are mandatory for this y-metric and omitting either is a 400. No metric needs it now; the field stays so existing clients keep reading it."
           },
           "max_range_days": {
             "anyOf": [
@@ -12670,7 +13356,7 @@
               }
             ],
             "title": "Max Range Days",
-            "description": "Widest allowed span between `start_date` and `end_date` for this y-metric, in days; a wider range is a 400. Null means no limit. Clamp the date picker to this instead of waiting for the error."
+            "description": "Widest allowed span between `start_date` and `end_date` for this y-metric's `x=date` trend, in days; a wider range is a 400. Null means no limit. Clamp the date picker to this instead of waiting for the error."
           }
         },
         "type": "object",
