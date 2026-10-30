@@ -294,6 +294,8 @@ export function areaSignature(
     area.id,
     areaKind(area),
     JSON.stringify(area.polygons),
+    'isPublic' in area ? String(area.isPublic) : '',
+    String(area.highlighted ?? false),
     ...areaPopupLines(area),
   ].join('|');
 }

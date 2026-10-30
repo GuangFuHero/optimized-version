@@ -308,6 +308,8 @@ export function mapAreasToOverlays(
       ...area,
       kind: item.type,
       teams: item.assignedTeams.map((team) => team.name),
+      teamUuids: item.assignedTeams.map((team) => team.uuid),
+      isPublic: item.isPublic,
     });
   });
 
