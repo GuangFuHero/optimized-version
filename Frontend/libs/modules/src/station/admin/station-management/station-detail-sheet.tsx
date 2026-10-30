@@ -158,7 +158,6 @@ function StationDetailContent({
 
   return (
     <SheetLayout
-      eyebrow={view.typeLabel}
       title={view.title}
       closeLabel="關閉站點詳情"
       headerContent={

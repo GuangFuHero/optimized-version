@@ -52,13 +52,14 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 ### `/stations`（資源站點管理 v2，ADMIN-026）
 
 - `page.tsx` 掛載 `StationManagementPage`（`libs/modules/src/station/admin/station-management/`），接真實 API
-- 狀態統計（`/analytics/stations/data` 各營運狀態數量，點選即篩選該狀態；ticket 寫的 `/analytics/stations/value` 只回一個總數，沒有各狀態拆分）、篩選（類型、營運狀態、行政區、指派 Team、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換
+- 篩選（類型、營運狀態、行政區、指派 Team、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換。列表上方的狀態統計（各營運狀態的數量卡片）照設計拿掉（糖 2026-10-31）
 - 列表會分頁讀完權限範圍內所有站點（上限 5,000），官方認定、更新時間篩選與排序（開設中優先、最近更新優先）在前端做
 - 站點抽屜是 `/stations` 自己的 `StationDetailSheet`（libs/ui 的 `SheetFrame` 加 `variant="admin"`，詳情與編輯是同一個 frame 裡切換的 `SheetLayout`，不會疊第二層），不用地圖的 `StationDetailDrawer`：基本資料、照片、資源、聯絡資訊（無 `station.view_pii` 時顯示遮罩值且不可改）、版本歷史；`/stations?station=<uuid>` 直接開啟，給通知連結用
 - 新增／編輯用 `station/form` 的 `StationForm`，與兩張 `/map` 的新增共用同一份表單與同一套欄位版面（設計稿 `station-drawer.jsx`）；新增都用 `StationFormDrawer`，`/stations` 傳 `variant="admin"`，編輯則把 `StationFormLayout` 放進站點抽屜；地址只在新增時送出（`UpdateStationInput` 不能改 `secondaryLocation`）
 - 刪除站點、列表上直接改營運狀態與指派 Team；後台（`/stations`、後台地圖）新增的站點帶 `source: "official"`；前台 `/map` 不能新增站點
 - 前台修改建議審查：依欄位決定採用／不採用（可改寫入值），一次送出附一則審核備註（`mergeStationSuggestions` 只收一個 `reviewNote`；ticket 寫「每一則附備註」，為了保持一次送出不可分割，維持一則）
 - 批次匯入（試算 → 欄位對應 → 確認，失敗列可下載）與匯出（單一類型，CSV／Excel）
+- 匯入是新增站點的一種方式：放在「新增站點」的下拉，列表空的時候也在「新增站點」旁；要同時有 `station.add` 和 `station.import` 才看得到，沒有新增權限的人不顯示（糖 2026-10-31）
 - 匯入一律官方：後端批次匯入新增的站點一律存 `source: "official"`，不看檔案的 source 欄（CSV、Excel、貼上的內容都一樣）
 - 匯入新增的站點用預設營運狀態（營運中），和其他新增的站點一樣；更新既有站點不改營運狀態
 - 匯入視窗依設計稿：欄位對應一列三組、「試算結果」只列失敗的列（第幾列／欄位／原因）
@@ -71,6 +72,12 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 匯出一次一種類型，各類型筆數只算自己 Team 的站點（team 角色的 `station.export` 只匯出指派給該 Team 的站點）
 - 地圖檢視：類型顏色圖釘、群集、圖例、縮放、飛到選取站點。改到共用的 `map/*`，但都是 admin 才開的選項，前台地圖不變
 
+**設計稿沒有、先保留（待設計確認，糖 2026-10-31）：**
+
+- 篩選的「更新」（24 小時內／超過 24 小時／超過 72 小時）
+- 「N 欄待審」標籤（列表名稱欄與詳情頂部）
+- 匯入可選 Excel 與貼上內容（設計稿只寫 CSV）
+
 **後端缺口（尚無 API，畫面未做或以前端方式替代）：**
 
 - 已刪除站點無法重新啟用，也無法回溯到某個版本（沒有 restore／rollback）
@@ -80,6 +87,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 設計稿的「這份檔案是『物資集散』，這列寫的是『避難收容』」：後端沒有這項檢查，列上的 type 會直接蓋過選的類型
 - 匯出只能選一種類型，不套用列表篩選
 - 站點照片只能附 URL，沒有上傳端點
+- 站點群（大場地底下掛多個子站，列表縮排、子站標「屬：○○」）：GraphQL 沒有這個欄位，等後端開放再做（糖 2026-10-31）
 - 營運狀態文字（開設中／暫時關閉／永久關閉）待產品確認是否改為兩態，只需改 `station/operational-status.ts`
 
 ### `/tickets`
