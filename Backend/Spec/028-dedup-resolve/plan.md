@@ -222,7 +222,7 @@ DEDUP-008 交給 Jarvis 前對照 mock 時發現：選主要單要看地址，�
 - [x] `dedup_review_tickets.py`：`LocationForReview`，一條 query 讀兩張單的地點；`location` 自動算進 `version`
 - [x] schema `LocationForReviewResponse`、`TicketForReviewResponse.location`
 - [x] 測試：地址到樓室、電線桿、沒有地點、改地點 `version` 會動、改地標 `version` 不動、query 數不變、REST 形狀
-- [ ] 合約檔、全套件、Docker 從零驗證
+- [x] 合約檔、全套件（**3316**：3315 passed，另 1 個是 main 上 #176 修掉的時區測試，rebase 後通過）、Docker 從零驗證 19/19（`c1c4492ec`，Backend 與 rebase 後的 `ddf1ab34c` 只差 #176 那個測試檔：空 DB 跑 alembic＋seed，真實「仍要建立」產生配對卡，打 REST 驗地點、暱稱、409、通知文字、API 標籤）
 
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 

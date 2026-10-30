@@ -104,7 +104,7 @@ DEDUP-008 交給 Jarvis 前對照時發現：前端查不到審核者是誰，�
 - [x] `dedup_review.py::_nicknames`：卡的 `reviewed_by_name`、事件的 `actor_name`，一頁只多一條 query
 - [x] 通知內文、REST 分組標籤拿掉「AI」
 - [x] 測試：事件有人／沒人、已審／待審的卡、query 數不隨卡數增加、REST 形狀、通知文字
-- [ ] 合約檔、全套件、Docker 從零驗證
+- [x] 合約檔、全套件（**3316**：3315 passed，另 1 個是 main 上 #176 修掉的時區測試，rebase 後通過）、Docker 從零驗證 19/19（`c1c4492ec`，Backend 與 rebase 後的 `ddf1ab34c` 只差 #176 那個測試檔：空 DB 跑 alembic＋seed，真實「仍要建立」產生配對卡，打 REST 驗地點、暱稱、409、通知文字、API 標籤）
 
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
