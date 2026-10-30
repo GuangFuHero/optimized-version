@@ -4,9 +4,11 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select, update
+from sqlalchemy.dialects import postgresql
 
+from app.graphql.geo.queries import _has_pending_suggestion
 from app.models.geo import Station
-from app.models.station_property import StationProperty, StationUpdateSuggestion
+from app.models.station_property import StationProperty, StationSuggestionMerge, StationUpdateSuggestion
 from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
 
 # ---------------------------------------------------------------------------
@@ -636,3 +638,62 @@ async def test_stations_filter_has_pending_suggestions(
 
     listed = (await _gql(client, None, queue, {}))["data"]["stations"]["items"]
     assert sample_station in {s["uuid"] for s in listed}
+
+
+@pytest.mark.asyncio
+async def test_a_pending_suggestion_naming_no_uuid_does_not_break_the_filter(
+    client, login_user_auth, sample_station
+):
+    """`target_uuid` is free text; a row the API could not have written is skipped, not cast and failed."""
+    user_uuid, user_token = login_user_auth
+    await _create(client, user_token, "station", sample_station, "name", "新站名")
+    async with test_db() as db:
+        db.add(
+            StationUpdateSuggestion(
+                target_type="station",
+                target_uuid="not-a-uuid",
+                field_name="name",
+                new_value="壞資料",
+                status="pending",
+                created_by=user_uuid,
+            )
+        )
+    queue = "query { stations(hasPendingSuggestions: true, limit: 500) { items { uuid } } }"
+
+    body = await _gql(client, None, queue, {})
+
+    assert "errors" not in body, body
+    assert sample_station in {s["uuid"] for s in body["data"]["stations"]["items"]}
+
+
+def test_the_pending_check_binds_no_constants():
+    """Bound, they let a connection's sixth call switch to a cached generic plan several times slower."""
+    statement = select(Station.uuid).where(_has_pending_suggestion())
+
+    compiled = statement.compile(dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True})
+
+    assert compiled.params == {}
+
+
+@pytest.mark.asyncio
+async def test_a_merge_whose_reviewer_is_gone_reads_a_null_reviewer(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """ADR-393: a SEED_MOCK run keeps a real merge a mock account reviewed and empties reviewed_by."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, user_token, "station", sample_station, "op_hour", "24h")
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", "24h"),
+    ]))["data"]["mergeStationSuggestions"]
+    async with test_db() as db:
+        await db.execute(
+            update(StationSuggestionMerge)
+            .where(StationSuggestionMerge.uuid == merge["uuid"])
+            .values(reviewed_by=None)
+        )
+
+    history = "query($uuid: UUID!) { station(uuid: $uuid) { suggestionMerges { uuid reviewedBy } } }"
+    view = (await _gql(client, auditor_token, history, {"uuid": sample_station}))["data"]["station"]
+
+    assert view["suggestionMerges"] == [{"uuid": merge["uuid"], "reviewedBy": None}]

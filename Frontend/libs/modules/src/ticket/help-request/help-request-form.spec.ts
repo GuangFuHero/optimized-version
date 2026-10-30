@@ -20,6 +20,8 @@ function filledForm(overrides: Partial<HelpRequestForm> = {}): HelpRequestForm {
     address: '花蓮縣光復鄉中山路100號',
     floor: '',
     room: '',
+    addressFilled: null,
+    addressKept: null,
     contactName: '王小姐',
     contactPhone: '',
     needs: [{ need: 'cleanup', name: '', quantity: '2' }],
@@ -177,6 +179,10 @@ describe('toHelpRequestInput', () => {
     expect(emptyHelpRequestForm().photoUrls).toEqual([]);
   });
 
+  it('starts a form with no address looked up', () => {
+    expect(emptyHelpRequestForm().addressFilled).toBeNull();
+  });
+
   it('sends the point as GeoJSON, longitude first', () => {
     expect(toHelpRequestInput(filledForm()).geometry).toEqual({
       type: 'Point',
@@ -184,12 +190,40 @@ describe('toHelpRequestInput', () => {
     });
   });
 
-  it('puts the typed address in landmarkNote with floor and room beside it', () => {
+  it('sends the typed address as fullAddress for the backend to split, with floor and room', () => {
     expect(
       toHelpRequestInput(
         filledForm({ address: ' 中山路100號 ', floor: ' 3樓 ', room: '302室' }),
       ).secondaryLocation,
-    ).toEqual({ landmarkNote: '中山路100號', floor: '3樓', room: '302室' });
+    ).toEqual({
+      fullAddress: '中山路100號',
+      addressToken: null,
+      floor: '3樓',
+      room: '302室',
+    });
+  });
+
+  it("sends the lookup's token with the address it filled in, and none once it was changed", () => {
+    const addressFilled = {
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+      token: 'token-19',
+      lat: 23.658676,
+      lng: 121.420631,
+      from: 'pin' as const,
+    };
+    const filled = filledForm({
+      address: addressFilled.fullAddress,
+      addressFilled,
+    });
+
+    expect(toHelpRequestInput(filled).secondaryLocation).toMatchObject({
+      fullAddress: '花蓮縣光復鄉大進村3鄰糖廠街19號',
+      addressToken: 'token-19',
+    });
+    expect(
+      toHelpRequestInput({ ...filled, address: '糖廠街19號' })
+        .secondaryLocation,
+    ).toMatchObject({ fullAddress: '糖廠街19號', addressToken: null });
   });
 
   it('sends what was left blank as null rather than empty text', () => {
@@ -200,7 +234,8 @@ describe('toHelpRequestInput', () => {
     expect(input.contactPhone).toBeNull();
     expect(input.description).toBeNull();
     expect(input.secondaryLocation).toEqual({
-      landmarkNote: '花蓮縣光復鄉中山路100號',
+      fullAddress: '花蓮縣光復鄉中山路100號',
+      addressToken: null,
       floor: null,
       room: null,
     });
@@ -238,6 +273,29 @@ describe('toHelpRequestInput', () => {
     expect(input.tasks).toEqual([
       { taskType: 'supply', taskName: '晚餐便當', quantity: 3 },
       { taskType: 'rescue', taskName: '人員受困／急難', quantity: null },
+    ]);
+  });
+
+  it('names the suspect on each need held, by its place among the needs sent, not among the rows', () => {
+    const input = toHelpRequestInput(
+      filledForm({
+        needs: [
+          emptyNeed(),
+          { need: 'cleanup', name: '清淤泥', quantity: '2' },
+          { need: 'supplies', name: '晚餐便當', quantity: '3' },
+        ],
+      }),
+      { 1: 'need-b1' },
+    );
+
+    expect(input.tasks).toEqual([
+      { taskType: 'hr', taskName: '清淤泥', quantity: 2 },
+      {
+        taskType: 'supply',
+        taskName: '晚餐便當',
+        quantity: 3,
+        acknowledgedDuplicateOf: 'need-b1',
+      },
     ]);
   });
 

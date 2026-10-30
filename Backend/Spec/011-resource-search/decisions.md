@@ -1,8 +1,8 @@
-# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276）
+# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394、419、438、439）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
-**Status**: 已實作（PR #35）；ADR-146~158 為 review 後的修正，ADR-174~177 為第二輪 review 後的修正；ADR-276 補上 ADR-149 當初「另開票」的那支守衛測試（PR #48）
+**Status**: 已實作（PR #35）；ADR-146~158 為 review 後的修正，ADR-174~177 為第二輪 review 後的修正；ADR-276 補上 ADR-149 當初「另開票」的那支守衛測試（PR #48）；ADR-394 是站點列表的篩選、排序與計數，給管理平台的站點頁分頁用（393 已分給 PR #125）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/010-multi-team-membership/decisions.md`（ADR-068~076）。
 
 ---
@@ -757,3 +757,229 @@ alembic 走 subprocess 而非 in-process，有兩個原因：`alembic/env.py` �
 ◾ 對 production 零行為差異，純測試基礎建設。
 ➖ 只釘名稱，所以 ADR-149 的「DDL 與 `create_all` 產出逐字相符」這條通則仍然沒有自動守衛；型別與 nullability 的漂移抓不到，還是靠人工與 `autogenerate` 的幽靈 diff。
 ➖ suite 多一次真實的 migration run（session-scoped，兩支測試共用，實測 3.5s），且執行者需要 `CREATE DATABASE` 權限。
+
+---
+
+### ADR-394 `stations` 多了行政區、官方、建立與更新時間的篩選和一種排序；`stationFacets` 回傳同一組篩選的計數
+
+**白話**：管理平台的站點頁不用再把所有站點抓下來，在瀏覽器裡篩選和計數；後端直接照條件回一頁，數字另外一次拿齊。
+
+HC 2026-10-26 在 #129 的 review 提四點（待審數太慢、官方標示看哪一欄、seed 沒有 official、`town` 是 null 的區域），
+Dan 2026-10-27 決定：官方一律看 `source`，其餘照 HC 的建議改，等 #97 合了再一起改。
+
+**Context**：
+- #97 的 `/stations` 把呼叫者看得到的站點全部抓下來（每頁 200、最多 5,000），用來：
+  - 在瀏覽器篩行政區、官方認定、成立時間、更新時間並排序；
+  - 從不篩選的那份算出行政區選項和每種類型可匯出的筆數；
+  - 從待審那份算出審查按鈕的數字。
+- 統計列另外讀 `/analytics/stations/data` 的中文標籤，再對回狀態值。
+- 超過 5,000 筆時，這些數字都是從截斷的資料算的。chingweih 和 Seaweed0112 在 #97 的 review 都要求改到後端算。
+- 做法：`docs/plans/2026-10-26-admin-stations-server-side.md`（本機）。
+
+**Decision**：
+- **`stations` 的新參數**，都放進 `extra_filters`，`count_active` 和 `list_active` 用同一組條件，`totalCount` 才會跟列數一致：
+  - `county`、`town`：用 `EXISTS` 查 `secondary_locations`，跟關鍵字搜尋碰地址的方式一樣，不 JOIN，免得一個站點
+    出現兩次。沒有地址的站點不屬於任何行政區。只給 `town` 會回錯誤 `town needs county`，因為鄉鎮市區的名字會在
+    不同縣市重複（中正區、東區）。
+  - `official`：true 是 `source = 'official'`，也就是管理平台建立或匯入的站點；false 是其他的，包含 `source` 是
+    NULL 的。「官方」從這裡起一律看 `source`：
+    - 前台的「官方」標示讀的是 GraphQL 的 `isOfficial`。它原本直接是 `is_official` 欄位，現在改成
+      `source = 'official'`，或舊的 `is_official` 是 true。
+    - `is_official` 只有 seed 寫過，app 不寫它。篩選不看它；之後 3NF 那支（F1）會讓它跟著 `source`。
+    - mock seed 的 17 個官方站點，`source` 從 `gov` 改成 `official`，篩選和標示在 staging 重灌 seed 後一致。
+    - 變更紀錄跟著改：沒有登入者的建立事件，`source` 是 `official` 時，操作者的 `kind` 是 `official`，跟 `gov`、
+      `ngo` 一樣，不會變成籠統的 `system`（016/ADR-137）。HC 2026-10-29 在 #129 問，Dan 2026-10-30 決定。
+  - `createdAfter`／`createdBefore`、`updatedAfter`／`updatedBefore`：半開區間 `[after, before)`，相鄰的兩段不會
+    重複算到同一個站點。成立第幾週、新鮮度門檻（24 小時／72 小時）都是前端的顯示規則，由前端算出時間點再傳進來。
+  - `orderBy: StationOrder`：`DEFAULT` 是現在的順序（搜尋時依相關度，然後最新建立的在前）；
+    `OPEN_FIRST_RECENTLY_UPDATED` 是開設中的在前，再依最近更新排，最後用 uuid 收尾讓分頁穩定（ADR-153）。
+    它連相關度也一起取代，因為管理平台的列表搜不搜尋都用同一種排序。
+    換頁照舊用 `skip`／`limit`：兩次載入之間有人改了站點（營運狀態、更新時間都會變），後面的頁會移一格，可能漏
+    一列或重複一列，重新載入前不會修正。不改成 cursor（keyset）：排序鍵本身會隨編輯改變，cursor 一樣會漏掉剛被改
+    的那一列，而且 #97 的換頁也要跟著改。popo 2026-10-27 在 #129 提出，Dan 2026-10-29 決定
+    維持 offset、寫明這一點。
+  - `limit` 上限 1,000，超過回 `limit must be at most 1000`，寫法跟 tickets 的 200 一樣（`TICKET_LIST_MAX_LIMIT`）。
+    1,000 是為了比現在所有呼叫端都大：最大的是後端測試的 500，前台送 200。
+- **`stationFacets`**：
+  - 權限和參數跟 `stations` 一樣，只是沒有分頁和排序。回傳：
+    - `total`；
+    - `byStatus`：狀態值和筆數，不是中文標籤；
+    - `byType`：類型、筆數，以及 `exportable`；
+    - `areas`：縣市、鄉鎮市區和筆數；
+    - `pendingReviewCount`。
+  - `exportable` 照呼叫者的 `station.export` scope 算，跟匯出 endpoint 的列篩選一致（`require_scope` →
+    `scope_filter`，gov 團隊的 team 會放寬成 all，ADR-285）。它跟著這次請求的篩選走，匯出只收類型，所以只有沒帶
+    其他篩選時兩者才相等。沒有類型的那一列一律是 0：匯出必須指定類型，要不到它們。popo 2026-10-27 在 #129 提出，
+    Dan 2026-10-29 照改。
+  - `pendingReviewCount` 是有待審建議、而且呼叫者有 `station.review` 的站點數。
+  - 訪客或沒有權限的人，這兩項都是 0，不回錯誤。
+  - `areas` 裡 `town` 是 null 的那一列，是這個縣市裡地址沒填鄉鎮市區的站點。沒有篩選能只選它們（只給 `county`
+    是整個縣市）；留著這一列，是因為拿掉的話，一個縣市的站點如果都沒填鄉鎮，這個縣市就從選項裡消失，各列加起來也
+    對不上縣市的總數。欄位說明寫明了。
+- **「有待審建議」從待審建議出發**（`_has_pending_suggestion`，`hasPendingSuggestions` 和 `pendingReviewCount`
+  共用）：先撈出待審建議指向的站點（指向站點本身的，和指向它屬性的，`UNION` 起來），再留 `Station.uuid` 在裡面的。
+  原本把兩種目標用 `OR` 放在同一個 `EXISTS` 裡，Postgres 只能拿每個站點去比每一筆待審建議。
+  - 常數（`pending`、兩種 `target_type`）直接寫進 SQL 不綁參數：綁的話，一條連線第 6 次起換成快取的 generic plan，
+    會慢好幾倍。
+  - `target_uuid` 是自由文字，先用 regex 確認是 uuid 的樣子才轉型，一筆壞資料不會讓每個人的查詢都失敗。
+  - HC 2026-10-29 在 #129 指出：中間版本（兩個 `EXISTS`）的估計成本超過 JIT 門檻，每次都要編譯，編譯比執行慢得多；
+    staging 是 PostgreSQL 16.4、`jit = on`、`jit_above_cost` 預設 100000，正式機用同一份設定。這個寫法是 HC 提的，
+    不用改資料庫設定。
+  - 2026-10-29 在 5433 的臨時資料庫量（2 萬個站點、4 萬個屬性、1,300 筆待審建議，一半指向站點、一半指向屬性；
+    走 app 的 repository、參數照綁，每種寫法開新連線連跑 7 次；量完刪掉），第 6 次起：計數 main 3.1 s、兩個
+    `EXISTS` 44 ms、這個寫法 16 ms；一頁 50 筆 3.3 s、43 ms、20 ms。第 1～5 次這個寫法最慢 77 ms。四種寫法回的列
+    一樣。
+  - 訂正：之前寫的「2,565 ms 到 46 ms」是把參數直接寫進 SQL 量的，app 不會這樣送，不代表實際情況。
+- **#97 的 `reviewableOnly`** 也放進 `_station_filters`，`stationFacets` 一樣收。「呼叫者有某個權限的站點」只留一個
+  函式 `_held_over(info, perm)`，`reviewableOnly`、`exportable`、`pendingReviewCount` 都用它。
+  - 一次請求就能填好統計列、行政區選項、匯出筆數和審查按鈕的數字。統計列要不要跟著篩選變由頁面決定：不帶
+    篩選參數就是全部的數字。
+
+**Consequences**：
+➕ 前端可以真的分頁；超過 5,000 筆時，數字也是對的。
+➕ 統計列不用再靠中文標籤對回狀態值。
+➖ `stations` 和 `stationFacets` 的參數清單要一起維護：共用的條件都寫在 `_station_filters`，新增篩選時兩邊都要加。
+◾ 先不做（等前端要改時再問糖）：
+  - 統計列要不要跟著篩選變；
+  - 「未填地址」要不要成為一個行政區選項。
+◾ 前端改用這些參數和 facets，另外開 PR。
+
+---
+
+### ADR-419 `tickets` 加 `order: NEEDS_FIRST`：還缺人的單在前、搜救優先，排在相關度之前
+
+**白話**：前台列表要讓志工先看到還需要人的單，有搜救需求的排最前面，已經滿額或完成的排最後。原本只能排已經載入的那
+一頁，現在由後端對全部的單排好再分頁。
+
+**Context**：
+
+- `tickets` 只有一種排序：新到舊，有 `q` 時相關度在前（ADR-083／147／153）。前台列表（#101）照原型
+  （`site-data.js:613-650`）分三層，但只能排已載入的 100 張；第 2 頁以後的搜救單、還缺人的舊單，要捲到才看得到。
+- 單的 `status` 由需求算出（`services/ticket_status.py`）：`pending`／`in_progress` 表示還有需求收人，`completed`
+  表示沒有。`cancelled` 只剩很早以前手動取消的舊資料（刪掉的單不回傳），它的需求可能還寫 `pending`，但不收人。
+- 前台把「自己承接的需求」也當成還收人（2026-10-23 使用者定）：搶到最後一個名額的人，那張單不該掉到最後。
+
+**Decision**：
+
+1. `tickets` 加參數 `order: TicketListOrder`，預設 `NEWEST`（原本的排序，不變）；`NEEDS_FIRST` 在原本的排序**前面**
+   多一個鍵，搜尋時也排在相關度前面：
+   - 0：單還收人，而且有搜救（`task_type = 'rescue'`）需求還收人；或登入者在這張單的搜救需求上有承接；
+   - 1：單還收人；或登入者在這張單有任何承接；
+   - 2：其他。
+
+   登入者的承接不算手動取消（`cancelled`）的單：那種單沒有人在做，訪客看它排最後，承接過的人也一樣
+   （popo 10-29 在 #160 review 指出；staging 10-29 有 2 張這種單）。刪掉的需求（`delete_at`）不算。
+2. 實作：需求先依 `ticket_uuid` 彙總成一列（訪客只算「有開放搜救」，登入者再加上自己的承接），`LEFT JOIN` 回 tickets，
+   用 `CASE` 排。**不在 `ORDER BY` 裡逐列寫 `EXISTS`**：Postgres 把 CASE 裡的關聯子查詢估成每列都跑一次，大約
+   8,500 張單起估計成本就超過 `jit_above_cost`（預設 100,000），每次查詢多花 150～300 ms 編 JIT；實際只算一次。
+3. `count_active` 不變：排序不影響筆數。分頁照舊 offset，最後一個鍵仍是主鍵（ADR-153）。
+4. 只讀列表本來就給任何人看的東西：單的狀態、需求的類型與狀態；加上登入者自己的承接。
+
+**實測**（2026-10-29，本機 Postgres 16.4，`alembic upgrade head` 的乾淨庫，每張單 1～3 個需求、約 15% 搜救、
+四分之一已完成；`EXPLAIN ANALYZE` 跑 `list_active` 實際送出的 SQL，暖機後 3 次）：
+
+| 20,000 張單、39,938 個需求，第 1 頁 100 筆 | 執行時間 | JIT |
+|---|---|---|
+| `NEWEST`（原本） | 16–23 ms | 否 |
+| `NEEDS_FIRST`，訪客 | 28–35 ms | 否 |
+| `NEEDS_FIRST`，訪客第 10 頁 | 32–33 ms | 否 |
+| `NEEDS_FIRST`，登入（含自己的承接） | 33–39 ms | 否 |
+| 改寫前（`ORDER BY` 裡逐列 `EXISTS`），訪客／登入 | 319–335／892–947 ms | 是 |
+| `NEWEST`＋`q`（原本就有） | 70–75 ms | 是 |
+| `NEEDS_FIRST`＋`q` | 80–85 ms | 是 |
+
+搜尋時的 JIT 是原本的搜尋條件（`WHERE` 裡的 `EXISTS`）造成的，`NEWEST` 也一樣，不在這次範圍。
+
+HC 10-29 用比較常見的關鍵字量（20,000 張單、50,000 個需求，關鍵字對到約 3,000 張）：`NEWEST`＋`q` 330 ms，
+`NEEDS_FIRST`＋`q` 訪客 395 ms、登入 450 ms。多出來的是 JIT 多編的函式（51 → 78 個），不是排序本身：同樣三個查詢把
+JIT 關掉是 40／54／65 ms。所以帶 `q` 時多多少，看關鍵字對到多少張；上表的 8 ms 是對到的單少的情況。搜尋時關 JIT
+會改到所有關鍵字搜尋，另開一支做。
+
+需求彙總不看篩選條件，每次對全部的需求跑一次：HC 量 50,000 個需求約 8–12 ms，`bounds` 很小時也一樣（6.4 → 14.5 ms）。
+現在的量沒問題；需求多到十倍時再量。
+
+**否決的做法**：
+
+- **把層存成 `tickets` 的欄位**（由 `recompute_ticket_status` 一起寫，再建 index）：要 migration 和回填；「自己承接的」
+  依呼叫者而不同，存不進去。上面的數字不需要。
+- **cursor（keyset）分頁**：層會隨承接改變，cursor 一樣會跳過剛移動的那張；offset 的重複由前台去重。
+
+**Consequences**：
+➕ 前台列表第一頁就是全部單裡最該先看的那些。
+➕ 預設不變，管理平台和其他呼叫者不受影響。
+➖ 兩次載入之間有人把一張單的最後一個名額接走，它會移到第 2 層，下一頁可能漏看一張；新單進來時可能重複一張
+  （新到舊本來就會）。
+➖ 登入者看到的順序跟訪客不同（自己承接的單排得比較前面）。
+➖ 承接過的單完成以後，對承接的人還是排在前兩層；做過很多張的志工，第一頁前面會有一串自己做完的單（HC 10-29 在
+  #160 問）。只在單還收人時往前排可以解決，但搶到最後一個名額、讓單變成完成的那張卡會立刻掉到最後；在 #160 跟 HC 討論中。
+
+---
+
+### ADR-438 站點和任務的 `source` 由建立的身分決定；`is_official` 由資料庫照 `source` 算
+
+**白話**：在管理平台建立的站點和任務是「官方」，在前台建立的是「民眾」，由後端看這次請求用的是哪個身分決定，表單送什麼
+都不算。站點的「官方」標示也改成資料庫照 `source` 算出來，兩個欄位不會再對不上。
+
+**Date**：2026-10-29。HC 在 #97 的 review 提出 `createStation` 照收前端送的 `source`（2026-10-28）；Dan 2026-10-28
+決定由後端依身分決定、任務一起改、staging 舊資料不另外補；Carol 2026-10-28 在 Discord #uiux 定「只要是在後台建立的
+都算官方」（含團隊成員）。3NF 稽核的 F1（`Spec/Docs/3nf-compliance.md`）併進這條，Dan 2026-10-29 決定：疊在 #129 上、
+任務的 `source` 不加 CHECK 也不改舊資料、匯入的任務也照身分存。
+
+**Context**：
+
+- `createStation`、`createTicket` 的任務、`createTicketTask` 都照收前端送的 `source`（預設 `user`），沒有值域；前台和
+  管理平台用同一個表單，民眾也能送 `official`。
+- 站點有兩個欄位在回答同一件事：`source` 和 `is_official`。只有 seed 寫過 `is_official`，所以管理平台建的站點
+  `source = 'official'`、`is_official = false`（3NF 稽核 F1：`source` → `is_official` 的遞移相依，而且已經不一致）。
+- staging 2026-10-29 唯讀查過：站點 `gov`／官方 17、`user`／非官方 10；任務 `gov` 20、`import` 2、`user` 121。
+
+**Decision**：
+
+1. `services/source.source_for(actor)`：這次請求的身分是平台 `user`（前台，每個登入的落點，ADR-290）就是 `user`，
+   其他身分（後台，ADR-329）都是 `official`。身分只能挑自己有的，所以帶後台標記的民眾會被擋下（403），不會變官方。
+2. 站點：`validate_station` 不再收 `source`，`createStation` 和批次匯入都經過它。
+3. 任務：`createTicket` 的任務、`createTicketTask` 和批次匯入的任務照同一套（匯入只有後台身分能做，所以是
+   `official`，原本寫死 `import`）。請求協助是前台民眾的流程（ADR-397），照舊寫 `user`。
+4. GraphQL 的 `CreateStationInput.source`、`CreateTicketTaskInput.source`、`CreateTicketTaskDraft.source` 留著但不讀，
+   標 deprecated（HC Bot 2026-10-29：前端拿掉那行之前不能直接刪欄位）。
+5. migration `af6e25b0d8db`（改資料）：
+   - 站點 `source` 是 `gov`／`import`／`official`，或原本標成官方的 → `official`；`user` 不變；其他值 → NULL
+     （不知道，不算官方）。
+   - `source` 加 CHECK `ck_stations_source`：只能是 `user`、`official` 或 NULL。
+   - `is_official` 改成 `GENERATED ALWAYS AS (COALESCE(source = 'official', false)) STORED`，誰都寫不進去。GraphQL
+     `isOfficial`、`official` 篩選、匯出讀的是同一件事。
+   - downgrade：`is_official` 回到一般欄位，照 `source` 填回；`gov`、`import` 回不去。
+6. 任務的 `source` 不加 CHECK、不改舊資料：任務沒有第二個欄位跟它重複，不是 3NF 的問題。
+
+**Consequences**：
+➕ 民眾送什麼都不會變官方；後台建的站點在前台有「官方」標示，篩選和標示看的是同一個欄位。
+➕ `is_official` 變成資料庫保證的推算值，跟 `search_text` 同一類（3NF 驗收說明，`Spec/Docs/3nf-compliance.md`）。
+➖ staging 上任務的舊值（`gov`、`import`）留著；之後要統一再另外做。
+➖ 歷程裡，沒有使用者的寫入（seed）原本用 `source = gov` 標成動作者，之後重灌的 seed 會顯示 `system`（ADR-137）。
+   舊紀錄不變。
+◾ 測試：`tests/test_graphql/test_source_by_identity.py`（前台送 `official` 存成 `user`、後台送 `user` 或不送存成
+  `official`、帶後台標記的民眾被擋、任務兩條路一樣）、`tests/test_bulk_import_ticket.py`（匯入的任務是 `official`）、
+  `tests/test_migration_station_official_from_source.py`（每種舊值的轉換、CHECK、`is_official` 跟著 `source`、
+  downgrade）、`tests/test_graphql/test_station_list_filters.py`（標示就是 `source`）。
+
+---
+
+### ADR-439 通知的 `read` 跟 `read_at` 由資料庫保持一致
+
+**白話**：「已讀」和「什麼時候讀的」一定一致，直接寫 SQL 也寫不出矛盾的資料。
+
+**Date**：2026-10-29。3NF 稽核的 F2（`Spec/Docs/3nf-compliance.md`）；Dan 2026-10-29 決定跟 ADR-438 同一支做。通知沒有
+自己的 Spec，放在這裡，跟 ADR-438 同出一份稽核。
+
+**Context**：`read` 等於 `read_at IS NOT NULL`（遞移相依）。`read` 留著，因為未讀數的索引
+`ix_notifications_recipient_unread` 用它；寫入點只有 `notification_repository` 兩處，都同時設兩欄，但資料庫沒擋。
+staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
+
+**Decision**：migration `9dd1f61063fe` 加 CHECK `ck_notifications_read_matches_read_at`：
+`read = (read_at IS NOT NULL)`。不改程式、不改 API。資料庫裡已經有不一致的列時，upgrade 會失敗，不替它猜哪一欄是對的。
+
+**Consequences**：
+➕ 跟 `user_role_assign.role_kind`（ADR-073）一樣，是資料庫強制的受控冗餘。
+➖ 之後要是有人只改其中一欄，會直接報錯，不會悄悄寫進去。
+◾ 測試：`tests/test_migration_notification_read_check.py`（兩種不一致都被擋、一致的照常寫入、有不一致的列時
+  upgrade 失敗、downgrade 拿掉 CHECK）。

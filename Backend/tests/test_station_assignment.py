@@ -38,6 +38,7 @@ from app.services.station import (
     assign_station,
     create_station,
     delete_station,
+    list_assignable_teams,
     update_station,
     update_station_property,
 )
@@ -149,7 +150,6 @@ async def _create(db, actor: User) -> Station:
         op_hour=None,
         level=0,
         comment=None,
-        source="manual",
         visibility="public",
     )
     # The service commits and the test session expires on commit (tests/conftest.py).
@@ -519,6 +519,47 @@ async def test_a_super_admin_platform_identity_can_assign(db):
     assigned = await assign_station(db, actor=root, station_uuid=station_uuid, team_uuid=ngo_uuid)
 
     assert str(assigned.team_uuid) == ngo_uuid
+
+
+@pytest.mark.asyncio
+async def test_a_gov_admin_can_pick_from_every_team_a_station_can_go_to(db):
+    """The picker lists what assign_station accepts: every active team, not just the caller's own."""
+    gov = await _team(db, "Gov", "gov")
+    await _team(db, "NGO", "ngo")
+    suspended = await _team(db, "Suspended", "ngo")
+    suspended.status = "suspended"
+    deleted = await _team(db, "Deleted", "ngo")
+    deleted.delete_at = datetime.now(UTC)
+    admin = await _user(db, "Gov admin")
+    await _grant(db, admin, Perm.STATION_ASSIGN, "team", "role-assign", team=gov)
+
+    names = {team.name for team in await list_assignable_teams(db, actor=admin)}
+
+    assert {"Gov", "NGO"} <= names
+    assert not names & {"Suspended", "Deleted"}
+
+
+@pytest.mark.asyncio
+async def test_an_ngo_admin_holding_station_assign_gets_no_team_list(db):
+    """The same gate as assign_station: the list is refused wherever the assignment would be."""
+    ngo = await _team(db, "NGO", "ngo")
+    admin = await _user(db, "NGO admin")
+    await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=ngo)
+
+    with pytest.raises(HTTPException) as exc:
+        await list_assignable_teams(db, actor=admin)
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_super_admin_platform_identity_can_list_assignable_teams(db):
+    """The gov fence is aimed at team identities; a platform holder gets the list too."""
+    await _team(db, "NGO", "ngo")
+    root = await _user(db, "Super admin")
+    await _grant(db, root, Perm.STATION_ASSIGN, "all", "role-assign")
+
+    assert "NGO" in {team.name for team in await list_assignable_teams(db, actor=root)}
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,13 @@
 -- =====================================================================
 -- Mock data seed v3 — 兩個災害情境,資料符合現在的承接、請求協助、刪除規則
 -- =====================================================================
--- Scenario A | 花蓮光復土石流 2024-07-24:站 16、帳號 27(志工 20+NGO 4+官方 3)、單 30+avol01 的 7 張
--- Scenario B | 宜蘭冬山水災   2025-10-03:站 9、帳號 10(志工 4+NGO 5+官方 1)、單 8
+-- Scenario A | 花蓮光復土石流 2024-07-24:站 16、帳號 27(志工 20+NGO 4+官方 3)、單 30+avol01 的 7 張、
+--              地圖區域 8(責任區 1、危險區 3、標示區 4,其中 1 個不公開)
+-- Scenario B | 宜蘭冬山水災   2025-10-03:站 9、帳號 10(志工 4+NGO 5+官方 1)、單 8、責任區 1
 -- 聯絡欄位混用電話與 LINE ID。
 -- 公告:前台、管理平台各一則上線(第 8b 節);那一頁已經有別的公告上線就不放。
 --
--- 給測試者的帳號(密碼都是 Mock1234!):
+-- 給測試者的帳號(除了 asuper01、aaudit01,密碼都是 Mock1234!):
 --   avol01@mock.test  建單者:我的任務 › 我建立的有 6 張(另有 1 張已刪除,不會出現),可以測刪一筆需求、
 --                     刪整張單、再加一件、停止招募;刪掉或改掉的要重跑這支 seed 才回得來
 --   avol02@mock.test  志工:我的任務 › 我承接的有 4 筆——開著的、人數已湊滿的(這兩筆可以釋出)、
@@ -15,6 +16,11 @@
 --   avol04@mock.test  角色申請審核中(政府單位人員);撤回後要重跑 seed 才回得來
 --   avol05@mock.test  角色申請未通過,卡片上有審核回覆(社福團體人員)
 --   agov01@mock.test  光復鄉公所的團隊管理員:右上角有「前往後台」
+--   asuper01@mock.test  平台的超級管理員(super_admin),不屬於哪個情境:測管理平台用
+--   aaudit01@mock.test  平台的資料稽核員(data_auditor),不屬於哪個情境:測去重審核用
+--                     這兩個沒有公開密碼:管理平台在公開網址上,它們的權限又最大。在 VM 上跑一次
+--                     scripts/set_password.py 設(Backend/DEPLOY.md),密碼跟管 staging 的人拿;
+--                     重跑這支 seed 不會刪掉這兩個帳號和它們的密碼
 --   (不用登入)        行前資訊 /briefing:一份已發布的,裝備可以勾;另有一個土石流範本給後台用
 --
 -- 規則(第 11 節會檢查,不符就整個回滾):
@@ -24,13 +30,14 @@
 --   app/services/ticket_status.py 由需求推導。承接紀錄 status 一律 accepted,人數不超過 quantity(ADR-291)。
 --
 -- UUID 前綴:users=c…、A 站=a…、B 站=b…、tickets=d…、tasks=e…、assignments=f…、teams=1…、
---   team_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…、
---   briefing_templates=7…、briefings=8…、announcements=9…
+--   地圖區域(責任區、危險區、標示區)=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、
+--   role_requests=6…、briefing_templates=7…、briefings=8…、announcements=9…
 -- 清除段照前綴刪,也照「建立者/承接者是 mock 帳號」刪:測試者在 staging 用 mock 帳號留下的單、站點、
 --   地圖區域、建築地圖、照片、申請、邀請連結、站點建議與合併紀錄、去重紀錄會一起清掉,所以可以重跑。
---   真人留下的資料不刪,只放掉指向 mock 帳號(或要刪的 mock 資料)的欄位。
+--   真人留下的資料不刪,只放掉指向 mock 帳號(或要刪的 mock 資料)的欄位:mock 帳號審核過的申請、站點
+--   建議與合併,發布、下架或最後改過的行前資訊與公告,都留著,審核人/發布者/最後修改者設成 NULL(ADR-393)。
 --
--- 登入:全部 37 人,密碼 Mock1234!(salt_frontend=mockdata12345678;
+-- 登入:39 人裡的 37 人用 Mock1234!(asuper01、aaudit01 見上面;salt_frontend=mockdata12345678;
 --   前端送出的 password=PBKDF2-HMAC-SHA256('Mock1234!', salt_frontend, 100000)
 --   =8c0aefb55114ef12e444543df20424fd9adff2bccfc861a6456386411f6a274c,直接打 API 時用這個值)
 -- 先要有 schema 到 alembic head,並跑過 scripts/seed_rbac.py(角色由它建立)。
@@ -49,6 +56,11 @@ BEGIN;
 -- UUID 不是前綴開頭,不一起刪的話,刪 mock 帳號時會被外鍵擋住。
 CREATE TEMP TABLE mock_users ON COMMIT DROP AS
   SELECT uuid FROM users WHERE uuid::text LIKE 'c0000000-%';
+-- 第 1e 節的兩個管理平台測試帳號:它們做過的事照樣清掉(它們也在 mock_users 裡),但帳號、email 和
+-- 在 VM 上用 scripts/set_password.py 設的密碼留著,角色在第 1b、1e 節重新給。密碼不寫在這支 seed。
+CREATE TEMP TABLE kept_mock_users ON COMMIT DROP AS
+  SELECT unnest(ARRAY['c0000000-0000-4000-8000-000000000038',
+                      'c0000000-0000-4000-8000-000000000039']::uuid[]) AS uuid;
 CREATE TEMP TABLE mock_geometries ON COMMIT DROP AS
   SELECT uuid FROM base_geometries
    WHERE uuid::text ~ '^[abd2]0000000-' OR created_by IN (SELECT uuid FROM mock_users);
@@ -61,12 +73,11 @@ CREATE TEMP TABLE mock_tasks ON COMMIT DROP AS
 CREATE TEMP TABLE mock_invites ON COMMIT DROP AS
   SELECT uuid FROM team_invites
    WHERE team_uuid::text LIKE '10000000-%' OR created_by IN (SELECT uuid FROM mock_users);
--- 站點建議的合併紀錄:mock 站點上的,以及 mock 帳號審核的(reviewed_by 不能空,只能刪)。
--- 真人審核、mock 帳號撤銷的留著,下面只放掉 revoked_by。
+-- 站點建議的合併紀錄:mock 站點上的。真人站點上的留著,mock 帳號審核或撤銷的,下面只放掉
+-- reviewed_by／revoked_by(ADR-393)。
 CREATE TEMP TABLE mock_merges ON COMMIT DROP AS
   SELECT uuid FROM station_suggestion_merges
-   WHERE station_uuid IN (SELECT uuid FROM mock_geometries)
-      OR reviewed_by IN (SELECT uuid FROM mock_users);
+   WHERE station_uuid IN (SELECT uuid FROM mock_geometries);
 -- 去重配對:有一邊是 mock 的單、站點或需求就刪(low/high_uuid 沒有外鍵)。
 -- 兩邊都是真人資料的配對留著,判定可能已經改了那些資料,只放掉指向 mock 帳號的審核者。
 CREATE TEMP TABLE mock_pairs ON COMMIT DROP AS
@@ -81,9 +92,10 @@ DELETE FROM team_zone_assign
     OR assigned_by IN (SELECT uuid FROM mock_users);
 DELETE FROM role_requests
  WHERE created_by IN (SELECT uuid FROM mock_users)
-    OR reviewed_by IN (SELECT uuid FROM mock_users)
     OR granted_team_uuid::text LIKE '10000000-%'
     OR team_uuid::text LIKE '10000000-%';
+-- 真人的申請只是被 mock 帳號審過,留著,只放掉審核人(ADR-393)。
+UPDATE role_requests SET reviewed_by = NULL WHERE reviewed_by IN (SELECT uuid FROM mock_users);
 -- 真人用 mock 邀請連結送的申請留著,只放掉連結。
 UPDATE role_requests SET invite_uuid = NULL WHERE invite_uuid IN (SELECT uuid FROM mock_invites);
 DELETE FROM team_invites WHERE uuid IN (SELECT uuid FROM mock_invites);
@@ -97,10 +109,12 @@ UPDATE duplicate_pairs SET reviewed_by = NULL WHERE reviewed_by IN (SELECT uuid 
 -- target_uuid 是字串,沒有外鍵。
 DELETE FROM station_update_suggestions
  WHERE created_by IN (SELECT uuid FROM mock_users)
-    OR reviewed_by IN (SELECT uuid FROM mock_users)
     OR target_uuid IN (SELECT uuid::text FROM mock_geometries)
     OR merge_uuid IN (SELECT uuid FROM mock_merges);
+-- 真人的建議只是被 mock 帳號審過,留著,只放掉審核人(ADR-393)。
+UPDATE station_update_suggestions SET reviewed_by = NULL WHERE reviewed_by IN (SELECT uuid FROM mock_users);
 DELETE FROM station_suggestion_merges WHERE uuid IN (SELECT uuid FROM mock_merges);
+UPDATE station_suggestion_merges SET reviewed_by = NULL WHERE reviewed_by IN (SELECT uuid FROM mock_users);
 UPDATE station_suggestion_merges SET revoked_by = NULL WHERE revoked_by IN (SELECT uuid FROM mock_users);
 -- 承接紀錄:mock 的需求上的(含真人接的),以及 mock 帳號接別人的。
 DELETE FROM task_assignments
@@ -161,32 +175,42 @@ DELETE FROM routes
  WHERE origin_uuid IN (SELECT uuid FROM mock_geometries)
     OR destination_uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM base_geometries WHERE uuid IN (SELECT uuid FROM mock_geometries);
+-- 行前資訊和公告:mock 寫的才刪。真人寫的留著,mock 帳號發布、下架或最後改過的,只放掉
+-- published_by／updated_by;從 mock 範本生成的,內容是生成時複製的,只放掉 template_uuid(ADR-393)。
 DELETE FROM briefings
- WHERE uuid::text LIKE '80000000-%'
-    OR created_by IN (SELECT uuid FROM mock_users)
-    OR updated_by IN (SELECT uuid FROM mock_users)
-    OR published_by IN (SELECT uuid FROM mock_users)
-    OR template_uuid IN (SELECT uuid FROM briefing_templates
+ WHERE uuid::text LIKE '80000000-%' OR created_by IN (SELECT uuid FROM mock_users);
+UPDATE briefings SET updated_by = NULL WHERE updated_by IN (SELECT uuid FROM mock_users);
+UPDATE briefings SET published_by = NULL WHERE published_by IN (SELECT uuid FROM mock_users);
+UPDATE briefings SET template_uuid = NULL
+ WHERE template_uuid IN (SELECT uuid FROM briefing_templates
                           WHERE uuid::text LIKE '70000000-%'
                              OR created_by IN (SELECT uuid FROM mock_users));
 DELETE FROM briefing_templates
  WHERE uuid::text LIKE '70000000-%' OR created_by IN (SELECT uuid FROM mock_users);
 DELETE FROM announcements
- WHERE uuid::text LIKE '90000000-%'
-    OR created_by IN (SELECT uuid FROM mock_users)
-    OR updated_by IN (SELECT uuid FROM mock_users)
-    OR published_by IN (SELECT uuid FROM mock_users);
+ WHERE uuid::text LIKE '90000000-%' OR created_by IN (SELECT uuid FROM mock_users);
+UPDATE announcements SET updated_by = NULL WHERE updated_by IN (SELECT uuid FROM mock_users);
+UPDATE announcements SET published_by = NULL WHERE published_by IN (SELECT uuid FROM mock_users);
 DELETE FROM user_permission_assign
  WHERE user_uuid IN (SELECT uuid FROM mock_users) OR team_uuid::text LIKE '10000000-%';
 DELETE FROM user_role_assign
  WHERE user_uuid IN (SELECT uuid FROM mock_users) OR team_uuid::text LIKE '10000000-%';
-DELETE FROM user_identities WHERE user_uuid IN (SELECT uuid FROM mock_users);
-DELETE FROM user_contacts WHERE user_uuid IN (SELECT uuid FROM mock_users);
--- notifications 指向 users 是 cascade(收件人)/set null(觸發者),不用另外刪。
-DELETE FROM users WHERE uuid IN (SELECT uuid FROM mock_users);
+DELETE FROM user_identities
+ WHERE user_uuid IN (SELECT uuid FROM mock_users) AND user_uuid NOT IN (SELECT uuid FROM kept_mock_users);
+-- 留下的兩個帳號如果還是公開的 mock 密碼(staging 上手動加的就是),也刪掉:要在 VM 上設過才登得入。
+DELETE FROM user_identities
+ WHERE user_uuid IN (SELECT uuid FROM kept_mock_users)
+   AND password_hash LIKE 'pbkdf2_sha256$600000$mockdata12345678$%';
+DELETE FROM user_contacts
+ WHERE user_uuid IN (SELECT uuid FROM mock_users) AND user_uuid NOT IN (SELECT uuid FROM kept_mock_users);
+-- notifications 指向 users 是 cascade(收件人)/set null(觸發者),刪帳號時會跟著清;留下的兩個帳號
+-- 不刪,它們收到的通知另外清掉,跟其他 mock 帳號一樣從空的開始。
+DELETE FROM notifications WHERE recipient_uuid IN (SELECT uuid FROM kept_mock_users);
+DELETE FROM users
+ WHERE uuid IN (SELECT uuid FROM mock_users) AND uuid NOT IN (SELECT uuid FROM kept_mock_users);
 DELETE FROM teams WHERE uuid::text LIKE '10000000-%';
 
--- 1. USERS — 37 人(A:志工20+NGO4+官方3;B:志工4+NGO5+官方1)
+-- 1. USERS — 39 人(A:志工20+NGO4+官方3;B:志工4+NGO5+官方1;平台管理帳號 2)
 INSERT INTO users (uuid, name, credibility_score, created_at, updated_at) VALUES
  ('c0000000-0000-4000-8000-000000000001', '志工-陳冠宇', 55, '2024-07-23 08:00+08', '2024-07-23 08:00+08'),
  ('c0000000-0000-4000-8000-000000000002', '志工-林雅婷', 38, '2024-07-23 08:00+08', '2024-07-23 08:00+08'),
@@ -224,7 +248,11 @@ INSERT INTO users (uuid, name, credibility_score, created_at, updated_at) VALUES
  ('c0000000-0000-4000-8000-000000000034', '宜蘭縣社福聯盟', 85, '2025-10-01 09:00+08', '2025-10-01 09:00+08'),
  ('c0000000-0000-4000-8000-000000000035', '佛光山蘭陽別院', 87, '2025-10-01 09:00+08', '2025-10-01 09:00+08'),
  ('c0000000-0000-4000-8000-000000000036', '善牧基金會-宜蘭', 82, '2025-10-01 09:00+08', '2025-10-01 09:00+08'),
- ('c0000000-0000-4000-8000-000000000037', '冬山鄉公所-民政課', 85, '2025-10-01 09:00+08', '2025-10-01 09:00+08');
+ ('c0000000-0000-4000-8000-000000000037', '冬山鄉公所-民政課', 85, '2025-10-01 09:00+08', '2025-10-01 09:00+08'),
+ ('c0000000-0000-4000-8000-000000000038', '測試-超級管理員', 50, now(), now()),
+ ('c0000000-0000-4000-8000-000000000039', '測試-資料稽核員', 50, now(), now())
+-- 重跑時 038、039 已經在(第 0 節留下的),跳過。
+ON CONFLICT (uuid) DO NOTHING;
 
 -- 1b. 登入憑證(email+密碼 Mock1234!+user 平台角色)
 INSERT INTO user_contacts (uuid, user_uuid, type, value, verified, verified_at, created_at) VALUES
@@ -264,7 +292,10 @@ INSERT INTO user_contacts (uuid, user_uuid, type, value, verified, verified_at, 
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000034', 'email', 'bngo03@mock.test', true, now(), now()),
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000035', 'email', 'bngo04@mock.test', true, now(), now()),
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000036', 'email', 'bngo05@mock.test', true, now(), now()),
- (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000037', 'email', 'bgov01@mock.test', true, now(), now());
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000037', 'email', 'bgov01@mock.test', true, now(), now()),
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000038', 'email', 'asuper01@mock.test', true, now(), now()),
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000039', 'email', 'aaudit01@mock.test', true, now(), now())
+ON CONFLICT (type, value) DO NOTHING;
 INSERT INTO user_identities (uuid, user_uuid, provider, provider_subject, password_hash, created_at)
 -- The password is hashed twice. The login form derives
 --   pbkdf2_hmac('sha256', 'Mock1234!', salt_frontend, 100000)
@@ -279,7 +310,9 @@ INSERT INTO user_identities (uuid, user_uuid, provider, provider_subject, passwo
 -- the sha256 digest as the password — that proves the backend agrees with itself, not that the
 -- login page works. Verify a change here by logging in through the browser.
 SELECT gen_random_uuid(), u.uuid, 'password', NULL, 'pbkdf2_sha256$600000$mockdata12345678$22c5f18b05a3da2d9b73ce908b1b0209$99a483d62cf51799d5cb4ce03dd460c8b3414b9fd1d12f816d8b35fe724d6479', now()
-FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
+FROM users u
+-- 038、039 不拿這組公開密碼:它們能進管理平台,密碼在 VM 上另外設(見 kept_mock_users)。
+WHERE u.uuid::text LIKE 'c0000000-%' AND u.uuid NOT IN (SELECT uuid FROM kept_mock_users);
 -- ADR-026 dropped the Group/Policy model: the old 'Login User' group is now the `user` platform
 -- role that every registered account gets (see scripts/seed_rbac.py). role_uuid is NOT NULL, so
 -- this fails loudly rather than silently if seed_rbac.py has not been run on this database first.
@@ -329,6 +362,15 @@ FROM (VALUES
 ) AS m(user_uuid, team_uuid)
 CROSS JOIN (SELECT uuid FROM roles WHERE name='admin' AND kind='team') r;
 
+-- 1e. 2 個平台管理帳號:除了 1b 給的 user,再拿一個平台角色。原本是在 staging 上手動加的,用的也是 c… 前綴,
+-- 所以每次 SEED_MOCK 都被第 0 節刪掉;現在帳號留著(kept_mock_users),角色每次在這裡重新給。
+-- 角色找不到時 role_uuid 是 NULL,會直接報錯。
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid) VALUES
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000038',
+  (SELECT uuid FROM roles WHERE name='super_admin' AND kind='platform'), 'platform', NULL),
+ (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000039',
+  (SELECT uuid FROM roles WHERE name='data_auditor' AND kind='platform'), 'platform', NULL);
+
 -- 2. STATIONS — base_geometries + stations + EAV + 投票
 INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_at, updated_at) VALUES
  ('a0000000-0000-4000-8000-000000000001','station',ST_SetSRID(ST_MakePoint(121.4219,23.6696),4326),'c0000000-0000-4000-8000-000000000025','2024-07-24 07:30+08','2024-07-24 16:00+08'),
@@ -357,32 +399,32 @@ INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_
  ('b0000000-0000-4000-8000-000000000008','station',ST_SetSRID(ST_MakePoint(121.8017,24.6607),4326),'c0000000-0000-4000-8000-000000000030','2025-10-03 09:00+08','2025-10-03 09:00+08'),
  ('b0000000-0000-4000-8000-000000000009','station',ST_SetSRID(ST_MakePoint(121.7222,24.7448),4326),'c0000000-0000-4000-8000-000000000029','2025-10-03 08:00+08','2025-10-03 08:00+08');
 
-INSERT INTO stations (uuid, type, name, description, op_hour, level, comment, source, visibility, verification_status, is_duplicate, dedup_group_id, is_temporary, expires_at, is_official, updated_by) VALUES
- ('a0000000-0000-4000-8000-000000000001','supply','光復鄉公所前進物資集散站','凱米颱風後設立之主要物資集散點,供應台九線中斷區受困聚落','24h',2,'官方主站,物資充足','gov','public','human_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000025'),
- ('a0000000-0000-4000-8000-000000000002','supply','光復國小物資發放站','設於光復國小操場,集中發放食物與民生物資','24h',1,NULL,'gov','public','human_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000025'),
- ('a0000000-0000-4000-8000-000000000003','supply','馬太鞍部落物資站','馬太鞍部落自救會與公所合作設立','06:00-22:00',1,NULL,'gov','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000021'),
- ('a0000000-0000-4000-8000-000000000004','supply','大農社區自發物資點',NULL,'unknown',0,'居民自發回報,資料不完整,現場已滿載','user','public','unverified',false,NULL,true,NULL,false,'c0000000-0000-4000-8000-000000000001'),
- ('a0000000-0000-4000-8000-000000000005','toilet','光復車站流動廁所區','車站旁臨時流動廁所,土石中斷期間無自來水','24h',0,NULL,'gov','public','human_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000025'),
- ('a0000000-0000-4000-8000-000000000006','toilet','大富火車站公廁','大富車站旁公廁,供南段受困居民使用','24h',0,NULL,'gov','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000022'),
- ('a0000000-0000-4000-8000-000000000007','toilet','太巴塱活動中心廁所','太巴塱部落活動中心,可沖水','06:00-22:00',0,NULL,'gov','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000021'),
- ('a0000000-0000-4000-8000-000000000008','water','光復淨水加水點','軍方水車駐點供應飲用水','24h',1,NULL,'gov','public','human_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000026'),
- ('a0000000-0000-4000-8000-000000000009','water','瑞穗鄉公所加水站','瑞穗端加水點,供南段聚落','08:00-20:00',0,NULL,'gov','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000026'),
- ('a0000000-0000-4000-8000-000000000010','shower','光復國中洗澡點','設置簡易淋浴間,提供熱水','16:00-22:00',0,NULL,'gov','public','human_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000023'),
- ('a0000000-0000-4000-8000-000000000011','shower','鳳林鎮立體育館洗澡點','鳳林端淋浴設施','17:00-21:00',0,NULL,'gov','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000023'),
- ('a0000000-0000-4000-8000-000000000012','medical','光復鄉衛生所醫療站','24 小時醫療站,具門診與藥局','24h',2,'官方主醫療站','gov','public','human_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000025'),
- ('a0000000-0000-4000-8000-000000000013','medical','慈濟人醫會醫療站','慈濟人醫會行動醫療,提供急救與義診','24h',2,NULL,'gov','public','human_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000021'),
- ('a0000000-0000-4000-8000-000000000014','shelter','光復商工避難收容所','主要收容中心,孤立人口大量湧入,目前已滿載','24h',2,'已滿載,床位為 0,群眾回報擁擠','gov','public','human_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000025'),
- ('a0000000-0000-4000-8000-000000000015','shelter','鳳林國小避難所','鳳林端收容點,尚有空床','24h',1,NULL,'gov','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000022'),
- ('a0000000-0000-4000-8000-000000000016','gas_station','光復中油加油站','維持供油,救災車輛優先','06:00-20:00',0,NULL,'gov','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08',true,'c0000000-0000-4000-8000-000000000025'),
- ('b0000000-0000-4000-8000-000000000001','transport','冬山鄉公所防災接駁站','鄉公所安排接駁車往返羅東轉運站','07:00-19:00',1,NULL,'gov','public','ai_verified',false,NULL,true,NULL,true,'c0000000-0000-4000-8000-000000000037'),
- ('b0000000-0000-4000-8000-000000000002','shelter','冬山國小避難收容所','里民自發協助開設,資訊未必即時','24h',1,'里民回報,更新較慢','user','public','unverified',false,NULL,true,NULL,false,'c0000000-0000-4000-8000-000000000028'),
- ('b0000000-0000-4000-8000-000000000003','shelter','廣興社區活動中心避難點','廣興里自發收容點','24h',0,NULL,'user','public','unverified',false,NULL,true,NULL,false,'c0000000-0000-4000-8000-000000000029'),
- ('b0000000-0000-4000-8000-000000000004','medical','羅東臨時醫療站','羅東端臨時醫療支援','24h',1,NULL,'gov','public','ai_verified',false,NULL,true,NULL,true,'c0000000-0000-4000-8000-000000000032'),
- ('b0000000-0000-4000-8000-000000000005','charge','冬山車站充電服務站','提供手機充電','08:00-20:00',0,NULL,'user','public','unverified',false,NULL,true,NULL,false,'c0000000-0000-4000-8000-000000000030'),
- ('b0000000-0000-4000-8000-000000000006','toilet','親水公園流動廁所','退水後已撤站,但回報未更新','—',0,'水退後已撤站,記錄未更新 (stale)','user','public','unverified',false,NULL,true,NULL,false,'c0000000-0000-4000-8000-000000000030'),
- ('b0000000-0000-4000-8000-000000000007','supply','三奇里物資集散點','三奇里長協助設立','08:00-20:00',0,NULL,'user','public','unverified',false,'dup-sanqi-supply',true,NULL,false,'c0000000-0000-4000-8000-000000000031'),
- ('b0000000-0000-4000-8000-000000000008','supply','三奇里物資站 (重複回報)','疑似與三奇里物資集散點為同一站,重複回報','08:00-20:00',0,'與 b…07 疑似重複','user','public','unverified',true,'dup-sanqi-supply',true,NULL,false,'c0000000-0000-4000-8000-000000000030'),
- ('b0000000-0000-4000-8000-000000000009','water','員山鄉加水站','員山端加水點','24h',0,NULL,'user','public','unverified',false,NULL,true,NULL,false,'c0000000-0000-4000-8000-000000000029');
+INSERT INTO stations (uuid, type, name, description, op_hour, level, comment, source, visibility, verification_status, is_duplicate, dedup_group_id, is_temporary, expires_at, updated_by) VALUES
+ ('a0000000-0000-4000-8000-000000000001','supply','光復鄉公所前進物資集散站','凱米颱風後設立之主要物資集散點,供應台九線中斷區受困聚落','24h',2,'官方主站,物資充足','official','public','human_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000025'),
+ ('a0000000-0000-4000-8000-000000000002','supply','光復國小物資發放站','設於光復國小操場,集中發放食物與民生物資','24h',1,NULL,'official','public','human_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000025'),
+ ('a0000000-0000-4000-8000-000000000003','supply','馬太鞍部落物資站','馬太鞍部落自救會與公所合作設立','06:00-22:00',1,NULL,'official','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000021'),
+ ('a0000000-0000-4000-8000-000000000004','supply','大農社區自發物資點',NULL,'unknown',0,'居民自發回報,資料不完整,現場已滿載','user','public','unverified',false,NULL,true,NULL,'c0000000-0000-4000-8000-000000000001'),
+ ('a0000000-0000-4000-8000-000000000005','toilet','光復車站流動廁所區','車站旁臨時流動廁所,土石中斷期間無自來水','24h',0,NULL,'official','public','human_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000025'),
+ ('a0000000-0000-4000-8000-000000000006','toilet','大富火車站公廁','大富車站旁公廁,供南段受困居民使用','24h',0,NULL,'official','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000022'),
+ ('a0000000-0000-4000-8000-000000000007','toilet','太巴塱活動中心廁所','太巴塱部落活動中心,可沖水','06:00-22:00',0,NULL,'official','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000021'),
+ ('a0000000-0000-4000-8000-000000000008','water','光復淨水加水點','軍方水車駐點供應飲用水','24h',1,NULL,'official','public','human_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000026'),
+ ('a0000000-0000-4000-8000-000000000009','water','瑞穗鄉公所加水站','瑞穗端加水點,供南段聚落','08:00-20:00',0,NULL,'official','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000026'),
+ ('a0000000-0000-4000-8000-000000000010','shower','光復國中洗澡點','設置簡易淋浴間,提供熱水','16:00-22:00',0,NULL,'official','public','human_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000023'),
+ ('a0000000-0000-4000-8000-000000000011','shower','鳳林鎮立體育館洗澡點','鳳林端淋浴設施','17:00-21:00',0,NULL,'official','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000023'),
+ ('a0000000-0000-4000-8000-000000000012','medical','光復鄉衛生所醫療站','24 小時醫療站,具門診與藥局','24h',2,'官方主醫療站','official','public','human_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000025'),
+ ('a0000000-0000-4000-8000-000000000013','medical','慈濟人醫會醫療站','慈濟人醫會行動醫療,提供急救與義診','24h',2,NULL,'official','public','human_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000021'),
+ ('a0000000-0000-4000-8000-000000000014','shelter','光復商工避難收容所','主要收容中心,孤立人口大量湧入,目前已滿載','24h',2,'已滿載,床位為 0,群眾回報擁擠','official','public','human_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000025'),
+ ('a0000000-0000-4000-8000-000000000015','shelter','鳳林國小避難所','鳳林端收容點,尚有空床','24h',1,NULL,'official','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000022'),
+ ('a0000000-0000-4000-8000-000000000016','gas_station','光復中油加油站','維持供油,救災車輛優先','06:00-20:00',0,NULL,'official','public','ai_verified',false,NULL,true,'2024-08-31 23:59+08','c0000000-0000-4000-8000-000000000025'),
+ ('b0000000-0000-4000-8000-000000000001','transport','冬山鄉公所防災接駁站','鄉公所安排接駁車往返羅東轉運站','07:00-19:00',1,NULL,'official','public','ai_verified',false,NULL,true,NULL,'c0000000-0000-4000-8000-000000000037'),
+ ('b0000000-0000-4000-8000-000000000002','shelter','冬山國小避難收容所','里民自發協助開設,資訊未必即時','24h',1,'里民回報,更新較慢','user','public','unverified',false,NULL,true,NULL,'c0000000-0000-4000-8000-000000000028'),
+ ('b0000000-0000-4000-8000-000000000003','shelter','廣興社區活動中心避難點','廣興里自發收容點','24h',0,NULL,'user','public','unverified',false,NULL,true,NULL,'c0000000-0000-4000-8000-000000000029'),
+ ('b0000000-0000-4000-8000-000000000004','medical','羅東臨時醫療站','羅東端臨時醫療支援','24h',1,NULL,'official','public','ai_verified',false,NULL,true,NULL,'c0000000-0000-4000-8000-000000000032'),
+ ('b0000000-0000-4000-8000-000000000005','charge','冬山車站充電服務站','提供手機充電','08:00-20:00',0,NULL,'user','public','unverified',false,NULL,true,NULL,'c0000000-0000-4000-8000-000000000030'),
+ ('b0000000-0000-4000-8000-000000000006','toilet','親水公園流動廁所','退水後已撤站,但回報未更新','—',0,'水退後已撤站,記錄未更新 (stale)','user','public','unverified',false,NULL,true,NULL,'c0000000-0000-4000-8000-000000000030'),
+ ('b0000000-0000-4000-8000-000000000007','supply','三奇里物資集散點','三奇里長協助設立','08:00-20:00',0,NULL,'user','public','unverified',false,'dup-sanqi-supply',true,NULL,'c0000000-0000-4000-8000-000000000031'),
+ ('b0000000-0000-4000-8000-000000000008','supply','三奇里物資站 (重複回報)','疑似與三奇里物資集散點為同一站,重複回報','08:00-20:00',0,'與 b…07 疑似重複','user','public','unverified',true,'dup-sanqi-supply',true,NULL,'c0000000-0000-4000-8000-000000000030'),
+ ('b0000000-0000-4000-8000-000000000009','water','員山鄉加水站','員山端加水點','24h',0,NULL,'user','public','unverified',false,NULL,true,NULL,'c0000000-0000-4000-8000-000000000029');
 
 -- 2a. 站點指派(ADR-285):比照「以 team 身分建立就指派給那個 team」,依建立者的 team 身分回填
 -- (1d 每個官方/NGO 帳號恰好一個)。志工只有平台身分,他們建的站維持未指派,
@@ -864,6 +906,52 @@ INSERT INTO team_zones (uuid) VALUES
  ('20000000-0000-4000-8000-000000000001'),
  ('20000000-0000-4000-8000-000000000002');
 
+-- 6b. 危險區與標示區(ADR-311)— 光復鄉公所在情境 A 劃設。危險區恆公開、要有 status(前台畫成橘白斜紋);
+-- 標示區預設不公開:這裡 3 個公開(前台「責任區與標示區」圖層看得到)、1 個不公開(只有後台看得到)。
+-- 危險區是 base_geometries → area_polygons → hazardous_zones 三層;標示區沒有自己的表,只寫前兩層。
+-- 名稱最多 10 字、地點寫在備註(設計 ZONE-NAME-101);兩個危險區的名稱超過 10 字,當作上限之前的舊資料,
+-- 前台標籤會截成 9 字加「…」。
+INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_at, updated_at) VALUES
+ ('20000000-0000-4000-8000-000000000003','hazardous_zone',
+  ST_GeomFromText(
+   'POLYGON((121.398 23.655,121.406 23.653,121.409 23.661,121.404 23.668,121.397 23.664,121.398 23.655))',
+   4326),
+  'c0000000-0000-4000-8000-000000000025','2024-07-24 08:10+08','2024-07-24 08:10+08'),
+ ('20000000-0000-4000-8000-000000000004','hazardous_zone',
+  ST_GeomFromText(
+   'POLYGON((121.416 23.630,121.4195 23.630,121.420 23.640,121.4165 23.640,121.416 23.630))',
+   4326),
+  'c0000000-0000-4000-8000-000000000025','2024-07-24 08:20+08','2024-07-24 08:20+08'),
+ ('20000000-0000-4000-8000-000000000005','hazardous_zone',
+  ST_GeomFromText(
+   'POLYGON((121.427 23.6735,121.4315 23.673,121.432 23.6765,121.4275 23.677,121.427 23.6735))',
+   4326),
+  'c0000000-0000-4000-8000-000000000025','2024-07-24 15:40+08','2024-07-24 15:40+08'),
+ ('20000000-0000-4000-8000-000000000006','mark_zone',
+  ST_MakeEnvelope(121.4240,23.6630,121.4258,23.6645,4326),
+  'c0000000-0000-4000-8000-000000000025','2024-07-24 09:00+08','2024-07-24 09:00+08'),
+ ('20000000-0000-4000-8000-000000000007','mark_zone',
+  ST_MakeEnvelope(121.4196,23.6678,121.4212,23.6690,4326),
+  'c0000000-0000-4000-8000-000000000025','2024-07-24 09:05+08','2024-07-24 09:05+08'),
+ ('20000000-0000-4000-8000-000000000008','mark_zone',
+  ST_MakeEnvelope(121.4320,23.6570,121.4345,23.6590,4326),
+  'c0000000-0000-4000-8000-000000000025','2024-07-24 09:10+08','2024-07-24 09:10+08'),
+ ('20000000-0000-4000-8000-000000000009','mark_zone',
+  ST_MakeEnvelope(121.4290,23.6840,121.4320,23.6860,4326),
+  'c0000000-0000-4000-8000-000000000025','2024-07-24 09:15+08','2024-07-24 09:15+08');
+INSERT INTO area_polygons (uuid, name, note, is_public) VALUES
+ ('20000000-0000-4000-8000-000000000003','大全村西側山坡 土石流警戒區','凱米颱風後坡面鬆動,下雨時勿進入山坡與溪溝',true),
+ ('20000000-0000-4000-8000-000000000004','台9線光復—大富路段 路基流失','雙向封閉,往鳳林請改走花 52 鄉道',true),
+ ('20000000-0000-4000-8000-000000000005','大華村低窪積水區','積水及膝、水下有淤泥,請勿涉水',true),
+ ('20000000-0000-4000-8000-000000000006','志工休息區','在光復國中活動中心,提供飲水、充電、簡易餐點,22:00 關閉',true),
+ ('20000000-0000-4000-8000-000000000007','志工集合點','在光復車站前廣場,每天 08:00 報到分組,請帶雨鞋、手套',true),
+ ('20000000-0000-4000-8000-000000000008','救災車輛臨時停車區','在光復糖廠,大型機具與運補車輛停放,請勿占用出入口',true),
+ ('20000000-0000-4000-8000-000000000009','重機具調度區','後台調度用,不公開',false);
+INSERT INTO hazardous_zones (uuid, status, information_source) VALUES
+ ('20000000-0000-4000-8000-000000000003','dangerous','花蓮縣政府災害應變中心'),
+ ('20000000-0000-4000-8000-000000000004','block','公路局花蓮工務段'),
+ ('20000000-0000-4000-8000-000000000005','dangerous','光復鄉公所');
+
 -- 7. TEAM ZONE ASSIGN — 每個情境的 zone 委派給一個同情境 NGO team;assigned_by 是劃設該 zone 的官方帳號
 -- (與 app/services/area.py 的真實服務層行為一致)。
 INSERT INTO team_zone_assign (uuid, team_uuid, zone_uuid, assigned_by) VALUES
@@ -916,9 +1004,17 @@ BEGIN
   END IF;
 END $$;
 
+-- 8c. 事件設定(ADR-395):前台頂欄的事件名稱、地圖第一次打開的位置(光復鄉市區,原型 site-route.js:201)。
+--     project_settings 是整個部署共用的一列,只補沒人設的:還沒有那一列就建一列;已經有了,只在還沒設地圖時補上,
+--     名稱和別人設的地圖都不動(跟 8b 公告同一個原則)。清除段不碰這一列,它不是 mock 資料。
+INSERT INTO project_settings (uuid, name, short_name, map_center_lat, map_center_lng, map_zoom)
+SELECT gen_random_uuid(), '花蓮馬太鞍溪堰塞湖專案', '花蓮馬太鞍溪', 23.67, 121.418, 14
+ WHERE NOT EXISTS (SELECT 1 FROM project_settings);
+UPDATE project_settings SET map_center_lat = 23.67, map_center_lng = 121.418, map_zoom = 14
+ WHERE map_zoom IS NULL;
+
 -- 9. 角色申請(功能 019):一筆審核中、一筆未通過附回覆,讓抽屜的兩種卡片一登入就看得到。
---    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。審核人填資料庫裡現有的 super admin,
---    沒有就留空(前台卡片只顯示回覆)。
+--    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。審核人是 1e 的 asuper01。
 INSERT INTO role_requests (uuid, requested_role, reason, contact, status, created_by, created_at, updated_at) VALUES
  ('60000000-0000-4000-8000-000000000001','government',
   '我是光復鄉公所約聘的災防人員，負責整理各村回報的災情和物資需求。希望有後台權限，幫忙更新站點資料、合併重複的任務單。',
@@ -927,9 +1023,7 @@ INSERT INTO role_requests (uuid, requested_role, reason, contact, status, create
 INSERT INTO role_requests (uuid, requested_role, reason, contact, status, review_note, reviewed_by, closed_at, created_by, created_at, updated_at)
 SELECT '60000000-0000-4000-8000-000000000002','ngo',
        '我是光復鄉社區關懷協會的志工幹部，想在後台協助管理收容點的物資需求，並把志工排班和任務單對起來。',
-       NULL,'rejected','請附上單位證明後再申請。',
-       (SELECT ura.user_uuid FROM user_role_assign ura JOIN roles r ON r.uuid = ura.role_uuid
-         WHERE r.name = 'super_admin' AND r.kind = 'platform' ORDER BY ura.user_uuid LIMIT 1),
+       NULL,'rejected','請附上單位證明後再申請。','c0000000-0000-4000-8000-000000000038',
        now() - interval '2 days','c0000000-0000-4000-8000-000000000005',
        now() - interval '3 days', now() - interval '2 days';
 

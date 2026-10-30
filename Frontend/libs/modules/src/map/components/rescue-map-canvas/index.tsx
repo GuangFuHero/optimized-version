@@ -11,21 +11,36 @@ import {
 import { createPortal } from 'react-dom';
 
 import {
+  areaKind,
+  areaLabelOpensPopup,
+  areaLabelText,
+  areaPopupLines,
+  areaSignature,
+  areaTitle,
+  largestAreasFirst,
+  placeAreaLabels,
+  type ScreenBox,
+} from '../../areas';
+import { PUBLIC_ZONE_COLORS } from '../../constants';
+import {
   buildLocationCells,
   isCoarseTicket,
   locationCellBoundary,
   locationCellLabelFit,
 } from '../../location-cells';
 import type {
-  RescueMapClosureArea,
+  RescueMapArea,
+  RescueMapClusterAppearance,
   RescueMapControllerValue,
   RescueMapDraftPoint,
   RescueMapLocationCell,
   RescueMapMarkerItem,
+  RescueMapPublicZone,
+  RescueMapView,
   RescueMapViewportStoreSnapshot,
   RescueMapViewportStoreLike,
 } from '../../types';
-import { createMapMarkerIcon } from '../map-marker';
+import { createMapMarkerIcon, createMapMarkerTooltipHtml } from '../map-marker';
 
 import { designTokens } from '@rescue-frontend/ui';
 
@@ -48,6 +63,19 @@ interface RescueMapCanvasProps {
   onDraftPointChange?: (point: RescueMapDraftPoint | null) => void;
   /** Floats above the crosshair and goes where it goes. */
   draftPointAction?: ReactNode;
+  /** Cluster look; read once, when the map is built. Default: the site's gradient discs. */
+  clusterAppearance?: RescueMapClusterAppearance;
+  /**
+   * Highest zoom at which markers still cluster; read once, when the map is built. Default: they
+   * cluster at every zoom.
+   */
+  clusterMaxZoom?: number;
+  /** Where Leaflet's zoom buttons sit; read once. The `Map` decides whether they show. */
+  zoomControlPosition?: L.ControlPosition;
+  /** Hands the Leaflet map over once it is built, for callers that steer it themselves. */
+  onMapReady?: (map: L.Map) => void;
+  /** Where the map came to rest after it moved — see `Map`'s `viewMemoryKey`. */
+  onViewChange?: (view: RescueMapView) => void;
 }
 
 /**
@@ -91,8 +119,16 @@ interface MarkerHandle {
   iconSignature: string;
 }
 
-interface ClosureAreaHandle {
-  layerGroup: L.LayerGroup;
+interface AreaLabel {
+  shape: L.Polygon;
+  marker: L.Marker;
+  element: HTMLElement;
+  hazard: boolean;
+}
+
+interface AreaHandle {
+  layerGroup: L.FeatureGroup;
+  labels: AreaLabel[];
   signature: string;
 }
 
@@ -101,29 +137,26 @@ interface MarkerClusterGroupLike extends L.LayerGroup {
   removeLayer(layer: L.Layer): this;
 }
 
-type MarkerClusterFactory = (options: {
+interface MarkerClusterOptions {
   animate: boolean;
   animateAddingMarkers: boolean;
   chunkedLoading: boolean;
   showCoverageOnHover: boolean;
   spiderfyOnMaxZoom: boolean;
+  disableClusteringAtZoom?: number;
   iconCreateFunction: (cluster: {
     getChildCount: () => number;
     getAllChildMarkers: () => Array<L.Marker & { __rescueDetailType?: string }>;
   }) => L.DivIcon;
-}) => MarkerClusterGroupLike;
+}
 
-type MarkerClusterConstructor = new (options: {
-  animate: boolean;
-  animateAddingMarkers: boolean;
-  chunkedLoading: boolean;
-  showCoverageOnHover: boolean;
-  spiderfyOnMaxZoom: boolean;
-  iconCreateFunction: (cluster: {
-    getChildCount: () => number;
-    getAllChildMarkers: () => Array<L.Marker & { __rescueDetailType?: string }>;
-  }) => L.DivIcon;
-}) => MarkerClusterGroupLike;
+type MarkerClusterFactory = (
+  options: MarkerClusterOptions,
+) => MarkerClusterGroupLike;
+
+type MarkerClusterConstructor = new (
+  options: MarkerClusterOptions,
+) => MarkerClusterGroupLike;
 
 /**
  * 畫成圖釘的：站點與精確座標的任務單。概略座標的單（`locationCell`）改由格子層畫 ——
@@ -135,9 +168,44 @@ function getPinnedMarkers(
   return markers.filter((marker) => !isCoarseTicket(marker));
 }
 
-/** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定。 */
+/** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定 —— 另加選用的 pin／tooltip。 */
 function getMarkerIconSignature(item: RescueMapMarkerItem): string {
-  return `${item.detailType}|${item.variant}|${item.label}`;
+  const base = `${item.detailType}|${item.variant}|${item.label}`;
+
+  if (!item.pin && !item.tooltip) {
+    return base;
+  }
+
+  const { pin, tooltip } = item;
+
+  return [
+    base,
+    pin ? `${pin.color}|${pin.dimmed ? 1 : 0}|${pin.selected ? 1 : 0}` : '',
+    tooltip ? `${tooltip.title}|${tooltip.subtitle ?? ''}` : '',
+  ].join('|');
+}
+
+/** Binds, rebinds or drops the opt-in hover tooltip (`item.tooltip`). */
+function syncMarkerTooltip(marker: L.Marker, item: RescueMapMarkerItem) {
+  const html = createMapMarkerTooltipHtml(item);
+
+  if (!html) {
+    marker.unbindTooltip();
+    return;
+  }
+
+  marker.unbindTooltip();
+  marker.bindTooltip(html, {
+    direction: 'top',
+    offset: [0, -18],
+    opacity: 1,
+    className: 'map-marker-tooltip',
+  });
+}
+
+/** A selected opt-in pin rises above its neighbours. */
+function getMarkerZIndexOffset(item: RescueMapMarkerItem): number {
+  return item.pin?.selected ? 1000 : 0;
 }
 
 function resolveClusterTone(
@@ -156,6 +224,28 @@ function resolveClusterTone(
   }
 
   return stationCount >= markers.length / 2 ? 'station' : 'ticket';
+}
+
+/**
+ * The opt-in `solid` cluster: a flat primary disc in a white ring, 40/46/52px at under 10, 10+ and
+ * 20+ (prototype `station-map.jsx` clusterHtml).
+ */
+function createSolidClusterIcon(
+  count: number,
+  leaflet: typeof import('leaflet'),
+): import('leaflet').DivIcon {
+  const dimension = count >= 20 ? 52 : count >= 10 ? 46 : 40;
+
+  return leaflet.divIcon({
+    className: 'map-marker-cluster-wrapper',
+    html: [
+      `<div class="map-marker-cluster map-marker-cluster--solid${count >= 100 ? ' map-marker-cluster--solid-dense' : ''}" style="width:${dimension}px;height:${dimension}px">`,
+      `<span class="map-marker-cluster__count">${count}</span>`,
+      '</div>',
+    ].join(''),
+    iconSize: [dimension, dimension],
+    iconAnchor: [dimension / 2, dimension / 2],
+  });
 }
 
 function createClusterIcon({
@@ -183,83 +273,260 @@ function createClusterIcon({
   });
 }
 
-function getClosureAreaStyle(status: string) {
-  const normalizedStatus = status.trim().toLowerCase();
+/** The 危險區's stripes, defined once by the canvas's own `<svg>` and filled in by id. */
+const HAZARD_STRIPES_ID = 'rescue-map-hazard-stripes';
 
-  if (normalizedStatus === 'dangerous' || normalizedStatus === 'active') {
-    return {
-      color: color.fg.warning,
-      fillColor: color.bg.warning.default,
-      fillOpacity: 0.18,
-      opacity: 0.84,
-      weight: 2,
-      dashArray: '8 4',
-    };
-  }
+// Areas lie under the overlay pane (400), so a guest's cells are drawn over them, and the 危險區 over
+// the other zones.
+const PUBLIC_ZONE_PANE = 'rescueMapPublicZones';
+const HAZARD_ZONE_PANE = 'rescueMapHazardZones';
 
-  if (normalizedStatus === 'block') {
-    return {
-      color: color.fg.danger,
-      fillColor: color.bg.danger.default,
-      fillOpacity: 0.14,
-      opacity: 0.78,
-      weight: 2,
-      dashArray: '6 3',
-    };
-  }
+/**
+ * 危險區: orange and white stripes (designer 2026-09-25, prototype `wg-hazard.js`). Nothing else on
+ * the map is striped, so the stripes alone say 危險, to the colour-blind too. Filled densely: thinned
+ * out, the stripes read as a dirty orange.
+ *
+ * No area takes a tap (prototype ZONE-CLICK-101): a 責任區 is often a whole township, and a tap
+ * anywhere in it must still reach the map, for 「在這裡新增」. Its label tells about it instead.
+ */
+const HAZARD_ZONE_STYLE: L.PathOptions = {
+  pane: HAZARD_ZONE_PANE,
+  interactive: false,
+  color: color.bg.warning.hover,
+  weight: 2.5,
+  opacity: 1,
+  fillColor: `url(#${HAZARD_STRIPES_ID})`,
+  fillOpacity: 0.6,
+};
+
+/** 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx`, 2026-10-23). */
+function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
+  const zoneColor = PUBLIC_ZONE_COLORS[zone.kind];
 
   return {
-    color: color.brand.primary.subtle,
-    fillColor: primitives.color.orange[200],
-    fillOpacity: 0.12,
-    opacity: 0.72,
-    weight: 2,
-    dashArray: '5 4',
+    pane: PUBLIC_ZONE_PANE,
+    interactive: false,
+    color: zoneColor,
+    weight: 2.5,
+    opacity: 0.95,
+    fillColor: zoneColor,
+    fillOpacity: 0.14,
   };
 }
 
-function renderClosureAreas(
-  layerGroup: L.LayerGroup,
-  closureAreas: readonly RescueMapClosureArea[],
-) {
-  closureAreas.forEach((area) => {
-    area.polygons.forEach((polygon) => {
-      L.polygon(polygon, getClosureAreaStyle(area.status)).addTo(layerGroup);
+/**
+ * An area's title, teams and note, one to a line. Made of elements rather than HTML: the words are
+ * typed in the back office.
+ */
+function createAreaPopupContent(lines: readonly string[]) {
+  const content = document.createElement('div');
+
+  lines.forEach((line, index) => {
+    const row = document.createElement('div');
+    row.textContent = line;
+
+    if (index === 0) {
+      row.className = 'map-area-popup__name';
+    }
+
+    content.append(row);
+  });
+
+  return content;
+}
+
+/**
+ * The label every area wears, its kind and name (prototype ZONE-STYLE-102), the name cut at 10
+ * characters (ZONE-NAME-101). Under the pins, which must stay tappable (prototype
+ * `zIndexOffset: -1000`). A tap on it, and only on it, opens the area's popup (prototype
+ * ZONE-CLICK-101) — when the popup has more to tell than the label: the teams, a note, or the whole
+ * name. Either way the tap stays off the map, as in the prototype.
+ */
+function createAreaLabel(
+  shape: L.Polygon,
+  area: RescueMapArea | RescueMapPublicZone,
+): AreaLabel {
+  const hazard = areaKind(area) === 'hazardous_zone';
+  const element = document.createElement('div');
+  element.className = hazard
+    ? 'map-area-label map-area-label--hazard'
+    : 'map-area-label';
+  element.textContent = areaLabelText(area);
+
+  if (element.textContent !== areaTitle(area)) {
+    element.title = areaTitle(area);
+  }
+
+  const marker = L.marker(shape.getBounds().getCenter(), {
+    icon: L.divIcon({
+      className: 'map-area-label-anchor',
+      html: element,
+      iconSize: [0, 0],
+    }),
+    keyboard: false,
+    zIndexOffset: -1000,
+  });
+
+  if (areaLabelOpensPopup(area)) {
+    marker.bindPopup(createAreaPopupContent(areaPopupLines(area)), {
+      className: 'map-area-popup',
+      maxWidth: 260,
     });
+  } else {
+    marker.on('click', L.DomEvent.stop);
+  }
+
+  return { shape, marker, element, hazard };
+}
+
+// How far a popup's tip reaches below where it is placed: Leaflet's own offset, less its tip.
+const POPUP_TIP_REACH = -3;
+
+// What an area's label keeps clear of: pins, clusters and cell counts.
+const AREA_LABEL_OBSTACLES =
+  '.map-marker-stack, .map-marker-cluster, .map-location-cell';
+
+/**
+ * Whether the map itself shows at each corner and the middle of `box`: not a button or a card
+ * floating over it (prototype `underUi`), one of the map's own controls, or the page past its edge.
+ * The topmost element at a point is taken, and one that lets taps through (`pointer-events: none`)
+ * is passed over, so only what would catch a tap counts.
+ */
+function isOverMap(
+  host: HTMLElement,
+  { left, top }: DOMRect,
+  box: ScreenBox,
+): boolean {
+  const middleX = (box.left + box.right) / 2;
+  const middleY = (box.top + box.bottom) / 2;
+
+  return [
+    [box.left, box.top],
+    [box.right, box.top],
+    [box.left, box.bottom],
+    [box.right, box.bottom],
+    [middleX, middleY],
+  ].every(([x, y]) => {
+    const element = document.elementFromPoint(left + x, top + y);
+
+    return (
+      element !== null &&
+      host.contains(element) &&
+      element.closest('.leaflet-control') === null
+    );
   });
 }
 
-function getClosureAreaSignature(area: RescueMapClosureArea): string {
-  let pointCount = 0;
+/**
+ * Puts every area's label where `placeAreaLabels` finds room for it, its middle on that point, and
+ * its popup to open just above it. A label with no room is left out until the next time.
+ */
+function placeAreaLabelsOnMap(map: L.Map, labels: readonly AreaLabel[]) {
+  const host = map.getContainer();
 
-  area.polygons.forEach((rings) => {
-    rings.forEach((ring) => {
-      pointCount += ring.length;
-    });
+  // A hidden map has nothing to measure: the labels wait for the next zoom or redraw.
+  if (labels.length === 0 || !host.offsetWidth) {
+    return;
+  }
+
+  labels.forEach(({ element }) => {
+    element.style.display = '';
   });
 
-  return `${area.id}:${area.status}:${pointCount}`;
-}
+  // Every label is measured before any is moved, so the page is laid out once.
+  const sizes = labels.map(({ element }) => ({
+    width: element.offsetWidth,
+    height: element.offsetHeight,
+  }));
+  const hostRect = host.getBoundingClientRect();
+  const obstacles = Array.from(
+    host.querySelectorAll<HTMLElement>(AREA_LABEL_OBSTACLES),
+  )
+    .map((element) => element.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .map((rect) => ({
+      left: rect.left - hostRect.left,
+      top: rect.top - hostRect.top,
+      right: rect.right - hostRect.left,
+      bottom: rect.bottom - hostRect.top,
+    }));
+  const spots = placeAreaLabels(
+    labels.map(({ shape, hazard }, index) => {
+      const bounds = shape.getBounds();
+      const northWest = map.latLngToContainerPoint(bounds.getNorthWest());
+      const southEast = map.latLngToContainerPoint(bounds.getSouthEast());
 
-function renderClosureArea(
-  layerGroup: L.LayerGroup,
-  area: RescueMapClosureArea,
-) {
-  area.polygons.forEach((polygon) => {
-    L.polygon(polygon, getClosureAreaStyle(area.status)).addTo(layerGroup);
+      return {
+        hazard,
+        area: {
+          left: northWest.x,
+          top: northWest.y,
+          right: southEast.x,
+          bottom: southEast.y,
+        },
+        label: sizes[index],
+      };
+    }),
+    {
+      width: host.clientWidth,
+      height: host.clientHeight,
+      obstacles,
+      isCovered: (box) => !isOverMap(host, hostRect, box),
+    },
+  );
+
+  labels.forEach(({ marker, element }, index) => {
+    const spot = spots[index];
+    element.dataset.place = spot.place;
+
+    if (!('x' in spot)) {
+      element.style.display = 'none';
+      return;
+    }
+
+    marker.setLatLng(map.containerPointToLatLng([spot.x, spot.y]));
+
+    const popup = marker.getPopup();
+
+    if (popup) {
+      L.setOptions(popup, {
+        offset: L.point(0, -sizes[index].height / 2 - POPUP_TIP_REACH),
+      });
+    }
   });
 }
 
-function syncClosureAreaLayer({
+/** Each part of the area, with its label. Returns the labels, to be placed. */
+function renderArea<T extends RescueMapArea>(
+  layerGroup: L.FeatureGroup,
+  area: T,
+  style: (area: T) => L.PathOptions,
+): AreaLabel[] {
+  return area.polygons.map((polygon) => {
+    const shape = L.polygon(polygon, style(area));
+    shape.addTo(layerGroup);
+
+    const label = createAreaLabel(shape, area);
+    label.marker.addTo(layerGroup);
+
+    return label;
+  });
+}
+
+/** Draws what changed. The labels are placed afterwards, all together (`placeAreaLabelsOnMap`). */
+function syncAreaLayer<T extends RescueMapArea>({
   overlayLayer,
   areas,
   handles,
+  style,
 }: {
   overlayLayer: L.LayerGroup;
-  areas: readonly RescueMapClosureArea[];
-  handles: Map<string, ClosureAreaHandle>;
+  areas: readonly T[];
+  handles: Map<string, AreaHandle>;
+  style: (area: T) => L.PathOptions;
 }) {
   const nextIds = new Set(areas.map((area) => area.id));
+  const drawn: AreaHandle[] = [];
 
   handles.forEach((handle, id) => {
     if (!nextIds.has(id)) {
@@ -269,17 +536,16 @@ function syncClosureAreaLayer({
   });
 
   areas.forEach((area) => {
-    const signature = getClosureAreaSignature(area);
+    const signature = areaSignature(area);
     const existing = handles.get(area.id);
 
     if (!existing) {
-      const layerGroup = L.layerGroup();
-      renderClosureArea(layerGroup, area);
+      const layerGroup = L.featureGroup();
+      const labels = renderArea(layerGroup, area, style);
       overlayLayer.addLayer(layerGroup);
-      handles.set(area.id, {
-        layerGroup,
-        signature,
-      });
+      const handle = { layerGroup, labels, signature };
+      handles.set(area.id, handle);
+      drawn.push(handle);
       return;
     }
 
@@ -288,8 +554,18 @@ function syncClosureAreaLayer({
     }
 
     existing.layerGroup.clearLayers();
-    renderClosureArea(existing.layerGroup, area);
+    existing.labels = renderArea(existing.layerGroup, area, style);
     existing.signature = signature;
+    drawn.push(existing);
+  });
+
+  if (drawn.length === 0) {
+    return;
+  }
+
+  // A newly drawn area lands on top; stack them again so a smaller one stays over a larger.
+  largestAreasFirst(areas).forEach((area) => {
+    handles.get(area.id)?.layerGroup.bringToFront();
   });
 }
 
@@ -354,8 +630,13 @@ function syncMarkerLayer({
     if (!existing) {
       const marker = L.marker(item.position, {
         icon: createMapMarkerIcon(item, leaflet),
+        zIndexOffset: getMarkerZIndexOffset(item),
       }) as L.Marker & { __rescueDetailType?: string };
       marker.__rescueDetailType = item.detailType;
+
+      if (item.tooltip) {
+        syncMarkerTooltip(marker, item);
+      }
 
       marker.on('click', () => {
         const handle = handles.get(item.id);
@@ -376,6 +657,15 @@ function syncMarkerLayer({
 
     if (existing.iconSignature !== iconSignature) {
       existing.marker.setIcon(createMapMarkerIcon(item, leaflet));
+
+      if (item.pin || existing.item.pin) {
+        existing.marker.setZIndexOffset(getMarkerZIndexOffset(item));
+      }
+
+      if (item.tooltip || existing.item.tooltip) {
+        syncMarkerTooltip(existing.marker, item);
+      }
+
       existing.iconSignature = iconSignature;
     }
 
@@ -583,6 +873,11 @@ export function RescueMapCanvas({
   draftPoint,
   onDraftPointChange,
   draftPointAction,
+  clusterAppearance = 'default',
+  clusterMaxZoom,
+  zoomControlPosition,
+  onMapReady,
+  onViewChange,
 }: RescueMapCanvasProps) {
   const externalViewportState =
     useSyncExternalStore<RescueMapViewportStoreSnapshot>(
@@ -609,21 +904,31 @@ export function RescueMapCanvas({
     null,
   );
   const markerHandlesRef = useRef<Map<string, MarkerHandle>>(new Map());
-  const closureAreaHandlesRef = useRef<Map<string, ClosureAreaHandle>>(
-    new Map(),
-  );
+  const closureAreaHandlesRef = useRef<Map<string, AreaHandle>>(new Map());
+  const publicZoneHandlesRef = useRef<Map<string, AreaHandle>>(new Map());
+  // Places the areas' labels again, once what is being drawn now is on the map.
+  const queueAreaLabelsRef = useRef<(() => void) | null>(null);
   const controllerRef = useRef(controller);
   const onMapClickRef = useRef(onMapClick);
   const onMarkerClickRef = useRef(onMarkerClick);
   const onLocationCellClickRef = useRef(onLocationCellClick);
   const onDraftPointChangeRef = useRef(onDraftPointChange);
+  const onViewChangeRef = useRef(onViewChange);
   const initialViewportStateRef = useRef(externalViewportState);
+  // Read once, when the map is built.
+  const mapOptionsRef = useRef({
+    clusterAppearance,
+    clusterMaxZoom,
+    zoomControlPosition,
+    onMapReady,
+  });
 
   controllerRef.current = controller;
   onMapClickRef.current = onMapClick;
   onMarkerClickRef.current = onMarkerClick;
   onLocationCellClickRef.current = onLocationCellClick;
   onDraftPointChangeRef.current = onDraftPointChange;
+  onViewChangeRef.current = onViewChange;
 
   // 地圖實例整個生命週期只建立一次；受控的視角變化由下方 setView 效果套用，
   // 避免位置寫回路由狀態後反過來把整張地圖銷毀重建。
@@ -654,9 +959,20 @@ export function RescueMapCanvas({
     // 移除 Leaflet 預設 attribution 前綴的旗標圖示，與地圖內容無關。
     map.attributionControl.setPrefix(false);
 
+    map.createPane(PUBLIC_ZONE_PANE).style.zIndex = '380';
+    map.createPane(HAZARD_ZONE_PANE).style.zIndex = '390';
+
+    const mapOptions = mapOptionsRef.current;
+
+    if (mapOptions.zoomControlPosition) {
+      map.zoomControl?.setPosition(mapOptions.zoomControlPosition);
+    }
+
     const overlayLayer = L.layerGroup();
     const cellLayer = L.layerGroup();
     const markerHandles = markerHandlesRef.current;
+    const closureAreaHandles = closureAreaHandlesRef.current;
+    const publicZoneHandles = publicZoneHandlesRef.current;
     let cancelled = false;
 
     mapRef.current = map;
@@ -685,38 +1001,51 @@ export function RescueMapCanvas({
         }
       ).markerClusterGroup;
 
+      const clusterOptions: MarkerClusterOptions = {
+        animate: false,
+        animateAddingMarkers: false,
+        chunkedLoading: true,
+        showCoverageOnHover: false,
+        spiderfyOnMaxZoom: true,
+        iconCreateFunction: (cluster) =>
+          mapOptions.clusterAppearance === 'solid'
+            ? createSolidClusterIcon(cluster.getChildCount(), L)
+            : createClusterIcon({
+                count: cluster.getChildCount(),
+                tone: resolveClusterTone(cluster.getAllChildMarkers()),
+                leaflet: L,
+              }),
+        ...(mapOptions.clusterMaxZoom === undefined
+          ? {}
+          : { disableClusteringAtZoom: mapOptions.clusterMaxZoom + 1 }),
+      };
       const markerLayer =
-        clusterFactory?.({
-          animate: false,
-          animateAddingMarkers: false,
-          chunkedLoading: true,
-          showCoverageOnHover: false,
-          spiderfyOnMaxZoom: true,
-          iconCreateFunction: (cluster) =>
-            createClusterIcon({
-              count: cluster.getChildCount(),
-              tone: resolveClusterTone(cluster.getAllChildMarkers()),
-              leaflet: L,
-            }),
-        }) ??
-        (clusterCtor
-          ? new clusterCtor({
-              animate: false,
-              animateAddingMarkers: false,
-              chunkedLoading: true,
-              showCoverageOnHover: false,
-              spiderfyOnMaxZoom: true,
-              iconCreateFunction: (cluster) =>
-                createClusterIcon({
-                  count: cluster.getChildCount(),
-                  tone: resolveClusterTone(cluster.getAllChildMarkers()),
-                  leaflet: L,
-                }),
-            })
-          : null);
+        clusterFactory?.(clusterOptions) ??
+        (clusterCtor ? new clusterCtor(clusterOptions) : null);
 
       if (!markerLayer) {
         return;
+      }
+
+      if (mapOptions.clusterAppearance === 'solid') {
+        markerLayer.on('clustermouseover', (event) => {
+          const cluster = (
+            event as L.LeafletEvent & {
+              layer: L.Marker & {
+                getChildCount: () => number;
+              };
+            }
+          ).layer;
+
+          cluster
+            .bindTooltip(`${cluster.getChildCount()} 個站點 · 點擊放大`, {
+              direction: 'top',
+              offset: [0, -22],
+              opacity: 1,
+              className: 'map-marker-tooltip',
+            })
+            .openTooltip();
+        });
       }
 
       markerLayer.addTo(mapRef.current);
@@ -728,6 +1057,7 @@ export function RescueMapCanvas({
         leaflet: L,
         onMarkerClickRef,
       });
+      queueAreaLabelsRef.current?.();
     });
 
     let viewportSyncTimer: number | undefined;
@@ -742,12 +1072,23 @@ export function RescueMapCanvas({
       syncViewportStateToController(currentMap, controllerRef.current);
     };
 
+    // Told on the map's own moves, as the prototype's `watchMapLast` is on `moveend`; not on the
+    // first sync below, which only reports where the map opened.
+    const reportViewChange = () => {
+      const center = map.getCenter();
+
+      onViewChangeRef.current?.({
+        center: [center.lat, center.lng],
+        zoom: map.getZoom(),
+      });
+    };
+
     const scheduleViewportSync = () => {
       window.clearTimeout(viewportSyncTimer);
-      viewportSyncTimer = window.setTimeout(
-        syncViewport,
-        VIEWPORT_SYNC_DEBOUNCE_MS,
-      );
+      viewportSyncTimer = window.setTimeout(() => {
+        syncViewport();
+        reportViewChange();
+      }, VIEWPORT_SYNC_DEBOUNCE_MS);
     };
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
@@ -767,9 +1108,41 @@ export function RescueMapCanvas({
     const fitCellLabels = () =>
       fitLocationCellLabels(map, cellLabelsRef.current);
 
+    // An area's label finds room among the cell counts and pins, which move with the zoom, so it
+    // waits for them: until the zoom's handlers have run, the clusters' among them, which were added
+    // after these; or until the render that redrew them is done. Asked for many times, it is placed
+    // once.
+    let areaLabelsQueued = false;
+    const queueAreaLabels = () => {
+      if (areaLabelsQueued) {
+        return;
+      }
+
+      areaLabelsQueued = true;
+      queueMicrotask(() => {
+        areaLabelsQueued = false;
+
+        if (mapRef.current !== map) {
+          return;
+        }
+
+        placeAreaLabelsOnMap(
+          map,
+          [
+            ...closureAreaHandles.values(),
+            ...publicZoneHandles.values(),
+          ].flatMap((handle) => handle.labels),
+        );
+      });
+    };
+
+    queueAreaLabelsRef.current = queueAreaLabels;
+
     map.on('moveend', scheduleViewportSync);
     map.on('zoomend', scheduleViewportSync);
     map.on('zoomend', fitCellLabels);
+    map.on('zoomend', queueAreaLabels);
+    map.on('resize', queueAreaLabels);
     map.on('click', handleMapClick);
     map.on('movestart', releaseDraftPoint);
     map.on('zoomstart', releaseDraftPoint);
@@ -792,24 +1165,30 @@ export function RescueMapCanvas({
       }
     });
 
+    mapOptions.onMapReady?.(map);
+
     return () => {
       window.clearTimeout(viewportSyncTimer);
       resizeObserver.disconnect();
       map.off('moveend', scheduleViewportSync);
       map.off('zoomend', scheduleViewportSync);
       map.off('zoomend', fitCellLabels);
+      map.off('zoomend', queueAreaLabels);
+      map.off('resize', queueAreaLabels);
       map.off('click', handleMapClick);
       map.off('movestart', releaseDraftPoint);
       map.off('zoomstart', releaseDraftPoint);
       cancelled = true;
 
       markerHandles.clear();
-      closureAreaHandlesRef.current.clear();
+      closureAreaHandles.clear();
+      publicZoneHandles.clear();
       markerLayerRef.current = null;
       overlayLayerRef.current = null;
       cellLayerRef.current = null;
       cellLayerSignatureRef.current = null;
       cellLabelsRef.current = [];
+      queueAreaLabelsRef.current = null;
       previewMarkerRef.current = null;
       draftMarkerRef.current = null;
       draftBubbleRef.current = null;
@@ -950,6 +1329,7 @@ export function RescueMapCanvas({
       leaflet: L,
       onMarkerClickRef,
     });
+    queueAreaLabelsRef.current?.();
   }, [controller.markers]);
 
   useEffect(() => {
@@ -978,6 +1358,7 @@ export function RescueMapCanvas({
       selectedId: controller.selectedMarkerId,
       onCellClickRef: onLocationCellClickRef,
     });
+    queueAreaLabelsRef.current?.();
   }, [controller.markers, controller.selectedMarkerId]);
 
   useEffect(() => {
@@ -987,12 +1368,30 @@ export function RescueMapCanvas({
       return;
     }
 
-    syncClosureAreaLayer({
+    syncAreaLayer({
       overlayLayer,
       areas: controller.closureAreas,
       handles: closureAreaHandlesRef.current,
+      style: () => HAZARD_ZONE_STYLE,
     });
+    queueAreaLabelsRef.current?.();
   }, [controller.closureAreas]);
+
+  useEffect(() => {
+    const overlayLayer = overlayLayerRef.current;
+
+    if (!overlayLayer) {
+      return;
+    }
+
+    syncAreaLayer({
+      overlayLayer,
+      areas: controller.publicZones,
+      handles: publicZoneHandlesRef.current,
+      style: getPublicZoneStyle,
+    });
+    queueAreaLabelsRef.current?.();
+  }, [controller.publicZones]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1100,6 +1499,31 @@ export function RescueMapCanvas({
   return (
     <>
       <div ref={hostRef} style={{ width: '100%', height: '100%' }} />
+      {/* Not `display: none`, which leaves a pattern unpainted in some browsers. */}
+      <svg
+        width="0"
+        height="0"
+        aria-hidden="true"
+        focusable="false"
+        style={{ position: 'absolute' }}
+      >
+        <defs>
+          <pattern
+            id={HAZARD_STRIPES_ID}
+            patternUnits="userSpaceOnUse"
+            width="16"
+            height="16"
+            patternTransform="rotate(45)"
+          >
+            <rect
+              width="16"
+              height="16"
+              fill={primitives.color.neutral.white}
+            />
+            <rect width="8" height="16" fill={color.bg.warning.default} />
+          </pattern>
+        </defs>
+      </svg>
       {draftBubbleHost && draftPointAction
         ? createPortal(draftPointAction, draftBubbleHost)
         : null}

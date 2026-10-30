@@ -38,6 +38,7 @@ As a system administrator or auditor, I need comprehensive audit logging with po
 1. **Given** admin user "admin@example.com" edits request REQ-20250129-0001 changing priority from 50 to 100, **When** auditor searches audit logs for request REQ-20250129-0001, **Then** log entry displays: timestamp, admin email, IP address, action type "update_request", entity "REQ-20250129-0001", field "priority", old value "50", new value "100", and reason (if provided)
 2. **Given** audit logs contain 1000 entries from past 30 days, **When** auditor filters by action_type="permission_change" and date range "Last 7 days", **Then** system displays only permission change actions from past week with all relevant details
 3. **Given** auditor viewing filtered log results, **When** auditor clicks "Export Logs", **Then** system generates JSON/CSV file containing filtered logs with all fields for external analysis
+   > **2026-10-28（ADR-414、417）**：實作為只有 super admin（`audit.export`）能匯出、只有 CSV、一次最多 10,000 筆；資料稽核員能看不能匯出。每次匯出都會留紀錄。
 4. **Given** audit log entry was created, **When** auditor attempts to modify or delete it, **Then** system prevents modification and displays error "Audit logs are immutable"
 
 ---
@@ -135,6 +136,7 @@ As a system administrator, I need system performance metrics showing server heal
 
 - **Dashboard export data sensitivity**: How does system handle exporting dashboard data containing sensitive information?
   - Export should respect user's permission level, redact sensitive fields based on role, require additional confirmation for full data export, and log all export actions
+  - > **2026-10-28（ADR-414、417）**：操作紀錄匯出已做到「依權限遮罩申請人資料」與「記錄每次匯出」；沒有另外的確認步驟。
 
 ## Requirements *(mandatory)*
 
@@ -157,6 +159,7 @@ As a system administrator, I need system performance metrics showing server heal
 - **FR-012**: Audit log interface MUST support filtering by: date range, user, action type, entity type, IP address, result status
 - **FR-013**: Audit log interface MUST support full-text search across all log fields
 - **FR-014**: Audit logs MUST be exportable to JSON/CSV format for external analysis or archival
+  > **2026-10-28**：只做 CSV，只給 super admin（ADR-414）；每次匯出記錄（ADR-417）。
 - **FR-015**: System MUST enforce configurable log retention policy: operational logs retained for 90 days minimum, critical audit events retained permanently
 - **FR-016**: System MUST alert administrators if audit log integrity check fails or tampering is detected
 

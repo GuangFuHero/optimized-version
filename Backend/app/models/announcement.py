@@ -39,6 +39,8 @@ class Announcement(Base, UUIDPKMixin, TimestampMixin):
     # Which page shows it: "admin_page", "public_page" or "all" (both).
     placement: Mapped[str] = mapped_column(Text, server_default=text("'all'"), default="all")
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
-    updated_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
+    # Every write names it; NULL only once that account is gone, as a mock one is after a
+    # SEED_MOCK run (ADR-393).
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)

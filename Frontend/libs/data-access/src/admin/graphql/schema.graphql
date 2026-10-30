@@ -413,8 +413,8 @@ input CreateStationInput {
   level: Int! = 0
   comment: String = null
 
-  """Data origin: 'user' (default) or 'official'"""
-  source: String! = "user"
+  """Not read: the identity making the station decides it"""
+  source: String! = "user" @deprecated(reason: "The backend sets `source` from the identity making the station; leave it out")
 
   """Visibility: 'public' (default), 'restricted', or 'internal'"""
   visibility: Visibility! = public
@@ -551,8 +551,8 @@ input CreateTicketTaskDraft {
   """Number of people or units needed"""
   quantity: Int = null
 
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
+  """Not read: the identity making the task decides it"""
+  source: String! = "user" @deprecated(reason: "The backend sets `source` from the identity making the task; leave it out")
   routeUuid: UUID = null
 
   """
@@ -575,8 +575,8 @@ input CreateTicketTaskInput {
   """
   quantity: Int = null
 
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
+  """Not read: the identity making the task decides it"""
+  source: String! = "user" @deprecated(reason: "The backend sets `source` from the identity making the task; leave it out")
 
   """Optional UUID of an associated route"""
   routeUuid: UUID = null
@@ -607,6 +607,22 @@ type CrowdSourcingType {
   """
   distanceFromGeometry: Float
   createdAt: DateTime
+}
+
+"""The disaster this deployment responds to, as the public site names it"""
+type CurrentDisasterType {
+  """Full name, e.g. 花蓮馬太鞍溪堰塞湖專案"""
+  name: String!
+
+  """
+  Short name for tight spots such as the site's top bar, e.g. 花蓮馬太鞍溪; null when unset, so use name
+  """
+  shortName: String
+
+  """
+  Where the site's map opens for this disaster; null when unset, so keep the site's own default
+  """
+  mapView: MapViewType
 }
 
 """Date with time (isoformat)"""
@@ -722,12 +738,29 @@ input HelpRequestTaskInput {
   People or units needed, at least 1; required except for a 'rescue' need, which may omit it
   """
   quantity: Int = null
+
+  """
+  Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again
+  """
+  acknowledgedDuplicateOf: String = null
 }
 
 """
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf).
 """
 scalar JSON @specifiedBy(url: "https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf")
+
+"""Where the site's map opens: a centre and a zoom"""
+type MapViewType {
+  """Latitude of the centre, e.g. 23.67"""
+  lat: Float!
+
+  """Longitude of the centre, e.g. 121.418"""
+  lng: Float!
+
+  """Zoom level, 7 to 18 as the site's map allows, e.g. 14"""
+  zoom: Int!
+}
 
 type Mutation {
   createStation(input: CreateStationInput!, acknowledgedDuplicateOf: String = null): CreateStationResult!
@@ -744,7 +777,7 @@ type Mutation {
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
   createTicket(input: CreateTicketInput!): CreateTicketResult!
-  createHelpRequest(input: CreateHelpRequestInput!): TicketType!
+  createHelpRequest(input: CreateHelpRequestInput!): CreateTicketResult!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
   auditTicket(
@@ -857,7 +890,9 @@ input PromoteMarkZoneInput {
 }
 
 type Query {
-  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, reviewableOnly: Boolean! = false, county: String = null, town: String = null, official: Boolean = null, createdAfter: DateTime = null, createdBefore: DateTime = null, updatedAfter: DateTime = null, updatedBefore: DateTime = null, orderBy: StationOrder! = DEFAULT, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stationFacets(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, reviewableOnly: Boolean! = false, county: String = null, town: String = null, official: Boolean = null, createdAfter: DateTime = null, createdBefore: DateTime = null, updatedAfter: DateTime = null, updatedBefore: DateTime = null): StationFacetsType!
+  assignableStationTeams: [AssignedTeamType!]!
   station(uuid: UUID!): StationType
   hazardousZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): HazardousZoneConnection!
   hazardousZone(uuid: UUID!): HazardousZoneType
@@ -898,7 +933,35 @@ type Query {
 
     """Only tickets at this audit status"""
     auditStatus: AuditStatus = null
+
+    """
+    NEWEST (default): newest first, best match first when searching. NEEDS_FIRST: tickets still taking people first, one with an open rescue need ahead, then as NEWEST; a need the signed-in caller claimed counts as open
+    """
+    order: TicketListOrder! = NEWEST
+
+    """
+    Only the tickets this caller is shown as this H3 cell — a `locationCell` value, as the guest map draws it. The cell's resolution, 8 or coarser, then sets how coarse every row is, in place of `zoom`. A ticket the caller sees exactly is in no cell
+    """
+    locationCell: String = null
+
+    """
+    Only tickets in one of these statuses, as the map's filter ticks several; a status given more than once counts once. Leave it out to match every status, as the site does when its filter means all of them: an empty list matches none
+    """
+    statuses: [TicketStatus!] = null
   ): TicketConnection!
+  ticketCells(
+    bounds: BoundsInput!
+
+    """
+    Map zoom the result is for. Only affects a caller without ticket.view_detail: sets how coarse the H3 cell standing in for each point is — coarser as the map zooms out, never finer than resolution 8 whatever is sent
+    """
+    zoom: Float = null
+
+    """
+    Only tickets in one of these statuses, as the map's filter ticks several; a status given more than once counts once. Leave it out to match every status, as the site does when its filter means all of them: an empty list matches none
+    """
+    statuses: [TicketStatus!] = null
+  ): [TicketCellType!]!
   ticket(
     uuid: UUID!
 
@@ -916,6 +979,11 @@ type Query {
   taskPropertyConfigs(taskType: String!, includeInactive: Boolean! = false): [TaskPropertyConfigType!]!
   ticketPropertyConfigs(disasterTypes: [String!]!, includeInactive: Boolean! = false): [TicketPropertyConfigType!]!
   disasterTypes(includeInactive: Boolean! = false): [DisasterTypeType!]!
+
+  """
+  The deployment's disaster, readable without signing in; null until first configured
+  """
+  currentDisaster: CurrentDisasterType
   announcements(filter: AnnouncementFilter! = ACTIVE, placement: AnnouncementPlacement! = public_page): [AnnouncementType!]!
   announcement(uuid: UUID!): AnnouncementType
   briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!
@@ -1106,6 +1174,16 @@ type SecondaryLocationType {
   poleNote: String
 }
 
+type StationAreaCountType {
+  county: String!
+
+  """
+  Null for the stations in this 縣市 whose address names no 鄉鎮市區. No filter selects just those: `county` alone matches the whole 縣市
+  """
+  town: String
+  count: Int!
+}
+
 type StationConnection {
   items: [StationType!]!
   pageInfo: PageInfo!
@@ -1115,10 +1193,31 @@ type StationCreated {
   station: StationType!
 }
 
+type StationFacetsType {
+  total: Int!
+  byStatus: [StationStatusCountType!]!
+  byType: [StationTypeCountType!]!
+
+  """
+  Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none, and one with a 縣市 but no 鄉鎮市區 is in a row whose `town` is null
+  """
+  areas: [StationAreaCountType!]!
+
+  """
+  Stations with a pending suggestion that the caller holds station.review over
+  """
+  pendingReviewCount: Int!
+}
+
 enum StationOperationalStatus {
   active
   temporarily_closed
   permanently_closed
+}
+
+enum StationOrder {
+  DEFAULT
+  OPEN_FIRST_RECENTLY_UPDATED
 }
 
 type StationPropertyConfigType {
@@ -1194,6 +1293,14 @@ type StationPropertyType {
   crowdSourcings: [CrowdSourcingType!]!
 }
 
+type StationStatusCountType {
+  """
+  An operationalStatus value: active, temporarily_closed or permanently_closed
+  """
+  status: String!
+  count: Int!
+}
+
 type StationSuggestionMergeType {
   uuid: UUID!
   stationUuid: String!
@@ -1201,7 +1308,11 @@ type StationSuggestionMergeType {
   """'applied' or 'revoked'"""
   status: String!
   reviewNote: String
-  reviewedBy: String!
+
+  """
+  UUID of the reviewer; null once their account is gone, as a mock one is after a SEED_MOCK run (ADR-393)
+  """
+  reviewedBy: String
   revokedBy: String
   revokedAt: DateTime
   createdAt: DateTime
@@ -1283,7 +1394,9 @@ type StationType {
   """True if this is a temporary station (e.g. emergency shelter)"""
   isTemporary: Boolean!
 
-  """True if this station is operated by a government or official body"""
+  """
+  True if the back office made this station: `source` is 'official', as the `official` filter reads it
+  """
   isOfficial: Boolean!
 
   """
@@ -1302,6 +1415,10 @@ type StationType {
   """When supply_status last changed; null while it has never been set"""
   supplyStatusUpdatedAt: DateTime
   createdAt: DateTime
+
+  """
+  When anything about this station last changed: any field, property, photo or team assignment, or an approved or revoked suggestion. A pending or rejected suggestion, or a verdict on a property (pending, verified, rejected), leaves it as is
+  """
   updatedAt: DateTime
 
   """
@@ -1328,6 +1445,31 @@ type StationType {
   Internal back-office note on this station — null unless the caller holds station.view_pii here (ADR-332)
   """
   comment: String
+
+  """
+  Whether the caller holds station.edit over this station, so a page offers edit controls only where the edit would be allowed
+  """
+  viewerCanEdit: Boolean!
+
+  """
+  Whether the caller holds station.delete over this station, so a page offers a delete control only where the delete would be allowed
+  """
+  viewerCanDelete: Boolean!
+
+  """
+  Whether the caller holds station.view_history over this station, so a page offers the timeline only where reading it would be allowed
+  """
+  viewerCanViewHistory: Boolean!
+
+  """
+  Whether the caller's station export would include this station, so a page can count an export before running it
+  """
+  viewerCanExport: Boolean!
+
+  """
+  Whether the contact fields on this station come back unmasked for the caller
+  """
+  viewerCanViewPii: Boolean!
   photos: [PhotoType!]!
   secondaryLocation: SecondaryLocationType
   properties: [StationPropertyType!]!
@@ -1346,6 +1488,17 @@ type StationType {
   Merges applied to this station, newest first; empty without station.review over this station
   """
   suggestionMerges: [StationSuggestionMergeType!]!
+}
+
+type StationTypeCountType {
+  """The station type; null for stations with none"""
+  type: String
+  count: Int!
+
+  """
+  How many of them the caller's station export of this type would include: none without station.export, and none on the row with no type, which the export can't ask for. It follows this request's filters, while the export takes the type alone, so the two agree only when no other filter is given
+  """
+  exportable: Int!
 }
 
 input SubmitRoleRequestInput {
@@ -1558,6 +1711,22 @@ type TicketAuditEntryType {
   actorName: String
 }
 
+"""
+How many tickets one H3 cell holds, of those its caller is shown as the cell
+"""
+type TicketCellType {
+  """
+  H3 index (hex), the same value TicketType.locationCell carries for these tickets
+  """
+  cell: String!
+  ticketCount: Int!
+
+  """
+  Of those, how many are urgent: a priority other than 'low' or 'medium' (trimmed, any case), and not 'in_progress' — the rule the site colours a ticket urgent by
+  """
+  urgentCount: Int!
+}
+
 type TicketConnection {
   items: [TicketType!]!
   pageInfo: PageInfo!
@@ -1588,6 +1757,11 @@ type TicketDisasterDetailType {
   One selected value. Numbers arrive as strings — the config's dataType says how to read it
   """
   value: String!
+}
+
+enum TicketListOrder {
+  NEWEST
+  NEEDS_FIRST
 }
 
 type TicketPropertyConfigType {
@@ -1623,6 +1797,13 @@ type TicketPropertyConfigType {
   isActive: Boolean!
 }
 
+enum TicketStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+}
+
 type TicketTaskCreated {
   task: TicketTaskType!
 }
@@ -1649,7 +1830,9 @@ type TicketTaskType {
   """
   status: String!
 
-  """Origin of this task: 'user' or 'official'"""
+  """
+  Origin of this task: 'user' when the site's identity made it, 'official' when a back-office one did. Tasks made before that rule keep what they had, 'gov' or 'import'
+  """
   source: String!
 
   """
@@ -1715,6 +1898,10 @@ type TicketType {
   """
   disasterTypes: [String!]!
   createdAt: DateTime
+
+  """
+  When anything visible about this ticket last changed: a field, its address, disaster details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only when it changes the status; a review verdict never does
+  """
   updatedAt: DateTime
 
   """
@@ -1802,6 +1989,16 @@ type TicketType {
   Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address
   """
   secondaryLocation: SecondaryLocationType
+
+  """
+  The building map this ticket was filed under (createTicket's buildingMapUuid). Null when it was not filed under one, when that building map is deleted, and to a caller without ticket.view_detail here
+  """
+  buildingMapUuid: UUID
+
+  """
+  The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it lies in none, and to a caller without ticket.view_detail here
+  """
+  responsibleTeams: [AssignedTeamType!]!
   disasterDetails: [TicketDisasterDetailType!]!
 }
 

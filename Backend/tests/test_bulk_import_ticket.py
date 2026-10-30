@@ -33,18 +33,37 @@ ZONE_POLYGON = Polygon([(121.4, 24.9), (121.6, 24.9), (121.6, 25.1), (121.4, 25.
 
 PEOPLE = f"{DYNAMIC_PREFIX}people_count"
 HEADERS = (
-    "uuid", "title", "status", "priority", "description",
-    "contact_name", "contact_phone", "latitude", "longitude",
-    "task_type", "task_name", "task_quantity", PEOPLE,
+    "uuid",
+    "title",
+    "status",
+    "priority",
+    "description",
+    "contact_name",
+    "contact_phone",
+    "latitude",
+    "longitude",
+    "task_type",
+    "task_name",
+    "task_quantity",
+    PEOPLE,
 )
 
 
 def _row(title, *, phone="0912345678", status="", task_name="送水", people="", description=""):
     return {
-        "uuid": "", "title": title, "status": status, "priority": "high",
-        "description": description, "contact_name": "王小明", "contact_phone": phone,
-        "latitude": "25.0", "longitude": "121.5", "task_type": "rescue",
-        "task_name": task_name, "task_quantity": "3", PEOPLE: people,
+        "uuid": "",
+        "title": title,
+        "status": status,
+        "priority": "high",
+        "description": description,
+        "contact_name": "王小明",
+        "contact_phone": phone,
+        "latitude": "25.0",
+        "longitude": "121.5",
+        "task_type": "rescue",
+        "task_name": task_name,
+        "task_quantity": "3",
+        PEOPLE: people,
     }
 
 
@@ -76,11 +95,15 @@ async def _grant(db, user: User, *perms_and_scopes, team=None) -> None:
             permission = Permission(key=perm.value)
             db.add(permission)
             await db.flush()
-        db.add(
-            RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope)
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+    db.add(
+        UserRoleAssign(
+            user_uuid=user.uuid,
+            role_uuid=role.uuid,
+            team_uuid=team.uuid if team is not None else None,
+            role_kind=kind,
         )
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
-                          team_uuid=team.uuid if team is not None else None, role_kind=kind))
+    )
     # Before the commit: `expire_on_commit` is True on this fixture, so reading `role.uuid`
     # afterwards would lazily reload it and raise MissingGreenlet under asyncio.
     acting_as(user, role, team)
@@ -92,7 +115,8 @@ async def _importer(db, *, scope="all") -> User:
     db.add(actor)
     await db.flush()
     await _grant(
-        db, actor,
+        db,
+        actor,
         (Perm.TICKET_IMPORT, "all"),
         (Perm.TICKET_ADD, "all"),
         (Perm.TICKET_EDIT, scope),
@@ -103,9 +127,11 @@ async def _importer(db, *, scope="all") -> User:
 
 
 async def _configs(db) -> None:
-    db.add(TaskPropertyConfig(
-        task_type="rescue", property_name="people_count", data_type="number", enum_options=None
-    ))
+    db.add(
+        TaskPropertyConfig(
+            task_type="rescue", property_name="people_count", data_type="number", enum_options=None
+        )
+    )
     await db.commit()
 
 
@@ -135,15 +161,11 @@ async def test_a_new_row_creates_all_three_layers(db):
 
     assert (outcome.created, outcome.failed) == (1, 0)
     ticket = await _ticket_titled(db, "需要飲用水")
-    task = (
-        await db.execute(select(TicketTask).where(TicketTask.ticket_uuid == ticket.uuid))
-    ).scalar_one()
-    prop = (
-        await db.execute(select(TaskProperty).where(TaskProperty.task_uuid == task.uuid))
-    ).scalar_one()
+    task = (await db.execute(select(TicketTask).where(TicketTask.ticket_uuid == ticket.uuid))).scalar_one()
+    prop = (await db.execute(select(TaskProperty).where(TaskProperty.task_uuid == task.uuid))).scalar_one()
 
     assert task.task_name == "送水"
-    assert task.source == "import"
+    assert task.source == "official"  # only the back office imports
     assert prop.property_value == "4"
 
 
@@ -162,12 +184,8 @@ async def test_a_new_rows_dynamic_value_takes_ticket_add_as_its_need_does(db):
 
     assert (outcome.created, outcome.failed) == (1, 0)
     ticket = await _ticket_titled(db, "需要飲用水")
-    task = (
-        await db.execute(select(TicketTask).where(TicketTask.ticket_uuid == ticket.uuid))
-    ).scalar_one()
-    prop = (
-        await db.execute(select(TaskProperty).where(TaskProperty.task_uuid == task.uuid))
-    ).scalar_one()
+    task = (await db.execute(select(TicketTask).where(TicketTask.ticket_uuid == ticket.uuid))).scalar_one()
+    prop = (await db.execute(select(TaskProperty).where(TaskProperty.task_uuid == task.uuid))).scalar_one()
     assert prop.property_value == "4"
 
 
@@ -285,15 +303,60 @@ async def test_a_matched_row_updates_rather_than_duplicating(db):
 
 
 @pytest.mark.asyncio
+async def test_an_imported_need_moves_the_last_update_and_the_same_file_again_does_not(db):
+    """A need a file adds is a change to its ticket; uploading an unchanged file again is not."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("求救")])
+    await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+    stamp = (await _ticket_titled(db, "求救")).updated_at
+
+    await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+    assert (await _ticket_titled(db, "求救")).updated_at == stamp
+
+    raw, filename = _file([_row("求救"), _row("求救", task_name="清淤")])
+    await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    assert (await _ticket_titled(db, "求救")).updated_at > stamp
+
+
+@pytest.mark.asyncio
+async def test_an_imported_need_value_moves_the_last_update(db):
+    """A value a file adds to a need already on the ticket is a change to the ticket."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("求救")])
+    await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+    stamp = (await _ticket_titled(db, "求救")).updated_at
+
+    raw, filename = _file([_row("求救", people="4")])
+    await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    ticket = await _ticket_titled(db, "求救")
+    task = (await db.execute(select(TicketTask).where(TicketTask.ticket_uuid == ticket.uuid))).scalar_one()
+    prop = (await db.execute(select(TaskProperty).where(TaskProperty.task_uuid == task.uuid))).scalar_one()
+    assert (prop.property_value, ticket.updated_at > stamp) == ("4", True)
+
+
+@pytest.mark.asyncio
 async def test_a_different_phone_makes_it_a_different_ticket(db):
-    """The same words from another person are another request (ADR-107)."""
+    """The same words from another person are another request (ADR-107).
+
+    Not an update, so it is a new ticket — and one the fast dedup layer says looks like the first,
+    at the same place with the same need. It lands once the importer files it anyway (ADR-398).
+    """
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([_row("需要飲用水", phone="0912345678")])
     await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
     raw, filename = _file([_row("需要飲用水", phone="0987654321")])
-    await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+    held = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+    assert (held.updated, held.created, held.suspected) == (0, 0, 1)
+    await commit_tickets(
+        db, actor=actor, raw=raw, filename=filename, task_type="rescue",
+        decisions={2: held.suspects[0].related_uuid},
+    )
 
     assert await _count(db, Tickets) == 2
 
@@ -330,10 +393,12 @@ async def test_a_zone_scoped_export_comes_back_half_writable(db):
     await db.flush()
 
     author = await _importer(db)  # creates both tickets with full reach
-    raw, filename = _file([
-        _row("區內", phone="0912345678"),
-        {**_row("區外", phone="0987654321"), "latitude": "25.40", "longitude": "121.90"},
-    ])
+    raw, filename = _file(
+        [
+            _row("區內", phone="0912345678"),
+            {**_row("區外", phone="0987654321"), "latitude": "25.40", "longitude": "121.90"},
+        ]
+    )
     await commit_tickets(db, actor=author, raw=raw, filename=filename, task_type="rescue")
 
     # Since feature 010 a User carries no team; the grant does, so the zone reach comes from
@@ -342,9 +407,13 @@ async def test_a_zone_scoped_export_comes_back_half_writable(db):
     db.add(zoned)
     await db.flush()
     await _grant(
-        db, zoned,
-        (Perm.TICKET_IMPORT, "all"), (Perm.TICKET_ADD, "all"),
-        (Perm.TICKET_EDIT, "zone"), (Perm.TICKET_EXPORT, "all"), (Perm.TICKET_VIEW_PII, "zone"),
+        db,
+        zoned,
+        (Perm.TICKET_IMPORT, "all"),
+        (Perm.TICKET_ADD, "all"),
+        (Perm.TICKET_EDIT, "zone"),
+        (Perm.TICKET_EXPORT, "all"),
+        (Perm.TICKET_VIEW_PII, "zone"),
         team=team,
     )
 
@@ -461,13 +530,11 @@ async def test_a_new_task_under_a_matched_ticket_keeps_its_own_fields(db):
 
     # same title -> the ticket matches; a different task name -> the task is a create
     second, filename = _file([_row("求救", task_name="清淤")])
-    outcome = await commit_tickets(db, actor=actor, raw=second, filename=filename,
-                                   task_type="rescue")
+    outcome = await commit_tickets(db, actor=actor, raw=second, filename=filename, task_type="rescue")
 
     assert outcome.failed == 0, outcome.errors
     assert await _count(db, Tickets) == 1
-    tasks = list((await db.execute(
-        select(TicketTask).where(TicketTask.task_name == "清淤"))).scalars())
+    tasks = list((await db.execute(select(TicketTask).where(TicketTask.task_name == "清淤"))).scalars())
     assert len(tasks) == 1
     assert tasks[0].quantity == 3, "the file said 3; a dropped create-only column writes NULL"
 
@@ -485,8 +552,7 @@ async def test_an_over_length_cell_fails_its_own_row_and_the_rest_land(db):
     actor = await _importer(db)
     raw, filename = _file([_row("正常的一列"), _row("長" * 300)])
 
-    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename,
-                                   task_type="rescue")
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
     assert outcome.created == 1, "the good row still lands"
     assert outcome.failed == 1
@@ -504,8 +570,7 @@ async def test_an_integer_beyond_int4_fails_its_own_row(db):
     row = {**_row("求救"), "task_quantity": "9999999999"}
     raw, filename = _file([row])
 
-    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename,
-                                   task_type="rescue")
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
     assert outcome.failed == 1
     assert "整數範圍" in " ".join(e.message for e in outcome.errors)
@@ -523,8 +588,7 @@ async def test_a_need_for_nobody_fails_its_own_row_before_anything_is_written(db
     actor = await _importer(db)
     raw, filename = _file([_row("正常的一列"), {**_row("求救"), "task_quantity": quantity}])
 
-    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename,
-                                   task_type="rescue")
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
     assert (outcome.created, outcome.failed, outcome.partial_rows) == (1, 1, ())
     assert await _ticket_titled(db, "求救") is None
@@ -587,13 +651,14 @@ async def test_the_error_report_is_re_uploadable_when_the_file_has_an_error_colu
     rows = [{**_row("長" * 300), "error": "上一輪的訊息"}]
     raw, filename = write_csv(headers, rows), "tickets.csv"
 
-    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename,
-                                   task_type="rescue")
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
     assert outcome.failed == 1
     assert outcome.error_report is not None
     import base64
-    report = read_table(base64.b64decode(outcome.error_report.content_base64),
-                        outcome.error_report.filename, max_rows=100)
+
+    report = read_table(
+        base64.b64decode(outcome.error_report.content_base64), outcome.error_report.filename, max_rows=100
+    )
     assert "error" in report.headers and "error_1" in report.headers
     assert report.rows[0]["error"] == "上一輪的訊息", "the file's own column is preserved"

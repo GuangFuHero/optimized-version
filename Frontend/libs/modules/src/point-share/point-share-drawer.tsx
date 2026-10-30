@@ -31,7 +31,11 @@ import {
 } from './share-links';
 import type { PointShareChannel, PointShareTarget } from './types';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  safeAreaBottom,
+} from '@rescue-frontend/ui';
 
 const { color, radius } = designTokens;
 
@@ -146,7 +150,7 @@ export function PointShareDrawer({
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          pb: 'env(safe-area-inset-bottom)',
+          pb: safeAreaBottom(0),
         }}
       >
         {isPhone ? (

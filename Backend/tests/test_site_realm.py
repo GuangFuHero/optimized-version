@@ -24,7 +24,9 @@ pytestmark = pytest.mark.asyncio
 SITE = {"X-WG-Realm": "site"}
 
 FILE = """
-mutation($input: CreateHelpRequestInput!) { createHelpRequest(input: $input) { uuid } }
+mutation($input: CreateHelpRequestInput!) {
+  createHelpRequest(input: $input) { ... on TicketCreated { ticket { uuid } } }
+}
 """
 
 HELP_REQUEST = {

@@ -179,6 +179,9 @@
 | project.edit | — | — | — | all | — | — |
 
 > 後台每一頁的外殼都讀專案設定（側欄顯示目前的災害），所以每個後台身分都有 `project.view`；改設定仍只有超管（ADR-324）。
+>
+> 災害名稱另有公開讀法：GraphQL `currentDisaster` 只回名稱、簡稱和地圖打開的位置（`name`、`shortName`、`mapView`），
+> 不看 capability，訪客和 `user` 都讀得到；災害類型、開始時間照舊要 `project.view`（ADR-392、ADR-395）。
 
 ### 緊急公告 Announcement
 
@@ -208,9 +211,12 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | audit.view | — | — | all | all | — | — |
+| audit.export | — | — | — | all | — | — |
 | rbac.view | — | — | — | all | — | — |
 | rbac.assign | — | — | — | all | — | — |
 | rbac.edit | — | — | — | all | — | — |
+
+> `audit.export`：把稽核紀錄照篩選條件下載成 CSV（006/ADR-414）。只給 super_admin，而且只認 `all`——檔案是全平台的紀錄，沒有「本隊的匯出」。data_auditor 能讀（`audit.view`）但不能匯出（Popo 2026-10-28 決定）。
 
 > `rbac.view`（feature 009 #25：`/admin/rbac` 唯讀面的 checkpoint-1 gate）只有 super_admin；`rbac.*` 全是 super_admin 專屬治理，不委派給其他角色。
 

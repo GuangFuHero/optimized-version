@@ -13,12 +13,14 @@ import {
   useFragment,
 } from '@rescue-frontend/data-access';
 
+import { responsibleTeamsText } from '../../map/areas';
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
 import { formatTicketStreet, formatTicketUnit } from '../address';
+import { requesterAuditNotice } from '../audit-issue';
 import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
-import { NeedRow, readTicketNeeds } from '../needs';
+import { NeedRow, readTicketNeeds, useNeedClaim } from '../needs';
 import { PhotoThumb } from '../photos';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
@@ -179,6 +181,13 @@ export function TaskMatchTicketDetailsPanel({
   const ticketCreatedBy = ticket?.createdBy ?? marker.ticketMeta?.createdBy;
   // Its requester can add one more need, even to a ticket left with none.
   const canAddNeed = useCanAddNeed({ ticketStatus, ticketCreatedBy });
+  const { viewerId } = useNeedClaim();
+  const auditNotice = requesterAuditNotice({
+    auditStatus: ticket?.auditStatus ?? marker.ticketMeta?.auditStatus,
+    createdBy: ticketCreatedBy,
+    viewerId,
+    title: ticket?.title || marker.title,
+  });
   const contact =
     [
       ticket?.contactName?.trim() || marker.ticketMeta?.contactName?.trim(),
@@ -188,9 +197,16 @@ export function TaskMatchTicketDetailsPanel({
       .join(' / ') || '未提供';
   const street = formatTicketStreet(ticketData?.ticket?.secondaryLocation);
   const unit = formatTicketUnit(ticketData?.ticket?.secondaryLocation);
+  // Empty when the ticket lies in no 責任區, and to a guest, who sees the coarse branch anyway (ADR-422).
+  const responsible = responsibleTeamsText(
+    ticketData?.ticket?.responsibleTeams.map((team) => team.name) ?? [],
+  );
 
   return (
     <Stack spacing={2}>
+      {/* At the very top, as the design has it: orange, not red, as the ticket stands. */}
+      {auditNotice ? <Alert severity="warning">{auditNotice}</Alert> : null}
+
       {ticketError ? (
         <Alert severity="error">
           {ticketError.message ?? '載入任務詳情失敗。'}
@@ -337,6 +353,18 @@ export function TaskMatchTicketDetailsPanel({
                       }}
                     >
                       {unit}
+                    </Typography>
+                  ) : null}
+                  {/* Who answers for this place, as the map's 責任區 label writes it (ADR-422). */}
+                  {responsible ? (
+                    <Typography
+                      sx={{
+                        color: detailPalette.text,
+                        fontSize: displayTextSize[13],
+                        lineHeight: '20px',
+                      }}
+                    >
+                      {responsible}
                     </Typography>
                   ) : null}
                   <Typography

@@ -2,13 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
-import { Box, ButtonBase, Fab, Stack, Typography, Zoom } from '@mui/material';
-
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { Box } from '@mui/material';
 
 import {
   createPointShareTarget,
@@ -21,7 +16,6 @@ import {
   PlaceHereAction,
   PointShareDrawer,
   SiteMapControls,
-  StationCreateDrawer,
   syncDocumentMetadata,
   useAuthSession,
   useCreatedTicketMarker,
@@ -38,8 +32,6 @@ import {
   type SiteRouteState,
 } from '@rescue-frontend/modules';
 
-const { color, primitives, shadow } = designTokens;
-
 export function SiteMapView() {
   return <SiteMapViewContent />;
 }
@@ -48,197 +40,6 @@ const DEFAULT_MAP_METADATA = {
   title: '救災地圖 - 島嶼守望',
   description: '檢視救災任務與站點資訊。',
 };
-const DEFAULT_CREATE_CENTER: [number, number] = [23.884, 121.0];
-
-// 「＋」 adds stations only: a request for help is filed through 請求協助, from the shell.
-const CREATE_ACCENT = {
-  solid: color.brand.secondary.default,
-  soft: color.bg.secondary.subtle,
-  text: color.brand.secondary.subtle,
-  border: color.brand.secondary.default,
-  hover: primitives.color.blue[100],
-};
-
-function ControlChip({
-  label,
-  active,
-  icon,
-  toneSoft,
-  toneText,
-  toneBorder,
-  toneHover,
-  onClick,
-}: {
-  label: string;
-  active?: boolean;
-  icon: React.ReactNode;
-  toneSoft?: string;
-  toneText?: string;
-  toneBorder?: string;
-  toneHover?: string;
-  onClick: () => void;
-}) {
-  return (
-    <ButtonBase
-      disableRipple
-      onClick={onClick}
-      sx={{
-        height: 38,
-        px: 1.5,
-        borderRadius: '999px',
-        border: `1px solid ${
-          active ? (toneBorder ?? color.border.accent) : color.border.accent
-        }`,
-        bgcolor: active
-          ? (toneSoft ?? color.bg.primary.subtle)
-          : color.bg.neutral.default,
-        color: active
-          ? (toneText ?? color.brand.primary.subtle)
-          : color.fg.neutral.default,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 0.75,
-        '&:hover': {
-          bgcolor: active
-            ? (toneHover ?? toneSoft ?? color.bg.primary.subtle)
-            : color.bg.neutral.subtle,
-        },
-      }}
-    >
-      <Box sx={{ display: 'grid', placeItems: 'center' }}>{icon}</Box>
-      <Typography
-        sx={{
-          fontSize: displayTextSize[12],
-          fontWeight: 800,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {label}
-      </Typography>
-    </ButtonBase>
-  );
-}
-
-function SiteMapCreateDock({
-  active,
-  onToggle,
-  onCreateStation,
-}: {
-  active: boolean;
-  onToggle: () => void;
-  onCreateStation: () => void;
-}) {
-  const accent = CREATE_ACCENT;
-
-  return (
-    <Box
-      sx={{
-        position: 'absolute',
-        right: 16,
-        bottom: { mobile: 20, tablet: 24 },
-        zIndex: 1200,
-        pointerEvents: 'none',
-      }}
-    >
-      <Stack
-        direction="row"
-        spacing={1.25}
-        sx={{
-          alignItems: 'center',
-          pointerEvents: 'auto',
-        }}
-      >
-        <Zoom in={active}>
-          <Box>
-            <ControlChip
-              label="新增站點"
-              active
-              icon={<PlaceRoundedIcon sx={{ fontSize: 18 }} />}
-              toneSoft={accent.soft}
-              toneText={accent.text}
-              toneBorder={accent.border}
-              toneHover={accent.hover}
-              onClick={onCreateStation}
-            />
-          </Box>
-        </Zoom>
-        <Fab
-          size="medium"
-          onClick={onToggle}
-          sx={{
-            width: 48,
-            height: 48,
-            minHeight: 48,
-            bgcolor: active ? accent.soft : color.bg.neutral.default,
-            color: active ? accent.text : color.fg.neutral.default,
-            border: `1px solid ${active ? accent.border : color.border.accent}`,
-            boxShadow: shadow.lg,
-            pointerEvents: 'auto',
-            '&:hover': {
-              bgcolor: active ? accent.hover : color.bg.primary.subtle,
-            },
-          }}
-        >
-          {active ? (
-            <CloseRoundedIcon sx={{ fontSize: 20 }} />
-          ) : (
-            <AddRoundedIcon sx={{ fontSize: 22 }} />
-          )}
-        </Fab>
-      </Stack>
-    </Box>
-  );
-}
-
-function SiteMapCenterPin({ open }: { open: boolean }) {
-  const accent = CREATE_ACCENT;
-
-  return (
-    <Box
-      sx={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -100%)',
-        zIndex: 1190,
-        pointerEvents: 'none',
-      }}
-    >
-      <Zoom in={open}>
-        <Stack sx={{ alignItems: 'center' }} spacing={0.25}>
-          <Box
-            sx={{
-              width: 44,
-              height: 44,
-              borderRadius: '999px',
-              bgcolor: accent.solid,
-              border: `2px solid ${color.bg.neutral.default}`,
-              boxShadow: shadow.lg,
-              display: 'grid',
-              placeItems: 'center',
-            }}
-          >
-            <PlaceRoundedIcon
-              sx={{ fontSize: 20, color: color.fg.onSecondary }}
-            />
-          </Box>
-          <Box
-            sx={{
-              width: 14,
-              height: 14,
-              mt: '-8px',
-              bgcolor: accent.solid,
-              transform: 'rotate(45deg)',
-              borderBottom: `2px solid ${color.bg.neutral.default}`,
-              borderRight: `2px solid ${color.bg.neutral.default}`,
-              boxShadow: shadow.md,
-            }}
-          />
-        </Stack>
-      </Zoom>
-    </Box>
-  );
-}
 
 function getSubDataTypesSignature(state: SiteRouteState): string {
   return (state.subDataTypes ?? []).join(',');
@@ -271,19 +72,13 @@ function mergeRouteStateWithViewport(
 function SiteMapViewportDataLayer({
   baseRouteState,
   createdMarkers,
-  createModeActive,
   onMapRouteStateChange,
-  onToggleCreateMode,
-  onOpenCreateStation,
   onOpenShareTarget,
   onReplaceRouteState,
 }: {
   baseRouteState: SiteRouteState;
   createdMarkers: readonly RescueMapMarkerItem[];
-  createModeActive: boolean;
   onMapRouteStateChange: (next: SiteRouteState) => void;
-  onToggleCreateMode: () => void;
-  onOpenCreateStation: () => void;
   onOpenShareTarget: (target: PointShareTarget) => void;
   onReplaceRouteState: (next: SiteRouteState) => void;
 }) {
@@ -297,29 +92,22 @@ function SiteMapViewportDataLayer({
     () => mergeRouteStateWithViewport(baseRouteState, viewportState),
     [baseRouteState, viewportState],
   );
-  // A blank spot tapped on the map, for 請求協助 there. Not while 「＋」 is open: its pin
-  // in the middle is then the point being placed, and a second one would confuse the two.
+  // A blank spot tapped on the map, for 請求協助 there.
   const [draftPoint, setDraftPoint] = useState<RescueMapDraftPoint | null>(
     null,
   );
   const selectedMarkerId = baseRouteState.selectedMarkerId;
 
-  const handleMapClick = useCallback(
-    ([lat, lng]: [number, number]) => {
-      if (!createModeActive) {
-        setDraftPoint({ lat, lng });
-      }
-    },
-    [createModeActive],
-  );
+  const handleMapClick = useCallback(([lat, lng]: [number, number]) => {
+    setDraftPoint({ lat, lng });
+  }, []);
 
-  // Let go once a pin or cell is opened — left standing, it would read as belonging to it — and
-  // once 「＋」 opens.
+  // Let go once a pin or cell is opened: left standing, it would read as belonging to it.
   useEffect(() => {
-    if (selectedMarkerId || createModeActive) {
+    if (selectedMarkerId) {
       setDraftPoint(null);
     }
-  }, [createModeActive, selectedMarkerId]);
+  }, [selectedMarkerId]);
 
   useEffect(() => {
     if (!draftPoint) {
@@ -462,24 +250,9 @@ function SiteMapViewportDataLayer({
 
   const renderControls = useCallback(
     (controller: RescueMapControllerValue) => (
-      <>
-        <SiteMapControls controller={controller} />
-        <SiteMapCenterPin open={createModeActive} />
-        {isAuthenticated ? (
-          <SiteMapCreateDock
-            active={createModeActive}
-            onToggle={onToggleCreateMode}
-            onCreateStation={onOpenCreateStation}
-          />
-        ) : null}
-      </>
+      <SiteMapControls controller={controller} />
     ),
-    [
-      createModeActive,
-      isAuthenticated,
-      onOpenCreateStation,
-      onToggleCreateMode,
-    ],
+    [],
   );
 
   const stationDetailSecondaryAction = useCallback(
@@ -507,6 +280,7 @@ function SiteMapViewportDataLayer({
           <Map
             markers={visibleMarkers}
             closureAreas={liveDataSnapshot.closureAreas}
+            publicZones={liveDataSnapshot.publicZones}
             routeState={baseRouteState}
             onRouteStateChange={onMapRouteStateChange}
             showScale
@@ -519,6 +293,8 @@ function SiteMapViewportDataLayer({
             draftPointAction={draftPointAction}
             ticketDetailOverrides={createTicketDetailOverrides}
             stationDetailSecondaryAction={stationDetailSecondaryAction}
+            stationLayout="site"
+            viewMemoryKey="site"
           />
         </Box>
         <MapRequestHelpBar />
@@ -529,15 +305,9 @@ function SiteMapViewportDataLayer({
 
 function SiteMapScene({
   createdMarkers,
-  createModeActive,
-  onToggleCreateMode,
-  onOpenCreateStation,
   onOpenShareTarget,
 }: {
   createdMarkers: readonly RescueMapMarkerItem[];
-  createModeActive: boolean;
-  onToggleCreateMode: () => void;
-  onOpenCreateStation: () => void;
   onOpenShareTarget: (target: PointShareTarget) => void;
 }) {
   const mapRoute = useSiteMapRouteState();
@@ -558,60 +328,17 @@ function SiteMapScene({
     <SiteMapViewportDataLayer
       baseRouteState={mapRoute.state}
       createdMarkers={createdMarkers}
-      createModeActive={createModeActive}
       onMapRouteStateChange={handleMapRouteStateChange}
-      onToggleCreateMode={onToggleCreateMode}
-      onOpenCreateStation={onOpenCreateStation}
       onOpenShareTarget={onOpenShareTarget}
       onReplaceRouteState={mapRoute.replace}
     />
   );
 }
 
-function SiteMapCreatePanels({
-  stationDrawerOpen,
-  onCloseStationDrawer,
-  onCreatedMarker,
-}: {
-  stationDrawerOpen: boolean;
-  onCloseStationDrawer: () => void;
-  onCreatedMarker: (marker: RescueMapMarkerItem) => void;
-}) {
-  const viewportState = useSiteMapViewportState();
-  const viewportStore = useSiteMapViewportStore();
-  const currentDraftPosition =
-    viewportState.position?.center ?? DEFAULT_CREATE_CENTER;
-
-  const handleDraftLocationChange = useCallback(
-    (position: [number, number]) => {
-      const snapshot = viewportStore.getSnapshot();
-
-      viewportStore.setState({
-        ...snapshot,
-        position: { ...snapshot.position, center: position },
-      });
-    },
-    [viewportStore],
-  );
-
-  return (
-    <StationCreateDrawer
-      open={stationDrawerOpen}
-      onClose={onCloseStationDrawer}
-      initialPosition={currentDraftPosition}
-      onCreatedMarker={onCreatedMarker}
-      onLocationChange={handleDraftLocationChange}
-    />
-  );
-}
-
 function SiteMapViewContent() {
-  const mapRoute = useSiteMapRouteState();
   const [createdMarkers, setCreatedMarkers] = useState<
     readonly RescueMapMarkerItem[]
   >([]);
-  const [createModeActive, setCreateModeActive] = useState(false);
-  const [stationDrawerOpen, setStationDrawerOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<PointShareTarget | null>(null);
 
   // Filed through 請求協助, which lives in the site shell: it turns the page to the ticket in the
@@ -620,52 +347,11 @@ function SiteMapViewContent() {
     setCreatedMarkers((current) => [marker, ...current]);
   });
 
-  const resetCreateFlow = () => {
-    setCreateModeActive(false);
-  };
-
-  const openCreateStation = () => {
-    setCreateModeActive(true);
-    setStationDrawerOpen(true);
-  };
-
   return (
     <>
       <SiteMapScene
         createdMarkers={createdMarkers}
-        createModeActive={createModeActive}
-        onToggleCreateMode={() =>
-          setCreateModeActive((current) => {
-            if (current) {
-              setStationDrawerOpen(false);
-            }
-
-            return !current;
-          })
-        }
-        onOpenCreateStation={openCreateStation}
         onOpenShareTarget={setShareTarget}
-      />
-      <SiteMapCreatePanels
-        stationDrawerOpen={stationDrawerOpen}
-        onCloseStationDrawer={() => {
-          setStationDrawerOpen(false);
-          resetCreateFlow();
-        }}
-        onCreatedMarker={(marker) => {
-          setCreatedMarkers((current) => [marker, ...current]);
-          setStationDrawerOpen(false);
-          resetCreateFlow();
-          // Made from tickets too (「＋」 is there on both), where a station does not show and would
-          // look lost: turn to stations, with no filter to hide it, and open it.
-          mapRoute.replace({
-            ...mapRoute.state,
-            dataType: 'station',
-            subDataTypes: undefined,
-            search: undefined,
-            selectedMarkerId: marker.id,
-          });
-        }}
       />
       <PointShareDrawer
         open={Boolean(shareTarget)}

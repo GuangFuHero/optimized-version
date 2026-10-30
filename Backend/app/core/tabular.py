@@ -13,6 +13,7 @@ and `_looks_like_formula` below.
 
 import csv
 import io
+import itertools
 import zipfile
 from dataclasses import dataclass
 
@@ -184,6 +185,34 @@ def _check_uncompressed_size(raw: bytes) -> None:
         )
 
 
+def _filled_cells(row) -> int:
+    return sum(1 for value in row if _cell_to_text(value))
+
+
+def _next_filled(raw_rows):
+    return next((row for row in raw_rows if _filled_cells(row)), None)
+
+
+def _header_and_rest(raw_rows):
+    """Find the header row of a sheet, skipping the title or blank rows a spreadsheet puts above it.
+
+    Numbers exports a table's name as a one-cell row over its header row, and a sheet can start
+    a few rows down. Blank rows are passed over outright, and a filled row is passed over only
+    while the next filled row is wider — so a single-column sheet keeps its first row as the
+    header, and a blank spacer under a title does not make the title look like one. Blank rows
+    dropped here would be dropped as data rows anyway.
+    """
+    current = _next_filled(raw_rows)
+    while current is not None:
+        following = _next_filled(raw_rows)
+        if following is None:
+            return current, iter(())
+        if _filled_cells(current) > 1 or _filled_cells(following) <= _filled_cells(current):
+            return current, itertools.chain((following,), raw_rows)
+        current = following
+    return None, raw_rows
+
+
 def _read_xlsx(raw: bytes, max_rows: int | None) -> Table:
     _check_uncompressed_size(raw)
     try:
@@ -192,8 +221,7 @@ def _read_xlsx(raw: bytes, max_rows: int | None) -> Table:
         raise TableFormatError("無法讀取這個 .xlsx 檔") from exc
 
     sheet = workbook.active
-    raw_rows = sheet.iter_rows(values_only=True)
-    header_row = next(raw_rows, None)
+    header_row, raw_rows = _header_and_rest(sheet.iter_rows(values_only=True))
     if header_row is None:
         workbook.close()
         raise TableFormatError("檔案是空的")

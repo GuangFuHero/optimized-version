@@ -1,5 +1,6 @@
 """Pydantic schemas for the minimal admin API (list users, assign role, manage team members)."""
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -14,6 +15,22 @@ class IdentitySummary(BaseModel):
     role: str
     team_uuid: UUID | None = None
     team: str | None = None
+
+
+# The 平台角色 the back office shows, first match wins (ADR-432, #146's `platformOf()`).
+PlatformKey = Literal["super_admin", "data_auditor", "gov", "ngo", "user"]
+
+
+@dataclass(frozen=True)
+class UserSearch:
+    """What `GET /admin/users` narrows the list by (ADR-412, ADR-432). All optional; they combine.
+
+    `q` is matched against the nickname only, even for readers who see real names (ADR-432).
+    """
+
+    q: str | None = None
+    platform_role: PlatformKey | None = None
+    team_uuid: UUID | None = None
 
 
 class AdminUserListItem(BaseModel):
@@ -31,6 +48,8 @@ class AdminUserListItem(BaseModel):
     real_name: str | None = None
     platform_role: str | None
     identities: list[IdentitySummary] = Field(default_factory=list)
+    # When the account was made: the 加入時間 column (ADR-413).
+    created_at: datetime
     last_login_at: datetime | None = None
     # Refreshed on refresh-token rotation, so up to one access-token TTL (15 min) stale (ADR-093).
     last_activity_at: datetime | None = None
@@ -39,13 +58,26 @@ class AdminUserListItem(BaseModel):
     active_session_count: int | None = None
 
 
+class MapView(BaseModel):
+    """Where the site's map opens (ADR-395): all three or none, so it is one value rather than three."""
+
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    # The site's map allows 7 to 18 (rescue-map-canvas `minZoom` / `maxZoom`).
+    zoom: int = Field(ge=7, le=18)
+
+
 class ProjectSettingsResponse(BaseModel):
     """The deployment's single project settings row, or its unset shape before first write."""
 
     uuid: UUID | None = None
     name: str | None = None
+    # For the site's top bar and other tight spots; null means use `name` (ADR-392).
+    short_name: str | None = None
     disaster_types: list[str] = Field(default_factory=list)
     started_at: datetime | None = None
+    # Null until set: the site then opens its map on its own default (ADR-395).
+    map_view: MapView | None = None
     # Advisory only, and only on write: a saved disaster type that no configured dynamic
     # field is scoped to (ADR-169). The write succeeded either way — this is what tells an
     # operator a typo emptied the forms instead of leaving them to find out from a rescue
@@ -57,8 +89,20 @@ class ProjectSettingsUpdate(BaseModel):
     """PATCH body: every field optional; omitted fields keep their stored value."""
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
+    # Optional, unlike `name`: null or blank clears it, and the full name is shown instead.
+    short_name: str | None = Field(default=None, max_length=30)
     disaster_types: list[str] | None = None
     started_at: datetime | None = None
+    # Sent whole; null clears it.
+    map_view: MapView | None = None
+
+    @field_validator("short_name", mode="before")
+    @classmethod
+    def _blank_short_name_is_none(cls, value):
+        """Trim it before the length check, so stray spaces neither count nor get stored."""
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
 
 
 class AssignRoleRequest(BaseModel):

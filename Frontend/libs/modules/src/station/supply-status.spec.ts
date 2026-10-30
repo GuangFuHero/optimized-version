@@ -42,6 +42,18 @@ describe('describeSupplyStatus', () => {
     ).toBe('10/10 更新');
   });
 
+  it('gives the date from a day old instead, when asked to, as the site does', () => {
+    const daily = (updatedAt: string) =>
+      describeSupplyStatus('飲用水見底', updatedAt, NOW, {
+        relativeWithin: DAY,
+      })?.updated;
+
+    expect(daily(before(25 * MINUTE))).toBe('25 分鐘前更新');
+    expect(daily(before(23 * HOUR + 59 * MINUTE))).toBe('23 小時前更新');
+    // NOW is 10-20 14:00 in Taipei.
+    expect(daily(before(DAY))).toBe('10/19 更新');
+  });
+
   it('reads a time ahead of the clock as just now, and leaves out one it cannot read', () => {
     expect(
       describeSupplyStatus('飲用水見底', '2026-10-20T06:05:00Z', NOW)?.updated,

@@ -31,6 +31,9 @@ class ErrorCode(StrEnum):
     # Passwords and sessions
     PASSWORD_NOT_SET = "password_not_set"
     PASSWORD_ALREADY_SET = "password_already_set"
+    # A password signs in with an email or phone number, so an account with neither could never
+    # use one (ADR-401). Remedy: add a contact first, not retry.
+    PASSWORD_NEEDS_CONTACT = "password_needs_contact"
     PASSWORD_INCORRECT = "password_incorrect"
     CREDENTIALS_INVALID = "credentials_invalid"
     REFRESH_TOKEN_INVALID = "refresh_token_invalid"
@@ -122,6 +125,10 @@ class ErrorCode(StrEnum):
 
     # Throttling
     RATE_LIMITED = "rate_limited"
+
+    # Audit log export (ADR-414): more changes match than one file carries. The answer carries
+    # `matched` and `limit`, so the page can say how far over it is and ask for a narrower range.
+    AUDIT_EXPORT_TOO_LARGE = "audit_export_too_large"
 
 
 class ApiError(HTTPException):

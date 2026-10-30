@@ -22,6 +22,7 @@ import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import {
   STATION_SUGGESTION_FIELDS,
   SUGGESTION_TEXT_MAX_LENGTH,
+  describeSuggestedValue,
   describeSuggestionValue,
   hasPendingSuggestion,
   startSuggestion,
@@ -279,11 +280,7 @@ function SuggestionForm({
         />
         <ComparedValue
           label="你的建議"
-          value={
-            form.value.trim()
-              ? describeSuggestionValue(field, form.value)
-              : '尚未填寫'
-          }
+          value={describeSuggestedValue(field, current, form.value)}
           emphasised
         />
       </Box>

@@ -82,7 +82,9 @@ class StationSuggestionMerge(Base, UUIDPKMixin, TimestampMixin):
     changes: Mapped[list] = mapped_column(JSONB, default=list)
     review_note: Mapped[str | None] = mapped_column(String)
     status: Mapped[str] = mapped_column(String(20), default="applied")
-    reviewed_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
+    # Always set on a merge; NULL only once the reviewer's account is gone, as a mock one is after
+    # a SEED_MOCK run (ADR-393).
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)
     revoked_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

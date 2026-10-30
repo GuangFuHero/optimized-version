@@ -7,6 +7,11 @@
 import type { CreateTicketTaskInput } from '@rescue-frontend/data-access';
 
 import { isTicketRequester } from '../needs/need-actions';
+import {
+  groupSuspectsByTicket,
+  type DuplicateSuspect,
+  type SuspectTicket,
+} from './duplicate-suspects';
 import { toNeedInput, type NeedDraft } from './help-request-form';
 
 interface AddNeedTicket {
@@ -34,18 +39,8 @@ export type CreateTicketTaskAnswer =
   | { __typename: 'TicketTaskCreated' }
   | {
       __typename: 'DuplicatesSuspected';
-      suspects: ReadonlyArray<{
-        relatedUuid: string;
-        relatedTicketUuid?: string | null;
-      }>;
+      suspects: ReadonlyArray<DuplicateSuspect>;
     };
-
-/** Another ticket with open needs the one being added looks like. */
-export interface SuspectTicket {
-  ticketUuid: string;
-  /** Which of its needs. */
-  needUuids: string[];
-}
 
 export type AddNeedOutcome =
   | { kind: 'added' }
@@ -53,44 +48,29 @@ export type AddNeedOutcome =
       kind: 'held';
       tickets: SuspectTicket[];
       /**
-       * What 不是同一件，加上去 sends as `acknowledgedDuplicateOf`. Any suspect will do: the backend
-       * then takes the whole need as looked at (`dedup_submission.py` `submit_new_task`).
+       * What 確認不重複，加上去 sends as `acknowledgedDuplicateOf`: the suspect the backend named,
+       * the only one it names for a need. It counts only for that one (ADR-400); held again for
+       * another, this is that one.
        */
       acknowledge: string;
     };
 
 /**
  * Added, or held with nothing added: the backend found open needs of other tickets it looks like —
- * never the ticket's own. One entry per ticket, in the order the backend ranked them.
+ * never the ticket's own. One entry per ticket, in the order the backend ranked them, each like
+ * `sentName`, the need's name as sent: with no point to measure from, the one reason a card gives.
  */
 export function readAddNeedOutcome(
   answer: CreateTicketTaskAnswer,
+  sentName: string,
 ): AddNeedOutcome {
   if (answer.__typename === 'TicketTaskCreated') {
     return { kind: 'added' };
   }
 
-  const tickets: SuspectTicket[] = [];
-
-  for (const { relatedUuid, relatedTicketUuid } of answer.suspects) {
-    if (!relatedTicketUuid) {
-      continue;
-    }
-
-    const ticket = tickets.find(
-      (item) => item.ticketUuid === relatedTicketUuid,
-    );
-
-    if (ticket) {
-      ticket.needUuids.push(relatedUuid);
-    } else {
-      tickets.push({ ticketUuid: relatedTicketUuid, needUuids: [relatedUuid] });
-    }
-  }
-
   return {
     kind: 'held',
-    tickets,
+    tickets: groupSuspectsByTicket(answer.suspects, () => sentName),
     acknowledge: answer.suspects[0]?.relatedUuid ?? '',
   };
 }

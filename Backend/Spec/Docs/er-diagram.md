@@ -317,7 +317,7 @@ users ||..o{ audit_logs : "acted (logical)"
 announcements {
     uuid uuid PK
     uuid created_by FK "FK to users"
-    uuid updated_by FK "FK to users; last to create, edit, activate or deactivate it"
+    uuid updated_by FK "nullable, FK to users; last to create, edit, activate or deactivate it; NULL once that account is gone (mock reseed, ADR-393)"
     timestamp published_at "nullable; NULL = draft (never activated), else when it last went live"
     uuid published_by FK "nullable, FK to users; who last activated it"
     boolean active
@@ -360,7 +360,7 @@ notifications {
     uuid ref_uuid "nullable, uuid of the ref_type row — no DB FK, same polymorphic pattern as photos"
     string title "String(200)"
     text body
-    boolean read "default false"
+    boolean read "default false; CHECK read = (read_at IS NOT NULL) (ADR-439)"
     timestamp read_at "nullable"
     timestamp created_at
     timestamp updated_at
@@ -401,7 +401,7 @@ briefings {
     string state "briefing/in_field/debrief, String(50), default briefing"
     string status "draft/published/inactive, String(20), default draft, CHECK"
     uuid created_by FK "FK to users, indexed"
-    uuid updated_by FK "FK to users; last to edit, publish or take it down"
+    uuid updated_by FK "nullable, FK to users; last to edit, publish or take it down; NULL once that account is gone (mock reseed, ADR-393)"
     timestamp published_at "nullable; NULL exactly while status = draft (CHECK)"
     uuid published_by FK "nullable, FK to users"
     timestamp created_at
@@ -431,12 +431,18 @@ users |o--o{ briefings : "published"
 project_settings {
     uuid uuid PK
     string name "disaster name, e.g. 花蓮 0816"
+    string short_name "nullable, String(30); for the site's top bar, falls back to name (ADR-392)"
     string_array disaster_types "default '{}' — e.g. {landslide,flood}; drives which config rows apply"
     timestamp started_at "nullable"
+    float map_center_lat "nullable; where the site's map opens (ADR-395)"
+    float map_center_lng "nullable"
+    smallint map_zoom "nullable; 7 to 18"
     timestamp created_at
     timestamp updated_at
 }
 %% UNIQUE INDEX uq_project_settings_singleton ON project_settings ((true))
+%% CHECK ck_project_settings_map_view_all_or_none: the three map columns are all set or all NULL
+%% CHECK ck_project_settings_map_view_range: lat -90..90, lng -180..180, zoom 7..18 (as the admin API)
 %% -- single-row invariant on a constant expression: no magic UUID needed
 
 %% ==========================
@@ -582,14 +588,14 @@ stations {
     string op_hour
     int level
     string comment
-    string source "user/gov/crawler"
+    string source "user/official (CHECK), NULL = not known; set from the creating identity (ADR-438)"
     string visibility "public/restricted/internal"
     string verification_status "unverified/ai_verified/human_verified"
     boolean is_duplicate
     string dedup_group_id "nullable"
     boolean is_temporary
     timestamp expires_at "nullable"
-    boolean is_official
+    boolean is_official "GENERATED from source = 'official' (ADR-438)"
     uuid updated_by FK "nullable, FK to users"
     string contact_name "nullable, String(100), independent of tickets.contact_name"
     string contact_email "nullable, String(100)"
@@ -679,7 +685,7 @@ station_suggestion_merges {
     jsonb changes "[{target_type, target_uuid, field_name, before, after}] per applied field"
     string review_note "nullable"
     string status "applied/revoked, String(20)"
-    uuid reviewed_by FK "FK to users"
+    uuid reviewed_by FK "nullable, FK to users; always set by a merge, NULL once the reviewer's account is gone (mock reseed, ADR-393)"
     uuid revoked_by FK "nullable, FK to users"
     timestamp revoked_at "nullable"
     timestamp created_at
@@ -839,7 +845,7 @@ ticket_tasks {
     string task_description "nullable"
     int quantity "nullable = no cap; at least 1, and required for every type but rescue (ADR-291)"
     string status "pending/fulfilled/canceled; in_progress only on rows from before ADR-293"
-    string source "user/gov/crawler/ngo/admin"
+    string source "user/official for new tasks, from the creating identity (ADR-438); older rows gov/import"
     string progress_note "nullable"
     boolean is_duplicate
     string dedup_group_id "nullable"

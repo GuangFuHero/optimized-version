@@ -75,6 +75,7 @@ TOTAL                                    13562 478   96%
 3. B 的通報者在同一地點開單 B（清淤人力 5、飲用水 5、便當 3）。快層擋下，三項需求都疑似重複，B 帶 `acknowledgedDuplicateOf` 照樣建立，產生 3 張待審卡。
 4. 兩位通報者各自用 `setTicketDisasterDetails` 填災害欄位答案（真的 API，200）：A `power_outage: no`；B `utility_hazards: gas`。
 5. 照片：A 一張（pA）、B 兩張（pB、pB2）。**用 ORM 寫入**：單的照片只能透過 `createHelpRequest` 帶，而那條路徑不做重複比對，產生不了待審卡。
+   （2026-10-27 起 `createHelpRequest` 也做重複比對（ADR-397），重驗時可以直接用它帶照片、產生待審卡。）
 6. 接單：志工一接 A 清淤；志工二接 A 清淤和 B 清淤；志工三接 B 清淤和 B 飲用水；志工四接 B 便當。全部 200。
 
 ### 4.2 審核

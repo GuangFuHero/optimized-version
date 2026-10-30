@@ -1188,6 +1188,44 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 - [x] 審查時看到的演算法現象（速度、佔位電話、回測比電話方式、`score` 對工單確認丟例外、上線時機）交給 Chi，後端不改演算法（已在 fast-v4 處理，見 spec §11）
 - [x] Spec 資料夾改號：`019-dedup-fast-layer` → `021-dedup-fast-layer`、`020-dedup-engine-interface` → `022-dedup-engine-interface`（避開 Dennis 的 019／020），所有引用跟著改
 
+## Task 27: 同一區域依地點排隊（ADR-396，2026-10-27）
+
+**Files:** `app/services/dedup.py`（常數）、`app/services/dedup_area_lock.py`（新）、`app/services/dedup_submission.py`、`tests/test_dedup_area_lock.py`（新）
+
+每一步先寫會失敗的測試，跑一次確認是紅的，再實作。
+
+- [x] **27.1 重現（紅）**：兩條連線，第一筆在寫入後、commit 前暫停，第二筆跑完整流程。三條路徑（新開單、替別張單加任務、登記站點）都斷言「第二筆被擋、只建立一筆」，現在會失敗。另加對照：先後送出時第二筆被擋（現在就會過）
+- [x] **27.2 守門 (a)**（突變：距離改 2000 m → 最大格子距離 3，測試失敗）：台灣範圍（經度 119.3~122.1、緯度 21.8~25.4）固定亂數種子取 2,000 組相距 `AREA_LOCK_MAX_RADIUS_M` 的點對，用 DB 的 h3 函式算格子距離，全部 ≤ 2
+- [x] **27.3 守門 (b)**：`registry` 的 engine 兩種 kind 的 `radius_m` ≤ `AREA_LOCK_MAX_RADIUS_M`
+- [x] **27.4 實作鎖**：`dedup_area_lock.lock_area_at(db, point)`／`lock_area_of_ticket(db, ticket_uuid)` 在 SAVEPOINT 裡設 `lock_timeout`，依 h3 index 由小到大取 7 個 `pg_advisory_xact_lock`；加任務的位置由後端查所屬工單（`ST_PointOnSurface`）。三個進入點在驗證之後、`_score_acknowledged` 之前呼叫 → 27.1 轉綠
+- [x] **27.5 逾時照常建立**：另一條連線先握住其中一格的鎖不放，送出在約 500 ms 後照常建立、有 warning log；交易沒有被弄壞（後續寫入、commit 正常）
+- [x] **27.6 鎖會放掉**：commit 後、被提示（hold）後、rollback 後（engine 出錯時走的就是整個 rollback，ADR-313），另一條連線都能立刻取得同一格的鎖；SAVEPOINT 逾時 rollback 後，已取得的部分鎖也放掉了（實測確認 Postgres 行為，寫進測試）
+- [x] **27.7 不同區域不互等**：一條連線握住 A 區的鎖，B 區（> 2 km）的送出不等待
+- [x] **27.8** dedup 相關測試全過；全套測試（`-n 4`）：2980 passed
+- [x] **27.9 Docker 從零完整驗證**（`51363de19`，2026-10-27）：`--no-cache` 建 image、隔離 network、alembic 到 head、seed；
+  容器內全套 2980 passed、`test_dedup_area_lock.py` 單獨 9 passed；真 HTTP 同時 20 筆一樣的 `createTicket` → `TicketCreated` 1、`DuplicatesSuspected` 19，
+  最慢 0.83 s；期間的 `/users/me` 200（0.54 s）；DB `tickets` 1、`hint_shown` 20（含之後再送一次）。
+  log 有 9 筆「area lock not granted」：排隊超過 500 ms 的請求放棄等鎖，但那時第一筆已經 commit，所以仍被提示
+
+## Task 28: PR #140 review 修正（ADR-433~436，2026-10-29）
+
+**Files:** `app/services/dedup_area_lock.py`、`app/services/dedup_submission.py`、`tests/test_dedup_area_lock.py`
+
+先 rebase main（解 `decisions.md`、`dedup_submission.py` 模組說明兩處衝突，都是兩邊各加一段）。每一步先寫會失敗的測試，跑一次確認是紅的，再實作。
+
+- [x] **28.1 請求協助也排隊（ADR-433）**：`test_racing_help_requests_create_one`，紅的原因是第二筆沒等鎖就建立。`submit_help_request` 在 `_score_acknowledged` 前呼叫 `lock_area_at` → 綠
+- [x] **28.2 站點分開（ADR-436）**：`area_keys`／`lock_area_at` 加必填 `kind`；`test_station_and_ticket_keys_never_overlap`、`test_a_station_does_not_wait_behind_tickets_in_its_area`。突變檢查：站點改回 `kind="ticket"` 時後者紅
+- [x] **28.3 合計期限（ADR-434）**：`test_the_whole_wait_is_capped_not_each_key`（session 級鎖握住 7 個 key、每 250 ms 放一個），紅的原因是沒有放棄。改成每個 key 前把 `lock_timeout` 設成剩下的時間 → 綠
+- [x] **28.4 log 四捨五入（ADR-435）**：`test_the_give_up_log_names_the_area_not_the_point`，紅的原因是 log 有精確座標 → 綠
+- [x] **28.5 nit**：`test_a_submission_elsewhere_does_not_wait` 不再計時，改成斷言沒有「area lock」warning
+- [x] **28.6** `test_dedup_area_lock.py` 14 passed；全套測試（`-n 4`）：3081 passed
+- [x] **28.7 Docker 從零完整驗證**（2026-10-29）：`--no-cache` 建 image、隔離 network、alembic 到 head、seed；真 HTTP，兩輪（第二輪換地點，避開冷啟動）：
+  - 同時 20 筆一樣的 `createHelpRequest` → `TicketCreated` 1、`DuplicatesSuspected` 19，最慢 0.87 s（第一輪剛啟動時 2.86 s）
+  - 同時 20 筆一樣的 `createTicket`，同一點夾 1 筆 `createStation` → 工單 1 建 19 擋（最慢 0.98 s）；站點 0.38 s 建立，沒有等鎖
+  - 同時 10 筆一樣的 `createStation` → 1 建 9 擋，最慢 0.64 s（站點之間仍會排隊）
+  - DB：`tickets` 4、`stations` 4、`hint_shown` 94（= 2 ×（19 + 19 + 9））
+  - 放棄等鎖的 log 座標都是 1/400 度，例如 `(121.4325, 23.655)`、`(121.49, 23.7)`
+
 ## 交給前端的 API 變更（後端不負責實作）
 
 前端改動由前端負責，後端只提供合約。以下是本票（Phase 2 完成後的最終版）對 GraphQL 的變更，供前端與 #47 作者調整。

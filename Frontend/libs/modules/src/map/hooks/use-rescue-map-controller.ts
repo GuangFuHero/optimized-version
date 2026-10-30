@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BASE_LAYER_CONFIG,
   DEFAULT_RESCUE_MAP_OVERLAY_LAYERS,
+  MAP_VIEW_TAIWAN,
   OVERLAY_LAYER_CONFIG,
-  RESCUE_MAP_INITIAL_VIEW,
   RESCUE_MAP_OVERLAY_LAYER_ORDER,
   isSelectableBaseLayer,
 } from '../constants';
@@ -20,6 +20,7 @@ import type {
   RescueMapMarkerItem,
   RescueMapOverlayLayer,
   RescueMapRouteState,
+  RescueMapView,
 } from '../types';
 import { filterRescueMapMarkers } from '../utils/filter-markers';
 
@@ -72,6 +73,7 @@ interface RescueMapControllerOptions {
   /** 覆寫預設 marker 資料源。 */
   sourceMarkers?: readonly RescueMapMarkerItem[];
   closureAreas?: readonly import('../types').RescueMapClosureArea[];
+  publicZones?: readonly import('../types').RescueMapPublicZone[];
   /** 是否用地圖疊加圖層開關過濾 marker。列表頁會關閉此行為。 */
   filterMarkersByOverlayLayers?: boolean;
   /**
@@ -84,16 +86,26 @@ interface RescueMapControllerOptions {
    * 描述、需求名稱這裡看不到，再過濾一次會把命中的單濾掉。
    */
   filterMarkersBySearch?: boolean;
+  /** Where the map opens with no position of its own yet; all of Taiwan when not given. */
+  defaultView?: RescueMapView;
 }
 
 const EMPTY_ROUTE_STATE: RescueMapRouteState = {};
 const MAP_LAYER_PREFERENCE_STORAGE_KEY = 'rescue-map:layer-preferences';
 
 const FALLBACK_LAYER_PREFERENCES: Required<
-  Pick<RescueMapLayerPreferences, 'enabledOverlayLayers'>
+  Pick<RescueMapLayerPreferences, 'enabledOverlayLayers' | 'knownOverlayLayers'>
 > = {
   enabledOverlayLayers: [...DEFAULT_RESCUE_MAP_OVERLAY_LAYERS],
+  knownOverlayLayers: [...RESCUE_MAP_OVERLAY_LAYER_ORDER],
 };
+
+// Preferences saved before `knownOverlayLayers` knew only these.
+const OVERLAY_LAYERS_BEFORE_PUBLIC_ZONES: readonly RescueMapOverlayLayer[] = [
+  'closure-areas',
+  'routes',
+  'secondary-locations',
+];
 
 function normalizeOverlayLayers(
   value: unknown,
@@ -108,7 +120,9 @@ function normalizeOverlayLayers(
   return RESCUE_MAP_OVERLAY_LAYER_ORDER.filter((layer) => values.has(layer));
 }
 
-function normalizeLayerPreferences(value: unknown): RescueMapLayerPreferences {
+export function normalizeLayerPreferences(
+  value: unknown,
+): RescueMapLayerPreferences {
   if (!value || typeof value !== 'object') {
     return FALLBACK_LAYER_PREFERENCES;
   }
@@ -123,44 +137,59 @@ function normalizeLayerPreferences(value: unknown): RescueMapLayerPreferences {
     candidate.enabledOverlayLayers,
     FALLBACK_LAYER_PREFERENCES.enabledOverlayLayers,
   );
+  const knownOverlayLayers = new Set(
+    Array.isArray(candidate.knownOverlayLayers)
+      ? candidate.knownOverlayLayers
+      : OVERLAY_LAYERS_BEFORE_PUBLIC_ZONES,
+  );
 
   return {
     baseLayer,
-    enabledOverlayLayers: RESCUE_MAP_OVERLAY_LAYER_ORDER.filter((layer) =>
-      enabledOverlayLayers.includes(layer),
+    // A layer added since these were saved starts as its default: its absence from them was no one's
+    // choice.
+    enabledOverlayLayers: RESCUE_MAP_OVERLAY_LAYER_ORDER.filter(
+      (layer) =>
+        enabledOverlayLayers.includes(layer) ||
+        (!knownOverlayLayers.has(layer) &&
+          DEFAULT_RESCUE_MAP_OVERLAY_LAYERS.includes(layer)),
     ),
+    knownOverlayLayers: [...RESCUE_MAP_OVERLAY_LAYER_ORDER],
   };
 }
 
-function readLayerPreferences(): RescueMapLayerPreferences {
+export function readLayerPreferences(): RescueMapLayerPreferences {
   if (typeof window === 'undefined') {
     return FALLBACK_LAYER_PREFERENCES;
   }
 
-  const storedValue = window.localStorage.getItem(
-    MAP_LAYER_PREFERENCE_STORAGE_KEY,
-  );
-
-  if (!storedValue) {
-    return FALLBACK_LAYER_PREFERENCES;
-  }
-
+  // A browser that blocks site data throws on any touch of localStorage: the map then opens on its
+  // default layer.
   try {
-    return normalizeLayerPreferences(JSON.parse(storedValue));
+    const storedValue = window.localStorage.getItem(
+      MAP_LAYER_PREFERENCE_STORAGE_KEY,
+    );
+
+    return storedValue
+      ? normalizeLayerPreferences(JSON.parse(storedValue))
+      : FALLBACK_LAYER_PREFERENCES;
   } catch {
     return FALLBACK_LAYER_PREFERENCES;
   }
 }
 
-function writeLayerPreferences(preferences: RescueMapLayerPreferences) {
+export function writeLayerPreferences(preferences: RescueMapLayerPreferences) {
   if (typeof window === 'undefined') {
     return;
   }
 
-  window.localStorage.setItem(
-    MAP_LAYER_PREFERENCE_STORAGE_KEY,
-    JSON.stringify(preferences),
-  );
+  try {
+    window.localStorage.setItem(
+      MAP_LAYER_PREFERENCE_STORAGE_KEY,
+      JSON.stringify(preferences),
+    );
+  } catch {
+    // Blocked site data: the layers picked hold until the page closes.
+  }
 }
 
 export function useRescueMapController({
@@ -168,9 +197,11 @@ export function useRescueMapController({
   onRouteStateChange,
   sourceMarkers = RESCUE_MAP_MARKERS,
   closureAreas: sourceClosureAreas = [],
+  publicZones: sourcePublicZones = [],
   filterMarkersByOverlayLayers = true,
   filterMarkersByBbox = true,
   filterMarkersBySearch = true,
+  defaultView = MAP_VIEW_TAIWAN,
 }: RescueMapControllerOptions = {}): RescueMapControllerValue {
   // 受控（提供 onRouteStateChange）由外部網址驅動；
   // 非受控（後台）則退回內部狀態，維持既有行為。
@@ -448,11 +479,20 @@ export function useRescueMapController({
         : [],
     [enabledOverlayLayerSet, sourceClosureAreas],
   );
+  const publicZones = useMemo(
+    () =>
+      enabledOverlayLayerSet.has('public-zones') ? [...sourcePublicZones] : [],
+    [enabledOverlayLayerSet, sourcePublicZones],
+  );
   const overlayLayerMeta = useMemo(() => {
     return {
       'closure-areas': {
         itemCount: sourceClosureAreas.length,
-        sourceLabel: 'closure_areas + base_geometries',
+        sourceLabel: 'areas (hazardous_zone)',
+      },
+      'public-zones': {
+        itemCount: sourcePublicZones.length,
+        sourceLabel: 'areas (team_zone, mark_zone)',
       },
       routes: {
         itemCount: 0,
@@ -463,13 +503,13 @@ export function useRescueMapController({
         sourceLabel: 'secondary_locations + base_geometries',
       },
     } as const;
-  }, [sourceClosureAreas.length]);
+  }, [sourceClosureAreas.length, sourcePublicZones.length]);
   const initialView = useMemo(
     () => ({
-      center: state.position?.center ?? RESCUE_MAP_INITIAL_VIEW.center,
-      zoom: state.position?.zoom ?? RESCUE_MAP_INITIAL_VIEW.zoom,
+      center: state.position?.center ?? defaultView.center,
+      zoom: state.position?.zoom ?? defaultView.zoom,
     }),
-    [state.position],
+    [defaultView, state.position],
   );
 
   return {
@@ -489,6 +529,7 @@ export function useRescueMapController({
     closeLayerPanel,
     markers,
     closureAreas,
+    publicZones,
     overlayLayerMeta,
     tileLayer,
     initialView,

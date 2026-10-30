@@ -27,6 +27,7 @@ export type RescueMapDataType = 'station' | 'ticket';
 
 export type RescueMapOverlayLayer =
   | 'closure-areas'
+  | 'public-zones'
   | 'routes'
   | 'secondary-locations';
 
@@ -35,6 +36,12 @@ export type RescueMapBoundingBox = [number, number, number, number];
 export interface RescueMapViewportState {
   center: [number, number];
   zoom?: number;
+}
+
+/** A view a map opens at: a centre and a zoom. */
+export interface RescueMapView {
+  center: [number, number];
+  zoom: number;
 }
 
 export interface RescueMapRouteState {
@@ -106,13 +113,23 @@ export interface RescueMapAdministrativeArea {
   points: [number, number][];
 }
 
-export interface RescueMapClosureArea {
+/** An area drawn on the back office's 互助地圖, as the public map shows it (backend `areas`, ADR-311). */
+export interface RescueMapArea {
   id: string;
-  label: string;
-  status: string;
-  informationSource?: string | null;
+  /** Null when the back office gave it none. */
+  name: string | null;
   comment?: string | null;
   polygons: [number, number][][][];
+}
+
+/** A 危險區, on the 封閉區域 layer. */
+export type RescueMapClosureArea = RescueMapArea;
+
+/** A 責任區, or a 標示區 switched to public, on the 責任區與標示區 layer. */
+export interface RescueMapPublicZone extends RescueMapArea {
+  kind: 'team_zone' | 'mark_zone';
+  /** The teams a 責任區 is assigned to, public since ADR-311's 10-11 revision; none for a 標示區. */
+  teams: readonly string[];
 }
 
 export interface RescueMapOverlayLayerMeta {
@@ -123,7 +140,31 @@ export interface RescueMapOverlayLayerMeta {
 export interface RescueMapLayerPreferences {
   baseLayer?: RescueMapBaseLayer;
   enabledOverlayLayers?: RescueMapOverlayLayer[];
+  /** The overlay layers there were when these were saved. One added since starts as its default. */
+  knownOverlayLayers?: RescueMapOverlayLayer[];
 }
+
+/**
+ * Opt-in look for a marker: a small teardrop pin in a colour of the caller's choosing, with no
+ * label. Markers without it keep the default round pin and label pill.
+ */
+export interface RescueMapPinAppearance {
+  /** Any CSS colour. */
+  color: string;
+  /** Faded, e.g. for a closed station. */
+  dimmed?: boolean;
+  /** Outlined, enlarged and lifted above the other pins. */
+  selected?: boolean;
+}
+
+/** Opt-in hover tooltip for a marker. Plain text; it is escaped. */
+export interface RescueMapMarkerTooltip {
+  title: string;
+  subtitle?: string;
+}
+
+/** Opt-in cluster look: `solid` is a flat primary disc in a white ring (admin station map). */
+export type RescueMapClusterAppearance = 'default' | 'solid';
 
 export interface RescueMapMarkerItem {
   id: string;
@@ -184,6 +225,10 @@ export interface RescueMapMarkerItem {
   requiredVolunteers?: number;
   /** 初始已媒合志工數；使用者操作後以前臺本地狀態為準。 */
   matchedVolunteers?: number;
+  /** Draws a teardrop pin instead of the default marker. Absent: the default marker. */
+  pin?: RescueMapPinAppearance;
+  /** Shown on hover. Absent: no tooltip. */
+  tooltip?: RescueMapMarkerTooltip;
 }
 
 /**
@@ -227,6 +272,7 @@ export interface RescueMapControllerValue {
   closeLayerPanel: () => void;
   markers: RescueMapMarkerItem[];
   closureAreas: RescueMapClosureArea[];
+  publicZones: RescueMapPublicZone[];
   overlayLayerMeta: Partial<
     Record<RescueMapOverlayLayer, RescueMapOverlayLayerMeta>
   >;

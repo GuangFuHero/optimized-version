@@ -69,6 +69,8 @@ export const graphCache = cacheExchange({
   keys: {
     BriefingType: (data) =>
       typeof data.uuid === 'string' ? data.uuid : null,
+    // 地址查詢的結果沒有 id：嵌在 `reverseGeocode(lat, lng)` 底下，同一個點照樣只查一次。
+    AddressLookupType: () => null,
   },
   resolvers: {
     Query: {

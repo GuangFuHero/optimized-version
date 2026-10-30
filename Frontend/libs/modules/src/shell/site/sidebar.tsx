@@ -20,6 +20,7 @@ import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import { BACK_OFFICE_HREF, type SitePortalEntry } from '../../role-request';
 import { openHelpRequest } from '../../ticket/help-request/open-help-request';
 import { BRIEFING_HREF } from '../../briefing/href';
+import { SiteBrandName } from './brand-name';
 import { PageHelpIcon } from './page-help';
 
 import { GuangFuBrandIcon } from '../../brand';
@@ -127,8 +128,9 @@ function SiteSidebarNav({
           sx={{ alignItems: 'center', gap: '10px', pb: '16px' }}
         >
           <GuangFuBrandIcon width={38} height={26} />
-          <Typography
-            noWrap
+          {/* The phone's top bar has no room for the name, so the drawer has it (`site-shell.jsx:722`). */}
+          {/* Two lines, then the ellipsis: a phone shows no `title`, so a cut name could not be read. */}
+          <SiteBrandName
             sx={{
               flex: 1,
               minWidth: 0,
@@ -136,10 +138,14 @@ function SiteSidebarNav({
               lineHeight: '28px',
               fontWeight: 700,
               color: color.fg.neutral.default,
+              whiteSpace: 'normal',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              // A long run of Latin letters or digits has nowhere to break, so it could not wrap.
+              overflowWrap: 'anywhere',
             }}
-          >
-            島嶼守望
-          </Typography>
+          />
           <IconButton
             aria-label="關閉選單"
             onClick={onClose}
