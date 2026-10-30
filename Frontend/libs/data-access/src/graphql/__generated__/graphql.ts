@@ -1022,6 +1022,8 @@ export type Query = {
   teamZone?: Maybe<TeamZoneType>;
   teamZones: TeamZoneConnection;
   ticket?: Maybe<TicketType>;
+  /** Whether ticket(uuid) gives this ticket, and if not, whether it was deleted or never was, so a share link can say which. Ask it beside ticket(uuid). The state alone, nothing of the ticket (ADR-444) */
+  ticketAvailability: TicketAvailability;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
@@ -1155,6 +1157,10 @@ export type QueryTeamZonesArgs = {
 export type QueryTicketArgs = {
   uuid: Scalars['UUID']['input'];
   zoom?: InputMaybe<Scalars['Float']['input']>;
+};
+
+export type QueryTicketAvailabilityArgs = {
+  uuid: Scalars['UUID']['input'];
 };
 
 export type QueryTicketPropertyConfigsArgs = {
@@ -1667,6 +1673,14 @@ export type TicketAuditEntryType = {
   status: Scalars['String']['output'];
 };
 
+export const TicketAvailability = {
+  Available: 'available',
+  Deleted: 'deleted',
+  NotFound: 'not_found',
+} as const;
+
+export type TicketAvailability =
+  (typeof TicketAvailability)[keyof typeof TicketAvailability];
 export type TicketConnection = {
   __typename?: 'TicketConnection';
   items: Array<TicketType>;
@@ -2584,6 +2598,27 @@ export type GetTicketQuery = {
           { __typename?: 'TicketTaskType' } & {
             ' $fragmentRefs'?: {
               TicketTaskFieldsFragment: TicketTaskFieldsFragment;
+              TicketNeedFieldsFragment: TicketNeedFieldsFragment;
+            };
+          }
+        >;
+      } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } })
+    | null;
+};
+
+export type GetLinkedTicketQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type GetLinkedTicketQuery = {
+  __typename?: 'Query';
+  ticketAvailability: TicketAvailability;
+  ticket?:
+    | ({
+        __typename?: 'TicketType';
+        tasks: Array<
+          { __typename?: 'TicketTaskType' } & {
+            ' $fragmentRefs'?: {
               TicketNeedFieldsFragment: TicketNeedFieldsFragment;
             };
           }
@@ -5371,6 +5406,142 @@ export const GetTicketDocument = {
     },
   ],
 } as unknown as DocumentNode<GetTicketQuery, GetTicketQueryVariables>;
+export const GetLinkedTicketDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetLinkedTicket' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'ticket' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'TicketFields' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'tasks' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'FragmentSpread',
+                        name: { kind: 'Name', value: 'TicketNeedFields' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'ticketAvailability' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketNeedFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketTaskType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'myAssignment' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  GetLinkedTicketQuery,
+  GetLinkedTicketQueryVariables
+>;
 export const GetTicketTasksDocument = {
   kind: 'Document',
   definitions: [

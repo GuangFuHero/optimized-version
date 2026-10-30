@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box } from '@mui/material';
@@ -16,10 +16,13 @@ import {
   NeedClaimProvider,
   PlaceHereAction,
   PointShareDrawer,
+  shouldLookUpLinkedTicket,
+  SITE_FALLBACK_DATA_TYPE,
   SiteMapControls,
   syncDocumentMetadata,
   useAuthSession,
   useCreatedTicketMarker,
+  useLinkedTicketLookup,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   useSiteMapRouteState,
@@ -29,6 +32,7 @@ import {
   type ReloadedTicket,
   type RescueMapControllerValue,
   type RescueMapDraftPoint,
+  type RescueMapGoneTicket,
   type RescueMapMarkerItem,
   type SiteRouteState,
 } from '@rescue-frontend/modules';
@@ -146,16 +150,31 @@ function SiteMapViewportDataLayer({
   const [buildingTicketMarker, setBuildingTicketMarker] =
     useState<RescueMapMarkerItem | null>(null);
 
+  // A link to a ticket the view never fetched — past its 200, outside it, left out by a filter, or
+  // not there at all — asks the backend (ADR-444): the ticket, or why there is none.
+  const lookUpLinkedTicket = useLinkedTicketLookup();
+  const [linkedTicketMarker, setLinkedTicketMarker] =
+    useState<RescueMapMarkerItem | null>(null);
+  const [goneTicket, setGoneTicket] = useState<RescueMapGoneTicket | null>(
+    null,
+  );
+  // The last selection seen in the view. One that drops out of it afterwards was panned or filtered
+  // away, not deleted, and is let go without asking.
+  const seenSelectionRef = useRef<string | undefined>(undefined);
+
   // Let go once another ticket is opened, or none — judged when the selection moves, not when the
   // ticket is set: the selection follows it a render later.
   useEffect(() => {
-    setBuildingTicketMarker((current) =>
-      current && current.id !== selectedMarkerId ? null : current,
-    );
+    const letGo = <T extends { id: string }>(current: T | null) =>
+      current && current.id !== selectedMarkerId ? null : current;
+
+    setBuildingTicketMarker(letGo);
+    setLinkedTicketMarker(letGo);
+    setGoneTicket(letGo);
   }, [selectedMarkerId]);
 
   // A ticket made here stays on the map until the view fetches it too; from then on the fetched
-  // one, being fresher, is the one shown. So does one opened from a building, while open.
+  // one, being fresher, is the one shown. So does one opened from a building or a link, while open.
   const visibleMarkers = useMemo(
     () =>
       dedupeMarkersById([
@@ -163,12 +182,14 @@ function SiteMapViewportDataLayer({
         ...[
           ...createdMarkers,
           ...(buildingTicketMarker ? [buildingTicketMarker] : []),
+          ...(linkedTicketMarker ? [linkedTicketMarker] : []),
         ].filter((marker) => !goneTicketIds.includes(marker.id)),
       ]),
     [
       buildingTicketMarker,
       createdMarkers,
       goneTicketIds,
+      linkedTicketMarker,
       liveDataSnapshot.markers,
     ],
   );
@@ -223,7 +244,9 @@ function SiteMapViewportDataLayer({
   }, [metadataTarget]);
 
   useEffect(() => {
-    if (!baseRouteState.selectedMarkerId) {
+    const selectedId = baseRouteState.selectedMarkerId;
+
+    if (!selectedId) {
       return;
     }
 
@@ -232,23 +255,58 @@ function SiteMapViewportDataLayer({
     }
 
     // A guest's location cell is selectable too, and is not a marker of its own.
-    const hasSelectedMarker = hasRescueMapDetailItem(
-      visibleMarkers,
-      baseRouteState.selectedMarkerId,
-    );
-
-    if (hasSelectedMarker) {
+    if (hasRescueMapDetailItem(visibleMarkers, selectedId)) {
+      seenSelectionRef.current = selectedId;
       return;
     }
 
-    onReplaceRouteState({
-      ...mergedRouteState,
-      selectedMarkerId: undefined,
+    if (goneTicket?.id === selectedId) {
+      return;
+    }
+
+    const letGo = () =>
+      onReplaceRouteState({
+        ...mergedRouteState,
+        selectedMarkerId: undefined,
+      });
+
+    if (
+      !shouldLookUpLinkedTicket({
+        selectedId,
+        dataType: baseRouteState.dataType ?? SITE_FALLBACK_DATA_TYPE,
+        seenLoaded: seenSelectionRef.current === selectedId,
+      })
+    ) {
+      letGo();
+      return;
+    }
+
+    let cancelled = false;
+
+    void lookUpLinkedTicket(selectedId).then((linked) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (linked.kind === 'ticket') {
+        setLinkedTicketMarker(linked.marker);
+      } else if (linked.kind === 'gone') {
+        setGoneTicket(linked.ticket);
+      } else {
+        letGo();
+      }
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
+    baseRouteState.dataType,
     baseRouteState.selectedMarkerId,
+    goneTicket,
     liveDataSnapshot.hasFetchedOnce,
     liveDataSnapshot.isFetching,
+    lookUpLinkedTicket,
     mergedRouteState,
     onReplaceRouteState,
     visibleMarkers,
@@ -337,6 +395,7 @@ function SiteMapViewportDataLayer({
             ticketDetailOverrides={createTicketDetailOverrides}
             stationDetailSecondaryAction={stationDetailSecondaryAction}
             stationLayout="site"
+            goneTicket={goneTicket}
             viewMemoryKey="site"
           />
         </Box>

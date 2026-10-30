@@ -158,6 +158,18 @@ query GetTicket($uuid: UUID!) {
   }
 }
 
+# A ticket a link names that no loaded page holds (modules/map/site/linked-ticket): the ticket as a
+# list row has it, and, when it is null, whether it was deleted or never was (ADR-444).
+query GetLinkedTicket($uuid: UUID!) {
+  ticket(uuid: $uuid) {
+    ...TicketFields
+    tasks {
+      ...TicketNeedFields
+    }
+  }
+  ticketAvailability(uuid: $uuid)
+}
+
 query GetTicketTasks(
   $ticketUuid: String!
   $status: String

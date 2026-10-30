@@ -49,6 +49,7 @@ import type {
   RescueMapControllerValue,
   RescueMapDetailItem,
   RescueMapDraftPoint,
+  RescueMapGoneTicket,
   RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapPublicZone,
@@ -230,6 +231,11 @@ interface MapProps {
   ) => StationDetailActionProps | undefined;
   /** 站點詳情的版面：前台傳 `'site'`；後台不傳，維持後台的版面。 */
   stationLayout?: RescueMapStationLayout;
+  /**
+   * A linked ticket the caller found gone (ADR-444): selectable like a marker, its drawer saying it
+   * was deleted or never was. The map does not look it up itself.
+   */
+  goneTicket?: RescueMapGoneTicket | null;
   /** 是否顯示比例尺。 */
   showScale?: boolean;
   /** 點擊地圖空白處時回傳經緯度。 */
@@ -286,6 +292,7 @@ export const Map = memo(function Map({
   ticketDetailOverrides,
   stationDetailSecondaryAction,
   stationLayout,
+  goneTicket,
   showScale = false,
   onMapClick,
   previewMarker,
@@ -368,8 +375,15 @@ export const Map = memo(function Map({
         (marker) => marker.id === controller.selectedMarkerId,
       ) ??
       locationCells.find((cell) => cell.id === controller.selectedMarkerId) ??
-      null,
-    [controller.markers, controller.selectedMarkerId, locationCells],
+      (goneTicket && goneTicket.id === controller.selectedMarkerId
+        ? goneTicket
+        : null),
+    [
+      controller.markers,
+      controller.selectedMarkerId,
+      goneTicket,
+      locationCells,
+    ],
   );
   const isTicketTone = controller.dataType === 'ticket';
   const globalStyles = useMemo(
