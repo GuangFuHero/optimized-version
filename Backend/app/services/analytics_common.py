@@ -45,7 +45,7 @@ class AnalyticsInputError(ValueError):
 
 
 class AnalyticsTimeoutError(StatementTimeoutError, AnalyticsInputError):
-    """A trend query that ran past the statement ceiling; the endpoint turns it into HTTP 400."""
+    """A volunteer query that ran past the statement ceiling; the endpoint turns it into HTTP 400."""
 
 
 def local_bounds(
