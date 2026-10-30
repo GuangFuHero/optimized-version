@@ -421,6 +421,13 @@ export function useCurrentDisaster(options: AdminQueryOptions = {}) {
   return useQuery({ ...currentDisasterQuery(), enabled: options.enabled });
 }
 
+/**
+ * How long what waits on the event gives it before going on as if it could not be read: a map opens
+ * on all of Taiwan, the site's name stays the platform's. A backend that does not answer would
+ * otherwise hold them, on the patchy networks they are most needed on.
+ */
+export const CURRENT_DISASTER_WAIT_MS = 3000;
+
 export function useCreateTicket() {
   const queryClient = useQueryClient();
   return useMutation({

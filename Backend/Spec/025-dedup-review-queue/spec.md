@@ -46,7 +46,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 - **不做擁有者與志工通知**（屬合併票，ADR-345）。
 - **不改演算法**，不改 `app/dedup_engine/`。
 - **不做慢層**（背景掃描、群組）。API 以配對卡為單位，`duplicate_group_uuid` 原樣回傳。
-- **批次匯入不去重**（ADR-299 不變）。
+- **不改批次匯入**。它從 ADR-398（`Spec/015`）起也跑快層；確認仍要建立的列，配對卡和提醒跟單筆建立一樣進這個佇列。
 - **不處理前端**：交接說明寫在 plan。
 
 ---

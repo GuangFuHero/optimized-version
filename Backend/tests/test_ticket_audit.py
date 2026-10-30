@@ -249,7 +249,6 @@ async def _add_need(db, actor, ticket_uuid, need_uuid):
         task_name="飲用水",
         task_description=None,
         quantity=2,
-        source="user",
         route_uuid=None,
     )
 

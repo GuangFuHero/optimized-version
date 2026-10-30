@@ -727,3 +727,13 @@ async def test_the_seed_fills_a_missing_view_and_leaves_what_someone_set(seeded)
 
     assert filled == [("真的災害", None, 23.67, 121.418, 14)]
     assert kept == [("真的災害", None, 24.0, 121.6, 12)]
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_the_seed_marks_its_official_stations_by_source(seeded):
+    """ADR-394: `source = 'official'` defines official, so the `official` filter finds the seed's 17."""
+    rows = await _fetch(
+        _CASE_DSN, "SELECT source, is_official, count(*) FROM stations GROUP BY 1, 2 ORDER BY 1, 2"
+    )
+    official = {(source, flag): count for source, flag, count in rows if source == "official" or flag}
+    assert official == {("official", True): 17}

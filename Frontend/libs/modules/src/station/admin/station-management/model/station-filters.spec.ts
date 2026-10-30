@@ -7,6 +7,7 @@ import {
   EMPTY_FILTERS,
   establishedIn,
   parseStationFilters,
+  stationFiltersKey,
   toServerVariables,
   writeStationFilters,
 } from './station-filters';
@@ -68,6 +69,18 @@ describe('toServerVariables', () => {
       hasPendingSuggestions: true,
       reviewableOnly: true,
     });
+  });
+});
+
+describe('stationFiltersKey', () => {
+  it('leaves out a keyword the stations query ignores', () => {
+    const typed = (q: string) =>
+      stationFiltersKey({ ...EMPTY_FILTERS, type: 'water', q });
+
+    expect(typed('光')).toBe('type=water');
+    expect(typed('光'.repeat(51))).toBe('type=water');
+    expect(typed(' 光復 ')).toBe(typed('光復'));
+    expect(typed('光復')).not.toBe('type=water');
   });
 });
 

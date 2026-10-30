@@ -36,6 +36,7 @@ from app.services.geo_validation import (
 )
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
+from app.services.source import source_for
 
 # `station_properties.property_name` values whose changes are operational status updates
 # worth notifying Gov/NGO about (PRD §3 `resource_station_updated`).
@@ -110,7 +111,6 @@ async def validate_station(
     op_hour: str | None,
     level: int,
     comment: str | None,
-    source: str,
     visibility: str,
     contact_name: str | None = None,
     contact_email: str | None = None,
@@ -119,7 +119,10 @@ async def validate_station(
     supply_status: str | None = None,
     secondary_location: dict | None = None,
 ) -> StationFields:
-    """Checkpoint 1 plus every input check `create_station` makes, without writing anything."""
+    """Checkpoint 1 plus every input check `create_station` makes, without writing anything.
+
+    `source` is not an argument: the identity making the station decides it.
+    """
     await require_scope(actor, Perm.STATION_ADD, db)
     validate_point(geometry)
     contacts = normalize_contact_fields(
@@ -139,7 +142,7 @@ async def validate_station(
             "op_hour": op_hour,
             "level": level,
             "comment": comment,
-            "source": source,
+            "source": source_for(actor),
             "visibility": visibility,
             # Spread the normalized values, never the raw arguments: the length check ran
             # against the stripped strings, so storing the originals is what round 3 of the
@@ -212,7 +215,6 @@ async def create_station(
     op_hour: str | None,
     level: int,
     comment: str | None,
-    source: str,
     visibility: str,
     contact_name: str | None = None,
     contact_email: str | None = None,
@@ -224,8 +226,9 @@ async def create_station(
     """Create a station (checkpoint 1 only — a new station has no prior owner to scope-check).
 
     Validate, insert, one commit that makes the station + address pair atomic, then notify.
-    Batch import calls this; the interactive GraphQL path goes through
-    `dedup_submission.submit_new_station`, which adds a duplicate check.
+    No duplicate check, and nothing in `app/` calls it any more: the GraphQL path goes through
+    `dedup_submission.submit_new_station`, and batch import through `bulk_import._create_station`
+    (ADR-398), both of which run the same two steps around one.
     """
     actor_uid = actor.uuid
     fields = await validate_station(
@@ -238,7 +241,6 @@ async def create_station(
         op_hour=op_hour,
         level=level,
         comment=comment,
-        source=source,
         visibility=visibility,
         contact_name=contact_name,
         contact_email=contact_email,
