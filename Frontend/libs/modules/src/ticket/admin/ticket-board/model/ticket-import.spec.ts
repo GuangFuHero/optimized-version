@@ -4,6 +4,7 @@ import {
   IMPORT_NEED_TYPES,
   pastedCsvFile,
   ticketImportCaption,
+  ticketImportSummaryLine,
 } from './ticket-import';
 import { NEED_TYPES } from './ticket-row';
 
@@ -44,5 +45,21 @@ describe('pastedCsvFile', () => {
 
   it('is nothing for blank text', () => {
     expect(pastedCsvFile('  \n ')).toBeNull();
+  });
+});
+
+describe('ticketImportSummaryLine', () => {
+  const summary = { create: 2, update: 0, suspected: 0, failedLines: 1 };
+
+  it('adds up the preview under the dialog', () => {
+    expect(ticketImportSummaryLine(summary, 3)).toBe(
+      '新增 2 列・更新 0 列・失敗 1 列（共 3 列）',
+    );
+  });
+
+  it('counts the rows held as suspected duplicates apart, as they are not created', () => {
+    expect(
+      ticketImportSummaryLine({ ...summary, create: 1, suspected: 2 }, 4),
+    ).toBe('新增 1 列・更新 0 列・疑似重複 2 列・失敗 1 列（共 4 列）');
   });
 });

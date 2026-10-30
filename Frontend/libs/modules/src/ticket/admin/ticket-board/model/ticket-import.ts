@@ -33,3 +33,22 @@ export function pastedCsvFile(text: string): File | null {
   if (!text.trim()) return null;
   return new File([text], 'pasted.csv', { type: 'text/csv' });
 }
+
+/**
+ * The line under the dialog once a file is read. Rows held as suspected duplicates are not created
+ * (ADR-398), so they count neither as new nor as updates, and the line names them apart.
+ */
+export function ticketImportSummaryLine(
+  summary: {
+    create: number;
+    update: number;
+    suspected: number;
+    failedLines: number;
+  },
+  rowCount: number,
+): string {
+  const parts = [`新增 ${summary.create} 列`, `更新 ${summary.update} 列`];
+  if (summary.suspected > 0) parts.push(`疑似重複 ${summary.suspected} 列`);
+  parts.push(`失敗 ${summary.failedLines} 列`);
+  return `${parts.join('・')}（共 ${rowCount} 列）`;
+}

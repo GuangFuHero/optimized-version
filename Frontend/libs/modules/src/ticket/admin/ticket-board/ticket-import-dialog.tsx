@@ -41,6 +41,7 @@ import {
   IMPORT_NEED_TYPES,
   pastedCsvFile,
   ticketImportCaption,
+  ticketImportSummaryLine,
 } from './model/ticket-import';
 import { needTypeLabel, type NeedType } from './model/ticket-row';
 
@@ -153,16 +154,19 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
           setResult(data);
           // The backend counts rows, and a ticket with three needs is three rows: 列, not 張.
           toast.success(
-            data.updated > 0
-              ? `已匯入：新增 ${data.created} 列、更新 ${data.updated} 列`
-              : `已匯入：新增 ${data.created} 列`,
+            `${
+              data.updated > 0
+                ? `已匯入：新增 ${data.created} 列、更新 ${data.updated} 列`
+                : `已匯入：新增 ${data.created} 列`
+            }${data.suspected > 0 ? `，${data.suspected} 列疑似重複未建立` : ''}`,
           );
         },
       },
     );
   };
 
-  // Ticket imports aren't compared for duplicates yet (DEDUP-006): no row is held, so none is filed.
+  // The backend holds suspected rows (ADR-398), but this dialog has no 仍要建立 step yet (DEDUP-006):
+  // none is filed, so every suspected row stays uncreated.
   const summary = preview ? importSummary(preview, 0) : null;
   const typeLabel = taskType ? needTypeLabel(taskType) : '';
   const pickFirst = taskType ? undefined : '先選這份檔案是哪一種需求';
@@ -206,7 +210,25 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
           createdUnit="列"
           showUpdated
           partialNote="任務單已寫入，但這一列的需求或需求欄位沒有寫完。請打開這些任務單核對需求與欄位後補齊。"
-        />
+          badges={
+            result.suspected > 0 ? (
+              <Badge tone="warning">疑似重複未建立 {result.suspected} 列</Badge>
+            ) : null
+          }
+          reportLabel="下載沒匯入的列"
+        >
+          {result.dedup_checked === false ? (
+            <Callout tone="warning">
+              這次沒有比對重複，新增的任務單可能跟現有的重複。
+            </Callout>
+          ) : null}
+          {result.suspected > 0 ? (
+            <Callout tone="warning">
+              {result.suspected}{' '}
+              列疑似重複，沒有建立，已放進報告檔。確認不是重複的話，請用「新增任務」建立。
+            </Callout>
+          ) : null}
+        </ImportResult>
       ) : (
         <>
           <Box
@@ -243,7 +265,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
                 一個檔案只放一種需求；一列是一張單的一筆需求。同一張單有好幾筆需求，就寫好幾列、標題和電話相同。
               </Muted>
               <Callout tone="info">
-                匯入的列還不會檢查是否與現有任務單重複，匯入前請先確認。
+                新的列會先跟現有的任務單比對：疑似重複的列不會建立，會放進報告檔。任務單匯入還不能逐列選「仍要建立」，確認不是重複的話，請用「新增任務」建立。
               </Callout>
             </Step>
 
@@ -322,12 +344,38 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
                     {summary.update > 0 ? (
                       <Badge tone="info">更新 {summary.update} 列</Badge>
                     ) : null}
+                    {summary.suspected > 0 ? (
+                      <Badge tone="warning">
+                        疑似重複 {summary.suspected} 列
+                      </Badge>
+                    ) : null}
                     {summary.failedLines > 0 ? (
                       <Badge tone="danger">失敗 {summary.failedLines} 列</Badge>
                     ) : null}
                   </>
                 }
               >
+                {preview.dedup_checked === false ? (
+                  <Callout tone="warning">
+                    這次沒有比對重複：比對服務沒有回應。新增的列可能跟現有的任務單重複。
+                    <Box sx={{ mt: '8px' }}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => previewFile(file)}
+                      >
+                        重新試算
+                      </Button>
+                    </Box>
+                  </Callout>
+                ) : null}
+                {summary.suspected > 0 ? (
+                  <Callout tone="warning">
+                    {summary.suspected}{' '}
+                    列疑似跟現有的任務單重複，不會建立，匯入後會放進報告檔。
+                  </Callout>
+                ) : null}
                 {preview.errors.length > 0 ? (
                   <ErrorList errors={preview.errors} />
                 ) : null}
@@ -350,7 +398,7 @@ export function TicketImportDialog({ onClose }: { onClose: () => void }) {
                 : commitImport.isPending
                   ? '匯入中…'
                   : summary
-                    ? `新增 ${summary.create} 列・更新 ${summary.update} 列・失敗 ${summary.failedLines} 列（共 ${preview?.row_count ?? 0} 列）`
+                    ? ticketImportSummaryLine(summary, preview?.row_count ?? 0)
                     : ''}
             </Muted>
             <Button variant="ghost" onClick={onClose} disabled={locked}>
