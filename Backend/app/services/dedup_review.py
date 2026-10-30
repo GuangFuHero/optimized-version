@@ -1,4 +1,4 @@
-"""The AI 重複審核 queue (Spec 025): read the pair cards the dedup layers leave behind, and decide them.
+"""The 重複審核 queue (Spec 025): read the pair cards the dedup layers leave behind, and decide them.
 
 `ai_duplicate.view` reads cards and their events; `ai_duplicate.review` confirms or rejects one and
 undoes one's own verdict; `ai_duplicate.revoke` undoes anyone's (ADR-342). They govern the dedup
@@ -9,8 +9,8 @@ verdict never touches the paired entities (ADR-341). Submitting new work goes th
 
 import logging
 import uuid
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
@@ -88,6 +88,8 @@ class PairItem:
     pair: DuplicatePair
     low: EntitySummary
     high: EntitySummary
+    # The nickname of `pair.reviewed_by`, so the page can say who decided (ADR-441).
+    reviewed_by_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -103,12 +105,14 @@ class PairDetail:
     """One card, its sides, every event recorded on it (oldest first) and its two whole tickets.
 
     `tickets` is (low, high), None on a side whose ticket is cancelled or deleted, and None as a
-    whole for a station card (Spec 028 §2, ADR-373).
+    whole for a station card (Spec 028 §2, ADR-373). `actor_names` maps each event actor's uuid
+    to their nickname (ADR-441).
     """
 
     item: PairItem
     events: list[DedupAuditEvent]
     tickets: tuple[TicketForReview | None, TicketForReview | None] | None = None
+    actor_names: Mapping[str, str] = field(default_factory=dict)
 
 
 def _checked(values: Sequence[str] | None, allowed: Sequence[str], name: str) -> list[str] | None:
@@ -172,10 +176,12 @@ async def get_pair(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID) -> Pa
 async def pair_detail(db: AsyncSession, pair: DuplicatePair) -> PairDetail:
     """A card's sides, events and whole tickets, as `get_pair` and a resolve return it."""
     (item,) = await _with_sides(db, [pair])
+    events = await dedup_audit_event_repository.for_pair(db, pair.uuid)
     return PairDetail(
         item=item,
-        events=await dedup_audit_event_repository.for_pair(db, pair.uuid),
+        events=events,
         tickets=await tickets_for_pair(db, pair),
+        actor_names=await _nicknames(db, (event.actor_uuid for event in events)),
     )
 
 
@@ -198,14 +204,25 @@ async def _with_sides(db: AsyncSession, pairs: Sequence[DuplicatePair]) -> list[
     for kind, uuids in wanted.items():
         found = await duplicate_pair_repository.entity_summaries(db, kind, uuids)
         rows.update({(kind, key): row for key, row in found.items()})
+    names = await _nicknames(db, (pair.reviewed_by for pair in pairs))
     return [
         PairItem(
             pair=pair,
             low=_summary(rows.get((pair.entity_kind, str(pair.low_uuid))), pair.low_uuid),
             high=_summary(rows.get((pair.entity_kind, str(pair.high_uuid))), pair.high_uuid),
+            reviewed_by_name=names.get(str(pair.reviewed_by)) if pair.reviewed_by else None,
         )
         for pair in pairs
     ]
+
+
+async def _nicknames(db: AsyncSession, user_uuids: Iterable) -> dict[str, str]:
+    """Each account's nickname (`users.name`) by uuid string, in one query; none asked, none run."""
+    wanted = {str(u) for u in user_uuids if u is not None}
+    if not wanted:
+        return {}
+    rows = await db.execute(select(User.uuid, User.name).where(User.uuid.in_(wanted)))
+    return {str(uuid_): name for uuid_, name in rows.all()}
 
 
 def _summary(row: dict | None, entity_uuid) -> EntitySummary:
@@ -367,7 +384,7 @@ async def notify_new_cards(db: AsyncSession, *, count: int, actor: User, actor_u
             db,
             event_type="dedup_review_pending",
             title=f"疑似重複待審核：{count} 筆",
-            body=f"有 {count} 筆照樣建立的資料和既有的項目疑似重複，請到「AI 重複審核」處理。",
+            body=f"有 {count} 筆照樣建立的資料和既有的項目疑似重複，請到「重複審核」處理。",
             priority="medium",
             actor_uuid=actor_uuid,
             ref_type="dedup_review",

@@ -97,6 +97,15 @@ commit 前看 `git diff --cached --stat`）。
   data_auditor 撤銷別人的被擋 → super_admin 撤銷 → 回到清單 → reject。
 - 驗證報告寫進本資料夾的 `verification.md`。完成後回報，**不自己開 PR**。
 
+## Task 10：名字與頁面名稱（ADR-441、442）
+
+DEDUP-008 交給 Jarvis 前對照時發現：前端查不到審核者是誰，通知還寫「AI 重複審核」。和 Spec 028 的 Task 11 同一張 PR。
+
+- [x] `dedup_review.py::_nicknames`：卡的 `reviewed_by_name`、事件的 `actor_name`，一頁只多一條 query
+- [x] 通知內文、REST 分組標籤拿掉「AI」
+- [x] 測試：事件有人／沒人、已審／待審的卡、query 數不隨卡數增加、REST 形狀、通知文字
+- [ ] 合約檔、全套件、Docker 從零驗證
+
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
 `Frontend/libs/data-access` 的 OpenAPI 型別已在本 PR 重新產生（`pnpm schemas:generate`，commit `695cb6676`；Frontend CI 會比對這份檔案）。畫面本身仍是前端的工作。
@@ -115,4 +124,5 @@ commit 前看 `git diff --cached --stat`）。
   `ai_duplicate.revoke`（只有 super_admin）。導覽列入口依 `ai_duplicate.view` 顯示（ADMIN-019）。
 - 撤銷按鈕：卡的 `reviewed_by` 是自己 → 有 review 就顯示；是別人 → 需要 `ai_duplicate.revoke`。
 - 通知：新類型 `dedup_review_pending`，`ref_type = "dedup_review"`、`ref_uuid = null`，點了應該開審核頁。舊的 `dedup_flag_ticket`／`dedup_flag_station` 已移除（從來沒發出過）。
+- 2026-10-29（Jarvis）：卡多 `reviewed_by_name`、事件多 `actor_name`，都是暱稱（ADR-441）。後台目前沒有通知收件匣（`shell/admin/header.tsx` 的鈴鐺沒有動作），點通知開審核頁要等那張票。
 - 合併、取代、逐欄位選值本次不提供（ADR-336）。

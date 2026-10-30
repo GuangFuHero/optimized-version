@@ -7,6 +7,8 @@ detail in test_dedup_review_api.py.
 
 import pytest
 
+from app.models.secondary_location import SecondaryLocation
+from app.models.ticket_task import TicketTask
 from tests.test_dedup_review_api import URL, _card, _headers
 
 pytestmark = pytest.mark.asyncio
@@ -39,3 +41,33 @@ async def test_the_listing_has_no_tickets(client, db_session, redis):
     response = await client.get(URL, headers=headers)
 
     assert "tickets" not in response.json()["items"][0]
+
+
+async def test_the_detail_says_where_each_ticket_is(client, db_session, redis):
+    """Each ticket's place goes out as `location` (ADR-440); a ticket with none sends null."""
+    card = await _card(db_session)
+    ticket_uuid = (await db_session.get(TicketTask, card["low"])).ticket_uuid
+    db_session.add(
+        SecondaryLocation(
+            geometry_uuid=ticket_uuid,
+            location_type="address",
+            full_address="花蓮縣光復鄉中正路45號",
+            floor="2F",
+            landmark_note="紅色鐵門",
+        )
+    )
+    await db_session.commit()
+    headers = await _headers(db_session, redis, "data_auditor")
+
+    response = await client.get(f"{URL}/{card['pair']}", headers=headers)
+
+    tickets = response.json()["tickets"]
+    assert tickets["low"]["location"] == {
+        "location_type": "address",
+        "full_address": "花蓮縣光復鄉中正路45號",
+        "building_section": None,
+        "floor": "2F",
+        "room": None,
+        "pole_id": None,
+    }
+    assert tickets["high"]["location"] is None

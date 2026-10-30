@@ -118,6 +118,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `title`、`description`、`priority`、`task_type`、`disaster_types`、`person_trapped_reported`、`immediate_danger_reported` | 單的欄位 |
 | `contact_name`、`contact_phone`、`contact_email` | 聯絡人。需要 `ai_duplicate.view`，審核員要能比對 |
 | `longitude`、`latitude` | 單的點 |
+| `location` | 單的地點（ADR-440）：`location_type`、`full_address`、`building_section`、`floor`、`room`、`pole_id`；沒有時為 `null`。權限同聯絡人，算進 `version`，處理時不能改 |
 | `status`、`audit_status` | 唯讀 |
 | `created_by`、`created_at` | 開單者 |
 | `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`recruiting_stopped`、`properties` |

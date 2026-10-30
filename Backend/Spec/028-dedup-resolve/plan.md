@@ -215,6 +215,15 @@ jujuyuzu 2026-10-25 的 review。
 - [x] 配對卡狀態改名 `confirmed_duplicate`／`not_duplicate`（ADR-391，Chi 提議；migration `a8d3e6b1c207`），全套件 **2932 passed**，Docker 第四次從零驗證通過（`dff0b43a4`）
 - [ ] 回覆 review 與 Chi 的留言
 
+## Task 11：審核頁讀得到地址（ADR-440）
+
+DEDUP-008 交給 Jarvis 前對照 mock 時發現：選主要單要看地址，但詳情只有座標。和 Spec 025 的 Task 10 同一張 PR。
+
+- [x] `dedup_review_tickets.py`：`LocationForReview`，一條 query 讀兩張單的地點；`location` 自動算進 `version`
+- [x] schema `LocationForReviewResponse`、`TicketForReviewResponse.location`
+- [x] 測試：地址到樓室、電線桿、沒有地點、改地點 `version` 會動、改地標 `version` 不動、query 數不變、REST 形狀
+- [ ] 合約檔、全套件、Docker 從零驗證
+
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
 | 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |
@@ -224,6 +233,7 @@ jujuyuzu 2026-10-25 的 review。
 | POST | `/duplicate-pairs/{uuid}/revoke` | 不變 | 不變 | 多一種 409：處理過的卡不能撤銷 |
 
 - 審核頁先讀 detail，用 `tickets.low`／`tickets.high` 並排顯示；送出 resolve 時把兩邊的 `version` 原樣帶回。
+- 2026-10-29（Jarvis）：每張單多一個 `location`（ADR-440），主要單依審核員選的地址決定。地址改了 `version` 會變。
 - 收到 409（`version` 對不上）→ 重新讀 detail，請審核員再比對一次。
 - request 要列出兩張單**每一項**需求、`keep`／`move` 的每一個細項（spec §3.3）。漏列會 422。
 - 「不是重複」仍用 `/reject`。

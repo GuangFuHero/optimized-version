@@ -18,6 +18,7 @@ from app.models.dedup import DuplicatePair
 from app.models.geo import Station
 from app.models.photo import Photo
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.services import dedup_review
@@ -294,11 +295,13 @@ async def _change(db, ids, change: str) -> None:
         )
     elif change == "new_item":
         db.add(TaskProperty(task_uuid=ids["a1"], property_name="新品項", property_value="1"))
+    elif change == "location":
+        db.add(SecondaryLocation(geometry_uuid=ids["a"], location_type="address", full_address="中正路45號"))
     await db.flush()
 
 
 @pytest.mark.parametrize(
-    "change", ["ticket_field", "contact", "need_field", "item_field", "new_need", "new_item"]
+    "change", ["ticket_field", "contact", "need_field", "item_field", "new_need", "new_item", "location"]
 )
 async def test_the_version_moves_when_what_the_reviewer_compared_changes(db, change):
     """An edit to the ticket, a need or an item, or a new need or item, gives A a new version; B's stays."""
@@ -420,3 +423,86 @@ async def test_a_soft_deleted_answer_is_left_out(db):
     detail = await dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
 
     assert _by_uuid(detail.tickets)[str(s["b"].uuid)].disaster_details == {"utility_hazards": ("gas",)}
+
+
+# --- where the ticket is (ADR-440) ---------------------------------------------------------
+
+
+async def _location(db, ticket, **values) -> SecondaryLocation:
+    location = SecondaryLocation(geometry_uuid=ticket.uuid, **{"location_type": "address", **values})
+    db.add(location)
+    await db.flush()
+    return location
+
+
+async def test_the_detail_carries_where_each_ticket_is(db):
+    """The address the reviewer picks the ticket to keep by, down to the room; a pole by its id."""
+    s = await _setup(db)
+    await _location(
+        db,
+        s["a"],
+        full_address="花蓮縣光復鄉中正路45號",
+        building_section="A棟",
+        floor="2F",
+        room="201",
+        landmark_note="紅色鐵門",
+    )
+    await _location(db, s["b"], location_type="pole", pole_id="光復幹123")
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+
+    detail = await dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
+
+    tickets = _by_uuid(detail.tickets)
+    a, b = tickets[str(s["a"].uuid)].location, tickets[str(s["b"].uuid)].location
+    assert (a.location_type, a.full_address, a.building_section, a.floor, a.room, a.pole_id) == (
+        "address",
+        "花蓮縣光復鄉中正路45號",
+        "A棟",
+        "2F",
+        "201",
+        None,
+    )
+    assert (b.location_type, b.full_address, b.pole_id) == ("pole", None, "光復幹123")
+    assert not hasattr(a, "landmark_note")
+
+
+async def test_a_ticket_without_a_location_has_none(db):
+    """No address and no pole: `location` is None, not an empty place."""
+    s = await _setup(db)
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+
+    detail = await dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
+
+    assert [t.location for t in detail.tickets] == [None, None]
+
+
+async def test_free_text_about_the_place_does_not_move_the_version(db):
+    """Only what the detail shows goes into the version: a landmark note is not compared."""
+    s = await _versioned(db)
+    location = await _location(db, await db.get(Tickets, s["ids"]["a"]), full_address="光復鄉中正路45號")
+    before = await _versions(db, s)
+
+    await db.execute(
+        update(SecondaryLocation)
+        .where(SecondaryLocation.uuid == location.uuid)
+        .values(landmark_note="紅色鐵門")
+    )
+    await db.flush()
+
+    assert await _versions(db, s) == before
+
+
+async def test_the_location_costs_one_query_however_many_tickets(db):
+    """Still a fixed number of queries per detail with both sides located (ADR-373)."""
+    s = await _setup(db)
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+
+    def read():
+        return dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
+
+    bare = await _count_queries(db, read)
+    await _location(db, s["a"], full_address="光復鄉中正路45號")
+    await _location(db, s["b"], full_address="光復鄉中正路47號")
+    located = await _count_queries(db, read)
+
+    assert located == bare

@@ -175,3 +175,34 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
 時要用它判斷權限，讀到過期的物件就丟 MissingGreenlet：工單已經建好，回應卻帶著 `Unexpected error.`。
 修法：`notify_new_cards` 多收 `actor`，rollback 之後 `refresh(actor)`；建立的 entity 本來就由呼叫端在通知後 refresh。
 回歸測試：`tests/test_graphql/test_dedup_review_notify_graphql.py`。
+
+---
+
+## ADR-441：配對卡與事件附上做事的人的暱稱
+
+**Date**: 2026-10-29　**Status**: Accepted（使用者拍板用暱稱；回應形狀為慣例，未另外拍板）
+
+**背景**：DEDUP-008 的測試案例 WG-163 要求「每個判定都顯示是誰、什麼時候、做了什麼」。
+配對卡只回 `reviewed_by`，事件只回 `actor_uuid`，都只是 uuid。前端沒有用 uuid 查使用者的 API：
+`GET /admin/users` 只能用暱稱搜尋（`app/api/v1/endpoints/admin.py::list_users`），所以前端自己查不到名字。
+
+**決定**：
+- 配對卡（清單、詳情、判定、撤銷、處理的回應）多一個 `reviewed_by_name`：`reviewed_by` 的暱稱，沒有審核者時為 `null`。
+- 詳情的每一筆事件多一個 `actor_name`：`actor_uuid` 的暱稱。系統寫的事件（沒有 `actor_uuid`）為 `null`。
+- 暱稱就是 `users.name`（`app/models/auth.py::User`，「display nickname」）。不給本名 `real_name`、不給聯絡方式。
+- 看得到卡就看得到暱稱，不另外檢查 `user.view`。工單歷程顯示動手的人的暱稱，也是同樣做法（`graphql/tickets/types.py` 的 `actor_name`）。
+- 一頁不論幾張卡，暱稱都只多一條 query；沒有人要查時不跑（`dedup_review.py::_nicknames`）。
+
+---
+
+## ADR-442：通知與 API 標籤不再寫「AI」
+
+**Date**: 2026-10-29　**Status**: Accepted（Carol 在 DEDUP-008 決定 1：頁面叫「重複審核」，比對重複不用 AI）
+
+**決定**：
+- 待審提醒（ADR-345）的內文改成「…請到「重複審核」處理。」。
+- REST API 的分組標籤 `AI 重複審核` 改成 `重複審核`，前端的 OpenAPI 合約檔跟著重新產生。
+- 有改到的檔案，說明文字也一併拿掉「AI」。
+- **權限 key 不改**：`ai_duplicate.view`／`review`／`revoke` 已寫進資料庫的授權列和前端導覽，改名要寫 migration，
+  畫面上也看不到 key。DEDUP-008 決定 2 也直接用這三個 key。
+- 之前的 ADR 和 Spec 標題裡的「AI 重複審核」是當時的紀錄，不改寫。
