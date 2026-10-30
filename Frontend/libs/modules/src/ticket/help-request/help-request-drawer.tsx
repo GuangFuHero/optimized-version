@@ -796,7 +796,12 @@ function HelpRequestFormDrawer({
               placeholder="姓名 / 稱謂"
               error={isMissing('contact')}
               helperText={isMissing('contact') ? '必填' : undefined}
-              slotProps={{ htmlInput: { maxLength: MAX_LENGTH.contactName } }}
+              slotProps={{
+                htmlInput: {
+                  maxLength: MAX_LENGTH.contactName,
+                  autoComplete: 'name',
+                },
+              }}
             />
             {/* Not only a phone: some will not give one, and then send nothing at all. */}
             <TextField
@@ -805,7 +810,13 @@ function HelpRequestFormDrawer({
               value={form.contactPhone}
               onChange={(event) => set('contactPhone')(event.target.value)}
               placeholder="手機或 LINE ID"
-              slotProps={{ htmlInput: { maxLength: MAX_LENGTH.contactPhone } }}
+              // Offers the phone; a LINE ID can still be typed.
+              slotProps={{
+                htmlInput: {
+                  maxLength: MAX_LENGTH.contactPhone,
+                  autoComplete: 'tel',
+                },
+              }}
             />
           </Box>
         </Stack>
