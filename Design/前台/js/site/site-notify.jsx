@@ -30,6 +30,17 @@
  * 🔒 通知與緊急公告**不可以混**（2026-09-06 裁示 C-2）：
  *    公告是廣播、通知是針對你個人的事。混在一起兩種都會變鈍。
  *    所以緊急公告走 `an-banner.jsx` 的紅色橫幅，永遠不進這個收件匣。
+ *
+ * 🆕 2026-10-31 空白畫面（Sucre：「通知要做空白畫面，前後台都要」）
+ *    - 抽屜在沒有任何通知時，顯示專屬的空白狀態（`SiteNotifyEmpty`），
+ *      而不是一行小字。與後台 `wg-notify.jsx` 的空白狀態是同一個形狀：
+ *      圓形圖示 ＋ 一句標題 ＋ 說明「什麼時候會有東西出現在這裡」。
+ *    - 空的時候**不重複說明**：抽屜標題下那句「哪些事會出現在這裡」只在有通知時顯示，
+ *      空白狀態自己就是那句說明 —— 兩處都寫，使用者會讀到同一句話兩次。
+ *    - 示範用的種子通知預設關閉（`SEED_DEMO_NOTICES = false`），
+ *      跟 2026-10-16 後台三頁「測試資料全部拿掉、一開是空的就是上線第一天的樣子」同一個方向。
+ *      要看到有通知的畫面，在前台承接／建立任務單就會長出來；
+ *      要臨時看舊的示範資料，把旗標改回 true（`usr-citizen-01`／`usr-citizen-42`）。
  */
 (function () {
   const { useState, useMemo, useCallback } = React;
@@ -58,7 +69,10 @@
    *    種第三種等於在畫面上先斬後奏地示範一個沒有裁示過的功能。
    *
    * 只在**該使用者一則都沒有**的時候種一次，之後真的通知會疊在上面。
-   * 種子的時間戳刻意是過去的，且 `read` 一新一舊 —— 未讀與已讀兩種樣式都要看得到。 */
+   * 種子的時間戳刻意是過去的，且 `read` 一新一舊 —— 未讀與已讀兩種樣式都要看得到。
+   *
+   * 🧹 2026-10-31：預設關閉。通知要做空白畫面，種子一開就永遠看不到空白狀態。 */
+  const SEED_DEMO_NOTICES = false;
   const NOTICE_SEEDS = {
     'usr-citizen-01': [
       { kind: 'claimed', ticketId: 'tk-4031', taskId: 'K-4031-1', read: false,
@@ -78,6 +92,7 @@
     ],
   };
   function seedNoticesOnce(viewerId) {
+    if (!SEED_DEMO_NOTICES) return;
     if (!viewerId) return;
     const seeds = NOTICE_SEEDS[viewerId];
     if (!seeds || Bridge.readNoticesFor(viewerId).length) return;
@@ -143,8 +158,59 @@
     );
   }
 
+  /** 空白畫面 —— 這個人一則通知都還沒有。
+   *
+   *  🔒 這裡回答的不是「出錯了嗎」，而是「這個地方是做什麼的、什麼時候會有東西」。
+   *  一個空抽屜如果只寫「沒有通知」，使用者分不出是壞了還是真的沒事；
+   *  所以要多講一句**會因為什麼而出現**，語氣是平的：沒有東西不是壞消息，也不是要他去做什麼。
+   *
+   *  ⚠️ 不放按鈕。這一頁沒有一個「讓通知出現」的動作 —— 通知是別人承接、單被關閉時才長出來的，
+   *     放「去建立任務單」會把一個純被動的收件匣變成推銷。
+   *  ⚠️ 三件事用「承接／異動／審核」三句短的列，不寫成一段。抽屜只有 420px，一段字在手機上看不出有三種。 */
+  function SiteNotifyEmpty() {
+    const reasons = [
+      { icon: 'HandHeart',  text: '有人承接了你建立的求助' },
+      { icon: 'CircleSlash', text: '你承接的任務有異動' },
+      { icon: 'BadgeCheck', text: '你的申請有審核結果' },
+    ];
+    return (
+      <div role="status" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
+        gap: 'var(--space-4)', padding: 'var(--space-12) var(--space-4) var(--space-8)', textAlign: 'center' }}>
+        <span aria-hidden="true" style={{ width: 64, height: 64, display: 'grid', placeItems: 'center',
+          borderRadius: 'var(--radius-full)', background: 'var(--color-bg-neutral-subtle)',
+          color: 'var(--color-fg-neutral-muted)' }}>
+          <WGIcon n="BellOff" s={28} />
+        </span>
+        <div>
+          <div style={{ font: '700 var(--fs-16, 16px)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' }}>
+            目前沒有通知
+          </div>
+          <div style={{ marginTop: 'var(--space-1)', font: '400 var(--fs-13)/1.6 var(--font-body)',
+            color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
+            有新動態時會出現在這裡，不用重新整理。
+          </div>
+        </div>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 'var(--space-3) var(--space-4)',
+          display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', alignItems: 'flex-start',
+          width: '100%', maxWidth: 300, boxSizing: 'border-box', textAlign: 'left',
+          borderRadius: 'var(--radius-md)', background: 'var(--color-bg-neutral-subtle)' }}>
+          {reasons.map((r) => (
+            <li key={r.text} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+              font: '400 var(--fs-13)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+              <span aria-hidden="true" style={{ flexShrink: 0, display: 'inline-flex', color: 'var(--color-fg-neutral-muted)' }}>
+                <WGIcon n={r.icon} s={16} />
+              </span>
+              {r.text}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   function SiteNotifyDrawer({ notices, onClose, onMarkAllRead, onOpenTicket }) {
     const unread = notices.filter((n) => !n.read).length;
+    const isEmpty = notices.length === 0;
     return (
       <WGPortal>
         <div style={{ position: 'fixed', top: 'var(--wg-banner-h, 0px)', left: 0, right: 0, bottom: 0, zIndex: 2000, display: 'flex', justifyContent: 'flex-end' }}
@@ -162,9 +228,12 @@
               borderBottom: '1px solid var(--color-border-default)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ font: '700 var(--fs-20)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)' }}>通知</div>
-                <div style={{ marginTop: 4, font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
-                  有人承接你的需求、你承接的任務有異動、申請審核有結果，都會出現在這裡。
-                </div>
+                {/* 空的時候不顯示 —— 空白畫面自己就是這句說明，兩處都寫會讀到同一句話兩次。 */}
+                {isEmpty ? null : (
+                  <div style={{ marginTop: 4, font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
+                    有人承接你的需求、你承接的任務有異動、申請審核有結果，都會出現在這裡。
+                  </div>
+                )}
               </div>
               <button type="button" aria-label="關閉通知" onClick={onClose}
                 style={{ width: 36, height: 36, flexShrink: 0, display: 'grid', placeItems: 'center', background: 'none',
@@ -175,14 +244,8 @@
 
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
               padding: 'var(--space-4) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom, 0px))' }}>
-              {notices.length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)',
-                  padding: 'var(--space-8) var(--space-4)', textAlign: 'center' }}>
-                  <span style={{ color: 'var(--color-fg-neutral-muted)' }}><WGIcon n="BellOff" s={28} /></span>
-                  <span style={{ font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
-                    目前沒有通知。有人承接你建立的需求、你承接的任務有異動，或申請有結果時，這裡會出現。
-                  </span>
-                </div>
+              {isEmpty ? (
+                <SiteNotifyEmpty />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                   {unread ? (
@@ -224,5 +287,5 @@
     );
   }
 
-  Object.assign(window, { SiteNotifyBell, useSiteNotices });
+  Object.assign(window, { SiteNotifyBell, SiteNotifyEmpty, useSiteNotices });
 })();

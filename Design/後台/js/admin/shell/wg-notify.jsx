@@ -15,6 +15,15 @@
 //   IAM-UP-109  保留 90 天
 //
 // ⚠️ 這支元件是後台專屬。前台（民眾 General User）的通知另有定義，不適用這裡的規則。
+//
+// 🆕 2026-10-31 空白畫面（Sucre：「通知要做空白畫面，前後台都要」）
+//    - 沒有任何通知時，Drawer 顯示專屬的空白狀態（`WGNotifyEmpty`），不再只是一行字。
+//      與前台 `site-notify.jsx` 的 `SiteNotifyEmpty` 同一個形狀：圓形圖示 ＋ 標題 ＋ 會出現什麼。
+//    - 空的時候，「開啟這份清單只會清掉鈴鐺上的數字…」那一列整列不 render ——
+//      那句話解釋的是 IAM-UP-104（徽章與已讀是兩回事），而清單是空的，沒有任何一則可以談「已讀」。
+//      留著等於在空畫面上放一句沒有對象的說明。
+//    - 🧹 示意通知 `seed()` 與「每 20 秒長一則假通知」的模擬器已拿掉（同 2026-10-16 三頁的方向：
+//      真實頁面不該自己編通知，一開是空的就是上線第一天的樣子）。
 (function () {
   const { Avatar, Badge, Button } = window.WanGuardDesignSystem_9c8f68;
   const Icon = window.WGIcon;
@@ -192,11 +201,50 @@
     );
   }
 
+  // ── 空白畫面 ────────────────────────────────────────────────────────────
+  // 這個人一則通知都還沒有。回答的不是「出錯了嗎」，而是「這裡是做什麼的、什麼時候會有東西」。
+  // 後台的讀者是在工作的人，所以把三種類型直接列出來（IAM-UP-101），
+  // 並用各類型自己的圖示與顏色 —— 之後第一次看到通知時，認得出「這個圖示我見過」。
+  // ⚠️ 不放按鈕：通知是別人的動作長出來的，沒有一個「讓它出現」的操作可以放。
+  function WGNotifyEmpty() {
+    const kinds = [
+      { t: TYPES.task,   text: "你負責的任務有新進度" },
+      { t: TYPES.review, text: "你回報的資料有審核結果" },
+      { t: TYPES.role,   text: "角色升級申請有結果" },
+    ];
+    return (
+      <div role="status" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        minHeight: "100%", gap: 16, padding: "48px 24px", textAlign: "center", boxSizing: "border-box" }}>
+        <span aria-hidden="true" style={{ width: 72, height: 72, display: "inline-flex", alignItems: "center", justifyContent: "center",
+          borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-subtle)" }}>
+          <Icon n="Inbox" s={34} c="var(--color-fg-neutral-muted)" />
+        </span>
+        <div>
+          <div className="wg-h600" style={{ color: "var(--color-fg-neutral-default)" }}>目前沒有通知</div>
+          <div className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)", marginTop: 4 }}>
+            有新動態時會自動出現在這裡，不需要重新整理。
+          </div>
+        </div>
+        <ul style={{ listStyle: "none", margin: 0, padding: "12px 16px", width: "100%", maxWidth: 320, boxSizing: "border-box",
+          display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start", textAlign: "left",
+          borderRadius: "var(--radius-md)", background: "var(--color-bg-neutral-subtle)" }}>
+          {kinds.map((k) => (
+            <li key={k.t.label} style={{ display: "flex", alignItems: "center", gap: 10, font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)" }}>
+              <Icon n={k.t.icon} s={16} c={k.t.fg} />
+              <span>{k.text}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   // ── 通知 Drawer ─────────────────────────────────────────────────────────
   function WGNotifyDrawer({ items, muted, onMarkRead, onMarkAllRead, onToggleMute, onClose }) {
     const [toast, setToast] = React.useState(null);
     const unreadCount = items.filter((i) => !i.read && muted.indexOf(refKey(i.ref)) < 0).length;
     const mutedItems = items.filter((i) => muted.indexOf(refKey(i.ref)) >= 0);
+    const isEmpty = items.length === 0;
 
     React.useEffect(() => {
       const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -237,31 +285,29 @@
             </button>
           </div>
 
-          {/* 全部標為已讀（IAM-UP-105：這是明確的一個動作，不是自動發生的）*/}
-          <div style={{ padding: "9px 16px", borderBottom: "1px solid var(--color-bg-neutral-sunken)", display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>
-              開啟這份清單只會清掉鈴鐺上的數字，不會把任何一則標成已讀。
-            </span>
-            <button type="button" onClick={onMarkAllRead} disabled={unreadCount === 0}
-              style={{ marginLeft: "auto", height: 28, padding: "0 10px", borderRadius: "var(--radius-sm)", whiteSpace: "nowrap",
-                border: "1px solid var(--color-border-default)",
-                background: unreadCount ? "var(--color-bg-neutral-default)" : "var(--color-bg-disable)",
-                color: unreadCount ? "var(--color-fg-neutral-default)" : "var(--color-fg-neutral-muted)",
-                font: "var(--font-label-300)", cursor: unreadCount ? "pointer" : "not-allowed",
-                display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <Icon n="CheckCheck" s={14} c="currentColor" />全部標為已讀
-            </button>
-          </div>
+          {/* 全部標為已讀（IAM-UP-105：這是明確的一個動作，不是自動發生的）
+              空的時候整列不 render —— 沒有任何一則可以談「已讀」，留著是一句沒有對象的說明。 */}
+          {isEmpty ? null : (
+            <div style={{ padding: "9px 16px", borderBottom: "1px solid var(--color-bg-neutral-sunken)", display: "flex", alignItems: "center", gap: 10 }}>
+              <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>
+                開啟這份清單只會清掉鈴鐺上的數字，不會把任何一則標成已讀。
+              </span>
+              <button type="button" onClick={onMarkAllRead} disabled={unreadCount === 0}
+                style={{ marginLeft: "auto", height: 28, padding: "0 10px", borderRadius: "var(--radius-sm)", whiteSpace: "nowrap",
+                  border: "1px solid var(--color-border-default)",
+                  background: unreadCount ? "var(--color-bg-neutral-default)" : "var(--color-bg-disable)",
+                  color: unreadCount ? "var(--color-fg-neutral-default)" : "var(--color-fg-neutral-muted)",
+                  font: "var(--font-label-300)", cursor: unreadCount ? "pointer" : "not-allowed",
+                  display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <Icon n="CheckCheck" s={14} c="currentColor" />全部標為已讀
+              </button>
+            </div>
+          )}
 
           {/* list */}
           <div style={{ flex: 1, overflow: "auto" }}>
-            {items.length === 0
-              ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 10, color: "var(--color-fg-neutral-muted)", padding: 24 }}>
-                  <Icon n="Inbox" s={34} c="var(--color-fg-neutral-muted)" />
-                  <span className="wg-h600" style={{ color: "var(--color-fg-neutral-subtle)" }}>目前沒有通知</span>
-                </div>
-              )
+            {isEmpty
+              ? <WGNotifyEmpty />
               : items.map((it) => (
                   <NotifyRow key={it.id} item={it}
                     muted={muted.indexOf(refKey(it.ref)) >= 0}
@@ -400,7 +446,7 @@
   else window.addEventListener("load", () => notifyConsumeHash());
 
   Object.assign(window, {
-    WGNotifyBell, WGNotifyDrawer, WG_NOTIFY_TYPES: TYPES,
+    WGNotifyBell, WGNotifyDrawer, WGNotifyEmpty, WG_NOTIFY_TYPES: TYPES,
     wgNotifyGo: notifyGo, wgNotifyConsumeHash: notifyConsumeHash,
   });
 })();
