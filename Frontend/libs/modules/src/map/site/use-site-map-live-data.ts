@@ -33,9 +33,10 @@ import {
   SITE_MAP_QUERY_CONTEXT as LIVE_QUERY_CONTEXT,
 } from './site-map-client';
 import {
+  readTicketCells,
   ticketCellStatuses,
-  ticketCellsNotice,
-  toLocationCells,
+  type TicketCellsNotice,
+  type TicketCellsRead,
 } from './ticket-cells';
 import { useSiteMapViewportStore } from './use-site-map-viewport-state';
 
@@ -57,8 +58,8 @@ export interface SiteMapLiveDataSnapshot {
    * ADR-387): all of them, where `markers` holds a page. Empty for stations.
    */
   cells: readonly RescueMapLocationCell[];
-  /** The backend's reason the counts could not be read, kept until a read works; the cells stay. */
-  cellsNotice: string | null;
+  /** Why the counts could not be read, kept until a read works. */
+  cellsNotice: TicketCellsNotice | null;
   closureAreas: readonly RescueMapClosureArea[];
   publicZones: readonly RescueMapPublicZone[];
   isFetching: boolean;
@@ -102,9 +103,9 @@ function resolveStationTypeFilter(state: SiteRouteState): string | undefined {
 
 function cellsSignature(
   cells: readonly RescueMapLocationCell[],
-  notice: string | null,
+  notice: TicketCellsNotice | null,
 ) {
-  return `${cells.map((cell) => `${cell.id}:${cell.count}:${cell.variant}`).join('|')}#${notice ?? ''}`;
+  return `${cells.map((cell) => `${cell.id}:${cell.count}:${cell.variant}`).join('|')}#${notice?.text ?? ''}`;
 }
 
 function mapMarkersForDataType({
@@ -252,6 +253,9 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
 
     let cancelled = false;
     let requestId = 0;
+    // The counts last read in this run. They stay while the map is only panned or zoomed; a new run
+    // is a new filter or layer, which they do not count, so it starts with none.
+    let counted: TicketCellsRead = { cells: [], notice: null };
 
     store.clearDismissedMarkers();
 
@@ -293,7 +297,20 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
 
       store.setFetching(true);
 
-      const [markerResult, cellsResult, areaResult] = await Promise.all([
+      // Every cell's count: a page of tickets holds 200, a cell can hold more (ADR-387). Asked with
+      // the rest, but the pins and the areas go up without waiting for it: near the backend's time
+      // limit it takes seconds.
+      const cellsRequest =
+        activeDataType === 'ticket'
+          ? client
+              .query(
+                GetTicketCellsDocument,
+                { bounds, statuses, zoom },
+                LIVE_QUERY_CONTEXT,
+              )
+              .toPromise()
+          : null;
+      const [markerResult, areaResult] = await Promise.all([
         activeDataType === 'ticket'
           ? client
               .query(
@@ -314,16 +331,6 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
                 LIVE_QUERY_CONTEXT,
               )
               .toPromise(),
-        // Every cell's count: a page of tickets holds 200, a cell can hold more (ADR-387).
-        activeDataType === 'ticket'
-          ? client
-              .query(
-                GetTicketCellsDocument,
-                { bounds, statuses, zoom },
-                LIVE_QUERY_CONTEXT,
-              )
-              .toPromise()
-          : null,
         fetchAllAreaPages((skip, limit) =>
           client
             .query(
@@ -355,26 +362,42 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
       const { closureAreas, publicZones } = mapAreasToOverlays(
         areaResult.items,
       );
-      // Refused (its time limit, zoomed far out) or unanswered: the cells already drawn stay, with
-      // the backend's reason when it gave one, rather than an empty map that reads as no requests.
-      const cellRows = cellsResult?.data?.ticketCells;
-      const cells = !cellsResult
-        ? []
-        : cellRows
-          ? toLocationCells(cellRows)
-          : store.getSnapshot().cells;
-      const cellsNotice =
-        cellsResult && !cellRows ? ticketCellsNotice(cellsResult.error) : null;
 
       store.replaceData({
         markers,
-        cells,
-        cellsNotice,
+        cells: cellsRequest ? counted.cells : [],
+        cellsNotice: cellsRequest ? counted.notice : null,
         closureAreas,
         publicZones,
-        isFetching: false,
+        // Still fetching while the counts are on their way, so a cell left open waits for them
+        // before the map decides it is gone.
+        isFetching: Boolean(cellsRequest),
         error: markerResult.error ?? areaResult.error ?? null,
         hasFetchedOnce: true,
+      });
+
+      if (!cellsRequest) {
+        return;
+      }
+
+      const cellsResult = await cellsRequest;
+
+      if (cancelled || nextRequestId !== requestId) {
+        return;
+      }
+
+      // Refused (its time limit, zoomed far out) or failed: the cells this run last counted stay,
+      // rather than an empty map that reads as no requests, and the notice says why.
+      counted = readTicketCells(
+        cellsResult.data?.ticketCells,
+        cellsResult.error,
+        counted.cells,
+      );
+      store.replaceData({
+        ...store.getSnapshot(),
+        cells: counted.cells,
+        cellsNotice: counted.notice,
+        isFetching: false,
       });
     };
 

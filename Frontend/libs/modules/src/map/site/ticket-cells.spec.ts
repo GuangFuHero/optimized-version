@@ -2,6 +2,9 @@ import { cellToLatLng, latLngToCell } from 'h3-js';
 import { describe, expect, it } from 'vitest';
 
 import {
+  readTicketCells,
+  TICKET_CELLS_FAILED_NOTICE,
+  TICKET_CELLS_TIME_LIMIT_REFUSAL,
   ticketCellStatuses,
   ticketCellsNotice,
   toLocationCells,
@@ -85,19 +88,73 @@ describe('toLocationCells', () => {
 });
 
 describe('ticketCellsNotice', () => {
-  const REFUSED = '這個範圍的單太多，計算逾時已中止，請放大地圖再試';
-
-  it("says what the backend said when it refused, such as the count's time limit", () => {
-    expect(ticketCellsNotice({ graphQLErrors: [{ message: REFUSED }] })).toBe(
-      REFUSED,
-    );
+  it("says the backend's sentence, with zooming in, only for the count's time limit", () => {
+    expect(
+      ticketCellsNotice({
+        graphQLErrors: [{ message: TICKET_CELLS_TIME_LIMIT_REFUSAL }],
+      }),
+    ).toEqual({ text: TICKET_CELLS_TIME_LIMIT_REFUSAL, zoomIn: true });
   });
 
-  it('says nothing when the counts came back, or the request never got an answer', () => {
-    expect(ticketCellsNotice(undefined)).toBeNull();
-    expect(ticketCellsNotice({ graphQLErrors: [] })).toBeNull();
-    expect(
-      ticketCellsNotice({ graphQLErrors: [{ message: '  ' }] }),
-    ).toBeNull();
+  it("says a fixed line, without zooming in, for the backend's other errors", () => {
+    for (const message of ['Unexpected error.', 'Permission Denied.']) {
+      expect(ticketCellsNotice({ graphQLErrors: [{ message }] })).toEqual({
+        text: TICKET_CELLS_FAILED_NOTICE,
+        zoomIn: false,
+      });
+    }
+  });
+
+  it('says the fixed line too when the request got no answer', () => {
+    expect(ticketCellsNotice({ graphQLErrors: [] })).toEqual({
+      text: TICKET_CELLS_FAILED_NOTICE,
+      zoomIn: false,
+    });
+    expect(ticketCellsNotice(undefined)).toEqual({
+      text: TICKET_CELLS_FAILED_NOTICE,
+      zoomIn: false,
+    });
+  });
+});
+
+describe('readTicketCells', () => {
+  const kept = toLocationCells([
+    { cell: CELL_A, ticketCount: 245, urgentCount: 0 },
+  ]);
+
+  it('draws the counted cells, and says nothing, when the read worked', () => {
+    const read = readTicketCells(
+      [{ cell: CELL_B, ticketCount: 3, urgentCount: 0 }],
+      undefined,
+      kept,
+    );
+
+    expect(read.cells.map((cell) => cell.cell)).toEqual([CELL_B]);
+    expect(read.notice).toBeNull();
+  });
+
+  it('keeps the cells it is given when the read failed, and says why', () => {
+    const read = readTicketCells(
+      null,
+      { graphQLErrors: [{ message: TICKET_CELLS_TIME_LIMIT_REFUSAL }] },
+      kept,
+    );
+
+    expect(read.cells).toBe(kept);
+    expect(read.notice?.zoomIn).toBe(true);
+  });
+
+  it('draws no cells when a failed read is given none, as after a change of filter', () => {
+    const read = readTicketCells(
+      undefined,
+      { graphQLErrors: [{ message: 'Unexpected error.' }] },
+      [],
+    );
+
+    expect(read.cells).toEqual([]);
+    expect(read.notice).toEqual({
+      text: TICKET_CELLS_FAILED_NOTICE,
+      zoomIn: false,
+    });
   });
 });

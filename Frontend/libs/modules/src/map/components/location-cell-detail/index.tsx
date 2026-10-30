@@ -22,12 +22,29 @@ import {
 import type {
   LocationCellMembersLoader,
   RescueMapLocationCell,
-  RescueMapMarkerItem,
 } from '../../types';
 import { LocationPrivacyNotice } from '../location-privacy-notice';
+import {
+  type CellMembersList,
+  EMPTY_CELL_MEMBERS,
+  nextCellMembersSkip,
+  withCellMembersPage,
+} from './cell-members';
 
 const { color, radius, spacing } = designTokens;
 const CloseIcon = Icons.close;
+
+// 再顯示 stays focusable while the next page loads, so a keyboard user's focus does not drop to the
+// page; it only looks and acts disabled.
+const LOOKS_DISABLED = {
+  '&[aria-disabled="true"]': {
+    bgcolor: color.bg.disable,
+    color: color.fg.disable,
+    borderColor: 'transparent',
+    cursor: 'default',
+    '&:hover': { bgcolor: color.bg.disable, transform: 'none' },
+  },
+};
 
 interface LocationCellDetailProps {
   cell: RescueMapLocationCell;
@@ -38,15 +55,13 @@ interface LocationCellDetailProps {
   onSelectMember: (markerId: string) => void;
 }
 
-interface CellMembers {
-  members: readonly RescueMapMarkerItem[];
-  hasMore: boolean;
+interface CellMembers extends CellMembersList {
   status: 'loading' | 'idle' | 'error';
 }
 
 /**
  * The cell's tickets: its own, or with `loadMembers`, read a page at a time from the first. A page
- * that comes back after the panel has closed is dropped.
+ * that comes back after the cell or the filter changed, or after the panel closed, is dropped.
  */
 function useCellMembers(
   cell: RescueMapLocationCell,
@@ -54,12 +69,19 @@ function useCellMembers(
 ): CellMembers & { loadMore: () => void; retry: () => void } {
   const [state, setState] = useState<CellMembers>(() =>
     loadMembers
-      ? { members: [], hasMore: false, status: 'loading' }
-      : { members: cell.members, hasMore: false, status: 'idle' },
+      ? { ...EMPTY_CELL_MEMBERS, status: 'loading' }
+      : {
+          members: cell.members,
+          read: cell.members.length,
+          hasMore: false,
+          status: 'idle',
+        },
   );
-  const mountedRef = useRef(true);
-  const membersRef = useRef(state.members);
-  membersRef.current = state.members;
+  // Moved on by each run of the effect below and as it is cleaned up: a page keeps the run it was
+  // asked in, and is listed only if that run is still the current one.
+  const runRef = useRef(0);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const load = useCallback(
     async (skip: number) => {
@@ -67,21 +89,25 @@ function useCellMembers(
         return;
       }
 
-      setState((current) => ({ ...current, status: 'loading' }));
+      const run = runRef.current;
+      // A first page lists the cell afresh: what was listed was for another cell or filter.
+      setState((current) =>
+        skip === 0
+          ? { ...EMPTY_CELL_MEMBERS, status: 'loading' }
+          : { ...current, status: 'loading' },
+      );
 
       try {
         const page = await loadMembers(cell.cell, skip);
 
-        if (mountedRef.current) {
+        if (run === runRef.current) {
           setState((current) => ({
-            members:
-              skip === 0 ? page.members : [...current.members, ...page.members],
-            hasMore: page.hasMore,
+            ...withCellMembersPage(current, page, skip),
             status: 'idle',
           }));
         }
       } catch {
-        if (mountedRef.current) {
+        if (run === runRef.current) {
           setState((current) => ({ ...current, status: 'error' }));
         }
       }
@@ -90,22 +116,21 @@ function useCellMembers(
   );
 
   useEffect(() => {
-    mountedRef.current = true;
+    runRef.current += 1;
     void load(0);
 
     return () => {
-      mountedRef.current = false;
+      runRef.current += 1;
     };
   }, [load]);
 
   const own: CellMembers = {
     members: cell.members,
+    read: cell.members.length,
     hasMore: false,
     status: 'idle',
   };
-  // Both go on from what is already listed: a failed first page from the start, a failed later
-  // one from where the list ends.
-  const next = () => void load(membersRef.current.length);
+  const next = () => void load(nextCellMembersSkip(stateRef.current));
 
   return { ...(loadMembers ? state : own), loadMore: next, retry: next };
 }
@@ -276,6 +301,7 @@ export function LocationCellDetail({
         <CellMembersFooter
           status={status}
           hasMore={hasMore}
+          listed={members.length > 0}
           onLoadMore={loadMore}
           onRetry={retry}
         />
@@ -288,28 +314,33 @@ export function LocationCellDetail({
 function CellMembersFooter({
   status,
   hasMore,
+  listed,
   onLoadMore,
   onRetry,
 }: {
   status: CellMembers['status'];
   hasMore: boolean;
+  /** Some tickets are listed already: a load is then for the next page, under the button. */
+  listed: boolean;
   onLoadMore: () => void;
   onRetry: () => void;
 }) {
-  if (status === 'loading') {
-    return (
-      <Typography
-        role="status"
-        sx={{
-          py: 1,
-          textAlign: 'center',
-          fontSize: displayTextSize[13],
-          color: color.fg.neutral.muted,
-        }}
-      >
-        載入中...
-      </Typography>
-    );
+  const loadingText = (
+    <Typography
+      role="status"
+      sx={{
+        py: 1,
+        textAlign: 'center',
+        fontSize: displayTextSize[13],
+        color: color.fg.neutral.muted,
+      }}
+    >
+      載入中...
+    </Typography>
+  );
+
+  if (status === 'loading' && !(listed && hasMore)) {
+    return loadingText;
   }
 
   if (status === 'error') {
@@ -328,14 +359,30 @@ function CellMembersFooter({
     );
   }
 
-  return hasMore ? (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={onLoadMore}
-      sx={{ alignSelf: 'center' }}
+  if (!hasMore) {
+    return null;
+  }
+
+  const loading = status === 'loading';
+
+  return (
+    <Stack
+      direction="row"
+      sx={{ alignSelf: 'center', alignItems: 'center', gap: 1 }}
     >
-      再顯示 {LOCATION_CELL_MEMBERS_PAGE_SIZE} 筆
-    </Button>
-  ) : null;
+      <Button
+        variant="outline"
+        size="sm"
+        aria-disabled={loading}
+        aria-busy={loading}
+        onClick={() => {
+          if (!loading) onLoadMore();
+        }}
+        sx={LOOKS_DISABLED}
+      >
+        再顯示 {LOCATION_CELL_MEMBERS_PAGE_SIZE} 筆
+      </Button>
+      {loading ? loadingText : null}
+    </Stack>
+  );
 }

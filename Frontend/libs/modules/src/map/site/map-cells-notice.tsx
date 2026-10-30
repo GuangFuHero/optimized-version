@@ -5,14 +5,16 @@ import { ZoomIn } from 'lucide-react';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
+import type { TicketCellsNotice } from './ticket-cells';
+
 const { color, radius, shadow } = designTokens;
 
 /**
- * Said over the map while the cells' counts cannot be read, in the backend's words — as when
- * zoomed so far out that counting runs past its time limit. The cells already drawn stay, so the
- * map does not read as having no requests. It takes no taps: the map under it stays usable.
+ * Said over the map while the cells' counts cannot be read: past the backend's time limit, zoomed
+ * far out, in its words and with a zoom-in icon; otherwise a fixed line without one. It takes no
+ * taps: the map under it stays usable.
  */
-export function MapCellsNotice({ message }: { message: string }) {
+export function MapCellsNotice({ notice }: { notice: TicketCellsNotice }) {
   return (
     <Box
       role="status"
@@ -37,17 +39,19 @@ export function MapCellsNotice({ message }: { message: string }) {
         pointerEvents: 'none',
       }}
     >
-      <Box
-        component={ZoomIn}
-        aria-hidden
-        sx={{
-          width: 16,
-          height: 16,
-          flexShrink: 0,
-          color: color.fg.neutral.muted,
-        }}
-      />
-      {message}
+      {notice.zoomIn ? (
+        <Box
+          component={ZoomIn}
+          aria-hidden
+          sx={{
+            width: 16,
+            height: 16,
+            flexShrink: 0,
+            color: color.fg.neutral.muted,
+          }}
+        />
+      ) : null}
+      {notice.text}
     </Box>
   );
 }

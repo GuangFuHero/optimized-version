@@ -52,7 +52,11 @@ export function useCellMembersLoader(
 
       onLoadedRef.current(members);
 
-      return { members, hasMore: page.pageInfo.hasNextPage };
+      return {
+        members,
+        read: page.items.length,
+        hasMore: page.pageInfo.hasNextPage,
+      };
     },
     [client, statusesKey],
   );

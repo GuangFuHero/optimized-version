@@ -137,7 +137,7 @@ describe('replaceData: counted cells', () => {
 
     store.replaceData({
       ...store.getSnapshot(),
-      cellsNotice: '請放大地圖再試',
+      cellsNotice: { text: '請放大地圖再試', zoomIn: true },
     });
     store.replaceData({ ...store.getSnapshot(), cellsNotice: null });
 

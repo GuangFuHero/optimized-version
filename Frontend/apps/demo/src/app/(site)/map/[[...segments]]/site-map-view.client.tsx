@@ -321,7 +321,7 @@ function SiteMapViewportDataLayer({
             viewMemoryKey="site"
           />
           {liveDataSnapshot.cellsNotice ? (
-            <MapCellsNotice message={liveDataSnapshot.cellsNotice} />
+            <MapCellsNotice notice={liveDataSnapshot.cellsNotice} />
           ) : null}
         </Box>
         <MapRequestHelpBar />

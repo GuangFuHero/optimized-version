@@ -255,6 +255,8 @@ export interface RescueMapLocationCell {
 /** A page of the tickets one counted cell stands for (`LocationCellDetail`). */
 export interface LocationCellMembersPage {
   members: readonly RescueMapMarkerItem[];
+  /** How many tickets the page held, drawn as members or not: the next page starts after them. */
+  read: number;
   hasMore: boolean;
 }
 

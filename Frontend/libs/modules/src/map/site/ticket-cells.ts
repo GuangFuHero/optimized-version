@@ -34,16 +34,60 @@ export function ticketCellStatuses(
 }
 
 /**
- * What to tell the map's reader when `ticketCells` came back with an error: the backend's own
- * sentence, as for its time limit (「這個範圍的單太多…請放大地圖再試」). A request that got no answer
- * has nothing to say; the map then keeps the cells it had, as it does after a refusal.
+ * The backend's refusal when counting runs past its time limit, word for word (backend
+ * `ticketCells`, `app/graphql/tickets/queries.py`). It sends no error code, so this sentence is how
+ * the map tells the time limit from any other failure.
  */
-export function ticketCellsNotice(
-  error: { graphQLErrors?: readonly { message: string }[] } | null | undefined,
-): string | null {
-  const message = error?.graphQLErrors?.[0]?.message.trim();
+export const TICKET_CELLS_TIME_LIMIT_REFUSAL =
+  '這個範圍的單太多，計算逾時已中止，請放大地圖再試';
 
-  return message || null;
+/**
+ * Said for any other failure: the backend's other errors come masked, in English ("Unexpected
+ * error."), and zooming in would not help.
+ */
+export const TICKET_CELLS_FAILED_NOTICE =
+  '暫時讀不到各區塊的求助筆數，請稍後再試';
+
+export interface TicketCellsNotice {
+  text: string;
+  /** Only for the time limit, which zooming in gets under. */
+  zoomIn: boolean;
+}
+
+type TicketCellsError = { graphQLErrors?: readonly { message: string }[] };
+
+/** What to tell the map's reader when a read of `ticketCells` failed. */
+export function ticketCellsNotice(
+  error: TicketCellsError | null | undefined,
+): TicketCellsNotice {
+  const timedOut = (error?.graphQLErrors ?? []).some(
+    ({ message }) => message.trim() === TICKET_CELLS_TIME_LIMIT_REFUSAL,
+  );
+
+  return timedOut
+    ? { text: TICKET_CELLS_TIME_LIMIT_REFUSAL, zoomIn: true }
+    : { text: TICKET_CELLS_FAILED_NOTICE, zoomIn: false };
+}
+
+export interface TicketCellsRead {
+  cells: readonly RescueMapLocationCell[];
+  notice: TicketCellsNotice | null;
+}
+
+/**
+ * The cells to draw after a read of `ticketCells`, and what to say: the counted cells when it
+ * worked. When it failed, `kept` and why: the caller keeps the last counted cells while the map is
+ * only panned or zoomed, as they still count what the filter asks for, and passes none after the
+ * filter or the layer changed, so the notice alone stands for the counts.
+ */
+export function readTicketCells(
+  rows: readonly TicketCellRow[] | null | undefined,
+  error: TicketCellsError | null | undefined,
+  kept: readonly RescueMapLocationCell[],
+): TicketCellsRead {
+  return rows
+    ? { cells: toLocationCells(rows), notice: null }
+    : { cells: kept, notice: ticketCellsNotice(error) };
 }
 
 /**
