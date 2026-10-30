@@ -182,3 +182,30 @@ async def test_tasks_made_in_the_back_office_are_official_whatever_they_send(cli
     tasks = await _file_and_add(client, await _back_office_identity(redis), sent="user")
 
     assert await _task_sources(tasks) == ["official", "official"]
+
+
+CREATE_HELP_REQUEST = """
+mutation($input: CreateHelpRequestInput!) {
+    createHelpRequest(input: $input) { __typename ... on TicketCreated { tasks { uuid source } } }
+}
+"""
+
+
+async def test_a_help_request_is_the_users_even_from_a_back_office_identity(client, redis):
+    """請求協助 is the site's own form: its needs are a citizen's, whichever identity files them."""
+    token = await _back_office_identity(redis)
+    point = [140 + random.random() * 20, -40 + random.random() * 20]
+    request = {
+        "title": f"來源測試請求-{random.random()}",
+        "geometry": {"type": "Point", "coordinates": point},
+        "contactName": "王阿嬤",
+        "contactPhone": "0912345678",
+        "secondaryLocation": {"landmarkNote": "花蓮縣光復鄉中山路100號"},
+        "tasks": [{"taskType": "hr", "taskName": "清淤人力", "quantity": 3}],
+    }
+
+    body = await _post(client, token, CREATE_HELP_REQUEST, {"input": request})
+
+    tasks = body["data"]["createHelpRequest"]["tasks"]
+    assert [task["source"] for task in tasks] == ["user"], body
+    assert await _task_sources([task["uuid"] for task in tasks]) == ["user"]
