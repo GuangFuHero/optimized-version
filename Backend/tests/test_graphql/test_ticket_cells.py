@@ -241,8 +241,12 @@ async def _plan_mode(db) -> str:
     return await db.scalar(text("SHOW plan_cache_mode"))
 
 
-async def test_counting_is_planned_generically(client, monkeypatch):
-    """Planned on a fresh connection as on a warm one, so the first counts aren't seconds (ADR-437)."""
+async def test_counting_is_planned_generically(client, redis, monkeypatch):
+    """Planned on a fresh connection as on a warm one, so the first counts aren't seconds (ADR-437).
+
+    A caller who sees every point has no cells to count, so nothing is planned differently for them.
+    """
+    _, token = await _signed_in(redis)
     seen = []
 
     async def recording_count(db, **_):
@@ -250,10 +254,12 @@ async def test_counting_is_planned_generically(client, monkeypatch):
         return []
 
     monkeypatch.setattr(ticket_repository, "count_by_cell", recording_count)
+    planned = {}
+    for case, caller in (("guest", None), ("sees points", token)):
+        await _query(client, CELLS, {"bounds": AREA}, caller)
+        planned[case], seen[:] = seen[:], []
 
-    await _query(client, CELLS, {"bounds": AREA})
-
-    assert seen == ["force_generic_plan"]
+    assert planned == {"guest": ["force_generic_plan"], "sees points": ["auto"]}
 
 
 async def test_only_a_box_of_cells_is_listed_on_a_generic_plan(client, redis, monkeypatch):

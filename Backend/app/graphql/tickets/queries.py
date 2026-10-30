@@ -307,7 +307,7 @@ class RequestQuery:
         scope = await check_permission(info, Perm.TICKET_VIEW)
         detail_filters = await _detail_filters(info)
         refusal = "這個範圍的單太多，計算逾時已中止，請放大地圖再試"
-        async with generic_plan(db), statement_ceiling(db, refusal=refusal):
+        async with generic_plan(db, needed=bool(detail_filters)), statement_ceiling(db, refusal=refusal):
             rows = await ticket_repository.count_by_cell(
                 db,
                 bounds=bounds,
