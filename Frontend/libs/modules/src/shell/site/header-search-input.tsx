@@ -5,7 +5,7 @@ import { Box, InputBase } from '@mui/material';
 import { usePathname } from 'next/navigation';
 import { startTransition, useEffect, useState, type ChangeEvent } from 'react';
 
-import { designTokens, Icons } from '@rescue-frontend/ui';
+import { designTokens, Icons, IOS_NO_ZOOM_INPUT_PX } from '@rescue-frontend/ui';
 
 import { useOptionalSiteMapRouteState } from '../../map/site/use-site-map-route-state';
 import { useSiteRouteState } from '../../route/use-site-route-state';
@@ -109,7 +109,12 @@ function SiteHeaderSearchField({
           '& .MuiInputBase-input': {
             p: 0,
             fontFamily: typography.body[400].fontFamily,
-            fontSize: compact ? 15 : 14,
+            // Set here, the size would win over the theme's 16px for phones (`MuiInputBase`), and a
+            // focused input under 16px makes iOS Safari zoom the whole page in.
+            fontSize: {
+              mobile: IOS_NO_ZOOM_INPUT_PX,
+              tablet: compact ? 15 : 14,
+            },
             lineHeight: compact ? '22px' : '20px',
             fontWeight: 600,
             color: color.fg.neutral.default,
