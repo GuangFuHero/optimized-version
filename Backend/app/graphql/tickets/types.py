@@ -368,7 +368,13 @@ class TicketTaskType:
             "only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description=(
+            "Origin of this task: 'user' when the site's identity made it, 'official' when a back-office "
+            "one did. Tasks made before that rule keep what they had, 'gov' or 'import'"
+        ),
+    )
     recruiting_stopped_at: datetime | None = strawberry.field(
         default=None,
         description=(
@@ -506,7 +512,11 @@ class CreateTicketTaskInput:
             "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the task decides it",
+        deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
+    )
     route_uuid: UUID | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
     )
@@ -1175,7 +1185,11 @@ class CreateTicketTaskDraft:
     task_name: str
     task_description: str | None = None
     quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the task decides it",
+        deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
+    )
     route_uuid: UUID | None = None
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,

@@ -914,6 +914,11 @@ type Query {
     auditStatus: AuditStatus = null
 
     """
+    NEWEST (default): newest first, best match first when searching. NEEDS_FIRST: tickets still taking people first, one with an open rescue need ahead, then as NEWEST; a need the signed-in caller claimed counts as open
+    """
+    order: TicketListOrder! = NEWEST
+
+    """
     Only the tickets this caller is shown as this H3 cell — a `locationCell` value, as the guest map draws it. The cell's resolution, 8 or coarser, then sets how coarse every row is, in place of `zoom`. A ticket the caller sees exactly is in no cell
     """
     locationCell: String = null
@@ -1656,6 +1661,11 @@ type TicketDisasterDetailType {
   value: String!
 }
 
+enum TicketListOrder {
+  NEWEST
+  NEEDS_FIRST
+}
+
 type TicketPropertyConfigType {
   uuid: UUID!
 
@@ -1875,6 +1885,11 @@ type TicketType {
   Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address
   """
   secondaryLocation: SecondaryLocationType
+
+  """
+  The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it lies in none, and to a caller without ticket.view_detail here
+  """
+  responsibleTeams: [AssignedTeamType!]!
   disasterDetails: [TicketDisasterDetailType!]!
 }
 

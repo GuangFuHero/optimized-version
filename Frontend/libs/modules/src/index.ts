@@ -101,6 +101,7 @@ export type {
 } from './point-share';
 
 export { AnnouncementPage } from './admin/announcement';
+export { SettingsPage } from './admin/settings/settings-page';
 export { BackOfficePlaceholder } from './role-request';
 export {
   AdminErrorPage,
