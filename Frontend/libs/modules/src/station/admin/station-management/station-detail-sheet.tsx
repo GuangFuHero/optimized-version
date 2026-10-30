@@ -181,7 +181,7 @@ function StationDetailContent({
             {view.verification.verified ? (
               <Badge tone="success">已驗證</Badge>
             ) : (
-              <Badge>未驗證</Badge>
+              <Badge tone="warning">未驗證</Badge>
             )}
             {view.pendingFieldCount > 0 ? (
               <Badge tone="warning">{view.pendingFieldCount} 欄待審</Badge>

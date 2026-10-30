@@ -349,13 +349,14 @@ function StationNameCell({ row }: { row: StationRow }) {
   );
 }
 
+/** The prototype's `AssignTeamCell` text: a team in subtle grey, 未指派 in muted. */
 export function TeamText({ name }: { name: string | null }) {
   return (
     <Typography
       noWrap
       sx={{
         ...typography.body[300],
-        color: name ? color.fg.neutral.default : color.fg.neutral.muted,
+        color: name ? color.fg.neutral.subtle : color.fg.neutral.muted,
       }}
     >
       {name ?? '未指派'}
@@ -363,6 +364,7 @@ export function TeamText({ name }: { name: string | null }) {
   );
 }
 
+/** The prototype's `TypeChip` (station-shared.jsx): a muted icon before the type in subtle grey. */
 function TypeCell({ row }: { row: StationRow }) {
   const TypeIcon = getStationTypeIcon(row.type);
   return (
@@ -374,10 +376,10 @@ function TypeCell({ row }: { row: StationRow }) {
         minWidth: 0,
       }}
     >
-      <TypeIcon sx={{ fontSize: 16, color: color.fg.neutral.subtle }} />
+      <TypeIcon sx={{ fontSize: 16, color: color.fg.neutral.muted }} />
       <Typography
         noWrap
-        sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+        sx={{ ...typography.label[400], color: color.fg.neutral.subtle }}
       >
         {row.typeLabel}
       </Typography>
