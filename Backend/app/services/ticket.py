@@ -34,7 +34,6 @@ from app.repositories.tickets_repository import (
     ticket_task_repository,
 )
 from app.services.address import apply_address, point_of
-from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 from app.services.building_map import place_ticket
 from app.services.geo_validation import (
@@ -44,6 +43,7 @@ from app.services.geo_validation import (
 )
 from app.services.notification_service import NotificationService
 from app.services.photo import TICKET_PHOTO_MAX, normalize_photo_url
+from app.services.source import USER, source_for
 from app.services.ticket_audit import lock_ticket, void_stale_verdict
 from app.services.ticket_status import recompute_ticket_status
 
@@ -412,7 +412,9 @@ async def validate_help_request(
                     "task_name": task["task_name"],
                     "task_description": task.get("task_description"),
                     "quantity": task.get("quantity"),
-                    "source": "user",
+                    # The site's own request, a citizen's whoever files it, unlike createTicket's
+                    # tasks, which follow the identity.
+                    "source": USER,
                 }
             )
             for task in tasks
@@ -730,20 +732,6 @@ async def delete_ticket_task(db: AsyncSession, *, actor: User, uuid: str) -> Non
     )
 
 
-def need_source(actor: User) -> str:
-    """Where a need comes from, decided by who files it rather than sent: 'official' or 'user'.
-
-    'official' when the caller acts as a back-office identity — anything besides the platform
-    `user` grant, the rule `back_office_identity` picks one by (ADR-329) — so a need staff enter
-    from the board is official, and one a citizen files on the site (always as `user`, ADR-289)
-    is theirs. Bulk import stamps its own 'import'.
-    """
-    identity = getattr(actor, "active_identity", None)
-    if identity is None or (identity.is_platform and identity.role_name == DEFAULT_PLATFORM_ROLE):
-        return "user"
-    return "official"
-
-
 @dataclass(frozen=True)
 class TaskFields:
     """A ticket task that passed authz and validation but is not written yet.
@@ -773,7 +761,7 @@ async def validate_ticket_task(
             "task_name": task_name,
             "task_description": task_description,
             "quantity": quantity,
-            "source": need_source(actor),
+            "source": source_for(actor),
             "route_uuid": route_uuid,
         }
     )
@@ -818,7 +806,7 @@ async def validate_added_task(
             "task_name": task_name,
             "task_description": task_description,
             "quantity": quantity,
-            "source": need_source(actor),
+            "source": source_for(actor),
             "route_uuid": route_uuid,
         }
     )
@@ -904,7 +892,7 @@ async def validate_imported_task(
             "task_name": task_name,
             "task_description": task_description,
             "quantity": quantity,
-            "source": "import",
+            "source": source_for(actor),
             "route_uuid": None,
         }
     )

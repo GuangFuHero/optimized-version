@@ -412,7 +412,6 @@ def _station(**overrides) -> dict:
         "op_hour": None,
         "level": 0,
         "comment": None,
-        "source": "manual",
         "visibility": "public",
     }
     return fields | overrides

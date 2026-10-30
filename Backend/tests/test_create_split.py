@@ -41,7 +41,7 @@ CREATE_TICKET_PARAMS = [
 ]  # fmt: skip
 CREATE_STATION_PARAMS = [
     "db", "actor", "geometry", "type", "name", "description", "op_hour", "level", "comment",
-    "source", "visibility", "contact_name", "contact_email", "contact_phone",
+    "visibility", "contact_name", "contact_email", "contact_phone",
     "operational_status", "supply_status", "secondary_location",
 ]  # fmt: skip
 
@@ -91,7 +91,6 @@ def _station_fields(**overrides) -> dict:
         "op_hour": "24h",
         "level": 1,
         "comment": None,
-        "source": "manual",
         "visibility": "public",
         "contact_name": "  李主任  ",
         "contact_phone": "0912345678",
@@ -266,8 +265,8 @@ async def test_validate_ticket_task_writes_nothing_and_needs_no_ticket(db):
     """Validation stands alone: a new ticket's tasks are validated before the ticket exists."""
     actor = await _actor(db, Perm.TICKET_ADD)
     fields = await ticket_service.validate_ticket_task(db, actor=actor, **_task_fields())
-    # The actor acts as a platform role besides `user`, a back-office identity: 'official'.
-    assert fields.values == _task_fields() | {"source": "official"}
+    # The actor's role is not the site's `user`, so the task is official.
+    assert fields.values == {**_task_fields(), "source": "official"}
     assert await _rows(db, TicketTask) == 0
 
 

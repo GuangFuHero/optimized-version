@@ -51,7 +51,6 @@ STATION = {
     "op_hour": None,
     "level": 0,
     "comment": None,
-    "source": "user",
     "visibility": "public",
 }
 

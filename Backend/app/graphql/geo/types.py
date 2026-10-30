@@ -194,8 +194,8 @@ class StationType:
     is_official: bool = strawberry.field(
         default=False,
         description=(
-            "True if the back office made this station (`source` is 'official'), as the `official` "
-            "filter reads it, or if it was marked official before `source` said so (ADR-394)"
+            "True if the back office made this station: `source` is 'official', as the `official` filter "
+            "reads it"
         ),
     )
     operational_status: str = strawberry.field(
@@ -427,8 +427,7 @@ class StationType:
             verification_status=m.verification_status,
             is_duplicate=m.is_duplicate,
             is_temporary=m.is_temporary,
-            # `source` defines official; the old column still holds what the seed marked (ADR-394).
-            is_official=m.source == "official" or m.is_official,
+            is_official=m.is_official,
             operational_status=m.operational_status,
             status_changed_at=m.status_changed_at,
             supply_status=m.supply_status,
@@ -535,7 +534,11 @@ class CreateStationInput:
     op_hour: str | None = strawberry.field(default=None, description="Operating hours in free-text format")
     level: int = strawberry.field(default=0, description="Importance level for map rendering (0 = default)")
     comment: str | None = None
-    source: str = strawberry.field(default="user", description="Data origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the station decides it",
+        deprecation_reason="The backend sets `source` from the identity making the station; leave it out",
+    )
     visibility: Visibility = strawberry.field(
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",
