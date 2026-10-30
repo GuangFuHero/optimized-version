@@ -71,8 +71,7 @@ async def get_operating_station_count(
 ) -> list[dict]:
     """Count of stations operating now, overall or grouped by `type` (x="category").
 
-    A running total, not what was created in a range, so the dates are ignored: a station's
-    status keeps no history to read an earlier day from.
+    A running total as of now, not what was created in a range, so the dates are ignored.
     """
     return await get_station_count(
         db,

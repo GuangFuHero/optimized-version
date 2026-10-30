@@ -39,10 +39,31 @@ backlog, count toward neither success nor failure, and stop ageing.
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import DateTime, Integer, and_, case, cast, column, exists, func, or_, select, true, values
+from sqlalchemy import (
+    UUID,
+    DateTime,
+    Integer,
+    String,
+    and_,
+    case,
+    cast,
+    column,
+    exists,
+    func,
+    literal_column,
+    null,
+    or_,
+    select,
+    union_all,
+    values,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
+from sqlalchemy.sql.expression import ColumnClause
+from sqlalchemy.sql.visitors import replacement_traverse
 
+from app.models.audit import AuditLog
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
@@ -529,6 +550,76 @@ def _as_of_instants(
     ]
 
 
+def _versions_at(table: str, live, days):
+    """`table`'s rows as they stood at each instant of `days`, from audit_logs: columns t, row_id, doc.
+
+    `doc` is the row's JSON in the newest audit entry made before `t`; a row deleted by then is left
+    out. A row with no entry yet shows the state its first entry started from, and one never audited
+    (it predates auditing) shows its current values.
+    """
+    a = AuditLog
+    # Entries of one transaction share created_at, so physical order (append-only) breaks the tie.
+    in_order = [a.created_at, literal_column("ctid")]
+    entries = (
+        select(
+            a.row_id,
+            a.created_at.label("from_at"),
+            func.lead(a.created_at).over(partition_by=a.row_id, order_by=in_order).label("to_at"),
+            a.new_values.label("doc"),
+            a.old_values.label("before"),
+            func.row_number().over(partition_by=a.row_id, order_by=in_order).label("n"),
+        )
+        .where(a.table_name == table)
+        .subquery()
+    )
+    no_time = cast(null(), DateTime(timezone=True))
+    history = union_all(
+        select(entries.c.row_id, entries.c.from_at, entries.c.to_at, entries.c.doc),
+        select(
+            entries.c.row_id,
+            no_time.label("from_at"),
+            entries.c.from_at.label("to_at"),
+            func.coalesce(entries.c.before, entries.c.doc).label("doc"),
+        ).where(entries.c.n == 1),
+        select(
+            live.uuid.label("row_id"),
+            no_time.label("from_at"),
+            no_time.label("to_at"),
+            func.to_jsonb(literal_column(table)).cast(JSONB).label("doc"),
+        ).where(~exists().where(a.table_name == table, a.row_id == live.uuid)),
+    ).subquery()
+    t = days.c.t
+    return (
+        select(t, history.c.row_id, history.c.doc)
+        .select_from(
+            days.join(
+                history,
+                and_(
+                    or_(history.c.from_at.is_(None), history.c.from_at < t),
+                    or_(history.c.to_at.is_(None), t <= history.c.to_at),
+                ),
+            )
+        )
+        .where(history.c.doc.is_not(None))
+        .subquery()
+    )
+
+
+def _on_need_type(clauses: list, need_type):
+    """`clauses` with the ticket's task_type read as the need's own, as the other need metrics do."""
+
+    def swap(element):
+        if (
+            isinstance(element, ColumnClause)
+            and element.table is Tickets.__table__
+            and element.name == "task_type"
+        ):
+            return need_type
+        return None
+
+    return [replacement_traverse(clause, {}, swap) for clause in clauses]
+
+
 async def get_volunteer_metric(
     db: AsyncSession,
     *,
@@ -546,74 +637,78 @@ async def get_volunteer_metric(
     and are not canceled or merged into another (a merge cancels the absorbed need):
 
         needed   -- sum of quantity
-        matched  -- task_assignments with status 'accepted' on those needs
+        matched  -- every task_assignment on those needs, whatever its progress status, as the
+                    app counts a need's places taken
         gap      -- sum of quantity - matched, over the needs still recruiting only: open
                     and not stopped by hand. A full or stopped need has no gap.
 
     `start_date` does not filter: these are running totals, not what was created in a range.
-    `x="category"` groups by the ticket's `task_type`. `x="date"` is a daily trend, each day's
-    value as of the end of that day (`x_granularity` is ignored).
+    `x="category"` groups by the need's own `task_type`, and a `task_type` filter reads it too.
+    `x="date"` is a daily trend, each day's value as of the end of that day (`x_granularity` is ignored).
 
-    The trend is approximate: quantities and statuses have no history. A past day uses today's
-    quantity and status, moved only by the timestamps (created_at, completed_at, canceled_at,
-    recruiting_stopped_at, assigned_at), so a need reopened or edited since is wrong before the edit.
+    Each instant reads every need and assignment as of then from audit_logs (see _versions_at), so a
+    released claim, a stopped need or a merge changes only the days after it. The caller's scope and
+    the type, status and area filters read today's ticket rows.
     """
     instants = _as_of_instants(x, start_date, end_date, tz)
     days = values(column("t", DateTime(timezone=True)), name="days").data([(t,) for _, t in instants])
-    t = days.c.t
+    need, claim = (
+        _versions_at("ticket_tasks", TicketTask, days),
+        _versions_at("task_assignments", TaskAssignment, days),
+    )
+
+    def field(version, name, type_=None):
+        # The key is inlined: bound as a parameter, the same expression in SELECT and GROUP BY would
+        # look like two different ones to Postgres.
+        text_value = version.c.doc.op("->>", return_type=String)(literal_column(f"'{name}'"))
+        return text_value if type_ is None else cast(text_value, type_)
+
+    claims = (
+        select(claim.c.t, field(claim, "task_uuid", UUID).label("task_uuid"), func.count().label("people"))
+        .where(field(claim, "assigned_at", DateTime(timezone=True)) < claim.c.t)
+        .group_by(claim.c.t, field(claim, "task_uuid", UUID))
+        .subquery()
+    )
+    need_type = field(need, "task_type")
     needs = (
         select(
-            TicketTask.uuid,
-            TicketTask.quantity,
-            TicketTask.status,
-            TicketTask.created_at,
-            TicketTask.completed_at,
-            TicketTask.canceled_at,
-            TicketTask.delete_at,
-            TicketTask.recruiting_stopped_at,
-            Tickets.task_type,
+            need.c.t,
+            field(need, "quantity", Integer).label("quantity"),
+            field(need, "status").label("status"),
+            field(need, "created_at", DateTime(timezone=True)).label("created_at"),
+            field(need, "delete_at", DateTime(timezone=True)).label("delete_at"),
+            field(need, "recruiting_stopped_at", DateTime(timezone=True)).label("stopped_at"),
+            need_type.label("task_type"),
+            func.coalesce(claims.c.people, 0).label("matched"),
         )
-        .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
-        .where(TicketTask.quantity.is_not(None), Tickets.delete_at.is_(None), *(extra_filters or []))
+        .select_from(need)
+        .join(Tickets, Tickets.uuid == field(need, "ticket_uuid", UUID))
+        .outerjoin(claims, and_(claims.c.t == need.c.t, claims.c.task_uuid == need.c.row_id))
+        .where(field(need, "quantity", Integer).is_not(None), *_on_need_type(extra_filters or [], need_type))
         .subquery()
     )
     c = needs.c
-    # Standing at `t`: created by then, and not canceled yet (or never).
-    not_canceled = and_(c.delete_at.is_(None), c.status != "canceled")
-    live = and_(c.created_at < t, or_(c.canceled_at >= t, not_canceled))
-    # Recruiting at `t`: standing, not yet filled, not yet stopped. A need canceled since was
-    # still recruiting while it stood, which `live` has already checked.
-    recruiting = and_(
-        live,
-        or_(c.status.in_(OPEN_NEED_STATUSES | {"canceled"}), c.completed_at >= t),
-        or_(c.recruiting_stopped_at.is_(None), c.recruiting_stopped_at >= t),
-    )
-    matched = (
-        select(func.count(TaskAssignment.uuid))
-        .where(
-            TaskAssignment.task_uuid == c.uuid,
-            TaskAssignment.status == "accepted",
-            TaskAssignment.assigned_at < t,
-        )
-        .scalar_subquery()
-    )
+    # Standing at `t`: created by then and neither canceled nor deleted.
+    live = and_(c.created_at < c.t, c.delete_at.is_(None), c.status != "canceled")
+    # Recruiting at `t`: standing, not yet filled, not stopped by hand.
+    recruiting = and_(live, c.status.in_(OPEN_NEED_STATUSES), c.stopped_at.is_(None))
     total = {
         "needed": func.sum(c.quantity).filter(live),
-        "matched": func.sum(matched).filter(live),
-        "gap": func.sum(c.quantity - matched).filter(recruiting),
+        "matched": func.sum(c.matched).filter(live),
+        "gap": func.sum(c.quantity - c.matched).filter(recruiting),
     }[metric]
 
     cols = [func.coalesce(cast(total, Integer), 0).label("count")]
     group_cols = []
     if x == "date":
-        cols.insert(0, t.label("t"))
-        group_cols.append(t)
+        cols.insert(0, days.c.t.label("t"))
+        group_cols.append(days.c.t)
     elif x == "category":
         category = category_expr(c.task_type)
         cols.insert(0, category.label("x"))
         group_cols.append(category)
     # Outer, so a total with no needs is a 0 and a day with none is a 0; a category with none is no row.
-    query = select(*cols).select_from(days).join(needs, true(), isouter=x != "category")
+    query = select(*cols).select_from(days).join(needs, needs.c.t == days.c.t, isouter=x != "category")
     if group_cols:
         query = query.group_by(*group_cols)
 

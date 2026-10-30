@@ -24,7 +24,7 @@ from app.services.chart_render import display_name
 
 
 def _in_area(geometry_uuid, *, county: str | None, town: str | None, village: str | None) -> list:
-    """The address filter: the row's address (one per ticket or station) has all the parts given.
+    """The address filter: the row's address has all the parts given.
 
     EXISTS, not a join, so a row with two address rows still counts once.
     """

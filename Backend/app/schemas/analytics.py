@@ -212,9 +212,9 @@ class YMetricSpec(BaseModel):
     )
     max_range_days: int | None = Field(
         default=None,
-        description="Widest allowed span between `start_date` and `end_date` for this "
-        "y-metric's `x=date` trend, in days; a wider range is a 400. Null means no limit. "
-        "Clamp the date picker to this instead of waiting for the error.",
+        description="Most days, both ends included, between `start_date` and `end_date` for this "
+        "y-metric's `x=date` trend; a longer range is a 400. Null means no limit. It applies "
+        "whether or not `requires_date_range` is set, so read it on its own to clamp the date picker.",
     )
 
 

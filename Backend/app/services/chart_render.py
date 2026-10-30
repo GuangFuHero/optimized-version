@@ -127,7 +127,7 @@ _TICKET_CATALOG = {
     "volunteers_needed": {
         "label": "志工需求人數",
         "unit": "人",
-        "description": "未取消任務的志工需求人數加總（沒填人數的不計）；截至今日",
+        "description": "未取消任務的志工需求人數加總（沒填人數的不計）；截至查詢期間最後一天，未指定則為今日",
         "allowed_x": (None, "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),
@@ -135,7 +135,10 @@ _TICKET_CATALOG = {
     "volunteers_matched": {
         "label": "已媒合志工人數",
         "unit": "人",
-        "description": "已接下任務的志工人數（沒填人數的任務不計）；截至今日",
+        "description": (
+            "任務上所有志工的人數，含已出發與已完成（沒填人數的任務不計）；"
+            "截至查詢期間最後一天，未指定則為今日"
+        ),
         "allowed_x": (None, "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),
@@ -144,8 +147,8 @@ _TICKET_CATALOG = {
         "label": "志工缺口",
         "unit": "人",
         "description": (
-            "還在招募的任務尚缺幾人；截至今日。趨勢為每天結束時的缺口，"
-            "過去的日子沿用現在的需求人數與任務狀態，只依各項時間推算"
+            "還在招募的任務尚缺幾人；截至查詢期間最後一天，未指定則為今日。"
+            "趨勢為每天結束時的缺口，依異動紀錄還原當天的任務與志工"
         ),
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
@@ -186,7 +189,7 @@ _STATION_CATALOG = {
     "operating_station_count": {
         "label": "營運中站點數",
         "unit": "站",
-        "description": "目前營運中的站點，截至今日",
+        "description": "目前營運中的站點，不受日期影響",
         "allowed_x": (None, "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),
@@ -210,6 +213,14 @@ _CATEGORY_LABEL = {
     "completed": "已完成",
     "remaining": "未完成",
     "shelter": "收容所",
+    "water": "加水",
+    "shower": "洗澡",
+    "toilet": "廁所",
+    "transport": "交通",
+    "gas_station": "加油",
+    "charge": "充電",
+    "power": "發電",
+    "cellular": "通訊",
     "pending": "待處理",
     "in_progress": "進行中",
     "cancelled": "已取消",

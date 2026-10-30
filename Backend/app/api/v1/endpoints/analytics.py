@@ -129,7 +129,8 @@ _CHART_TYPE_DESCRIPTION = (
     "chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog."
 )
 _TZ_DESCRIPTION = (
-    "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. "
+    "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, "
+    "and a missing one is a 422. "
     "Controls day/week bucket boundaries when x=date and how start_date/end_date are "
     "interpreted (local midnight in this timezone, not UTC midnight) — duration-based "
     "metrics like age_distribution/time_to_completion ignore it."
@@ -448,11 +449,7 @@ async def _scope_filter_or_none(perm: Perm, model, actor: User, db: AsyncSession
     return None if scope == Scope.NONE else scope_filter(scope, actor=actor, model=model)
 
 
-@router.get(
-    "/catalog",
-    response_model=CatalogResponse,
-    dependencies=[Depends(security.get_current_user)],
-)
+@router.get("/catalog", response_model=CatalogResponse)
 async def get_analytics_catalog(
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
@@ -490,7 +487,7 @@ async def get_ticket_chart(
     chart_type: ChartType | None = Query(None, description=_CHART_TYPE_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
     style: str | None = Query(None, description=_STYLE_DESCRIPTION),
     width: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_WIDTH_DESCRIPTION),
     height: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_HEIGHT_DESCRIPTION),
@@ -536,7 +533,7 @@ async def get_ticket_data(
     x_granularity: ChartXGranularity = Query(ChartXGranularity.day, description=_X_GRANULARITY_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
     filters: list = Depends(_ticket_filters),
     scope: Scope = security.has_permission(Perm.TICKET_VIEW),
     current_user: User = Depends(security.get_current_user),
@@ -566,7 +563,7 @@ async def get_ticket_value(
     y: TicketYMetric = Query(..., description=_VALUE_Y_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
     filters: list = Depends(_ticket_filters),
     scope: Scope = security.has_permission(Perm.TICKET_VIEW),
     current_user: User = Depends(security.get_current_user),
@@ -593,7 +590,7 @@ async def get_station_chart(
     chart_type: ChartType | None = Query(None, description=_CHART_TYPE_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
     style: str | None = Query(None, description=_STYLE_DESCRIPTION),
     width: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_WIDTH_DESCRIPTION),
     height: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_HEIGHT_DESCRIPTION),
@@ -635,7 +632,7 @@ async def get_station_data(
     x_granularity: ChartXGranularity = Query(ChartXGranularity.day, description=_X_GRANULARITY_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
     filters: list = Depends(_station_filters),
     scope: Scope = security.has_permission(Perm.STATION_VIEW),
     current_user: User = Depends(security.get_current_user),
@@ -661,7 +658,7 @@ async def get_station_value(
     y: StationYMetric = Query(..., description=_VALUE_Y_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
     filters: list = Depends(_station_filters),
     scope: Scope = security.has_permission(Perm.STATION_VIEW),
     current_user: User = Depends(security.get_current_user),

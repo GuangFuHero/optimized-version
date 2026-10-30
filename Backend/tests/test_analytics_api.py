@@ -91,7 +91,7 @@ async def _seeded_user(db, redis, *perms: Perm, scope: str = "all") -> tuple[str
 @pytest.mark.asyncio
 async def test_chart_requires_authentication(client):
     """These are REST endpoints, so PUBLIC_PERMS doesn't apply — no token means 401."""
-    res = await client.get(TICKETS_URL, params={"y": "total_tickets"})
+    res = await client.get(TICKETS_URL, params={"tz": "UTC", "y": "total_tickets"})
     assert res.status_code == 401
 
 
@@ -99,7 +99,7 @@ async def test_chart_requires_authentication(client):
 async def test_chart_requires_the_domain_permission(client, db_session, redis):
     """A user without ticket.view is refused, and station.view doesn't substitute."""
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
-    res = await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
+    res = await client.get(TICKETS_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 403
 
 
@@ -107,7 +107,7 @@ async def test_chart_requires_the_domain_permission(client, db_session, redis):
 async def test_ticket_chart_renders(client, db_session, redis):
     """Baseline: the default request returns Plotly figure JSON, with no HTML to inject."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
+    res = await client.get(TICKETS_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 200
     body = res.json()
     assert set(body) == {"data", "layout", "config"}
@@ -125,7 +125,7 @@ async def test_category_line_chart_renders_with_null_task_type(client, db_sessio
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
-        params={"y": "total_tickets", "x": "category", "chart_type": "line"},
+        params={"tz": "UTC", "y": "total_tickets", "x": "category", "chart_type": "line"},
         headers=headers,
     )
     assert res.status_code == 200
@@ -146,6 +146,29 @@ async def test_invalid_timezone_is_a_400(client, db_session, tz, redis):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("url", "y", "perm"),
+    [
+        (url, y, perm)
+        for url, y, perm in (
+            (TICKETS_URL, "total_tickets", Perm.TICKET_VIEW),
+            (TICKETS_DATA_URL, "total_tickets", Perm.TICKET_VIEW),
+            (TICKETS_VALUE_URL, "total_tickets", Perm.TICKET_VIEW),
+            (STATIONS_URL, "station_count", Perm.STATION_VIEW),
+            (STATIONS_DATA_URL, "station_count", Perm.STATION_VIEW),
+            (STATIONS_VALUE_URL, "station_count", Perm.STATION_VIEW),
+        )
+    ],
+)
+async def test_a_missing_timezone_is_a_422_not_utc(client, db_session, redis, url, y, perm):
+    """`tz` has no default: leaving it out must not quietly bucket days in UTC."""
+    headers = await _user_with_perms(db_session, redis, perm)
+    res = await client.get(url, params={"y": y}, headers=headers)
+    assert res.status_code == 422
+    assert "tz" in str(res.json()["detail"])
+
+
+@pytest.mark.asyncio
 async def test_valid_timezone_is_accepted(client, db_session, redis):
     """Control for the above — a real IANA name still works."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
@@ -158,9 +181,9 @@ async def test_duplicate_count_needs_no_date_range(client, db_session, redis):
     """It reads the AI review's cards instead of self-joining tickets, so an open range is fine."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     for url in (TICKETS_URL, TICKETS_DATA_URL, TICKETS_VALUE_URL):
-        res = await client.get(url, params={"y": "duplicate_count"}, headers=headers)
+        res = await client.get(url, params={"tz": "UTC", "y": "duplicate_count"}, headers=headers)
         assert res.status_code == 200
-    res = await client.get(TICKETS_VALUE_URL, params={"y": "duplicate_count"}, headers=headers)
+    res = await client.get(TICKETS_VALUE_URL, params={"tz": "UTC", "y": "duplicate_count"}, headers=headers)
     assert res.json() == {"value": 0}
 
 
@@ -170,7 +193,7 @@ async def test_unsupported_chart_type_is_rejected(client, db_session, redis):
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
-        params={"y": "net_backlog_change", "chart_type": "pie"},
+        params={"tz": "UTC", "y": "net_backlog_change", "chart_type": "pie"},
         headers=headers,
     )
     assert res.status_code == 400
@@ -182,7 +205,7 @@ async def test_inapplicable_x_is_ignored_not_rejected(client, db_session, redis)
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
-        params={"y": "task_completion_distribution", "x": "date"},
+        params={"tz": "UTC", "y": "task_completion_distribution", "x": "date"},
         headers=headers,
     )
     assert res.status_code == 200
@@ -194,7 +217,7 @@ async def test_unparseable_layout_overrides_is_a_400(client, db_session, redis):
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
-        params={"y": "total_tickets", "layout_overrides": "not json"},
+        params={"tz": "UTC", "y": "total_tickets", "layout_overrides": "not json"},
         headers=headers,
     )
     assert res.status_code == 400
@@ -204,7 +227,7 @@ async def test_unparseable_layout_overrides_is_a_400(client, db_session, redis):
 async def test_station_chart_renders(client, db_session, redis):
     """The station handler shares _render_domain; no rows to group is an empty pie, not a 總計 slice."""
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
-    res = await client.get(STATIONS_URL, params={"y": "station_status_count"}, headers=headers)
+    res = await client.get(STATIONS_URL, params={"tz": "UTC", "y": "station_status_count"}, headers=headers)
     assert res.status_code == 200
     pie = res.json()["data"][0]
     assert (pie["type"], pie["labels"], pie["values"]) == ("pie", [], [])
@@ -272,13 +295,13 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
         ("volunteer_gap", "志工缺口"),
     ):
         assert (body["tickets"][y]["label"], body["tickets"][y]["unit"]) == (label, "人")
-        assert "截至今日" in body["tickets"][y]["description"]
+        assert "截至查詢期間最後一天" in body["tickets"][y]["description"]
     assert body["tickets"]["volunteer_gap"]["allowed_x"] == ["category", "date", "none"]
     assert body["tickets"]["volunteers_needed"]["allowed_x"] == ["category", "none"]
-    assert "沿用現在" in body["tickets"]["volunteer_gap"]["description"]
+    assert "依異動紀錄還原" in body["tickets"]["volunteer_gap"]["description"]
     operating = body["stations"]["operating_station_count"]
     assert (operating["label"], operating["unit"]) == ("營運中站點數", "站")
-    assert "截至今日" in operating["description"]
+    assert "不受日期影響" in operating["description"]
     # default_style is what the chart endpoints use when `style` is omitted.
     assert body["default_style"]["palette"][0] == "#E3791E"
     assert body["default_style"]["legend"] == "bottom"
@@ -297,7 +320,13 @@ async def test_volunteer_gap_trend_rejects_a_range_wider_than_the_cap(client, db
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_DATA_URL,
-        params={"y": "volunteer_gap", "x": "date", "start_date": "1900-01-01", "end_date": "2999-12-31"},
+        params={
+            "tz": "UTC",
+            "y": "volunteer_gap",
+            "x": "date",
+            "start_date": "1900-01-01",
+            "end_date": "2999-12-31",
+        },
         headers=headers,
     )
     assert res.status_code == 400
@@ -305,7 +334,7 @@ async def test_volunteer_gap_trend_rejects_a_range_wider_than_the_cap(client, db
     # A total reads one instant, so the span between the dates costs nothing.
     res = await client.get(
         TICKETS_VALUE_URL,
-        params={"y": "volunteer_gap", "start_date": "1900-01-01", "end_date": "2999-12-31"},
+        params={"tz": "UTC", "y": "volunteer_gap", "start_date": "1900-01-01", "end_date": "2999-12-31"},
         headers=headers,
     )
     assert res.status_code == 200
@@ -333,7 +362,7 @@ async def test_station_status_count_always_groups_by_status(client, db_session, 
         )
     await db_session.commit()
 
-    res = await client.get(STATIONS_URL, params={"y": "station_status_count"}, headers=headers)
+    res = await client.get(STATIONS_URL, params={"tz": "UTC", "y": "station_status_count"}, headers=headers)
     assert res.status_code == 200
     pie = res.json()["data"][0]
     # Labels are the zh-TW display names, not the raw operational_status values.
@@ -368,7 +397,7 @@ async def test_ticket_chart_counts_only_tickets_in_the_callers_scope(client, db_
         )
     await db_session.commit()
 
-    res = await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
+    res = await client.get(TICKETS_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 200
     # One ticket of the three is theirs; the chart must plot 1, not 3.
     assert res.json()["data"][0]["y"] == [1]
@@ -384,7 +413,7 @@ async def test_unknown_layout_overrides_key_is_a_400(client, db_session, redis):
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
-        params={"y": "total_tickets", "layout_overrides": '{"no_such_layout_key": 1}'},
+        params={"tz": "UTC", "y": "total_tickets", "layout_overrides": '{"no_such_layout_key": 1}'},
         headers=headers,
     )
     assert res.status_code == 400
@@ -395,7 +424,7 @@ async def test_unknown_layout_overrides_key_is_a_400(client, db_session, redis):
 async def test_default_style_matches_the_dashboard_mock(client, db_session, redis):
     """With no `style`, the figure carries the ops dashboard's look and no modebar."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
+    res = await client.get(TICKETS_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 200
     layout, config = res.json()["layout"], res.json()["config"]
     assert layout["colorway"][0] == "#E3791E"
@@ -412,6 +441,7 @@ async def test_style_param_overrides_the_defaults(client, db_session, redis):
     res = await client.get(
         TICKETS_URL,
         params={
+            "tz": "UTC",
             "y": "total_tickets",
             "style": json.dumps({"palette": ["#123456"], "legend": "none", "modebar": True}),
         },
@@ -438,7 +468,9 @@ async def test_style_param_overrides_the_defaults(client, db_session, redis):
 async def test_bad_style_is_a_400(client, db_session, redis, style):
     """Undecodable, unknown-field, non-hex, or empty-palette styles are the caller's error."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_URL, params={"y": "total_tickets", "style": style}, headers=headers)
+    res = await client.get(
+        TICKETS_URL, params={"tz": "UTC", "y": "total_tickets", "style": style}, headers=headers
+    )
     assert res.status_code == 400
     assert "style" in res.json()["detail"]
 
@@ -447,7 +479,7 @@ async def test_bad_style_is_a_400(client, db_session, redis, style):
 async def test_completion_rate_axis_is_a_percentage(client, db_session, redis):
     """The metric's own axis rule survives the style layer: the rate is 0–1 but reads as %."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_URL, params={"y": "completion_rate"}, headers=headers)
+    res = await client.get(TICKETS_URL, params={"tz": "UTC", "y": "completion_rate"}, headers=headers)
     assert res.status_code == 200
     assert res.json()["layout"]["yaxis"]["tickformat"] == ".0%"
 
@@ -469,7 +501,9 @@ async def test_category_axis_shows_display_names(client, db_session, redis):
     )
     await db_session.commit()
 
-    res = await client.get(TICKETS_URL, params={"y": "total_tickets", "x": "category"}, headers=headers)
+    res = await client.get(
+        TICKETS_URL, params={"tz": "UTC", "y": "total_tickets", "x": "category"}, headers=headers
+    )
     assert res.status_code == 200
     bar = res.json()["data"][0]
     assert bar["x"] == ["搜救"]
@@ -499,7 +533,7 @@ async def test_free_text_categories_render_as_literal_text(client, db_session, r
         )
     await db_session.commit()
 
-    params = {"y": "station_count", "x": "category", "chart_type": chart_type}
+    params = {"tz": "UTC", "y": "station_count", "x": "category", "chart_type": chart_type}
     res = await client.get(STATIONS_URL, params=params, headers=headers)
     assert res.status_code == 200
     assert set(res.json()["data"][0][key]) == {
@@ -525,7 +559,7 @@ def test_bundled_plotlyjs_matches_the_frontend():
 @pytest.mark.asyncio
 async def test_value_requires_authentication(client):
     """Same rule as the chart endpoints — a KPI number is not public data."""
-    res = await client.get(TICKETS_VALUE_URL, params={"y": "total_tickets"})
+    res = await client.get(TICKETS_VALUE_URL, params={"tz": "UTC", "y": "total_tickets"})
     assert res.status_code == 401
 
 
@@ -533,7 +567,7 @@ async def test_value_requires_authentication(client):
 async def test_value_requires_the_domain_permission(client, db_session, redis):
     """station.view doesn't substitute for ticket.view on the ticket number either."""
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
-    res = await client.get(TICKETS_VALUE_URL, params={"y": "total_tickets"}, headers=headers)
+    res = await client.get(TICKETS_VALUE_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 403
 
 
@@ -559,7 +593,7 @@ async def test_value_returns_the_aggregate_within_the_callers_scope(client, db_s
         )
     await db_session.commit()
 
-    res = await client.get(TICKETS_VALUE_URL, params={"y": "total_tickets"}, headers=headers)
+    res = await client.get(TICKETS_VALUE_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 200
     assert res.json() == {"value": 1}
 
@@ -571,7 +605,7 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
     Empty data is 0, not a 500.
     """
     user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_VALUE_URL, params={"y": "completion_rate"}, headers=headers)
+    res = await client.get(TICKETS_VALUE_URL, params={"tz": "UTC", "y": "completion_rate"}, headers=headers)
     assert res.status_code == 200
     assert res.json()["value"] == 0
 
@@ -602,7 +636,7 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
     db_session.add(TaskAssignment(task_uuid=task.uuid, actor_uuid=user_uuid, status="completed"))
     await db_session.commit()
 
-    res = await client.get(TICKETS_VALUE_URL, params={"y": "completion_rate"}, headers=headers)
+    res = await client.get(TICKETS_VALUE_URL, params={"tz": "UTC", "y": "completion_rate"}, headers=headers)
     assert res.status_code == 200
     assert res.json()["value"] == 50.0
 
@@ -611,7 +645,7 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
 async def test_station_value_renders(client, db_session, redis):
     """The station handler shares _value_domain; an empty table is 0, not a 500."""
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
-    res = await client.get(STATIONS_VALUE_URL, params={"y": "station_count"}, headers=headers)
+    res = await client.get(STATIONS_VALUE_URL, params={"tz": "UTC", "y": "station_count"}, headers=headers)
     assert res.status_code == 200
     assert res.json() == {"value": 0}
 
@@ -621,7 +655,7 @@ async def test_station_value_renders(client, db_session, redis):
 async def test_value_rejects_a_metric_with_no_single_number(client, db_session, redis, y):
     """Forced-shape and multi-series metrics have no one number to return."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_VALUE_URL, params={"y": y}, headers=headers)
+    res = await client.get(TICKETS_VALUE_URL, params={"tz": "UTC", "y": y}, headers=headers)
     assert res.status_code == 400
     assert y in res.json()["detail"]
 
@@ -649,7 +683,7 @@ async def test_a_render_bug_is_not_reported_as_a_client_error(client, db_session
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     # The test transport re-raises unhandled app exceptions, so the raise *is* the pass.
     with pytest.raises(ValueError, match="internal render bug"):
-        await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
+        await client.get(TICKETS_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
 
 
 @pytest.mark.asyncio
@@ -663,7 +697,7 @@ async def test_out_of_range_end_date_is_a_400(client, db_session, url, redis):
     """
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW, Perm.STATION_VIEW)
     y = "total_tickets" if url == TICKETS_URL else "station_count"
-    res = await client.get(url, params={"y": y, "end_date": "9999-12-31"}, headers=headers)
+    res = await client.get(url, params={"tz": "UTC", "y": y, "end_date": "9999-12-31"}, headers=headers)
     assert res.status_code == 400
     assert "end_date" in res.json()["detail"]
 
@@ -717,7 +751,9 @@ async def test_undersized_figure_is_rejected(client, db_session, param, value, r
     plotly unguarded and 500'd. Now bounded at the framework edge, like the enum params.
     """
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_URL, params={"y": "total_tickets", param: value}, headers=headers)
+    res = await client.get(
+        TICKETS_URL, params={"tz": "UTC", "y": "total_tickets", param: value}, headers=headers
+    )
     assert res.status_code == 422
 
 
@@ -727,7 +763,7 @@ async def test_minimum_figure_size_is_accepted(client, db_session, redis):
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
-        params={"y": "total_tickets", "width": 10, "height": 10},
+        params={"tz": "UTC", "y": "total_tickets", "width": 10, "height": 10},
         headers=headers,
     )
     assert res.status_code == 200
@@ -749,7 +785,7 @@ def _ticket(owner: str, task_type: str | None = "rescue") -> Tickets:
 @pytest.mark.parametrize("url", [TICKETS_DATA_URL, STATIONS_DATA_URL])
 async def test_data_requires_authentication(client, url):
     """The series are the chart's numbers, so they are no more public than the chart."""
-    res = await client.get(url, params={"y": "total_tickets"})
+    res = await client.get(url, params={"tz": "UTC", "y": "total_tickets"})
     assert res.status_code == 401
 
 
@@ -757,7 +793,7 @@ async def test_data_requires_authentication(client, url):
 async def test_data_requires_the_domain_permission(client, db_session, redis):
     """station.view doesn't substitute for ticket.view on the ticket series either."""
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
-    res = await client.get(TICKETS_DATA_URL, params={"y": "total_tickets"}, headers=headers)
+    res = await client.get(TICKETS_DATA_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 403
 
 
@@ -768,7 +804,7 @@ async def test_data_matches_what_the_chart_plots(client, db_session, redis):
     db_session.add_all([_ticket(user_uuid, "rescue"), _ticket(user_uuid, "hr"), _ticket(user_uuid, None)])
     await db_session.commit()
 
-    params = {"y": "total_tickets", "x": "category"}
+    params = {"tz": "UTC", "y": "total_tickets", "x": "category"}
     data = (await client.get(TICKETS_DATA_URL, params=params, headers=headers)).json()
     bar = (await client.get(TICKETS_URL, params=params, headers=headers)).json()["data"][0]
     assert data == {
@@ -789,7 +825,7 @@ async def test_data_counts_only_tickets_in_the_callers_scope(client, db_session,
     db_session.add_all([_ticket(user_uuid), _ticket(str(stranger.uuid))])
     await db_session.commit()
 
-    res = await client.get(TICKETS_DATA_URL, params={"y": "total_tickets"}, headers=headers)
+    res = await client.get(TICKETS_DATA_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 200
     assert res.json() == {"x": None, "x_values": ["總計"], "series": [{"name": "任務單", "values": [1]}]}
 
@@ -835,7 +871,7 @@ async def test_data_completion_rate_is_a_percentage(client, db_session, redis):
     db_session.add(TaskAssignment(task_uuid=task.uuid, actor_uuid=user_uuid, status="completed"))
     await db_session.commit()
 
-    res = await client.get(TICKETS_DATA_URL, params={"y": "completion_rate"}, headers=headers)
+    res = await client.get(TICKETS_DATA_URL, params={"tz": "UTC", "y": "completion_rate"}, headers=headers)
     assert res.status_code == 200
     assert res.json()["series"] == [{"name": "完成率", "values": [50.0]}]
 
@@ -845,21 +881,23 @@ async def test_data_reports_the_grouping_it_applied(client, db_session, redis):
     """An `x` that doesn't apply is dropped, and `x` in the response says so."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
-        TICKETS_DATA_URL, params={"y": "task_completion_distribution", "x": "date"}, headers=headers
+        TICKETS_DATA_URL,
+        params={"tz": "UTC", "y": "task_completion_distribution", "x": "date"},
+        headers=headers,
     )
     assert res.status_code == 200
     assert res.json()["x"] == "completion"
     assert res.json()["x_values"] == ["已完成", "未完成"]
 
-    res = await client.get(TICKETS_DATA_URL, params={"y": "age_distribution"}, headers=headers)
+    res = await client.get(TICKETS_DATA_URL, params={"tz": "UTC", "y": "age_distribution"}, headers=headers)
     assert res.status_code == 200
     assert res.json()["x"] == "age_bucket"
 
-    res = await client.get(TICKETS_DATA_URL, params={"y": "total_tickets"}, headers=headers)
+    res = await client.get(TICKETS_DATA_URL, params={"tz": "UTC", "y": "total_tickets"}, headers=headers)
     assert res.status_code == 200
     assert res.json()["x"] is None
 
-    res = await client.get(TICKETS_DATA_URL, params={"y": "net_backlog_change"}, headers=headers)
+    res = await client.get(TICKETS_DATA_URL, params={"tz": "UTC", "y": "net_backlog_change"}, headers=headers)
     assert res.status_code == 200
     assert res.json()["x"] == "date"
     assert [s["name"] for s in res.json()["series"]] == ["新增", "完成", "取消", "淨變化"]
@@ -871,7 +909,13 @@ async def test_data_keeps_the_metrics_own_input_rules(client, db_session, redis)
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_DATA_URL,
-        params={"y": "volunteer_gap", "x": "date", "start_date": "2026-09-02", "end_date": "2026-09-01"},
+        params={
+            "tz": "UTC",
+            "y": "volunteer_gap",
+            "x": "date",
+            "start_date": "2026-09-02",
+            "end_date": "2026-09-01",
+        },
         headers=headers,
     )
     assert res.status_code == 400
@@ -885,7 +929,9 @@ async def test_data_keeps_the_metrics_own_input_rules(client, db_session, redis)
 async def test_station_data_renders(client, db_session, redis):
     """The station handler shares _data_domain; a grouping over no rows is empty, not a zero total."""
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
-    res = await client.get(STATIONS_DATA_URL, params={"y": "station_status_count"}, headers=headers)
+    res = await client.get(
+        STATIONS_DATA_URL, params={"tz": "UTC", "y": "station_status_count"}, headers=headers
+    )
     assert res.status_code == 200
     assert res.json() == {"x": "category", "x_values": [], "series": [{"name": "站點", "values": []}]}
 
@@ -926,7 +972,7 @@ async def test_data_durations_are_days_as_numbers(client, db_session, redis):
     await db_session.commit()
 
     res = await client.get(
-        TICKETS_DATA_URL, params={"y": "time_to_completion", "x": "category"}, headers=headers
+        TICKETS_DATA_URL, params={"tz": "UTC", "y": "time_to_completion", "x": "category"}, headers=headers
     )
     assert res.status_code == 200
     assert res.json() == {
@@ -956,7 +1002,7 @@ async def _filed(db, owner, *, county=None, town=None, village=None, task_type="
 
 
 async def _total(client, headers, url=TICKETS_VALUE_URL, y="total_tickets", **filters) -> int:
-    res = await client.get(url, params={"y": y, **filters}, headers=headers)
+    res = await client.get(url, params={"tz": "UTC", "y": y, **filters}, headers=headers)
     assert res.status_code == 200, res.text
     return res.json()["value"]
 
@@ -993,18 +1039,21 @@ async def test_volunteer_metrics_over_value_data_and_chart(client, db_session, r
     assert await _total(client, headers, y="volunteer_gap") == 3
 
     by_type = (
-        await client.get(TICKETS_DATA_URL, params={"y": "volunteer_gap", "x": "category"}, headers=headers)
+        await client.get(
+            TICKETS_DATA_URL, params={"tz": "UTC", "y": "volunteer_gap", "x": "category"}, headers=headers
+        )
     ).json()
     assert (by_type["x_values"], by_type["series"]) == (["人力"], [{"name": "志工缺口", "values": [3]}])
     # The totals have no date form, so the x is ignored rather than rejected.
     ignored = await client.get(
-        TICKETS_DATA_URL, params={"y": "volunteers_needed", "x": "date"}, headers=headers
+        TICKETS_DATA_URL, params={"tz": "UTC", "y": "volunteers_needed", "x": "date"}, headers=headers
     )
     assert ignored.status_code == 200
     assert ignored.json()["x"] is None
 
     today = datetime.now(UTC).date()
     trend = {
+        "tz": "UTC",
         "y": "volunteer_gap",
         "x": "date",
         "start_date": str(today - timedelta(days=2)),
@@ -1040,7 +1089,9 @@ async def test_ticket_filters_by_task_type_and_status(client, db_session, redis)
 async def test_ticket_filter_values_outside_the_vocabulary_are_rejected(client, db_session, redis, params):
     """An unknown task type or status is a 422, not a silent empty result."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(TICKETS_VALUE_URL, params={"y": "total_tickets", **params}, headers=headers)
+    res = await client.get(
+        TICKETS_VALUE_URL, params={"tz": "UTC", "y": "total_tickets", **params}, headers=headers
+    )
     assert res.status_code == 422
 
 
@@ -1114,7 +1165,7 @@ async def test_filters_apply_to_the_chart_and_data_endpoints_too(client, db_sess
     await _filed(db_session, user_uuid, county="宜蘭縣")
     await db_session.commit()
 
-    params = {"y": "total_tickets", "county": "花蓮縣"}
+    params = {"tz": "UTC", "y": "total_tickets", "county": "花蓮縣"}
     chart = (await client.get(TICKETS_URL, params=params, headers=headers)).json()
     data = (await client.get(TICKETS_DATA_URL, params=params, headers=headers)).json()
     assert chart["data"][0]["y"] == [1]
@@ -1172,11 +1223,11 @@ async def test_station_filters_and_the_operating_count(client, db_session, redis
     # ...and a status filter that contradicts it leaves nothing.
     assert await total(y="operating_station_count", status="permanently_closed") == 0
     res = await client.get(
-        STATIONS_URL, params={"y": "operating_station_count", "x": "category"}, headers=headers
+        STATIONS_URL, params={"tz": "UTC", "y": "operating_station_count", "x": "category"}, headers=headers
     )
     assert dict(zip(res.json()["data"][0]["x"], res.json()["data"][0]["y"], strict=True)) == {
         "收容所": 1,
-        "water": 1,
+        "加水": 1,
     }
 
 
@@ -1185,7 +1236,7 @@ async def test_a_station_status_outside_the_vocabulary_is_rejected(client, db_se
     """A ticket status is not a station status: 422."""
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
     res = await client.get(
-        STATIONS_VALUE_URL, params={"y": "station_count", "status": "pending"}, headers=headers
+        STATIONS_VALUE_URL, params={"tz": "UTC", "y": "station_count", "status": "pending"}, headers=headers
     )
     assert res.status_code == 422
 
@@ -1210,7 +1261,9 @@ async def test_duplicate_count_over_the_endpoints_counts_pending_cards(client, d
     await db_session.commit()
 
     assert await _total(client, headers, y="duplicate_count") == 2
-    data = (await client.get(TICKETS_DATA_URL, params={"y": "duplicate_count"}, headers=headers)).json()
+    data = (
+        await client.get(TICKETS_DATA_URL, params={"tz": "UTC", "y": "duplicate_count"}, headers=headers)
+    ).json()
     assert data["series"] == [{"name": "疑似重複的單", "values": [2]}]
     assert (
         await _total(client, headers, y="duplicate_count", start_date="2001-01-01", end_date="2001-01-02")
@@ -1286,7 +1339,7 @@ async def test_catalog_publishes_the_filter_values(client, db_session, redis):
     ]
     assert stations["types"] == [
         {"value": "shelter", "label": "收容所"},
-        {"value": "water", "label": "water"},
+        {"value": "water", "label": "加水"},
     ]
     assert stations["statuses"] == [
         {"value": "active", "label": "營運中"},

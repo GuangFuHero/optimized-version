@@ -15,9 +15,9 @@ from sqlalchemy import func
 # shows an honest "uncategorized" bar instead of a blank one.
 UNCATEGORIZED_LABEL = "uncategorized"
 
-# A day-by-day trend runs its query once per day, so its span is capped: with no
-# statement_timeout and no rate limit deployed, this is the only thing stopping one request
-# from holding a connection indefinitely. The default is what the dashboard opens on.
+# A day-by-day trend evaluates every need once per day, so its span is capped: its query sets
+# no statement timeout and no rate limit is deployed, so this cap is what bounds one request.
+# The default is what the dashboard opens on.
 MAX_TREND_DAYS = 366
 DEFAULT_TREND_DAYS = 30
 
