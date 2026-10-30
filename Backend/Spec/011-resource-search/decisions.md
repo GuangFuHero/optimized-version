@@ -922,7 +922,7 @@ JIT 關掉是 40／54／65 ms。所以帶 `q` 時多多少，看關鍵字對到�
 
 **Date**：2026-10-29。HC 在 #97 的 review 提出 `createStation` 照收前端送的 `source`（2026-10-28）；Dan 2026-10-28
 決定由後端依身分決定、任務一起改、staging 舊資料不另外補；Carol 2026-10-28 在 Discord #uiux 定「只要是在後台建立的
-都算官方」（含團隊成員）。3NF 稽核的 F1（`note/3nf-audit.md`，本機）併進這條，Dan 2026-10-29 決定：疊在 #129 上、
+都算官方」（含團隊成員）。3NF 稽核的 F1（`Spec/Docs/3nf-compliance.md`）併進這條，Dan 2026-10-29 決定：疊在 #129 上、
 任務的 `source` 不加 CHECK 也不改舊資料、匯入的任務也照身分存。
 
 **Context**：
@@ -968,7 +968,7 @@ JIT 關掉是 40／54／65 ms。所以帶 `q` 時多多少，看關鍵字對到�
 
 **白話**：「已讀」和「什麼時候讀的」一定一致，直接寫 SQL 也寫不出矛盾的資料。
 
-**Date**：2026-10-29。3NF 稽核的 F2（`note/3nf-audit.md`，本機）；Dan 2026-10-29 決定跟 ADR-438 同一支做。通知沒有
+**Date**：2026-10-29。3NF 稽核的 F2（`Spec/Docs/3nf-compliance.md`）；Dan 2026-10-29 決定跟 ADR-438 同一支做。通知沒有
 自己的 Spec，放在這裡，跟 ADR-438 同出一份稽核。
 
 **Context**：`read` 等於 `read_at IS NOT NULL`（遞移相依）。`read` 留著，因為未讀數的索引
