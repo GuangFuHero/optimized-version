@@ -1,6 +1,7 @@
 {
   "name": "@rescue-frontend/modules",
   "version": "0.0.1",
+  "license": "GPL-3.0-only",
   "private": true,
   "exports": {
     ".": "./src/index.ts",
