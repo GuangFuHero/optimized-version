@@ -1,4 +1,4 @@
-# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387、ADR-422、ADR-437）
+# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387、ADR-422、ADR-437、ADR-444）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/016-resource-history/decisions.md`（ADR-243 為目前全 repo 最大值）。
@@ -875,3 +875,44 @@ Dan 2026-10-29 決定用這個做法（A），另開一支 PR 接在 #121 後面
 主鍵查詢兩種都 1～3 ms；目前前台沒有把這兩支跟別的 root field 放在同一個請求。
 ◾ 測試量不了時間，所以測的是設定：`tests/test_generic_plan.py` 釘住這個視窗（裡面是 generic、出去還原、
 巢狀不提早還原、失敗時留原本的錯），`test_ticket_cells.py` 釘住哪幾條路有包、哪幾條沒有。
+
+### ADR-444 分享連結分得出「任務單已刪除」和「找不到」：另一個只回狀態的查詢
+
+**白話**：打開一張單的分享連結時，前台分得出單是被刪了、還是根本沒有這張單；分的時候不給單的任何內容。
+
+**Date**: 2026-10-31（糖要前台打開分享連結時分得出「這張任務單已刪除」和「找不到這張任務單」兩種畫面；這個做法
+使用者在協調者分頁照建議定）
+
+**Context**：
+
+- `ticket(uuid)` 用 `get_by_uuid_active`，刪掉的單和不存在的 uuid 都回 null（`graphql/tickets/queries.py`）。
+- 刪單都是軟刪除：建單者刪（`services/ticket.py::delete_ticket`）和重複審核合併掉的那張
+  （`services/dedup_resolve.py::_cancel_secondary`）都寫 `cancelled`＋`delete_at`。網站沒有硬刪單的路徑。
+- 分享頁在伺服器端讀 `ticket`（`point-share/target.ts`），拿到 null 就沒有東西可以分。
+
+**Decision**：
+
+- 加 `Query.ticketAvailability(uuid: UUID!): TicketAvailability!`，值是 `available`／`deleted`／`not_found`。
+  前台跟 `ticket(uuid)` 放在同一個 request 問，`ticket` 是 null 時看這裡。
+- `deleted`：`tickets` 有這個 uuid，`delete_at` 不是 NULL。跟 `ticket(uuid)` 回 null 的原因是同一欄。
+- `available`：`ticket(uuid)` 會回這張單時，用同一個 `ticket.view` 判斷。`ticket.view` 是公開能力（ADR-273），
+  所以現在每個人都是 ALL。
+- `not_found`：其他都是。包括從來沒有這個 uuid、別種東西的 uuid（站點、區域、需求；只查 `tickets`）、硬刪的、
+  呼叫者看不到的。
+- 只讀 `delete_at` 一欄，一句主鍵查詢（`ticket_repository.is_deleted`）。回的只有 enum：不給標題、地址、聯絡人、
+  刪除時間，也不給單本身。
+- 重複審核合併掉的單也是 `deleted`；`replaced_by_uuid` 仍然只是紀錄（ADR-372）。
+- `ticket(uuid)` 不動。
+- 不用的做法：
+  - `ticket(uuid)` 改回 union（單／已刪除／找不到）：改了現有查詢的型別，前台、管理平台、分享頁都要一起改。
+  - 刪掉的單讓 `ticket(uuid)` 回 error code：每個呼叫的地方都會當失敗，「沒有」跟「出錯」混在一起。
+  - 刪掉的單照樣回 `TicketType`、其他欄位清空：每個欄位 resolver 都要記得擋，漏一個就露出內容。
+  - `tickets` 加刪除狀態欄位：跟 `delete_at` 重複（3NF），還要 migration。
+
+**Consequences**：
+➕ 現有的 `ticket` 呼叫都不用改；分享頁同一個 request 多問一個欄位就分得出來。
+➕ 不露內容不靠每個欄位各自擋：這個查詢拿不到內容。
+➕ 不存新欄位、不用 migration：刪除只記在 `delete_at`。
+➖ 多一個 root query。
+◾ mock seed 清掉的單（含測試者用 mock 帳號建的）是硬刪，分享連結是「找不到」。
+◾ 之後要「已合併到另一張」，再加 `merged`、帶上 `replaced_by_uuid`，現有三個值不受影響。

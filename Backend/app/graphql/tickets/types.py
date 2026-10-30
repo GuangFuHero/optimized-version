@@ -176,6 +176,19 @@ class TicketStatus(enum.Enum):
     cancelled = "cancelled"
 
 
+@strawberry.enum
+class TicketAvailability(enum.Enum):
+    """Whether `ticket(uuid)` gives a ticket, and if not, whether there was one (ADR-444).
+
+    deleted: there was, and it was deleted, by its owner or as the other ticket of a 重複審核 merge.
+    not_found: there never was, or the caller cannot see it, which `ticket` cannot tell apart either.
+    """
+
+    available = "available"
+    deleted = "deleted"
+    not_found = "not_found"
+
+
 @strawberry.type(description="One move of a ticket's audit status")
 class TicketAuditEntryType:
     """An entry of `TicketType.auditHistory`, built by `ticket_audit.audit_history`."""

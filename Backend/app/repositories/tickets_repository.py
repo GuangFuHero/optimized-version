@@ -251,6 +251,16 @@ class TicketRepository(GenericRepository[Tickets]):
             whens.append((open_ticket, 1))
         return case(*whens, else_=2)
 
+    async def is_deleted(self, db: AsyncSession, uuid) -> bool | None:
+        """Whether the ticket `uuid` was deleted; None when no ticket has that uuid (ADR-444).
+
+        Reads `delete_at` and nothing else, so a caller asking whether a ticket is gone never holds
+        what was in it.
+        """
+        return await db.scalar(
+            select(self.model.delete_at.is_not(None)).select_from(self.model).where(self.model.uuid == uuid)
+        )
+
     async def list_active(
         self,
         db: AsyncSession,

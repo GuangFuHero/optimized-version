@@ -1035,6 +1035,8 @@ export type Query = {
   teamZone?: Maybe<TeamZoneType>;
   teamZones: TeamZoneConnection;
   ticket?: Maybe<TicketType>;
+  /** Whether ticket(uuid) gives this ticket, and if not, whether it was deleted or never was, so a share link can say which. Ask it beside ticket(uuid). The state alone, nothing of the ticket (ADR-444) */
+  ticketAvailability: TicketAvailability;
   ticketCells: Array<TicketCellType>;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketTasks: Array<TicketTaskType>;
@@ -1196,6 +1198,10 @@ export type QueryTeamZonesArgs = {
 export type QueryTicketArgs = {
   uuid: Scalars['UUID']['input'];
   zoom?: InputMaybe<Scalars['Float']['input']>;
+};
+
+export type QueryTicketAvailabilityArgs = {
+  uuid: Scalars['UUID']['input'];
 };
 
 export type QueryTicketCellsArgs = {
@@ -1769,6 +1775,14 @@ export type TicketAuditEntryType = {
   status: Scalars['String']['output'];
 };
 
+export const TicketAvailability = {
+  Available: 'available',
+  Deleted: 'deleted',
+  NotFound: 'not_found',
+} as const;
+
+export type TicketAvailability =
+  (typeof TicketAvailability)[keyof typeof TicketAvailability];
 /** How many tickets one H3 cell holds, of those its caller is shown as the cell */
 export type TicketCellType = {
   __typename?: 'TicketCellType';

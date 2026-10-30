@@ -962,6 +962,11 @@ type Query {
     """
     statuses: [TicketStatus!] = null
   ): [TicketCellType!]!
+
+  """
+  Whether ticket(uuid) gives this ticket, and if not, whether it was deleted or never was, so a share link can say which. Ask it beside ticket(uuid). The state alone, nothing of the ticket (ADR-444)
+  """
+  ticketAvailability(uuid: UUID!): TicketAvailability!
   ticket(
     uuid: UUID!
 
@@ -1709,6 +1714,12 @@ type TicketAuditEntryType {
   """Who moved it; null for the scan"""
   actorUuid: String
   actorName: String
+}
+
+enum TicketAvailability {
+  available
+  deleted
+  not_found
 }
 
 """

@@ -28,6 +28,7 @@ from app.graphql.tickets.types import (
     MyTaskAssignmentType,
     TaskAssignmentType,
     TaskPropertyType,
+    TicketAvailability,
     TicketCellType,
     TicketConnection,
     TicketListOrder,
@@ -319,6 +320,30 @@ class RequestQuery:
         return [
             TicketCellType(cell=cell, ticket_count=count, urgent_count=urgent) for cell, count, urgent in rows
         ]
+
+    @strawberry.field(
+        description=(
+            "Whether ticket(uuid) gives this ticket, and if not, whether it was deleted or never was, so "
+            "a share link can say which. Ask it beside ticket(uuid). The state alone, nothing of the "
+            "ticket (ADR-444)"
+        )
+    )
+    async def ticket_availability(self, info: strawberry.types.Info, uuid: UUID) -> TicketAvailability:
+        """`available` exactly when `ticket` returns the ticket; read from `delete_at` alone otherwise."""
+        db = info.context["db"]
+        scope = await check_permission(info, Perm.TICKET_VIEW)
+        deleted = await ticket_repository.is_deleted(db, uuid)
+        if deleted is None:
+            return TicketAvailability.not_found
+        if deleted:
+            return TicketAvailability.deleted
+        if scope != Scope.ALL:
+            # As `ticket` decides it. ticket.view is public (ADR-273), so no caller gets here today.
+            user = info.context["user"]
+            m = await ticket_repository.get_by_uuid_active(db, uuid)
+            if user is None or m is None or not await in_scope(scope, actor=user, resource=m, db=db):
+                return TicketAvailability.not_found
+        return TicketAvailability.available
 
     @strawberry.field
     async def ticket(
