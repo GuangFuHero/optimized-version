@@ -22,27 +22,29 @@
     // ── 後台（key＝nav.js 的導覽 id）──────────────────────────────────────
     dashboard: {
       title: "總覽儀表板",
-      what: "一眼看這次災害應變的整體狀況。",
-      can: ["看任務單、志工、資源站點的數量與變化", "找出需求最多、還沒有人處理的地方"],
+      what: "藉由儀表板綜觀任務需求、志工媒合、資源站點的數量、類型及趨勢變化，了解即時熱點及尚需協助的區域。",
     },
     map: {
       title: "互助地圖",
-      what: "在地圖上圈出區域，讓大家知道哪裡危險、哪一區由誰負責。",
-      can: [
-        "危險區：用橘白斜紋提醒大家不要進入",
-        "責任區：把一區交給一個單位，區內的任務單會一起指派給他",
-        "標示區：只標出位置，例如志工休息區、集合點",
-        "打開「前台可見」，民眾與志工在前台地圖也看得到",
-      ],
-      note: "只有超級管理員與政府可以圈選與指派。做錯了，5 秒內可以按「復原」。",
+      // 2026-10-31 對齊 Notion「這一頁怎麼用」（Notion 為準）；**包起來的字會變粗體
+      what: "政府及專案管理員可於地圖劃分及指派以組織為單位的援救區域，劃分或指派後，使用者前台地圖將同步顯示，知會災害範圍民眾危險區、組織負責區，以及特別標示區。",
+      sections: [{
+        title: "區域標示定義",
+        items: [
+          "危險區：以橘白斜紋**顯示於前後台所有地圖**，提醒災害範圍內非相關人員禁止進入，例：施工區、大體挖掘區、河堤潰口等。",
+          "責任區：以組織為單位，政府可分派任務區域，劃分該區內的所有援救任務單會隸屬一單位統一處理，**指派後民眾使用者端即會顯示組織名稱，並自動完成媒合**；被指派的負責組織可在「任務管理」頁面中篩選組織，即會出現區域內的任務。",
+          "標示區：非指派區域及危險區域，標示區域範圍後也**可選擇「前台可見」**決定是否顯示民眾使用者前台公開。例如志工休息區、集合點",
+        ],
+      }],
+      note: "僅超級管理員及政府單位管理員，可編輯互助地圖內的圈選劃分，區域成立後若需要取消，請回到此分頁進行區域刪除（刪除後系統操作仍會有歷史紀錄，未來仍可做科研用途查閱紀錄）",
     },
     ticket: {
       title: "任務管理",
-      what: "所有求助任務單都在這裡：誰需要什麼、誰去處理、處理到哪裡。",
+      what: "所有求助任務單都在這裡，以同一地址為單位，每一地址可有多重任務、類型跟各任務狀態。",
       can: ["查看、搜尋、篩選任務單", "建立任務單，或處理民眾從前台送來的求助", "把任務指派給團隊或志工，並更新進度"],
       // 2026-09-27 Sucre：加「直立地圖」介紹與 RBAC。直立地圖已於 09-25 改名為「現場分區」，畫面用新名稱。
       sections: [{
-        // 2026-10-15 後台改叫「新增地點」；前台仍叫「現場分區」。
+        // 2026-10-15 Sucre：後台改叫「新增地點」；前台仍叫「現場分區」。
         title: "開啟空間",
         // 2026-10-26：改名「開啟空間」；空間跟任務單一樣出現在列表與地圖上（BE-036）
         body: "同一棟大樓裡有很多人需要幫忙時，按工具列的「開啟空間」：在地圖上點那棟建築（地址會自動帶出），填名稱與地上、地下幾層，每棟會自動加上頂樓 RF。開好之後，這個空間會跟任務單一起出現在列表與地圖上（方形圖釘）；點開可以看各樓層哪幾層還需要幫忙，也可以編輯名稱、地址、樓層數或刪除（刪除不會刪掉底下的任務單）。任務單的樓層寫 RF 或「頂樓」都會歸到頂樓。",
@@ -101,17 +103,17 @@
     },
     dedup: {
       title: "重複審核",
-      what: "系統發現兩張可能在講同一件事的任務單或站點，集中在這裡判斷要不要合併。",
+      // 2026-10-31 Carol 改稿：用 A 單、B 單、預覽單；操作方式；已承接的志工與跨單位合成一句「合併規則」
+      what: "系統提示兩張任務單或站點疑似重複內容，集中在這裡判斷要不要合併。",
+      canTitle: "操作方式",
       can: [
-        "點一對進比對畫面：左邊兩張並排，點一格就把那個值帶到右邊；右邊是合併後的任務單，每一格都可以直接改",
-        "兩張依建立時間排（A 最早），表頭標出最早與晚多久",
-        "兩張單上的其他需求、照片都列成勾選，勾的放進合併後的任務單，沒勾的取消",
-        "站點這一版還不能合併，只能記下「確認重複」或「不是重複」",
-        "按「合併」會先確認一次；送出後不能復原、不能拆回，但會留在變更紀錄",
+        "點一對進比對畫面：例如 A 單、B 單並排，點 A 單的特定欄位，就能把欄位值放進預覽單；預覽單即合併成功後的任務單，欄位內容不只可擇一，也可直接編輯；沒勾選的其他需求與照片不會併入預覽單，請務必重複確認欄位資訊。",
+        "按「合併」後可再行確認，送出後不能復原、不能拆回，變更紀錄將記在系統內可供閱覽。",
+        // 以下一條是核對畫面後補的（Carol 稿沒有）：站點這一版不能合併
+        "站點這一版還不能合併，只能記下「確認重複」或「不是重複」。",
       ],
       sections: [
-        { title: "已承接的志工", body: "合併的那筆需求兩邊的志工都會繼續承接，並收到通知；沒勾的需求上的志工會收到取消通知。合併後的數量不能少於承接人數。" },
-        { title: "跨單位的", body: "團隊管理員只能處理兩張都屬於自己團隊的；含有別隊或未指派單位的，由資料檢核員或超級管理員處理。" },
+        { title: "合併規則", body: "需求數量不得少於已承接的志工數量。合併成功後雙方開單者、承接志工皆會收到通知。" },
       ],
       note: "「可能重複」是系統依距離、時間、需求種類與文字算出來的建議，會判錯，請以實際內容為準。",
     },
@@ -133,15 +135,16 @@
       what: "看附近有哪些資源站點，以及哪裡有人需要幫忙。",
       can: [
         "切換「站點」與「任務」，點圖示看詳細資訊",
-        "需要幫忙時，按「請求協助」",
-        "登入後可以承接任務，或回報站點資訊有誤",
+        "需要幫忙時，按「請求協助」；也可以先點地圖上的位置，再按「在這裡新增」",
+        "登入後可以承接任務，或對站點提出修改建議",
       ],
-      note: "沒有登入時，任務的位置會用格子顯示，保護求助者的隱私。",
+      note: "沒有登入時，任務的位置會用格子顯示，也看不到地址與照片，保護求助者的隱私。",
     },
     "site:list": {
       title: "列表",
       what: "用清單的方式看資源站點與求助任務，適合搜尋與比較。",
-      can: ["搜尋、篩選站點或任務", "點一筆看詳細資訊", "登入後可以承接任務"],
+      can: ["搜尋、篩選站點或任務", "點一筆看詳細資訊", "登入後可以承接任務，或對站點提出修改建議"],
+      note: "沒有登入時，看不到任務的地址與照片，保護求助者的隱私。",
     },
     "site:brief": {
       title: "志工行前資訊",
@@ -149,6 +152,9 @@
       can: ["了解怎麼參與、交通方式與注意事項", "勾選打包清單（只存在這台裝置）", "列印帶在身上"],
     },
   };
+
+  // **粗體** 的簡單解析（不用物件 rest，見下方 _excluded 的說明）
+  function rich(t) { return String(t).split("**").map((x, i) => (i % 2 ? <strong key={i}>{x}</strong> : x)); }
 
   const SEEN_KEY = "wg.help.seen";
   function readSeen() { try { return JSON.parse(window.localStorage.getItem(SEEN_KEY) || "{}") || {}; } catch (e) { return {}; } }
@@ -179,7 +185,7 @@
       const r = el.getBoundingClientRect();
       const vw = window.innerWidth;
       if (vw < 768) { setPos({ top: 12, left: 12, right: 12, sheet: true }); return; }
-      const w = WG_PAGE_HELP[pageKey] && WG_PAGE_HELP[pageKey].roles ? 400 : 340;
+      const w = WG_PAGE_HELP[pageKey] && (WG_PAGE_HELP[pageKey].roles || (WG_PAGE_HELP[pageKey].sections || []).some((x) => x.items)) ? 400 : 340;
       let left = align === "right" ? r.right - w : r.left - 8;
       left = Math.max(12, Math.min(left, vw - w - 12));
       setPos({ top: r.bottom + 8, left, width: w });
@@ -262,19 +268,24 @@
                 <Icon n="X" s={16} />
               </button>
             </div>
-            <p style={{ margin: "10px 0 0", font: "var(--font-body-300)", fontSize: 14, lineHeight: 1.7, color: "var(--color-fg-neutral-default)" }}>{help.what}</p>
+            <p style={{ margin: "10px 0 0", font: "var(--font-body-300)", fontSize: 14, lineHeight: 1.7, color: "var(--color-fg-neutral-default)" }}>{rich(help.what)}</p>
             {help.can && help.can.length > 0 && (
               <>
-                <div style={{ marginTop: 12, font: "var(--font-label-300)", fontWeight: 700, color: "var(--color-fg-neutral-muted)" }}>你可以</div>
+                <div style={{ marginTop: 12, font: "var(--font-label-300)", fontWeight: 700, color: "var(--color-fg-neutral-muted)" }}>{help.canTitle || "你可以"}</div>
                 <ul style={{ margin: "6px 0 0", paddingLeft: 18, font: "var(--font-body-300)", fontSize: 14, lineHeight: 1.75, color: "var(--color-fg-neutral-subtle)" }}>
-                  {help.can.map((c) => <li key={c}>{c}</li>)}
+                  {help.can.map((c) => <li key={c}>{rich(c)}</li>)}
                 </ul>
               </>
             )}
             {(help.sections || []).map((sec) => (
               <div key={sec.title} style={{ marginTop: 12 }}>
                 <div style={{ font: "var(--font-label-300)", fontWeight: 700, color: "var(--color-fg-neutral-muted)" }}>{sec.title}</div>
-                <p style={{ margin: "6px 0 0", font: "var(--font-body-300)", fontSize: 14, lineHeight: 1.75, color: "var(--color-fg-neutral-subtle)" }}>{sec.body}</p>
+                {sec.body && <p style={{ margin: "6px 0 0", font: "var(--font-body-300)", fontSize: 14, lineHeight: 1.75, color: "var(--color-fg-neutral-subtle)" }}>{rich(sec.body)}</p>}
+                {sec.items && (
+                  <ul style={{ margin: "6px 0 0", paddingLeft: 18, font: "var(--font-body-300)", fontSize: 14, lineHeight: 1.75, color: "var(--color-fg-neutral-subtle)" }}>
+                    {sec.items.map((it) => <li key={it}>{rich(it)}</li>)}
+                  </ul>
+                )}
               </div>
             ))}
             {help.roles && help.roles.length > 0 && (
@@ -293,7 +304,7 @@
             {help.note && (
               <p style={{ margin: "12px 0 0", padding: "9px 11px", borderRadius: 8, background: "var(--color-bg-neutral-subtle)",
                 font: "var(--font-body-300)", fontSize: 13, lineHeight: 1.65, color: "var(--color-fg-neutral-subtle)" }}>
-                {help.note}
+                {rich(help.note)}
               </p>
             )}
           </div>,
