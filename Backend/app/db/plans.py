@@ -22,8 +22,11 @@ async def generic_plan(db, *, needed: bool = True):
 
     `set_config(..., is_local => true)` keeps it to this transaction, and the outermost window puts
     it back on the way out, as `statement_ceiling` does its timeout (ADR-156/157): a GraphQL request
-    is one transaction on one session, and its other reads should plan as they always did. A no-op
-    when not `needed`.
+    is one transaction on one session, and the reads after the window plan as they always did. A
+    sibling root field's reads that land while it is open are planned generically too, since root
+    fields resolve concurrently on that session (`app/graphql/context.py`), so which ones depends on
+    how they interleave. That changes their plan for those runs only, never their results: once
+    reset, Postgres plans a statement as if the window had never run it. A no-op when not `needed`.
     """
     if not needed:
         yield

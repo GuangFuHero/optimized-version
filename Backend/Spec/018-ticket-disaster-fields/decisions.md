@@ -846,10 +846,17 @@ Dan 2026-10-29 決定用這個做法（A），另開一支 PR 接在 #121 後面
 **Decision**：
 
 - `app/db/plans.generic_plan(db)`：在這個交易裡設 `plan_cache_mode = force_generic_plan`
-  （`set_config(..., true)`），離開時 `RESET`。一個 GraphQL 請求是同一個交易、同一個 session，同一個請求裡
-  其他的讀取要照原本的方式規劃，所以要還原；巢狀時只有最外層會設、會還原，跟 statement ceiling 同一套規矩
+  （`set_config(..., true)`），離開時 `RESET`。一個 GraphQL 請求是同一個交易、同一個 session，視窗之後的
+  讀取要照原本的方式規劃，所以要還原；巢狀時只有最外層會設、會還原，跟 statement ceiling 同一套規矩
   （ADR-156／157）。裡面的語句失敗、交易已中止時，RESET 也會失敗；這時吞掉 RESET 的錯，讓原本的錯誤往上傳，
   rollback 本來就會丟掉這個設定。
+- 視窗開著的時候，同一個請求裡並列的 root field 也在這個 session 上交錯執行（`app/graphql/context.py`），
+  剛好落在視窗裡的讀取也會用 generic plan，哪幾句看執行順序（popo 2026-10-30 在 #167 review 實測）。不另外
+  隔離：
+  - 結果不變，只差那幾次的計畫。還原後 Postgres 照沒被套過的樣子規劃：2026-10-30 在 5433 量，視窗裡跑過
+    一次的語句，還原後前 5 次照樣是 custom plan。
+  - 設定、計數、還原是三次分開的來回，縮小視窗關不掉這個縫；要隔離得讓計數另外拿一條連線，每次拖地圖多
+    佔一條。statement ceiling 開著時，並列的讀取也一樣會被管到。
 - 用在兩處，都在 resolver：
   - `ticketCells`：呼叫者有看不到精確位置的單（`detail_filters` 不是空的）時，整個計數包在裡面（外面再套
     原本的 ceiling）。看得到所有精確位置的人沒有格子，不查也不包。
@@ -864,5 +871,7 @@ Dan 2026-10-29 決定用這個做法（A），另開一支 PR 接在 #121 後面
 **Consequences**：
 ➕ 新連線也不會因為計畫被「請放大地圖」擋掉；前台可以改用 `ticketCells`。
 ➖ 小框的訪客列表在新連線的第 2～5 次多 3～5 ms（generic 12～16 ms，custom 8～11 ms），第 6 次起一樣。
+➖ 跟 `ticketCells` 或訪客框的 `tickets` 並列在同一個請求的欄位，落在視窗裡的讀取也用 generic plan。popo 量的
+主鍵查詢兩種都 1～3 ms；目前前台沒有把這兩支跟別的 root field 放在同一個請求。
 ◾ 測試量不了時間，所以測的是設定：`tests/test_generic_plan.py` 釘住這個視窗（裡面是 generic、出去還原、
 巢狀不提早還原、失敗時留原本的錯），`test_ticket_cells.py` 釘住哪幾條路有包、哪幾條沒有。
