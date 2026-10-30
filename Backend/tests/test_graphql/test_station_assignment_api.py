@@ -109,6 +109,32 @@ async def test_a_station_is_assigned_and_unassigned_through_graphql(client, redi
     assert await _team_of(station_uuid) is None
 
 
+ASSIGNABLE_TEAMS = "{ assignableStationTeams { uuid name type } }"
+
+
+@pytest.mark.asyncio
+async def test_a_gov_assigner_can_pick_a_team_that_is_not_its_own(client, redis):
+    """The picker offers other teams, which team.view=team would never list for a gov member."""
+    token = await _gov_assigner(redis)
+    _, ngo_uuid = await _station_and_team()
+
+    resp = await client.post("/graphql", json={"query": ASSIGNABLE_TEAMS}, headers=auth_header(token))
+
+    body = resp.json()
+    assert "errors" not in body, body
+    assert ngo_uuid in {team["uuid"] for team in body["data"]["assignableStationTeams"]}
+
+
+@pytest.mark.asyncio
+async def test_an_ngo_holding_station_assign_gets_no_team_list(client, redis):
+    """Refused where the assignment itself would be."""
+    token, _ = await _team_member(redis, "ngo", Perm.STATION_ASSIGN, "all")
+
+    resp = await client.post("/graphql", json={"query": ASSIGNABLE_TEAMS}, headers=auth_header(token))
+
+    assert "Only gov teams" in resp.json()["errors"][0]["message"]
+
+
 # --- reading the assignment (ADR-285 decision 11) ---
 
 STATION_TEAM = "query($uuid: UUID!) { station(uuid: $uuid) { assignedTeam { uuid name } } }"
@@ -288,3 +314,102 @@ async def test_station_contacts_follow_the_assignment(client, redis, team_type, 
     items = body["data"]["stations"]["items"]
     phones = {item["name"].removeprefix(f"{tag} "): item["contactPhone"] for item in items}
     assert phones == expected
+
+
+# --- per-station edit/delete rights follow the assignment (WG-168, `station.edit=team`) ---
+
+STATION_RIGHTS = """
+query($q: String!) {
+    stations(q: $q) {
+        items { name viewerCanEdit viewerCanDelete viewerCanViewHistory viewerCanViewPii viewerCanExport }
+    }
+}
+"""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("team_type", "expected"),
+    [
+        ("ngo", {"own": True, "other": False, "unassigned": False}),
+        ("gov", {"own": True, "other": True, "unassigned": True}),
+    ],
+    ids=["ngo-edits-its-own", "gov-edits-all"],
+)
+@pytest.mark.parametrize(
+    ("perm", "field"),
+    [
+        (Perm.STATION_EDIT, "viewerCanEdit"),
+        (Perm.STATION_DELETE, "viewerCanDelete"),
+        (Perm.STATION_VIEW_HISTORY, "viewerCanViewHistory"),
+        (Perm.STATION_VIEW_PII, "viewerCanViewPii"),
+        (Perm.STATION_EXPORT, "viewerCanExport"),
+    ],
+    ids=["edit", "delete", "view-history", "view-pii", "export"],
+)
+async def test_station_rights_follow_the_assignment(client, redis, team_type, expected, perm, field):
+    """A row the caller cannot act on says so, so the page offers no control that would 404."""
+    token, team_uuid = await _team_member(redis, team_type, perm, "team")
+    tag = await _contact_stations(team_uuid)
+
+    resp = await client.post(
+        "/graphql", json={"query": STATION_RIGHTS, "variables": {"q": tag}}, headers=auth_header(token)
+    )
+
+    body = resp.json()
+    assert "errors" not in body, body
+    items = body["data"]["stations"]["items"]
+    assert {item["name"].removeprefix(f"{tag} "): item[field] for item in items} == expected
+
+
+@pytest.mark.asyncio
+async def test_an_anonymous_caller_can_change_no_station(client):
+    """No user means no rights, and no field-level error either."""
+    tag = await _contact_stations(str((await _station_and_team())[1]))
+
+    resp = await client.post("/graphql", json={"query": STATION_RIGHTS, "variables": {"q": tag}})
+
+    body = resp.json()
+    assert "errors" not in body, body
+    items = body["data"]["stations"]["items"]
+    assert all(not any(value for key, value in item.items() if key != "name") for item in items)
+
+
+# --- the review queue holds only what the caller can review (WG-168, `station.review=team`) ---
+
+REVIEWABLE = "query($q: String!) { stations(q: $q, reviewableOnly: true) { items { name } } }"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("team_type", "expected"),
+    [("ngo", {"own"}), ("gov", {"own", "other", "unassigned"})],
+    ids=["ngo-reviews-its-own", "gov-reviews-all"],
+)
+async def test_reviewable_only_keeps_the_stations_the_caller_can_review(client, redis, team_type, expected):
+    """Another team's suggestions are not this team's to decide, so they stay out of its queue."""
+    token, team_uuid = await _team_member(redis, team_type, Perm.STATION_REVIEW, "team")
+    tag = await _contact_stations(team_uuid)
+
+    resp = await client.post(
+        "/graphql", json={"query": REVIEWABLE, "variables": {"q": tag}}, headers=auth_header(token)
+    )
+
+    body = resp.json()
+    assert "errors" not in body, body
+    assert {item["name"].removeprefix(f"{tag} ") for item in body["data"]["stations"]["items"]} == expected
+
+
+@pytest.mark.asyncio
+async def test_reviewable_only_is_empty_without_station_review(client, redis):
+    """Holding view but not review leaves nothing to review, rather than everything."""
+    token, team_uuid = await _team_member(redis, "gov", Perm.STATION_EDIT, "team")
+    tag = await _contact_stations(team_uuid)
+
+    for headers in (auth_header(token), {}):
+        resp = await client.post(
+            "/graphql", json={"query": REVIEWABLE, "variables": {"q": tag}}, headers=headers
+        )
+        body = resp.json()
+        assert "errors" not in body, body
+        assert body["data"]["stations"]["items"] == []

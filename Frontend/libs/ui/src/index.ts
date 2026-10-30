@@ -75,8 +75,13 @@ export { SegmentedTabs } from './components/segmented-tabs';
 export type { SegmentedTabsProps } from './components/segmented-tabs';
 export { Tabs } from './components/tabs';
 export type { TabsProps } from './components/tabs';
-export { Sheet } from './components/Sheet';
-export type { SheetProps } from './components/Sheet';
+export { Sheet, SheetFrame, SheetLayout } from './components/Sheet';
+export type {
+  SheetFrameProps,
+  SheetLayoutProps,
+  SheetProps,
+  SheetVariant,
+} from './components/Sheet';
 export { SidebarItem } from './components/SidebarItem';
 export type { SidebarItemProps } from './components/SidebarItem';
 export { TextInput } from './components/TextInput';
@@ -105,6 +110,7 @@ export {
   fontStack,
   fontVariables,
   IOS_NO_ZOOM_INPUT_PX,
+  safeAreaBottom,
   withAlpha,
 } from './theme';
 export type {

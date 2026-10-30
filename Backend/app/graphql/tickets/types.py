@@ -14,6 +14,7 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
 from app.db.h3 import COARSE_MAX_H3_RESOLUTION
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import (
@@ -151,6 +152,28 @@ class AuditStatus(enum.Enum):
     need_audit = "need_audit"
     audited = "audited"
     audit_issue = "audit_issue"
+
+
+@strawberry.enum
+class TicketListOrder(enum.Enum):
+    """How the `tickets` list is ordered: `TICKET_ORDERS` in app/repositories/tickets_repository.py.
+
+    NEEDS_FIRST is the site list's (ADR-419): tickets still taking people first, one with an open
+    rescue need ahead of the rest, then newest first within each.
+    """
+
+    NEWEST = "newest"
+    NEEDS_FIRST = "needs_first"
+
+
+@strawberry.enum
+class TicketStatus(enum.Enum):
+    """A ticket's status, to filter on: worked out from its needs in app/services/ticket_status.py."""
+
+    pending = "pending"
+    in_progress = "in_progress"
+    completed = "completed"
+    cancelled = "cancelled"
 
 
 @strawberry.type(description="One move of a ticket's audit status")
@@ -345,7 +368,13 @@ class TicketTaskType:
             "only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description=(
+            "Origin of this task: 'user' when the site's identity made it, 'official' when a back-office "
+            "one did. Tasks made before that rule keep what they had, 'gov' or 'import'"
+        ),
+    )
     recruiting_stopped_at: datetime | None = strawberry.field(
         default=None,
         description=(
@@ -483,7 +512,11 @@ class CreateTicketTaskInput:
             "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the task decides it",
+        deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
+    )
     route_uuid: UUID | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
     )
@@ -633,7 +666,12 @@ class TicketType:
         ),
     )
     created_at: datetime | None = None
-    updated_at: datetime | None = None
+    updated_at: datetime | None = strawberry.field(
+        default=None,
+        description="When anything visible about this ticket last changed: a field, its address, disaster "
+        "details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only "
+        "when it changes the status; a review verdict never does",
+    )
 
     # Private storage backing the contact_* PII resolvers below (ADR-049) — never exposed
     # directly in the schema, only readable (raw or masked) through the gated resolvers.
@@ -1002,6 +1040,41 @@ class TicketType:
             return None
         return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
 
+    @strawberry.field(
+        description=(
+            "The building map this ticket was filed under (createTicket's buildingMapUuid). Null when "
+            "it was not filed under one, when that building map is deleted, and to a caller without "
+            "ticket.view_detail here"
+        )
+    )
+    async def building_map_uuid(self, info: strawberry.types.Info) -> UUID | None:
+        """Return the ticket's building, or null when out of detail scope: naming it names the place.
+
+        The ticket was given the building's point (place_ticket), so knowing the building is
+        knowing the exact point `geometry` withholds. Decided before the lookup, as the address
+        is, so a page of tickets a guest reads costs no query here.
+        """
+        if not await self._detail_visible(info):
+            return None
+        return await info.context["loaders"]["building_map_by_ticket"].load(str(self.uuid))
+
+    @strawberry.field(
+        description=(
+            "The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it "
+            "lies in none, and to a caller without ticket.view_detail here"
+        )
+    )
+    async def responsible_teams(self, info: strawberry.types.Info) -> list[AssignedTeamType]:
+        """Return who answers for the place this ticket is at, or none when out of detail scope.
+
+        Worked out from the exact point, so where a zone's edge crosses the cell a guest is shown,
+        it tells which side the ticket is on: more than the cell (ADR-281). Decided before the
+        lookup, as the address is, so a page of tickets a guest reads costs no query here.
+        """
+        if not await self._detail_visible(info):
+            return []
+        return await info.context["loaders"]["responsible_teams_by_ticket"].load(str(self.uuid))
+
     @strawberry.field
     async def disaster_details(self, info: strawberry.types.Info) -> list["TicketDisasterDetailType"]:
         """Resolve this ticket's disaster-specific field values.
@@ -1088,6 +1161,22 @@ class TicketConnection:
     page_info: PageInfo
 
 
+@strawberry.type(description="How many tickets one H3 cell holds, of those its caller is shown as the cell")
+class TicketCellType:
+    """A row of `ticketCells`: one cell on the guest map and the number to write in it (ADR-387)."""
+
+    cell: str = strawberry.field(
+        description="H3 index (hex), the same value TicketType.locationCell carries for these tickets"
+    )
+    ticket_count: int
+    urgent_count: int = strawberry.field(
+        description=(
+            "Of those, how many are urgent: a priority other than 'low' or 'medium' (trimmed, any case), "
+            "and not 'in_progress' — the rule the site colours a ticket urgent by"
+        )
+    )
+
+
 @strawberry.input
 class CreateTicketTaskDraft:
     """A task sent with a new ticket."""
@@ -1096,7 +1185,11 @@ class CreateTicketTaskDraft:
     task_name: str
     task_description: str | None = None
     quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the task decides it",
+        deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
+    )
     route_uuid: UUID | None = None
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,

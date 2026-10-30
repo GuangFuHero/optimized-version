@@ -6,14 +6,17 @@ import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
 
 import {
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 
 import { Box, Drawer, GlobalStyles, useMediaQuery } from '@mui/material';
+import type { Map as LeafletMap } from 'leaflet';
 import dynamic from 'next/dynamic';
 
 import type { StationDetailActionProps } from '../station/station-detail';
@@ -30,11 +33,18 @@ import { RescueMapStatusMessage } from './components/rescue-map-status-message';
 import { RescueMapTopBar } from './components/rescue-map-top-bar';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from './constants';
 import { countDetailOpenings } from './detail-openings';
-import { designTokens, displayTextSizeCss, withAlpha } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSizeCss,
+  withAlpha,
+} from '@rescue-frontend/ui';
 
+import { useMapOpening } from './hooks/use-event-map-view';
 import { useRescueMapController } from './hooks/use-rescue-map-controller';
 import { buildLocationCells } from './location-cells';
+import { rememberMapView, type RescueMapMemoryKey } from './map-opening';
 import type {
+  RescueMapClusterAppearance,
   RescueMapClosureArea,
   RescueMapControllerValue,
   RescueMapDetailItem,
@@ -43,10 +53,13 @@ import type {
   RescueMapMarkerItem,
   RescueMapPublicZone,
   RescueMapRouteState,
+  RescueMapView,
   RescueMapViewportStoreLike,
 } from './types';
 
 const { color, primitives, radius, shadow } = designTokens;
+
+const MAP_LOADING_MESSAGE = '救災寶加載地圖中...';
 
 const RescueMapCanvas = dynamic(
   () =>
@@ -55,7 +68,7 @@ const RescueMapCanvas = dynamic(
     ),
   {
     ssr: false,
-    loading: () => <RescueMapStatusMessage message="救災寶加載地圖中..." />,
+    loading: () => <RescueMapStatusMessage message={MAP_LOADING_MESSAGE} />,
   },
 );
 
@@ -115,6 +128,15 @@ const MAP_STATIC_GLOBAL_STYLES = {
     color: color.fg.onSecondary,
     background: `linear-gradient(180deg, ${primitives.color.blue[200]} 0%, ${color.brand.secondary.default} 100%)`,
   },
+  // Opt-in `clusterAppearance="solid"` (admin station map). Size is set inline per count.
+  '.map-marker-cluster--solid': {
+    color: color.fg.onPrimary,
+    background: color.bg.primary.default,
+    boxShadow: '0 3px 10px rgba(15, 23, 42, 0.28)',
+    // Admin chrome: the design system's px, not the public site's display scale.
+    fontSize: 15,
+  },
+  '.map-marker-cluster--solid-dense': { fontSize: 13 },
   '.map-marker-cluster__count': {
     display: 'block',
     transform: 'translateY(0.5px)',
@@ -233,6 +255,27 @@ interface MapProps {
   viewportStore?: RescueMapViewportStoreLike;
   /** 只用於訪客提示文案（「登入後可看」）；遮不遮由後端決定。 */
   isAuthenticated?: boolean;
+  /**
+   * Opt-in: selecting a marker opens no detail drawer, and the map keeps its full width. The
+   * caller shows the selection itself (`controller.selectedMarkerId`). Default: the drawer opens.
+   */
+  hideDetailDrawer?: boolean;
+  /** Opt-in: show Leaflet's zoom buttons, top right. Default: hidden. */
+  showZoomControl?: boolean;
+  /** Opt-in cluster look, read once when the map is built. Default: the site's gradient discs. */
+  clusterAppearance?: RescueMapClusterAppearance;
+  /** Opt-in: markers stop clustering above this zoom (read once). Default: they always cluster. */
+  clusterMaxZoom?: number;
+  /**
+   * Opt-in: receives the Leaflet map once it is built, for callers that steer it themselves, and
+   * whether it opened where this browser last left it (`viewMemoryKey`).
+   */
+  onMapReady?: (map: LeafletMap, opening: { restored: boolean }) => void;
+  /**
+   * Which map this is, for it to open where this browser last left it (MAP-VIEW-104). Not given, it
+   * remembers nothing and opens at the event's view.
+   */
+  viewMemoryKey?: RescueMapMemoryKey;
 }
 
 export const Map = memo(function Map({
@@ -254,7 +297,55 @@ export const Map = memo(function Map({
   publicZones,
   viewportStore,
   isAuthenticated = false,
+  hideDetailDrawer = false,
+  showZoomControl = false,
+  clusterAppearance,
+  clusterMaxZoom,
+  onMapReady,
+  viewMemoryKey,
 }: MapProps = {}) {
+  // Read once, as the canvas reads it: a position in the address (a shared link, a reload) is where
+  // the map opens, at once. Without one, the map waits to know where to open (MAP-VIEW-101–104);
+  // so does one from a `bbox` alone, which names no zoom, for the event's.
+  const [addressPosition] = useState(
+    () => viewportStore?.getSnapshot().position ?? routeState?.position,
+  );
+  const { opening, openedUnder, eventView } = useMapOpening({
+    memoryKey: viewMemoryKey,
+    addressHasPosition: Boolean(addressPosition),
+  });
+  const opensAtOnce = addressPosition?.zoom !== undefined;
+  const openedUnderRef = useRef(openedUnder);
+  openedUnderRef.current = openedUnder;
+  const eventViewRef = useRef(eventView);
+  eventViewRef.current = eventView;
+  const openingRef = useRef(opening);
+  openingRef.current = opening;
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
+
+  // The canvas is built once the opening is worked out (or at a position in the address), and reads
+  // this once, as it is built.
+  const handleMapReady = useCallback((map: LeafletMap) => {
+    onMapReadyRef.current?.(map, {
+      restored: openingRef.current?.restored ?? false,
+    });
+  }, []);
+
+  const rememberView = useCallback(
+    (view: RescueMapView) => {
+      if (viewMemoryKey) {
+        rememberMapView(
+          viewMemoryKey,
+          view,
+          openedUnderRef.current,
+          eventViewRef.current,
+        );
+      }
+    },
+    [viewMemoryKey],
+  );
+
   const controller = useRescueMapController({
     routeState,
     onRouteStateChange,
@@ -263,6 +354,7 @@ export const Map = memo(function Map({
     publicZones,
     // 視窗外的標記在地圖上本就不可見，關閉 bbox 過濾讓視角移動不重建 markers。
     filterMarkersByBbox: false,
+    defaultView: opening?.view,
   });
 
   // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。
@@ -299,7 +391,9 @@ export const Map = memo(function Map({
         backdropFilter: 'blur(6px)',
         border: 'none',
         borderTop: `5px solid ${
-          isTicketTone ? color.bg.primary.default : color.brand.secondary.default
+          isTicketTone
+            ? color.bg.primary.default
+            : color.brand.secondary.default
         }`,
         borderRadius: `0 0 ${radius.md}px ${radius.md}px`,
         boxShadow: shadow.sm,
@@ -337,6 +431,9 @@ export const Map = memo(function Map({
     controller.setSelectedMarkerId(undefined);
   };
 
+  // With the drawer suppressed, the map never gives up width to it.
+  const drawerOpen = detailOpen && !hideDetailDrawer;
+
   const handleMobileDetailExited = () => {
     if (!detailOpen) {
       setDisplayMarker(null);
@@ -361,7 +458,7 @@ export const Map = memo(function Map({
           height: '100%',
           minHeight: '100%',
           display: 'grid',
-          gridTemplateColumns: detailOpen
+          gridTemplateColumns: drawerOpen
             ? {
                 mobile: 'minmax(0, 1fr) 0',
                 tablet: `minmax(0, 1fr) ${RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH}px`,
@@ -373,6 +470,9 @@ export const Map = memo(function Map({
           isolation: 'isolate',
           overflow: 'hidden',
           bgcolor: color.bg.neutral.sunken,
+          ...(showZoomControl
+            ? { '& .leaflet-control-zoom': { display: 'block' } }
+            : {}),
         }}
       >
         <GlobalStyles styles={globalStyles} />
@@ -386,20 +486,29 @@ export const Map = memo(function Map({
             overflow: 'hidden',
           }}
         >
-          <RescueMapCanvas
-            controller={controller}
-            onMarkerClick={handleMarkerClick}
-            onLocationCellClick={handleLocationCellClick}
-            previewMarker={previewMarker}
-            cursor={cursor}
-            onMapClick={onMapClick}
-            layoutKey={detailOpen ? 'detail-open' : 'detail-closed'}
-            showScale={showScale}
-            viewportStore={viewportStore}
-            draftPoint={draftPoint}
-            onDraftPointChange={onDraftPointChange}
-            draftPointAction={draftPointAction}
-          />
+          {opensAtOnce || opening ? (
+            <RescueMapCanvas
+              controller={controller}
+              onMarkerClick={handleMarkerClick}
+              onLocationCellClick={handleLocationCellClick}
+              previewMarker={previewMarker}
+              cursor={cursor}
+              onMapClick={onMapClick}
+              layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}
+              showScale={showScale}
+              clusterAppearance={clusterAppearance}
+              clusterMaxZoom={clusterMaxZoom}
+              zoomControlPosition={showZoomControl ? 'topright' : undefined}
+              onMapReady={onMapReady ? handleMapReady : undefined}
+              viewportStore={viewportStore}
+              draftPoint={draftPoint}
+              onDraftPointChange={onDraftPointChange}
+              draftPointAction={draftPointAction}
+              onViewChange={rememberView}
+            />
+          ) : (
+            <RescueMapStatusMessage message={MAP_LOADING_MESSAGE} />
+          )}
           {renderControls ? (
             renderControls(controller)
           ) : (
@@ -407,92 +516,96 @@ export const Map = memo(function Map({
           )}
         </Box>
 
-        <Box
-          // Collapsed, the panel still holds the last detail — nothing clears it now that the phone's
-          // drawer stays shut here — so keep it out of reach of the keyboard and screen readers.
-          inert={!detailOpen}
-          sx={{
-            gridColumn: 2,
-            gridRow: 1,
-            position: 'relative',
-            minWidth: 0,
-            minHeight: 0,
-            display: { mobile: 'none', tablet: 'block' },
-            overflow: 'hidden',
-          }}
-        >
+        {hideDetailDrawer ? null : (
           <Box
+            // Collapsed, the panel still holds the last detail — nothing clears it now that the phone's
+            // drawer stays shut here — so keep it out of reach of the keyboard and screen readers.
+            inert={!detailOpen}
             sx={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              width: RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH,
-              height: '100%',
+              gridColumn: 2,
+              gridRow: 1,
+              position: 'relative',
+              minWidth: 0,
+              minHeight: 0,
+              display: { mobile: 'none', tablet: 'block' },
+              overflow: 'hidden',
             }}
           >
-            <RescueMapDetailDrawer
-              // A new panel at each opening, so that a ticket opened again is read again (WG-028).
-              key={detailOpenings}
-              marker={displayMarker}
-              onClose={closeDetail}
-              onSelectMarker={controller.setSelectedMarkerId}
-              isAuthenticated={isAuthenticated}
-              ticketDetailOverrides={
-                displayMarker?.detailType === 'ticket'
-                  ? ticketDetailOverrides?.(displayMarker)
-                  : undefined
-              }
-              stationSecondaryAction={
-                displayMarker?.detailType === 'station'
-                  ? stationDetailSecondaryAction?.(displayMarker)
-                  : undefined
-              }
-              stationLayout={stationLayout}
-            />
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                width: RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH,
+                height: '100%',
+              }}
+            >
+              <RescueMapDetailDrawer
+                // A new panel at each opening, so that a ticket opened again is read again (WG-028).
+                key={detailOpenings}
+                marker={displayMarker}
+                onClose={closeDetail}
+                onSelectMarker={controller.setSelectedMarkerId}
+                isAuthenticated={isAuthenticated}
+                ticketDetailOverrides={
+                  displayMarker?.detailType === 'ticket'
+                    ? ticketDetailOverrides?.(displayMarker)
+                    : undefined
+                }
+                stationSecondaryAction={
+                  displayMarker?.detailType === 'station'
+                    ? stationDetailSecondaryAction?.(displayMarker)
+                    : undefined
+                }
+                stationLayout={stationLayout}
+              />
+            </Box>
           </Box>
-        </Box>
+        )}
       </Box>
       <RescueMapLayerPanel controller={controller} />
-      <Drawer
-        anchor="right"
-        open={detailOpen && isPhone}
-        onClose={closeDetail}
-        ModalProps={{ keepMounted: true }}
-        slotProps={{
-          transition: {
-            onExited: handleMobileDetailExited,
-          },
-        }}
-        sx={{
-          display: { mobile: 'block', tablet: 'none' },
-          '& .MuiDrawer-paper': {
-            width: '100vw',
-            maxWidth: '100vw',
-            // The drawer's, which starts under the announcement banner if one is up.
-            height: '100%',
-            overflow: 'hidden',
-            bgcolor: 'transparent',
-          },
-        }}
-      >
-        <RescueMapDetailDrawer
-          marker={displayMarker}
+      {hideDetailDrawer ? null : (
+        <Drawer
+          anchor="right"
+          open={detailOpen && isPhone}
           onClose={closeDetail}
-          onSelectMarker={controller.setSelectedMarkerId}
-          isAuthenticated={isAuthenticated}
-          ticketDetailOverrides={
-            displayMarker?.detailType === 'ticket'
-              ? ticketDetailOverrides?.(displayMarker)
-              : undefined
-          }
-          stationSecondaryAction={
-            displayMarker?.detailType === 'station'
-              ? stationDetailSecondaryAction?.(displayMarker)
-              : undefined
-          }
-          stationLayout={stationLayout}
-        />
-      </Drawer>
+          ModalProps={{ keepMounted: true }}
+          slotProps={{
+            transition: {
+              onExited: handleMobileDetailExited,
+            },
+          }}
+          sx={{
+            display: { mobile: 'block', tablet: 'none' },
+            '& .MuiDrawer-paper': {
+              width: '100vw',
+              maxWidth: '100vw',
+              // The drawer's, which starts under the announcement banner if one is up.
+              height: '100%',
+              overflow: 'hidden',
+              bgcolor: 'transparent',
+            },
+          }}
+        >
+          <RescueMapDetailDrawer
+            marker={displayMarker}
+            onClose={closeDetail}
+            onSelectMarker={controller.setSelectedMarkerId}
+            isAuthenticated={isAuthenticated}
+            ticketDetailOverrides={
+              displayMarker?.detailType === 'ticket'
+                ? ticketDetailOverrides?.(displayMarker)
+                : undefined
+            }
+            stationSecondaryAction={
+              displayMarker?.detailType === 'station'
+                ? stationDetailSecondaryAction?.(displayMarker)
+                : undefined
+            }
+            stationLayout={stationLayout}
+          />
+        </Drawer>
+      )}
     </>
   );
 });

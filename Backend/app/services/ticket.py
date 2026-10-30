@@ -16,6 +16,7 @@ from app.core.disaster_types import validate_disaster_types
 from app.core.permissions import Perm
 from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
+from app.models.geo import edited, touch
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
@@ -42,6 +43,7 @@ from app.services.geo_validation import (
 )
 from app.services.notification_service import NotificationService
 from app.services.photo import normalize_photo_url
+from app.services.source import USER, source_for
 from app.services.ticket_audit import lock_ticket, void_stale_verdict
 from app.services.ticket_status import recompute_ticket_status
 
@@ -252,9 +254,9 @@ async def create_ticket(
     """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner).
 
     Validate, insert, and one commit that makes the ticket + address pair atomic, exactly as
-    `station.py::create_station` does. Batch import calls this; the interactive GraphQL path
-    goes through `dedup_submission.submit_new_ticket`, which runs the same two steps around a
-    duplicate check.
+    `station.py::create_station` does. No duplicate check: the GraphQL path goes through
+    `dedup_submission.submit_new_ticket`, and batch import through `bulk_import._create_ticket`
+    (ADR-398), both of which run the same two steps around one.
     """
     fields = await validate_ticket(
         db,
@@ -389,7 +391,9 @@ async def validate_help_request(
                     "task_name": task["task_name"],
                     "task_description": task.get("task_description"),
                     "quantity": task.get("quantity"),
-                    "source": "user",
+                    # The site's own request, a citizen's whoever files it, unlike createTicket's
+                    # tasks, which follow the identity.
+                    "source": USER,
                 }
             )
             for task in tasks
@@ -483,11 +487,17 @@ async def update_ticket(
     if not ticket:
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
+    # Locked before anything is read, so the address's change check compares against what is current.
+    ticket = await lock_ticket(db, uuid)
+    if ticket is None or ticket.delete_at is not None:
+        # Deleted by a concurrent call while this one waited for the lock.
+        raise ValueError("Ticket not found")
     if secondary_location is not None:
         secondary_location = apply_address(
             secondary_location, point=point_of(geom_to_geojson(ticket.geometry))
         )
-        await _replace_secondary_location(db, str(ticket.uuid), secondary_location)
+        if await _replace_secondary_location(db, str(ticket.uuid), secondary_location):
+            touch(ticket)
 
     obj_in = dict(changes)
     if "disaster_types" in obj_in:
@@ -506,8 +516,8 @@ async def update_ticket(
     return ticket
 
 
-async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, values: dict) -> None:
-    """Overwrite the address row for a geometry, or create it when there is none.
+async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, values: dict) -> bool:
+    """Overwrite the address row for a geometry, or create it when there is none; say whether it changed.
 
     A whole-input replacement, so clearing a member means sending it null, not omitting it.
     Flush only: `update_ticket` commits.
@@ -515,10 +525,12 @@ async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, valu
     existing = await secondary_location_repository.get_by_geometry(db, geometry_uuid)
     if existing is None:
         await secondary_location_repository.add(db, obj_in={"geometry_uuid": geometry_uuid, **values})
-        return
+        return True
     for field, value in values.items():
         setattr(existing, field, value)
+    changed = edited(existing)
     await db.flush()
+    return changed
 
 
 async def set_ticket_disaster_details(
@@ -548,6 +560,15 @@ async def set_ticket_disaster_details(
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
     _check_disaster_detail_size(details)
+    # Locked before the answers are read, so the change check compares against what is current.
+    ticket = await lock_ticket(db, ticket_uuid)
+    if ticket is None or ticket.delete_at is not None:
+        # Deleted by a concurrent call while this one waited for the lock.
+        raise ValueError("Ticket not found")
+    before = {
+        (d.property_name, d.value)
+        for d in await ticket_disaster_detail_repository.list_by_ticket(db, ticket_uuid)
+    }
 
     await ticket_disaster_detail_repository.delete_for_ticket(db, ticket_uuid)
     for property_name, values in details.items():
@@ -562,6 +583,8 @@ async def set_ticket_disaster_details(
                     "value": value,
                 },
             )
+    if {(name, v) for name, values in details.items() for v in values if v is not None and v != ""} != before:
+        touch(ticket)
     await db.flush()
     await void_stale_verdict(db, ticket_uuid)
     await db.commit()
@@ -682,6 +705,7 @@ async def delete_ticket_task(db: AsyncSession, *, actor: User, uuid: str) -> Non
 
     ticket, task = await _lock_ticket_and_task(db, task_uuid=uuid)
     mark_need_deleted(task, datetime.now(UTC))
+    touch(ticket)
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     claimants = [str(a.actor_uuid) for a in await task_assignment_repository.list_by_task(db, uuid)]
@@ -719,7 +743,6 @@ async def validate_ticket_task(
     task_name: str,
     task_description: str | None,
     quantity: int | None,
-    source: str,
     route_uuid: str | None,
 ) -> TaskFields:
     """Checks for a task filed with a new ticket, without writing: ticket.add, its name and size."""
@@ -731,7 +754,7 @@ async def validate_ticket_task(
             "task_name": task_name,
             "task_description": task_description,
             "quantity": quantity,
-            "source": source,
+            "source": source_for(actor),
             "route_uuid": route_uuid,
         }
     )
@@ -755,7 +778,6 @@ async def validate_added_task(
     task_name: str,
     task_description: str | None,
     quantity: int | None,
-    source: str,
     route_uuid: str | None,
 ) -> TaskFields:
     """Every check for adding a need to an existing ticket (the site's 「再加一件」), without writing.
@@ -777,7 +799,7 @@ async def validate_added_task(
             "task_name": task_name,
             "task_description": task_description,
             "quantity": quantity,
-            "source": source,
+            "source": source_for(actor),
             "route_uuid": route_uuid,
         }
     )
@@ -800,6 +822,7 @@ async def insert_added_task(
     )
     if ticket is None or ticket.delete_at is not None:
         raise ValueError("Ticket not found")
+    touch(ticket)
     task = await insert_ticket_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
     await recompute_ticket_status(db, ticket_uuid=ticket_uuid)
     await void_stale_verdict(db, ticket_uuid)
@@ -815,7 +838,6 @@ async def create_ticket_task(
     task_name: str,
     task_description: str | None,
     quantity: int | None,
-    source: str,
     route_uuid: str | None,
 ) -> TicketTask:
     """Add a need to a ticket and commit, without a duplicate check.
@@ -831,7 +853,6 @@ async def create_ticket_task(
         task_name=task_name,
         task_description=task_description,
         quantity=quantity,
-        source=source,
         route_uuid=route_uuid,
     )
     task = await insert_added_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
@@ -840,19 +861,16 @@ async def create_ticket_task(
     return task
 
 
-async def import_ticket_task(
+async def validate_imported_task(
     db: AsyncSession,
     *,
     actor: User,
-    ticket_uuid: str,
     task_type: str,
     task_name: str,
     task_description: str | None,
     quantity: int | None,
-    source: str,
-    route_uuid: str | None,
-) -> TicketTask:
-    """Add a need for a bulk import row (ADR-120).
+) -> TaskFields:
+    """Every check for a need a bulk import row adds (ADR-120), without writing.
 
     ticket.add alone, the rule createTicketTask had before 2026-09-28: who may import what is the
     back office's to decide, not the public site's. The row's columns were checked by the import
@@ -861,20 +879,16 @@ async def import_ticket_task(
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
     _validate_need_size(task_type, task_name, quantity)
-    fields = TaskFields(
+    return TaskFields(
         values={
             "task_type": task_type,
             "task_name": task_name,
             "task_description": task_description,
             "quantity": quantity,
-            "source": source,
-            "route_uuid": route_uuid,
+            "source": source_for(actor),
+            "route_uuid": None,
         }
     )
-    task = await insert_added_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
-    await db.commit()
-    await db.refresh(task)
-    return task
 
 
 async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, changes: dict) -> TicketTask:
@@ -897,12 +911,14 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     # The ticket before the need, the order every writer keeps: voiding the verdict locks it.
-    await lock_ticket(db, str(task.ticket_uuid))
+    ticket = await lock_ticket(db, str(task.ticket_uuid))
     task = await _need_still_on(db, task.uuid, task.ticket_uuid)
 
     for field, value in changes.items():
         if hasattr(task, field):
             setattr(task, field, value)
+    if edited(task):
+        touch(ticket)
     await db.flush()
     await void_stale_verdict(db, str(task.ticket_uuid))
     await db.commit()
@@ -951,7 +967,7 @@ async def import_task_property(
 ) -> TaskProperty:
     """Add a structured property for a bulk import row (ADR-120).
 
-    ticket.add alone, as import_ticket_task: the row's need is one the import just added or
+    ticket.add alone, as validate_imported_task: the row's need is one the import just added or
     matched, and who may import what is the back office's to decide, not the public site's.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
@@ -980,8 +996,9 @@ async def _add_task_property(
     """Write the property, void the ticket's verdict if it no longer holds, and commit."""
     ticket_uuid = str(task.ticket_uuid)
     # The ticket before the need, the order every writer keeps: the new row holds the need too.
-    await lock_ticket(db, ticket_uuid)
+    ticket = await lock_ticket(db, ticket_uuid)
     await _need_still_on(db, task.uuid, ticket_uuid)
+    touch(ticket)
     prop = await task_property_repository.add(
         db,
         obj_in={
@@ -1011,16 +1028,24 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     ticket_uuid = str(task.ticket_uuid)
-    await lock_ticket(db, ticket_uuid)  # the ticket before the need, as in _add_task_property
-    on_task = await db.scalar(select(TaskProperty.task_uuid).where(TaskProperty.uuid == prop.uuid))
-    if str(on_task) != str(task.uuid):
+    ticket = await lock_ticket(db, ticket_uuid)  # the ticket before the need, as in _add_task_property
+    # Read again under the lock, so the change check below compares against what is current.
+    prop = await db.scalar(
+        select(TaskProperty).where(TaskProperty.uuid == prop.uuid).execution_options(populate_existing=True)
+    )
+    if str(prop.task_uuid) != str(task.uuid):
         # The item itself moved to the need its need folded into (ADR-388). Checked before the
         # need, which the fold soft-deleted: "merged" says where it went, "not found" would not.
         raise ValueError(MOVED_DURING_DEDUP)
     await _need_still_on(db, task.uuid, ticket_uuid)
+    if prop.delete_at is not None:
+        # A dedup resolve cancelled the item while this one waited for the lock.
+        raise ValueError("Task property not found")
     for field, value in changes.items():
         if hasattr(prop, field):
             setattr(prop, field, value)
+    if edited(prop):
+        touch(ticket)
     await db.flush()
     await void_stale_verdict(db, ticket_uuid)
     await db.commit()
@@ -1194,6 +1219,7 @@ async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> T
     task.quantity = len(claimants)
     task.completed_at = now
     task.recruiting_stopped_at = now
+    touch(ticket)
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     task_id, task_name, ticket_title, actor_uid = task.uuid, task.task_name, ticket.title, actor.uuid

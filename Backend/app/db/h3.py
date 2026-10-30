@@ -14,9 +14,11 @@ the wrong order); the calibration below is his.
 """
 
 import math
+import re
 
 from geoalchemy2 import Geometry
 from sqlalchemy import String, cast, func
+from sqlalchemy.types import UserDefinedType
 
 # The finest cell a caller without ticket.view_detail can ever get, whatever zoom it sends.
 # Resolution 8: average edge 531 m, area 0.737 km², about 1 km across (h3geo.org resolution
@@ -38,8 +40,15 @@ _ANCHOR_ZOOM = 13
 # edge of a hexagon is also its circumradius, so it bounds how far a point sits from its own
 # cell centre — which is what coarse_margin_degrees() needs.
 _AVG_EDGE_M = (
-    1281256.011, 483056.8391, 182512.9565, 68979.22179, 26071.75968,
-    9854.09099, 3724.532667, 1406.475763, 531.4140101,
+    1281256.011,
+    483056.8391,
+    182512.9565,
+    68979.22179,
+    26071.75968,
+    9854.09099,
+    3724.532667,
+    1406.475763,
+    531.4140101,
 )
 # H3 cells are not regular: at one resolution the largest is about twice the area of the
 # smallest, so a single cell's circumradius can exceed the average edge. Twice the average
@@ -98,3 +107,45 @@ def h3_centroid(geometry_column, resolution: int):
         func.h3_cell_to_geometry(h3_cell(geometry_column, resolution)),
         Geometry(geometry_type="POINT", srid=4326),
     )
+
+
+class _H3Index(UserDefinedType):
+    """h3-pg's `h3index` type, so a cell sent as text can be cast to one."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw) -> str:
+        """Render the type's SQL name."""
+        return "h3index"
+
+
+def h3_cell_centre(cell: str):
+    """SQL expression: the centre of the cell `cell` names, a hex index like '884ba0a511fffff'."""
+    return func.h3_cell_to_geometry(cast(cell, _H3Index()))
+
+
+def h3_is_valid_cell(cell: str):
+    """SQL expression: whether `cell` names a real H3 cell. Pass only what cell_resolution accepts."""
+    return func.h3_is_valid_cell(cast(cell, _H3Index()))
+
+
+def cell_reach_metres(resolution: int) -> float:
+    """How far a point can be from its cell's centre at `resolution`: coarse_margin_degrees in metres."""
+    return _AVG_EDGE_M[resolution] * _MARGIN_FACTOR
+
+
+def cell_resolution(cell: str) -> int | None:
+    """The resolution of the H3 cell `cell` is shaped as, or None if it is not shaped as one.
+
+    Read off the index's bits — bit 63 clear, mode 1 (a cell) at bits 59-62, resolution at 52-55 —
+    as the Python `h3` package is not a dependency (ADR-283). An index of that shape can still name
+    no real cell (a base cell past 121, a digit out of place), on which h3-pg's functions may raise:
+    ask h3_is_valid_cell before using one.
+    """
+    # Hex digits only: int() would also take a sign, spaces and underscores.
+    if not re.fullmatch(r"[0-9a-fA-F]{1,16}", cell):
+        return None
+    index = int(cell, 16)
+    if index >> 59 != 1 or (index >> 56) & 0x7:
+        return None
+    return (index >> 52) & 0xF

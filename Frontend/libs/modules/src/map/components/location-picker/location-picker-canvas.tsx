@@ -8,13 +8,11 @@ import { useEffect, useRef } from 'react';
 import { designTokens } from '@rescue-frontend/ui';
 
 import { BASE_LAYER_CONFIG } from '../../constants';
+import type { RescueMapView } from '../../types';
 import type { PickedPoint } from './types';
 
 const { color } = designTokens;
 
-/** 光復鄉, where the map opens with no point yet (prototype `tk-locpicker.jsx:4`). */
-const FALLBACK_CENTER: [number, number] = [23.6725, 121.4235];
-const FALLBACK_ZOOM = 14;
 /** Close enough to tell which street the pin is on. */
 const PICKED_ZOOM = 17;
 /** The main map's default base layer (`use-rescue-map-controller.ts`), so its tiles are cached. */
@@ -23,6 +21,12 @@ const BASE_LAYER = BASE_LAYER_CONFIG['osm-direct'];
 interface LocationPickerCanvasProps {
   value: PickedPoint | null;
   onPick: (point: { lat: number; lng: number }) => void;
+  /**
+   * Where the map opens with no point yet: the event's view, else all of Taiwan (prototype
+   * `tk-locpicker.jsx` `startView`, 49a668bd). Never where it was last left: only the maps people
+   * browse remember that (MAP-VIEW-104).
+   */
+  startView: RescueMapView;
 }
 
 // A teardrop in the ticket's own orange, with room around it to grab (prototype `pinHtml`).
@@ -45,12 +49,14 @@ function createPinIcon() {
 export function LocationPickerCanvas({
   value,
   onPick,
+  startView,
 }: LocationPickerCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const pinRef = useRef<L.Marker | null>(null);
   const onPickRef = useRef(onPick);
   const initialValueRef = useRef(value);
+  const startViewRef = useRef(startView);
 
   onPickRef.current = onPick;
 
@@ -63,8 +69,10 @@ export function LocationPickerCanvas({
 
     const initial = initialValueRef.current;
     const map = L.map(host, {
-      center: initial ? [initial.lat, initial.lng] : FALLBACK_CENTER,
-      zoom: initial ? PICKED_ZOOM : FALLBACK_ZOOM,
+      center: initial
+        ? [initial.lat, initial.lng]
+        : startViewRef.current.center,
+      zoom: initial ? PICKED_ZOOM : startViewRef.current.zoom,
       zoomControl: false,
     });
 

@@ -479,6 +479,9 @@ export interface paths {
      *     revoked, and it means a session that watched a password being set does not keep running
      *     on the strength of it. The owner is told afterwards, because a first password on an
      *     SSO-only account is a new permanent way in and must not appear silently.
+     *
+     *     An account with no verified email or phone is refused before any proof (ADR-401): a password
+     *     signs in with one of them, so it could never be used.
      */
     post: operations['set_password_api_v1_auth_set_password_post'];
     delete?: never;
@@ -527,6 +530,9 @@ export interface paths {
     /**
      * Reset Password
      * @description Complete a logged-out reset: consume the code, write the new password, revoke all sessions.
+     *
+     *     Every contact on the account is then told, as after `change-password` (ADR-218), not only
+     *     the one the code went to.
      */
     post: operations['reset_password_api_v1_auth_reset_password_post'];
     delete?: never;
@@ -748,7 +754,8 @@ export interface paths {
      *
      *     Feature 010 replaced the single platform/team role pair with the full identity list
      *     (ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).
-     *     Both land in the same row. Built by PlatformUserDirectory (Spec/026).
+     *     Both land in the same row. Built by PlatformUserDirectory (Spec/026). `q`, `platform_role`
+     *     and `team_uuid` narrow it and combine (ADR-412, ADR-432).
      */
     get: operations['list_users_api_v1_admin_users_get'];
     put?: never;
@@ -1339,6 +1346,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/audit-logs/export': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * 匯出稽核紀錄（CSV）
+     * @description The same filters as the list, as one CSV file (ADR-414). Super admins only.
+     *
+     *     A POST because every export is recorded (ADR-417): a write, so a browser signed in by cookie has
+     *     to send it from one of our pages (ADR-327), and a link on another site cannot start one.
+     */
+    post: operations['export_audit_logs_api_v1_admin_audit_logs_export_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/admin/teams/{team_uuid}/invites': {
     parameters: {
       query?: never;
@@ -1574,7 +1604,7 @@ export interface paths {
     put?: never;
     /**
      * 執行資源站點匯入
-     * @description Write the file row by row; failed rows come back as a downloadable report.
+     * @description Write the file row by row; failed and held rows come back as a downloadable report.
      */
     post: operations['commit_station_import_api_v1_bulk_stations_import_commit_post'];
     delete?: never;
@@ -1993,7 +2023,7 @@ export interface components {
       name: string | null;
       /**
        * Kind
-       * @description user / system / crawler / gov / ngo（後三者僅建立事件，ADR-137）
+       * @description user / system / crawler / gov / ngo / official（後四者僅建立事件，ADR-137）
        */
       kind: string;
       /**
@@ -2038,6 +2068,11 @@ export interface components {
       platform_role: string | null;
       /** Identities */
       identities?: components['schemas']['IdentitySummary'][];
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
       /** Last Login At */
       last_login_at?: string | null;
       /** Last Activity At */
@@ -2112,6 +2147,33 @@ export interface components {
       notes?: string | null;
     };
     /**
+     * AuditExportRequest
+     * @description The filters of an export, the same as the list's (ADR-414).
+     *
+     *     All optional; `from` and `to` bound `created_at`, as on the list. A field the export does not
+     *     know is refused, so a misspelled filter cannot export the whole log (ADR-428). `tz` is the IANA
+     *     zone the file's times and name are written in (ADR-430).
+     */
+    AuditExportRequest: {
+      /** Table */
+      table?: string | null;
+      /** Row Id */
+      row_id?: string | null;
+      /** Actor Uuid */
+      actor_uuid?: string | null;
+      /** From */
+      from?: string | null;
+      /** To */
+      to?: string | null;
+      /**
+       * Tz
+       * @description IANA time zone, e.g. Asia/Taipei
+       * @default UTC
+       * @example Asia/Taipei
+       */
+      tz: string;
+    };
+    /**
      * AuditLogItem
      * @description One recorded change. `client_ip` is filled for the platform view only.
      */
@@ -2164,6 +2226,16 @@ export interface components {
        * @description preview 確認過的欄位映射 JSON
        */
       mapping?: string | null;
+      /**
+       * Decisions
+       * @description 仍要建立的疑似重複列，JSON 陣列：[{line, acknowledged_duplicate_of}]，acknowledged_duplicate_of 是預覽給的 related_uuid。沒列的疑似重複列不建立（ADR-398）
+       */
+      decisions?: string | null;
+      /**
+       * Declined
+       * @description 選了不建立的疑似重複列，列號的 JSON 陣列，例如 [4, 9]：預覽的 suspects 扣掉 decisions 的列，沒決定的也算。這些列一律不建立，送出時引擎沒回答也一樣（ADR-398）
+       */
+      declined?: string | null;
     };
     /** Body_commit_ticket_import_api_v1_bulk_tickets_import_commit_post */
     Body_commit_ticket_import_api_v1_bulk_tickets_import_commit_post: {
@@ -2177,6 +2249,16 @@ export interface components {
        * @description preview 確認過的欄位映射 JSON
        */
       mapping?: string | null;
+      /**
+       * Decisions
+       * @description 仍要建立的疑似重複列，JSON 陣列：[{line, acknowledged_duplicate_of}]，acknowledged_duplicate_of 是預覽給的 related_uuid。沒列的疑似重複列不建立（ADR-398）
+       */
+      decisions?: string | null;
+      /**
+       * Declined
+       * @description 選了不建立的疑似重複列，列號的 JSON 陣列，例如 [4, 9]：預覽的 suspects 扣掉 decisions 的列，沒決定的也算。這些列一律不建立，送出時引擎沒回答也一樣（ADR-398）
+       */
+      declined?: string | null;
     };
     /** Body_login_api_v1_auth_login_post */
     Body_login_api_v1_auth_login_post: {
@@ -2252,6 +2334,29 @@ export interface components {
        * @description 主資料已寫入、但後續步驟因權限失敗的列號——這幾列處於半完成狀態
        */
       partial_rows?: number[];
+      /**
+       * Suspected
+       * @description 疑似重複、沒確認也不在 declined 裡，所以沒建立的列數，不含跟著它沒建立的後續列（見 suspects 的 followers）。不算在 failed 裡，但在錯誤報告裡
+       * @default 0
+       */
+      suspected: number;
+      /**
+       * Suspects
+       * @description 沒確認也不在 declined 裡的疑似重複列，形狀同預覽（ADR-398）
+       */
+      suspects?: components['schemas']['SuspectedRowResponse'][];
+      /**
+       * Dedup Checked
+       * @description 要新建的列都跟資料庫比過了。false 是這次沒比完，不代表沒有重複
+       * @default true
+       */
+      dedup_checked: boolean;
+      /**
+       * Declined
+       * @description 放在 declined、所以沒建立的列數，不含跟著它沒建立的後續列。不算在 failed、suspected 裡，但在錯誤報告裡（ADR-398）
+       * @default 0
+       */
+      declined: number;
     };
     /**
      * BulkPreviewResponse
@@ -2291,6 +2396,23 @@ export interface components {
       skipped_columns?: {
         [key: string]: string;
       }[];
+      /**
+       * Suspected
+       * @description 疑似重複的列數，不含跟著它的後續列（見 suspects 的 followers）；送出時沒確認就不建立，這些列和後續列都不算在 to_create、to_update 裡
+       * @default 0
+       */
+      suspected: number;
+      /**
+       * Suspects
+       * @description 每個疑似重複一筆，照列號排（ADR-398）
+       */
+      suspects?: components['schemas']['SuspectedRowResponse'][];
+      /**
+       * Dedup Checked
+       * @description 要新建的列都跟資料庫比過了。false 是這次沒比完，不代表沒有重複
+       * @default true
+       */
+      dedup_checked: boolean;
     };
     /**
      * CapabilityCatalogResponse
@@ -3390,6 +3512,7 @@ export interface components {
       | 'pre_departure.delete'
       | 'audit.view'
       | 'team.audit.view'
+      | 'audit.export'
       | 'rbac.view'
       | 'rbac.assign'
       | 'rbac.edit';
@@ -3963,6 +4086,74 @@ export interface components {
       old_channel_code?: string | null;
       /** Id Token */
       id_token?: string | null;
+    };
+    /**
+     * SuspectedRowResponse
+     * @description A row that looks like something already there (ADR-398). No similarity, no contact details.
+     */
+    SuspectedRowResponse: {
+      /**
+       * Line
+       * @description 試算表的列號，表頭是第 1 列
+       */
+      line: number;
+      /**
+       * Row Title
+       * @description 這一列自己的站點名稱或單標題，照檔案寫的；加到既有單的任務，是那張單的標題
+       */
+      row_title: string | null;
+      /**
+       * Row Task Name
+       * @description 這一列自己的任務名稱；站點是 null
+       */
+      row_task_name: string | null;
+      /**
+       * Related Kind
+       * @description `station` 或 `ticket_task`
+       */
+      related_kind: string;
+      /**
+       * Related Uuid
+       * @description 很像的那一筆。送出時放進 `decisions` 的 `acknowledged_duplicate_of`，這一列就仍會建立
+       */
+      related_uuid: string;
+      /**
+       * Related Ticket Uuid
+       * @description 很像的是任務時，它所屬的單
+       */
+      related_ticket_uuid: string | null;
+      /**
+       * Title
+       * @description 很像的那一筆：站點名稱；任務則是它所屬單的標題
+       */
+      title: string | null;
+      /**
+       * Task Name
+       * @description 很像的那一筆的任務名稱；站點是 null
+       */
+      task_name: string | null;
+      /**
+       * Type
+       * @description 站點類型或任務類型
+       */
+      type: string | null;
+      /**
+       * Status
+       * @description 站點營運狀態或任務狀態
+       */
+      status: string | null;
+      /**
+       * Distance M
+       * @description 這一列跟它相距幾公尺
+       */
+      distance_m: number | null;
+      /** Created At */
+      created_at: string | null;
+      /**
+       * Followers
+       * @description 這一列建立一張新單時，同一張單後面幾列的列號：這一列不建立，它們也跟著不建立，也不算在 to_create、to_update 裡
+       */
+      followers?: number[];
     };
     /**
      * SwitchIdentityRequest
@@ -5478,6 +5669,14 @@ export interface operations {
       query?: {
         skip?: number;
         limit?: number;
+        /** @description Part of the nickname; full and half width match */
+        q?: string | null;
+        /** @description First that applies: super_admin, data_auditor, gov (in a gov team), ngo (in a team, none gov), user (no team, no other platform role) */
+        platform_role?:
+          | ('super_admin' | 'data_auditor' | 'gov' | 'ngo' | 'user')
+          | null;
+        /** @description Only those holding a role in this team */
+        team_uuid?: string | null;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -6789,6 +6988,46 @@ export interface operations {
         content: {
           'application/json': components['schemas']['HTTPValidationError'];
         };
+      };
+    };
+  };
+  export_audit_logs_api_v1_admin_audit_logs_export_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AuditExportRequest'];
+      };
+    };
+    responses: {
+      /** @description The filtered log, newest first */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/csv': unknown;
+        };
+      };
+      /** @description No audit.export at all (super admins only), or not from one of our pages */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description audit_export_too_large: too many rows, `matched` and `limit` say how many; or an unknown field or time zone in the body */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

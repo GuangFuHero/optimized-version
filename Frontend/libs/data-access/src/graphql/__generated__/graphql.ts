@@ -522,6 +522,17 @@ export type CrowdSourcingType = {
   uuid: Scalars['UUID']['output'];
 };
 
+/** The disaster this deployment responds to, as the public site names it */
+export type CurrentDisasterType = {
+  __typename?: 'CurrentDisasterType';
+  /** Where the site's map opens for this disaster; null when unset, so keep the site's own default */
+  mapView?: Maybe<MapViewType>;
+  /** Full name, e.g. 花蓮馬太鞍溪堰塞湖專案 */
+  name: Scalars['String']['output'];
+  /** Short name for tight spots such as the site's top bar, e.g. 花蓮馬太鞍溪; null when unset, so use name */
+  shortName?: Maybe<Scalars['String']['output']>;
+};
+
 export type DisasterTypeType = {
   __typename?: 'DisasterTypeType';
   /** False retires the type: no new writes, existing ones readable */
@@ -607,6 +618,17 @@ export type HelpRequestTaskInput = {
   taskName: Scalars['String']['input'];
   /** What the need asks for */
   taskType: NeedKind;
+};
+
+/** Where the site's map opens: a centre and a zoom */
+export type MapViewType = {
+  __typename?: 'MapViewType';
+  /** Latitude of the centre, e.g. 23.67 */
+  lat: Scalars['Float']['output'];
+  /** Longitude of the centre, e.g. 121.418 */
+  lng: Scalars['Float']['output'];
+  /** Zoom level, 7 to 18 as the site's map allows, e.g. 14 */
+  zoom: Scalars['Int']['output'];
 };
 
 export type Mutation = {
@@ -978,6 +1000,8 @@ export type Query = {
   buildingMap?: Maybe<BuildingMapType>;
   buildingMapTickets: Array<TicketType>;
   buildingMaps: BuildingMapConnection;
+  /** The deployment's disaster, readable without signing in; null until first configured */
+  currentDisaster?: Maybe<CurrentDisasterType>;
   disasterTypes: Array<DisasterTypeType>;
   hazardousZone?: Maybe<HazardousZoneType>;
   hazardousZones: HazardousZoneConnection;
@@ -1152,6 +1176,7 @@ export type QueryTicketsArgs = {
   limit?: Scalars['Int']['input'];
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
+  order?: TicketListOrder;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
@@ -1373,7 +1398,8 @@ export type StationSuggestionMergeType = {
   changes: Array<SuggestionChangeType>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   reviewNote?: Maybe<Scalars['String']['output']>;
-  reviewedBy: Scalars['String']['output'];
+  /** UUID of the reviewer; null once their account is gone, as a mock one is after a SEED_MOCK run (ADR-393) */
+  reviewedBy?: Maybe<Scalars['String']['output']>;
   revokedAt?: Maybe<Scalars['DateTime']['output']>;
   revokedBy?: Maybe<Scalars['String']['output']>;
   stationUuid: Scalars['String']['output'];
@@ -1671,6 +1697,13 @@ export type TicketDisasterDetailType = {
   value: Scalars['String']['output'];
 };
 
+export const TicketListOrder = {
+  NeedsFirst: 'NEEDS_FIRST',
+  Newest: 'NEWEST',
+} as const;
+
+export type TicketListOrder =
+  (typeof TicketListOrder)[keyof typeof TicketListOrder];
 export type TicketPropertyConfigType = {
   __typename?: 'TicketPropertyConfigType';
   /** Which control the form renders for this field */
@@ -1778,6 +1811,8 @@ export type TicketType = {
   priority: Scalars['String']['output'];
   /** Internal polymorphic discriminator — always 'request' */
   propertyName: Scalars['String']['output'];
+  /** The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it lies in none, and to a caller without ticket.view_detail here */
+  responsibleTeams: Array<AssignedTeamType>;
   /** Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address */
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
@@ -2437,6 +2472,7 @@ export type GetTicketsWithNeedsQueryVariables = Exact<{
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
+  order?: InputMaybe<TicketListOrder>;
 }>;
 
 export type GetTicketsWithNeedsQuery = {
@@ -2491,6 +2527,11 @@ export type GetTicketQuery = {
           room?: string | null;
           landmarkNote?: string | null;
         } | null;
+        responsibleTeams: Array<{
+          __typename?: 'AssignedTeamType';
+          uuid: string;
+          name: string;
+        }>;
         photos: Array<{
           __typename?: 'PhotoType';
           uuid: string;
@@ -4661,6 +4702,17 @@ export const GetTicketsWithNeedsDocument = {
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'zoom' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'order' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'TicketListOrder' },
+          },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -4720,6 +4772,14 @@ export const GetTicketsWithNeedsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'zoom' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'order' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'order' },
                 },
               },
             ],
@@ -4927,6 +4987,17 @@ export const GetTicketDocument = {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'landmarkNote' },
                       },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'responsibleTeams' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                     ],
                   },
                 },

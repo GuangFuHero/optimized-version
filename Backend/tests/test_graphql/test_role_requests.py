@@ -8,14 +8,12 @@ from datetime import UTC, datetime
 
 import pytest
 from jose import jwt
-from sqlalchemy import select
 
 from app.core.permissions import Perm
 from app.models.auth import UserContact
-from app.models.rbac import Permission, Role, RolePermissionAssign
 from app.models.role_request import RoleRequest
 from app.models.team import Team
-from tests.test_graphql.conftest import _create_user_with_role, auth_header
+from tests.test_graphql.conftest import _create_user_with_role, _ensure_platform_role, auth_header
 from tests.test_graphql.conftest import test_db as graphql_db  # renamed so pytest does not collect it
 
 SUBMIT = """
@@ -44,19 +42,7 @@ async def _citizen_token(redis, phone: str | None = None) -> str:
     The GraphQL fixtures seed their own role names, not the production `user` that the
     eligibility rule keys on, so the role is added here once and reused across tests.
     """
-    async with graphql_db() as db:
-        role = (await db.execute(select(Role).where(Role.name == "user"))).scalar_one_or_none()
-        if role is None:
-            role = Role(name="user", kind="platform")
-            db.add(role)
-            permission = (
-                await db.execute(select(Permission).where(Permission.key == Perm.ROLE_REQUEST_ADD.value))
-            ).scalar_one_or_none()
-            if permission is None:
-                permission = Permission(key=Perm.ROLE_REQUEST_ADD.value)
-                db.add(permission)
-            await db.flush()
-            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
+    await _ensure_platform_role("user", [(Perm.ROLE_REQUEST_ADD, "all")])
     user_uuid, token = await _create_user_with_role(redis, "user")
     # Applying needs a verified phone since Spec 026 (ADR-355). Unique by value, so one per test run.
     async with graphql_db() as db:

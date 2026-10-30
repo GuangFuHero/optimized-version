@@ -29,17 +29,12 @@ from app.graphql.tickets.types import PhotoType
 from app.services.building_map import OTHER_AREA, floor_labels
 
 
-async def _can_review_suggestions(info: strawberry.types.Info, station: "StationType") -> bool:
-    """Whether the caller holds station.review over this station, as a merge requires.
-
-    Never raises: a denial reads as [].
-    """
+async def _holds_over_station(info: strawberry.types.Info, station: "StationType", perm: Perm) -> bool:
+    """Whether the caller holds `perm` over this one station — checkpoints 1 and 2, never raising."""
     user = info.context["user"]
     if user is None:
         return False
-    scope = await resolve_scope(
-        user, Perm.STATION_REVIEW, info.context["db"], cache=info.context["_rbac_cache"]
-    )
+    scope = await resolve_scope(user, perm, info.context["db"], cache=info.context["_rbac_cache"])
     if scope == Scope.NONE:
         return False
     if scope == Scope.ALL:
@@ -48,6 +43,14 @@ async def _can_review_suggestions(info: strawberry.types.Info, station: "Station
         created_by=station.created_by, team_uuid=station._team_uuid_raw, geometry=station._geometry_raw
     )
     return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
+
+
+async def _can_review_suggestions(info: strawberry.types.Info, station: "StationType") -> bool:
+    """Whether the caller holds station.review over this station, as a merge requires.
+
+    Never raises: a denial reads as [].
+    """
+    return await _holds_over_station(info, station, Perm.STATION_REVIEW)
 
 
 async def _pending_suggested_fields(info: strawberry.types.Info, station_uuid, target_uuid) -> list[str]:
@@ -63,6 +66,16 @@ class StationOperationalStatus(enum.Enum):
     active = "active"
     temporarily_closed = "temporarily_closed"
     permanently_closed = "permanently_closed"
+
+
+@strawberry.enum
+class StationOrder(enum.Enum):
+    """How `stations` sorts (ADR-394)."""
+
+    # Relevance while searching, then newest first: the order the site has always had.
+    DEFAULT = "default"
+    # Open stations first, then the most recently updated: the back office's list.
+    OPEN_FIRST_RECENTLY_UPDATED = "open_first_recently_updated"
 
 
 @strawberry.input
@@ -180,7 +193,10 @@ class StationType:
     )
     is_official: bool = strawberry.field(
         default=False,
-        description="True if this station is operated by a government or official body",
+        description=(
+            "True if the back office made this station: `source` is 'official', as the `official` filter "
+            "reads it"
+        ),
     )
     operational_status: str = strawberry.field(
         default="active",
@@ -198,7 +214,12 @@ class StationType:
         default=None, description="When supply_status last changed; null while it has never been set"
     )
     created_at: datetime | None = None
-    updated_at: datetime | None = None
+    updated_at: datetime | None = strawberry.field(
+        default=None,
+        description="When anything about this station last changed: any field, property, photo or team "
+        "assignment, or an approved or revoked suggestion. A pending or rejected suggestion, or a verdict on "
+        "a property (pending, verified, rejected), leaves it as is",
+    )
 
     # Private storage backing the contact_* PII resolvers below (mirrors TicketType,
     # ADR-049) and the comment resolver (ADR-332) — never exposed directly in the schema,
@@ -291,6 +312,45 @@ class StationType:
         if await self._pii_visible(info):
             return self._comment_raw
         return None
+
+    @strawberry.field(
+        description="Whether the caller holds station.edit over this station, so a page offers "
+        "edit controls only where the edit would be allowed"
+    )
+    async def viewer_can_edit(self, info: strawberry.types.Info) -> bool:
+        """Resolve station.edit against this station's scope, as the edit itself would."""
+        return await _holds_over_station(info, self, Perm.STATION_EDIT)
+
+    @strawberry.field(
+        description="Whether the caller holds station.delete over this station, so a page offers "
+        "a delete control only where the delete would be allowed"
+    )
+    async def viewer_can_delete(self, info: strawberry.types.Info) -> bool:
+        """Resolve station.delete against this station's scope, as the delete itself would."""
+        return await _holds_over_station(info, self, Perm.STATION_DELETE)
+
+    @strawberry.field(
+        description="Whether the caller holds station.view_history over this station, so a page "
+        "offers the timeline only where reading it would be allowed"
+    )
+    async def viewer_can_view_history(self, info: strawberry.types.Info) -> bool:
+        """Resolve station.view_history against this station's scope, as the timeline would."""
+        return await _holds_over_station(info, self, Perm.STATION_VIEW_HISTORY)
+
+    @strawberry.field(
+        description="Whether the caller's station export would include this station, so a page "
+        "can count an export before running it"
+    )
+    async def viewer_can_export(self, info: strawberry.types.Info) -> bool:
+        """Resolve station.export against this station's scope, as the export's row filter would."""
+        return await _holds_over_station(info, self, Perm.STATION_EXPORT)
+
+    @strawberry.field(
+        description="Whether the contact fields on this station come back unmasked for the caller"
+    )
+    async def viewer_can_view_pii(self, info: strawberry.types.Info) -> bool:
+        """The same memoized check the contact_* resolvers mask by."""
+        return await self._pii_visible(info)
 
     @strawberry.field
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
@@ -401,6 +461,64 @@ class StationConnection:
     page_info: PageInfo
 
 
+@strawberry.type
+class StationStatusCountType:
+    """How many of the counted stations have one operational status."""
+
+    status: str = strawberry.field(
+        description="An operationalStatus value: active, temporarily_closed or permanently_closed"
+    )
+    count: int
+
+
+@strawberry.type
+class StationTypeCountType:
+    """How many of the counted stations have one type, and how many of those an export would include."""
+
+    type: str | None = strawberry.field(description="The station type; null for stations with none")
+    count: int
+    exportable: int = strawberry.field(
+        description=(
+            "How many of them the caller's station export of this type would include: none without "
+            "station.export, and none on the row with no type, which the export can't ask for. It follows "
+            "this request's filters, while the export takes the type alone, so the two agree only when no "
+            "other filter is given"
+        )
+    )
+
+
+@strawberry.type
+class StationAreaCountType:
+    """How many of the counted stations have their address in one 縣市 and 鄉鎮市區."""
+
+    county: str
+    town: str | None = strawberry.field(
+        description=(
+            "Null for the stations in this 縣市 whose address names no 鄉鎮市區. No filter selects just "
+            "those: `county` alone matches the whole 縣市"
+        )
+    )
+    count: int
+
+
+@strawberry.type
+class StationFacetsType:
+    """Counts over the stations `stations` would list for the same filters (ADR-394)."""
+
+    total: int
+    by_status: list[StationStatusCountType]
+    by_type: list[StationTypeCountType]
+    areas: list[StationAreaCountType] = strawberry.field(
+        description=(
+            "Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none, and one with a "
+            "縣市 but no 鄉鎮市區 is in a row whose `town` is null"
+        )
+    )
+    pending_review_count: int = strawberry.field(
+        description="Stations with a pending suggestion that the caller holds station.review over"
+    )
+
+
 @strawberry.input
 class CreateStationInput:
     """Input for creating a new map station."""
@@ -416,7 +534,11 @@ class CreateStationInput:
     op_hour: str | None = strawberry.field(default=None, description="Operating hours in free-text format")
     level: int = strawberry.field(default=0, description="Importance level for map rendering (0 = default)")
     comment: str | None = None
-    source: str = strawberry.field(default="user", description="Data origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the station decides it",
+        deprecation_reason="The backend sets `source` from the identity making the station; leave it out",
+    )
     visibility: Visibility = strawberry.field(
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",

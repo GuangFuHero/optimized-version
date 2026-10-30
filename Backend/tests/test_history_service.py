@@ -33,6 +33,7 @@ from app.services.history import (
     TICKET,
     UNASSIGNED,
     UPDATED,
+    ScopeIds,
     Visibility,
     build_events,
     entity_exists,
@@ -295,6 +296,39 @@ async def test_a_cancelled_assignment_is_still_in_the_timeline(db):
 
 
 @pytest.mark.asyncio
+async def test_a_geometry_write_that_only_moved_updated_at_is_left_out(db):
+    """Adding a need stamps its ticket too; the need's own row says what happened, so the stamp is dropped."""
+    ticket = uuidlib.uuid4()
+    db.add_all(
+        [
+            _audit(
+                "base_geometries",
+                "UPDATE",
+                ticket,
+                old={"updated_at": "2026-08-21T10:00:00+00:00", "delete_at": "2026-08-21T10:00:00+00:00"},
+                new={"updated_at": "2026-08-21T11:00:00+00:00", "delete_at": "2026-08-21T10:00:00+00:00"},
+                at=_at(120),
+            ),
+            _audit(
+                "base_geometries",
+                "UPDATE",
+                ticket,
+                old={"updated_at": "2026-08-21T09:00:00+00:00", "delete_at": None},
+                new={"updated_at": "2026-08-21T10:00:00+00:00", "delete_at": "2026-08-21T10:00:00+00:00"},
+                at=_at(60),
+            ),
+        ]
+    )
+    await db.flush()
+
+    rows, _ = await fetch_audit_rows(db, ids=ScopeIds(row_ids={ticket}), cap=1)
+
+    assert [(row.old_values["delete_at"], row.new_values["delete_at"]) for row in rows] == [
+        (None, "2026-08-21T10:00:00+00:00")
+    ]
+
+
+@pytest.mark.asyncio
 async def test_a_live_assignment_is_not_returned_twice(db):
     """It matches both access paths, so the union has to de-duplicate."""
     ticket, tasks, actor = await _ticket_with_two_tasks(db)
@@ -463,6 +497,17 @@ def test_a_crawler_insert_is_attributed_to_the_crawler():
     )
 
     assert events[0].actor_kind == "crawler"
+
+
+def test_an_official_station_a_seed_wrote_reads_official():
+    """The seed's official stations carry source='official' (ADR-394), named as gov and ngo are."""
+    events = build_events(
+        [
+            _audit("stations", "INSERT", uuidlib.uuid4(), new={"name": "光復鄉公所", "source": "official"}),
+        ]
+    )
+
+    assert events[0].actor_kind == "official"
 
 
 def test_a_person_editing_a_crawler_row_is_not_the_crawler():
