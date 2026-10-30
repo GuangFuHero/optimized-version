@@ -2241,7 +2241,6 @@ export type AdminTicketFieldsFragment = {
   status: string;
   priority: string;
   taskType?: string | null;
-  auditStatus: string;
   contactName?: string | null;
   contactEmail?: string | null;
   contactPhone?: string | null;
@@ -2355,7 +2354,6 @@ export type AdminTicketsQuery = {
       status: string;
       priority: string;
       taskType?: string | null;
-      auditStatus: string;
       contactName?: string | null;
       contactEmail?: string | null;
       contactPhone?: string | null;
@@ -2515,7 +2513,6 @@ export type AdminTicketQuery = {
     status: string;
     priority: string;
     taskType?: string | null;
-    auditStatus: string;
     contactName?: string | null;
     contactEmail?: string | null;
     contactPhone?: string | null;
@@ -3147,7 +3144,6 @@ export type AdminCreateTicketMutation = {
           status: string;
           priority: string;
           taskType?: string | null;
-          auditStatus: string;
           contactName?: string | null;
           contactEmail?: string | null;
           contactPhone?: string | null;
@@ -3186,7 +3182,6 @@ export type AdminUpdateTicketMutation = {
     status: string;
     priority: string;
     taskType?: string | null;
-    auditStatus: string;
     contactName?: string | null;
     contactEmail?: string | null;
     contactPhone?: string | null;
@@ -3215,46 +3210,6 @@ export type AdminDeleteTicketMutationVariables = Exact<{
 export type AdminDeleteTicketMutation = {
   __typename?: 'Mutation';
   deleteTicket: boolean;
-};
-
-export type AdminAuditTicketMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  status: AuditVerdict;
-  contentHash: Scalars['String']['input'];
-  note?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-export type AdminAuditTicketMutation = {
-  __typename?: 'Mutation';
-  auditTicket: {
-    __typename?: 'TicketType';
-    uuid: string;
-    title: string;
-    description?: string | null;
-    geometry?: Geometry | null;
-    status: string;
-    priority: string;
-    taskType?: string | null;
-    auditStatus: string;
-    contactName?: string | null;
-    contactEmail?: string | null;
-    contactPhone?: string | null;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    disasterTypes: Array<string>;
-    locationCell?: string | null;
-    buildingMapUuid?: string | null;
-    viewerCanEdit: boolean;
-    viewerCanDelete: boolean;
-    viewerCanViewHistory: boolean;
-    secondaryLocation?: {
-      __typename?: 'SecondaryLocationType';
-      county?: string | null;
-      town?: string | null;
-      floor?: string | null;
-    } | null;
-  };
 };
 
 export type AdminSetTicketDisasterDetailsMutationVariables = Exact<{
@@ -4378,7 +4333,6 @@ export const AdminTicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -4995,7 +4949,6 @@ export const AdminTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -5747,7 +5700,6 @@ export const AdminTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -7629,7 +7581,6 @@ export const AdminCreateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -7750,7 +7701,6 @@ export const AdminUpdateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -7827,162 +7777,6 @@ export const AdminDeleteTicketDocument = {
 } as unknown as DocumentNode<
   AdminDeleteTicketMutation,
   AdminDeleteTicketMutationVariables
->;
-export const AdminAuditTicketDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminAuditTicket' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'status' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'AuditVerdict' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'contentHash' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'note' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'auditTicket' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'status' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'status' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'contentHash' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'contentHash' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'note' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'note' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminTicketFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminTicketFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'secondaryLocation' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'county' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'town' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
-              ],
-            },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'viewerCanViewHistory' },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminAuditTicketMutation,
-  AdminAuditTicketMutationVariables
 >;
 export const AdminSetTicketDisasterDetailsDocument = {
   kind: 'Document',

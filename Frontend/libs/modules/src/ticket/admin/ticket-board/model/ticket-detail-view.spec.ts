@@ -15,7 +15,6 @@ const ticket = {
   description: '一樓積水約 30 公分',
   status: 'pending',
   priority: 'high',
-  auditStatus: 'need_audit',
   contactName: '王小明',
   contactPhone: '0912345678',
   contactEmail: null,

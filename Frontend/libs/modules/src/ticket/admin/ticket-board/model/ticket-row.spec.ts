@@ -41,7 +41,6 @@ const ticket = (
   title: '淹水',
   status: 'pending',
   priority: 'high',
-  auditStatus: 'need_audit',
   disasterTypes: ['flood'],
   geometry: { type: 'Point' as const, coordinates: [121.5, 25.0] },
   locationCell: null,

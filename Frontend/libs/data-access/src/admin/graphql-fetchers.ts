@@ -772,19 +772,6 @@ export function useDeleteTicket() {
   });
 }
 
-export function useAuditTicket() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminAuditTicketMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminAuditTicketDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: (_data, variables) =>
-      invalidateTicketWrite(queryClient, variables.uuid),
-  });
-}
-
 export function useSetTicketDisasterDetails() {
   const queryClient = useQueryClient();
   return useMutation({
