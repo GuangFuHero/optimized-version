@@ -175,3 +175,52 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
 時要用它判斷權限，讀到過期的物件就丟 MissingGreenlet：工單已經建好，回應卻帶著 `Unexpected error.`。
 修法：`notify_new_cards` 多收 `actor`，rollback 之後 `refresh(actor)`；建立的 entity 本來就由呼叫端在通知後 refresh。
 回歸測試：`tests/test_graphql/test_dedup_review_notify_graphql.py`。
+
+---
+
+## ADR-443：任務單加唯讀 `verificationStatus`，從配對卡讀出「疑似重複」
+
+**Date**: 2026-10-30　**Status**: Accepted（使用者 2026-10-30 照建議；依據糖的管理平台原型
+`Design/後台/docs/任務管理.md`（`sucrelindesign` 分支）：`verification` 查核狀態，`disputed`＝疑似重複
+→ 後端 `TicketType.verificationStatus`）
+
+**背景**：管理平台任務單看板要在單上標「疑似重複」，並寫出跟哪張單重複（原型 `tk-table.jsx` 列表標題旁、
+`tk-detail.jsx` 抽屜「查核狀態：疑似與 X 重複」），只給資料檢核員和超管看。配對卡（`duplicate_pairs`）已經記了
+哪兩筆疑似重複、審核到哪，但快層的卡是需求對需求（`ticket_task`），單上讀不到。`auditStatus` 是另一件事
+（PR #84 的資料檢核），不拿來用。
+
+**決定**：
+
+- `TicketType.verificationStatus: TicketVerificationType`（可為 null），每次讀的時候從配對卡算，不存：
+  - `state: TicketVerificationState!`：目前只有 `disputed`。
+  - `duplicateOf: [TicketDuplicateRefType!]!`：跟哪幾張單（`uuid`、`title`）。
+- **什麼算疑似重複**：這張單或它的需求，有一張重複審核還能處理的卡：
+  - 卡沒軟刪除，種類是 `ticket` 或 `ticket_task`；
+  - 狀態是 `dup_ignored`／`suggested`（待審，ADR-339），或 `confirmed_duplicate` 但還沒合併（沒有 `merged` 事件）。
+    跟 `dedup_resolve` 能合併的卡同一個條件（`RESOLVABLE_KINDS`、`RESOLVABLE_STATUSES`、`has_merged_event`）。
+  - 判「不是重複」或合併後就不算；撤回判定後卡回到待審，又算。
+- **卡對回單**：`ticket` 卡兩邊就是單；`ticket_task` 卡用需求**現在**所屬的單（`ticket_tasks.ticket_uuid`），
+  跟 `dedup_review_tickets.ticket_uuids_for_pair` 一樣。合併把需求搬到主單後，那個需求還能處理的卡跟著算在主單；
+  需求刪了，卡還在審核清單裡，照樣算。
+- **`duplicateOf`**：卡另一邊的單，去掉這張單自己、已取消或已刪除的單，同一張只列一次，照最早那張卡的建立時間排。
+  另一邊的單都不在了時是空 list，卡仍算數，前端只寫「疑似重複」。
+- **誰看得到**：在這張單上持有 `ai_duplicate.view` 的人（超管、資料檢核員，ADR-337），跟重複審核頁同一個權限；
+  其他人（含前台、訪客）拿到 null，也不查。審核頁已經給整張單，標題不會多給。
+- **怎麼查**：`disputes_by_ticket` DataLoader（`app/services/ticket_verification.py`），一頁的單一起查：
+  卡一句、對方單的標題一句，不隨筆數增加。
+- **不做**：不能用它篩選或排序；不加存資料的欄位、不用 migration；不改 `ticket_audit`／`auditStatus`／通知；
+  不改重複審核頁和合併的程式。
+
+**理由**：卡的狀態由建卡、判定、撤回、合併四條路徑改，存一份在單上就要每條都記得同步；讀的時候算，判完下一次讀
+就對，也不會多一個從別的表推得出來的欄位（第三正規化）。
+
+**Consequences**：
+
+- ➕ 看板跟重複審核頁同一個來源，判完就看得到。
+- ➖ 看得到的人每頁多兩句 SQL。卡那句從還能處理的卡找起（`ix_duplicate_pairs_status`）；已合併的卡也是
+  `confirmed_duplicate`，會一直累積，靠 `ix_dedup_audit_events_pair` 排掉。卡只在「仍要建立」時寫，數量小。
+- ➖ 不能用它篩選；要的話得另外決定存一份，或在列表查詢裡加子查詢。
+- ➖ 判了「是重複」還沒合併的卡，審核頁預設清單看不到（ADR-339 預設只列待審），要篩 `confirmed_duplicate`
+  才找得到，看板卻會標它。
+- ◾ `auditStatus` 照舊是資料檢核；看板的「疑似重複」改讀 `verificationStatus`。同一次拿掉看板不再用、
+  也還沒進 main 的 `viewerCanAudit` 和 `ticketsExtent(auditStatus:)`；`tickets(auditStatus:)` 不動。

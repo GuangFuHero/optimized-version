@@ -90,7 +90,9 @@ def _status_values(statuses: list[TicketStatus] | None) -> list[str] | None:
     return None if statuses is None else sorted({s.value for s in statuses})
 
 
-def _list_filters(need_type: str | None, open_needs_only: bool, audit_status: AuditStatus | None) -> list:
+def _list_filters(
+    need_type: str | None, open_needs_only: bool, audit_status: AuditStatus | None = None
+) -> list:
     """The need-type and audit-status filters of the `tickets` list, as conditions on Tickets.
 
     A need taken off never matches. Both read only what the list shows anyone: each need's type,
@@ -350,9 +352,6 @@ class RequestQuery:
                 description="As on `tickets`: with needType, only a need still taking volunteers"
             ),
         ] = False,
-        audit_status: Annotated[
-            AuditStatus | None, strawberry.argument(description="Only tickets at this audit status")
-        ] = None,
         location_cell: Annotated[
             str | None,
             strawberry.argument(
@@ -371,9 +370,9 @@ class RequestQuery:
     ) -> TicketsExtentType:
         """How many tickets `tickets` would list for these filters, and the box their points span.
 
-        The arguments are `tickets`' less paging, order, `zoom` and `bounds`, under the same gate,
-        scope and per-row detail rules, so `count` is its totalCount. Lets a map frame every match
-        without loading them. A ticket the caller is shown as a cell counts at its cell's centre —
+        The arguments are `tickets`' less paging, order, `zoom`, `bounds` and `auditStatus`, under the
+        same gate, scope and per-row detail rules, so `count` is its totalCount. Lets a map frame every
+        match without loading them. A ticket the caller is shown as a cell counts at its cell's centre —
         at resolution 8, as `tickets` shows it without `zoom`, or `locationCell`'s — never its
         point, so the box says no more than the rows would. One statement, under the statement
         ceiling: a guest can call it over every ticket.
@@ -392,7 +391,7 @@ class RequestQuery:
                 disaster_type=disaster_type,
                 extra_filters=[
                     *scope_filter(scope, actor=info.context["user"], model=Tickets),
-                    *_list_filters(need_type, open_needs_only, audit_status),
+                    *_list_filters(need_type, open_needs_only),
                 ],
                 detail_filters=detail_filters,
                 coarse_resolution=resolution,

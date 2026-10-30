@@ -206,6 +206,39 @@ class TicketStatus(enum.Enum):
     cancelled = "cancelled"
 
 
+@strawberry.enum
+class TicketVerificationState(enum.Enum):
+    """Why 重複審核 waits on a ticket: app/services/ticket_verification.py (ADR-443)."""
+
+    disputed = "disputed"
+
+
+@strawberry.type(description="Another ticket a disputed ticket may duplicate")
+class TicketDuplicateRefType:
+    """An entry of `TicketVerificationType.duplicateOf`."""
+
+    uuid: UUID
+    title: str
+
+
+@strawberry.type(description="Where a ticket stands in 重複審核 (ADR-443)")
+class TicketVerificationType:
+    """`TicketType.verificationStatus`, worked out from the duplicate pair cards on every read."""
+
+    state: TicketVerificationState = strawberry.field(
+        description=(
+            "'disputed': a card on this ticket or one of its needs waits for a verdict, or was judged a "
+            "duplicate and not merged yet"
+        )
+    )
+    duplicate_of: list[TicketDuplicateRefType] = strawberry.field(
+        description=(
+            "The tickets on the far side of those cards, each once, oldest card first. A ticket cancelled "
+            "or deleted is left out, so this can be empty while the card still waits"
+        )
+    )
+
+
 @strawberry.type(description="One move of a ticket's audit status")
 class TicketAuditEntryType:
     """An entry of `TicketType.auditHistory`, built by `ticket_audit.audit_history`."""
@@ -925,6 +958,30 @@ class TicketType:
 
     @strawberry.field(
         description=(
+            "Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when "
+            "it does not, and to a caller without ai_duplicate.view here. Not the data check: that is "
+            "`auditStatus`"
+        )
+    )
+    async def verification_status(self, info: strawberry.types.Info) -> TicketVerificationType | None:
+        """Read the ticket's duplicate pair cards, or nothing when the caller cannot see them.
+
+        The 重複審核 page's own capability: its reviewers already read both tickets in full there, so
+        the far tickets' titles tell them nothing new. Decided before the lookup, so a page anyone
+        else reads costs no query here.
+        """
+        if not await ticket_perm_held(info, Perm.AI_DUP_VIEW, str(self.uuid), self._scope_resource()):
+            return None
+        refs = await info.context["loaders"]["disputes_by_ticket"].load(str(self.uuid))
+        if refs is None:
+            return None
+        return TicketVerificationType(
+            state=TicketVerificationState.disputed,
+            duplicate_of=[TicketDuplicateRefType(uuid=UUID(ref.uuid), title=ref.title) for ref in refs],
+        )
+
+    @strawberry.field(
+        description=(
             "UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here"
         )
     )
@@ -947,14 +1004,6 @@ class TicketType:
     async def viewer_can_delete(self, info: strawberry.types.Info) -> bool:
         """Resolve ticket.delete against this ticket's scope, as the delete itself would."""
         return await ticket_perm_held(info, Perm.TICKET_DELETE, str(self.uuid), self._scope_resource())
-
-    @strawberry.field(
-        description="Whether the caller holds ticket.audit over this ticket, so a page offers "
-        "the audit card only where a verdict would be allowed"
-    )
-    async def viewer_can_audit(self, info: strawberry.types.Info) -> bool:
-        """The same memoized check the audit fields are withheld by."""
-        return await self._audit_visible(info)
 
     @strawberry.field(
         description="Whether the caller holds ticket.view_history over this ticket, so a page "

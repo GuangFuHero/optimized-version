@@ -22,7 +22,7 @@ from tests.test_graphql.test_zone_scope import INSIDE_ZONE_POINT, OUTSIDE_ZONE_P
 RIGHTS = """
 query($q: String!) {
     tickets(q: $q) {
-        items { title viewerCanEdit viewerCanDelete viewerCanAudit viewerCanViewHistory }
+        items { title viewerCanEdit viewerCanDelete viewerCanViewHistory }
     }
 }
 """
@@ -100,13 +100,7 @@ async def _gql(client, token, query, variables=None):
 @pytest.mark.asyncio
 async def test_viewer_can_flags_follow_each_tickets_scope(client, redis):
     """At `own`, only the caller's own ticket carries the flags; at `all`, every one does."""
-    perms = [
-        Perm.TICKET_VIEW,
-        Perm.TICKET_EDIT,
-        Perm.TICKET_DELETE,
-        Perm.TICKET_AUDIT,
-        Perm.TICKET_VIEW_HISTORY,
-    ]
+    perms = [Perm.TICKET_VIEW, Perm.TICKET_EDIT, Perm.TICKET_DELETE, Perm.TICKET_VIEW_HISTORY]
     own_uuid, own_token = await _create_user_with_grants(redis, [(p, "own") for p in perms])
     _, all_token = await _create_user_with_grants(redis, [(p, "all") for p in perms])
     tag = uuid_mod.uuid4().hex[:10]
@@ -116,12 +110,12 @@ async def test_viewer_can_flags_follow_each_tickets_scope(client, redis):
     def flags(data):
         return {
             i["title"].removeprefix(f"{tag} "): [
-                i[k] for k in ("viewerCanEdit", "viewerCanDelete", "viewerCanAudit", "viewerCanViewHistory")
+                i[k] for k in ("viewerCanEdit", "viewerCanDelete", "viewerCanViewHistory")
             ]
             for i in data["tickets"]["items"]
         }
 
-    mine, theirs = [True] * 4, [False] * 4
+    mine, theirs = [True] * 3, [False] * 3
     assert flags(await _gql(client, own_token, RIGHTS, {"q": tag})) == {"mine": mine, "theirs": theirs}
     assert flags(await _gql(client, all_token, RIGHTS, {"q": tag})) == {"mine": mine, "theirs": mine}
 
@@ -138,7 +132,7 @@ async def test_viewer_can_flags_are_false_without_the_perm(client, redis):
     by_title = {i["title"].removeprefix(f"{tag} "): i for i in items}
     assert by_title["mine"]["viewerCanEdit"] is True
     assert by_title["theirs"]["viewerCanEdit"] is False
-    assert not any(i[k] for i in items for k in ("viewerCanDelete", "viewerCanAudit", "viewerCanViewHistory"))
+    assert not any(i[k] for i in items for k in ("viewerCanDelete", "viewerCanViewHistory"))
 
     resp = await client.post("/graphql", json={"query": RIGHTS, "variables": {"q": tag}})
     body = resp.json()
@@ -175,7 +169,6 @@ async def test_zone_check_runs_once_per_page_not_per_ticket_and_perm(client, red
         Perm.TICKET_VIEW_PII,
         Perm.TICKET_EDIT,
         Perm.TICKET_DELETE,
-        Perm.TICKET_AUDIT,
         Perm.TICKET_VIEW_HISTORY,
     )
     _, token = await _make_zone_scoped_editor(redis, team_assigned_to_zone, perms)
@@ -185,7 +178,7 @@ async def test_zone_check_runs_once_per_page_not_per_ticket_and_perm(client, red
         tickets(q: $q) {
             items {
                 title description contactName
-                viewerCanEdit viewerCanDelete viewerCanAudit viewerCanViewHistory
+                viewerCanEdit viewerCanDelete viewerCanViewHistory
             }
         }
     }
@@ -198,7 +191,9 @@ async def test_zone_check_runs_once_per_page_not_per_ticket_and_perm(client, red
         data, statements = await _zone_statements(client, token, query, {"q": tag})
         items = data["tickets"]["items"]
         assert len(items) == size
-        assert all(i["viewerCanEdit"] and i["viewerCanAudit"] and i["description"] == "d" for i in items)
+        assert all(
+            i["viewerCanEdit"] and i["viewerCanViewHistory"] and i["description"] == "d" for i in items
+        )
         counts.append(statements)
     assert counts[0] == counts[1], counts
 

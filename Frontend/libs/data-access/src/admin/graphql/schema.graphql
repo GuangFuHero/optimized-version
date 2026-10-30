@@ -983,9 +983,6 @@ type Query {
     """As on `tickets`: with needType, only a need still taking volunteers"""
     openNeedsOnly: Boolean! = false
 
-    """Only tickets at this audit status"""
-    auditStatus: AuditStatus = null
-
     """As on `tickets`: only the tickets this caller is shown as this H3 cell"""
     locationCell: String = null
 
@@ -1800,6 +1797,12 @@ type TicketDisasterDetailType {
   value: String!
 }
 
+"""Another ticket a disputed ticket may duplicate"""
+type TicketDuplicateRefType {
+  uuid: UUID!
+  title: String!
+}
+
 enum TicketListOrder {
   NEWEST
   NEEDS_FIRST
@@ -2012,6 +2015,11 @@ type TicketType {
   auditContentHash: String
 
   """
+  Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not, and to a caller without ai_duplicate.view here. Not the data check: that is `auditStatus`
+  """
+  verificationStatus: TicketVerificationType
+
+  """
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here
   """
   createdBy: String
@@ -2025,11 +2033,6 @@ type TicketType {
   Whether the caller holds ticket.delete over this ticket, so a page offers a delete control only where the delete would be allowed
   """
   viewerCanDelete: Boolean!
-
-  """
-  Whether the caller holds ticket.audit over this ticket, so a page offers the audit card only where a verdict would be allowed
-  """
-  viewerCanAudit: Boolean!
 
   """
   Whether the caller holds ticket.view_history over this ticket, so a page offers the timeline only where reading it would be allowed
@@ -2082,6 +2085,23 @@ type TicketType {
   """
   responsibleTeams: [AssignedTeamType!]!
   disasterDetails: [TicketDisasterDetailType!]!
+}
+
+enum TicketVerificationState {
+  disputed
+}
+
+"""Where a ticket stands in 重複審核 (ADR-443)"""
+type TicketVerificationType {
+  """
+  'disputed': a card on this ticket or one of its needs waits for a verdict, or was judged a duplicate and not merged yet
+  """
+  state: TicketVerificationState!
+
+  """
+  The tickets on the far side of those cards, each once, oldest card first. A ticket cancelled or deleted is left out, so this can be empty while the card still waits
+  """
+  duplicateOf: [TicketDuplicateRefType!]!
 }
 
 """

@@ -1250,7 +1250,6 @@ export type QueryTicketsArgs = {
 };
 
 export type QueryTicketsExtentArgs = {
-  auditStatus?: InputMaybe<AuditStatus>;
   disasterType?: InputMaybe<Scalars['String']['input']>;
   locationCell?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
@@ -1837,6 +1836,13 @@ export type TicketDisasterDetailType = {
   value: Scalars['String']['output'];
 };
 
+/** Another ticket a disputed ticket may duplicate */
+export type TicketDuplicateRefType = {
+  __typename?: 'TicketDuplicateRefType';
+  title: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+};
+
 export const TicketListOrder = {
   NeedsFirst: 'NEEDS_FIRST',
   Newest: 'NEWEST',
@@ -1990,14 +1996,29 @@ export type TicketType = {
   /** When anything visible about this ticket last changed: a field, its address, disaster details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only when it changes the status; a review verdict never does */
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
-  /** Whether the caller holds ticket.audit over this ticket, so a page offers the audit card only where a verdict would be allowed */
-  viewerCanAudit: Scalars['Boolean']['output'];
+  /** Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not, and to a caller without ai_duplicate.view here. Not the data check: that is `auditStatus` */
+  verificationStatus?: Maybe<TicketVerificationType>;
   /** Whether the caller holds ticket.delete over this ticket, so a page offers a delete control only where the delete would be allowed */
   viewerCanDelete: Scalars['Boolean']['output'];
   /** Whether the caller holds ticket.edit over this ticket, so a page offers edit controls only where the edit would be allowed */
   viewerCanEdit: Scalars['Boolean']['output'];
   /** Whether the caller holds ticket.view_history over this ticket, so a page offers the timeline only where reading it would be allowed */
   viewerCanViewHistory: Scalars['Boolean']['output'];
+};
+
+export const TicketVerificationState = {
+  Disputed: 'disputed',
+} as const;
+
+export type TicketVerificationState =
+  (typeof TicketVerificationState)[keyof typeof TicketVerificationState];
+/** Where a ticket stands in 重複審核 (ADR-443) */
+export type TicketVerificationType = {
+  __typename?: 'TicketVerificationType';
+  /** The tickets on the far side of those cards, each once, oldest card first. A ticket cancelled or deleted is left out, so this can be empty while the card still waits */
+  duplicateOf: Array<TicketDuplicateRefType>;
+  /** 'disputed': a card on this ticket or one of its needs waits for a verdict, or was judged a duplicate and not merged yet */
+  state: TicketVerificationState;
 };
 
 /** How many tickets match a `tickets` filter, and the box their map points span */

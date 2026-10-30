@@ -49,6 +49,7 @@ from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.team_repository import team_zone_assign_repository
+from app.services.ticket_verification import DuplicateRef, disputes_by_ticket
 
 
 def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
@@ -172,6 +173,8 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         # Whether a ticket lies in the caller's team zones: the `zone` scope, once per ticket for
         # every perm a page asks about (app/graphql/tickets/types.py:_decide_ticket_scope).
         "ticket_in_team_zones": DataLoader(load_fn=_make_ticket_in_team_zones_loader(db)),
+        # Whether 重複審核 still waits on a ticket, and on which others (ADR-443).
+        "disputes_by_ticket": DataLoader(load_fn=_make_disputes_by_ticket_loader(db)),
     }
 
 
@@ -525,5 +528,19 @@ def _make_ticket_in_team_zones_loader(db: AsyncSession):
             )
             inside.update((team_uuid, str(ticket_uuid)) for (ticket_uuid,) in rows)
         return [(str(team_uuid), str(ticket_uuid)) in inside for team_uuid, ticket_uuid in keys]
+
+    return load_fn
+
+
+def _make_disputes_by_ticket_loader(db: AsyncSession):
+    """Batch-load the tickets each ticket may duplicate while 重複審核 waits on it, None when it does not.
+
+    `ticket_verification.disputes_by_ticket` over the page: its cards in one statement, the far
+    tickets' titles in a second.
+    """
+
+    async def load_fn(ticket_uuids: list[str]) -> list[list[DuplicateRef] | None]:
+        disputes = await disputes_by_ticket(db, ticket_uuids)
+        return [disputes.get(str(uuid)) for uuid in ticket_uuids]
 
     return load_fn
