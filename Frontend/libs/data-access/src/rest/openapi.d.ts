@@ -4686,7 +4686,7 @@ export interface components {
       requires_date_range: boolean;
       /**
        * Max Range Days
-       * @description Widest allowed span between `start_date` and `end_date` for this y-metric's `x=date` trend, in days; a wider range is a 400. Null means no limit. Clamp the date picker to this instead of waiting for the error.
+       * @description Most days, both ends included, between `start_date` and `end_date` for this y-metric's `x=date` trend; a longer range is a 400. Null means no limit. It applies whether or not `requires_date_range` is set, so read it on its own to clamp the date picker.
        */
       max_range_days?: number | null;
     };
@@ -7920,8 +7920,8 @@ export interface operations {
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
         /** @description JSON-encoded ChartStyle: palette, font, legend position, line/pie shape, margin, modebar. Every field is optional; omitted ones take the defaults published as `default_style` on GET /analytics/catalog. Unknown fields are a 400. */
         style?: string | null;
         /** @description Figure width in px, at least 10; omit for Plotly's default. */
@@ -7982,8 +7982,8 @@ export interface operations {
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
         /** @description Only tickets of this task type (the ticket's own `task_type`). */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
@@ -8032,8 +8032,8 @@ export interface operations {
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
         /** @description Only tickets of this task type (the ticket's own `task_type`). */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
@@ -8088,8 +8088,8 @@ export interface operations {
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
         /** @description JSON-encoded ChartStyle: palette, font, legend position, line/pie shape, margin, modebar. Every field is optional; omitted ones take the defaults published as `default_style` on GET /analytics/catalog. Unknown fields are a 400. */
         style?: string | null;
         /** @description Figure width in px, at least 10; omit for Plotly's default. */
@@ -8150,8 +8150,8 @@ export interface operations {
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
         /** @description Only stations of this type; GET /analytics/catalog lists the values. */
         station_type?: string | null;
         /** @description Only stations with this operational status. */
@@ -8200,8 +8200,8 @@ export interface operations {
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
         /** @description Only stations of this type; GET /analytics/catalog lists the values. */
         station_type?: string | null;
         /** @description Only stations with this operational status. */
