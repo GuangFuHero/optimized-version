@@ -70,24 +70,29 @@ export function buildLocationCells(
 }
 
 /**
- * `id` 是否仍指得到詳情抽屜能顯示的東西：一個 marker，或某張概略單所在的格子，或後端數過的格子
- * （`cells`，格子裡的單不一定在這一頁 markers 裡）。資料刷新後用來判斷要不要清掉選取 —— 只比對
- * marker id 的話，選到格子會立刻被清掉。
+ * `id` 是否仍指得到詳情抽屜能顯示的東西：一個 marker，或某張概略單所在的格子。資料刷新後用來判斷
+ * 要不要清掉選取 —— 只比對 marker id 的話，選到格子會立刻被清掉。
+ *
+ * 給了後端數過的格子（`cells`）時，格子只在裡面找：格子裡的單不一定在這一頁 markers 裡，而手上留著
+ * 的單（點開格子時讀的）可能是換篩選之前讀的。數字讀不到、又換了篩選時，格子就算不見了，只剩地圖
+ * 底部的提示（HC 在 #181）。
  */
 export function hasRescueMapDetailItem(
   markers: readonly RescueMapMarkerItem[],
   id: string,
-  cells: readonly RescueMapLocationCell[] = [],
+  cells?: readonly RescueMapLocationCell[],
 ): boolean {
-  return (
-    cells.some((cell) => cell.id === id) ||
-    markers.some(
-      (marker) =>
-        marker.id === id ||
-        (isCoarseTicket(marker) &&
-          locationCellId(marker.locationCell ?? '') === id),
-    )
-  );
+  if (markers.some((marker) => marker.id === id)) {
+    return true;
+  }
+
+  return cells
+    ? cells.some((cell) => cell.id === id)
+    : markers.some(
+        (marker) =>
+          isCoarseTicket(marker) &&
+          locationCellId(marker.locationCell ?? '') === id,
+      );
 }
 
 /** 地圖上要畫的格子。已有精確座標的單不在此列，圖釘層照舊處理。 */

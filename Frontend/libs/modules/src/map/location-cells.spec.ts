@@ -119,6 +119,17 @@ describe('location cell ids', () => {
     );
   });
 
+  it('with counted cells, finds a cell among them alone: tickets held for it may be under another filter', () => {
+    const held = [ticket('a1'), ticket('a2')];
+
+    // The counts failed after the filter changed: no cells, though the tickets read with the
+    // cell, under the old filter, are still held.
+    expect(hasRescueMapDetailItem(held, locationCellId(CELL_A), [])).toBe(
+      false,
+    );
+    expect(hasRescueMapDetailItem(held, 'a1', [])).toBe(true);
+  });
+
   it('marks a ticket coarse only when it carries a cell', () => {
     expect(isCoarseTicket(ticket('a'))).toBe(true);
     expect(isCoarseTicket(ticket('b', { locationCell: null }))).toBe(false);
