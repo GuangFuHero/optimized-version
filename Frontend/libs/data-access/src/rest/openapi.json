@@ -3854,7 +3854,7 @@
     "/api/v1/admin/duplicate-pairs": {
       "get": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "List Duplicate Pairs",
         "description": "Pending cards by default (ADR-339), newest first, each with both sides (ADR-340).",
@@ -4022,7 +4022,7 @@
     "/api/v1/admin/duplicate-pairs/{pair_uuid}": {
       "get": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Get Duplicate Pair",
         "description": "One card, its sides, its events (oldest first) and its two whole tickets.",
@@ -4087,7 +4087,7 @@
     "/api/v1/admin/duplicate-pairs/{pair_uuid}/confirm": {
       "post": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Confirm Duplicate Pair",
         "description": "Mark a pending card a duplicate (ADR-341: only the card changes).",
@@ -4169,7 +4169,7 @@
     "/api/v1/admin/duplicate-pairs/{pair_uuid}/reject": {
       "post": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Reject Duplicate Pair",
         "description": "Mark a pending card not a duplicate (ADR-341: only the card changes).",
@@ -4251,7 +4251,7 @@
     "/api/v1/admin/duplicate-pairs/{pair_uuid}/revoke": {
       "post": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Revoke Duplicate Pair Verdict",
         "description": "Undo a card's verdict, back to the queue; someone else's needs ai_duplicate.revoke (ADR-342).",
@@ -4316,7 +4316,7 @@
     "/api/v1/admin/duplicate-pairs/{pair_uuid}/resolve": {
       "post": {
         "tags": [
-          "AI 重複審核"
+          "重複審核"
         ],
         "summary": "Resolve Duplicate Pair",
         "description": "Keep `primary`, fold the other ticket into it and cancel it, in one go (Spec 028, ADR-365).\n\n409 when the card is already resolved or decided, a ticket is gone, or either ticket changed\nsince the reviewer read it (send back the detail's `version`s); 422 when the request cannot be\ncarried out as sent.",
@@ -8518,6 +8518,18 @@
             ],
             "title": "Actor Uuid"
           },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name",
+            "description": "The nickname of `actor_uuid` (ADR-441)"
+          },
           "source_layer": {
             "type": "string",
             "enum": [
@@ -8776,6 +8788,18 @@
             ],
             "title": "Reviewed By"
           },
+          "reviewed_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By Name",
+            "description": "The nickname of `reviewed_by` (ADR-441)"
+          },
           "reviewed_at": {
             "anyOf": [
               {
@@ -8826,6 +8850,7 @@
           "hint_outcome",
           "created_at",
           "reviewed_by",
+          "reviewed_by_name",
           "reviewed_at",
           "low",
           "high",
@@ -8971,6 +8996,18 @@
             ],
             "title": "Reviewed By"
           },
+          "reviewed_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By Name",
+            "description": "The nickname of `reviewed_by` (ADR-441)"
+          },
           "reviewed_at": {
             "anyOf": [
               {
@@ -9004,6 +9041,7 @@
           "hint_outcome",
           "created_at",
           "reviewed_by",
+          "reviewed_by_name",
           "reviewed_at",
           "low",
           "high"
@@ -9703,6 +9741,81 @@
         ],
         "title": "LinkGoogleRequest",
         "description": "Body carrying a Google id_token to link to the current account, plus its proof.\n\nThe id_token proves the caller holds *that Google account*; it says nothing about the\naccount being linked to. `step_up` is the other half (ADR-217), and is optional in the\nschema for the same reason `DeleteContactRequest`'s is: the first call is what delivers\nthe code and answers 422 asking for it back."
+      },
+      "LocationForReviewResponse": {
+        "properties": {
+          "location_type": {
+            "type": "string",
+            "title": "Location Type",
+            "description": "'address' or 'pole'"
+          },
+          "full_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Address"
+          },
+          "building_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Building Section"
+          },
+          "floor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Floor"
+          },
+          "room": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Room"
+          },
+          "pole_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pole Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "location_type",
+          "full_address",
+          "building_section",
+          "floor",
+          "room",
+          "pole_id"
+        ],
+        "title": "LocationForReviewResponse",
+        "description": "Where a ticket is: the address down to the room, or the pole (ADR-440). Read-only here."
       },
       "LoginMethodOut": {
         "properties": {
@@ -12144,6 +12257,17 @@
             },
             "type": "object",
             "title": "Disaster Details"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocationForReviewResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the ticket is; null when it has no address or pole. A resolve cannot change it"
           }
         },
         "type": "object",
@@ -12168,7 +12292,8 @@
           "created_at",
           "tasks",
           "photos",
-          "disaster_details"
+          "disaster_details",
+          "location"
         ],
         "title": "TicketForReviewResponse",
         "description": "A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).\n\nSend `version` back unchanged when resolving: it says what the reviewer saw (ADR-374)."

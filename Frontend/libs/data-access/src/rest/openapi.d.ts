@@ -2766,6 +2766,11 @@ export interface components {
       /** Actor Uuid */
       actor_uuid: string | null;
       /**
+       * Actor Name
+       * @description The nickname of `actor_uuid` (ADR-441)
+       */
+      actor_name?: string | null;
+      /**
        * Source Layer
        * @enum {string}
        */
@@ -2872,6 +2877,11 @@ export interface components {
       created_at: string;
       /** Reviewed By */
       reviewed_by: string | null;
+      /**
+       * Reviewed By Name
+       * @description The nickname of `reviewed_by` (ADR-441)
+       */
+      reviewed_by_name: string | null;
       /** Reviewed At */
       reviewed_at: string | null;
       low: components['schemas']['EntitySummaryResponse'];
@@ -2940,6 +2950,11 @@ export interface components {
       created_at: string;
       /** Reviewed By */
       reviewed_by: string | null;
+      /**
+       * Reviewed By Name
+       * @description The nickname of `reviewed_by` (ADR-441)
+       */
+      reviewed_by_name: string | null;
       /** Reviewed At */
       reviewed_at: string | null;
       low: components['schemas']['EntitySummaryResponse'];
@@ -3274,6 +3289,27 @@ export interface components {
       /** Id Token */
       id_token: string;
       step_up?: components['schemas']['StepUp'] | null;
+    };
+    /**
+     * LocationForReviewResponse
+     * @description Where a ticket is: the address down to the room, or the pole (ADR-440). Read-only here.
+     */
+    LocationForReviewResponse: {
+      /**
+       * Location Type
+       * @description 'address' or 'pole'
+       */
+      location_type: string;
+      /** Full Address */
+      full_address: string | null;
+      /** Building Section */
+      building_section: string | null;
+      /** Floor */
+      floor: string | null;
+      /** Room */
+      room: string | null;
+      /** Pole Id */
+      pole_id: string | null;
     };
     /**
      * LoginMethodOut
@@ -4329,6 +4365,8 @@ export interface components {
       disaster_details: {
         [key: string]: string[];
       };
+      /** @description Where the ticket is; null when it has no address or pole. A resolve cannot change it */
+      location: components['schemas']['LocationForReviewResponse'] | null;
     };
     /**
      * TicketYMetric
