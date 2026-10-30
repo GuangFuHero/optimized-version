@@ -127,6 +127,14 @@ query AdminTickets(
         uuid
         name
       }
+      # The 疑似重複 tag: null unless the viewer holds ai_duplicate.view.
+      verificationStatus {
+        state
+        duplicateOf {
+          uuid
+          title
+        }
+      }
       tasks {
         ...AdminTaskFields
       }
@@ -216,6 +224,13 @@ query AdminTicket($uuid: UUID!) {
     responsibleTeams {
       uuid
       name
+    }
+    verificationStatus {
+      state
+      duplicateOf {
+        uuid
+        title
+      }
     }
     secondaryLocation {
       fullAddress

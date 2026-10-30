@@ -7,14 +7,9 @@ import { taiwanDateParts } from '../../../../time';
 import { formatTicketStreet, formatTicketUnit } from '../../../address';
 import { formatTicketStatusLabel } from '../../../status';
 import { adminTicketPriorityLabel } from './ticket-priority';
-import {
-  suspectedDuplicateOf,
-  UNTITLED_TICKET,
-  type AwaitedVerification,
-} from './ticket-row';
+import { suspectedDuplicateOf, UNTITLED_TICKET } from './ticket-row';
 
-export type DetailTicket = NonNullable<AdminTicketQuery['ticket']> &
-  AwaitedVerification;
+export type DetailTicket = NonNullable<AdminTicketQuery['ticket']>;
 
 /** What the drawer reads from a disaster-specific field's config: its label and its unit. */
 export type DisasterFieldConfig = Pick<

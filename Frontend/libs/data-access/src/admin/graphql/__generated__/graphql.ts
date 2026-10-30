@@ -2382,6 +2382,15 @@ export type AdminTicketsQuery = {
         uuid: string;
         name: string;
       }>;
+      verificationStatus?: {
+        __typename?: 'TicketVerificationType';
+        state: TicketVerificationState;
+        duplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
+      } | null;
       tasks: Array<{
         __typename?: 'TicketTaskType';
         uuid: string;
@@ -2524,6 +2533,15 @@ export type AdminTicketQuery = {
       uuid: string;
       name: string;
     }>;
+    verificationStatus?: {
+      __typename?: 'TicketVerificationType';
+      state: TicketVerificationState;
+      duplicateOf: Array<{
+        __typename?: 'TicketDuplicateRefType';
+        uuid: string;
+        title: string;
+      }>;
+    } | null;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
       fullAddress?: string | null;
@@ -4897,6 +4915,36 @@ export const AdminTicketsDocument = {
                       },
                       {
                         kind: 'Field',
+                        name: { kind: 'Name', value: 'verificationStatus' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'state' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'duplicateOf' },
+                              selectionSet: {
+                                kind: 'SelectionSet',
+                                selections: [
+                                  {
+                                    kind: 'Field',
+                                    name: { kind: 'Name', value: 'uuid' },
+                                  },
+                                  {
+                                    kind: 'Field',
+                                    name: { kind: 'Name', value: 'title' },
+                                  },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
                         name: { kind: 'Name', value: 'tasks' },
                         selectionSet: {
                           kind: 'SelectionSet',
@@ -5470,6 +5518,33 @@ export const AdminTicketDocument = {
                     selections: [
                       { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'verificationStatus' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'state' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'duplicateOf' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'title' },
+                            },
+                          ],
+                        },
+                      },
                     ],
                   },
                 },

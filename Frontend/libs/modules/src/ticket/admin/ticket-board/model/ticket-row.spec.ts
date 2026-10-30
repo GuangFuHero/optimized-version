@@ -1,4 +1,7 @@
-import type { AdminTaskFieldsFragment } from '@rescue-frontend/data-access/admin';
+import type {
+  AdminTaskFieldsFragment,
+  TicketVerificationState,
+} from '@rescue-frontend/data-access/admin';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -302,9 +305,9 @@ describe('suspectedDuplicateOf', () => {
   it('is null for no verification or a state it does not know', () => {
     expect(suspectedDuplicateOf(null)).toBeNull();
     expect(suspectedDuplicateOf(undefined)).toBeNull();
-    expect(
-      suspectedDuplicateOf({ state: 'something_new', duplicateOf: [] }),
-    ).toBeNull();
+    // A state a later backend may add.
+    const later = 'merged' as TicketVerificationState;
+    expect(suspectedDuplicateOf({ state: later, duplicateOf: [] })).toBeNull();
   });
 });
 

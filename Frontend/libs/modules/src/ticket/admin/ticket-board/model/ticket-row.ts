@@ -3,6 +3,7 @@ import type {
   AdminTicketMapPinsQuery,
   AdminTicketsQuery,
 } from '@rescue-frontend/data-access/admin';
+import { TicketVerificationState } from '@rescue-frontend/data-access/admin';
 
 import { stationPoint } from '../../../../station/station-point';
 import { formatTicketStreet } from '../../../address';
@@ -38,33 +39,17 @@ export function needTypeLabel(value?: string | null): string {
 export const UNTITLED_TICKET = '（未命名任務單）';
 
 /**
- * A ticket's `verificationStatus` (ADR-443): `disputed` while a 重複審核 pair on it, or on one of
- * its needs, is still open, with the tickets it may repeat, oldest pair first. The backend
- * sends it only to a viewer with ai_duplicate.view (a data auditor or a super admin) and null to
- * anyone else, so whatever arrives is shown.
- */
-export interface TicketVerification {
-  state: string;
-  duplicateOf: readonly { uuid: string; title: string }[];
-}
-
-/**
- * The field until the schema carries it (C, on this branch): the queries do not select it yet,
- * so it never arrives and no ticket reads as a suspected duplicate.
- */
-export type AwaitedVerification = {
-  verificationStatus?: TicketVerification | null;
-};
-
-/**
  * The titles of the tickets this one may repeat while it is a suspected duplicate (糖's prototype
- * `verification === "disputed"`); [] when the pair names no ticket the viewer may see, and null
- * when it is not one.
+ * `verification === "disputed"`). Its `verificationStatus` (ADR-443) is `disputed` while a 重複審核
+ * pair on it, or on one of its needs, is still open, and lists the far tickets oldest pair first.
+ * [] when the pair names no ticket the viewer may see. null when it is not one, and for any viewer
+ * but a data auditor or a super admin: the backend sends them null (ai_duplicate.view), so
+ * whatever arrives is shown.
  */
 export function suspectedDuplicateOf(
-  verification: TicketVerification | null | undefined,
+  verification: TicketListItem['verificationStatus'],
 ): string[] | null {
-  if (verification?.state !== 'disputed') return null;
+  if (verification?.state !== TicketVerificationState.Disputed) return null;
   return verification.duplicateOf.map(
     (other) => other.title.trim() || UNTITLED_TICKET,
   );
@@ -105,8 +90,7 @@ export type TaskRowFields = Pick<
 >;
 
 /** One ticket of the board's `tickets` page, as the list query selects it. */
-export type TicketListItem = AdminTicketsQuery['tickets']['items'][number] &
-  AwaitedVerification;
+export type TicketListItem = AdminTicketsQuery['tickets']['items'][number];
 
 export interface TicketRow {
   uuid: string;

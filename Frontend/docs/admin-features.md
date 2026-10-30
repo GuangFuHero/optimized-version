@@ -100,7 +100,6 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 編輯空間不能改地址：`UpdateBuildingMapInput` 沒有地址欄位
 - 列表欄位是固定的：設計稿的欄位順序與顯示由「欄位設定」頁統一管理（TM-FS-101），後端 `ticketPropertyConfigs` 還沒有順序或「列表顯示」欄位
 - 批次匯入會先比對疑似重複（#148）：疑似重複的列不建立、放進報告檔，試算與結果會算出列數；還不能逐列選「不建立／仍要建立」（DEDUP-006）
-- 疑似重複還沒接上：`verificationStatus`（ADR-443）後端推上來之前，查詢不選這個欄位，所以任何單都不會標疑似重複
 - 編輯任務單不能移動地標：`UpdateTicketInput` 沒有 geometry，設計稿要求編輯時可改
 - 列表排序只有最新與需求優先（`TicketListOrder` 的 NEWEST／NEEDS_FIRST），沒有設計稿的「優先級 → 缺口 → 更新時間」
 - 篩選沒有設計稿的行政區域、組織分配、時間：`tickets` 查詢沒有這些參數
