@@ -63,6 +63,19 @@ describe('toSpaceMarker', () => {
     expect(toSpaceMarker(row({ status: 'done' }))?.pin?.dimmed).toBe(true);
   });
 
+  it('is grey and counts nothing while its tickets are not in', () => {
+    const loading = toSpaceMarker(
+      row({ status: 'loading', priority: null, ticketCount: 0, needFloors: 0 }),
+    );
+
+    expect(loading?.pin).toMatchObject({ color: '#64748B', dimmed: false });
+    expect(loading?.tooltip?.subtitle).toBe('任務單載入中…');
+    expect(
+      toSpaceMarker(row({ status: 'failed', priority: null }))?.tooltip
+        ?.subtitle,
+    ).toBe('任務單無法載入');
+  });
+
   it('is not drawn without a point', () => {
     expect(toSpaceMarker(row({ lngLat: null }))).toBeNull();
   });

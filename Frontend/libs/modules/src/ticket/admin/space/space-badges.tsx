@@ -4,7 +4,14 @@ import { Box } from '@mui/material';
 import { designTokens } from '@rescue-frontend/ui';
 import { Building2 } from 'lucide-react';
 
-import { FLOOR_STATE_LABEL, type FloorState } from './space-analysis';
+import { Muted } from '../../../admin/shared/muted';
+import {
+  FLOOR_STATE_LABEL,
+  isSpaceLoad,
+  SPACE_LOAD_LABEL,
+  type FloorState,
+  type SpaceStatus,
+} from './space-analysis';
 
 const { color, radius, typography } = designTokens;
 
@@ -20,8 +27,14 @@ export function floorStateColor(state: FloorState): string {
   return STATE_COLOR[state].fg;
 }
 
-/** A floor's or a space's state: a dot and its words (`tk-space.jsx` `StateBadge`). */
-export function StateBadge({ state }: { state: FloorState }) {
+/**
+ * A floor's or a space's state: a dot and its words (`tk-space.jsx` `StateBadge`). A space whose
+ * tickets aren't in says so instead, quietly and with no dot, as it has no state yet.
+ */
+export function StateBadge({ state }: { state: SpaceStatus }) {
+  if (isSpaceLoad(state)) {
+    return <Muted cell>{SPACE_LOAD_LABEL[state]}</Muted>;
+  }
   const { dot, fg } = STATE_COLOR[state];
   return (
     <Box

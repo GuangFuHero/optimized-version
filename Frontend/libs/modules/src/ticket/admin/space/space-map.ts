@@ -1,13 +1,19 @@
 /**
  * A space on the 任務管理 map (designer, `Design/後台/docs/任務管理.md` §開啟空間 3): one square pin
- * per space, the only square on the map, coloured as the list's priority and grey with no tickets.
+ * per space, the only square on the map, coloured as the list's priority and grey with no tickets
+ * (or none in yet).
  * The tickets inside a space draw no pin of their own: they share its point.
  */
 
 import type { RescueMapMarkerItem } from '../../../map/types';
 import type { MapViewport } from '../ticket-board/model/ticket-filters';
 import { TICKET_PRIORITY_PIN_COLORS } from '../ticket-board/model/ticket-marker';
-import type { SpaceListRow, SpacePriority } from './space-analysis';
+import {
+  isSpaceLoad,
+  SPACE_LOAD_LABEL,
+  type SpaceListRow,
+  type SpacePriority,
+} from './space-analysis';
 
 /** A space with no ticket that counts. */
 export const SPACE_PIN_EMPTY = '#64748B';
@@ -50,9 +56,11 @@ export function toSpaceMarker(row: SpaceListRow): RescueMapMarkerItem | null {
     // The prototype's tipHtml for a space.
     tooltip: {
       title: `空間：${row.name}`,
-      subtitle: `${row.ticketCount} 張任務單${
-        row.needFloors ? ` · ${row.needFloors} 層還需要幫忙` : ''
-      }`,
+      subtitle: isSpaceLoad(row.status)
+        ? `任務單${SPACE_LOAD_LABEL[row.status]}`
+        : `${row.ticketCount} 張任務單${
+            row.needFloors ? ` · ${row.needFloors} 層還需要幫忙` : ''
+          }`,
     },
   };
 }

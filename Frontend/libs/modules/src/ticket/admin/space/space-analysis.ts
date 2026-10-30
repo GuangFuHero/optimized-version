@@ -28,6 +28,22 @@ export const FLOOR_STATE_LABEL: Record<FloorState, string> = {
   empty: '沒有任務單',
 };
 
+/** A space's tickets not in yet: still coming, or failed to come. */
+export type SpaceLoad = 'loading' | 'failed';
+
+/** What a space says in place of its state until its tickets are in. */
+export const SPACE_LOAD_LABEL: Record<SpaceLoad, string> = {
+  loading: '載入中…',
+  failed: '無法載入',
+};
+
+/** A space's state once its tickets are in; until then, how they are coming. */
+export type SpaceStatus = FloorState | SpaceLoad;
+
+export function isSpaceLoad(status: SpaceStatus): status is SpaceLoad {
+  return status === 'loading' || status === 'failed';
+}
+
 /** When an ISO time is, to compare by: never by its text, whose offset may differ. */
 export function timeOf(iso: string | null | undefined): number {
   const time = iso ? Date.parse(iso) : NaN;
@@ -189,7 +205,8 @@ export interface SpaceListRow {
   name: string;
   address: string | null;
   summary: string;
-  status: FloorState;
+  /** `loading` or `failed` while its tickets aren't in: it then has no priority or counts either. */
+  status: SpaceStatus;
   /** The most urgent of its tickets not yet completed; of all of them once all are; null with none. */
   priority: SpacePriority | null;
   /** People still missing on those tickets' open needs, as a ticket row counts its 志工缺口. */
@@ -239,10 +256,7 @@ export function toSpaceListRow(
   );
 
   return {
-    kind: 'space',
-    id: building.uuid,
-    name: building.name,
-    address: building.secondaryLocation?.fullAddress ?? null,
+    ...buildingFields(building),
     summary: spaceSummary(analysis),
     status: analysis.overall,
     priority: highestPriority(live.length ? live : members),
@@ -254,6 +268,35 @@ export function toSpaceListRow(
     ticketCount: members.length,
     needFloors: analysis.counts.need,
     updatedAt,
+  };
+}
+
+/**
+ * A space whose tickets aren't in: its name, place and floors only, so a building the board can't
+ * see into yet never reads as having no tickets. It sorts after the spaces it can.
+ */
+export function toUnloadedSpaceRow(
+  building: AdminBuildingMapFieldsFragment,
+  load: SpaceLoad,
+): SpaceListRow {
+  return {
+    ...buildingFields(building),
+    summary: `${building.floors.length} 層`,
+    status: load,
+    priority: null,
+    volunteerGap: 0,
+    ticketCount: 0,
+    needFloors: 0,
+    updatedAt: null,
+  };
+}
+
+function buildingFields(building: AdminBuildingMapFieldsFragment) {
+  return {
+    kind: 'space' as const,
+    id: building.uuid,
+    name: building.name,
+    address: building.secondaryLocation?.fullAddress ?? null,
     lngLat: pointOf(building.geometry),
   };
 }

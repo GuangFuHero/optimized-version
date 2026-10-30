@@ -47,9 +47,15 @@ export function sortSpaceRows(rows: readonly SpaceListRow[]): SpaceListRow[] {
   );
 }
 
-/** The spaces the board lists under `filters`, in order. */
+/**
+ * The spaces the board lists under `filters`, in order. One whose tickets aren't in (null) stays
+ * under a filter, as one of them may pass; the search still applies, by its name and address.
+ */
 export function visibleSpaceRows(
-  spaces: readonly { row: SpaceListRow; tickets: readonly SpaceTicket[] }[],
+  spaces: readonly {
+    row: SpaceListRow;
+    tickets: readonly SpaceTicket[] | null;
+  }[],
   filters: TicketFilters,
 ): SpaceListRow[] {
   const hasFilters = countActiveFilters(filters) > 0;
@@ -60,9 +66,9 @@ export function visibleSpaceRows(
           row: space.row,
           keyword: filters.q,
           hasFilters,
-          anyTicketPasses: space.tickets.some((ticket) =>
-            spaceTicketPasses(ticket, filters),
-          ),
+          anyTicketPasses:
+            space.tickets === null ||
+            space.tickets.some((ticket) => spaceTicketPasses(ticket, filters)),
         }),
       )
       .map((space) => space.row),

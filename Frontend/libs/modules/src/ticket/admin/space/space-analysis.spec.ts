@@ -10,6 +10,7 @@ import {
   spaceRowVisible,
   spaceSummary,
   toSpaceListRow,
+  toUnloadedSpaceRow,
   type SpaceListRow,
   type SpaceTicket,
 } from './space-analysis';
@@ -400,6 +401,26 @@ describe('toSpaceListRow', () => {
       toSpaceListRow(building({ geometry: null }), analyzeSpace(['RF'], []))
         .lngLat,
     ).toBeNull();
+  });
+});
+
+describe('toUnloadedSpaceRow', () => {
+  it('names and places a space whose tickets are not in, with no status or counts', () => {
+    expect(toUnloadedSpaceRow(building(), 'loading')).toEqual({
+      kind: 'space',
+      id: 'b1',
+      name: '中正路社區大樓',
+      address: '花蓮縣光復鄉中正路二段120號',
+      summary: '4 層',
+      status: 'loading',
+      priority: null,
+      volunteerGap: 0,
+      ticketCount: 0,
+      needFloors: 0,
+      updatedAt: null,
+      lngLat: [121.4, 23.6],
+    });
+    expect(toUnloadedSpaceRow(building(), 'failed').status).toBe('failed');
   });
 });
 

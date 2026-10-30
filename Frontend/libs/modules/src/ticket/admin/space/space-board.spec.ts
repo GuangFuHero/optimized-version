@@ -141,4 +141,25 @@ describe('visibleSpaceRows', () => {
       ),
     ).toEqual(['b']);
   });
+
+  it('keeps a space whose tickets are not in under a filter, but not past a search', () => {
+    const unloaded = {
+      row: row({ id: 'c', name: '光復大樓', status: 'failed', priority: null }),
+      tickets: null,
+    };
+
+    expect(
+      visibleSpaceRows([...spaces, unloaded], {
+        ...EMPTY_TICKET_FILTERS,
+        priority: 'high',
+      }).map((r) => r.id),
+    ).toEqual(['a', 'c']);
+    expect(
+      visibleSpaceRows([...spaces, unloaded], {
+        ...EMPTY_TICKET_FILTERS,
+        priority: 'high',
+        q: '中正',
+      }),
+    ).toEqual([]);
+  });
 });

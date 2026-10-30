@@ -5,7 +5,7 @@ import {
   useTicketsExtent,
   useTicketStats,
 } from '@rescue-frontend/data-access/admin';
-import { designTokens } from '@rescue-frontend/ui';
+import { Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -232,6 +232,22 @@ export function TicketBoardPage() {
         listContainerSx={{ ...SECTION_SX, pb: '28px' }}
         list={
           <Box sx={COLUMN_SX}>
+            {/* A space whose tickets failed lists with no state; its 重試 is here, for both views. */}
+            {spaceData.error ? (
+              <Box sx={{ mb: '12px' }}>
+                <Callout tone="danger">
+                  無法載入空間，請稍後再試
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={spaceData.retrying}
+                    onClick={spaceData.retry}
+                  >
+                    重試
+                  </Button>
+                </Callout>
+              </Box>
+            ) : null}
             {view === 'map' ? (
               <TicketMapView
                 filters={filters}
@@ -243,7 +259,8 @@ export function TicketBoardPage() {
             ) : (
               <TicketTable
                 rows={tickets.rows}
-                loading={tickets.isPending}
+                // An empty first page isn't 沒有任務單 while the spaces above it may still come.
+                loading={tickets.isPending || spaceData.isLoading}
                 failed={tickets.error != null}
                 unfiltered={listsEveryTicket(filters)}
                 retrying={tickets.isFetching}
