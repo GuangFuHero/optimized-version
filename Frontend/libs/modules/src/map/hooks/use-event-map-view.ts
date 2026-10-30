@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-import { useCurrentDisaster } from '@rescue-frontend/data-access/admin';
+import {
+  CURRENT_DISASTER_WAIT_MS,
+  useCurrentDisaster,
+} from '@rescue-frontend/data-access/admin';
 
 import { MAP_VIEW_TAIWAN } from '../constants';
 import {
@@ -40,16 +43,9 @@ const UNREAD: EventMapViewState = {
 };
 
 /**
- * How long a map waits for the event before opening as if it could not be read. A backend that does
- * not answer would otherwise keep the map behind its loading line, on the patchy networks it is most
- * needed on.
- */
-export const EVENT_MAP_VIEW_WAIT_MS = 3000;
-
-/**
  * Where the event says maps open (`currentDisaster.mapView`, ADR-395). An event that sets no view,
  * no event configured yet and a failed read all come to all of Taiwan; only the last leaves
- * `eventView` undefined, and so does a read still out after EVENT_MAP_VIEW_WAIT_MS. An answer that
+ * `eventView` undefined, and so does a read still out after CURRENT_DISASTER_WAIT_MS. An answer that
  * comes later is taken, but a map already open does not move to it.
  */
 export function useEventMapView(): EventMapViewState {
@@ -64,7 +60,7 @@ export function useEventMapView(): EventMapViewState {
 
     const timer = window.setTimeout(
       () => setWaitedOut(true),
-      EVENT_MAP_VIEW_WAIT_MS,
+      CURRENT_DISASTER_WAIT_MS,
     );
 
     return () => window.clearTimeout(timer);
