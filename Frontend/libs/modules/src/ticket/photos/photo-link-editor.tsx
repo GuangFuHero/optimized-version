@@ -161,10 +161,14 @@ export function PhotoLinkEditor({
         </Box>
       ) : null}
 
+      {/* 48px on a phone, a thumb's size (design 2026-10-30); the field takes what 加入 leaves. */}
       <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start' }}>
         <TextField
           fullWidth
           size="small"
+          sx={{
+            '& .MuiInputBase-root': { height: { mobile: 48, tablet: 40 } },
+          }}
           value={draft}
           disabled={full}
           error={Boolean(message) && !full && draft.trim() !== ''}
@@ -187,7 +191,7 @@ export function PhotoLinkEditor({
           variant="outlined"
           onClick={add}
           disabled={!draft.trim() || full}
-          sx={{ flexShrink: 0, height: 40 }}
+          sx={{ flexShrink: 0, height: { mobile: 48, tablet: 40 } }}
         >
           加入
         </Button>
