@@ -413,8 +413,8 @@ input CreateStationInput {
   level: Int! = 0
   comment: String = null
 
-  """Data origin: 'user' (default) or 'official'"""
-  source: String! = "user"
+  """Not read: the identity making the station decides it"""
+  source: String! = "user" @deprecated(reason: "The backend sets `source` from the identity making the station; leave it out")
 
   """Visibility: 'public' (default), 'restricted', or 'internal'"""
   visibility: Visibility! = public
@@ -551,8 +551,8 @@ input CreateTicketTaskDraft {
   """Number of people or units needed"""
   quantity: Int = null
 
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
+  """Not read: the identity making the task decides it"""
+  source: String! = "user" @deprecated(reason: "The backend sets `source` from the identity making the task; leave it out")
   routeUuid: UUID = null
 
   """
@@ -575,8 +575,8 @@ input CreateTicketTaskInput {
   """
   quantity: Int = null
 
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
+  """Not read: the identity making the task decides it"""
+  source: String! = "user" @deprecated(reason: "The backend sets `source` from the identity making the task; leave it out")
 
   """Optional UUID of an associated route"""
   routeUuid: UUID = null
@@ -1395,7 +1395,7 @@ type StationType {
   isTemporary: Boolean!
 
   """
-  True if the back office made this station (`source` is 'official'), as the `official` filter reads it, or if it was marked official before `source` said so (ADR-394)
+  True if the back office made this station: `source` is 'official', as the `official` filter reads it
   """
   isOfficial: Boolean!
 
@@ -1830,7 +1830,9 @@ type TicketTaskType {
   """
   status: String!
 
-  """Origin of this task: 'user' or 'official'"""
+  """
+  Origin of this task: 'user' when the site's identity made it, 'official' when a back-office one did. Tasks made before that rule keep what they had, 'gov' or 'import'
+  """
   source: String!
 
   """

@@ -376,9 +376,8 @@ def _new_station(columns, row: dict[str, str], station_type: str) -> dict:
         "op_hour": fixed.get("op_hour"),
         "level": fixed.get("level") or 0,
         "comment": fixed.get("comment"),
-        # Bulk import is admin-only, and an admin-created station is official (ADMIN-026),
-        # so `source` is an export-only column (bulk_columns.py).
-        "source": "official",
+        # No `source`: the importer's identity decides it, and only the back office imports, so it is
+        # official. The file's `source` column is export-only (bulk_columns.py).
         "visibility": fixed.get("visibility") or "public",
         "secondary_location": {"location_type": "address", **address} if address else None,
     }

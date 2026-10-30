@@ -122,7 +122,6 @@ async def _add(
         task_name=name,
         task_description=None,
         quantity=quantity,
-        source="user",
         route_uuid=None,
     )
     return str(task.uuid)

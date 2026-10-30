@@ -43,6 +43,7 @@ from app.services.geo_validation import (
 )
 from app.services.notification_service import NotificationService
 from app.services.photo import normalize_photo_url
+from app.services.source import USER, source_for
 from app.services.ticket_audit import lock_ticket, void_stale_verdict
 from app.services.ticket_status import recompute_ticket_status
 
@@ -390,7 +391,9 @@ async def validate_help_request(
                     "task_name": task["task_name"],
                     "task_description": task.get("task_description"),
                     "quantity": task.get("quantity"),
-                    "source": "user",
+                    # The site's own request, a citizen's whoever files it, unlike createTicket's
+                    # tasks, which follow the identity.
+                    "source": USER,
                 }
             )
             for task in tasks
@@ -740,7 +743,6 @@ async def validate_ticket_task(
     task_name: str,
     task_description: str | None,
     quantity: int | None,
-    source: str,
     route_uuid: str | None,
 ) -> TaskFields:
     """Checks for a task filed with a new ticket, without writing: ticket.add, its name and size."""
@@ -752,7 +754,7 @@ async def validate_ticket_task(
             "task_name": task_name,
             "task_description": task_description,
             "quantity": quantity,
-            "source": source,
+            "source": source_for(actor),
             "route_uuid": route_uuid,
         }
     )
@@ -776,7 +778,6 @@ async def validate_added_task(
     task_name: str,
     task_description: str | None,
     quantity: int | None,
-    source: str,
     route_uuid: str | None,
 ) -> TaskFields:
     """Every check for adding a need to an existing ticket (the site's 「再加一件」), without writing.
@@ -798,7 +799,7 @@ async def validate_added_task(
             "task_name": task_name,
             "task_description": task_description,
             "quantity": quantity,
-            "source": source,
+            "source": source_for(actor),
             "route_uuid": route_uuid,
         }
     )
@@ -837,7 +838,6 @@ async def create_ticket_task(
     task_name: str,
     task_description: str | None,
     quantity: int | None,
-    source: str,
     route_uuid: str | None,
 ) -> TicketTask:
     """Add a need to a ticket and commit, without a duplicate check.
@@ -853,7 +853,6 @@ async def create_ticket_task(
         task_name=task_name,
         task_description=task_description,
         quantity=quantity,
-        source=source,
         route_uuid=route_uuid,
     )
     task = await insert_added_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
@@ -886,7 +885,7 @@ async def validate_imported_task(
             "task_name": task_name,
             "task_description": task_description,
             "quantity": quantity,
-            "source": "import",
+            "source": source_for(actor),
             "route_uuid": None,
         }
     )

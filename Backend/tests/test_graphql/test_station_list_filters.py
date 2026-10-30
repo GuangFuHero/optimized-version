@@ -113,18 +113,18 @@ async def test_official_keeps_the_stations_the_back_office_made(client):
 
 
 @pytest.mark.asyncio
-async def test_the_official_badge_follows_source_and_keeps_the_old_flag(client):
-    """The site's 官方 badge reads `isOfficial`: official by `source`, or marked so before (ADR-394)."""
+async def test_the_official_badge_is_what_source_says(client):
+    """The site's 官方 badge reads `isOfficial`, which the database works out from `source`."""
     lng, lat, bounds = _box()
-    made = await _station((lng, lat), source="official", is_official=False)
-    marked = await _station((lng, lat), source="gov", is_official=True)
-    user = await _station((lng, lat), source="user", is_official=False)
+    made = await _station((lng, lat), source="official")
+    user = await _station((lng, lat), source="user")
+    unknown = await _station((lng, lat), source=None)
     query = "query($bounds: BoundsInput) { stations(bounds: $bounds) { items { uuid isOfficial } } }"
 
     resp = await client.post("/graphql", json={"query": query, "variables": {"bounds": bounds}})
 
     badges = {item["uuid"]: item["isOfficial"] for item in resp.json()["data"]["stations"]["items"]}
-    assert badges == {made: True, marked: True, user: False}
+    assert badges == {made: True, user: False, unknown: False}
 
 
 @pytest.mark.asyncio

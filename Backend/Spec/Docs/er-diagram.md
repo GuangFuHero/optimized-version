@@ -360,7 +360,7 @@ notifications {
     uuid ref_uuid "nullable, uuid of the ref_type row — no DB FK, same polymorphic pattern as photos"
     string title "String(200)"
     text body
-    boolean read "default false"
+    boolean read "default false; CHECK read = (read_at IS NOT NULL) (ADR-439)"
     timestamp read_at "nullable"
     timestamp created_at
     timestamp updated_at
@@ -588,14 +588,14 @@ stations {
     string op_hour
     int level
     string comment
-    string source "user/gov/crawler"
+    string source "user/official (CHECK), NULL = not known; set from the creating identity (ADR-438)"
     string visibility "public/restricted/internal"
     string verification_status "unverified/ai_verified/human_verified"
     boolean is_duplicate
     string dedup_group_id "nullable"
     boolean is_temporary
     timestamp expires_at "nullable"
-    boolean is_official
+    boolean is_official "GENERATED from source = 'official' (ADR-438)"
     uuid updated_by FK "nullable, FK to users"
     string contact_name "nullable, String(100), independent of tickets.contact_name"
     string contact_email "nullable, String(100)"
@@ -845,7 +845,7 @@ ticket_tasks {
     string task_description "nullable"
     int quantity "nullable = no cap; at least 1, and required for every type but rescue (ADR-291)"
     string status "pending/fulfilled/canceled; in_progress only on rows from before ADR-293"
-    string source "user/gov/crawler/ngo/admin"
+    string source "user/official for new tasks, from the creating identity (ADR-438); older rows gov/import"
     string progress_note "nullable"
     boolean is_duplicate
     string dedup_group_id "nullable"

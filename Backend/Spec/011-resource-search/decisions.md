@@ -1,4 +1,4 @@
-# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394、419）
+# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394、419、438、439）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
@@ -912,3 +912,74 @@ JIT 關掉是 40／54／65 ms。所以帶 `q` 時多多少，看關鍵字對到�
 ➖ 登入者看到的順序跟訪客不同（自己承接的單排得比較前面）。
 ➖ 承接過的單完成以後，對承接的人還是排在前兩層；做過很多張的志工，第一頁前面會有一串自己做完的單（HC 10-29 在
   #160 問）。只在單還收人時往前排可以解決，但搶到最後一個名額、讓單變成完成的那張卡會立刻掉到最後；在 #160 跟 HC 討論中。
+
+---
+
+### ADR-438 站點和任務的 `source` 由建立的身分決定；`is_official` 由資料庫照 `source` 算
+
+**白話**：在管理平台建立的站點和任務是「官方」，在前台建立的是「民眾」，由後端看這次請求用的是哪個身分決定，表單送什麼
+都不算。站點的「官方」標示也改成資料庫照 `source` 算出來，兩個欄位不會再對不上。
+
+**Date**：2026-10-29。HC 在 #97 的 review 提出 `createStation` 照收前端送的 `source`（2026-10-28）；Dan 2026-10-28
+決定由後端依身分決定、任務一起改、staging 舊資料不另外補；Carol 2026-10-28 在 Discord #uiux 定「只要是在後台建立的
+都算官方」（含團隊成員）。3NF 稽核的 F1（`Spec/Docs/3nf-compliance.md`）併進這條，Dan 2026-10-29 決定：疊在 #129 上、
+任務的 `source` 不加 CHECK 也不改舊資料、匯入的任務也照身分存。
+
+**Context**：
+
+- `createStation`、`createTicket` 的任務、`createTicketTask` 都照收前端送的 `source`（預設 `user`），沒有值域；前台和
+  管理平台用同一個表單，民眾也能送 `official`。
+- 站點有兩個欄位在回答同一件事：`source` 和 `is_official`。只有 seed 寫過 `is_official`，所以管理平台建的站點
+  `source = 'official'`、`is_official = false`（3NF 稽核 F1：`source` → `is_official` 的遞移相依，而且已經不一致）。
+- staging 2026-10-29 唯讀查過：站點 `gov`／官方 17、`user`／非官方 10；任務 `gov` 20、`import` 2、`user` 121。
+
+**Decision**：
+
+1. `services/source.source_for(actor)`：這次請求的身分是平台 `user`（前台，每個登入的落點，ADR-290）就是 `user`，
+   其他身分（後台，ADR-329）都是 `official`。身分只能挑自己有的，所以帶後台標記的民眾會被擋下（403），不會變官方。
+2. 站點：`validate_station` 不再收 `source`，`createStation` 和批次匯入都經過它。
+3. 任務：`createTicket` 的任務、`createTicketTask` 和批次匯入的任務照同一套（匯入只有後台身分能做，所以是
+   `official`，原本寫死 `import`）。請求協助是前台民眾的流程（ADR-397），照舊寫 `user`。
+4. GraphQL 的 `CreateStationInput.source`、`CreateTicketTaskInput.source`、`CreateTicketTaskDraft.source` 留著但不讀，
+   標 deprecated（HC Bot 2026-10-29：前端拿掉那行之前不能直接刪欄位）。
+5. migration `af6e25b0d8db`（改資料）：
+   - 站點 `source` 是 `gov`／`import`／`official`，或原本標成官方的 → `official`；`user` 不變；其他值 → NULL
+     （不知道，不算官方）。
+   - `source` 加 CHECK `ck_stations_source`：只能是 `user`、`official` 或 NULL。
+   - `is_official` 改成 `GENERATED ALWAYS AS (COALESCE(source = 'official', false)) STORED`，誰都寫不進去。GraphQL
+     `isOfficial`、`official` 篩選、匯出讀的是同一件事。
+   - downgrade：`is_official` 回到一般欄位，照 `source` 填回；`gov`、`import` 回不去。
+6. 任務的 `source` 不加 CHECK、不改舊資料：任務沒有第二個欄位跟它重複，不是 3NF 的問題。
+
+**Consequences**：
+➕ 民眾送什麼都不會變官方；後台建的站點在前台有「官方」標示，篩選和標示看的是同一個欄位。
+➕ `is_official` 變成資料庫保證的推算值，跟 `search_text` 同一類（3NF 驗收說明，`Spec/Docs/3nf-compliance.md`）。
+➖ staging 上任務的舊值（`gov`、`import`）留著；之後要統一再另外做。
+➖ 歷程裡，沒有使用者的寫入（seed）原本用 `source = gov` 標成動作者，之後重灌的 seed 會顯示 `system`（ADR-137）。
+   舊紀錄不變。
+◾ 測試：`tests/test_graphql/test_source_by_identity.py`（前台送 `official` 存成 `user`、後台送 `user` 或不送存成
+  `official`、帶後台標記的民眾被擋、任務兩條路一樣）、`tests/test_bulk_import_ticket.py`（匯入的任務是 `official`）、
+  `tests/test_migration_station_official_from_source.py`（每種舊值的轉換、CHECK、`is_official` 跟著 `source`、
+  downgrade）、`tests/test_graphql/test_station_list_filters.py`（標示就是 `source`）。
+
+---
+
+### ADR-439 通知的 `read` 跟 `read_at` 由資料庫保持一致
+
+**白話**：「已讀」和「什麼時候讀的」一定一致，直接寫 SQL 也寫不出矛盾的資料。
+
+**Date**：2026-10-29。3NF 稽核的 F2（`Spec/Docs/3nf-compliance.md`）；Dan 2026-10-29 決定跟 ADR-438 同一支做。通知沒有
+自己的 Spec，放在這裡，跟 ADR-438 同出一份稽核。
+
+**Context**：`read` 等於 `read_at IS NOT NULL`（遞移相依）。`read` 留著，因為未讀數的索引
+`ix_notifications_recipient_unread` 用它；寫入點只有 `notification_repository` 兩處，都同時設兩欄，但資料庫沒擋。
+staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
+
+**Decision**：migration `9dd1f61063fe` 加 CHECK `ck_notifications_read_matches_read_at`：
+`read = (read_at IS NOT NULL)`。不改程式、不改 API。資料庫裡已經有不一致的列時，upgrade 會失敗，不替它猜哪一欄是對的。
+
+**Consequences**：
+➕ 跟 `user_role_assign.role_kind`（ADR-073）一樣，是資料庫強制的受控冗餘。
+➖ 之後要是有人只改其中一欄，會直接報錯，不會悄悄寫進去。
+◾ 測試：`tests/test_migration_notification_read_check.py`（兩種不一致都被擋、一致的照常寫入、有不一致的列時
+  upgrade 失敗、downgrade 拿掉 CHECK）。
