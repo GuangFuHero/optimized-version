@@ -18,6 +18,10 @@ interface TaskMatchTicketDetailOptions {
   marker: RescueMapMarkerItem;
   isAuthenticated: boolean;
   onShare?: () => void;
+  /** For a ticket filed inside a building: its 看各樓層, which opens the page's `BuildingDrawer`. */
+  onOpenBuilding?: (buildingUuid: string) => void;
+  /** Its 上一張／下一張: open that ticket of the same building instead. */
+  onSelectTicket?: (marker: RescueMapMarkerItem) => void;
 }
 
 function createFooterActions({
@@ -41,6 +45,8 @@ export function createTaskMatchTicketDetailOverrides({
   marker,
   isAuthenticated,
   onShare,
+  onOpenBuilding,
+  onSelectTicket,
 }: TaskMatchTicketDetailOptions): RescueMapTicketDetailOverrides {
   const priority = marker.ticketMeta?.priority;
 
@@ -73,6 +79,8 @@ export function createTaskMatchTicketDetailOverrides({
       <TaskMatchTicketDetailsPanel
         marker={marker}
         isAuthenticated={isAuthenticated}
+        onOpenBuilding={onOpenBuilding}
+        onSelectTicket={onSelectTicket}
       />
     ),
     footerLead: (
