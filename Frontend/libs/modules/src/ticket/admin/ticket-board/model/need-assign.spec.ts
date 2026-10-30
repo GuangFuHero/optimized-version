@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assignPickerOptions,
+  canAddNeed,
   canAssignNeed,
   canRemoveAssignee,
   canWriteNeedNote,
@@ -122,6 +123,23 @@ describe('canWriteNeedNote', () => {
     expect(
       canWriteNeedNote({ viewerCanEdit: true, locationCell: '8a4b1e2' }),
     ).toBe(false);
+  });
+});
+
+describe('canAddNeed', () => {
+  it('follows the ticket’s edit flag', () => {
+    expect(canAddNeed({ viewerCanEdit: true, status: 'pending' })).toBe(true);
+    expect(canAddNeed({ viewerCanEdit: false, status: 'pending' })).toBe(false);
+  });
+
+  it('is never offered on a cancelled ticket, which the backend refuses', () => {
+    expect(canAddNeed({ viewerCanEdit: true, status: 'cancelled' })).toBe(
+      false,
+    );
+  });
+
+  it('is offered on a completed ticket, which a new need reopens', () => {
+    expect(canAddNeed({ viewerCanEdit: true, status: 'completed' })).toBe(true);
   });
 });
 

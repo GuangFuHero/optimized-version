@@ -39,6 +39,7 @@ import { AddNeedForm } from './add-need-form';
 import { ProgressNote } from './progress-note';
 import {
   assignPickerOptions,
+  canAddNeed,
   canAssignNeed,
   canRemoveAssignee,
   canWriteNeedNote,
@@ -92,7 +93,8 @@ type PendingAction =
  * 停止招募, 刪除需求), never a status to set (BE-034); each behind a confirmation. Where the need's
  * `viewerCanAssign` allows and it has room, 指派承接 adds a member of the caller's team; a place's
  * `viewerCanUnassign` offers × to take that person off. `ticket.edit` on the ticket adds 再加一項需求
- * below them, and writes each need's 進度備註 when the ticket isn't coarse (`canWriteNeedNote`).
+ * below them unless it is cancelled (`canAddNeed`), and writes each need's 進度備註 when the ticket
+ * isn't coarse (`canWriteNeedNote`).
  */
 export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
   const busyFor = useBusyKeys(onBusyChange);
@@ -168,7 +170,7 @@ export function TicketTaskList({ ticket, onBusyChange }: TicketTaskListProps) {
           })}
         </Box>
       )}
-      {ticket.viewerCanEdit ? (
+      {canAddNeed(ticket) ? (
         <AddNeedForm ticketUuid={ticket.uuid} onBusyChange={busyFor('add')} />
       ) : null}
       <StopRecruitingConfirm

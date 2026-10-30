@@ -90,6 +90,18 @@ export function canWriteNeedNote(ticket: {
   return ticket.viewerCanEdit && !ticket.locationCell;
 }
 
+/**
+ * Whether the ticket offers 再加一項需求: the caller may edit it, and it isn't cancelled, which is
+ * final and refused by the backend (`ticket.py` "Ticket is no longer open"). A completed ticket
+ * does take a need, and reopens with it.
+ */
+export function canAddNeed(ticket: {
+  viewerCanEdit: boolean;
+  status: string;
+}): boolean {
+  return ticket.viewerCanEdit && ticket.status !== 'cancelled';
+}
+
 /** A member of the caller's team, as `GET /admin/teams/{uuid}/members` lists them. */
 export interface PickerMember {
   uuid: string;
