@@ -10,6 +10,7 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
@@ -308,18 +309,23 @@ export function AreaDetailFooter({
           </Button>
         ) : null}
         {actions.canEdit ? (
-          <Button
-            variant="outlined"
-            disabled={editing || !actions.canEditBounds}
+          <Tooltip
             title={
               actions.canEditBounds
-                ? undefined
+                ? ''
                 : '這一區的形狀有好幾塊或中間挖空，這裡還不能調整範圍'
             }
-            onClick={actions.onEditBounds}
           >
-            調整範圍
-          </Button>
+            <span>
+              <Button
+                variant="outlined"
+                disabled={editing || !actions.canEditBounds}
+                onClick={actions.onEditBounds}
+              >
+                調整範圍
+              </Button>
+            </span>
+          </Tooltip>
         ) : null}
       </Stack>
       <AreaConfirmDialog

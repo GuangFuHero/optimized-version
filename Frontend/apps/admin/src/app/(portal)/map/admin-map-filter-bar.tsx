@@ -103,6 +103,7 @@ export function AdminMapFilterBar({
   onChange,
   shownTickets,
   shownStations,
+  ticketsMayBeMore,
   isFiltered,
   disabled,
 }: {
@@ -110,6 +111,8 @@ export function AdminMapFilterBar({
   onChange: (next: AdminMapFilters) => void;
   shownTickets: number;
   shownStations: number;
+  /** The query stops at a limit, and the tickets reached it: the count may be a part of them. */
+  ticketsMayBeMore: boolean;
   /** Whether the map shows fewer than it has. */
   isFiltered: boolean;
   disabled: boolean;
@@ -159,7 +162,7 @@ export function AdminMapFilterBar({
           }}
         />
         <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
-          {filters.layers.tickets ? `${shownTickets} 張任務單` : '任務單已隱藏'}
+          {filters.layers.tickets ? `${shownTickets}${ticketsMayBeMore ? '+' : ''} 張任務單` : '任務單已隱藏'}
         </Typography>
         <Typography sx={{ color: color.border.default }}>·</Typography>
         <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
@@ -217,7 +220,7 @@ export function AdminMapFilterBar({
               color: color.fg.neutral.subtle,
             }}
           >
-            篩選只影響<b>看到什麼</b>。區域清單與區域裡的數量一律算全部。
+            篩選只影響<b>看到什麼</b>。區域清單與區域裡的數量不受篩選影響。
           </Typography>
         </Box>
       ) : null}

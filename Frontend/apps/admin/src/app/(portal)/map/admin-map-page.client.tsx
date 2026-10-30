@@ -12,11 +12,12 @@ import {
   useCreateArea,
   useDeleteArea,
   usePromoteMarkZone,
+  useAssignableStationTeams,
   useRemoveZoneFromTeam,
-  useTeams,
   useUpdateArea,
 } from '@rescue-frontend/data-access/admin';
 import {
+  ADMIN_MAP_LIVE_QUERY_LIMIT,
   AREA_KIND_LABELS,
   boundaryChange,
   editableOutline,
@@ -102,7 +103,15 @@ export function AdminMapPageClient() {
     (marker) => marker.detailType === 'ticket',
   ).length;
   const shownStations = shownMarkers.length - shownTickets;
-  const areas = useAdminMapAreas({ enabled: canViewZones });
+  // Only so many tickets are asked for at a time; a count at that mark may be a part.
+  const ticketsMayBeMore =
+    markers.filter((marker) => marker.detailType === 'ticket').length >=
+    ADMIN_MAP_LIVE_QUERY_LIMIT;
+  // Those who may not see work zones still get the 危險區 the public map shows.
+  const areas = useAdminMapAreas({
+    enabled: true,
+    includePrivate: canViewZones,
+  });
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   // What is shown ahead of the backend while a change waits its 5 seconds: a deleted area is gone,
   // a team added or removed is already so.
@@ -149,12 +158,42 @@ export function AdminMapPageClient() {
         }),
     [areas.publicZones, geometryOverrides, hiddenAreaIds, teamOverrides],
   );
-  // A fresh answer from the backend has the changes in it: what was shown ahead is not needed.
-  useEffect(() => {
-    setHiddenAreaIds(new Set());
-    setTeamOverrides({});
-    setGeometryOverrides({});
-  }, [areas.closureAreas, areas.publicZones]);
+  // What was shown ahead is let go once its own request is answered and the areas are asked for
+  // again, not whenever any answer arrives: another change may still be waiting its 5 seconds.
+  const settleHidden = useCallback((areaId: string) => {
+    setHiddenAreaIds((current) => {
+      const next = new Set(current);
+      next.delete(areaId);
+
+      return next;
+    });
+  }, []);
+  const settleTeams = useCallback(
+    (areaId: string, shown: { names: string[]; uuids: string[] }) =>
+      setTeamOverrides((current) => {
+        if (current[areaId] !== shown) {
+          return current;
+        }
+
+        const { [areaId]: _settled, ...rest } = current;
+
+        return rest;
+      }),
+    [],
+  );
+  const settleGeometry = useCallback(
+    (areaId: string, shown: [number, number][][][]) =>
+      setGeometryOverrides((current) => {
+        if (current[areaId] !== shown) {
+          return current;
+        }
+
+        const { [areaId]: _settled, ...rest } = current;
+
+        return rest;
+      }),
+    [],
+  );
   const closureAreas = useMemo(
     () =>
       visibleClosureAreas
@@ -256,11 +295,12 @@ export function AdminMapPageClient() {
   );
   // Drawing a new area: first its corners, then what it is.
   const canDraw = useCapability('work_zone.add').data ?? false;
-  const teams = useTeams({ enabled: canDraw });
-  const activeTeams = useMemo(
-    () => (teams.data ?? []).filter((team) => team.status === 'active'),
-    [teams.data],
-  );
+  const canAssignZone = useCapability('work_zone.assign').data ?? false;
+  // /admin/teams gives a gov team admin only their own team, so a zone could not be handed to an NGO.
+  // The teams a station can be assigned to are all of them; a zone version in the backend would be
+  // the lasting fix (ADR-285).
+  const teams = useAssignableStationTeams({ enabled: canDraw || canAssignZone });
+  const activeTeams = teams.data ?? [];
   const createArea = useCreateArea();
   const [drawStep, setDrawStep] = useState<'idle' | 'drawing' | 'form'>('idle');
   const [drawPoints, setDrawPoints] = useState<[number, number][]>([]);
@@ -366,7 +406,7 @@ export function AdminMapPageClient() {
             const created = await createArea.mutateAsync({ input });
 
             setHeldPoints(null);
-            areas.reload();
+            void areas.reload();
             setSelectedAreaId(created.createArea.uuid);
             toast.success(`已建立${label}`);
           } catch (error) {
@@ -447,7 +487,6 @@ export function AdminMapPageClient() {
   // The rest of what an admin does to an area (FE-021 items 5-9), for those who may.
   const canEditZone = useCapability('work_zone.edit').data ?? false;
   const canDeleteZone = useCapability('work_zone.delete').data ?? false;
-  const canAssignZone = useCapability('work_zone.assign').data ?? false;
   const updateArea = useUpdateArea();
   const deleteArea = useDeleteArea();
   const promoteMarkZone = usePromoteMarkZone();
@@ -462,7 +501,8 @@ export function AdminMapPageClient() {
 
     const fail = (error: unknown) => {
       toast.error(areaErrorMessage(error));
-      areas.reload();
+
+      return areas.reload();
     };
     const label = `${AREA_KIND_LABELS[area.kind]}「${area.name ?? ''}」`;
     const shape = [...visibleClosureAreas, ...visiblePublicZones].find(
@@ -474,20 +514,19 @@ export function AdminMapPageClient() {
       message: string,
       send: () => Promise<unknown>,
     ) => {
+      const settle = () => settleTeams(area.id, next);
+
       setTeamOverrides((current) => ({ ...current, [area.id]: next }));
       holdRequest({
         message,
-        onUndo: () =>
-          setTeamOverrides((current) => {
-            const { [area.id]: _undone, ...rest } = current;
-
-            return rest;
-          }),
+        onUndo: settle,
         send: () =>
-          send().then(
-            () => areas.reload(),
-            (error: unknown) => fail(error),
-          ),
+          send()
+            .then(
+              () => areas.reload(),
+              (error: unknown) => fail(error),
+            )
+            .then(settle),
       });
     };
 
@@ -532,18 +571,15 @@ export function AdminMapPageClient() {
         setSelectedAreaId(null);
         holdRequest({
           message: `已刪除${label}`,
-          onUndo: () =>
-            setHiddenAreaIds((current) => {
-              const next = new Set(current);
-              next.delete(area.id);
-
-              return next;
-            }),
+          onUndo: () => settleHidden(area.id),
           send: () =>
-            deleteArea.mutateAsync({ uuid: area.id }).then(
-              () => areas.reload(),
-              (error: unknown) => fail(error),
-            ),
+            deleteArea
+              .mutateAsync({ uuid: area.id })
+              .then(
+                () => areas.reload(),
+                (error: unknown) => fail(error),
+              )
+              .then(() => settleHidden(area.id)),
         });
       },
       onAddTeam: (teamUuid) => {
@@ -595,6 +631,8 @@ export function AdminMapPageClient() {
     promoteMarkZone,
     removeZoneFromTeam,
     selectedAreaId,
+    settleHidden,
+    settleTeams,
     updateArea,
     visibleClosureAreas,
     visiblePublicZones,
@@ -608,16 +646,13 @@ export function AdminMapPageClient() {
     const { areaId, points } = editing;
     const name = editedArea.name ? `「${editedArea.name}」` : '這個區域';
 
-    setGeometryOverrides((current) => ({ ...current, [areaId]: [[points]] }));
+    const shown: [number, number][][][] = [[points]];
+
+    setGeometryOverrides((current) => ({ ...current, [areaId]: shown }));
     setEditing(null);
     holdRequest({
       message: `已調整${name}的範圍`,
-      onUndo: () =>
-        setGeometryOverrides((current) => {
-          const { [areaId]: _undone, ...rest } = current;
-
-          return rest;
-        }),
+      onUndo: () => settleGeometry(areaId, shown),
       send: () =>
         updateArea
           .mutateAsync({
@@ -628,11 +663,13 @@ export function AdminMapPageClient() {
             () => areas.reload(),
             (error: unknown) => {
               toast.error(areaErrorMessage(error));
-              areas.reload();
+
+              return areas.reload();
             },
-          ),
+          )
+          .then(() => settleGeometry(areaId, shown)),
     });
-  }, [areas, editedArea, editing, updateArea]);
+  }, [areas, editedArea, editing, settleGeometry, updateArea]);
   const handleRouteStateChange = useCallback(
     (next: RescueMapRouteState) => {
       const { position, bbox, ...picked } = next;
@@ -649,7 +686,14 @@ export function AdminMapPageClient() {
 
   const handleMapClick = (position: [number, number]) => {
     if (drawStep === 'drawing') {
-      setDrawPoints((current) => [...current, position]);
+      // A double-click is two clicks on one spot: the second is not a corner.
+      setDrawPoints((current) => {
+        const last = current[current.length - 1];
+
+        return last && last[0] === position[0] && last[1] === position[1]
+          ? current
+          : [...current, position];
+      });
       return;
     }
 
@@ -692,6 +736,7 @@ export function AdminMapPageClient() {
             draftArea={draftArea}
             editArea={editArea}
             cursor={drawStep === 'drawing' ? 'crosshair' : undefined}
+            disableDoubleClickZoom={isBusy}
             renderControls={() => (
               <Box
                 sx={{
@@ -716,6 +761,7 @@ export function AdminMapPageClient() {
                     onChange={setFilters}
                     shownTickets={shownTickets}
                     shownStations={shownStations}
+                    ticketsMayBeMore={ticketsMayBeMore}
                     isFiltered={isFiltering(filters)}
                     disabled={isBusy}
                   />

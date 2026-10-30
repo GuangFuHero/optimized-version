@@ -59,6 +59,7 @@ interface RescueMapCanvasProps {
   /** The boundary being changed: see `Map`'s prop of the same name. */
   editArea?: RescueMapEditArea | null;
   cursor?: string;
+  disableDoubleClickZoom?: boolean;
   onMapClick?: (position: [number, number]) => void;
   layoutKey: string;
   showScale?: boolean;
@@ -910,6 +911,7 @@ export function RescueMapCanvas({
   draftArea,
   editArea,
   cursor,
+  disableDoubleClickZoom = false,
   onMapClick,
   layoutKey,
   showScale = false,
@@ -1303,6 +1305,20 @@ export function RescueMapCanvas({
 
     map.getContainer().style.cursor = cursor ?? 'grab';
   }, [cursor]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!map) {
+      return;
+    }
+
+    if (disableDoubleClickZoom) {
+      map.doubleClickZoom.disable();
+    } else {
+      map.doubleClickZoom.enable();
+    }
+  }, [disableDoubleClickZoom]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -1,15 +1,14 @@
 import { Box, Stack, Typography } from '@mui/material';
 
-import { ADMIN_MAP_PRIORITIES } from '@rescue-frontend/modules';
-
 import { AreaSwatch } from './area-swatch';
 import { designTokens } from '@rescue-frontend/ui';
 
 const { color, radius, shadow, typography } = designTokens;
 
 /**
- * What the colours and shapes on 互助地圖 mean: a ticket's priority, a resource station, and the
- * stripes of a 危險區, the only stripes on the map (prototype, 2026-09-25).
+ * What the pins on 互助地圖 are, as they are drawn: tickets and stations are told apart by colour,
+ * a ticket's priority is not (the prototype colours pins by priority; whether this page should is
+ * for 糖 to say), and the stripes are a 危險區's alone.
  */
 export function AdminMapLegend() {
   return (
@@ -31,38 +30,28 @@ export function AdminMapLegend() {
           color: color.fg.neutral.muted,
         }}
       >
-        優先級
+        圖例
       </Typography>
-      {ADMIN_MAP_PRIORITIES.map((priority) => (
-        <Stack
-          key={priority.value}
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center' }}
-        >
-          <Box
-            sx={{
-              width: 11,
-              height: 11,
-              mx: '1px',
-              borderRadius: '50%',
-              bgcolor: priority.color,
-              boxShadow: `0 0 0 2px ${color.bg.neutral.default}, 0 0 0 3px ${color.border.default}`,
-            }}
-          />
-          <Typography sx={{ ...typography.label[300], whiteSpace: 'nowrap' }}>
-            {priority.label}
-          </Typography>
-        </Stack>
-      ))}
-      <Box sx={{ height: '1px', my: 0.25, bgcolor: color.border.default }} />
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Box
           sx={{
-            width: 14,
-            height: 14,
-            borderRadius: '4px',
-            bgcolor: color.fg.neutral.default,
+            width: 12,
+            height: 12,
+            borderRadius: '50%',
+            bgcolor: color.bg.primary.default,
+          }}
+        />
+        <Typography sx={{ ...typography.label[300], whiteSpace: 'nowrap' }}>
+          任務單（圖示分緊急、處理中）
+        </Typography>
+      </Stack>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        <Box
+          sx={{
+            width: 12,
+            height: 12,
+            borderRadius: '50%',
+            bgcolor: color.bg.info.default,
           }}
         />
         <Typography sx={{ ...typography.label[300], whiteSpace: 'nowrap' }}>

@@ -92,6 +92,7 @@ export {
   polygonSelfIntersects,
   toGeoJsonPolygon,
   useAdminMapAreas,
+  ADMIN_MAP_LIVE_QUERY_LIMIT,
   useAdminMapLiveMarkers,
   viewOfArea,
   type AdminMapAreas,

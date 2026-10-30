@@ -4,10 +4,37 @@ import { toast } from 'sonner';
 // backend has no way to restore what was created, deleted or changed (FE-021).
 export const UNDO_MS = 5000;
 
+// The requests still waiting. Leaving the page with any of them would lose a change the toast has
+// already reported, so the page asks first and sends them as it goes.
+const pending = new Set<() => void>();
+let listening = false;
+
+function warnBeforeLeaving(event: BeforeUnloadEvent) {
+  if (pending.size > 0) {
+    event.preventDefault();
+  }
+}
+
+function sendPending() {
+  [...pending].forEach((send) => send());
+}
+
+function listen() {
+  if (listening) {
+    return;
+  }
+
+  listening = true;
+  window.addEventListener('beforeunload', warnBeforeLeaving);
+  window.addEventListener('pagehide', sendPending);
+}
+
 /**
- * Sends nothing for 5 seconds, showing a toast with 復原. Pressing it cancels the request and calls
- * `onUndo`; otherwise `send` runs once the time is up. Returns a function that sends at once, for
- * when the page is left with a request still waiting.
+ * Sends nothing while the toast with 復原 is on screen. Pressing it cancels the request and calls
+ * `onUndo`; otherwise `send` runs when the toast closes, so 復原 is there exactly as long as the
+ * request is held (sonner pauses the toast under the pointer or in a hidden tab, and the request
+ * waits with it). A request still waiting when the page is left is sent then. Returns a function
+ * that sends at once.
  */
 export function holdRequest({
   message,
@@ -25,13 +52,17 @@ export function holdRequest({
     }
 
     settled = true;
-    window.clearTimeout(timer);
+    pending.delete(run);
     void send();
   };
-  const timer = window.setTimeout(run, UNDO_MS);
+
+  pending.add(run);
+  listen();
 
   toast(message, {
     duration: UNDO_MS,
+    onAutoClose: run,
+    onDismiss: run,
     action: {
       label: '復原',
       onClick: () => {
@@ -40,7 +71,7 @@ export function holdRequest({
         }
 
         settled = true;
-        window.clearTimeout(timer);
+        pending.delete(run);
         onUndo();
       },
     },

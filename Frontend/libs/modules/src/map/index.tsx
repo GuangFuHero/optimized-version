@@ -244,6 +244,8 @@ interface MapProps {
   previewMarker?: RescueMapMarkerItem | null;
   /** 覆寫地圖互動游標。 */
   cursor?: string;
+  /** A double-click then adds a corner (or nothing) instead of zooming. */
+  disableDoubleClickZoom?: boolean;
   /**
    * A point picked on the map, marked by a crosshair that drags (the site's 「在這裡新增」).
    * Moving the map by hand lets it go, through `onDraftPointChange(null)`.
@@ -295,6 +297,7 @@ export const Map = memo(function Map({
   draftArea,
   editArea,
   cursor,
+  disableDoubleClickZoom,
   draftPoint,
   onDraftPointChange,
   draftPointAction,
@@ -488,6 +491,7 @@ export const Map = memo(function Map({
               draftArea={draftArea}
               editArea={editArea}
               cursor={cursor}
+              disableDoubleClickZoom={disableDoubleClickZoom}
               onMapClick={onMapClick}
               layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}
               showScale={showScale}

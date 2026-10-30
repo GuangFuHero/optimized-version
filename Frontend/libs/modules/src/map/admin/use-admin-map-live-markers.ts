@@ -23,7 +23,8 @@ const LIVE_QUERY_CONTEXT = {
   suspense: false,
 };
 
-const LIVE_QUERY_LIMIT = 200;
+export const ADMIN_MAP_LIVE_QUERY_LIMIT = 200;
+const LIVE_QUERY_LIMIT = ADMIN_MAP_LIVE_QUERY_LIMIT;
 
 export interface AdminMapLiveMarkers {
   markers: readonly RescueMapMarkerItem[];

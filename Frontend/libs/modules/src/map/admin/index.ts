@@ -27,6 +27,7 @@ export {
 } from './polygon';
 export { useAdminMapAreas, type AdminMapAreas } from './use-admin-map-areas';
 export {
+  ADMIN_MAP_LIVE_QUERY_LIMIT,
   useAdminMapLiveMarkers,
   type AdminMapLiveMarkers,
 } from './use-admin-map-live-markers';
