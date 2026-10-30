@@ -49,11 +49,10 @@ describe('ticket filters', () => {
 
   it('ignores unknown enum values in the URL', () => {
     const f = parseTicketFilters(
-      new URLSearchParams('status=bogus&priority=x&audit=y'),
+      new URLSearchParams('status=bogus&priority=x'),
     );
     expect(f.status).toBeNull();
     expect(f.priority).toBeNull();
-    expect(f.audit).toBeNull();
   });
 
   it('sends only a valid keyword', () => {
@@ -68,21 +67,19 @@ describe('ticket filters', () => {
     expect(searchHint('')).toBeNull();
   });
 
-  it('maps taskType, audit and disaster onto needType, auditStatus and disasterType', () => {
+  it('maps taskType and disaster onto needType and disasterType', () => {
     expect(
       toServerVariables({
         ...EMPTY_TICKET_FILTERS,
         status: 'pending',
         priority: 'high',
         taskType: 'supply',
-        audit: 'need_audit',
         disaster: 'flood',
       }),
     ).toEqual({
       status: 'pending',
       priority: 'high',
       needType: 'supply',
-      auditStatus: 'need_audit',
       disasterType: 'flood',
     });
     expect(toServerVariables(EMPTY_TICKET_FILTERS)).toEqual({});

@@ -15,7 +15,6 @@ function ticket(overrides: Partial<SpaceTicket> = {}): SpaceTicket {
     title: '受困',
     status: 'pending',
     priority: 'high',
-    auditStatus: 'need_audit',
     disasterTypes: ['flood'],
     updatedAt: '2026-10-29T01:00:00Z',
     secondaryLocation: { floor: '3F', room: 'A' },
@@ -66,10 +65,6 @@ describe('spaceTicketPasses', () => {
     expect(spaceTicketPasses(ticket(), { ...f, taskType: 'supply' })).toBe(
       false,
     );
-    expect(spaceTicketPasses(ticket(), { ...f, audit: 'need_audit' })).toBe(
-      true,
-    );
-    expect(spaceTicketPasses(ticket(), { ...f, audit: 'audited' })).toBe(false);
     expect(spaceTicketPasses(ticket(), { ...f, disaster: 'flood' })).toBe(true);
     expect(spaceTicketPasses(ticket(), { ...f, disaster: 'quake' })).toBe(
       false,

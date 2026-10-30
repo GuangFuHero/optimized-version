@@ -7,9 +7,14 @@ import { taiwanDateParts } from '../../../../time';
 import { formatTicketStreet, formatTicketUnit } from '../../../address';
 import { formatTicketStatusLabel } from '../../../status';
 import { adminTicketPriorityLabel } from './ticket-priority';
-import { auditTag, UNTITLED_TICKET } from './ticket-row';
+import {
+  suspectedDuplicateOf,
+  UNTITLED_TICKET,
+  type AwaitedVerification,
+} from './ticket-row';
 
-export type DetailTicket = NonNullable<AdminTicketQuery['ticket']>;
+export type DetailTicket = NonNullable<AdminTicketQuery['ticket']> &
+  AwaitedVerification;
 
 /** What the drawer reads from a disaster-specific field's config: its label and its unit. */
 export type DisasterFieldConfig = Pick<
@@ -46,8 +51,11 @@ export interface TicketDetailView {
   title: string;
   statusLabel: string;
   priorityLabel: string;
-  /** The audit state's tag (疑似重複, 兩單合一); null for a state that carries none. */
-  auditTag: ReturnType<typeof auditTag>;
+  /**
+   * The tickets it may repeat (`suspectedDuplicateOf`): 查核中 · 疑似重複 at the top and 查核狀態
+   * under 系統資訊; null when it is not a suspected duplicate.
+   */
+  suspectedDuplicateOf: string[] | null;
   /** As the API returned it; the sheet formats it for display. */
   updatedAt: string | null;
   /** The subtitle, 「建立於 06/13 09:12」 in Taiwan time; null without a creation time. */
@@ -180,7 +188,7 @@ export function toTicketDetailView(
     title: text(ticket.title) ?? UNTITLED_TICKET,
     statusLabel: formatTicketStatusLabel(ticket.status),
     priorityLabel: ticketPriorityLabel(ticket.priority),
-    auditTag: auditTag(ticket.auditStatus),
+    suspectedDuplicateOf: suspectedDuplicateOf(ticket.verificationStatus),
     updatedAt: ticket.updatedAt ?? null,
     createdLabel: createdLabel(ticket.createdAt),
     teamNames: coarse ? null : ticket.responsibleTeams.map((team) => team.name),

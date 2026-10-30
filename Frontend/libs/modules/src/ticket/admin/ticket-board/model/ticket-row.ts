@@ -2,15 +2,11 @@ import type {
   AdminTaskFieldsFragment,
   AdminTicketMapPinsQuery,
   AdminTicketsQuery,
-  AuditStatus,
 } from '@rescue-frontend/data-access/admin';
-import type { BadgeTone } from '@rescue-frontend/ui';
 
 import { stationPoint } from '../../../../station/station-point';
 import { formatTicketStreet } from '../../../address';
 import { formatTicketTypeLabel } from '../../../status';
-
-export type { AuditStatus };
 
 export type TicketStatus =
   | 'pending'
@@ -38,31 +34,48 @@ export function needTypeLabel(value?: string | null): string {
     : formatTicketTypeLabel(value);
 }
 
-/**
- * A ticket's audit state as the board words it: the audit is the 重複審核, so each state says
- * where the ticket stands on duplicates (糖, Discord #uiux, 2026-10-30). Only a suspected
- * duplicate and a merged pair are tagged; 無重複 and 不是重複 carry no tag.
- */
-export const AUDIT_BADGES: Record<
-  AuditStatus,
-  { label: string; tone: BadgeTone; tagged: boolean }
-> = {
-  no_audit: { label: '無重複', tone: 'neutral', tagged: false },
-  need_audit: { label: '疑似重複', tone: 'warning', tagged: true },
-  audited: { label: '不是重複', tone: 'neutral', tagged: false },
-  audit_issue: { label: '兩單合一', tone: 'info', tagged: true },
-};
-
-/** The tag a ticket's audit state puts on it, or null for a state that carries none. */
-export function auditTag(
-  status: string,
-): { label: string; tone: BadgeTone } | null {
-  const badge = AUDIT_BADGES[status as AuditStatus];
-  return badge?.tagged ? { label: badge.label, tone: badge.tone } : null;
-}
-
 /** Shown wherever a ticket has no title. */
 export const UNTITLED_TICKET = '（未命名任務單）';
+
+/**
+ * A ticket's `verificationStatus` (ADR-443): `disputed` while a 重複審核 pair on it, or on one of
+ * its needs, is still open, with the tickets it may repeat, oldest pair first. The backend
+ * sends it only to a viewer with ai_duplicate.view (a data auditor or a super admin) and null to
+ * anyone else, so whatever arrives is shown.
+ */
+export interface TicketVerification {
+  state: string;
+  duplicateOf: readonly { uuid: string; title: string }[];
+}
+
+/**
+ * The field until the schema carries it (C, on this branch): the queries do not select it yet,
+ * so it never arrives and no ticket reads as a suspected duplicate.
+ */
+export type AwaitedVerification = {
+  verificationStatus?: TicketVerification | null;
+};
+
+/**
+ * The titles of the tickets this one may repeat while it is a suspected duplicate (糖's prototype
+ * `verification === "disputed"`); [] when the pair names no ticket the viewer may see, and null
+ * when it is not one.
+ */
+export function suspectedDuplicateOf(
+  verification: TicketVerification | null | undefined,
+): string[] | null {
+  if (verification?.state !== 'disputed') return null;
+  return verification.duplicateOf.map(
+    (other) => other.title.trim() || UNTITLED_TICKET,
+  );
+}
+
+/** 查核狀態 in the drawer: 疑似與「A」、「B」重複, or 疑似重複 when no other ticket is named. */
+export function duplicateCheckLine(titles: readonly string[]): string {
+  return titles.length
+    ? `疑似與${titles.map((title) => `「${title}」`).join('、')}重複`
+    : '疑似重複';
+}
 
 /**
  * Need statuses that still take people: the backend's `OPEN_NEED_STATUSES`. `in_progress` is a
@@ -92,14 +105,16 @@ export type TaskRowFields = Pick<
 >;
 
 /** One ticket of the board's `tickets` page, as the list query selects it. */
-export type TicketListItem = AdminTicketsQuery['tickets']['items'][number];
+export type TicketListItem = AdminTicketsQuery['tickets']['items'][number] &
+  AwaitedVerification;
 
 export interface TicketRow {
   uuid: string;
   title: string;
   status: TicketStatus;
   priority: TicketPriority;
-  auditStatus: AuditStatus;
+  /** The tickets it may repeat (`suspectedDuplicateOf`): its 疑似重複 tag; null when none. */
+  suspectedDuplicateOf: string[] | null;
   disasterTypes: string[];
   county: string;
   town: string;
@@ -226,7 +241,7 @@ export function toTicketRow(ticket: TicketListItem): TicketRow {
   const tasks = toTaskRows(ticket.tasks);
   return {
     ...toTicketPin(ticket),
-    auditStatus: ticket.auditStatus as AuditStatus,
+    suspectedDuplicateOf: suspectedDuplicateOf(ticket.verificationStatus),
     disasterTypes: ticket.disasterTypes,
     county,
     town,

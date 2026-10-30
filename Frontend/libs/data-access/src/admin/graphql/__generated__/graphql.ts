@@ -2232,7 +2232,6 @@ export type AdminTicketFieldsFragment = {
   buildingMapUuid?: string | null;
   viewerCanEdit: boolean;
   viewerCanDelete: boolean;
-  viewerCanAudit: boolean;
   viewerCanViewHistory: boolean;
   secondaryLocation?: {
     __typename?: 'SecondaryLocationType';
@@ -2316,7 +2315,6 @@ export type AdminTicketsQueryVariables = Exact<{
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
-  auditStatus?: InputMaybe<AuditStatus>;
   disasterType?: InputMaybe<Scalars['String']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
@@ -2348,7 +2346,6 @@ export type AdminTicketsQuery = {
       buildingMapUuid?: string | null;
       viewerCanEdit: boolean;
       viewerCanDelete: boolean;
-      viewerCanAudit: boolean;
       viewerCanViewHistory: boolean;
       secondaryLocation?: {
         __typename?: 'SecondaryLocationType';
@@ -2406,7 +2403,6 @@ export type AdminTicketMapPinsQueryVariables = Exact<{
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
-  auditStatus?: InputMaybe<AuditStatus>;
   disasterType?: InputMaybe<Scalars['String']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
@@ -2443,7 +2439,6 @@ export type AdminTicketsExtentQueryVariables = Exact<{
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
-  auditStatus?: InputMaybe<AuditStatus>;
   disasterType?: InputMaybe<Scalars['String']['input']>;
 }>;
 
@@ -2502,7 +2497,6 @@ export type AdminTicketQuery = {
     buildingMapUuid?: string | null;
     viewerCanEdit: boolean;
     viewerCanDelete: boolean;
-    viewerCanAudit: boolean;
     viewerCanViewHistory: boolean;
     responsibleTeams: Array<{
       __typename?: 'AssignedTeamType';
@@ -3126,7 +3120,6 @@ export type AdminCreateTicketMutation = {
           buildingMapUuid?: string | null;
           viewerCanEdit: boolean;
           viewerCanDelete: boolean;
-          viewerCanAudit: boolean;
           viewerCanViewHistory: boolean;
           secondaryLocation?: {
             __typename?: 'SecondaryLocationType';
@@ -3166,7 +3159,6 @@ export type AdminUpdateTicketMutation = {
     buildingMapUuid?: string | null;
     viewerCanEdit: boolean;
     viewerCanDelete: boolean;
-    viewerCanAudit: boolean;
     viewerCanViewHistory: boolean;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
@@ -3216,7 +3208,6 @@ export type AdminAuditTicketMutation = {
     buildingMapUuid?: string | null;
     viewerCanEdit: boolean;
     viewerCanDelete: boolean;
-    viewerCanAudit: boolean;
     viewerCanViewHistory: boolean;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
@@ -4120,7 +4111,6 @@ export type AdminSpaceTicketFieldsFragment = {
   title: string;
   status: string;
   priority: string;
-  auditStatus: string;
   disasterTypes: Array<string>;
   updatedAt?: string | null;
   secondaryLocation?: {
@@ -4211,7 +4201,6 @@ export type AdminBuildingMapTicketsQuery = {
     title: string;
     status: string;
     priority: string;
-    auditStatus: string;
     disasterTypes: Array<string>;
     updatedAt?: string | null;
     secondaryLocation?: {
@@ -4374,7 +4363,6 @@ export const AdminTicketFieldsFragmentDoc = {
           },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'viewerCanViewHistory' },
@@ -4637,7 +4625,6 @@ export const AdminSpaceTicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {
@@ -4725,17 +4712,6 @@ export const AdminTicketsDocument = {
           kind: 'VariableDefinition',
           variable: {
             kind: 'Variable',
-            name: { kind: 'Name', value: 'auditStatus' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'AuditStatus' },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
             name: { kind: 'Name', value: 'disasterType' },
           },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
@@ -4803,14 +4779,6 @@ export const AdminTicketsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'needType' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'auditStatus' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'auditStatus' },
                 },
               },
               {
@@ -4982,7 +4950,6 @@ export const AdminTicketsDocument = {
           },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'viewerCanViewHistory' },
@@ -5105,17 +5072,6 @@ export const AdminTicketMapPinsDocument = {
           kind: 'VariableDefinition',
           variable: {
             kind: 'Variable',
-            name: { kind: 'Name', value: 'auditStatus' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'AuditStatus' },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
             name: { kind: 'Name', value: 'disasterType' },
           },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
@@ -5183,14 +5139,6 @@ export const AdminTicketMapPinsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'needType' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'auditStatus' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'auditStatus' },
                 },
               },
               {
@@ -5350,17 +5298,6 @@ export const AdminTicketsExtentDocument = {
           kind: 'VariableDefinition',
           variable: {
             kind: 'Variable',
-            name: { kind: 'Name', value: 'auditStatus' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'AuditStatus' },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
             name: { kind: 'Name', value: 'disasterType' },
           },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
@@ -5400,14 +5337,6 @@ export const AdminTicketsExtentDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'needType' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'auditStatus' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'auditStatus' },
                 },
               },
               {
@@ -5746,7 +5675,6 @@ export const AdminTicketDocument = {
           },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'viewerCanViewHistory' },
@@ -7629,7 +7557,6 @@ export const AdminCreateTicketDocument = {
           },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'viewerCanViewHistory' },
@@ -7751,7 +7678,6 @@ export const AdminUpdateTicketDocument = {
           },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'viewerCanViewHistory' },
@@ -7950,7 +7876,6 @@ export const AdminAuditTicketDocument = {
           },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanEdit' } },
           { kind: 'Field', name: { kind: 'Name', value: 'viewerCanDelete' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'viewerCanAudit' } },
           {
             kind: 'Field',
             name: { kind: 'Name', value: 'viewerCanViewHistory' },
@@ -11621,7 +11546,6 @@ export const AdminBuildingMapTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'disasterTypes' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {

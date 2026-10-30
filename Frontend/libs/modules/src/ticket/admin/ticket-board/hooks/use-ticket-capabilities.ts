@@ -6,7 +6,7 @@ import type { components } from '@rescue-frontend/data-access/openapi';
 /**
  * What the signed-in identity may do on the ticket board as a whole, from the backend's
  * capability list: the toolbar's 新增, 匯入 and 匯出. What may be done to one ticket (edit, delete,
- * audit, history, its needs) is that ticket's `viewerCan*`, scoped to it.
+ * history, its needs) is that ticket's `viewerCan*`, scoped to it.
  */
 export function useTicketCapabilities() {
   const { data } = useCurrentUser();

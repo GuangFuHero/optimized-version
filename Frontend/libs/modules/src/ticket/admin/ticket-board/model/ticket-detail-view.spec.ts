@@ -92,12 +92,26 @@ describe('toTicketDetailView', () => {
       title: '家中淹水需要清淤',
       statusLabel: '待處理',
       priorityLabel: '緊急',
-      auditTag: { label: '疑似重複', tone: 'warning' },
+      suspectedDuplicateOf: null,
       description: '一樓積水約 30 公分',
       contact: { name: '王小明', phone: '0912345678', email: null },
       disasterDetails: [{ label: '積水深度', value: '30cm' }],
       detailHidden: false,
     });
+  });
+
+  it('names the tickets a suspected duplicate may repeat', () => {
+    const view = toTicketDetailView(
+      {
+        ...ticket,
+        verificationStatus: {
+          state: 'disputed',
+          duplicateOf: [{ uuid: 't-2', title: '中正路淹水' }],
+        },
+      },
+      LABELS,
+    );
+    expect(view.suspectedDuplicateOf).toEqual(['中正路淹水']);
   });
 
   it('hides the address of a coarse ticket', () => {

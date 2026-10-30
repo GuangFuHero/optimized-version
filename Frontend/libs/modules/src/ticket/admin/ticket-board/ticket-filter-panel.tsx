@@ -9,10 +9,8 @@ import { TICKET_STATUS_OPTIONS } from '../../status';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
 import { NEED_FILTER_TYPES, type TicketFilters } from './model/ticket-filters';
 import {
-  AUDIT_BADGES,
   needTypeLabel,
   TICKET_PRIORITIES,
-  type AuditStatus,
   type TicketPriority,
 } from './model/ticket-row';
 
@@ -28,10 +26,6 @@ const NEED_OPTIONS = NEED_FILTER_TYPES.map((value) => ({
   value: value as string,
   label: needTypeLabel(value),
 }));
-
-const AUDIT_OPTIONS = (Object.keys(AUDIT_BADGES) as AuditStatus[]).map(
-  (value) => ({ value, label: AUDIT_BADGES[value].label }),
-);
 
 interface TicketFilterPanelProps {
   filters: TicketFilters;
@@ -96,12 +90,6 @@ export function TicketFilterPanel({
           onChange={(v) => set('disaster', v)}
         />
       ) : null}
-      <ChipRow
-        label="重複審核"
-        value={filters.audit}
-        options={AUDIT_OPTIONS}
-        onChange={(v) => set('audit', v)}
-      />
     </Box>
   );
 }

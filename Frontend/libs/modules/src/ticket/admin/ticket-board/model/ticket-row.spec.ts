@@ -2,10 +2,11 @@ import type { AdminTaskFieldsFragment } from '@rescue-frontend/data-access/admin
 import { describe, expect, it } from 'vitest';
 
 import {
-  auditTag,
+  duplicateCheckLine,
   needChipLabel,
   needTypeLabel,
   needProgress,
+  suspectedDuplicateOf,
   ticketAddressLine,
   toTaskRows,
   toTicketPin,
@@ -51,7 +52,6 @@ const ticket = (
   updatedAt: '2026-10-21T00:00:00Z',
   viewerCanEdit: true,
   viewerCanDelete: true,
-  viewerCanAudit: true,
   viewerCanViewHistory: true,
   ...over,
   tasks,
@@ -64,6 +64,23 @@ describe('toTicketRow', () => {
     );
     expect(row.raw.viewerCanEdit).toBe(false);
     expect(row.raw.viewerCanDelete).toBe(true);
+  });
+
+  it('tags a suspected duplicate, and nothing for a viewer sent no verification', () => {
+    expect(
+      toTicketRow(
+        ticket({
+          verificationStatus: {
+            state: 'disputed',
+            duplicateOf: [{ uuid: 't2', title: '中正路淹水' }],
+          },
+        }),
+      ).suspectedDuplicateOf,
+    ).toEqual(['中正路淹水']);
+    expect(
+      toTicketRow(ticket({ verificationStatus: null })).suspectedDuplicateOf,
+    ).toBeNull();
+    expect(toTicketRow(ticket()).suspectedDuplicateOf).toBeNull();
   });
 
   it('gives an open need its missing people as gap', () => {
@@ -269,21 +286,35 @@ describe('needTypeLabel', () => {
   });
 });
 
-describe('auditTag', () => {
-  it('tags a suspected duplicate and a merged pair', () => {
-    expect(auditTag('need_audit')).toEqual({
-      label: '疑似重複',
-      tone: 'warning',
-    });
-    expect(auditTag('audit_issue')).toEqual({
-      label: '兩單合一',
-      tone: 'info',
-    });
+describe('suspectedDuplicateOf', () => {
+  it('lists the other tickets, oldest pair first, an untitled one by the board name', () => {
+    expect(
+      suspectedDuplicateOf({
+        state: 'disputed',
+        duplicateOf: [
+          { uuid: 't2', title: ' 中正路淹水 ' },
+          { uuid: 't3', title: ' ' },
+        ],
+      }),
+    ).toEqual(['中正路淹水', UNTITLED_TICKET]);
   });
 
-  it('puts no tag on 無重複, 不是重複 or a state it does not know', () => {
-    expect(auditTag('no_audit')).toBeNull();
-    expect(auditTag('audited')).toBeNull();
-    expect(auditTag('something_new')).toBeNull();
+  it('is null for no verification or a state it does not know', () => {
+    expect(suspectedDuplicateOf(null)).toBeNull();
+    expect(suspectedDuplicateOf(undefined)).toBeNull();
+    expect(
+      suspectedDuplicateOf({ state: 'something_new', duplicateOf: [] }),
+    ).toBeNull();
+  });
+});
+
+describe('duplicateCheckLine', () => {
+  it('names the tickets it may repeat', () => {
+    expect(duplicateCheckLine(['中正路淹水'])).toBe('疑似與「中正路淹水」重複');
+    expect(duplicateCheckLine(['A', 'B'])).toBe('疑似與「A」、「B」重複');
+  });
+
+  it('says only 疑似重複 when no ticket is named', () => {
+    expect(duplicateCheckLine([])).toBe('疑似重複');
   });
 });

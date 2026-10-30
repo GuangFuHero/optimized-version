@@ -28,7 +28,6 @@ fragment AdminTicketFields on TicketType {
   }
   viewerCanEdit
   viewerCanDelete
-  viewerCanAudit
   viewerCanViewHistory
 }
 fragment AdminTaskFields on TicketTaskType {
@@ -98,7 +97,6 @@ query AdminTickets(
   $priority: String
   $q: String
   $needType: String
-  $auditStatus: AuditStatus
   $disasterType: String
   $zoom: Float
   $skip: Int = 0
@@ -110,7 +108,6 @@ query AdminTickets(
     priority: $priority
     q: $q
     needType: $needType
-    auditStatus: $auditStatus
     disasterType: $disasterType
     zoom: $zoom
     skip: $skip
@@ -145,7 +142,6 @@ query AdminTicketMapPins(
   $priority: String
   $q: String
   $needType: String
-  $auditStatus: AuditStatus
   $disasterType: String
   $zoom: Float
   $skip: Int = 0
@@ -157,7 +153,6 @@ query AdminTicketMapPins(
     priority: $priority
     q: $q
     needType: $needType
-    auditStatus: $auditStatus
     disasterType: $disasterType
     zoom: $zoom
     skip: $skip
@@ -188,7 +183,6 @@ query AdminTicketsExtent(
   $priority: String
   $q: String
   $needType: String
-  $auditStatus: AuditStatus
   $disasterType: String
 ) {
   ticketsExtent(
@@ -196,7 +190,6 @@ query AdminTicketsExtent(
     priority: $priority
     q: $q
     needType: $needType
-    auditStatus: $auditStatus
     disasterType: $disasterType
   ) {
     count
@@ -934,7 +927,6 @@ fragment AdminSpaceTicketFields on TicketType {
   title
   status
   priority
-  auditStatus
   disasterTypes
   updatedAt
   secondaryLocation {

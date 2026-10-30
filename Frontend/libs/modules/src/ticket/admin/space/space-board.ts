@@ -29,7 +29,6 @@ export function spaceTicketPasses(
     !ticket.tasks.some((task) => task.taskType === filters.taskType)
   )
     return false;
-  if (filters.audit && ticket.auditStatus !== filters.audit) return false;
   if (filters.disaster && !ticket.disasterTypes.includes(filters.disaster))
     return false;
   return true;

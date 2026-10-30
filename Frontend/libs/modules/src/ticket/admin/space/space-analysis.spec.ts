@@ -42,7 +42,6 @@ function ticket(
     title: '受困',
     status: 'pending',
     priority: 'low',
-    auditStatus: 'no_audit',
     disasterTypes: [],
     updatedAt: '2026-10-29T01:00:00Z',
     secondaryLocation: { floor, room },

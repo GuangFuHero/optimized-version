@@ -3,12 +3,10 @@ import type {
   AdminTicketsExtentQueryVariables,
   AdminTicketsQueryVariables,
 } from '@rescue-frontend/data-access/admin';
-import { AuditStatus as AuditStatusValues } from '@rescue-frontend/data-access/admin';
 
 import {
   NEED_TYPES,
   TICKET_PRIORITIES,
-  type AuditStatus,
   type NeedType,
   type TicketPriority,
   type TicketStatus,
@@ -21,7 +19,6 @@ export interface TicketFilters {
   priority: TicketPriority | null;
   /** A need type, sent to the server as `needType`. */
   taskType: string | null;
-  audit: AuditStatus | null;
   /** A disaster type, sent to the server as `disasterType`. */
   disaster: string | null;
   q: string;
@@ -42,7 +39,6 @@ export const EMPTY_TICKET_FILTERS: TicketFilters = {
   status: null,
   priority: null,
   taskType: null,
-  audit: null,
   disaster: null,
   q: '',
 };
@@ -51,7 +47,6 @@ const KEYS = {
   status: 'status',
   priority: 'priority',
   taskType: 'task',
-  audit: 'audit',
   disaster: 'disaster',
   q: 'q',
 } as const;
@@ -68,7 +63,6 @@ export function parseTicketFilters(params: URLSearchParams): TicketFilters {
     ),
     priority: pick(KEYS.priority, TICKET_PRIORITIES),
     taskType: params.get(KEYS.taskType) || null,
-    audit: pick(KEYS.audit, Object.values(AuditStatusValues)),
     disaster: params.get(KEYS.disaster) || null,
     q: params.get(KEYS.q) ?? '',
   };
@@ -85,7 +79,6 @@ export function writeTicketFilters(
   set(KEYS.status, filters.status);
   set(KEYS.priority, filters.priority);
   set(KEYS.taskType, filters.taskType);
-  set(KEYS.audit, filters.audit);
   set(KEYS.disaster, filters.disaster);
   set(KEYS.q, filters.q.trim() || null);
   next.delete('page');
@@ -101,7 +94,6 @@ export function toServerVariables(
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.priority ? { priority: filters.priority } : {}),
     ...(filters.taskType ? { needType: filters.taskType } : {}),
-    ...(filters.audit ? { auditStatus: filters.audit } : {}),
     ...(filters.disaster ? { disasterType: filters.disaster } : {}),
     ...(search.kind === 'query' ? { q: search.q } : {}),
   };
@@ -119,7 +111,6 @@ export function countActiveFilters(filters: TicketFilters): number {
     filters.status,
     filters.priority,
     filters.taskType,
-    filters.audit,
     filters.disaster,
   ].filter(Boolean).length;
 }

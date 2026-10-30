@@ -14,6 +14,7 @@ import {
 import {
   CircleDashed,
   ClipboardList,
+  Flag,
   Image as ImageIcon,
   PanelRightOpen,
   Plus,
@@ -312,8 +313,8 @@ export function PriorityCell({ priority }: { priority: string }) {
 }
 
 /**
- * 任務: the photo count (never the images), the title with its space's 「🏢 名稱 · 3F」 when it
- * was filed in one, and the street line under it.
+ * 任務: the photo count (never the images), the title with 疑似重複 on a suspected duplicate and
+ * its space's 「🏢 名稱 · 3F」 when it was filed in one, and the street line under it.
  */
 function TicketCell({ row, tag }: { row: TicketRow; tag: string | null }) {
   const address = ticketAddressLine(row);
@@ -351,6 +352,17 @@ function TicketCell({ row, tag }: { row: TicketRow; tag: string | null }) {
         >
           {row.title}
         </Typography>
+        {row.suspectedDuplicateOf ? (
+          <Badge
+            tone="warning"
+            size="sm"
+            icon={<Flag size={10} />}
+            title="疑似重複 · 待查核"
+            sx={{ flexShrink: 0 }}
+          >
+            疑似重複
+          </Badge>
+        ) : null}
         {tag ? <SpacePill title={tag}>{tag}</SpacePill> : null}
       </Box>
       <CutText title={address}>{address}</CutText>

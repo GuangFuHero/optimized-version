@@ -21,7 +21,7 @@ import {
   SheetLayout,
   Tabs,
 } from '@rescue-frontend/ui';
-import { ChevronDown, ChevronRight, PencilLine } from 'lucide-react';
+import { ChevronDown, ChevronRight, Flag, PencilLine } from 'lucide-react';
 
 import { Muted } from '../../../admin/shared/muted';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
@@ -43,11 +43,11 @@ import {
 } from './model/ticket-detail-view';
 import { isForbidden } from './model/task-actions';
 import {
+  duplicateCheckLine,
   needProgress,
   toTaskRows,
   type TaskRowFields,
 } from './model/ticket-row';
-import { TicketAuditCard } from './ticket-audit-card';
 import { TicketForm } from './ticket-form';
 import {
   TICKET_HISTORY_PAGE,
@@ -425,8 +425,8 @@ export function DeleteTicketConfirm({
 
 /**
  * 任務詳情, after the prototype's `TicketDetail`: the summary card, 地點資訊, 現場災況, the photos,
- * 需求與承接, and 重複審核 for whoever may audit the ticket. What a coarse ticket withholds
- * reads 無權限檢視, never as missing. The prototype's 系統資訊 (公開範圍, 自動封存) is left out: a
+ * 需求與承接, and 系統資訊 with 查核狀態 on a suspected duplicate. What a coarse ticket withholds
+ * reads 無權限檢視, never as missing. 系統資訊's other rows (公開範圍, 自動封存) are left out: a
  * ticket has no visibility, and nothing archives tickets or keeps an archive-days setting.
  */
 function TicketInfo({
@@ -541,9 +541,11 @@ function TicketInfo({
         <TicketTaskList ticket={ticket} onBusyChange={onNeedBusyChange} />
       </Section>
 
-      {ticket.viewerCanAudit ? (
-        <Section title="重複審核">
-          <TicketAuditCard auditStatus={ticket.auditStatus} />
+      {view.suspectedDuplicateOf ? (
+        <Section title="系統資訊">
+          <InfoRow label="查核狀態">
+            {duplicateCheckLine(view.suspectedDuplicateOf)}
+          </InfoRow>
         </Section>
       ) : null}
     </Box>
@@ -551,8 +553,9 @@ function TicketInfo({
 }
 
 /**
- * The card at the top: priority, status and any audit tag, 承接進度 over its bar; when it last
- * changed, and 指派 Team — the 責任區 teams, read-only (a team gets a ticket by its zone).
+ * The card at the top: priority, status and 查核中 · 疑似重複 on a suspected duplicate, 承接進度
+ * over its bar; when it last changed, and 指派 Team — the 責任區 teams, read-only (a team gets a
+ * ticket by its zone).
  */
 function SummaryCard({
   ticket,
@@ -603,8 +606,10 @@ function SummaryCard({
           >
             <StatusCell status={ticket.status} />
           </Box>
-          {view.auditTag ? (
-            <Badge tone={view.auditTag.tone}>{view.auditTag.label}</Badge>
+          {view.suspectedDuplicateOf ? (
+            <Badge variant="outline" icon={<Flag size={11} />}>
+              查核中 · 疑似重複
+            </Badge>
           ) : null}
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

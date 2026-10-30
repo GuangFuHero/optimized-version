@@ -50,7 +50,6 @@ function ticket(floor: string | null): SpaceTicket {
     title: '受困',
     status: 'pending',
     priority: 'low',
-    auditStatus: 'no_audit',
     disasterTypes: [],
     updatedAt: null,
     secondaryLocation: { floor, room: null },
