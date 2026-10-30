@@ -2,7 +2,15 @@
 
 import { Check } from 'lucide-react';
 
-import { Box, ButtonBase, Drawer, Stack, Typography } from '@mui/material';
+import {
+  Box,
+  ButtonBase,
+  Drawer,
+  IconButton,
+  Stack,
+  SwipeableDrawer,
+  Typography,
+} from '@mui/material';
 
 import {
   BASE_LAYER_CONFIG,
@@ -14,11 +22,13 @@ import type { RescueMapBaseLayer, RescueMapControllerValue } from '../../types';
 import {
   designTokens,
   displayTextSize,
+  Icons,
   safeAreaBottom,
   withAlpha,
 } from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
+const CloseIcon = Icons.close;
 
 interface RescueMapLayerPanelProps {
   controller: RescueMapControllerValue;
@@ -34,6 +44,7 @@ function RescueMapLayerPanelContent({
   >;
   return (
     <Box>
+      {/* The bottom sheet's handle: the sheet drags down from it, or from anywhere on it. */}
       {mobile ? (
         <Box
           sx={{
@@ -47,24 +58,43 @@ function RescueMapLayerPanelContent({
         />
       ) : null}
 
-      <Typography
-        sx={{
-          fontSize: displayTextSize[20],
-          fontWeight: 800,
-          color: color.fg.neutral.default,
-        }}
-      >
-        圖層切換
-      </Typography>
-      <Typography
-        sx={{
-          mt: 0.6,
-          fontSize: displayTextSize[14],
-          color: color.fg.neutral.subtle,
-        }}
-      >
-        選擇底圖與目前可用的疊加圖層。
-      </Typography>
+      <Stack direction="row" sx={{ alignItems: 'flex-start', gap: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            sx={{
+              fontSize: displayTextSize[20],
+              fontWeight: 800,
+              color: color.fg.neutral.default,
+            }}
+          >
+            圖層切換
+          </Typography>
+          <Typography
+            sx={{
+              mt: 0.6,
+              fontSize: displayTextSize[14],
+              color: color.fg.neutral.subtle,
+            }}
+          >
+            選擇底圖與目前可用的疊加圖層。
+          </Typography>
+        </Box>
+        {/* As in the prototype (`site-map.jsx`, 關閉圖層控制), at every width. */}
+        <IconButton
+          aria-label="關閉圖層控制"
+          onClick={controller.closeLayerPanel}
+          sx={{
+            width: 44,
+            height: 44,
+            mt: -1,
+            mr: -1,
+            flexShrink: 0,
+            color: color.fg.neutral.subtle,
+          }}
+        >
+          <CloseIcon />
+        </IconButton>
+      </Stack>
 
       <Typography
         sx={{
@@ -281,10 +311,18 @@ function RescueMapLayerPanelContent({
 export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
   return (
     <>
-      <Drawer
+      {/*
+       * On a phone, a bottom sheet that drags down to close (糖, 2026-10-31): once the list is
+       * scrolled back to the top, dragging further closes it. It stops short of the top, so a strip
+       * of map stays to tap as well. It only opens from the layer button: a swipe up from the
+       * screen's edge is the map's.
+       */}
+      <SwipeableDrawer
         anchor="bottom"
         open={controller.layerPanelOpen}
+        onOpen={controller.openLayerPanel}
         onClose={controller.closeLayerPanel}
+        disableSwipeToOpen
         slotProps={{
           backdrop: {
             sx: {
@@ -300,6 +338,8 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
             borderTopLeftRadius: radius.lg,
             borderTopRightRadius: radius.lg,
             boxShadow: shadow.lg,
+            // As the shared bottom sheet (`SheetFrame`).
+            maxHeight: '92dvh',
             px: 2,
             pt: 1.25,
             pb: safeAreaBottom(24),
@@ -307,7 +347,7 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         }}
       >
         <RescueMapLayerPanelContent controller={controller} mobile />
-      </Drawer>
+      </SwipeableDrawer>
 
       <Drawer
         anchor="right"
