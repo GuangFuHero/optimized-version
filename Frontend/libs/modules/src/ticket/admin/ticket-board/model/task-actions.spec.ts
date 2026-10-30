@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  auditErrorMessage,
   buildNeedInput,
-  isStaleAudit,
   progressNoteInput,
   readCreateResult,
   taskActionsFor,
@@ -110,45 +108,6 @@ describe('readCreateResult', () => {
     expect(readCreateResult({ __typename: 'TicketTaskCreated' })).toEqual({
       kind: 'created',
     });
-  });
-});
-
-describe('isStaleAudit', () => {
-  it('spots the stale content-hash refusal only', () => {
-    expect(
-      isStaleAudit({
-        graphQLErrors: [
-          {
-            message:
-              'The ticket has changed since it was loaded; reload it and audit again',
-          },
-        ],
-      }),
-    ).toBe(true);
-    expect(
-      isStaleAudit({ graphQLErrors: [{ message: '403: Forbidden' }] }),
-    ).toBe(false);
-  });
-});
-
-describe('auditErrorMessage', () => {
-  it('asks for a reload on a stale content hash', () => {
-    expect(
-      auditErrorMessage({
-        graphQLErrors: [
-          {
-            message:
-              'The ticket has changed since it was loaded; reload it and audit again',
-          },
-        ],
-      }),
-    ).toBe('內容已更新，請重新整理後再審核');
-  });
-
-  it('says a 403 is a permission problem', () => {
-    expect(
-      auditErrorMessage({ graphQLErrors: [{ message: '403: Forbidden' }] }),
-    ).toBe('你的帳號沒有審核權限。');
   });
 });
 

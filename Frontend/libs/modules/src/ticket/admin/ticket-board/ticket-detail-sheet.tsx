@@ -43,10 +43,8 @@ import {
 } from './model/ticket-detail-view';
 import { isForbidden } from './model/task-actions';
 import {
-  AUDIT_BADGES,
   needProgress,
   toTaskRows,
-  type AuditStatus,
   type TaskRowFields,
 } from './model/ticket-row';
 import { TicketAuditCard } from './ticket-audit-card';
@@ -103,12 +101,11 @@ export function TicketDetailSheet({
     [disasterTypes.data],
   );
   const [activeTab, setActiveTab] = useState<DetailTab>('info');
-  // The edit form is saving, a need is being added, assigned or taken off, or a verdict sent:
-  // Escape, the backdrop and × wait for it.
+  // The edit form is saving, or a need is being added, assigned or taken off: Escape, the
+  // backdrop and × wait for it.
   const [formBusy, setFormBusy] = useState(false);
   const [needBusy, setNeedBusy] = useState(false);
-  const [auditBusy, setAuditBusy] = useState(false);
-  const busy = formBusy || needBusy || auditBusy;
+  const busy = formBusy || needBusy;
   const close = () => {
     if (!busy) onClose();
   };
@@ -141,7 +138,7 @@ export function TicketDetailSheet({
   } else if (state === 'ready' && ticket) {
     content = (
       <TicketDetailContent
-        // A fresh drawer per ticket: no half-typed need or audit note carried to the next one.
+        // A fresh drawer per ticket: no half-typed need carried to the next one.
         key={ticket.uuid}
         ticket={ticket}
         view={toTicketDetailView(
@@ -159,7 +156,6 @@ export function TicketDetailSheet({
         onEdit={() => onEdit(ticket.uuid)}
         onDeleted={onDeleted}
         onNeedBusyChange={setNeedBusy}
-        onAuditBusyChange={setAuditBusy}
       />
     );
   } else if (state === 'failed') {
@@ -235,7 +231,6 @@ function TicketDetailContent({
   onEdit,
   onDeleted,
   onNeedBusyChange,
-  onAuditBusyChange,
 }: {
   ticket: DetailTicket;
   view: TicketDetailView;
@@ -249,7 +244,6 @@ function TicketDetailContent({
   onEdit: () => void;
   onDeleted: (uuid: string) => void;
   onNeedBusyChange: (busy: boolean) => void;
-  onAuditBusyChange: (busy: boolean) => void;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   // The tab's count: the first page the history tab loads, shared with it through the cache.
@@ -332,7 +326,6 @@ function TicketDetailContent({
           fieldsLoading={fieldsLoading}
           now={now}
           onNeedBusyChange={onNeedBusyChange}
-          onAuditBusyChange={onAuditBusyChange}
         />
       )}
       {ticket.viewerCanDelete ? (
@@ -432,7 +425,7 @@ export function DeleteTicketConfirm({
 
 /**
  * 任務詳情, after the prototype's `TicketDetail`: the summary card, 地點資訊, 現場災況, the photos,
- * 需求與承接, and the audit card for whoever may give a verdict. What a coarse ticket withholds
+ * 需求與承接, and 重複審核 for whoever may audit the ticket. What a coarse ticket withholds
  * reads 無權限檢視, never as missing. The prototype's 系統資訊 (公開範圍, 自動封存) is left out: a
  * ticket has no visibility, and nothing archives tickets or keeps an archive-days setting.
  */
@@ -442,14 +435,12 @@ function TicketInfo({
   fieldsLoading,
   now,
   onNeedBusyChange,
-  onAuditBusyChange,
 }: {
   ticket: DetailTicket;
   view: TicketDetailView;
   fieldsLoading: boolean;
   now: Date;
   onNeedBusyChange: (busy: boolean) => void;
-  onAuditBusyChange: (busy: boolean) => void;
 }) {
   const progress = needProgress(toTaskRows(ticket.tasks));
   const hidden = <Muted inline>無權限檢視</Muted>;
@@ -550,9 +541,9 @@ function TicketInfo({
         <TicketTaskList ticket={ticket} onBusyChange={onNeedBusyChange} />
       </Section>
 
-      {ticket.viewerCanAudit && ticket.auditContentHash ? (
-        <Section title="審核">
-          <TicketAuditCard ticket={ticket} onBusyChange={onAuditBusyChange} />
+      {ticket.viewerCanAudit ? (
+        <Section title="重複審核">
+          <TicketAuditCard auditStatus={ticket.auditStatus} />
         </Section>
       ) : null}
     </Box>
@@ -560,7 +551,7 @@ function TicketInfo({
 }
 
 /**
- * The card at the top: priority, status and audit state, 承接進度 over its bar; when it last
+ * The card at the top: priority, status and any audit tag, 承接進度 over its bar; when it last
  * changed, and 指派 Team — the 責任區 teams, read-only (a team gets a ticket by its zone).
  */
 function SummaryCard({
@@ -572,7 +563,6 @@ function SummaryCard({
   view: TicketDetailView;
   now: Date;
 }) {
-  const audit = AUDIT_BADGES[ticket.auditStatus as AuditStatus];
   const progress = needProgress(toTaskRows(ticket.tasks));
   const caption = { ...typography.body[300], color: color.fg.neutral.muted };
 
@@ -613,7 +603,9 @@ function SummaryCard({
           >
             <StatusCell status={ticket.status} />
           </Box>
-          <Badge tone={audit?.tone ?? 'neutral'}>{view.auditLabel}</Badge>
+          {view.auditTag ? (
+            <Badge tone={view.auditTag.tone}>{view.auditTag.label}</Badge>
+          ) : null}
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <Typography component="span" sx={caption}>

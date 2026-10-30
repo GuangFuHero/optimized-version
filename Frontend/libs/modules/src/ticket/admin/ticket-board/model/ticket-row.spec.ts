@@ -2,6 +2,7 @@ import type { AdminTaskFieldsFragment } from '@rescue-frontend/data-access/admin
 import { describe, expect, it } from 'vitest';
 
 import {
+  auditTag,
   needChipLabel,
   needTypeLabel,
   needProgress,
@@ -265,5 +266,24 @@ describe('needTypeLabel', () => {
 
   it('says 未提供 for no type', () => {
     expect(needTypeLabel(null)).toBe('未提供');
+  });
+});
+
+describe('auditTag', () => {
+  it('tags a suspected duplicate and a merged pair', () => {
+    expect(auditTag('need_audit')).toEqual({
+      label: '疑似重複',
+      tone: 'warning',
+    });
+    expect(auditTag('audit_issue')).toEqual({
+      label: '兩單合一',
+      tone: 'info',
+    });
+  });
+
+  it('puts no tag on 無重複, 不是重複 or a state it does not know', () => {
+    expect(auditTag('no_audit')).toBeNull();
+    expect(auditTag('audited')).toBeNull();
+    expect(auditTag('something_new')).toBeNull();
   });
 });

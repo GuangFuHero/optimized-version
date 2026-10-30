@@ -2483,9 +2483,6 @@ export type AdminTicketQuery = {
   __typename?: 'Query';
   ticket?: {
     __typename?: 'TicketType';
-    auditNote?: string | null;
-    auditedAt?: string | null;
-    auditContentHash?: string | null;
     uuid: string;
     title: string;
     description?: string | null;
@@ -2512,14 +2509,6 @@ export type AdminTicketQuery = {
       uuid: string;
       name: string;
     }>;
-    changesSinceAudit?: Array<{
-      __typename?: 'TicketAuditChangeType';
-      entity: string;
-      entityUuid: string;
-      field: string;
-      auditedValue?: unknown | null;
-      currentValue?: unknown | null;
-    }> | null;
     secondaryLocation?: {
       __typename?: 'SecondaryLocationType';
       fullAddress?: string | null;
@@ -5531,38 +5520,6 @@ export const AdminTicketDocument = {
                     selections: [
                       { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                    ],
-                  },
-                },
-                { kind: 'Field', name: { kind: 'Name', value: 'auditNote' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'auditedAt' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'auditContentHash' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'changesSinceAudit' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'entity' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'entityUuid' },
-                      },
-                      { kind: 'Field', name: { kind: 'Name', value: 'field' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'auditedValue' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'currentValue' },
-                      },
                     ],
                   },
                 },

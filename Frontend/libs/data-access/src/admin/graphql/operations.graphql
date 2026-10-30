@@ -224,16 +224,6 @@ query AdminTicket($uuid: UUID!) {
       uuid
       name
     }
-    auditNote
-    auditedAt
-    auditContentHash
-    changesSinceAudit {
-      entity
-      entityUuid
-      field
-      auditedValue
-      currentValue
-    }
     secondaryLocation {
       fullAddress
       county

@@ -38,16 +38,28 @@ export function needTypeLabel(value?: string | null): string {
     : formatTicketTypeLabel(value);
 }
 
-/** A ticket's audit state as the board badges it. */
+/**
+ * A ticket's audit state as the board words it: the audit is the 重複審核, so each state says
+ * where the ticket stands on duplicates (糖, Discord #uiux, 2026-10-30). Only a suspected
+ * duplicate and a merged pair are tagged; 無重複 and 不是重複 carry no tag.
+ */
 export const AUDIT_BADGES: Record<
   AuditStatus,
-  { label: string; tone: BadgeTone }
+  { label: string; tone: BadgeTone; tagged: boolean }
 > = {
-  no_audit: { label: '免審核', tone: 'neutral' },
-  need_audit: { label: '待審核', tone: 'warning' },
-  audited: { label: '已審核', tone: 'success' },
-  audit_issue: { label: '有問題', tone: 'danger' },
+  no_audit: { label: '無重複', tone: 'neutral', tagged: false },
+  need_audit: { label: '疑似重複', tone: 'warning', tagged: true },
+  audited: { label: '不是重複', tone: 'neutral', tagged: false },
+  audit_issue: { label: '兩單合一', tone: 'info', tagged: true },
 };
+
+/** The tag a ticket's audit state puts on it, or null for a state that carries none. */
+export function auditTag(
+  status: string,
+): { label: string; tone: BadgeTone } | null {
+  const badge = AUDIT_BADGES[status as AuditStatus];
+  return badge?.tagged ? { label: badge.label, tone: badge.tone } : null;
+}
 
 /** Shown wherever a ticket has no title. */
 export const UNTITLED_TICKET = '（未命名任務單）';

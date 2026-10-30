@@ -1,199 +1,56 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
 import { Box, Typography } from '@mui/material';
-import { useQueryClient } from '@tanstack/react-query';
-import {
-  invalidateTicketWrite,
-  useAuditTicket,
-  type AuditVerdict,
-} from '@rescue-frontend/data-access/admin';
-import {
-  Badge,
-  Button,
-  Callout,
-  designTokens,
-  TextInput,
-  timelineTimeFormatter,
-} from '@rescue-frontend/ui';
+import { Badge, designTokens } from '@rescue-frontend/ui';
+import Link from 'next/link';
 
-import { Muted } from '../../../admin/shared/muted';
-import type { ClaimError } from '../../needs/claim-error';
-import { auditErrorMessage, isStaleAudit } from './model/task-actions';
-import type { DetailTicket } from './model/ticket-detail-view';
-import { AUDIT_BADGES, type AuditStatus } from './model/ticket-row';
+import { AUDIT_BADGES, auditTag, type AuditStatus } from './model/ticket-row';
 
-const { color, radius, typography } = designTokens;
+const { color, typography } = designTokens;
 
-interface TicketAuditCardProps {
-  /** Must carry `auditContentHash`: the verdict is given on the content it names. */
-  ticket: DetailTicket;
-  /** A verdict went through. */
-  onDone?: () => void;
-  /** A verdict is in flight (or not), as `TicketForm` reports its save. */
-  onBusyChange?(busy: boolean): void;
-}
+/** The 重複審核 page (the nav's 資料檢核), where suspected duplicates are worked through. */
+export const DUPLICATE_REVIEW_HREF = '/audit';
 
 /**
- * Moderation (`ticket.audit`): the ticket's audit state, what changed since the last verdict, and
- * the two verdicts. Each is sent with the content hash the drawer loaded, so a ticket edited
- * meanwhile is refused rather than passed unseen.
+ * 重複審核 on a ticket: where it stands on duplicates, and nothing to decide here (糖, Discord
+ * #uiux, 2026-10-30). Duplicates are settled on the 重複審核 page, so a suspected one links
+ * there.
  */
-export function TicketAuditCard({
-  ticket,
-  onDone,
-  onBusyChange,
-}: TicketAuditCardProps) {
-  const audit = useAuditTicket();
-  const queryClient = useQueryClient();
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [note, setNote] = useState('');
-  const [noteError, setNoteError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const submitting = audit.isPending;
-  useEffect(() => {
-    onBusyChange?.(submitting);
-  }, [submitting, onBusyChange]);
-  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
-  const badge = AUDIT_BADGES[ticket.auditStatus as AuditStatus];
-  const changes = ticket.changesSinceAudit?.length ?? 0;
-
-  async function send(status: AuditVerdict) {
-    if (submitting || !ticket.auditContentHash) return;
-    const trimmed = note.trim();
-    if (status === 'audit_issue' && !trimmed) {
-      setNoteError('請填寫有問題的原因');
-      return;
-    }
-    setError(null);
-    try {
-      await audit.mutateAsync({
-        uuid: ticket.uuid,
-        status,
-        contentHash: ticket.auditContentHash,
-        note: status === 'audit_issue' ? trimmed : null,
-      });
-      setNoteOpen(false);
-      setNote('');
-      onDone?.();
-    } catch (caught) {
-      const refusal = caught as ClaimError;
-      setError(auditErrorMessage(refusal));
-      // The ticket changed under the verdict: reload it, so the next try carries the new hash.
-      if (isStaleAudit(refusal)) {
-        void invalidateTicketWrite(queryClient, ticket.uuid);
-      }
-    }
-  }
+export function TicketAuditCard({ auditStatus }: { auditStatus: string }) {
+  const tag = auditTag(auditStatus);
 
   return (
     <Box
       sx={{
-        p: '12px',
-        border: `1px solid ${color.border.default}`,
-        borderRadius: `${radius.md}px`,
         display: 'flex',
-        flexDirection: 'column',
+        alignItems: 'center',
+        flexWrap: 'wrap',
         gap: '8px',
       }}
     >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '8px',
-        }}
-      >
-        <Badge tone={badge?.tone ?? 'neutral'}>
-          {badge?.label ?? ticket.auditStatus}
-        </Badge>
-        {ticket.auditedAt ? (
-          <Muted inline>
-            {`審核於 ${timelineTimeFormatter.format(new Date(ticket.auditedAt))}`}
-          </Muted>
-        ) : null}
-        {changes > 0 ? (
-          <Badge tone="warning" size="sm">
-            {`審核後有 ${changes} 項變更`}
-          </Badge>
-        ) : null}
-      </Box>
-      {ticket.auditNote ? (
+      {tag ? (
+        <Badge tone={tag.tone}>{tag.label}</Badge>
+      ) : (
         <Typography
+          component="span"
+          sx={{ ...typography.body[300], color: color.fg.neutral.default }}
+        >
+          {AUDIT_BADGES[auditStatus as AuditStatus]?.label ?? auditStatus}
+        </Typography>
+      )}
+      {auditStatus === 'need_audit' ? (
+        <Box
+          component={Link}
+          href={DUPLICATE_REVIEW_HREF}
           sx={{
-            ...typography.body[300],
+            ...typography.label[400],
             color: color.fg.neutral.default,
-            whiteSpace: 'pre-line',
-            overflowWrap: 'anywhere',
+            textDecoration: 'underline',
           }}
         >
-          {ticket.auditNote}
-        </Typography>
+          前往重複審核
+        </Box>
       ) : null}
-      {noteOpen ? (
-        <TextInput
-          label="有問題的原因"
-          required
-          multiline
-          minRows={2}
-          value={note}
-          disabled={submitting}
-          error={noteError}
-          onChange={(event) => {
-            setNote(event.target.value);
-            setNoteError(null);
-          }}
-        />
-      ) : null}
-      {error ? <Callout tone="danger">{error}</Callout> : null}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-        {noteOpen ? (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={submitting}
-              onClick={() => {
-                setNoteOpen(false);
-                setNoteError(null);
-              }}
-            >
-              取消
-            </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              disabled={submitting || !note.trim()}
-              onClick={() => void send('audit_issue')}
-            >
-              {submitting ? '送出中…' : '確認標記有問題'}
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              size="sm"
-              disabled={submitting}
-              onClick={() => void send('audited')}
-            >
-              {submitting ? '送出中…' : '審核通過'}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={submitting}
-              onClick={() => {
-                setError(null);
-                setNoteOpen(true);
-              }}
-            >
-              標記有問題
-            </Button>
-          </>
-        )}
-      </Box>
     </Box>
   );
 }

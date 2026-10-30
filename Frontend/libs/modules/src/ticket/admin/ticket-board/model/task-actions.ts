@@ -1,6 +1,6 @@
 /**
  * What the board's drawer offers on a ticket's needs, and how it reads what the backend says
- * back: the ⋯ of each need, the dedup answer of 再加一項需求, and the audit's refusals.
+ * back: the ⋯ of each need, the dedup answer of 再加一項需求, and a refusal's 403.
  */
 
 import type { ClaimError } from '../../../needs/claim-error';
@@ -135,11 +135,6 @@ export function progressNoteInput(
   return next === (current?.trim() || null) ? null : { progressNote: next };
 }
 
-const STALE_AUDIT =
-  'The ticket has changed since it was loaded; reload it and audit again';
-const AUDIT_NOTE_REQUIRED =
-  'audit_note is required when marking an audit issue';
-
 /** The backend's message, or '' when the error is not a GraphQL refusal. */
 function graphqlMessage(error: ClaimError): string {
   return error.graphQLErrors?.[0]?.message ?? '';
@@ -148,20 +143,4 @@ function graphqlMessage(error: ClaimError): string {
 /** Whether the refusal is a 403 (an `HTTPException` reads "403: <detail>"). */
 export function isForbidden(error: ClaimError): boolean {
   return graphqlMessage(error).startsWith('403:');
-}
-
-/** The audit was refused because the ticket changed after the drawer loaded it. */
-export function isStaleAudit(error: ClaimError): boolean {
-  return graphqlMessage(error) === STALE_AUDIT;
-}
-
-/** What the audit card says when `auditTicket` is refused. */
-export function auditErrorMessage(error: ClaimError): string {
-  const message = graphqlMessage(error);
-  if (message === STALE_AUDIT) return '內容已更新，請重新整理後再審核';
-  if (message === AUDIT_NOTE_REQUIRED) return '標記有問題時請填寫原因。';
-  if (message === 'Ticket not found') return '這張任務單已經刪除了。';
-  if (isForbidden(error)) return '你的帳號沒有審核權限。';
-  if (error.networkError) return '連線失敗，請確認網路後再試一次。';
-  return '審核失敗，請稍後再試一次。';
 }

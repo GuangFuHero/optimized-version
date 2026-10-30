@@ -97,7 +97,7 @@ export function TicketFilterPanel({
         />
       ) : null}
       <ChipRow
-        label="審核"
+        label="重複審核"
         value={filters.audit}
         options={AUDIT_OPTIONS}
         onChange={(v) => set('audit', v)}

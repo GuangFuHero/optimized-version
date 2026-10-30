@@ -7,7 +7,7 @@ import { taiwanDateParts } from '../../../../time';
 import { formatTicketStreet, formatTicketUnit } from '../../../address';
 import { formatTicketStatusLabel } from '../../../status';
 import { adminTicketPriorityLabel } from './ticket-priority';
-import { AUDIT_BADGES, UNTITLED_TICKET, type AuditStatus } from './ticket-row';
+import { auditTag, UNTITLED_TICKET } from './ticket-row';
 
 export type DetailTicket = NonNullable<AdminTicketQuery['ticket']>;
 
@@ -46,7 +46,8 @@ export interface TicketDetailView {
   title: string;
   statusLabel: string;
   priorityLabel: string;
-  auditLabel: string;
+  /** The audit state's tag (疑似重複, 兩單合一); null for a state that carries none. */
+  auditTag: ReturnType<typeof auditTag>;
   /** As the API returned it; the sheet formats it for display. */
   updatedAt: string | null;
   /** The subtitle, 「建立於 06/13 09:12」 in Taiwan time; null without a creation time. */
@@ -179,9 +180,7 @@ export function toTicketDetailView(
     title: text(ticket.title) ?? UNTITLED_TICKET,
     statusLabel: formatTicketStatusLabel(ticket.status),
     priorityLabel: ticketPriorityLabel(ticket.priority),
-    auditLabel:
-      AUDIT_BADGES[ticket.auditStatus as AuditStatus]?.label ??
-      ticket.auditStatus,
+    auditTag: auditTag(ticket.auditStatus),
     updatedAt: ticket.updatedAt ?? null,
     createdLabel: createdLabel(ticket.createdAt),
     teamNames: coarse ? null : ticket.responsibleTeams.map((team) => team.name),
