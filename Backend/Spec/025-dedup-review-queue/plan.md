@@ -126,3 +126,4 @@ DEDUP-008 交給 Jarvis 前對照時發現：前端查不到審核者是誰，�
 - 通知：新類型 `dedup_review_pending`，`ref_type = "dedup_review"`、`ref_uuid = null`，點了應該開審核頁。舊的 `dedup_flag_ticket`／`dedup_flag_station` 已移除（從來沒發出過）。
 - 2026-10-29（Jarvis）：卡多 `reviewed_by_name`、事件多 `actor_name`，都是暱稱（ADR-441）。後台目前沒有通知收件匣（`shell/admin/header.tsx` 的鈴鐺沒有動作），點通知開審核頁要等那張票。
 - 合併、取代、逐欄位選值本次不提供（ADR-336）。
+- 詳情裡每個細項多了欄位設定的名稱與順序（`label`、`sort_order`），有 `ai_duplicate.view` 就讀得到；處理前的預覽見 Spec 028 spec §3.7。

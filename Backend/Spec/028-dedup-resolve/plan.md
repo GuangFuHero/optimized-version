@@ -224,6 +224,19 @@ DEDUP-008 交給 Jarvis 前對照 mock 時發現：選主要單要看地址，�
 - [x] 測試：地址到樓室、電線桿、沒有地點、改地點 `version` 會動、改地標 `version` 不動、query 數不變、REST 形狀
 - [x] 合約檔、全套件（**3316**：3315 passed，另 1 個是 main 上 #176 修掉的時區測試，rebase 後通過）、Docker 從零驗證 19/19（`c1c4492ec`，Backend 與 rebase 後的 `ddf1ab34c` 只差 #176 那個測試檔：空 DB 跑 alembic＋seed，真實「仍要建立」產生配對卡，打 REST 驗地點、暱稱、409、通知文字、API 標籤）
 
+## Task 12：預覽處理結果；細項附名稱與順序
+
+審核頁做好後提出兩個缺口：頁面把兩邊的 `claim_count` 相加當合併後人數，同一人在兩邊會算兩次，
+後端會接受的數量被頁面擋掉；細項名稱要 `dynamic_field.view` 才查得到，資料檢核員只看到代碼。
+
+- [x] `dedup_resolve.py`：`resolve` 的檢查抽成 `_checked_plan`（`lock` 決定要不要鎖），`preview` 共用它，只回 `build_plan` 的結果
+- [x] `dedup_resolve_plan.py`：`KeptTask.quantity`，處理後的數量，由原本的數量檢查順手回傳
+- [x] `POST /duplicate-pairs/{uuid}/resolve/preview`，回應 `ResolvePreviewResponse`
+- [x] `dedup_review_tickets.py`：細項的 `label`、`sort_order`，一條 query 讀完；不算進 `version`
+- [x] 測試：兩項需求共用一位志工只算一次、預覽和實際處理的結果相同、預覽什麼都不寫、壞 body 和 resolve 回一樣的錯誤、沒權限 403、訪客 401；
+  名稱與順序（啟用、停用、沒有設定）、改名稱或順序 `version` 不動、資料檢核員讀得到、query 數不變
+- [x] 合約檔重新產生
+
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
 | 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |
@@ -231,12 +244,15 @@ DEDUP-008 交給 Jarvis 前對照 mock 時發現：選主要單要看地址，�
 | GET | `/duplicate-pairs/{uuid}` | `ai_duplicate.view` | 卡＋`events`＋**`tickets`**（新） | 403、404 |
 | POST | `/duplicate-pairs/{uuid}/resolve`（新） | `ai_duplicate.review` | 處理後的卡（detail 形狀） | 403、404、409（已處理、單已取消、`version` 對不上）、422（request 不合法） |
 | POST | `/duplicate-pairs/{uuid}/revoke` | 不變 | 不變 | 多一種 409：處理過的卡不能撤銷 |
+| POST | `/duplicate-pairs/{uuid}/resolve/preview`（新） | `ai_duplicate.review` | 處理後保留的需求、各自的數量與人數（spec §3.7），什麼都不存 | 和 resolve 一樣 |
 
 - 審核頁先讀 detail，用 `tickets.low`／`tickets.high` 並排顯示；送出 resolve 時把兩邊的 `version` 原樣帶回。
 - 2026-10-29（Jarvis）：每張單多一個 `location`（ADR-440），主要單依審核員選的地址決定。地址改了 `version` 會變。
 - 收到 409（`version` 對不上）→ 重新讀 detail，請審核員再比對一次。
 - request 要列出兩張單**每一項**需求、`keep`／`move` 的每一個細項（spec §3.3）。漏列會 422。
 - 「不是重複」仍用 `/reject`。
+- 合併後的人數用 `/resolve/preview` 的 `kept_tasks[].headcount`，不要把兩邊的 `claim_count` 相加：同一個人在兩邊只算一次。
+- 細項名稱與順序用 `tickets.*.tasks[].properties[].label`／`sort_order`，不必另外查 `taskPropertyConfigs`。
 - 導向主要單靠通知（`ref_uuid` = 主要單），GraphQL 沒有新欄位。
 - 新通知類型：`dedup_task_merged`、`dedup_task_canceled`、`dedup_ticket_merged`、`dedup_ticket_updated`，
   都是 `ref_type = "ticket"`、`ref_uuid` = 主要單。

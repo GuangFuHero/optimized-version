@@ -122,7 +122,8 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `status`、`audit_status` | 唯讀 |
 | `created_by`、`created_at` | 開單者 |
 | `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`recruiting_stopped`、`properties` |
-| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`property_value`、`quantity`、`status`、`comment` |
+| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`property_value`、`quantity`、`status`、`comment`，以及 `label`、`sort_order` |
+| `tasks[].properties[].label`、`sort_order` | 這種需求、這個細項代碼在欄位設定（`task_property_config`）裡的顯示名稱與順序，停用的設定也算；沒有設定時為 `null`。有 `ai_duplicate.view` 就讀得到，不需要 `dynamic_field.view`。是設定不是單的內容，不算進 `version` |
 | `photos` | 還在的照片：`uuid`、`url`、`created_at`（ADR-384） |
 | `disaster_details` | 災害欄位答案：`{property_name: [value, …]}`（ADR-385） |
 
@@ -268,6 +269,31 @@ B ticket                        B ticket：已取消，replaced_by = A
 ### 3.6 Response
 
 回傳處理後的卡（同 detail 的形狀，含 `tickets` 與 `events`）。被取消的那一邊 `tickets` 為 `null`。
+
+### 3.7 預覽：`POST /admin/duplicate-pairs/{uuid}/resolve/preview`
+
+送出前先看處理完會怎樣，什麼都不存。
+
+- body 和 resolve 一模一樣；權限一樣是 `ai_duplicate.review`。
+- 檢查和 resolve 共用同一段程式：resolve 會回 404／409／422 的 body，預覽回一樣的狀態碼和訊息。
+- 不鎖任何列、不寫任何東西：沒有新列、沒有事件、沒有通知、沒有稽核紀錄，卡和兩張單的 `version` 都不變。
+- 回應：
+
+```json
+{
+  "primary_uuid": "…",
+  "secondary_uuid": "…",
+  "kept_tasks": [
+    { "uuid": "<A.task1>", "task_type": "hr", "quantity": 7, "headcount": 3, "absorbed": ["<B.task1>"], "moved": false },
+    { "uuid": "<B.task3>", "task_type": "supply", "quantity": 3, "headcount": 1, "absorbed": [], "moved": true }
+  ],
+  "canceled_tasks": []
+}
+```
+
+- `kept_tasks`：主要單處理後保留的每一項需求（自己的或整項移過來的）。`quantity` 是處理後的數量（有送就是送的值，沒送就是原本的）；
+  `headcount` 是處理後的承接人數，同一個人同時在兩項被合併的需求上只算一次（§3.3）。數量不能少於這個人數，否則 resolve 和預覽都回 422。
+- 預覽只是參考：預覽之後、送出之前有人承接，實際處理時人數會照當下重算。
 
 ## 4. 資料庫變更
 
