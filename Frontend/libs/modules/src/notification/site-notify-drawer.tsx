@@ -25,7 +25,12 @@ import {
   MyTaskAssignmentsDocument,
   MyTicketsDocument,
 } from '@rescue-frontend/data-access';
-import { Badge, designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  Badge,
+  designTokens,
+  displayTextSize,
+  EmptyState,
+} from '@rescue-frontend/ui';
 
 import { useSiteRouteState } from '../route';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
@@ -141,95 +146,57 @@ const EMPTY_REASONS = [
  */
 function SiteNotifyEmpty() {
   return (
-    <Stack
-      role="status"
-      sx={{
-        alignItems: 'center',
-        gap: 2,
-        pt: 6,
-        px: 2,
-        pb: 4,
-        textAlign: 'center',
-      }}
-    >
-      <Box
-        aria-hidden
-        sx={{
-          display: 'grid',
-          placeItems: 'center',
-          width: 64,
-          height: 64,
-          borderRadius: '50%',
-          bgcolor: color.bg.neutral.subtle,
-          color: color.fg.neutral.muted,
-        }}
-      >
-        <NotificationsOffRoundedIcon sx={{ fontSize: 28 }} />
-      </Box>
-      <Box>
-        <Typography
-          sx={{
-            color: color.fg.neutral.default,
-            fontSize: displayTextSize[16],
-            lineHeight: 1.4,
-            fontWeight: 700,
-          }}
-        >
-          目前沒有通知
-        </Typography>
-        <Typography
-          sx={{
-            mt: 0.5,
-            color: color.fg.neutral.subtle,
-            fontSize: displayTextSize[13],
-            lineHeight: 1.6,
-            textWrap: 'pretty',
-          }}
-        >
-          有新動態時會出現在這裡。
-        </Typography>
-      </Box>
-      <Stack
-        component="ul"
-        sx={{
-          m: 0,
-          px: 2,
-          py: 1.5,
-          gap: 1,
-          width: '100%',
-          maxWidth: 300,
-          listStyle: 'none',
-          textAlign: 'left',
-          borderRadius: `${radius.md}px`,
-          bgcolor: color.bg.neutral.subtle,
-        }}
-      >
-        {EMPTY_REASONS.map(({ icon: Icon, text }) => (
+    <Box role="status">
+      <EmptyState
+        prominent
+        icon={<NotificationsOffRoundedIcon />}
+        title="目前沒有通知"
+        description="有新動態時會出現在這裡。"
+        action={
           <Stack
-            key={text}
-            component="li"
-            direction="row"
+            component="ul"
             sx={{
-              alignItems: 'center',
+              m: 0,
+              mt: 0.5,
+              px: 2,
+              py: 1.5,
               gap: 1,
-              color: color.fg.neutral.subtle,
-              fontSize: displayTextSize[13],
-              lineHeight: 1.5,
+              width: '100%',
+              maxWidth: 300,
+              listStyle: 'none',
+              textAlign: 'left',
+              borderRadius: `${radius.md}px`,
+              bgcolor: color.bg.neutral.subtle,
             }}
           >
-            <Icon
-              aria-hidden
-              sx={{
-                fontSize: 16,
-                flexShrink: 0,
-                color: color.fg.neutral.muted,
-              }}
-            />
-            {text}
+            {EMPTY_REASONS.map(({ icon: Icon, text }) => (
+              <Stack
+                key={text}
+                component="li"
+                direction="row"
+                sx={{
+                  alignItems: 'center',
+                  gap: 1,
+                  color: color.fg.neutral.subtle,
+                  fontSize: displayTextSize[13],
+                  lineHeight: 1.5,
+                }}
+              >
+                <Icon
+                  aria-hidden
+                  sx={{
+                    fontSize: 16,
+                    flexShrink: 0,
+                    color: color.fg.neutral.muted,
+                  }}
+                />
+                {text}
+              </Stack>
+            ))}
           </Stack>
-        ))}
-      </Stack>
-    </Stack>
+        }
+      />
+    </Box>
   );
 }
 
