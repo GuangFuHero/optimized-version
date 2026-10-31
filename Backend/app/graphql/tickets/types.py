@@ -237,6 +237,34 @@ class TicketVerificationType:
     )
 
 
+@strawberry.enum
+class TicketAvailability(enum.Enum):
+    """Whether `ticket(uuid)` gives a ticket, and if not, what became of it (ADR-444).
+
+    merged: 重複審核 merged it into another ticket, which is still there: `replacedByUuid` names it.
+    deleted: its owner deleted it, or the ticket it was merged into is deleted since.
+    not_found: there never was, or the caller cannot see it, which `ticket` cannot tell apart either.
+    """
+
+    available = "available"
+    merged = "merged"
+    deleted = "deleted"
+    not_found = "not_found"
+
+
+@strawberry.type(description="What a share link finds at a ticket's uuid: the state, nothing of the ticket")
+class TicketAvailabilityType:
+    """The answer of `ticketAvailability` (ADR-444)."""
+
+    status: TicketAvailability
+    replaced_by_uuid: UUID | None = strawberry.field(
+        default=None,
+        description=(
+            "Set only when status is merged: the ticket the request now lives in, which ticket(uuid) gives"
+        ),
+    )
+
+
 @strawberry.type(description="One move of a ticket's audit status")
 class TicketAuditEntryType:
     """An entry of `TicketType.auditHistory`, built by `ticket_audit.audit_history`."""
