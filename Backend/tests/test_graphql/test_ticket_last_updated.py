@@ -161,6 +161,31 @@ async def test_sending_back_the_line_it_read_keeps_the_raw_line_and_changes_noth
 
 
 @pytest.mark.asyncio
+async def test_a_row_with_no_raw_line_gets_one_from_the_first_save_and_keeps_it_after(
+    client, coordinator_auth, sample_ticket
+):
+    """A row kept with parts but no line (from before the raw line existed) gets the received line once."""
+    _, admin = coordinator_auth
+    line = {"secondaryLocation": {"fullAddress": "花蓮縣光復鄉糖廠街19號"}}
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": line})
+    async with test_db() as db:
+        await db.execute(
+            update(SecondaryLocation)
+            .where(SecondaryLocation.geometry_uuid == sample_ticket)
+            .values(user_input_address=None)
+        )
+    await _set_earlier(sample_ticket)
+
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": line})
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號"
+    assert await _updated_at(client, admin, sample_ticket) > EARLIER
+
+    await _set_earlier(sample_ticket)
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": line})
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
 async def test_a_changed_address_overwrites_the_raw_line_and_moves_it(
     client, coordinator_auth, sample_ticket
 ):

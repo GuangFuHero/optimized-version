@@ -90,7 +90,13 @@ _PARTS_WITHOUT_LINE = (
 _BLANK_LINES = (
     _ADDRESS_COLUMNS.replace(", alley, lane, section", "")
     + f"('b0000000-0000-4000-8000-000000000005', {TICKET}, 'address', '', '花蓮縣', '光復鄉', NULL, NULL),"
-    f" ('b0000000-0000-4000-8000-000000000006', {TICKET}, 'address', ' \n', NULL, NULL, NULL, NULL)"
+    f" ('b0000000-0000-4000-8000-000000000006', {TICKET}, 'address', ' \n', NULL, NULL, NULL, NULL),"
+    # An ideographic space is whitespace to the app, so it counts here too, alone or after a line.
+    f" ('b0000000-0000-4000-8000-000000000007', {TICKET}, 'address', '\u3000', NULL, NULL, NULL, NULL),"
+    f" ('b0000000-0000-4000-8000-000000000008', {TICKET}, 'address', '\u3000',"
+    " '花蓮縣', '光復鄉', NULL, NULL),"
+    f" ('b0000000-0000-4000-8000-000000000009', {TICKET}, 'address', '花蓮縣光復鄉糖廠街19號\u3000',"
+    " '花蓮縣', '光復鄉', '糖廠街', '19號')"
 )
 
 
@@ -295,7 +301,7 @@ async def test_parts_with_no_line_are_kept_and_the_line_is_built_from_them(outco
     done = outcomes["lineless"]
     assert done["upgraded"] and done["upgraded_again"]
     assert done["addresses"]["4"] == (None, None, None, "花蓮縣光復鄉糖廠街19號")
-    assert "3 rows re-parsed, 0 would rebuild" in done["says"]
+    assert "5 rows re-parsed, 0 would rebuild" in done["says"]
 
 
 @pytest.mark.asyncio(loop_scope="module")
@@ -304,6 +310,15 @@ async def test_a_blank_line_counts_as_no_line(outcomes):
     addresses = outcomes["lineless"]["addresses"]
     assert addresses["5"] == (None, None, None, "花蓮縣光復鄉")
     assert addresses["6"] == (None, None, None, None)
+    assert addresses["7"] == (None, None, None, None)
+    assert addresses["8"] == (None, None, None, "花蓮縣光復鄉")
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_a_line_ending_in_an_ideographic_space_is_trimmed_like_the_app_trims(outcomes):
+    """The copied line loses the space the app would have dropped, and the built line is unchanged."""
+    line = "花蓮縣光復鄉糖廠街19號"
+    assert outcomes["lineless"]["addresses"]["9"] == (line, None, None, line)
 
 
 @pytest.mark.asyncio(loop_scope="module")

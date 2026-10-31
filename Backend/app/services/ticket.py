@@ -527,14 +527,14 @@ async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, valu
     """Overwrite the address row for a geometry, or create it when there is none; say whether it changed.
 
     A whole-input replacement, so clearing a member means sending it null, not omitting it. A line that
-    splits into the parts already stored keeps the raw line it was first saved with.
+    splits into the parts already stored keeps the raw line it was first saved with, when it has one.
     Flush only: `update_ticket` commits.
     """
     existing = await secondary_location_repository.get_by_geometry(db, geometry_uuid)
     if existing is None:
         await secondary_location_repository.add(db, obj_in={"geometry_uuid": geometry_uuid, **values})
         return True
-    if same_address(existing, values):
+    if same_address(existing, values) and existing.user_input_address:
         values = {k: v for k, v in values.items() if k != "user_input_address"}
     for field, value in values.items():
         setattr(existing, field, value)

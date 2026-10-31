@@ -180,19 +180,20 @@ def _address_up() -> None:
     op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.remainder IS '解析不出來的地址文字'")
     # A derived-column rewrite, not an edit anyone made, so it stays out of the audit log.
     op.execute(f"ALTER TABLE {_ADDRESSES} DISABLE TRIGGER audit_trigger_{_ADDRESSES}")
-    # A blank line counts as no line.
-    op.execute(
-        f"UPDATE {_ADDRESSES} SET user_input_address = NULLIF(btrim(full_address, E' \\t\\r\\n'), '')"
-        " WHERE user_input_address IS NULL"
-    )
+    op.execute(f"UPDATE {_ADDRESSES} SET user_input_address = full_address WHERE user_input_address IS NULL")
 
     stored_parts = ", ".join(_PARTS)
     rows = bind.execute(
         sa.text(f"SELECT uuid, user_input_address, full_address, {stored_parts} FROM {_ADDRESSES}")
     ).all()
-    changes, differing = [], []
+    changes, differing, trimmed = [], [], []
     for uuid, line, stored, *held in rows:
-        if not (line or "").strip() and any(held):
+        # Trimmed exactly as apply_address does, so a blank line counts as no line.
+        kept = (line or "").strip() or None
+        if kept != line:
+            trimmed.append({"uuid": uuid, "user_input_address": kept})
+            line = kept
+        if not line and any(held):
             # Parts with no line: nothing to re-parse, and a rewrite would clear them.
             continue
         parts = parse_tw_address(line)
@@ -213,6 +214,11 @@ def _address_up() -> None:
             "SELECT uuid, full_address FROM secondary_locations WHERE uuid IN "
             f"({', '.join(repr(u) for u in differing[:20])}{', …' if len(differing) > 20 else ''}); "
             "fix or clear them, then upgrade again."
+        )
+    if trimmed:
+        bind.execute(
+            sa.text(f"UPDATE {_ADDRESSES} SET user_input_address = :user_input_address WHERE uuid = :uuid"),
+            trimmed,
         )
     if changes:
         assignments = ", ".join(f"{c} = :{c}" for c in (*_PARTS, "remainder"))
