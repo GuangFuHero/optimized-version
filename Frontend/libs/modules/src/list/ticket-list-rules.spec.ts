@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { RescueMapMarkerItem } from '../map/types';
 import type { TicketNeed } from '../ticket/needs';
 import {
+  countFloor,
+  listCountLabel,
+  listPaging,
   listTickets,
   pageFoldedAway,
   showsClosedTickets,
@@ -287,5 +290,76 @@ describe('pageFoldedAway', () => {
 
   it('is not set before a page is in', () => {
     expect(pageFoldedAway([], [])).toBe(false);
+  });
+});
+
+describe('countFloor', () => {
+  it('writes a count over the loaded pages as a floor while more pages wait', () => {
+    expect(countFloor(12, true)).toBe('12+');
+    expect(countFloor(12, false)).toBe('12');
+  });
+});
+
+describe('listCountLabel', () => {
+  it('says 共 N once everything is loaded, and N+ while more pages wait', () => {
+    expect(listCountLabel(37, { more: false, what: '需求' })).toBe(
+      '共 37 筆需求',
+    );
+    expect(listCountLabel(100, { more: true, what: '需求' })).toBe(
+      '100+ 筆需求',
+    );
+  });
+
+  it('counts stations without naming what', () => {
+    expect(listCountLabel(25, { more: false })).toBe('共 25 筆');
+    expect(listCountLabel(100, { more: true })).toBe('100+ 筆');
+  });
+});
+
+describe('listPaging', () => {
+  const SCROLLED: Parameters<typeof listPaging>[0] = {
+    hasNextPage: true,
+    pageFolded: false,
+    foldsFullNeeds: true,
+    loading: false,
+  };
+
+  it('keeps paging, both counts floors, while pages still list something', () => {
+    expect(listPaging(SCROLLED)).toEqual({
+      canLoadMore: true,
+      countMore: true,
+      fullMore: true,
+    });
+  });
+
+  it('stops once a whole page folds away: the needs are all in, the full ones are not', () => {
+    // The backend sends tickets still taking people first: past that page, only finished ones.
+    expect(listPaging({ ...SCROLLED, pageFolded: true })).toEqual({
+      canLoadMore: false,
+      countMore: false,
+      fullMore: true,
+    });
+  });
+
+  it('does not stop early while nothing folds: 含已滿額 on, or finished tickets asked for', () => {
+    // With two statuses or more the filter runs on the page, so a page can come out empty while
+    // the tickets asked for are still to come.
+    expect(
+      listPaging({ ...SCROLLED, pageFolded: true, foldsFullNeeds: false }),
+    ).toEqual({ canLoadMore: true, countMore: true, fullMore: true });
+  });
+
+  it('keeps the count a floor while a page is on its way, the first one included', () => {
+    expect(
+      listPaging({ ...SCROLLED, hasNextPage: false, loading: true }),
+    ).toEqual({ canLoadMore: false, countMore: true, fullMore: false });
+  });
+
+  it('claims a total once every page is in', () => {
+    expect(listPaging({ ...SCROLLED, hasNextPage: false })).toEqual({
+      canLoadMore: false,
+      countMore: false,
+      fullMore: false,
+    });
   });
 });

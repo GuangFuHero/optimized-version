@@ -1,7 +1,7 @@
 {
   "name": "@rescue-frontend/source",
   "version": "0.0.0",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "scripts": {
     "dev": "nx run-many -t dev",
     "dev:demo": "nx dev demo",

@@ -29,7 +29,12 @@ from app.models.station_property import StationProperty
 from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_task import TaskProperty, TicketTask
 from app.services.bulk_columns import DYNAMIC_PREFIX
-from app.services.bulk_export import BulkExportError, export_stations, export_tickets
+from app.services.bulk_export import (
+    BulkExportError,
+    count_ticket_exports,
+    export_stations,
+    export_tickets,
+)
 from tests.conftest import acting_as
 
 IN_ZONE = Point(121.50, 25.00)
@@ -244,6 +249,48 @@ async def test_zone_scoped_ticket_export_only_reaches_the_team_s_own_area(db):
     table = _parse(await export_tickets(db, actor=actor, task_type="rescue"))
 
     assert [row["title"] for row in table.rows] == ["區內"]
+
+
+@pytest.mark.asyncio
+async def test_ticket_export_counts_are_the_rows_each_type_s_file_would_hold(db):
+    """The 匯出 popover's 「N 筆」 per type: the same scope and one count per (ticket, task) pair."""
+    await _configs(db)
+    team = await _zoned_team(db)
+    actor = User(name="TeamAdmin")
+    author = User(name="Someone")
+    db.add_all([actor, author])
+    await db.flush()
+    await _grant(db, actor, Perm.TICKET_EXPORT, "zone", "zoned-exporter", team=team)
+    ticket, _ = await _ticket_with_task(db, title="區內", point=IN_ZONE, creator=author)
+    await _ticket_with_task(db, title="區外", point=OUT_OF_ZONE, creator=author)
+    db.add(
+        TicketTask(
+            ticket_uuid=ticket.uuid,
+            task_type="supply",
+            task_name="物資",
+            source="user",
+            created_by=str(author.uuid),
+        )
+    )
+    await db.flush()
+
+    counts = await count_ticket_exports(db, actor=actor)
+
+    assert counts == {"rescue": 1, "supply": 1}
+    table = _parse(await export_tickets(db, actor=actor, task_type="rescue"))
+    assert len(table.rows) == counts["rescue"]
+
+
+@pytest.mark.asyncio
+async def test_ticket_export_counts_without_the_capability_are_denied(db):
+    """Counting an export is reading it, so it asks for ticket.export too."""
+    actor = User(name="Member")
+    db.add(actor)
+    await db.flush()
+
+    with pytest.raises(HTTPException) as exc:
+        await count_ticket_exports(db, actor=actor)
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio

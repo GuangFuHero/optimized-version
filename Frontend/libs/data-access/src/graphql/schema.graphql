@@ -546,9 +546,6 @@ input CreateTicketTaskDraft {
 
   """Number of people or units needed"""
   quantity: Int = null
-
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
   visibility: Visibility! = public
   routeUuid: UUID = null
 
@@ -571,9 +568,6 @@ input CreateTicketTaskInput {
   People or units needed, at least 1; required except for a 'rescue' task, which may omit it
   """
   quantity: Int = null
-
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
 
   """Optional UUID of an associated route"""
   routeUuid: UUID = null

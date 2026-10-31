@@ -143,7 +143,6 @@ async def main():
             task_name="清淤",
             task_description=None,
             quantity=5,
-            source="user",
             route_uuid=None,
         )
     )

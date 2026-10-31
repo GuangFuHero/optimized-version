@@ -32,7 +32,6 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `station/admin/station-detail`
 - `station/admin/station-drawer`
 - `station/admin/station-management`
-- `ticket/admin/ticket-create`
 - `ticket/admin/ticket-detail`
 - `ticket/admin/ticket-list`
 - `ticket/admin/ticket-report`
@@ -47,7 +46,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `page.tsx` + `admin-map-page.client.tsx` 已存在
 - 使用 `@rescue-frontend/modules` 的 `Map`
 - 已有「新增站點 / 新增任務」控制 UI
-- 依賴 `StationCreateDrawer`（共用的 `StationFormDrawer` 新增模式）、`TicketCreateDrawer`
+- 依賴 `StationCreateDrawer`（共用的 `StationFormDrawer` 新增模式）、`TicketCreateSheet`（任務管理的 `TicketForm` 新增模式，以點下的位置為圖釘）
 - 只有登入狀態會顯示建立 controls
 
 ### `/stations`（資源站點管理 v2，ADMIN-026）
@@ -87,6 +86,46 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 - 已有 page 檔案
 - 對應的 reusable modules 位於 `ticket/admin/*`
+- 任務詳情的「系統資訊」只有查核狀態（疑似重複的單才出現）；設計稿的公開範圍、自動封存沒有：後端的任務單沒有公開範圍欄位，也沒有自動封存規則與封存天數設定，等後端有了再加
+- 每項需求可寫「進度備註」（`updateTicketTask` 的 `progressNote`，要有該單的 `ticket.edit`）；清空後儲存即刪除。需求狀態仍不能手改（BE-034）
+- 地圖視圖左邊清單：範圍內有圖釘的空間排在任務單前面，點了開逐層檢視
+- 新增任務的地址必填（設計稿 `tk-form.jsx`）；空間裡的一戶用那一棟的地址，不必填
+- 編輯空間裡的一戶：樓層只能選那一棟的樓層（原本寫的樓層那一棟沒有時，保留成一個選項），地址與地標用那一棟的，不能改
+- 匯入、匯出：任務管理的設計稿沒有，版面照資源站點的匯入與匯出（`station-v2/station-import.jsx`、`station-export-dialog.jsx`）
+- 疑似重複（設計稿 `tk-table.jsx`、`tk-detail.jsx`；Dan、糖 2026-10-30 釐清）：任務單或它的需求還有沒處理完的重複配對時，列表標題旁標琥珀色「疑似重複」，抽屜上方標「查核中 · 疑似重複」，系統資訊寫「查核狀態：疑似與「X」重複」（X 是對方單的標題；沒有看得到的對方單時只寫「疑似重複」）。資料是任務單的 `verificationStatus`（ADR-443），後端只給有 `ai_duplicate.view` 的人（資料檢核員、超管），其他人拿到 null，畫面就不顯示。不做篩選；設計稿沒有的「不是重複」「兩單合一」不顯示。任務單的 `audit_status`（`auditTicket`）看板不讀也不改
+
+**後端缺口（尚無 API，畫面未做）：**
+
+- 編輯任務單不能改聯絡人：`UpdateTicketInput` 沒有聯絡欄位，只有新增時能填
+- 編輯空間不能改地址：`UpdateBuildingMapInput` 沒有地址欄位
+- 列表欄位是固定的：設計稿的欄位順序與顯示由「欄位設定」頁統一管理（TM-FS-101），後端 `ticketPropertyConfigs` 還沒有順序或「列表顯示」欄位
+- 批次匯入會先比對疑似重複（#148）：疑似重複的列不建立、放進報告檔，試算與結果會算出列數；還不能逐列選「不建立／仍要建立」（DEDUP-006）
+- 編輯任務單不能移動地標：`UpdateTicketInput` 沒有 geometry，設計稿要求編輯時可改
+- 列表排序只有最新與需求優先（`TicketListOrder` 的 NEWEST／NEEDS_FIRST），沒有設計稿的「優先級 → 缺口 → 更新時間」
+- 篩選沒有設計稿的行政區域、組織分配、時間：`tickets` 查詢沒有這些參數
+- 指派 Team 沒有 API（ADR-049），列的 ⋯ 裡顯示「尚未開放」
+- 通知連結：`/tickets?ticket=<uuid>` 會直接開抽屜，但後台頂欄的鈴鐺還沒接 `/notifications`，目前沒有東西連進來
+- 空間與任務單混排：任務單由後端分頁，空間不能照設計稿跟任務單一起排序，只能放在第一頁最前面、空間之間排序
+- `buildingMaps` 與每個空間的 `buildingMapTickets` 一次最多 200 筆；後者也不含看不到詳情的單，所以空間的件數與各樓層狀態可能偏少，畫面不會標出
+
+**依設計稿刻意不做：**
+
+- 災害專屬欄位只在詳情唯讀顯示，表單不填（設計稿「報案無需選災害」，欄位清單待權責單位確認）
+- 列表不展開需求列，需求以「需求·承接進度」欄呈現
+
+**設計稿有、還沒做（待產品決定權限或做法）：**
+
+- 「我的單位／全部單位」範圍切換（AC-VS-104）
+- 列的 ⋯ 「升為生命危急」（設計稿只給超級管理員，後端沒有對應 capability）
+- 新增時的「歸屬單位」（隸屬多個單位時要選）
+
+**需求文件或設計稿沒有出處、待確認要不要留：**
+
+- 表單的「災害類型（選填）」多選：設計稿寫「系統已預設，報案無需選災害」
+- 表單的房號、Email、需求的「說明」；需求上把承接的人移除（×）；進度備註（出自 BE-036 的 task progress notes，設計稿沒有）
+- 地圖的「請放大地圖」「此範圍沒有符合的任務單」提示與群集的「此區任務單」清單；需求篩選的「醫療」
+- 空間：完成的空間圖釘變淡、空間列的「缺 N 人」、只有沒樓層的單要幫忙時摘要寫「還需要幫忙」不寫數字、「改回你打的」、「200+」
+- 搜尋只比對空間的名稱與地址；原型在只搜尋時也會列出底下有單符合的空間
 
 ### `/users`
 

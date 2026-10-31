@@ -1,6 +1,6 @@
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 
-import { getFreshness } from './freshness';
+import { getFreshness } from '../../../../admin/shared/model/freshness';
 import type { StationRow } from './station-row';
 import {
   OPERATIONAL_STATUS_OPTIONS,

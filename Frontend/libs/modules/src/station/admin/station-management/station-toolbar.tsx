@@ -1,41 +1,15 @@
 'use client';
 
-import { Box, ButtonBase, Menu, MenuItem, Typography } from '@mui/material';
-import {
-  Badge,
-  Button,
-  CountBadge,
-  designTokens,
-  TextInput,
-} from '@rescue-frontend/ui';
-import {
-  ChevronDown,
-  ChevronUp,
-  CircleHelp,
-  GitPullRequestArrow,
-  List,
-  Map as MapIcon,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Upload,
-} from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import { useDebounceCallback } from 'usehooks-ts';
+import { Box, Menu, MenuItem, Typography } from '@mui/material';
+import { Badge, Button, designTokens } from '@rescue-frontend/ui';
+import { ChevronDown, GitPullRequestArrow, Plus, Upload } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 
+import { ToolbarButton } from '../../../admin/shared/toolbar-button';
+import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
 import type { StationCapabilities } from './hooks/use-station-capabilities';
-import { followUrl, initialSearchBox } from './model/search-box';
-import { ToolbarButton } from './toolbar-button';
 
 const { color, radius, shadow, typography } = designTokens;
-
-export type StationView = 'table' | 'map';
 
 interface StationToolbarProps {
   caps: StationCapabilities;
@@ -68,38 +42,6 @@ export function StationToolbar({
   onImport,
   exportControl,
 }: StationToolbarProps) {
-  const [box, setBox] = useState(() => initialSearchBox(query));
-  // An IME (注音, 倉頡) is mid-word: its keystrokes are not a query yet.
-  const composing = useRef(false);
-  // `useDebounceCallback` starts a new debouncer whenever its callback changes, so the callback
-  // must stay the same across renders: otherwise each keystroke gets its own timer.
-  const latestOnQueryChange = useRef(onQueryChange);
-  useEffect(() => {
-    latestOnQueryChange.current = onQueryChange;
-  });
-  const send = useCallback((value: string) => {
-    setBox((current) => ({ ...current, sent: value.trim() }));
-    latestOnQueryChange.current(value);
-  }, []);
-  const sendQuery = useDebounceCallback(send, 300);
-
-  const followed = followUrl(box, query);
-  if (followed !== box) setBox(followed);
-
-  const changeDraft = (value: string) => {
-    setBox((current) => ({ ...current, draft: value }));
-    if (!composing.current) sendQuery(value);
-  };
-  const clear = () => {
-    sendQuery.cancel();
-    // A query still waiting on the debounce never reached the URL, so the URL can't clear it.
-    setBox(initialSearchBox(''));
-    onClear();
-  };
-
-  const trimmed = followed.draft.trim();
-  const showClear = activeFilterCount > 0 || trimmed.length > 0;
-
   return (
     <Box
       sx={{
@@ -109,60 +51,19 @@ export function StationToolbar({
         gap: '8px',
       }}
     >
-      <ToolbarButton
-        onClick={onToggleFilter}
-        aria-expanded={filterOpen}
-        sx={filterOpen ? { bgcolor: color.bg.neutral.subtle } : undefined}
-      >
-        <SlidersHorizontal size={16} color={color.fg.neutral.subtle} />
-        篩選
-        {activeFilterCount > 0 ? (
-          <CountBadge count={activeFilterCount} />
-        ) : null}
-        {filterOpen ? (
-          <ChevronUp size={15} color={color.fg.neutral.muted} />
-        ) : (
-          <ChevronDown size={15} color={color.fg.neutral.muted} />
-        )}
-      </ToolbarButton>
-
-      <Box
-        sx={{
-          width: 320,
-          '& .MuiInputBase-root': { minHeight: 42, height: 42 },
-        }}
-      >
-        <TextInput
-          value={followed.draft}
-          onChange={(event) => changeDraft(event.target.value)}
-          placeholder="搜尋站名／地址…"
-          leadingIcon={<Search size={16} />}
-          helperText={trimmed.length === 1 ? '至少輸入 2 個字' : undefined}
-          inputProps={{
-            'aria-label': '搜尋站點',
-            onCompositionStart: () => {
-              composing.current = true;
-            },
-            onCompositionEnd: (event) => {
-              composing.current = false;
-              sendQuery(event.currentTarget.value);
-            },
-          }}
-        />
-      </Box>
-
-      {showClear ? (
-        <ButtonBase
-          onClick={clear}
-          sx={{
-            ...typography.label[300],
-            color: color.fg.neutral.subtle,
-            textDecoration: 'underline',
-          }}
-        >
-          清除
-        </ButtonBase>
-      ) : null}
+      <ToolbarSearch
+        query={query}
+        onQueryChange={onQueryChange}
+        activeFilterCount={activeFilterCount}
+        filterOpen={filterOpen}
+        onToggleFilter={onToggleFilter}
+        onClear={onClear}
+        placeholder="搜尋站名／地址…"
+        ariaLabel="搜尋站點"
+        hint={(draft) =>
+          draft.trim().length === 1 ? '至少輸入 2 個字' : undefined
+        }
+      />
 
       <Typography
         sx={{
@@ -325,87 +226,5 @@ function NewMenuItem({
       {icon}
       {children}
     </MenuItem>
-  );
-}
-
-/** What the header's ? explains: the page in one line. */
-const PAGE_HELP = '維護資源站點並審查民眾送來的修改建議';
-
-/**
- * The title-side controls the page renders into the admin header: a ? with the page's one-line
- * explanation, the `(N)` count, and the list/map switch.
- */
-export function StationViewSwitch({
-  count,
-  view,
-  onChange,
-}: {
-  count: number;
-  view: StationView;
-  onChange: (view: StationView) => void;
-}) {
-  const options = [
-    { value: 'table', label: '列表視圖', Icon: List },
-    { value: 'map', label: '地圖視圖', Icon: MapIcon },
-  ] as const;
-  return (
-    <>
-      <Box
-        component="span"
-        title={PAGE_HELP}
-        aria-label={PAGE_HELP}
-        role="img"
-        sx={{ display: 'inline-flex', ml: '-8px', cursor: 'help' }}
-      >
-        <CircleHelp size={17} color={color.fg.neutral.muted} />
-      </Box>
-      <Typography
-        component="span"
-        sx={{ ...typography.data[300], color: color.fg.neutral.muted }}
-      >
-        ({count})
-      </Typography>
-      <Box
-        role="group"
-        aria-label="檢視方式"
-        sx={{
-          display: 'inline-flex',
-          gap: '2px',
-          p: '3px',
-          borderRadius: '10px',
-          border: `1px solid ${color.border.default}`,
-          bgcolor: color.bg.neutral.sunken,
-        }}
-      >
-        {options.map(({ value, label, Icon }) => {
-          const on = view === value;
-          const fg = on ? color.fg.neutral.default : color.fg.neutral.muted;
-          return (
-            <ButtonBase
-              key={value}
-              onClick={() => onChange(value)}
-              aria-pressed={on}
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                height: 30,
-                px: '14px',
-                borderRadius: '8px',
-                whiteSpace: 'nowrap',
-                bgcolor: on ? color.bg.neutral.default : 'transparent',
-                boxShadow: on ? shadow.sm : 'none',
-                ...typography.label[400],
-                fontWeight: on ? 700 : 400,
-                color: fg,
-              }}
-            >
-              <Icon size={15} color={fg} />
-              {label}
-            </ButtonBase>
-          );
-        })}
-      </Box>
-    </>
   );
 }

@@ -24,6 +24,7 @@
 --   (不用登入)        行前資訊 /briefing:一份已發布的,裝備可以勾;另有一個土石流範本給後台用
 --   (登入任一帳號)    現場分區:光復一帶點開中正路二段61號的任一張單 › 看各樓層,一層一框;
 --                     上一張/下一張在同一棟裡走。訪客看不到「看各樓層」
+--   (疑似重複)        asuper01、aaudit01 在任務管理看得到 6 張單標「疑似重複」:第 4c 節三張配對卡各一種狀態
 --
 -- 規則(第 11 節會檢查,不符就整個回滾):
 --   需求只用 pending/fulfilled/canceled(ADR-293)。湊滿的是 fulfilled+completed_at;停止招募的是
@@ -33,7 +34,8 @@
 --
 -- UUID 前綴:users=c…、A 站=a…、B 站=b…、tickets=d…、tasks=e…、assignments=f…、teams=1…、
 --   地圖區域(責任區、危險區、標示區)、建築地圖(2…101 起)=2…、team_zone_assign=3…、secondary_locations=4…、
---   photos=5…、role_requests=6…、briefing_templates=7…、briefings=8…、announcements=9…
+--   photos=5…、role_requests=6…、briefing_templates=7…、briefings=8…、announcements=9…、去重配對卡=0a…、
+--   去重事件=0b…
 -- 清除段照前綴刪,也照「建立者/承接者是 mock 帳號」刪:測試者在 staging 用 mock 帳號留下的單、站點、
 --   地圖區域、建築地圖、照片、申請、邀請連結、站點建議與合併紀錄、去重紀錄會一起清掉,所以可以重跑。
 --   真人留下的資料不刪,只放掉指向 mock 帳號(或要刪的 mock 資料)的欄位:mock 帳號審核過的申請、站點
@@ -834,6 +836,24 @@ INSERT INTO task_properties (uuid, task_uuid, property_name, property_value, qua
  (gen_random_uuid(),'e0000000-0000-4000-8000-000000000055','item_name','便當',NULL,NULL,NULL,'2025-10-03 10:37+08','2025-10-03 10:37+08'),
  (gen_random_uuid(),'e0000000-0000-4000-8000-000000000056','item_name','圓鍬',NULL,NULL,NULL,'2025-10-03 13:34+08','2025-10-03 13:34+08'),
  (gen_random_uuid(),'e0000000-0000-4000-8000-000000000057','item_name','推車',NULL,NULL,NULL,'2025-10-03 13:34+08','2025-10-03 13:34+08');
+
+-- 4c. 疑似重複(ADR-443)— 重複審核還沒處理完的配對卡,一種狀態一張。卡兩邊的單都標「疑似重複」、寫跟哪張重複,
+--     只有 asuper01、aaudit01 看得到。卡上的單和需求都是上面的 mock 資料,清除段照 low/high_uuid 刪。
+--     (a) 需求對需求,送單的人看到提示仍送出(dup_ignored):d007、d025 的清淤人力。
+--     (b) 單對單,等審核(suggested):d010、d012。快層只比需求,單對單的卡要等慢層,這張先手寫(method manual)。
+--     (c) 需求對需求,aaudit01 判了重複、還沒合併(confirmed_duplicate):d017、d019 的飲用水。
+--         aaudit01 可以撤回判定或合併;撤回、判定、合併過的要重跑這支 seed 才回得來。
+--     快層的卡不寫分數和依據,跟 engine 沒回應時送出的一樣(services/dedup.py 的 unchecked_pairs),不編分數。
+INSERT INTO duplicate_pairs (uuid, entity_kind, low_uuid, high_uuid, similarity, evidence, method, engine_version, source_layer, status, hint_outcome, rescan_needed, reviewed_by, reviewed_at, created_at, updated_at) VALUES
+ ('0a000000-0000-4000-8000-000000000001','ticket_task','e0000000-0000-4000-8000-000000000009','e0000000-0000-4000-8000-000000000038',NULL,NULL,'fast_rule','fast-v4','fast','dup_ignored','ignored_hint',true,NULL,NULL,'2024-07-24 15:56+08','2024-07-24 15:56+08'),
+ ('0a000000-0000-4000-8000-000000000002','ticket','d0000000-0000-4000-8000-000000000010','d0000000-0000-4000-8000-000000000012',NULL,NULL,'manual',NULL,'manual','suggested',NULL,false,NULL,NULL,'2024-07-24 19:00+08','2024-07-24 19:00+08'),
+ ('0a000000-0000-4000-8000-000000000003','ticket_task','e0000000-0000-4000-8000-000000000026','e0000000-0000-4000-8000-000000000030',NULL,NULL,'fast_rule','fast-v4','fast','confirmed_duplicate','ignored_hint',true,'c0000000-0000-4000-8000-000000000039','2024-07-24 17:00+08','2024-07-24 15:41+08','2024-07-24 17:00+08');
+-- 事件照網站寫的(services/dedup.py 的 record_pair_ignored、dedup_review.py 的 _decide):送出時一筆
+-- ignored_by_submitter(primary=提示指的需求、duplicate=仍送出的需求、actor=送出的人),判定時一筆 confirmed。
+INSERT INTO dedup_audit_events (uuid, entity_kind, event_type, pair_uuid, primary_uuid, duplicate_uuid, actor_uuid, source_layer, decision_reason, engine_version, before_state, after_state, created_at) VALUES
+ ('0b000000-0000-4000-8000-000000000001','ticket_task','ignored_by_submitter','0a000000-0000-4000-8000-000000000001','e0000000-0000-4000-8000-000000000009','e0000000-0000-4000-8000-000000000038','c0000000-0000-4000-8000-000000000022','fast','ignored_hint','fast-v4',NULL,NULL,'2024-07-24 15:56+08'),
+ ('0b000000-0000-4000-8000-000000000002','ticket_task','ignored_by_submitter','0a000000-0000-4000-8000-000000000003','e0000000-0000-4000-8000-000000000030','e0000000-0000-4000-8000-000000000026','c0000000-0000-4000-8000-000000000010','fast','ignored_hint','fast-v4',NULL,NULL,'2024-07-24 15:41+08'),
+ ('0b000000-0000-4000-8000-000000000003','ticket_task','confirmed','0a000000-0000-4000-8000-000000000003',NULL,NULL,'c0000000-0000-4000-8000-000000000039','manual',NULL,NULL,'{"status": "dup_ignored"}','{"status": "confirmed_duplicate"}','2024-07-24 17:00+08');
 
 -- 5. TASK ASSIGNMENTS — 承接紀錄:status 一律 accepted,人數不超過 quantity。avol02 是給測試者用的志工;
 --    avol01(建單者)、avol03(剛註冊的人)沒有任何承接。
