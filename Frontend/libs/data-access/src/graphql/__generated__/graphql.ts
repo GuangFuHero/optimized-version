@@ -2614,16 +2614,9 @@ export type GetLinkedTicketQuery = {
   __typename?: 'Query';
   ticketAvailability: TicketAvailability;
   ticket?:
-    | ({
-        __typename?: 'TicketType';
-        tasks: Array<
-          { __typename?: 'TicketTaskType' } & {
-            ' $fragmentRefs'?: {
-              TicketNeedFieldsFragment: TicketNeedFieldsFragment;
-            };
-          }
-        >;
-      } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } })
+    | ({ __typename?: 'TicketType' } & {
+        ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
+      })
     | null;
 };
 
@@ -5446,19 +5439,6 @@ export const GetLinkedTicketDocument = {
                   kind: 'FragmentSpread',
                   name: { kind: 'Name', value: 'TicketFields' },
                 },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'tasks' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'TicketNeedFields' },
-                      },
-                    ],
-                  },
-                },
               ],
             },
           },
@@ -5505,35 +5485,6 @@ export const GetLinkedTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'TicketNeedFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketTaskType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'myAssignment' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-              ],
-            },
-          },
         ],
       },
     },

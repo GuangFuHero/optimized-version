@@ -1,6 +1,6 @@
 import type { RescueMapGoneTicket } from '../../types';
 
-/** 糖's wording (Discord #uiux, 2026-10-31), word for word. */
+/** The two screens' words, as the design has them, word for word: a change to them starts there. */
 export function goneTicketCopy(
   availability: RescueMapGoneTicket['availability'],
 ): {

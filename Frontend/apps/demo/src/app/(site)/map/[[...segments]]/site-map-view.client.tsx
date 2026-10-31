@@ -151,7 +151,8 @@ function SiteMapViewportDataLayer({
     useState<RescueMapMarkerItem | null>(null);
 
   // A link to a ticket the view never fetched — past its 200, outside it, left out by a filter, or
-  // not there at all — asks the backend (ADR-444): the ticket, or why there is none.
+  // not there at all — asks the backend (ADR-444): the ticket, or why there is none. Either goes to
+  // the map as its linked item, which opens even when the map's status filter leaves the pin out.
   const lookUpLinkedTicket = useLinkedTicketLookup();
   const [linkedTicketMarker, setLinkedTicketMarker] =
     useState<RescueMapMarkerItem | null>(null);
@@ -331,13 +332,17 @@ function SiteMapViewportDataLayer({
 
   // A claim, a release or a stop can change a ticket's status, which its pin shows; the next fetch
   // would bring it, but the person who did it should not have to wait for one. A ticket found gone
-  // (null — deleted) loses its pin, and with it the selection, so its drawer shuts.
+  // (null — deleted) loses its pin, and its looked-up copy if a link opened it, and with them the
+  // selection, so its drawer shuts.
   const showReloadedTicketStatus = useCallback(
     (ticketUuid: string, reloaded: ReloadedTicket | null) => {
       if (!reloaded) {
         liveDataStore.dismissMarker(ticketUuid);
         setGoneTicketIds((current) =>
           current.includes(ticketUuid) ? current : [...current, ticketUuid],
+        );
+        setLinkedTicketMarker((current) =>
+          current?.id === ticketUuid ? null : current,
         );
         return;
       }
@@ -395,7 +400,7 @@ function SiteMapViewportDataLayer({
             ticketDetailOverrides={createTicketDetailOverrides}
             stationDetailSecondaryAction={stationDetailSecondaryAction}
             stationLayout="site"
-            goneTicket={goneTicket}
+            linkedItem={linkedTicketMarker ?? goneTicket}
             viewMemoryKey="site"
           />
         </Box>

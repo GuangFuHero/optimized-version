@@ -131,7 +131,8 @@ export function SiteListView() {
   const [unlistedItem, setUnlistedItem] = useState<
     RescueMapMarkerItem | RescueMapGoneTicket | null
   >(null);
-  // The last selection seen in the list. One that drops out of it afterwards was filtered out.
+  // The last selection seen in the list, or opened beside it. One that drops out of it afterwards was
+  // filtered out or found deleted, and its drawer shuts, without asking again.
   const listedSelectionRef = useRef<string | undefined>(undefined);
 
   const selectedMarker = useMemo(
@@ -226,6 +227,7 @@ export function SiteListView() {
     }
 
     if (unlistedItem?.id === selectedId) {
+      listedSelectionRef.current = selectedId;
       return;
     }
 

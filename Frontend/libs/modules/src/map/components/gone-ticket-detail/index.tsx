@@ -21,8 +21,8 @@ interface GoneTicketDetailProps {
 }
 
 /**
- * The drawer of a ticket a link names that is not there: 「這張任務單已刪除」 or 「找不到這張任務單」
- * (糖, Discord #uiux, 2026-10-31), in the drawer a ticket opens in rather than a page of its own.
+ * The drawer of a ticket a link names that is not there: 「這張任務單已刪除」 or 「找不到這張任務單」,
+ * in the drawer a ticket opens in rather than a page of its own, so the way back is where it was.
  *
  * It shows the ticket's number and nothing else of it — it has nothing else: the item holds the
  * link's uuid and the backend's word on it (ADR-444). A deleted ticket's title, address and contact
@@ -65,8 +65,11 @@ export function GoneTicketDetail({
         <CloseIcon />
       </IconButton>
 
+      {/* Scrolls: a small phone held sideways has less height than the words and the button. */}
       <Stack
         sx={{
+          minHeight: 0,
+          overflowY: 'auto',
           gap: `${spacing[4]}px`,
           px: `${spacing[6]}px`,
           pt: `${spacing[6]}px`,

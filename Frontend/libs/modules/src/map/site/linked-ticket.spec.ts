@@ -23,7 +23,6 @@ function ticket(overrides: Record<string, unknown> = {}) {
     createdBy: 'user-1',
     createdAt: null,
     updatedAt: null,
-    tasks: [],
     ...overrides,
   } as never;
 }
