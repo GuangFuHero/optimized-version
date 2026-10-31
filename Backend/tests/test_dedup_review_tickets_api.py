@@ -7,8 +7,9 @@ detail in test_dedup_review_api.py.
 
 import pytest
 
+from app.models.property_config import TaskPropertyConfig
 from app.models.secondary_location import SecondaryLocation
-from app.models.ticket_task import TicketTask
+from app.models.ticket_task import TaskProperty, TicketTask
 from tests.test_dedup_review_api import URL, _card, _headers
 
 pytestmark = pytest.mark.asyncio
@@ -71,3 +72,23 @@ async def test_the_detail_says_where_each_ticket_is(client, db_session, redis):
         "pole_id": None,
     }
     assert tickets["high"]["location"] is None
+
+
+async def test_a_data_auditor_reads_item_labels(client, db_session, redis):
+    """The label comes with the detail, so ai_duplicate.view is enough without dynamic_field.view."""
+    card = await _card(db_session)
+    db_session.add(TaskProperty(task_uuid=card["low"], property_name="shovel", property_value="2"))
+    task_type = (await db_session.get(TicketTask, card["low"])).task_type
+    db_session.add(
+        TaskPropertyConfig(
+            task_type=task_type, property_name="shovel", data_type="number", label="鏟子", sort_order=3
+        )
+    )
+    await db_session.commit()
+    headers = await _headers(db_session, redis, "data_auditor")
+
+    response = await client.get(f"{URL}/{card['pair']}", headers=headers)
+
+    assert response.status_code == 200, response.text
+    (item,) = response.json()["tickets"]["low"]["tasks"][0]["properties"]
+    assert (item["property_name"], item["label"], item["sort_order"]) == ("shovel", "鏟子", 3)

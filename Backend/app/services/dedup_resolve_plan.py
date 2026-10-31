@@ -37,6 +37,8 @@ class KeptTask:
     absorbed: tuple[str, ...]
     headcount: int
     moved: bool = False
+    # The quantity it ends with: the one sent, else its own.
+    quantity: int | None = None
 
 
 @dataclass(frozen=True)
@@ -172,7 +174,7 @@ class _Draft:
 
     def _keep(self, entry, task, sources, people: int, *, absorbed: tuple, moved: bool = False) -> None:
         changes = _task_changes(entry, task)
-        _check_size(task, changes, people)
+        quantity = _check_size(task, changes, people)
         self.items.plan(entry, task.uuid, sources)
         self.kept.append(
             KeptTask(
@@ -182,6 +184,7 @@ class _Draft:
                 absorbed=absorbed,
                 headcount=people,
                 moved=moved,
+                quantity=quantity,
             )
         )
 
@@ -235,10 +238,11 @@ def _task_changes(entry, task) -> dict:
     return {name: getattr(values, name) for name in TASK_FIELDS if name in values.model_fields_set}
 
 
-def _check_size(task, changes: dict, people: int) -> None:
+def _check_size(task, changes: dict, people: int) -> int | None:
     """The need's name and quantity after the changes, against its kind and its people (ADR-370).
 
     The kind's rules are create's own (`ticket._validate_need_size`); only the headcount is new.
+    Returns the quantity the need ends with.
     """
     task_name = changes.get("task_name", task.task_name)
     quantity = changes.get("quantity", task.quantity)
@@ -252,6 +256,7 @@ def _check_size(task, changes: dict, people: int) -> None:
         raise ResolveRefused(
             f"Need {task.uuid}: {people} people are on it, more than the quantity {quantity}"
         )
+    return quantity
 
 
 def _plan_photos(listed, primary: TicketForReview, secondary: TicketForReview) -> tuple[tuple, tuple]:

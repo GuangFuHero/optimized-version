@@ -87,6 +87,15 @@ class PropertyForReviewResponse(BaseModel):
     quantity: int | None
     status: str | None
     comment: str | None
+    label: str | None = Field(
+        default=None,
+        description="The item's display name from the need kind's field settings, inactive ones included; "
+        "null when there is none",
+    )
+    sort_order: int | None = Field(
+        default=None,
+        description="The item's display order from the same field settings; null when there is none",
+    )
 
 
 class TaskForReviewResponse(BaseModel):
@@ -284,3 +293,25 @@ class ResolveRequest(_Strict):
     photos: list[ResolvePhoto] | None = None
     disaster_details: dict[str, list[str]] | None = None
     note: str | None = None
+
+
+class ResolvePreviewTask(BaseModel):
+    """A need the primary ticket would keep, its own or moved over, as the resolve would leave it."""
+
+    uuid: UUID
+    task_type: str
+    quantity: int | None
+    headcount: int = Field(
+        description="People on it after the merge; someone on two merged needs counts once"
+    )
+    absorbed: list[UUID] = Field(description="The other ticket's needs it would absorb")
+    moved: bool = Field(description="Whether it is the other ticket's need moved over whole")
+
+
+class ResolvePreviewResponse(BaseModel):
+    """What a resolve with the same body would leave, worked out without saving anything."""
+
+    primary_uuid: UUID
+    secondary_uuid: UUID
+    kept_tasks: list[ResolvePreviewTask]
+    canceled_tasks: list[UUID]

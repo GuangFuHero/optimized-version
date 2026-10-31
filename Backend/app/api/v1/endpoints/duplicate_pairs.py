@@ -23,6 +23,8 @@ from app.schemas.duplicate_pair import (
     EntitySummaryResponse,
     PairSort,
     PairStatus,
+    ResolvePreviewResponse,
+    ResolvePreviewTask,
     ResolveRequest,
     SourceLayer,
     TicketForReviewResponse,
@@ -200,3 +202,37 @@ async def resolve_duplicate_pair(
     except ValueError as err:
         raise _refusal(err) from err
     return _detail(result.detail)
+
+
+@router.post("/duplicate-pairs/{pair_uuid}/resolve/preview", response_model=ResolvePreviewResponse)
+async def preview_duplicate_pair_resolve(
+    pair_uuid: UUID,
+    body: ResolveRequest,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """What the resolve with this body would leave, with nothing saved.
+
+    Same permission and refusals as the resolve: 409 for a card or ticket that changed, 422 for a
+    request that cannot be carried out.
+    """
+    try:
+        plan = await dedup_resolve.preview(db, actor=current_user, pair_uuid=pair_uuid, request=body)
+    except ValueError as err:
+        raise _refusal(err) from err
+    return ResolvePreviewResponse(
+        primary_uuid=plan.primary_uuid,
+        secondary_uuid=plan.secondary_uuid,
+        kept_tasks=[
+            ResolvePreviewTask(
+                uuid=kept.uuid,
+                task_type=kept.task_type,
+                quantity=kept.quantity,
+                headcount=kept.headcount,
+                absorbed=list(kept.absorbed),
+                moved=kept.moved,
+            )
+            for kept in plan.kept_tasks
+        ],
+        canceled_tasks=list(plan.canceled_tasks),
+    )

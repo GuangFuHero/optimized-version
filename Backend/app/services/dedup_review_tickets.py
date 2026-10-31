@@ -15,11 +15,12 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dedup import DuplicatePair
 from app.models.photo import Photo
+from app.models.property_config import TaskPropertyConfig
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_disaster_detail import TicketDisasterDetail
@@ -36,6 +37,10 @@ class PropertyForReview:
     quantity: int | None
     status: str | None
     comment: str | None
+    # The configured display name and order for this need kind and key, inactive configs included.
+    # Both are None without a config.
+    label: str | None = None
+    sort_order: int | None = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +119,8 @@ class TicketForReview:
 # a claim fills, and the ticket status (and audit status) worked out from them.
 _TICKET_SKIPPED = {"version", "status", "audit_status", "tasks", "photos"}
 _TASK_SKIPPED = {"claim_count", "status", "properties"}
+# An item's label and order are configuration, not the ticket: changing them must not send the reviewer back.
+_PROPERTY_SKIPPED = {"label", "sort_order"}
 
 
 def ticket_version(ticket: TicketForReview) -> str:
@@ -132,7 +139,13 @@ def ticket_version(ticket: TicketForReview) -> str:
         (
             {
                 **{k: v for k, v in asdict(task).items() if k not in _TASK_SKIPPED},
-                "properties": sorted((asdict(p) for p in task.properties), key=lambda p: p["uuid"]),
+                "properties": sorted(
+                    (
+                        {k: v for k, v in asdict(p).items() if k not in _PROPERTY_SKIPPED}
+                        for p in task.properties
+                    ),
+                    key=lambda p: p["uuid"],
+                ),
             }
             for task in ticket.tasks
         ),
@@ -189,6 +202,7 @@ class _Parts:
     photos: list
     details: list
     locations: dict
+    labels: dict
 
 
 async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
@@ -200,7 +214,7 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
         )
     ).all()
     task_ids = [task.uuid for task in tasks]
-    properties, claims = [], {}
+    properties, claims, labels = [], {}, {}
     if task_ids:
         properties = (
             await db.scalars(
@@ -218,6 +232,8 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
                 )
             ).all()
         )
+        kind = {task.uuid: task.task_type for task in tasks}
+        labels = await _labels(db, {(kind[prop.task_uuid], prop.property_name) for prop in properties})
     photos = (
         await db.scalars(
             select(Photo)
@@ -245,8 +261,29 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
     ):
         locations.setdefault(str(location.geometry_uuid), location)
     return _Parts(
-        tasks=tasks, properties=properties, claims=claims, photos=photos, details=details, locations=locations
+        tasks=tasks,
+        properties=properties,
+        claims=claims,
+        photos=photos,
+        details=details,
+        locations=locations,
+        labels=labels,
     )
+
+
+async def _labels(db: AsyncSession, keys: set[tuple[str, str]]) -> dict[tuple[str, str], tuple]:
+    """Each item's configured (label, sort_order) by (need kind, key), in one query; none asked, none run."""
+    if not keys:
+        return {}
+    rows = await db.execute(
+        select(
+            TaskPropertyConfig.task_type,
+            TaskPropertyConfig.property_name,
+            TaskPropertyConfig.label,
+            TaskPropertyConfig.sort_order,
+        ).where(tuple_(TaskPropertyConfig.task_type, TaskPropertyConfig.property_name).in_(sorted(keys)))
+    )
+    return {(task_type, name): (label, order) for task_type, name, label, order in rows.all()}
 
 
 def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
@@ -292,6 +329,7 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
                         quantity=prop.quantity,
                         status=prop.status,
                         comment=prop.comment,
+                        **_config_fields(parts.labels.get((task.task_type, prop.property_name))),
                     )
                     for prop in parts.properties
                     if prop.task_uuid == task.uuid
@@ -308,6 +346,11 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
         location=_location(parts.locations.get(str(ticket.uuid))),
     )
     return replace(review, version=ticket_version(review))
+
+
+def _config_fields(config: tuple | None) -> dict:
+    label, sort_order = config or (None, None)
+    return {"label": label, "sort_order": sort_order}
 
 
 def _location(row: SecondaryLocation | None) -> LocationForReview | None:

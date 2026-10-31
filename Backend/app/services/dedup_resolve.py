@@ -7,6 +7,10 @@ changed (ADR-374); plan (`dedup_resolve_plan.build_plan`); write the tickets, ne
 claims; mark the card `confirmed_duplicate`; record a `merged` event holding everything as it was (ADR-375).
 There is no undo (ADR-376): the event is what a person restores from.
 
+`preview` runs the same checks and plan without locking or writing anything, so the page can show
+what a resolve would leave, such as each kept need's headcount with a person on two merged needs
+counted once.
+
 The paired entities are touched here and only here; confirm and reject still change the card
 alone (ADR-341).
 """
@@ -28,6 +32,7 @@ from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
+from app.repositories.dedup_repository import duplicate_pair_repository
 from app.services.authz import require_scope
 from app.services.dedup_resolve_notices import send_resolve_notices
 from app.services.dedup_resolve_plan import RESOLVABLE_KINDS, ResolvePlan, ResolveRefused, build_plan
@@ -35,6 +40,7 @@ from app.services.dedup_review import (
     CONFIRMED_DUPLICATE,
     PENDING_STATUSES,
     DuplicatePairConflictError,
+    DuplicatePairNotFoundError,
     PairDetail,
     checked_note,
     has_merged_event,
@@ -86,15 +92,8 @@ async def resolve(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, reques
     note = checked_note(request.note)
     reviewer = actor.uuid  # read before the commit expires `actor`
     pair = await lock_pair(db, pair_uuid)
-    if pair.status not in RESOLVABLE_STATUSES or await has_merged_event(db, pair):
-        raise DuplicatePairConflictError(f"Duplicate pair is {pair.status} and cannot be resolved")
-    if pair.entity_kind not in RESOLVABLE_KINDS:
-        raise ResolveRefused("Only ticket and need cards can be resolved")
-
-    low, high, claimants = await _locked_snapshot(db, pair, request)
-    plan = build_plan(request, pair_kind=pair.entity_kind, low=low, high=high, claimants=claimants)
+    low, high, claimants, plan, ticket_changes = await _checked_plan(db, pair, request, lock=True)
     primary, secondary = (low, high) if plan.primary_uuid == low.uuid else (high, low)
-    ticket_changes = await _checked_ticket_changes(db, plan.ticket_changes, primary)
 
     now = await db.scalar(select(func.clock_timestamp()))  # the database's clock, as every stamp is
     tasks = await _tasks_by_uuid(db, (primary.uuid, secondary.uuid))
@@ -114,6 +113,33 @@ async def resolve(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, reques
     return ResolveResult(detail=await pair_detail(db, pair), outcome=outcome)
 
 
+async def preview(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, request) -> ResolvePlan:
+    """The plan `resolve` would carry out for `request`, refused the same way; nothing is locked or written.
+
+    The answer is advisory: a claim made before the real resolve can still change its headcount.
+    """
+    await require_scope(actor, Perm.AI_DUP_REVIEW, db)
+    checked_note(request.note)
+    pair = await duplicate_pair_repository.get_live(db, pair_uuid)
+    if pair is None:
+        raise DuplicatePairNotFoundError("Duplicate pair not found")
+    *_, plan, _ = await _checked_plan(db, pair, request, lock=False)
+    return plan
+
+
+async def _checked_plan(db: AsyncSession, pair: DuplicatePair, request, *, lock: bool):
+    """Both tickets, who is on each need, the plan and the primary's checked changes, or a refusal."""
+    if pair.status not in RESOLVABLE_STATUSES or await has_merged_event(db, pair):
+        raise DuplicatePairConflictError(f"Duplicate pair is {pair.status} and cannot be resolved")
+    if pair.entity_kind not in RESOLVABLE_KINDS:
+        raise ResolveRefused("Only ticket and need cards can be resolved")
+    low, high, claimants = await _snapshot(db, pair, request, lock=lock)
+    plan = build_plan(request, pair_kind=pair.entity_kind, low=low, high=high, claimants=claimants)
+    primary = low if plan.primary_uuid == low.uuid else high
+    ticket_changes = await _checked_ticket_changes(db, plan.ticket_changes, primary)
+    return low, high, claimants, plan, ticket_changes
+
+
 async def _write(db: AsyncSession, plan: ResolvePlan, ticket_changes: dict, tasks, now: datetime) -> None:
     """Everything the plan changes on the tickets, then the primary's status and verdict."""
     await _write_primary(db, plan.primary_uuid, ticket_changes)
@@ -130,8 +156,8 @@ async def _write(db: AsyncSession, plan: ResolvePlan, ticket_changes: dict, task
     await db.flush()
 
 
-async def _locked_snapshot(db: AsyncSession, pair: DuplicatePair, request):
-    """Lock both tickets and their live needs, read them fresh, check them against what was seen.
+async def _snapshot(db: AsyncSession, pair: DuplicatePair, request, *, lock: bool):
+    """Read both tickets fresh, locked with their needs when `lock`, and check them against what was seen.
 
     Ticket rows first, then needs, each in uuid order (ADR-291). What the reviewer saw is the
     request's `expected_versions` (ADR-374).
@@ -139,14 +165,15 @@ async def _locked_snapshot(db: AsyncSession, pair: DuplicatePair, request):
     low_uuid, high_uuid = await ticket_uuids_for_pair(db, pair)
     if not low_uuid or not high_uuid:
         raise DuplicatePairConflictError("A side of this card is gone")
-    for ticket_uuid in sorted((low_uuid, high_uuid)):
-        await db.scalar(select(Tickets.uuid).where(Tickets.uuid == ticket_uuid).with_for_update())
-    await db.scalars(
-        select(TicketTask.uuid)
-        .where(TicketTask.ticket_uuid.in_((low_uuid, high_uuid)), TicketTask.delete_at.is_(None))
-        .order_by(TicketTask.uuid)
-        .with_for_update()
-    )
+    if lock:
+        for ticket_uuid in sorted((low_uuid, high_uuid)):
+            await db.scalar(select(Tickets.uuid).where(Tickets.uuid == ticket_uuid).with_for_update())
+        await db.scalars(
+            select(TicketTask.uuid)
+            .where(TicketTask.ticket_uuid.in_((low_uuid, high_uuid)), TicketTask.delete_at.is_(None))
+            .order_by(TicketTask.uuid)
+            .with_for_update()
+        )
     found = await tickets_for_review(db, (low_uuid, high_uuid))
     low, high = found.get(low_uuid), found.get(high_uuid)
     if low is None or high is None:
