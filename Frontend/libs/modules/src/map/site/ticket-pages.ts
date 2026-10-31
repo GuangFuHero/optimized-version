@@ -9,6 +9,11 @@ import {
  * pages moves every ticket after it up one, and a page starting where the last one ended would open
  * one past the ticket that slid into that place, which no page then holds. The repeats are dropped
  * by id.
+ *
+ * It covers up to this many tickets leaving the loaded range between two page loads. Past that, the
+ * next tickets in order stay unlisted until the list reloads, with nothing to say so. Stepping back
+ * a page whenever the first ticket returned is not already loaded would close it, but that is a loop
+ * hard to get right without a test of the paging hook, so the limit stands (HC on #178).
  */
 export const TICKET_PAGE_OVERLAP = 20;
 
