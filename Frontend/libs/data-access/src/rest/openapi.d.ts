@@ -2693,9 +2693,8 @@ export interface components {
      * @description Plotly chart shape.
      *
      *     See https://plotly.com/python/bar-charts/, https://plotly.com/python/line-charts/,
-     *     https://plotly.com/python/pie-charts/. Unlike `x`, an unsupported chart_type for
-     *     the chosen y-metric is a 400, not silently ignored — see GET /analytics/catalog
-     *     for each metric's allowed_chart_types.
+     *     https://plotly.com/python/pie-charts/. An unsupported chart_type for the chosen
+     *     y-metric is a 400 — see GET /analytics/catalog for each metric's allowed_chart_types.
      * @enum {string}
      */
     ChartType: 'bar' | 'line' | 'pie';
@@ -2703,17 +2702,15 @@ export interface components {
      * ChartX
      * @description How to slice the chosen y-metric (the X axis).
      *
-     *     Omit this param entirely for a single aggregate value/pie. Whether a given value
-     *     is valid for a given y-metric is enforced by app.services.chart_render.resolve()
-     *     — an inapplicable x is silently ignored (falls back to aggregate, or to the
-     *     metric's forced grouping if it has one), never rejected. See GET
-     *     /api/v1/analytics/catalog for which x values are valid per y-metric.
+     *     Omit this param entirely for a single aggregate value/pie. A value the chosen y-metric
+     *     does not allow is a 422. See GET /api/v1/analytics/catalog for which x values are
+     *     valid per y-metric.
      * @enum {string}
      */
     ChartX: 'date' | 'category';
     /**
      * ChartXGranularity
-     * @description Bucket size when x=date. Ignored otherwise.
+     * @description Bucket size when x=date. Ignored otherwise, and by a metric whose catalog entry lacks it.
      * @enum {string}
      */
     ChartXGranularity: 'day' | 'week';
@@ -2769,7 +2766,7 @@ export interface components {
     DataResponse: {
       /**
        * X
-       * @description The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' (the two metrics with a built-in grouping), or null for one aggregate. It can differ from the requested `x`, which is ignored where it doesn't apply.
+       * @description The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' (the two metrics with a built-in grouping), or null for one aggregate. It differs from the request only when `x` is omitted on a metric with a built-in grouping.
        */
       x: string | null;
       /**
@@ -4666,9 +4663,14 @@ export interface components {
       description: string;
       /**
        * Allowed X
-       * @description Valid values for the `x` query param on this y-metric: any of 'date', 'category', 'none' (aggregate/no grouping — omit `x` entirely). An `x` outside this list is silently ignored (falls back to 'none', or to this metric's forced value if 'none' isn't in the list), never rejected with 400.
+       * @description Valid values for the `x` query param on this y-metric: any of 'date', 'category', 'none' (aggregate/no grouping — omit `x` entirely). An `x` outside this list is rejected with 422; omitting `x` gives 'none', or this metric's forced value if 'none' isn't in the list.
        */
       allowed_x: string[];
+      /**
+       * Allowed X Granularities
+       * @description Bucket sizes `x_granularity` can take for this y-metric's `x=date` trend. A size outside this list is not rejected: the trend is drawn at the first one listed.
+       */
+      allowed_x_granularities: string[];
       /**
        * Default Chart Type
        * @description chart_type used when the param is omitted.
@@ -4676,7 +4678,7 @@ export interface components {
       default_chart_type: string;
       /**
        * Allowed Chart Types
-       * @description Valid values for `chart_type` on this y-metric — unlike `x`, an unsupported chart_type is rejected with 400.
+       * @description Valid values for `chart_type` on this y-metric; an unsupported one is rejected with 400.
        */
       allowed_chart_types: string[];
       /**
@@ -7910,11 +7912,11 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
-        /** @description Bucket size when x=date. Ignored for every other x. */
+        /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
-        /** @description Overrides the y-metric's default chart shape. Unlike `x`, an unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog. */
+        /** @description Overrides the y-metric's default chart shape. An unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog. */
         chart_type?: components['schemas']['ChartType'] | null;
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
@@ -7934,11 +7936,11 @@ export interface operations {
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
-        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         county?: string | null;
-        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         town?: string | null;
-        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
       };
       header?: {
@@ -7974,9 +7976,9 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
-        /** @description Bucket size when x=date. Ignored for every other x. */
+        /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
@@ -7988,11 +7990,11 @@ export interface operations {
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
-        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         county?: string | null;
-        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         town?: string | null;
-        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
       };
       header?: {
@@ -8038,11 +8040,11 @@ export interface operations {
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
-        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         county?: string | null;
-        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         town?: string | null;
-        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
       };
       header?: {
@@ -8078,11 +8080,11 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
-        /** @description Bucket size when x=date. Ignored for every other x. */
+        /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
-        /** @description Overrides the y-metric's default chart shape. Unlike `x`, an unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog. */
+        /** @description Overrides the y-metric's default chart shape. An unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog. */
         chart_type?: components['schemas']['ChartType'] | null;
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
@@ -8102,11 +8104,11 @@ export interface operations {
         station_type?: string | null;
         /** @description Only stations with this operational status. */
         status?: components['schemas']['StationStatus'] | null;
-        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         county?: string | null;
-        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         town?: string | null;
-        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
       };
       header?: {
@@ -8142,9 +8144,9 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
-        /** @description Bucket size when x=date. Ignored for every other x. */
+        /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
@@ -8156,11 +8158,11 @@ export interface operations {
         station_type?: string | null;
         /** @description Only stations with this operational status. */
         status?: components['schemas']['StationStatus'] | null;
-        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         county?: string | null;
-        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         town?: string | null;
-        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
       };
       header?: {
@@ -8206,11 +8208,11 @@ export interface operations {
         station_type?: string | null;
         /** @description Only stations with this operational status. */
         status?: components['schemas']['StationStatus'] | null;
-        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         county?: string | null;
-        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         town?: string | null;
-        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values. */
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
       };
       header?: {
