@@ -21,7 +21,7 @@ from app.models.geo import Station
 from app.models.secondary_location import SecondaryLocation
 from app.services.address import apply_address
 from scripts.check_address_drift import check
-from scripts.resplit_addresses import drifted, report, resplit
+from scripts.resplit_addresses import drifted, lineless, report, resplit, survey
 
 pytestmark = pytest.mark.asyncio
 
@@ -171,3 +171,17 @@ async def test_a_parser_change_reaches_old_rows_through_the_resplit(db):
     assert found == {row_uuid: {"alley": ("2弄", "2弄3衖")}}
     await resplit(apply=True)
     assert await _full_address(db, row_uuid) == "臺北市中山區民生東路一段1巷2弄3衖4號"
+
+
+async def test_a_row_with_parts_but_no_line_is_reported_and_never_cleared(db):
+    """There is nothing to re-parse, so the re-split leaves its parts alone and both tools name it."""
+    bare = await _save(db, None, county="花蓮縣", town="光復鄉", road="糖廠街", no="19號")
+    drifting = await _save(db, "花蓮縣光復鄉糖廠街19號", road="中山路")
+
+    found, unplaced = await survey(db)
+    assert set(found) == {drifting} and unplaced == [bare]
+    assert await lineless(db) == [bare]
+    assert set(await resplit(apply=True)) == {drifting}
+
+    assert await _full_address(db, bare) == "花蓮縣光復鄉糖廠街19號"
+    assert await lineless(db) == [bare]

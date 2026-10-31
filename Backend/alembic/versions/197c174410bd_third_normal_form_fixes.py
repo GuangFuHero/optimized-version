@@ -18,7 +18,8 @@ Three facts the schema stored twice are stored once.
 3. `secondary_locations.full_address` becomes a generated column, the parts and a new `remainder` joined.
    `user_input_address` keeps the line as received; rows from before this hold the parsed line there, since
    the raw input was never stored. Each row is parsed again to fill `remainder` and the 衖/衕 kept in
-   `alley`; if any row would then rebuild to a different line than it holds, the upgrade stops and says so.
+   `alley`; if any row would then rebuild to a different line than it holds, or holds parts but no line,
+   the upgrade stops and says so.
    The audit trigger is off for that backfill, which rewrites derived columns only.
 
 Downgrade restores a plain `full_address` with its values and the copied `role_kind` with its constraints,
@@ -179,13 +180,18 @@ def _address_up() -> None:
     op.execute(f"ALTER TABLE {_ADDRESSES} DISABLE TRIGGER audit_trigger_{_ADDRESSES}")
     op.execute(f"UPDATE {_ADDRESSES} SET user_input_address = full_address WHERE user_input_address IS NULL")
 
-    rows = bind.execute(sa.text(f"SELECT uuid, user_input_address, full_address FROM {_ADDRESSES}")).all()
+    stored_parts = ", ".join(_PARTS)
+    rows = bind.execute(
+        sa.text(f"SELECT uuid, user_input_address, full_address, {stored_parts} FROM {_ADDRESSES}")
+    ).all()
     changes, differing = [], []
-    for uuid, line, stored in rows:
+    for uuid, line, stored, *held in rows:
         parts = parse_tw_address(line)
         values = {**parts.as_dict(), "remainder": parts.remainder}
         values.pop("full_address")
-        if join_address(**values) != stored:
+        # Parts with no line to re-parse would be cleared by the rewrite, so they count as differing.
+        parts_without_line = not (line or "").strip() and any(held)
+        if join_address(**values) != stored or parts_without_line:
             differing.append(str(uuid))
         changes.append({"uuid": uuid, **values})
     log.info(
@@ -196,8 +202,8 @@ def _address_up() -> None:
     if differing:
         raise RuntimeError(
             f"{len(differing)} secondary_locations rows would rebuild to a different address line than "
-            "they hold, so full_address cannot become a generated column yet. List them with: "
-            "SELECT uuid, full_address FROM secondary_locations WHERE uuid IN "
+            "they hold (parts with no line count), so full_address cannot become a generated column yet. "
+            "List them with: SELECT * FROM secondary_locations WHERE uuid IN "
             f"({', '.join(repr(u) for u in differing[:20])}{', …' if len(differing) > 20 else ''}); "
             "fix or clear them, then upgrade again."
         )

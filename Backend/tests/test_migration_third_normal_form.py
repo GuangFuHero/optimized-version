@@ -1,8 +1,8 @@
 """Migration 197c174410bd: role kind, need timestamps and the address line stored once.
 
-Two databases built to the revision before: one whose rows the upgrade repairs and rebuilds, and one
-holding an address line the parser would not give back, which the upgrade refuses. Both go up, and the
-first goes down and up again.
+Databases built to the revision before: one whose rows the upgrade repairs and rebuilds, one holding an
+address line the parser would not give back, and one holding parts with no line; the last two are refused.
+The first goes up, down and up again.
 """
 
 import asyncio
@@ -80,6 +80,11 @@ _UNPARSED_ADDRESS = (
     _ADDRESS_COLUMNS.replace(", alley, lane, section", "")
     + f"('b0000000-0000-4000-8000-000000000003', {TICKET}, 'address', '花蓮縣光復鄉糖廠街19號3樓',"
     " '花蓮縣', '光復鄉', '糖廠街', '19號')"
+)
+# Parts with no line, as the earlier address rename left them; a re-parse would clear every one.
+_PARTS_WITHOUT_LINE = (
+    _ADDRESS_COLUMNS.replace(", full_address", "").replace(", alley, lane, section", "")
+    + f"('b0000000-0000-4000-8000-000000000004', {TICKET}, 'address', '花蓮縣', '光復鄉', '糖廠街', '19號')"
 )
 
 
@@ -215,6 +220,7 @@ async def outcomes():
     return {
         "repairable": await _run("repairable", addresses=(_ADDRESSES,)),
         "unparsed": await _run("unparsed", addresses=(_ADDRESSES, _UNPARSED_ADDRESS)),
+        "lineless": await _run("lineless", addresses=(_ADDRESSES, _PARTS_WITHOUT_LINE)),
     }
 
 
@@ -274,6 +280,16 @@ async def test_a_line_that_would_not_rebuild_stops_the_upgrade_and_changes_nothi
     stopped = outcomes["unparsed"]
     assert stopped["upgraded"] is False
     assert "1 secondary_locations rows would rebuild to a different address line" in stopped["says"]
+    assert stopped["role_kind_column_left"] == 1
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_parts_with_no_line_stop_the_upgrade_instead_of_being_cleared(outcomes):
+    """A row holding parts but no line has nothing to re-parse, so the upgrade stops and changes nothing."""
+    stopped = outcomes["lineless"]
+    assert stopped["upgraded"] is False
+    assert "1 secondary_locations rows would rebuild to a different address line" in stopped["says"]
+    assert "b0000000-0000-4000-8000-000000000004" in stopped["says"]
     assert stopped["role_kind_column_left"] == 1
 
 

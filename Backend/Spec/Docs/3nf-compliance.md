@@ -133,7 +133,8 @@ Removed: see F6.
 - **Guards for a parser change or a direct SQL write**: `scripts/resplit_addresses.py` re-parses
   `user_input_address` for every row and prints what would change (`--apply` writes it);
   `scripts/check_address_drift.py` lists the rows whose stored parts differ from a re-parse and exits 1 if
-  there are any. Both need Python, since SQL cannot run the parser.
+  there are any. Both need Python, since SQL cannot run the parser. A row with parts but no line has nothing
+  to re-parse: the upgrade stops on one, the re-split leaves it alone, and both scripts list it.
 - **Tests**: `tests/test_address_service.py`, `tests/test_address_parse.py`, `tests/test_address_tools.py`.
 - **Acceptance**: derived columns of the raw address line, written by one function only, used for search and
   matching, with a command to re-derive them and a check that finds a row where they disagree.
