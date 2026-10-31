@@ -4,13 +4,11 @@ See https://plotly.com/python/ for the underlying charting library.
 
 **X/Y model.** Pick `y` (what to measure — a metric from the catalog below) and `x`
 (how to slice it — `date` or `category`, or omit `x` entirely for a single aggregate
-value) independently. Not every combination is meaningful: an `x` that doesn't apply
-to the chosen `y` (or to `chart_type` — e.g. a date trend can't be pie slices) is
-**silently ignored**, not rejected — the response still renders, just without that
-grouping. `chart_type` stays strictly validated (an unsupported one for the chosen `y`
-is a 400). `GET /analytics/catalog` is the machine-readable source of truth for which
-`x` values and chart types each `y` supports — build dropdowns from that response
-instead of hardcoding the rules.
+value) independently. Not every combination is meaningful: an `x` the chosen `y` does not
+allow is a 422, and an unsupported `chart_type` is a 400. A date trend has no pie form, so
+`x=date` with `chart_type=pie` draws the aggregate. `GET /analytics/catalog` is the
+machine-readable source of truth for which `x` values and chart types each `y` supports —
+build dropdowns from that response instead of hardcoding the rules.
 
 Example queries:
 - `?y=total_tickets&x=date&x_granularity=week` — ticket volume trend, weekly buckets
@@ -53,12 +51,15 @@ from app.schemas.analytics import (
     ChartX,
     ChartXGranularity,
     DataResponse,
+    StationStatus,
     StationYMetric,
+    TicketStatus,
+    TicketTaskType,
     TicketYMetric,
     ValueResponse,
     YMetricSpec,
 )
-from app.services import chart_render, station_analytics, ticket_analytics
+from app.services import analytics_filters, chart_render, station_analytics, ticket_analytics
 from app.services.analytics_common import AnalyticsInputError
 
 router = APIRouter()
@@ -75,12 +76,16 @@ TICKET_METRIC_FNS = {
     TicketYMetric.net_backlog_change: ticket_analytics.get_net_backlog_change,
     TicketYMetric.task_completion_distribution: ticket_analytics.get_task_completion_distribution,
     TicketYMetric.duplicate_count: ticket_analytics.get_duplicate_count,
+    TicketYMetric.volunteers_needed: partial(ticket_analytics.get_volunteer_metric, metric="needed"),
+    TicketYMetric.volunteers_matched: partial(ticket_analytics.get_volunteer_metric, metric="matched"),
+    TicketYMetric.volunteer_gap: partial(ticket_analytics.get_volunteer_metric, metric="gap"),
 }
 
 STATION_METRIC_FNS = {
     StationYMetric.station_count: station_analytics.get_station_count,
     StationYMetric.station_status_count: station_analytics.get_station_status_count,
     StationYMetric.station_freshness_trend: station_analytics.get_station_freshness_trend,
+    StationYMetric.operating_station_count: station_analytics.get_operating_station_count,
 }
 
 # Metrics whose ungrouped aggregate is one number (the KPI cards), and which row key holds
@@ -93,7 +98,11 @@ VALUE_KEYS = {
     TicketYMetric.canceled_tickets: "count",
     TicketYMetric.completion_rate: "rate",
     TicketYMetric.duplicate_count: "count",
+    TicketYMetric.volunteers_needed: "count",
+    TicketYMetric.volunteers_matched: "count",
+    TicketYMetric.volunteer_gap: "count",
     StationYMetric.station_count: "count",
+    StationYMetric.operating_station_count: "count",
 }
 
 _Y_DESCRIPTION = (
@@ -102,25 +111,35 @@ _Y_DESCRIPTION = (
 )
 _VALUE_Y_DESCRIPTION = (
     "Which metric's total to return. Only single-number metrics are accepted "
-    "(ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or "
+    "(ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, "
+    "operating_station_count); a forced-shape or "
     "multi-series metric such as age_distribution or net_backlog_change is a 400. The "
     "number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
 )
 _X_DESCRIPTION = (
     "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). "
-    "Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` "
-    "or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog."
+    "Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; "
+    "see GET /analytics/catalog."
 )
-_X_GRANULARITY_DESCRIPTION = "Bucket size when x=date. Ignored for every other x."
+_X_GRANULARITY_DESCRIPTION = (
+    "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog "
+    "`allowed_x_granularities` lacks it (its trend is drawn at the size listed there)."
+)
 _CHART_TYPE_DESCRIPTION = (
-    "Overrides the y-metric's default chart shape. Unlike `x`, an unsupported "
+    "Overrides the y-metric's default chart shape. An unsupported "
     "chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog."
 )
 _TZ_DESCRIPTION = (
-    "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. "
+    "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, "
+    "and a missing one is a 422. "
     "Controls day/week bucket boundaries when x=date and how start_date/end_date are "
     "interpreted (local midnight in this timezone, not UTC midnight) — duration-based "
     "metrics like age_distribution/time_to_completion ignore it."
+)
+_AREA_DESCRIPTION = (
+    "Only rows whose address has this {part}. `county`, `town` and `village` combine, and a 村里 "
+    "name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values "
+    "for your scope; a combination that is not in that list is a 422."
 )
 _STYLE_DESCRIPTION = (
     "JSON-encoded ChartStyle: palette, font, legend position, line/pie shape, margin, "
@@ -137,12 +156,8 @@ _LAYOUT_OVERRIDES_DESCRIPTION = (
 # unbounded param 500'd. Rejecting it here keeps it off plotly entirely and, unlike a guard in
 # the service, publishes the minimum in the OpenAPI schema.
 _MIN_FIGURE_PX = 10
-_WIDTH_DESCRIPTION = (
-    f"Figure width in px, at least {_MIN_FIGURE_PX}; omit for Plotly's default."
-)
-_HEIGHT_DESCRIPTION = (
-    f"Figure height in px, at least {_MIN_FIGURE_PX}; omit for Plotly's default."
-)
+_WIDTH_DESCRIPTION = f"Figure width in px, at least {_MIN_FIGURE_PX}; omit for Plotly's default."
+_HEIGHT_DESCRIPTION = f"Figure height in px, at least {_MIN_FIGURE_PX}; omit for Plotly's default."
 
 
 def _parse_tz(tz: str) -> ZoneInfo:
@@ -159,6 +174,69 @@ def _parse_tz(tz: str) -> ZoneInfo:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown timezone: {tz!r}"
         ) from err
+
+
+async def _require_known_area(
+    db: AsyncSession, model, scope: list, county: str | None, town: str | None, village: str | None
+) -> None:
+    """422, in zh-TW, when the area given is not in the caller's catalog area list."""
+    if await analytics_filters.area_in_catalog(db, model, scope, county=county, town=town, village=village):
+        return
+    given = "、".join(
+        f"{part} {value}"
+        for part, value in (("縣市", county), ("鄉鎮市區", town), ("村里", village))
+        if value
+    )
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=f"找不到這個地區（{given}）；請從 /analytics/catalog 列出的地區選擇",
+    )
+
+
+async def _ticket_filters(
+    task_type: TicketTaskType | None = Query(
+        None, description="Only tickets of this task type; the volunteer metrics read each need's own type."
+    ),
+    ticket_status: TicketStatus | None = Query(
+        None, alias="status", description="Only tickets with this status."
+    ),
+    county: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="縣市")),
+    town: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="鄉鎮市區")),
+    village: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="村里")),
+    scope: Scope = security.has_permission(Perm.TICKET_VIEW),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+) -> list:
+    """The ticket endpoints' optional filters as WHERE clauses; ANDed with the caller's scope."""
+    await _require_known_area(
+        db, Tickets, scope_filter(scope, actor=current_user, model=Tickets), county, town, village
+    )
+    return analytics_filters.ticket_filters(
+        task_type=task_type, status=ticket_status, county=county, town=town, village=village
+    )
+
+
+async def _station_filters(
+    station_type: str | None = Query(
+        None, description="Only stations of this type; GET /analytics/catalog lists the values."
+    ),
+    station_status: StationStatus | None = Query(
+        None, alias="status", description="Only stations with this operational status."
+    ),
+    county: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="縣市")),
+    town: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="鄉鎮市區")),
+    village: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="村里")),
+    scope: Scope = security.has_permission(Perm.STATION_VIEW),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+) -> list:
+    """The station endpoints' optional filters as WHERE clauses; ANDed with the caller's scope."""
+    await _require_known_area(
+        db, Station, scope_filter(scope, actor=current_user, model=Station), county, town, village
+    )
+    return analytics_filters.station_filters(
+        station_type=station_type, status=station_status, county=county, town=town, village=village
+    )
 
 
 def _parse_layout_overrides(layout_overrides: str | None) -> dict | None:
@@ -207,6 +285,9 @@ def _serialize_spec(spec: dict) -> YMetricSpec:
         unit=spec["unit"],
         description=spec["description"],
         allowed_x=sorted("none" if v is None else v for v in spec["allowed_x"]),
+        allowed_x_granularities=sorted(
+            spec.get("allowed_x_granularities") or (g.value for g in ChartXGranularity)
+        ),
         default_chart_type=spec["default_chart_type"],
         allowed_chart_types=sorted(spec["allowed_chart_types"]),
         requires_date_range=spec.get("requires_date_range", False),
@@ -214,33 +295,71 @@ def _serialize_spec(spec: dict) -> YMetricSpec:
     )
 
 
+def _require_allowed_x(domain: str, y: str, x: str | None) -> None:
+    """422, in zh-TW, when `x` is given and the metric's catalog entry does not allow it."""
+    spec = chart_render.CATALOG[domain][y]
+    if x is None or x in spec["allowed_x"]:
+        return
+    usable = "、".join(v for v in spec["allowed_x"] if v is not None)
+    hint = f"可用的 x：{usable}" if usable else "此指標的分組是固定的，請不帶 x"
+    if None in spec["allowed_x"] and usable:
+        hint += "，或不帶 x"
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"「{spec['label']}」不支援 x={x}；{hint}"
+    )
+
+
 async def _query_metric(
-    domain: str, metric_fns: dict, db: AsyncSession, *,
-    y, x: str | None, x_granularity: str, chart_type: str | None,
-    start_date: date | None, end_date: date | None, tz: str,
+    domain: str,
+    metric_fns: dict,
+    db: AsyncSession,
+    *,
+    y,
+    x: str | None,
+    x_granularity: str,
+    chart_type: str | None,
+    start_date: date | None,
+    end_date: date | None,
+    tz: str,
     extra_filters: list,
 ) -> tuple[str | None, str, list[dict]]:
     """Resolve the request against the catalog and run the metric's aggregation query.
 
     Shared by the chart and value endpoints. `extra_filters` is the caller's RBAC row
-    filter; see the service module docstrings. Raises HTTPException (bad tz) or
-    AnalyticsInputError (unknown y, bad chart_type, missing/over-wide date range).
+    filter; see the service module docstrings. Raises HTTPException (bad tz, an `x` the metric
+    does not allow) or AnalyticsInputError (unknown y, bad chart_type, over-wide trend range).
     """
     tzinfo = _parse_tz(tz)
+    _require_allowed_x(domain, y.value, x)
     resolved_x, resolved_chart_type = chart_render.resolve(domain, y.value, x, chart_type)
     data = await metric_fns[y](
-        db, x=resolved_x, x_granularity=x_granularity,
-        start_date=start_date, end_date=end_date, tz=tzinfo,
+        db,
+        x=resolved_x,
+        x_granularity=x_granularity,
+        start_date=start_date,
+        end_date=end_date,
+        tz=tzinfo,
         extra_filters=extra_filters,
     )
     return resolved_x, resolved_chart_type, data
 
 
 async def _render_domain(
-    domain: str, metric_fns: dict, db: AsyncSession, *,
-    y, x, x_granularity, chart_type,
-    start_date: date | None, end_date: date | None, tz: str,
-    style: str | None, width: int | None, height: int | None, layout_overrides: str | None,
+    domain: str,
+    metric_fns: dict,
+    db: AsyncSession,
+    *,
+    y,
+    x,
+    x_granularity,
+    chart_type,
+    start_date: date | None,
+    end_date: date | None,
+    tz: str,
+    style: str | None,
+    width: int | None,
+    height: int | None,
+    layout_overrides: str | None,
     extra_filters: list,
 ) -> ChartResponse:
     """Shared body of both chart endpoints — resolve, query, render.
@@ -258,15 +377,28 @@ async def _render_domain(
         chart_style = _parse_style(style)
         overrides = _parse_layout_overrides(layout_overrides)
         resolved_x, resolved_chart_type, data = await _query_metric(
-            domain, metric_fns, db,
-            y=y, x=x.value if x is not None else None, x_granularity=x_granularity.value,
+            domain,
+            metric_fns,
+            db,
+            y=y,
+            x=x.value if x is not None else None,
+            x_granularity=x_granularity.value,
             chart_type=chart_type.value if chart_type is not None else None,
-            start_date=start_date, end_date=end_date, tz=tz, extra_filters=extra_filters,
+            start_date=start_date,
+            end_date=end_date,
+            tz=tz,
+            extra_filters=extra_filters,
         )
         figure = chart_render.render_chart(
-            domain, y.value, data,
-            x=resolved_x, chart_type=resolved_chart_type,
-            style=chart_style, width=width, height=height, layout_overrides=overrides,
+            domain,
+            y.value,
+            data,
+            x=resolved_x,
+            chart_type=resolved_chart_type,
+            style=chart_style,
+            width=width,
+            height=height,
+            layout_overrides=overrides,
         )
     except AnalyticsInputError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
@@ -274,17 +406,32 @@ async def _render_domain(
 
 
 async def _data_domain(
-    domain: str, metric_fns: dict, db: AsyncSession, *,
-    y, x, x_granularity,
-    start_date: date | None, end_date: date | None, tz: str, extra_filters: list,
+    domain: str,
+    metric_fns: dict,
+    db: AsyncSession,
+    *,
+    y,
+    x,
+    x_granularity,
+    start_date: date | None,
+    end_date: date | None,
+    tz: str,
+    extra_filters: list,
 ) -> DataResponse:
     """Shared body of both data endpoints — the series a chart would plot, without the figure."""
     try:
         resolved_x, _, data = await _query_metric(
-            domain, metric_fns, db,
-            y=y, x=x.value if x is not None else None, x_granularity=x_granularity.value,
+            domain,
+            metric_fns,
+            db,
+            y=y,
+            x=x.value if x is not None else None,
+            x_granularity=x_granularity.value,
             chart_type=None,
-            start_date=start_date, end_date=end_date, tz=tz, extra_filters=extra_filters,
+            start_date=start_date,
+            end_date=end_date,
+            tz=tz,
+            extra_filters=extra_filters,
         )
     except AnalyticsInputError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
@@ -309,8 +456,15 @@ def _in_catalog_unit(domain: str, y, value: int | float) -> int | float:
 
 
 async def _value_domain(
-    domain: str, metric_fns: dict, db: AsyncSession, *,
-    y, start_date: date | None, end_date: date | None, tz: str, extra_filters: list,
+    domain: str,
+    metric_fns: dict,
+    db: AsyncSession,
+    *,
+    y,
+    start_date: date | None,
+    end_date: date | None,
+    tz: str,
+    extra_filters: list,
 ) -> ValueResponse:
     """Shared body of both value endpoints — the metric's ungrouped aggregate as one number."""
     key = VALUE_KEYS.get(y)
@@ -321,34 +475,55 @@ async def _value_domain(
         )
     try:
         _, _, data = await _query_metric(
-            domain, metric_fns, db,
-            y=y, x=None, x_granularity=ChartXGranularity.day.value, chart_type=None,
-            start_date=start_date, end_date=end_date, tz=tz, extra_filters=extra_filters,
+            domain,
+            metric_fns,
+            db,
+            y=y,
+            x=None,
+            x_granularity=ChartXGranularity.day.value,
+            chart_type=None,
+            start_date=start_date,
+            end_date=end_date,
+            tz=tz,
+            extra_filters=extra_filters,
         )
     except AnalyticsInputError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
     return ValueResponse(value=_in_catalog_unit(domain, y, data[0][key] if data else 0))
 
 
-@router.get(
-    "/catalog",
-    response_model=CatalogResponse,
-    dependencies=[Depends(security.get_current_user)],
-)
-async def get_analytics_catalog():
+async def _scope_filter_or_none(perm: Perm, model, actor: User, db: AsyncSession, cache: dict) -> list | None:
+    """The actor's row filter for `perm` on `model`, or None when they hold no scope for it."""
+    scope = await security.resolve_scope(actor, perm, db, cache=cache)
+    return None if scope == Scope.NONE else scope_filter(scope, actor=actor, model=model)
+
+
+@router.get("/catalog", response_model=CatalogResponse)
+async def get_analytics_catalog(
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+):
     """Machine-readable y-metric catalog: valid `x` values and chart types per metric.
 
     The source of truth behind the "ignore x when it doesn't apply" behavior on both
     chart endpoints below — build x/y dropdowns from this response instead of
     hardcoding the rules client-side.
 
-    Authentication only, no capability: the response is a static description of this
-    API's own shape and contains no records. Gating it on ticket.view (as it originally
-    was) locked a station-only role out of the station catalog it is allowed to chart.
+    Authentication only, no capability: the metric specs are a static description of this
+    API's own shape. Gating it on ticket.view (as it originally was) locked a station-only
+    role out of the station catalog it is allowed to chart. The filter values that come from
+    rows (areas, station types) are narrowed to the caller's own scope per domain, and left
+    empty for a domain they cannot chart.
     """
+    cache: dict = {}
+    ticket_scope = await _scope_filter_or_none(Perm.TICKET_VIEW, Tickets, current_user, db, cache)
+    station_scope = await _scope_filter_or_none(Perm.STATION_VIEW, Station, current_user, db, cache)
     return CatalogResponse(
         tickets={k: _serialize_spec(v) for k, v in chart_render.CATALOG["tickets"].items()},
         stations={k: _serialize_spec(v) for k, v in chart_render.CATALOG["stations"].items()},
+        filters=await analytics_filters.catalog_filters(
+            db, ticket_scope=ticket_scope, station_scope=station_scope
+        ),
         default_style=ChartStyle(),
     )
 
@@ -361,11 +536,12 @@ async def get_ticket_chart(
     chart_type: ChartType | None = Query(None, description=_CHART_TYPE_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
     style: str | None = Query(None, description=_STYLE_DESCRIPTION),
     width: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_WIDTH_DESCRIPTION),
     height: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_HEIGHT_DESCRIPTION),
     layout_overrides: str | None = Query(None, description=_LAYOUT_OVERRIDES_DESCRIPTION),
+    filters: list = Depends(_ticket_filters),
     scope: Scope = security.has_permission(Perm.TICKET_VIEW),
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
@@ -381,11 +557,21 @@ async def get_ticket_chart(
     at `own` gets totals for the whole table.
     """
     return await _render_domain(
-        "tickets", TICKET_METRIC_FNS, db,
-        y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
-        start_date=start_date, end_date=end_date, tz=tz,
-        style=style, width=width, height=height, layout_overrides=layout_overrides,
-        extra_filters=scope_filter(scope, actor=current_user, model=Tickets),
+        "tickets",
+        TICKET_METRIC_FNS,
+        db,
+        y=y,
+        x=x,
+        x_granularity=x_granularity,
+        chart_type=chart_type,
+        start_date=start_date,
+        end_date=end_date,
+        tz=tz,
+        style=style,
+        width=width,
+        height=height,
+        layout_overrides=layout_overrides,
+        extra_filters=[*scope_filter(scope, actor=current_user, model=Tickets), *filters],
     )
 
 
@@ -396,7 +582,8 @@ async def get_ticket_data(
     x_granularity: ChartXGranularity = Query(ChartXGranularity.day, description=_X_GRANULARITY_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
+    filters: list = Depends(_ticket_filters),
     scope: Scope = security.has_permission(Perm.TICKET_VIEW),
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
@@ -407,10 +594,16 @@ async def get_ticket_data(
     dropped to fit a pie the way the chart drops it.
     """
     return await _data_domain(
-        "tickets", TICKET_METRIC_FNS, db,
-        y=y, x=x, x_granularity=x_granularity,
-        start_date=start_date, end_date=end_date, tz=tz,
-        extra_filters=scope_filter(scope, actor=current_user, model=Tickets),
+        "tickets",
+        TICKET_METRIC_FNS,
+        db,
+        y=y,
+        x=x,
+        x_granularity=x_granularity,
+        start_date=start_date,
+        end_date=end_date,
+        tz=tz,
+        extra_filters=[*scope_filter(scope, actor=current_user, model=Tickets), *filters],
     )
 
 
@@ -419,16 +612,22 @@ async def get_ticket_value(
     y: TicketYMetric = Query(..., description=_VALUE_Y_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
+    filters: list = Depends(_ticket_filters),
     scope: Scope = security.has_permission(Perm.TICKET_VIEW),
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
 ):
     """One ticket/task metric's ungrouped aggregate as a number — what a KPI card shows."""
     return await _value_domain(
-        "tickets", TICKET_METRIC_FNS, db,
-        y=y, start_date=start_date, end_date=end_date, tz=tz,
-        extra_filters=scope_filter(scope, actor=current_user, model=Tickets),
+        "tickets",
+        TICKET_METRIC_FNS,
+        db,
+        y=y,
+        start_date=start_date,
+        end_date=end_date,
+        tz=tz,
+        extra_filters=[*scope_filter(scope, actor=current_user, model=Tickets), *filters],
     )
 
 
@@ -440,11 +639,12 @@ async def get_station_chart(
     chart_type: ChartType | None = Query(None, description=_CHART_TYPE_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
     style: str | None = Query(None, description=_STYLE_DESCRIPTION),
     width: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_WIDTH_DESCRIPTION),
     height: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_HEIGHT_DESCRIPTION),
     layout_overrides: str | None = Query(None, description=_LAYOUT_OVERRIDES_DESCRIPTION),
+    filters: list = Depends(_station_filters),
     scope: Scope = security.has_permission(Perm.STATION_VIEW),
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
@@ -456,11 +656,21 @@ async def get_station_chart(
     than a route dependency for the reason given on the ticket endpoint above.
     """
     return await _render_domain(
-        "stations", STATION_METRIC_FNS, db,
-        y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
-        start_date=start_date, end_date=end_date, tz=tz,
-        style=style, width=width, height=height, layout_overrides=layout_overrides,
-        extra_filters=scope_filter(scope, actor=current_user, model=Station),
+        "stations",
+        STATION_METRIC_FNS,
+        db,
+        y=y,
+        x=x,
+        x_granularity=x_granularity,
+        chart_type=chart_type,
+        start_date=start_date,
+        end_date=end_date,
+        tz=tz,
+        style=style,
+        width=width,
+        height=height,
+        layout_overrides=layout_overrides,
+        extra_filters=[*scope_filter(scope, actor=current_user, model=Station), *filters],
     )
 
 
@@ -471,17 +681,24 @@ async def get_station_data(
     x_granularity: ChartXGranularity = Query(ChartXGranularity.day, description=_X_GRANULARITY_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
+    filters: list = Depends(_station_filters),
     scope: Scope = security.has_permission(Perm.STATION_VIEW),
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
 ):
     """The series `/stations/chart` would plot, as plain numbers for the frontend's own chart library."""
     return await _data_domain(
-        "stations", STATION_METRIC_FNS, db,
-        y=y, x=x, x_granularity=x_granularity,
-        start_date=start_date, end_date=end_date, tz=tz,
-        extra_filters=scope_filter(scope, actor=current_user, model=Station),
+        "stations",
+        STATION_METRIC_FNS,
+        db,
+        y=y,
+        x=x,
+        x_granularity=x_granularity,
+        start_date=start_date,
+        end_date=end_date,
+        tz=tz,
+        extra_filters=[*scope_filter(scope, actor=current_user, model=Station), *filters],
     )
 
 
@@ -490,14 +707,20 @@ async def get_station_value(
     y: StationYMetric = Query(..., description=_VALUE_Y_DESCRIPTION),
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
-    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    tz: str = Query(..., description=_TZ_DESCRIPTION),
+    filters: list = Depends(_station_filters),
     scope: Scope = security.has_permission(Perm.STATION_VIEW),
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
 ):
     """One station metric's ungrouped aggregate as a number — what a KPI card shows."""
     return await _value_domain(
-        "stations", STATION_METRIC_FNS, db,
-        y=y, start_date=start_date, end_date=end_date, tz=tz,
-        extra_filters=scope_filter(scope, actor=current_user, model=Station),
+        "stations",
+        STATION_METRIC_FNS,
+        db,
+        y=y,
+        start_date=start_date,
+        end_date=end_date,
+        tz=tz,
+        extra_filters=[*scope_filter(scope, actor=current_user, model=Station), *filters],
     )

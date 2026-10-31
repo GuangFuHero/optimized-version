@@ -1,6 +1,7 @@
 """Reviewers hear about new pair cards (Spec 025 §3, ADR-345): one notice per submission.
 
-A stub engine scores every acknowledgement, so each "create anyway" leaves a dup_ignored card.
+A stub engine suspects every draft of being `RELATED`, and each "create anyway" names it, so each
+one leaves a dup_ignored card (ADR-400).
 """
 
 import logging
@@ -11,6 +12,7 @@ from sqlalchemy import select
 
 from app.core.permissions import Perm
 from app.dedup_engine import registry
+from app.dedup_engine.contract import NewStation, NewTicket, Suspect, task_ref
 from app.models.auth import User
 from app.models.notification import Notification
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
@@ -49,15 +51,24 @@ STATION = {
     "op_hour": None,
     "level": 0,
     "comment": None,
-    "source": "user",
     "visibility": "public",
 }
 
 
+RELATED = str(uuid_mod.uuid4())
+
+
+def _every_draft_like_related(submission) -> list[Suspect]:
+    if isinstance(submission, NewStation):
+        return [Suspect("station", "station", RELATED, 0.9, {})]
+    drafts = submission.tasks if isinstance(submission, NewTicket) else (submission.task,)
+    return [Suspect(task_ref(i), "ticket_task", RELATED, 0.9, {}) for i in range(len(drafts))]
+
+
 @pytest.fixture(autouse=True)
 def engine(monkeypatch) -> AsyncStubEngine:
-    """Suspects nothing; scores any acknowledgement, so it is carded."""
-    stub = AsyncStubEngine()
+    """Suspects every draft of being `RELATED`, so an acknowledgement naming it is carded."""
+    stub = AsyncStubEngine(suspects=_every_draft_like_related)
     monkeypatch.setattr(registry, "_ENGINE", stub)
     return stub
 
@@ -82,15 +93,11 @@ def _task(name="抽水", ack=None) -> TaskSubmission:
     return TaskSubmission(task_type="rescue", task_name=name, acknowledged_duplicate_of=ack)
 
 
-def _related() -> str:
-    return str(uuid_mod.uuid4())
-
-
 async def test_one_created_anyway_task_sends_one_notice(db, sent):
     """One card, one notice pointing at the queue."""
     actor = await actor_with(db, Perm.TICKET_ADD)
 
-    await submit_new_ticket(db, actor=actor, tasks=[_task(ack=_related())], **TICKET)
+    await submit_new_ticket(db, actor=actor, tasks=[_task(ack=RELATED)], **TICKET)
 
     (notice,) = _pending(sent)
     assert "1 筆" in notice["title"]
@@ -103,15 +110,16 @@ async def test_three_cards_in_one_submission_send_one_notice(db, sent):
     actor = await actor_with(db, Perm.TICKET_ADD)
 
     await submit_new_ticket(
-        db, actor=actor, tasks=[_task(n, ack=_related()) for n in ("抽水", "送水", "搬運")], **TICKET
+        db, actor=actor, tasks=[_task(n, ack=RELATED) for n in ("抽水", "送水", "搬運")], **TICKET
     )
 
     (notice,) = _pending(sent)
     assert "3 筆" in notice["title"]
 
 
-async def test_a_submission_without_cards_sends_none(db, sent):
+async def test_a_submission_without_cards_sends_none(db, engine, sent):
     """No create-anyway, no card, no notice."""
+    engine.suspects = ()
     actor = await actor_with(db, Perm.TICKET_ADD)
 
     await submit_new_ticket(db, actor=actor, tasks=[_task(), _task("送水")], **TICKET)
@@ -126,7 +134,7 @@ async def test_an_added_task_created_anyway_sends_one_notice(db, sent):
     ticket_uuid = str(created.entity.uuid)
     await db.refresh(actor)
 
-    result = await submit_new_task(db, actor=actor, ticket_uuid=ticket_uuid, task=_task(ack=_related()))
+    result = await submit_new_task(db, actor=actor, ticket_uuid=ticket_uuid, task=_task(ack=RELATED))
 
     assert isinstance(result, SubmissionCreated)
     assert len(_pending(sent)) == 1
@@ -136,7 +144,7 @@ async def test_a_station_created_anyway_sends_one_notice_beside_the_station_noti
     """The createStation path notifies too, and keeps its own station notice."""
     actor = await actor_with(db, Perm.STATION_ADD)
 
-    await submit_new_station(db, actor=actor, acknowledged_duplicate_of=_related(), **STATION)
+    await submit_new_station(db, actor=actor, acknowledged_duplicate_of=RELATED, **STATION)
 
     assert len(_pending(sent)) == 1
     assert [c["event_type"] for c in sent].count("resource_station_updated") == 1
@@ -151,7 +159,7 @@ async def test_a_failing_notice_does_not_undo_the_create(db, monkeypatch, caplog
 
     monkeypatch.setattr(NotificationService, "dispatch", explode)
     with caplog.at_level(logging.ERROR):
-        result = await submit_new_ticket(db, actor=actor, tasks=[_task(ack=_related())], **TICKET)
+        result = await submit_new_ticket(db, actor=actor, tasks=[_task(ack=RELATED)], **TICKET)
 
     assert isinstance(result, SubmissionCreated)
     ticket_uuid = result.entity.uuid  # still readable: refreshed after the failed notice
@@ -188,7 +196,7 @@ async def test_the_notice_reaches_review_holders_only(db):
     actor = await actor_with(db, Perm.TICKET_ADD)
     actor_uuid = str(actor.uuid)
 
-    await submit_new_ticket(db, actor=actor, tasks=[_task(ack=_related())], **TICKET)
+    await submit_new_ticket(db, actor=actor, tasks=[_task(ack=RELATED)], **TICKET)
 
     rows = (
         await db.execute(

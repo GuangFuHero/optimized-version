@@ -78,7 +78,8 @@ query GetTickets(
 
 # The site list's page of tickets, each with the needs its rows claim. The map keeps GetTickets:
 # it has no claim buttons, so it has no use for the needs. `q` is the header's search, 2 to 50
-# characters: the backend reads the tickets' text and their needs, every page of them.
+# characters: the backend reads the tickets' text and their needs, every page of them. `order`
+# NEEDS_FIRST orders every page as the list draws it (backend ADR-419).
 query GetTicketsWithNeeds(
   $bounds: BoundsInput
   $status: String
@@ -87,6 +88,7 @@ query GetTicketsWithNeeds(
   $skip: Int = 0
   $limit: Int = 50
   $zoom: Float
+  $order: TicketListOrder
 ) {
   tickets(
     bounds: $bounds
@@ -96,6 +98,7 @@ query GetTicketsWithNeeds(
     skip: $skip
     limit: $limit
     zoom: $zoom
+    order: $order
   ) {
     items {
       ...TicketFields
@@ -114,6 +117,9 @@ query GetTicketsWithNeeds(
 query GetTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...TicketFields
+    # The building it was filed inside, for 看各樓層 and 上一張／下一張 (modules/building). Null when
+    # it was not, and to a caller without ticket.view_detail: the building gives the place away.
+    buildingMapUuid
     # Where a volunteer is going, for the claim confirmation. Null without an address, and to a
     # caller without ticket.view_detail.
     secondaryLocation {
@@ -133,6 +139,12 @@ query GetTicket($uuid: UUID!) {
       room
       # The address as typed on the site's 請求協助, when the parts above are empty.
       landmarkNote
+    }
+    # Who answers for where it is, written under the address: the teams of the 責任區 it lies in.
+    # Empty when in none, and to a caller without ticket.view_detail (ADR-422).
+    responsibleTeams {
+      uuid
+      name
     }
     photos {
       uuid

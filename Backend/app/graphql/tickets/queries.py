@@ -19,6 +19,7 @@ from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout, statement_ceiling
 from app.core.security import resolve_scope
 from app.db.h3 import COARSE_MAX_H3_RESOLUTION, cell_resolution, coarse_resolution, h3_is_valid_cell
+from app.db.plans import generic_plan
 from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import BoundsInput
 from app.graphql.shared import PageInfo
@@ -30,6 +31,8 @@ from app.graphql.tickets.types import (
     TicketCellType,
     TicketConnection,
     TicketListOrder,
+    TicketsExtentType,
+    TicketStatsType,
     TicketStatus,
     TicketTaskType,
     TicketType,
@@ -88,7 +91,9 @@ def _status_values(statuses: list[TicketStatus] | None) -> list[str] | None:
     return None if statuses is None else sorted({s.value for s in statuses})
 
 
-def _list_filters(need_type: str | None, open_needs_only: bool, audit_status: AuditStatus | None) -> list:
+def _list_filters(
+    need_type: str | None, open_needs_only: bool, audit_status: AuditStatus | None = None
+) -> list:
     """The need-type and audit-status filters of the `tickets` list, as conditions on Tickets.
 
     A need taken off never matches. Both read only what the list shows anyone: each need's type,
@@ -107,6 +112,28 @@ def _list_filters(need_type: str | None, open_needs_only: bool, audit_status: Au
     if audit_status is not None:
         conditions.append(Tickets.audit_status == audit_status.value)
     return conditions
+
+
+async def _location_cell(db, location_cell: str | None, resolution: int) -> tuple[str | None, int]:
+    """`locationCell` checked and spelt as h3-pg prints it, and the resolution the rows then take.
+
+    None leaves `resolution` as it is. A cell finer than COARSE_MAX_H3_RESOLUTION, or naming no real
+    cell, is refused: see `tickets`.
+    """
+    if location_cell is None:
+        return None, resolution
+    cell_res = cell_resolution(location_cell)
+    if cell_res is not None:
+        location_cell = f"{int(location_cell, 16):x}"
+    if (
+        cell_res is None
+        or cell_res > COARSE_MAX_H3_RESOLUTION
+        or not await db.scalar(select(h3_is_valid_cell(location_cell)))
+    ):
+        raise ValueError(
+            f"locationCell must be an H3 cell of resolution {COARSE_MAX_H3_RESOLUTION} or coarser"
+        )
+    return location_cell, cell_res
 
 
 @strawberry.type
@@ -165,8 +192,14 @@ class RequestQuery:
         statuses: Annotated[
             list[TicketStatus] | None, strawberry.argument(description=_STATUSES_DESCRIPTION)
         ] = None,
+        disaster_type: Annotated[
+            str | None,
+            strawberry.argument(
+                description="Only tickets filed under this disaster type (a disaster_types key)"
+            ),
+        ] = None,
     ) -> TicketConnection:
-        """List tickets with optional bbox, status, priority, need-type, audit and keyword filters, paginated.
+        """List tickets with optional bbox, status, priority, need-type, audit, disaster and keyword filters.
 
         Requires ticket.view permission (public — Guest may call this). Note: the
         help-request board is public (ADR-027), so the seed grants ticket.view at `all`
@@ -214,19 +247,7 @@ class RequestQuery:
             raise ValueError("limit and skip must not be negative")
         db = info.context["db"]
         user = info.context["user"]
-        resolution = coarse_resolution(zoom)
-        if location_cell is not None:
-            resolution = cell_resolution(location_cell)
-            if resolution is not None:
-                location_cell = f"{int(location_cell, 16):x}"
-            if (
-                resolution is None
-                or resolution > COARSE_MAX_H3_RESOLUTION
-                or not await db.scalar(select(h3_is_valid_cell(location_cell)))
-            ):
-                raise ValueError(
-                    f"locationCell must be an H3 cell of resolution {COARSE_MAX_H3_RESOLUTION} or coarser"
-                )
+        location_cell, resolution = await _location_cell(db, location_cell, coarse_resolution(zoom))
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = [
             *scope_filter(scope, actor=info.context["user"], model=Tickets),
@@ -238,7 +259,10 @@ class RequestQuery:
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
         # own set_config/RESET, so this costs two round-trips where it used to cost six.
-        async with search_timeout(db, normalize_query(q)):
+        # A box the caller sees cells in tests cell centres, as `ticketCells` does, so it is planned
+        # generically from a connection's first run too (ADR-437).
+        cells_in_box = bounds is not None and bool(detail_filters)
+        async with generic_plan(db, needed=cells_in_box), search_timeout(db, normalize_query(q)):
             total = await ticket_repository.count_active(
                 db,
                 bounds=bounds,
@@ -246,6 +270,7 @@ class RequestQuery:
                 statuses=status_values,
                 priority=priority,
                 q=q,
+                disaster_type=disaster_type,
                 extra_filters=extra_filters,
                 detail_filters=detail_filters,
                 coarse_resolution=resolution,
@@ -258,6 +283,7 @@ class RequestQuery:
                 statuses=status_values,
                 priority=priority,
                 q=q,
+                disaster_type=disaster_type,
                 skip=skip,
                 limit=limit,
                 extra_filters=extra_filters,
@@ -295,12 +321,15 @@ class RequestQuery:
         is a pin, not a cell, so a caller holding ticket.view_detail on every ticket gets none.
 
         Anonymous and called on every pan, so the count runs under keyword search's statement
-        ceiling: past it the caller is asked to zoom in rather than holding a connection.
+        ceiling: past it the caller is asked to zoom in rather than holding a connection. It is
+        planned generically from a connection's first run, which is what keeps a fresh connection
+        under that ceiling (ADR-437).
         """
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         detail_filters = await _detail_filters(info)
-        async with statement_ceiling(db, refusal="這個範圍的單太多，計算逾時已中止，請放大地圖再試"):
+        refusal = "這個範圍的單太多，計算逾時已中止，請放大地圖再試"
+        async with generic_plan(db, needed=bool(detail_filters)), statement_ceiling(db, refusal=refusal):
             rows = await ticket_repository.count_by_cell(
                 db,
                 bounds=bounds,
@@ -312,6 +341,93 @@ class RequestQuery:
         return [
             TicketCellType(cell=cell, ticket_count=count, urgent_count=urgent) for cell, count, urgent in rows
         ]
+
+    @strawberry.field
+    async def tickets_extent(
+        self,
+        info: strawberry.types.Info,
+        status: str | None = None,
+        priority: str | None = None,
+        q: str | None = None,
+        need_type: Annotated[
+            str | None,
+            strawberry.argument(description="As on `tickets`: only tickets with a need of this type"),
+        ] = None,
+        open_needs_only: Annotated[
+            bool,
+            strawberry.argument(
+                description="As on `tickets`: with needType, only a need still taking volunteers"
+            ),
+        ] = False,
+        location_cell: Annotated[
+            str | None,
+            strawberry.argument(
+                description="As on `tickets`: only the tickets this caller is shown as this H3 cell"
+            ),
+        ] = None,
+        statuses: Annotated[
+            list[TicketStatus] | None, strawberry.argument(description=_STATUSES_DESCRIPTION)
+        ] = None,
+        disaster_type: Annotated[
+            str | None,
+            strawberry.argument(
+                description="Only tickets filed under this disaster type (a disaster_types key)"
+            ),
+        ] = None,
+    ) -> TicketsExtentType:
+        """How many tickets `tickets` would list for these filters, and the box their points span.
+
+        The arguments are `tickets`' less paging, order, `zoom`, `bounds` and `auditStatus`, under the
+        same gate, scope and per-row detail rules, so `count` is its totalCount. Lets a map frame every
+        match without loading them. A ticket the caller is shown as a cell counts at its cell's centre —
+        at resolution 8, as `tickets` shows it without `zoom`, or `locationCell`'s — never its
+        point, so the box says no more than the rows would. One statement, under the statement
+        ceiling: a guest can call it over every ticket.
+        """
+        db = info.context["db"]
+        location_cell, resolution = await _location_cell(db, location_cell, COARSE_MAX_H3_RESOLUTION)
+        scope = await check_permission(info, Perm.TICKET_VIEW)
+        detail_filters = await _detail_filters(info)
+        async with statement_ceiling(db, refusal="符合條件的單太多，計算範圍逾時已中止，請縮小篩選再試"):
+            count, min_lat, max_lat, min_lng, max_lng = await ticket_repository.extent_active(
+                db,
+                status=status,
+                statuses=_status_values(statuses),
+                priority=priority,
+                q=q,
+                disaster_type=disaster_type,
+                extra_filters=[
+                    *scope_filter(scope, actor=info.context["user"], model=Tickets),
+                    *_list_filters(need_type, open_needs_only),
+                ],
+                detail_filters=detail_filters,
+                coarse_resolution=resolution,
+                location_cell=location_cell,
+            )
+        return TicketsExtentType(
+            count=count, min_lat=min_lat, max_lat=max_lat, min_lng=min_lng, max_lng=max_lng
+        )
+
+    @strawberry.field
+    async def ticket_stats(self, info: strawberry.types.Info) -> TicketStatsType:
+        """Counts by status and the volunteer gap over every active ticket the caller may list.
+
+        The same ticket.view gate and scope as `tickets`, computed in SQL so the board's stats
+        strip does not load the board. `gapPeople` is the people still short across open needs
+        with a quantity (quantity less the people linked, never below 0); `gapNeeds` counts
+        those needs. Needs on completed or cancelled tickets add nothing.
+
+        A guest may call it over every ticket, so it runs under the statement ceiling, as
+        `ticketCells` does.
+        """
+        db = info.context["db"]
+        scope = await check_permission(info, Perm.TICKET_VIEW)
+        async with statement_ceiling(db, refusal="單太多，統計逾時已中止，請稍後再試"):
+            stats = await ticket_repository.stats(
+                db,
+                extra_filters=scope_filter(scope, actor=info.context["user"], model=Tickets),
+            )
+        return TicketStatsType(**stats)
 
     @strawberry.field
     async def ticket(

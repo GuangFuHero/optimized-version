@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   announceTicketChanged,
   announceTicketCreated,
+  announceTicketReread,
   onTicketChanged,
   onTicketCreated,
+  onTicketReread,
   type CreatedTicket,
 } from './ticket-changes';
 
@@ -31,6 +33,30 @@ describe('ticket changes', () => {
     announceTicketChanged('ticket-1');
 
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('ticket reread', () => {
+  it('tells every other copy which ticket was read again, until it stops listening', () => {
+    const building = vi.fn();
+    const stop = onTicketReread(building);
+
+    announceTicketReread('ticket-1');
+    stop();
+    announceTicketReread('ticket-2');
+
+    expect(building).toHaveBeenCalledTimes(1);
+    expect(building).toHaveBeenCalledWith('ticket-1');
+  });
+
+  it('is not word that a ticket changed, which would have the page read it once more', () => {
+    const changed = vi.fn();
+    const stop = onTicketChanged(changed);
+
+    announceTicketReread('ticket-1');
+
+    expect(changed).not.toHaveBeenCalled();
+    stop();
   });
 });
 

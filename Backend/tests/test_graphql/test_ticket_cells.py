@@ -237,6 +237,62 @@ async def test_counting_runs_under_the_search_ceiling(client, monkeypatch):
     assert any("請放大地圖" in e["message"] for e in body["errors"]), body
 
 
+async def _plan_mode(db) -> str:
+    return await db.scalar(text("SHOW plan_cache_mode"))
+
+
+async def test_counting_is_planned_generically(client, redis, monkeypatch):
+    """Planned on a fresh connection as on a warm one, so the first counts aren't seconds (ADR-437).
+
+    A caller who sees every point has no cells to count, so nothing is planned differently for them.
+    """
+    _, token = await _signed_in(redis)
+    seen = []
+
+    async def recording_count(db, **_):
+        seen.append(await _plan_mode(db))
+        return []
+
+    monkeypatch.setattr(ticket_repository, "count_by_cell", recording_count)
+    planned = {}
+    for case, caller in (("guest", None), ("sees points", token)):
+        await _query(client, CELLS, {"bounds": AREA}, caller)
+        planned[case], seen[:] = seen[:], []
+
+    assert planned == {"guest": ["force_generic_plan"], "sees points": ["auto"]}
+
+
+async def test_only_a_box_of_cells_is_listed_on_a_generic_plan(client, redis, monkeypatch):
+    """A guest's box tests cell centres, as `ticketCells` does; without a box, or seeing points, as before."""
+    _, token = await _signed_in(redis)
+    seen = []
+
+    async def recording_count(db, **_):
+        seen.append(await _plan_mode(db))
+        return 0
+
+    async def recording_list(db, **_):
+        seen.append(await _plan_mode(db))
+        return []
+
+    monkeypatch.setattr(ticket_repository, "count_active", recording_count)
+    monkeypatch.setattr(ticket_repository, "list_active", recording_list)
+    planned = {}
+    for case, variables, caller in (
+        ("guest box", {"bounds": AREA}, None),
+        ("guest without a box", {}, None),
+        ("sees points", {"bounds": AREA}, token),
+    ):
+        await _query(client, TICKETS, variables, caller)
+        planned[case], seen[:] = seen[:], []
+
+    assert planned == {
+        "guest box": ["force_generic_plan"] * 2,
+        "guest without a box": ["auto"] * 2,
+        "sees points": ["auto"] * 2,
+    }
+
+
 async def test_a_caller_who_sees_every_point_gets_no_cells(client, redis):
     """Their tickets are pins, not cells, so there is nothing to count."""
     _, token = await _signed_in(redis)

@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.permissions import Perm
-from app.core.tabular import write_csv
+from app.core.tabular import read_table, write_csv
 from app.models.auth import User
 from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
@@ -169,6 +169,49 @@ async def test_ticket_export_is_wired_up_too(client, db_session, redis):
 
     assert resp.status_code == 200
     assert 'filename="tickets-rescue.csv"' in resp.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
+async def test_ticket_export_counts_come_with_the_most_one_export_may_hold(client, db_session, redis):
+    """So a page can say a type is over the cap before anyone asks for its file."""
+    headers = await _user_with(db_session, redis, "TicketCounter", Perm.TICKET_EXPORT)
+
+    resp = await client.get(f"{BASE}/tickets/export/counts", headers=headers)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"counts": {}, "max_rows": 10_000}
+
+
+@pytest.mark.asyncio
+async def test_a_ticket_template_is_the_header_row_alone_for_an_importer(client, db_session, redis):
+    """The export's columns, no rows: for someone who may import but not export, of a kind nobody filed."""
+    headers = await _user_with(db_session, redis, "TicketImporter", Perm.TICKET_IMPORT)
+
+    resp = await client.get(f"{BASE}/tickets/export?task_type=medical&template=true", headers=headers)
+
+    assert resp.status_code == 200, resp.text
+    assert 'filename="tickets-medical-template.csv"' in resp.headers["content-disposition"]
+    table = read_table(resp.content, "template.csv")
+    assert table.headers[:3] == ("uuid", "title", "description")
+    assert "task_name" in table.headers
+    assert table.rows == ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("perm", "task_type", "expected"),
+    [(Perm.TICKET_EXPORT, "medical", 403), (Perm.TICKET_IMPORT, "no-such-kind", 400)],
+    ids=["exporter-only", "unknown-kind"],
+)
+async def test_a_ticket_template_needs_the_import_capability_and_a_known_kind(
+    client, db_session, redis, perm, task_type, expected
+):
+    """Exporting is not importing; and the kind goes into the file name, so it is checked first."""
+    headers = await _user_with(db_session, redis, "TemplateAsker", perm)
+
+    resp = await client.get(f"{BASE}/tickets/export?task_type={task_type}&template=true", headers=headers)
+
+    assert resp.status_code == expected, resp.text
 
 
 # --- the type in the file name (ADR-214) ---
@@ -351,6 +394,18 @@ async def test_a_malformed_mapping_is_a_400(client, db_session, redis):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["mapping", "decisions", "declined"])
+async def test_json_too_deep_to_read_is_a_400(client, db_session, redis, field):
+    """A value the parser cannot read is malformed like any other, not a server error."""
+    headers = await _importer(db_session, redis)
+
+    resp = await _commit(client, headers, [_row("光復國小")], **{field: "[" * 100_000})
+
+    assert resp.status_code == 400
+    assert "JSON" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_a_mapping_that_is_not_an_object_is_a_400(client, db_session, redis):
     """The mapping has to be an object of header pairs."""
     headers = await _importer(db_session, redis)
@@ -399,3 +454,99 @@ async def test_ticket_preview_and_commit_are_wired_up(client, db_session, redis)
 
     assert preview.json()["to_create"] == 1
     assert commit.json()["created"] == 1
+
+
+# --- the fast dedup layer (ADR-398) ---
+
+
+async def _commit(client, headers, rows, **data):
+    return await client.post(
+        f"{BASE}/stations/import/commit?station_type=shelter", headers=headers, files=_upload(rows), data=data
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_suspected_row_comes_back_from_preview_and_lands_with_its_decision(client, db_session, redis):
+    """The preview names what the row looks like; the commit's `decisions` files it anyway."""
+    headers = await _importer(db_session, redis)
+    await _commit(client, headers, [_row("光復國小臨時收容所")])
+
+    preview = await client.post(
+        f"{BASE}/stations/import/preview?station_type=shelter",
+        headers=headers,
+        files=_upload([_row("光復國小臨時收容處")]),
+    )
+    body = preview.json()
+    (suspect,) = body["suspects"]
+    assert (body["to_create"], body["suspected"], body["dedup_checked"]) == (0, 1, True)
+    assert {k: suspect[k] for k in ("line", "related_kind", "title", "task_name", "distance_m")} == {
+        "line": 2,
+        "related_kind": "station",
+        "title": "光復國小臨時收容所",
+        "task_name": None,
+        "distance_m": 0,
+    }
+    decisions = json.dumps([{"line": 2, "acknowledged_duplicate_of": suspect["related_uuid"]}])
+    commit = await _commit(client, headers, [_row("光復國小臨時收容處")], decisions=decisions)
+
+    assert (commit.json()["created"], commit.json()["suspected"]) == (1, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "decisions",
+    [
+        "not json",
+        json.dumps({"2": "x"}),
+        json.dumps([{"line": "2", "acknowledged_duplicate_of": "x"}]),
+        json.dumps([{"line": True, "acknowledged_duplicate_of": "x"}]),
+        json.dumps([{"line": 2}]),
+        json.dumps(
+            [{"line": 2, "acknowledged_duplicate_of": "x"}, {"line": 2, "acknowledged_duplicate_of": "y"}]
+        ),
+    ],
+    ids=["not-json", "not-a-list", "line-not-a-number", "line-a-bool", "no-uuid", "a-line-twice"],
+)
+async def test_malformed_decisions_are_a_400(client, db_session, redis, decisions):
+    """The caller's mistake, said before anything is written."""
+    headers = await _importer(db_session, redis)
+
+    resp = await _commit(client, headers, [_row("光復國小")], decisions=decisions)
+
+    assert resp.status_code == 400
+    assert "decisions" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_declined_row_is_not_created_and_counted_apart(client, db_session, redis):
+    """`declined` names the rows the importer chose not to create; the response counts them."""
+    headers = await _importer(db_session, redis)
+
+    commit = await _commit(client, headers, [_row("光復國小"), _row("大進國小")], declined=json.dumps([3]))
+
+    body = commit.json()
+    assert (body["created"], body["failed"], body["suspected"], body["declined"]) == (1, 0, 0, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("declined", "decisions", "says"),
+    [
+        ("not json", None, "declined"),
+        (json.dumps({"2": True}), None, "declined"),
+        (json.dumps(["2"]), None, "declined"),
+        (json.dumps([True]), None, "declined"),
+        (json.dumps([2, 2]), None, "第 2 列"),
+        (json.dumps([2]), json.dumps([{"line": 2, "acknowledged_duplicate_of": "x"}]), "第 2 列"),
+    ],
+    ids=["not-json", "not-a-list", "line-not-a-number", "line-a-bool", "a-line-twice", "also-in-decisions"],
+)
+async def test_malformed_declined_is_a_400(client, db_session, redis, declined, decisions, says):
+    """As for `decisions`; a line both filed anyway and declined is the caller's mistake too."""
+    headers = await _importer(db_session, redis)
+    data = {"declined": declined} | ({"decisions": decisions} if decisions else {})
+
+    resp = await _commit(client, headers, [_row("光復國小")], **data)
+
+    assert resp.status_code == 400
+    assert says in resp.json()["detail"]
