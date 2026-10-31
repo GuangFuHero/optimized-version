@@ -13,7 +13,7 @@ import pytest_asyncio
 from geoalchemy2.shape import from_shape
 from graphql import print_schema
 from shapely.geometry import Point
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 
 from app.dedup_engine.registry import get_engine
 from app.graphql.schema import schema
@@ -87,8 +87,16 @@ async def _clean_tables():
     """No leftovers from other tests become candidates.
 
     A need's assignments and properties go first: another file may leave some, and they hold the need.
+    So do merges: a ticket or need folded into another points at it, and the rows below go one at a
+    time, so the one pointed at could go first. Those pointers are cleared before anything is deleted.
     """
     async with test_db() as db:
+        await db.execute(
+            update(Tickets).where(Tickets.replaced_by_uuid.is_not(None)).values(replaced_by_uuid=None)
+        )
+        await db.execute(
+            update(TicketTask).where(TicketTask.merged_into_uuid.is_not(None)).values(merged_into_uuid=None)
+        )
         await db.execute(delete(BuildingMapTicketMap))
         await db.execute(
             delete(SecondaryLocation).where(
