@@ -40,7 +40,7 @@ export const STATION_IMPORT_FIELDS: readonly {
 
 /**
  * Whether 匯入 is offered: it is one of 新增站點's ways in, in its dropdown and beside it on the
- * empty list, so whoever may not add a station never sees it (糖, Discord #uiux, 2026-10-31).
+ * empty list, so whoever may not add a station never sees it.
  */
 export function offersImport(caps: {
   canAdd: boolean;
