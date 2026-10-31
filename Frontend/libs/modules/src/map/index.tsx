@@ -45,6 +45,7 @@ import { buildLocationCells } from './location-cells';
 import { rememberMapView, type RescueMapMemoryKey } from './map-opening';
 import type {
   RescueMapClusterAppearance,
+  LocationCellMembersLoader,
   RescueMapClosureArea,
   RescueMapControllerValue,
   RescueMapDetailItem,
@@ -276,6 +277,13 @@ interface MapProps {
    * remembers nothing and opens at the event's view.
    */
   viewMemoryKey?: RescueMapMemoryKey;
+  /**
+   * Opt-in: the guest's cells as the backend counts them (`ticketCells`, ADR-387), in place of
+   * grouping the coarse tickets among `markers`, which holds a page of them only. Default: grouped.
+   */
+  locationCells?: readonly RescueMapLocationCell[];
+  /** With `locationCells`: reads a cell's tickets when it is opened, as those cells come without. */
+  loadLocationCellMembers?: LocationCellMembersLoader;
 }
 
 export const Map = memo(function Map({
@@ -303,6 +311,8 @@ export const Map = memo(function Map({
   clusterMaxZoom,
   onMapReady,
   viewMemoryKey,
+  locationCells: countedCells,
+  loadLocationCellMembers,
 }: MapProps = {}) {
   // Read once, as the canvas reads it: a position in the address (a shared link, a reload) is where
   // the map opens, at once. Without one, the map waits to know where to open (MAP-VIEW-101–104);
@@ -357,10 +367,11 @@ export const Map = memo(function Map({
     defaultView: opening?.view,
   });
 
-  // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。
+  // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。後端數好的
+  // 格子（`locationCells`）優先：markers 只有一頁。
   const locationCells = useMemo(
-    () => buildLocationCells(controller.markers),
-    [controller.markers],
+    () => countedCells ?? buildLocationCells(controller.markers),
+    [controller.markers, countedCells],
   );
   const selectedMarker = useMemo<RescueMapDetailItem | null>(
     () =>
@@ -490,6 +501,7 @@ export const Map = memo(function Map({
             <RescueMapCanvas
               controller={controller}
               onMarkerClick={handleMarkerClick}
+              locationCells={locationCells}
               onLocationCellClick={handleLocationCellClick}
               previewMarker={previewMarker}
               cursor={cursor}
@@ -546,6 +558,7 @@ export const Map = memo(function Map({
                 marker={displayMarker}
                 onClose={closeDetail}
                 onSelectMarker={controller.setSelectedMarkerId}
+                loadLocationCellMembers={loadLocationCellMembers}
                 isAuthenticated={isAuthenticated}
                 ticketDetailOverrides={
                   displayMarker?.detailType === 'ticket'
@@ -591,6 +604,7 @@ export const Map = memo(function Map({
             marker={displayMarker}
             onClose={closeDetail}
             onSelectMarker={controller.setSelectedMarkerId}
+            loadLocationCellMembers={loadLocationCellMembers}
             isAuthenticated={isAuthenticated}
             ticketDetailOverrides={
               displayMarker?.detailType === 'ticket'
