@@ -29,9 +29,10 @@ import {
   signOutHereAsync,
 } from '../../auth/session/sign-out';
 import { GuangFuBrandIcon } from '../../brand';
+import { siteBrandName } from '../site/event-name';
 import { eventDayNumber } from './event-day';
-import { sidebarEventName } from './event-name';
 import { useAdminNavSections, type AdminNavItem } from './nav';
+import { siteMapUrl } from './site-map-url';
 
 const { color, radius, typography, motion } = designTokens;
 
@@ -165,7 +166,9 @@ function EventHeader({
     isError,
   } = useProjectSettings({ enabled: canViewProject });
   const settings = canViewProject ? projectSettings : undefined;
-  const eventName = sidebarEventName(settings);
+  const eventName = settings?.name
+    ? siteBrandName({ name: settings.name, shortName: settings.short_name })
+    : null;
   const name =
     eventName?.label ??
     (!canViewProject
@@ -280,7 +283,7 @@ function RealmBar({
   collapsed: boolean;
   siteUrl?: string;
 }) {
-  const siteMap = siteUrl ? new URL('/map', siteUrl).href : null;
+  const siteMap = siteMapUrl(siteUrl);
 
   if (collapsed) {
     if (!siteMap) return null;
