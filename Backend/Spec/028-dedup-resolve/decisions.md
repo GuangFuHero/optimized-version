@@ -439,3 +439,44 @@ ADR-388～390（386、387 已被 `018-ticket-disaster-fields` 用掉）。review
 - **算進 `version`**（ADR-374）：審核員讀完之後有人改了地址，送出處理會收到 409，要重新讀、重新比對。
   沒給的自由文字欄位不算進去，改了不會 409。
 - 處理時仍然不能改地址（ADR-367 不變）。`merged` 事件的 `before_state` 會一併記下兩張單的地點，被取消那張的地址也有紀錄。
+
+---
+
+## ADR-445：每項需求附上這張配對卡專用的承接人代號
+
+**Date**: 2026-11-01　**Status**: Accepted（使用者拍板：用代號，不用兩兩共同人數，也不加試算 API）
+
+**背景**：Jarvis 做 DEDUP-008 時發現，詳情的每項需求只有 `claim_count`。後端在處理時會把要合在一起的需求上的人去重後才比名額（ADR-369、`dedup_resolve_plan._headcount`），前端只能把人數相加。同一個人在兩邊都有承接時，前端會多算，把後端其實會接受的合併擋下。
+
+合併後的人數取決於審核員把哪幾項需求合在一起，詳情沒辦法事先給一個固定數字。
+
+**決定**：
+- `tickets.low/high.tasks[]` 多一個 `claimant_keys`：每位承接人一個代號，排序後給。代號是 `sha256("{配對卡 uuid}:{承接人 uuid}")` 的前 16 碼。
+- 同一張卡裡，同一個人在兩張單上的代號相同。前端把要合在一起的需求代號取聯集，數量就是合併後的人數；不管怎麼合都準。
+- 換一張卡代號就不同，從代號看不出是誰，也串不起跨卡的同一人。
+- 權限同詳情（`ai_duplicate.view`）。
+- **不算進 `version`**：跟 `claim_count` 一樣會隨承接變動。處理時仍以鎖住後的實際承接人檢查名額（ADR-374 不變）。
+- `claim_count` 改成由同一批承接紀錄算出，等於代號數量。
+- 處理（resolve）讀單時不帶卡號，代號為空；只有詳情會給。`merged` 事件的 `before_state` 因此會有空的 `claimant_keys`，真實承接人照舊記在 `people`。
+
+**不採用**：
+- 兩兩需求的共同人數：三項以上合在一起會算錯。
+- 試算 API：前端每次調整都要多打一次，而名額檢查本來就會在處理時再做一次。
+
+## ADR-446：細項附上顯示名稱
+
+**Date**: 2026-11-01　**Status**: Accepted（使用者拍板：詳情直接帶，不改權限）
+
+**背景**：細項的顯示名稱在 `task_property_config.label`，前端要用 `taskPropertyConfigs` 讀。那支要 `dynamic_field.view`，資料稽核員沒有，請求會讓整頁 403，所以稽核員只看得到細項的 key（Jarvis 回報，2026-11-01 實測稽核員呼叫回 `403: Permission Denied`）。
+
+**決定**：
+- `tasks[].properties[]` 多一個 `display_label`：該需求類型（`task_type`）的設定 `label`；沒有設定或 `label` 是空的就用 `property_name`。跟 `taskPropertyConfigs.displayLabel` 的回退規則一樣（ADR-095）。
+- 用需求的 `task_type` 加細項 key 對設定，同一個 key 在別的需求類型的名稱不採用。
+- 一個 query 讀完所有細項的名稱，查詢數不隨細項數增加；沒有細項就不查。
+- **不算進 `version`**：名稱是顯示用的，不是審核員比對的內容。後台改名稱不會讓審核員收到 409。
+- 權限不動：稽核員一樣沒有 `dynamic_field.view`。
+- `merged` 事件的 `before_state`／`after_state` 會一併記下處理當下的名稱。
+
+**不採用**：
+- 給稽核員 `dynamic_field.view`：連所有動態欄位設定都看得到，範圍比需要的大。
+- 讓 `taskPropertyConfigs` 也接受 `ai_duplicate.view`：一支 API 混用兩種權限。

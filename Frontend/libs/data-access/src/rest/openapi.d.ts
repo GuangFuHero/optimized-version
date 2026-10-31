@@ -3709,6 +3709,11 @@ export interface components {
       status: string | null;
       /** Comment */
       comment: string | null;
+      /**
+       * Display Label
+       * @description How the item reads: the label set for its need type, else property_name (ADR-446)
+       */
+      display_label: string;
     };
     /**
      * RefreshRequest
@@ -4321,6 +4326,11 @@ export interface components {
       recruiting_stopped: boolean;
       /** Properties */
       properties: components['schemas']['PropertyForReviewResponse'][];
+      /**
+       * Claimant Keys
+       * @description One opaque key per person on the need (ADR-445). A person on needs of both tickets has the same key on each, so the people after a fold are the distinct keys of the needs folded together; keys differ on every other card and do not name the person
+       */
+      claimant_keys: string[];
     };
     /**
      * TeamMemberItem

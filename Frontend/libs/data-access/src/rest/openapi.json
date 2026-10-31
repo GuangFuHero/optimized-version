@@ -11152,6 +11152,11 @@
               }
             ],
             "title": "Comment"
+          },
+          "display_label": {
+            "type": "string",
+            "title": "Display Label",
+            "description": "How the item reads: the label set for its need type, else property_name (ADR-446)"
           }
         },
         "type": "object",
@@ -11161,7 +11166,8 @@
           "property_value",
           "quantity",
           "status",
-          "comment"
+          "comment",
+          "display_label"
         ],
         "title": "PropertyForReviewResponse",
         "description": "One live item under a need (Spec 028 §2)."
@@ -12615,6 +12621,14 @@
             },
             "type": "array",
             "title": "Properties"
+          },
+          "claimant_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Claimant Keys",
+            "description": "One opaque key per person on the need (ADR-445). A person on needs of both tickets has the same key on each, so the people after a fold are the distinct keys of the needs folded together; keys differ on every other card and do not name the person"
           }
         },
         "type": "object",
@@ -12627,7 +12641,8 @@
           "status",
           "claim_count",
           "recruiting_stopped",
-          "properties"
+          "properties",
+          "claimant_keys"
         ],
         "title": "TaskForReviewResponse",
         "description": "One live need with its headcount and items (Spec 028 §2)."

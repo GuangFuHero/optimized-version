@@ -121,8 +121,8 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `location` | 單的地點（ADR-440）：`location_type`、`full_address`、`building_section`、`floor`、`room`、`pole_id`；沒有時為 `null`。權限同聯絡人，算進 `version`，處理時不能改 |
 | `status`、`audit_status` | 唯讀 |
 | `created_by`、`created_at` | 開單者 |
-| `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`recruiting_stopped`、`properties` |
-| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`property_value`、`quantity`、`status`、`comment` |
+| `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`claimant_keys`（ADR-445：這張卡專用的承接人代號，同一人兩邊相同；不算進 `version`）、`recruiting_stopped`、`properties` |
+| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`display_label`（ADR-446：需求類型的設定名稱，沒有就用 key；不算進 `version`）、`property_value`、`quantity`、`status`、`comment` |
 | `photos` | 還在的照片：`uuid`、`url`、`created_at`（ADR-384） |
 | `disaster_details` | 災害欄位答案：`{property_name: [value, …]}`（ADR-385） |
 

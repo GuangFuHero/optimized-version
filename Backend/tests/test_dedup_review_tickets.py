@@ -506,3 +506,117 @@ async def test_the_location_costs_one_query_however_many_tickets(db):
     located = await _count_queries(db, read)
 
     assert located == bare
+
+
+# --- who is on each need, as a per-card key (ADR-445) -------------------------------------
+
+
+async def _volunteer(db, name="志工") -> User:
+    person = User(name=name)
+    db.add(person)
+    await db.flush()
+    return person
+
+
+async def test_one_person_on_both_sides_has_the_same_key(db):
+    """The page can count a fold: a person on A.1 and B.1 shows the same key on both."""
+    s = await _setup(db)
+    both, only_b = await _volunteer(db, "兩邊都接"), await _volunteer(db, "只接 B")
+    for task in (s["a1"], s["b1"]):
+        db.add(TaskAssignment(task_uuid=task.uuid, actor_uuid=both.uuid))
+    db.add(TaskAssignment(task_uuid=s["b1"].uuid, actor_uuid=only_b.uuid))
+    await db.flush()
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+
+    detail = await dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
+
+    tickets = _by_uuid(detail.tickets)
+    a1 = {t.uuid: t for t in tickets[str(s["a"].uuid)].tasks}[str(s["a1"].uuid)]
+    b1 = {t.uuid: t for t in tickets[str(s["b"].uuid)].tasks}[str(s["b1"].uuid)]
+    assert (len(a1.claimant_keys), a1.claim_count) == (2, 2)
+    assert (len(b1.claimant_keys), b1.claim_count) == (2, 2)
+    assert len(set(a1.claimant_keys) & set(b1.claimant_keys)) == 1
+    assert len(set(a1.claimant_keys) | set(b1.claimant_keys)) == 3
+
+
+async def test_a_need_nobody_is_on_has_no_keys(db):
+    """No claims, no keys."""
+    s = await _setup(db)
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+
+    detail = await dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
+
+    a2 = {t.uuid: t for t in _by_uuid(detail.tickets)[str(s["a"].uuid)].tasks}[str(s["a2"].uuid)]
+    assert a2.claimant_keys == ()
+
+
+async def test_the_same_person_has_another_key_on_another_card(db):
+    """Keys only line up within one card: they neither name the person nor link cards."""
+    s = await _setup(db)
+    person = await _volunteer(db)
+    db.add(TaskAssignment(task_uuid=s["b1"].uuid, actor_uuid=person.uuid))
+    c = await _ticket(db, s["owner"], title="C 一樓淹水")
+    c1 = await _task(db, s["owner"], c)
+    other = await _pair(db, s["b1"], c1)
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+
+    def b1_keys(detail):
+        b = _by_uuid(detail.tickets)[str(s["b"].uuid)]
+        return {t.uuid: t for t in b.tasks}[str(s["b1"].uuid)].claimant_keys
+
+    here = b1_keys(await dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid))
+    there = b1_keys(await dedup_review.get_pair(db, actor=actor, pair_uuid=other.uuid))
+
+    assert here and there and not set(here) & set(there)
+    assert all(str(person.uuid) not in key and person.uuid.hex not in key for key in here)
+
+
+# --- an item's label (ADR-446) ------------------------------------------------------------
+
+
+async def test_items_carry_their_label(db):
+    """The label set for the item's need type, else the key, as taskPropertyConfigs gives it (ADR-095)."""
+    from app.models.property_config import TaskPropertyConfig
+
+    s = await _setup(db)
+    await _property(db, s["a2"], name="no_config")
+    await _property(db, s["a2"], name="blank_label")
+    db.add_all(
+        [
+            TaskPropertyConfig(
+                task_type="supply", property_name="瓶裝水", data_type="number", label="瓶裝水（箱）"
+            ),
+            TaskPropertyConfig(task_type="supply", property_name="blank_label", data_type="text", label=None),
+            # Same key under another need type: not this item's label.
+            TaskPropertyConfig(task_type="hr", property_name="no_config", data_type="text", label="別的類型"),
+        ]
+    )
+    await db.flush()
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+
+    detail = await dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
+
+    a2 = {t.uuid: t for t in _by_uuid(detail.tickets)[str(s["a"].uuid)].tasks}[str(s["a2"].uuid)]
+    assert {p.property_name: p.display_label for p in a2.properties} == {
+        "瓶裝水": "瓶裝水（箱）",
+        "no_config": "no_config",
+        "blank_label": "blank_label",
+    }
+
+
+async def test_renaming_an_items_label_does_not_move_the_version(db):
+    """The label is how the item reads, not what the reviewer compares (ADR-446)."""
+    from app.models.property_config import TaskPropertyConfig
+
+    s = await _versioned(db)
+    config = TaskPropertyConfig(
+        task_type="supply", property_name="瓶裝水", data_type="number", label="瓶裝水"
+    )
+    db.add(config)
+    await db.flush()
+    before = await _versions(db, s)
+
+    config.label = "瓶裝水（箱）"
+    await db.flush()
+
+    assert await _versions(db, s) == before

@@ -71,3 +71,35 @@ async def test_the_detail_says_where_each_ticket_is(client, db_session, redis):
         "pole_id": None,
     }
     assert tickets["high"]["location"] is None
+
+
+async def test_an_auditor_reads_item_labels_and_claimant_keys(client, db_session, redis):
+    """An auditor gets each item's label (ADR-446) and each need's claimant keys (ADR-445).
+
+    The auditor cannot read taskPropertyConfigs (no dynamic_field.view); the detail carries the label.
+    """
+    from app.models.auth import User
+    from app.models.property_config import TaskPropertyConfig
+    from app.models.ticket_task import TaskAssignment, TaskProperty
+
+    card = await _card(db_session)
+    task = await db_session.get(TicketTask, card["low"])
+    db_session.add(TaskProperty(task_uuid=task.uuid, property_name="shovel", property_value="2", quantity=2))
+    db_session.add(
+        TaskPropertyConfig(task_type=task.task_type, property_name="shovel", data_type="number", label="鏟子")
+    )
+    person = User(name="志工")
+    db_session.add(person)
+    await db_session.flush()
+    person_uuid = str(person.uuid)
+    db_session.add(TaskAssignment(task_uuid=task.uuid, actor_uuid=person.uuid))
+    await db_session.commit()
+    headers = await _headers(db_session, redis, "data_auditor")
+
+    response = await client.get(f"{URL}/{card['pair']}", headers=headers)
+
+    assert response.status_code == 200, response.text
+    need = response.json()["tickets"]["low"]["tasks"][0]
+    assert [(p["property_name"], p["display_label"]) for p in need["properties"]] == [("shovel", "鏟子")]
+    assert need["claim_count"] == 1 and len(need["claimant_keys"]) == 1
+    assert isinstance(need["claimant_keys"][0], str) and person_uuid not in need["claimant_keys"][0]

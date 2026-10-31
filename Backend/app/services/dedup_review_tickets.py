@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dedup import DuplicatePair
 from app.models.photo import Photo
+from app.models.property_config import TaskPropertyConfig
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_disaster_detail import TicketDisasterDetail
@@ -36,6 +37,9 @@ class PropertyForReview:
     quantity: int | None
     status: str | None
     comment: str | None
+    # How the item reads: its need type's configured label, else its key (ADR-095, ADR-446).
+    # Read for the reviewer, not compared: it stays out of the version.
+    display_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,10 @@ class TaskForReview:
     claim_count: int
     recruiting_stopped: bool
     properties: tuple[PropertyForReview, ...]
+    # One key per person on the need, the same for a person across this card's two tickets and
+    # different on any other card (ADR-445): the page counts a fold by the keys it unites. Empty
+    # when read without a card, as a resolve reads. Moves with claims, so it stays out of the version.
+    claimant_keys: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -113,7 +121,8 @@ class TicketForReview:
 # What a claim moves, which must not move the version (ADR-374): a need's headcount and the status
 # a claim fills, and the ticket status (and audit status) worked out from them.
 _TICKET_SKIPPED = {"version", "status", "audit_status", "tasks", "photos"}
-_TASK_SKIPPED = {"claim_count", "status", "properties"}
+_TASK_SKIPPED = {"claim_count", "status", "properties", "claimant_keys"}
+_PROPERTY_SKIPPED = {"display_label"}
 
 
 def ticket_version(ticket: TicketForReview) -> str:
@@ -132,7 +141,13 @@ def ticket_version(ticket: TicketForReview) -> str:
         (
             {
                 **{k: v for k, v in asdict(task).items() if k not in _TASK_SKIPPED},
-                "properties": sorted((asdict(p) for p in task.properties), key=lambda p: p["uuid"]),
+                "properties": sorted(
+                    (
+                        {k: v for k, v in asdict(p).items() if k not in _PROPERTY_SKIPPED}
+                        for p in task.properties
+                    ),
+                    key=lambda p: p["uuid"],
+                ),
             }
             for task in ticket.tasks
         ),
@@ -159,8 +174,13 @@ async def ticket_uuids_for_pair(db: AsyncSession, pair: DuplicatePair) -> tuple[
     return owner.get(sides[0]), owner.get(sides[1])
 
 
-async def tickets_for_review(db: AsyncSession, ticket_uuids: Iterable[str]) -> dict[str, TicketForReview]:
-    """The live tickets among `ticket_uuids`, keyed by uuid string; a cancelled or deleted one is absent."""
+async def tickets_for_review(
+    db: AsyncSession, ticket_uuids: Iterable[str], *, card_uuid: str | None = None
+) -> dict[str, TicketForReview]:
+    """The live tickets among `ticket_uuids`, keyed by uuid string; a cancelled or deleted one is absent.
+
+    With `card_uuid`, each need lists its claimant keys for that card (ADR-445).
+    """
     wanted = [uuid for uuid in ticket_uuids if uuid]
     if not wanted:
         return {}
@@ -176,7 +196,12 @@ async def tickets_for_review(db: AsyncSession, ticket_uuids: Iterable[str]) -> d
         return {}
     live = [str(ticket.uuid) for ticket, _, _ in ticket_rows]
     parts = await _parts(db, live)
-    return {str(ticket.uuid): _ticket(ticket, lon, lat, parts) for ticket, lon, lat in ticket_rows}
+    return {str(ticket.uuid): _ticket(ticket, lon, lat, parts, card_uuid) for ticket, lon, lat in ticket_rows}
+
+
+def claimant_key(card_uuid: str, actor_uuid) -> str:
+    """A person's key on one card (ADR-445): stable within the card, unrelated across cards."""
+    return hashlib.sha256(f"{card_uuid}:{actor_uuid}".encode()).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -185,7 +210,8 @@ class _Parts:
 
     tasks: list
     properties: list
-    claims: dict
+    claims: dict  # need uuid -> the people on it
+    labels: dict  # (need type, item key) -> configured label
     photos: list
     details: list
     locations: dict
@@ -200,7 +226,7 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
         )
     ).all()
     task_ids = [task.uuid for task in tasks]
-    properties, claims = [], {}
+    properties, claims, labels = [], {}, {}
     if task_ids:
         properties = (
             await db.scalars(
@@ -209,15 +235,27 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
                 .order_by(TaskProperty.created_at, TaskProperty.uuid)
             )
         ).all()
-        claims = dict(
-            (
-                await db.execute(
-                    select(TaskAssignment.task_uuid, func.count())
-                    .where(TaskAssignment.task_uuid.in_(task_ids))
-                    .group_by(TaskAssignment.task_uuid)
+        for task_uuid, person in (
+            await db.execute(
+                select(TaskAssignment.task_uuid, TaskAssignment.actor_uuid).where(
+                    TaskAssignment.task_uuid.in_(task_ids)
                 )
-            ).all()
-        )
+            )
+        ).all():
+            claims.setdefault(task_uuid, []).append(person)
+        if properties:
+            # One query for every item's label, however many items (ADR-446).
+            keys = {prop.property_name for prop in properties}
+            types = {task.task_type for task in tasks}
+            labels = {
+                (config.task_type, config.property_name): config.label
+                for config in await db.scalars(
+                    select(TaskPropertyConfig).where(
+                        TaskPropertyConfig.task_type.in_(types), TaskPropertyConfig.property_name.in_(keys)
+                    )
+                )
+                if config.label
+            }
     photos = (
         await db.scalars(
             select(Photo)
@@ -245,11 +283,17 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
     ):
         locations.setdefault(str(location.geometry_uuid), location)
     return _Parts(
-        tasks=tasks, properties=properties, claims=claims, photos=photos, details=details, locations=locations
+        tasks=tasks,
+        properties=properties,
+        claims=claims,
+        labels=labels,
+        photos=photos,
+        details=details,
+        locations=locations,
     )
 
 
-def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
+def _ticket(ticket: Tickets, lon, lat, parts: _Parts, card_uuid: str | None) -> TicketForReview:
     own_tasks = [task for task in parts.tasks if str(task.ticket_uuid) == str(ticket.uuid)]
     answers: dict[str, list[str]] = {}
     for detail in parts.details:
@@ -282,7 +326,8 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
                 task_description=task.task_description,
                 quantity=task.quantity,
                 status=task.status,
-                claim_count=parts.claims.get(task.uuid, 0),
+                claim_count=len(parts.claims.get(task.uuid, ())),
+                claimant_keys=_claimant_keys(card_uuid, parts.claims.get(task.uuid, ())),
                 recruiting_stopped=task.recruiting_stopped_at is not None,
                 properties=tuple(
                     PropertyForReview(
@@ -292,6 +337,7 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
                         quantity=prop.quantity,
                         status=prop.status,
                         comment=prop.comment,
+                        display_label=_label(parts.labels, task.task_type, prop.property_name),
                     )
                     for prop in parts.properties
                     if prop.task_uuid == task.uuid
@@ -308,6 +354,16 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
         location=_location(parts.locations.get(str(ticket.uuid))),
     )
     return replace(review, version=ticket_version(review))
+
+
+def _claimant_keys(card_uuid: str | None, people) -> tuple[str, ...]:
+    if not card_uuid:
+        return ()
+    return tuple(sorted(claimant_key(card_uuid, person) for person in people))
+
+
+def _label(labels: dict, task_type: str, property_name: str) -> str:
+    return labels.get((task_type, property_name)) or property_name
 
 
 def _location(row: SecondaryLocation | None) -> LocationForReview | None:
@@ -330,5 +386,5 @@ async def tickets_for_pair(
     if pair.entity_kind not in ("ticket", "ticket_task"):
         return None
     low, high = await ticket_uuids_for_pair(db, pair)
-    found = await tickets_for_review(db, (low, high))
+    found = await tickets_for_review(db, (low, high), card_uuid=str(pair.uuid))
     return found.get(low) if low else None, found.get(high) if high else None

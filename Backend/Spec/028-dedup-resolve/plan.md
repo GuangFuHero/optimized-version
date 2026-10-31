@@ -224,6 +224,15 @@ DEDUP-008 交給 Jarvis 前對照 mock 時發現：選主要單要看地址，�
 - [x] 測試：地址到樓室、電線桿、沒有地點、改地點 `version` 會動、改地標 `version` 不動、query 數不變、REST 形狀
 - [x] 合約檔、全套件（**3316**：3315 passed，另 1 個是 main 上 #176 修掉的時區測試，rebase 後通過）、Docker 從零驗證 19/19（`c1c4492ec`，Backend 與 rebase 後的 `ddf1ab34c` 只差 #176 那個測試檔：空 DB 跑 alembic＋seed，真實「仍要建立」產生配對卡，打 REST 驗地點、暱稱、409、通知文字、API 標籤）
 
+## Task 12：合併後人數與細項名稱（ADR-445、446）
+
+Jarvis 2026-11-01 做 DEDUP-008 時回報的兩個缺口。和 Task 11 同一張 PR（#179）。
+
+- [x] `dedup_review_tickets.py`：承接紀錄改讀 `(task_uuid, actor_uuid)`，`claim_count` 由同一批算出；詳情帶卡號時算 `claimant_keys`；細項名稱一個 query 讀完；兩者都不算進 `version`
+- [x] schema `TaskForReviewResponse.claimant_keys`、`PropertyForReviewResponse.display_label`
+- [x] 測試：同一人兩邊代號相同、聯集＝合併後人數、沒人承接沒有代號、換一張卡代號不同且不含 uuid、名稱取同需求類型的設定、沒設定或空名稱用 key、改名稱 `version` 不動、稽核員從 REST 拿得到名稱與代號；既有的「承接不動 version」「query 數不隨細項增加」照樣通過
+- [x] 合約檔、全套件 **3469 passed**、Docker 從零驗證 15/15（空 DB 跑 alembic＋seed；真的送兩筆相同求助產生配對卡；avol03 兩邊都接、avol04／05 各接一邊；稽核員讀詳情：各 2 個代號、共同 1 個、聯集 3（相加是 4）、代號不含 uuid、細項「鏟子」；稽核員 `taskPropertyConfigs` 仍 403；超管讀同一張卡代號相同；名額 3 把乙併進甲，後端接受、DB 承接 3 人、`merged` 事件記下名稱與 `people`）
+
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
 | 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |
@@ -234,6 +243,8 @@ DEDUP-008 交給 Jarvis 前對照 mock 時發現：選主要單要看地址，�
 
 - 審核頁先讀 detail，用 `tickets.low`／`tickets.high` 並排顯示；送出 resolve 時把兩邊的 `version` 原樣帶回。
 - 2026-10-29（Jarvis）：每張單多一個 `location`（ADR-440），主要單依審核員選的地址決定。地址改了 `version` 會變。
+- 2026-11-01（Jarvis）：每項需求多一個 `claimant_keys`（ADR-445）。合併後人數＝要合在一起的需求的代號聯集數量，取代兩邊 `claim_count` 相加。代號只在同一張卡內對得上。
+- 2026-11-01（Jarvis）：每個細項多一個 `display_label`（ADR-446），直接顯示即可，不必再讀 `taskPropertyConfigs`；稽核員也拿得到。
 - 收到 409（`version` 對不上）→ 重新讀 detail，請審核員再比對一次。
 - request 要列出兩張單**每一項**需求、`keep`／`move` 的每一個細項（spec §3.3）。漏列會 422。
 - 「不是重複」仍用 `/reject`。
