@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createPointShareLinks, sharesThroughDeviceSheet } from './share-links';
+import {
+  createPointShareLinks,
+  isShareSheetDismissal,
+  sharesThroughDeviceSheet,
+} from './share-links';
 
 const target = {
   title: '光復國中洗澡點｜救災站點',
@@ -65,5 +69,24 @@ describe('sharesThroughDeviceSheet', () => {
         touchScreen: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe('isShareSheetDismissal', () => {
+  it('is the sheet the person closed', () => {
+    expect(
+      isShareSheetDismissal(new DOMException('Share canceled', 'AbortError')),
+    ).toBe(true);
+  });
+
+  it('is not a sheet that failed, which the share page stands in for', () => {
+    expect(
+      [
+        new DOMException('Not allowed', 'NotAllowedError'),
+        new DOMException('A share is already open', 'InvalidStateError'),
+        new TypeError('Bad data'),
+        undefined,
+      ].map(isShareSheetDismissal),
+    ).toEqual([false, false, false, false]);
   });
 });

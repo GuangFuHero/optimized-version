@@ -27,6 +27,7 @@ import { createQrDataUrl, downloadQrSvg } from './qr-code';
 import {
   copyPointShareUrl,
   createPointShareLinks,
+  isShareSheetDismissal,
   openPointShareLink,
   sharesThroughDeviceSheet,
 } from './share-links';
@@ -117,15 +118,20 @@ export function PointShareDrawer({
     window.setTimeout(() => setCopyState('idle'), 1400);
   };
 
-  const handleNativeShare = () => {
+  const handleNativeShare = (fallbackHref?: string) => {
     if (!target) {
       return;
     }
 
-    // A dismissed sheet rejects; there is nothing to tell the person who dismissed it.
+    // A dismissed sheet rejects; there is nothing to tell the person who dismissed it. One that
+    // fails, opened from a channel's tile, gives way to that channel's page.
     navigator
       .share({ title: target.title, text: target.description, url: target.url })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (fallbackHref && !isShareSheetDismissal(error)) {
+          openPointShareLink(fallbackHref);
+        }
+      });
   };
 
   return (
@@ -258,7 +264,7 @@ export function PointShareDrawer({
               <Button
                 variant="contained"
                 startIcon={<IosShareRoundedIcon />}
-                onClick={handleNativeShare}
+                onClick={() => handleNativeShare()}
                 sx={{ textTransform: 'none', fontWeight: 700 }}
               >
                 分享到⋯
@@ -291,7 +297,7 @@ export function PointShareDrawer({
                         canShareNatively,
                         touchScreen,
                       })
-                        ? handleNativeShare()
+                        ? handleNativeShare(link.href)
                         : openPointShareLink(link.href)
                     }
                     sx={tileSx}

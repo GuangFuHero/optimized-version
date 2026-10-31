@@ -56,6 +56,15 @@ export function sharesThroughDeviceSheet(
   );
 }
 
+/**
+ * Whether the share sheet's refusal is the person closing it (`AbortError`), which needs nothing
+ * more. Any other — a browser in an app that has `navigator.share` but refuses it, a sheet already
+ * open — is the sheet failing, and a tile that went through it opens its channel's page instead.
+ */
+export function isShareSheetDismissal(error: unknown): boolean {
+  return (error as Error | undefined)?.name === 'AbortError';
+}
+
 export async function copyPointShareUrl(url: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
     try {
