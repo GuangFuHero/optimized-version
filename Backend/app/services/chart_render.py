@@ -9,9 +9,9 @@ values exposed publicly at `GET /api/v1/analytics/catalog`); `x` picks how to sl
 chart_type) combination is meaningful — CATALOG records each y-metric's `allowed_x`
 and `allowed_chart_types`; `resolve()` is the single place that reconciles a request
 against it. `chart_type` is validated strictly (an unsupported chart_type for a given
-y is a 400); `x` is *not* — an `x` that doesn't apply is silently dropped rather than
-rejected (e.g. requesting `x=date` on a pie-only metric, or `chart_type=pie` together
-with `x=date` on a metric that allows both individually but not combined).
+y is a 400), and so is an `x` the metric's `allowed_x` lacks (the endpoint layer, a 422). Only
+two cases are reconciled rather than rejected: an omitted `x` on a forced-shape metric, and
+`chart_type=pie` together with `x=date`, which has no pie form.
 """
 
 import html
@@ -29,7 +29,8 @@ from app.services.analytics_common import MAX_TREND_DAYS, AnalyticsInputError
 # and/or "category" — ordered because resolve() falls back to its first entry for the
 # "forced shape" metrics, the ones that are only meaningful grouped one way.
 # `requires_date_range` and `max_range_days` (both optional) mark a metric that refuses an
-# unbounded or over-wide query. See GET /api/v1/analytics/catalog for the JSON version.
+# unbounded or over-wide query; `allowed_x_granularities` (optional, day and week by default)
+# lists the bucket sizes its `x=date` trend honours. See GET /api/v1/analytics/catalog for the JSON version.
 # Descriptions say what the dashboard shows: it opens on the last 30 days, so a metric over a
 # range says so, and a running total says it counts up to today. ---
 
@@ -148,11 +149,13 @@ _TICKET_CATALOG = {
         "unit": "人",
         "description": (
             "還在招募的任務尚缺幾人；截至查詢期間最後一天，未指定則為今日。"
-            "趨勢為每天結束時的缺口，依異動紀錄還原當天的任務與志工"
+            "趨勢固定按天，為每天結束時的缺口，依異動紀錄還原當天的任務與志工"
         ),
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "line", "pie"),
+        # The trend is one point per day whatever x_granularity says, so only day is published.
+        "allowed_x_granularities": ("day",),
         # Only the daily trend is capped; the other shapes read one instant.
         "max_range_days": MAX_TREND_DAYS,
     },
@@ -245,8 +248,9 @@ def resolve(domain: str, y: str, x: str | None, chart_type: str | None) -> tuple
     """Resolve the effective (x, chart_type) for a (domain, y) request.
 
     Raises AnalyticsInputError for an unknown y or a chart_type outside that metric's
-    allowed_chart_types; the endpoint layer turns that into HTTP 400. Never raises over
-    `x` — see the module docstring's "ignore, don't reject" rule.
+    allowed_chart_types; the endpoint layer turns that into HTTP 400. An `x` outside
+    allowed_x is refused before this runs, so what is reconciled here is only an omitted `x`
+    and the pie-with-date combination.
     """
     catalog = CATALOG.get(domain)
     if catalog is None or y not in catalog:
@@ -261,11 +265,9 @@ def resolve(domain: str, y: str, x: str | None, chart_type: str | None) -> tuple
     if resolved_chart_type == "pie" and resolved_x == "date":
         resolved_x = None  # a date trend can't be rendered as pie slices
     if resolved_x not in spec["allowed_x"]:
-        # Not applicable to this y — ignore rather than reject, falling back to
-        # aggregate (None) where that's allowed, or the metric's one *forced* grouping
-        # otherwise (e.g. net_backlog_change/station_freshness_trend always group by
-        # date — allowed_x={"date"} with no None — so an irrelevant x still lands on
-        # "date", not silently ungrouped).
+        # An omitted x falls back to aggregate (None) where that's allowed, or the metric's one
+        # *forced* grouping otherwise (e.g. net_backlog_change/station_freshness_trend always
+        # group by date — allowed_x={"date"} with no None — so no x still lands on "date").
         # allowed_x is an ordered tuple, so the forced-grouping fallback is deterministic
         # (a set would make [0] arbitrary the moment a metric had two forced values).
         resolved_x = None if None in spec["allowed_x"] else spec["allowed_x"][0]

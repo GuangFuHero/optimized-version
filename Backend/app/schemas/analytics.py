@@ -68,11 +68,9 @@ class StationStatus(str, Enum):
 class ChartX(str, Enum):
     """How to slice the chosen y-metric (the X axis).
 
-    Omit this param entirely for a single aggregate value/pie. Whether a given value
-    is valid for a given y-metric is enforced by app.services.chart_render.resolve()
-    — an inapplicable x is silently ignored (falls back to aggregate, or to the
-    metric's forced grouping if it has one), never rejected. See GET
-    /api/v1/analytics/catalog for which x values are valid per y-metric.
+    Omit this param entirely for a single aggregate value/pie. A value the chosen y-metric
+    does not allow is a 422. See GET /api/v1/analytics/catalog for which x values are
+    valid per y-metric.
     """
 
     date = "date"
@@ -80,7 +78,7 @@ class ChartX(str, Enum):
 
 
 class ChartXGranularity(str, Enum):
-    """Bucket size when x=date. Ignored otherwise."""
+    """Bucket size when x=date. Ignored otherwise, and by a metric whose catalog entry lacks it."""
 
     day = "day"
     week = "week"
@@ -90,9 +88,8 @@ class ChartType(str, Enum):
     """Plotly chart shape.
 
     See https://plotly.com/python/bar-charts/, https://plotly.com/python/line-charts/,
-    https://plotly.com/python/pie-charts/. Unlike `x`, an unsupported chart_type for
-    the chosen y-metric is a 400, not silently ignored — see GET /analytics/catalog
-    for each metric's allowed_chart_types.
+    https://plotly.com/python/pie-charts/. An unsupported chart_type for the chosen
+    y-metric is a 400 — see GET /analytics/catalog for each metric's allowed_chart_types.
     """
 
     bar = "bar"
@@ -168,7 +165,7 @@ class DataResponse(BaseModel):
     x: str | None = Field(
         description="The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' "
         "(the two metrics with a built-in grouping), or null for one aggregate. "
-        "It can differ from the requested `x`, which is ignored where it doesn't apply."
+        "It differs from the request only when `x` is omitted on a metric with a built-in grouping."
     )
     x_values: list[str | datetime | None] = Field(
         description="Axis values in display order: bucket starts as wall-clock time in the request's `tz`, "
@@ -197,13 +194,16 @@ class YMetricSpec(BaseModel):
     allowed_x: list[str] = Field(
         description="Valid values for the `x` query param on this y-metric: any of "
         "'date', 'category', 'none' (aggregate/no grouping — omit `x` entirely). An "
-        "`x` outside this list is silently ignored (falls back to 'none', or to this "
-        "metric's forced value if 'none' isn't in the list), never rejected with 400."
+        "`x` outside this list is rejected with 422; omitting `x` gives 'none', or this "
+        "metric's forced value if 'none' isn't in the list."
+    )
+    allowed_x_granularities: list[str] = Field(
+        description="Bucket sizes `x_granularity` can take for this y-metric's `x=date` trend. A "
+        "size outside this list is not rejected: the trend is drawn at the first one listed."
     )
     default_chart_type: str = Field(description="chart_type used when the param is omitted.")
     allowed_chart_types: list[str] = Field(
-        description="Valid values for `chart_type` on this y-metric — unlike `x`, an "
-        "unsupported chart_type is rejected with 400."
+        description="Valid values for `chart_type` on this y-metric; an unsupported one is rejected with 400."
     )
     requires_date_range: bool = Field(
         description="When true, `start_date` and `end_date` are mandatory for this "

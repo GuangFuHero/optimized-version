@@ -4,13 +4,11 @@ See https://plotly.com/python/ for the underlying charting library.
 
 **X/Y model.** Pick `y` (what to measure — a metric from the catalog below) and `x`
 (how to slice it — `date` or `category`, or omit `x` entirely for a single aggregate
-value) independently. Not every combination is meaningful: an `x` that doesn't apply
-to the chosen `y` (or to `chart_type` — e.g. a date trend can't be pie slices) is
-**silently ignored**, not rejected — the response still renders, just without that
-grouping. `chart_type` stays strictly validated (an unsupported one for the chosen `y`
-is a 400). `GET /analytics/catalog` is the machine-readable source of truth for which
-`x` values and chart types each `y` supports — build dropdowns from that response
-instead of hardcoding the rules.
+value) independently. Not every combination is meaningful: an `x` the chosen `y` does not
+allow is a 422, and an unsupported `chart_type` is a 400. A date trend has no pie form, so
+`x=date` with `chart_type=pie` draws the aggregate. `GET /analytics/catalog` is the
+machine-readable source of truth for which `x` values and chart types each `y` supports —
+build dropdowns from that response instead of hardcoding the rules.
 
 Example queries:
 - `?y=total_tickets&x=date&x_granularity=week` — ticket volume trend, weekly buckets
@@ -120,12 +118,15 @@ _VALUE_Y_DESCRIPTION = (
 )
 _X_DESCRIPTION = (
     "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). "
-    "Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` "
-    "or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog."
+    "Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; "
+    "see GET /analytics/catalog."
 )
-_X_GRANULARITY_DESCRIPTION = "Bucket size when x=date. Ignored for every other x."
+_X_GRANULARITY_DESCRIPTION = (
+    "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog "
+    "`allowed_x_granularities` lacks it (its trend is drawn at the size listed there)."
+)
 _CHART_TYPE_DESCRIPTION = (
-    "Overrides the y-metric's default chart shape. Unlike `x`, an unsupported "
+    "Overrides the y-metric's default chart shape. An unsupported "
     "chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog."
 )
 _TZ_DESCRIPTION = (
@@ -137,7 +138,8 @@ _TZ_DESCRIPTION = (
 )
 _AREA_DESCRIPTION = (
     "Only rows whose address has this {part}. `county`, `town` and `village` combine, and a 村里 "
-    "name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values."
+    "name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values "
+    "for your scope; a combination that is not in that list is a 422."
 )
 _STYLE_DESCRIPTION = (
     "JSON-encoded ChartStyle: palette, font, legend position, line/pie shape, margin, "
@@ -174,7 +176,24 @@ def _parse_tz(tz: str) -> ZoneInfo:
         ) from err
 
 
-def _ticket_filters(
+async def _require_known_area(
+    db: AsyncSession, model, scope: list, county: str | None, town: str | None, village: str | None
+) -> None:
+    """422, in zh-TW, when the area given is not in the caller's catalog area list."""
+    if await analytics_filters.area_in_catalog(db, model, scope, county=county, town=town, village=village):
+        return
+    given = "、".join(
+        f"{part} {value}"
+        for part, value in (("縣市", county), ("鄉鎮市區", town), ("村里", village))
+        if value
+    )
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=f"找不到這個地區（{given}）；請從 /analytics/catalog 列出的地區選擇",
+    )
+
+
+async def _ticket_filters(
     task_type: TicketTaskType | None = Query(
         None, description="Only tickets of this task type; the volunteer metrics read each need's own type."
     ),
@@ -184,14 +203,20 @@ def _ticket_filters(
     county: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="縣市")),
     town: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="鄉鎮市區")),
     village: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="村里")),
+    scope: Scope = security.has_permission(Perm.TICKET_VIEW),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
 ) -> list:
     """The ticket endpoints' optional filters as WHERE clauses; ANDed with the caller's scope."""
+    await _require_known_area(
+        db, Tickets, scope_filter(scope, actor=current_user, model=Tickets), county, town, village
+    )
     return analytics_filters.ticket_filters(
         task_type=task_type, status=ticket_status, county=county, town=town, village=village
     )
 
 
-def _station_filters(
+async def _station_filters(
     station_type: str | None = Query(
         None, description="Only stations of this type; GET /analytics/catalog lists the values."
     ),
@@ -201,8 +226,14 @@ def _station_filters(
     county: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="縣市")),
     town: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="鄉鎮市區")),
     village: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="村里")),
+    scope: Scope = security.has_permission(Perm.STATION_VIEW),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
 ) -> list:
     """The station endpoints' optional filters as WHERE clauses; ANDed with the caller's scope."""
+    await _require_known_area(
+        db, Station, scope_filter(scope, actor=current_user, model=Station), county, town, village
+    )
     return analytics_filters.station_filters(
         station_type=station_type, status=station_status, county=county, town=town, village=village
     )
@@ -254,10 +285,27 @@ def _serialize_spec(spec: dict) -> YMetricSpec:
         unit=spec["unit"],
         description=spec["description"],
         allowed_x=sorted("none" if v is None else v for v in spec["allowed_x"]),
+        allowed_x_granularities=sorted(
+            spec.get("allowed_x_granularities") or (g.value for g in ChartXGranularity)
+        ),
         default_chart_type=spec["default_chart_type"],
         allowed_chart_types=sorted(spec["allowed_chart_types"]),
         requires_date_range=spec.get("requires_date_range", False),
         max_range_days=spec.get("max_range_days"),
+    )
+
+
+def _require_allowed_x(domain: str, y: str, x: str | None) -> None:
+    """422, in zh-TW, when `x` is given and the metric's catalog entry does not allow it."""
+    spec = chart_render.CATALOG[domain][y]
+    if x is None or x in spec["allowed_x"]:
+        return
+    usable = "、".join(v for v in spec["allowed_x"] if v is not None)
+    hint = f"可用的 x：{usable}" if usable else "此指標不分組"
+    if None in spec["allowed_x"] and usable:
+        hint += "，或不帶 x"
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"「{spec['label']}」不支援 x={x}；{hint}"
     )
 
 
@@ -278,10 +326,12 @@ async def _query_metric(
     """Resolve the request against the catalog and run the metric's aggregation query.
 
     Shared by the chart and value endpoints. `extra_filters` is the caller's RBAC row
-    filter; see the service module docstrings. Raises HTTPException (bad tz) or
+    filter; see the service module docstrings. Raises HTTPException (bad tz, an `x` the metric
+    does not allow) or
     AnalyticsInputError (unknown y, bad chart_type, over-wide trend range).
     """
     tzinfo = _parse_tz(tz)
+    _require_allowed_x(domain, y.value, x)
     resolved_x, resolved_chart_type = chart_render.resolve(domain, y.value, x, chart_type)
     data = await metric_fns[y](
         db,

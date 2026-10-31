@@ -23,12 +23,9 @@ from app.schemas.analytics import (
 from app.services.chart_render import display_name
 
 
-def _in_area(geometry_uuid, *, county: str | None, town: str | None, village: str | None) -> list:
-    """The address filter: the row's address has all the parts given.
-
-    EXISTS, not a join, so a row with two address rows still counts once.
-    """
-    parts = [
+def _area_parts(county: str | None, town: str | None, village: str | None) -> list:
+    """The address columns that must equal the parts given; a blank part means no condition."""
+    return [
         column == value
         for column, value in (
             (SecondaryLocation.county, county),
@@ -37,6 +34,14 @@ def _in_area(geometry_uuid, *, county: str | None, town: str | None, village: st
         )
         if value
     ]
+
+
+def _in_area(geometry_uuid, *, county: str | None, town: str | None, village: str | None) -> list:
+    """The address filter: the row's address has all the parts given.
+
+    EXISTS, not a join, so a row with two address rows still counts once.
+    """
+    parts = _area_parts(county, town, village)
     if not parts:
         return []
     return [
@@ -86,9 +91,12 @@ def _options(values) -> list[FilterOption]:
     return [FilterOption(value=v, label=display_name(v)) for v in values]
 
 
-async def _areas(db: AsyncSession, model, scope: list) -> list[AreaCounty]:
-    """The 縣市 > 鄉鎮市區 > 村里 of the addresses of the live rows of `model` inside `scope`."""
-    rows = await db.execute(
+def _address_rows(model, scope: list):
+    """The 縣市, 鄉鎮市區 and 村里 of the addresses of the live rows of `model` inside `scope`.
+
+    The catalog's area list and the area check both read these rows, so they cannot disagree.
+    """
+    return (
         select(SecondaryLocation.county, SecondaryLocation.town, SecondaryLocation.village)
         .join(model, model.uuid == SecondaryLocation.geometry_uuid)
         .where(
@@ -97,6 +105,25 @@ async def _areas(db: AsyncSession, model, scope: list) -> list[AreaCounty]:
             model.delete_at.is_(None),
             *scope,
         )
+    )
+
+
+async def area_in_catalog(
+    db: AsyncSession, model, scope: list, *, county: str | None, town: str | None, village: str | None
+) -> bool:
+    """Whether the area given is in the area list the catalog shows for `scope`; true when none is given."""
+    parts = _area_parts(county, town, village)
+    if not parts:
+        return True
+    if village:
+        parts.append(SecondaryLocation.town.is_not(None))  # the list only shows a 村里 under its town
+    return bool(await db.scalar(select(_address_rows(model, scope).where(*parts).exists())))
+
+
+async def _areas(db: AsyncSession, model, scope: list) -> list[AreaCounty]:
+    """The 縣市 > 鄉鎮市區 > 村里 of the addresses of the live rows of `model` inside `scope`."""
+    rows = await db.execute(
+        _address_rows(model, scope)
         .distinct()
         .order_by(SecondaryLocation.county, SecondaryLocation.town, SecondaryLocation.village)
     )

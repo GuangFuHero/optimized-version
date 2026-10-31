@@ -199,16 +199,64 @@ async def test_unsupported_chart_type_is_rejected(client, db_session, redis):
     assert res.status_code == 400
 
 
+_METRICS_WITH_AN_UNALLOWED_X = [
+    (domain, y, x)
+    for domain, catalog in chart_render.CATALOG.items()
+    for y, spec in catalog.items()
+    for x in ("date", "category")
+    if x not in spec["allowed_x"]
+]
+
+
 @pytest.mark.asyncio
-async def test_inapplicable_x_is_ignored_not_rejected(client, db_session, redis):
-    """The documented asymmetry: a meaningless `x` still renders."""
+@pytest.mark.parametrize(("domain", "y", "x"), _METRICS_WITH_AN_UNALLOWED_X)
+@pytest.mark.parametrize("endpoint", ["chart", "data"])
+async def test_an_x_the_metric_does_not_allow_is_a_422(client, db_session, redis, domain, y, x, endpoint):
+    """Every metric, both endpoints: an `x` outside the catalog's allowed_x is refused, in zh-TW."""
+    perm = Perm.TICKET_VIEW if domain == "tickets" else Perm.STATION_VIEW
+    headers = await _user_with_perms(db_session, redis, perm)
+    res = await client.get(
+        f"/api/v1/analytics/{domain}/{endpoint}", params={"tz": "UTC", "y": y, "x": x}, headers=headers
+    )
+    assert res.status_code == 422
+    assert f"x={x}" in res.json()["detail"]
+    assert chart_render.CATALOG[domain][y]["label"] in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_the_x_refusal_names_what_the_metric_does_allow(client, db_session, redis):
+    """The message lists the usable `x` values, and says an omitted one works where it does."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
-        TICKETS_URL,
+        TICKETS_DATA_URL, params={"tz": "UTC", "y": "volunteers_needed", "x": "date"}, headers=headers
+    )
+    assert res.json()["detail"] == "「志工需求人數」不支援 x=date；可用的 x：category，或不帶 x"
+    res = await client.get(
+        TICKETS_DATA_URL,
         params={"tz": "UTC", "y": "task_completion_distribution", "x": "date"},
         headers=headers,
     )
-    assert res.status_code == 200
+    assert res.json()["detail"] == "「子任務完成比例」不支援 x=date；此指標不分組"
+
+
+@pytest.mark.asyncio
+async def test_an_omitted_x_and_a_pie_of_a_date_trend_still_render(client, db_session, redis):
+    """Only a given `x` is refused: none on a forced-shape metric uses its grouping.
+
+    `x=date` with a pie draws the aggregate, because a trend has no pie form.
+    """
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
+    forced = await client.get(
+        TICKETS_DATA_URL, params={"tz": "UTC", "y": "net_backlog_change"}, headers=headers
+    )
+    assert (forced.status_code, forced.json()["x"]) == (200, "date")
+    pie = await client.get(
+        TICKETS_URL,
+        params={"tz": "UTC", "y": "total_tickets", "x": "date", "chart_type": "pie"},
+        headers=headers,
+    )
+    assert pie.status_code == 200
+    assert pie.json()["data"][0]["type"] == "pie"
 
 
 @pytest.mark.asyncio
@@ -298,6 +346,9 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
         assert "截至查詢期間最後一天" in body["tickets"][y]["description"]
     assert body["tickets"]["volunteer_gap"]["allowed_x"] == ["category", "date", "none"]
     assert body["tickets"]["volunteers_needed"]["allowed_x"] == ["category", "none"]
+    # The gap trend is daily whatever x_granularity says, and the catalog says so; the rest do both.
+    assert body["tickets"]["volunteer_gap"]["allowed_x_granularities"] == ["day"]
+    assert body["tickets"]["total_tickets"]["allowed_x_granularities"] == ["day", "week"]
     assert "依異動紀錄還原" in body["tickets"]["volunteer_gap"]["description"]
     operating = body["stations"]["operating_station_count"]
     assert (operating["label"], operating["unit"]) == ("營運中站點數", "站")
@@ -878,12 +929,10 @@ async def test_data_completion_rate_is_a_percentage(client, db_session, redis):
 
 @pytest.mark.asyncio
 async def test_data_reports_the_grouping_it_applied(client, db_session, redis):
-    """An `x` that doesn't apply is dropped, and `x` in the response says so."""
+    """With no `x`, a metric that has a built-in grouping uses it, and `x` in the response says so."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
-        TICKETS_DATA_URL,
-        params={"tz": "UTC", "y": "task_completion_distribution", "x": "date"},
-        headers=headers,
+        TICKETS_DATA_URL, params={"tz": "UTC", "y": "task_completion_distribution"}, headers=headers
     )
     assert res.status_code == 200
     assert res.json()["x"] == "completion"
@@ -1044,12 +1093,11 @@ async def test_volunteer_metrics_over_value_data_and_chart(client, db_session, r
         )
     ).json()
     assert (by_type["x_values"], by_type["series"]) == (["人力"], [{"name": "志工缺口", "values": [3]}])
-    # The totals have no date form, so the x is ignored rather than rejected.
-    ignored = await client.get(
+    # The totals have no date form, so asking for one is refused rather than answered with the total.
+    refused = await client.get(
         TICKETS_DATA_URL, params={"tz": "UTC", "y": "volunteers_needed", "x": "date"}, headers=headers
     )
-    assert ignored.status_code == 200
-    assert ignored.json()["x"] is None
+    assert refused.status_code == 422
 
     today = datetime.now(UTC).date()
     trend = {
@@ -1062,6 +1110,11 @@ async def test_volunteer_metrics_over_value_data_and_chart(client, db_session, r
     data = (await client.get(TICKETS_DATA_URL, params=trend, headers=headers)).json()
     assert data["x"] == "date"
     assert data["series"] == [{"name": "志工缺口", "values": [0, 3, 3]}]
+    # Only day is published for the gap trend; a week still gets the same daily points.
+    weekly = (
+        await client.get(TICKETS_DATA_URL, params={**trend, "x_granularity": "week"}, headers=headers)
+    ).json()
+    assert weekly == data
     figure = await client.get(TICKETS_URL, params={**trend, "chart_type": "line"}, headers=headers)
     assert figure.status_code == 200
     assert figure.json()["data"][0]["y"] == [0, 3, 3]
@@ -1122,9 +1175,62 @@ async def test_ticket_area_filters_by_city_town_or_village(client, db_session, r
     assert await _total(client, headers, village="大馬村") == 2  # the same name in two towns
     assert await _total(client, headers, town="光復鄉", village="大馬村") == 1
     assert await _total(client, headers, county="宜蘭縣") == 1
-    assert await _total(client, headers, county="臺北市") == 0  # the pole row is not an address
-    assert await _total(client, headers, county="花蓮縣", village="冬山村") == 0
     assert await _total(client, headers, county="") == 5  # blank means no filter
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"county": "XYZ"},
+        {"county": "臺北市"},  # only a pole row has it, and the catalog lists addresses
+        {"county": "花蓮縣", "village": "冬山村"},  # both exist, never on the same address
+        {"town": "XYZ"},
+        {"village": "XYZ"},
+        {"county": "花蓮縣", "town": "冬山鄉"},
+    ],
+)
+@pytest.mark.parametrize("url", [TICKETS_VALUE_URL, TICKETS_DATA_URL, TICKETS_URL])
+async def test_an_area_outside_the_catalog_is_a_422(client, db_session, redis, url, params):
+    """Like an unknown status, an area the catalog does not list is refused on every ticket endpoint."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    await _filed(db_session, user_uuid, county="花蓮縣", town="光復鄉", village="大馬村")
+    pole = await _filed(db_session, user_uuid, county="宜蘭縣", town="冬山鄉", village="冬山村")
+    db_session.add(SecondaryLocation(geometry_uuid=pole.uuid, location_type="pole", county="臺北市"))
+    await db_session.commit()
+
+    res = await client.get(url, params={"tz": "UTC", "y": "total_tickets", **params}, headers=headers)
+    assert res.status_code == 422
+    assert "找不到這個地區" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_the_area_check_accepts_exactly_what_the_catalog_lists(client, db_session, redis):
+    """Every county, town and village the catalog names passes the filter; a deleted row's place does not."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    await _filed(db_session, user_uuid, county="花蓮縣", town="光復鄉", village="大馬村")
+    await _filed(db_session, user_uuid, county="花蓮縣", town="鳳林鎮")
+    await _filed(db_session, user_uuid, county="宜蘭縣")
+    await _filed(
+        db_session, user_uuid, county="屏東縣", village="無鄉鎮村"
+    )  # no town: the list omits the village
+    gone = await _filed(db_session, user_uuid, county="臺北市", town="中正區")
+    gone.delete_at = datetime.now(UTC)
+    await db_session.commit()
+
+    areas = (await client.get(CATALOG_URL, headers=headers)).json()["filters"]["tickets"]["areas"]
+    for county in areas:
+        assert await _total(client, headers, county=county["county"]) >= 0
+        for town in county["towns"]:
+            assert await _total(client, headers, county=county["county"], town=town["town"]) >= 0
+            for village in town["villages"]:
+                filters = {"county": county["county"], "town": town["town"], "village": village}
+                assert await _total(client, headers, **filters) >= 0
+    for params in ({"county": "臺北市"}, {"county": "屏東縣", "village": "無鄉鎮村"}):
+        res = await client.get(
+            TICKETS_VALUE_URL, params={"tz": "UTC", "y": "total_tickets", **params}, headers=headers
+        )
+        assert res.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -1153,8 +1259,12 @@ async def test_filters_narrow_the_callers_scope_and_never_widen_it(client, db_se
     await db_session.commit()
 
     assert await _total(client, headers, county="花蓮縣", task_type="supply") == 1
-    assert await _total(client, headers, county="宜蘭縣") == 0
     assert await _total(client, headers, y="volunteers_needed", county="花蓮縣") == 0
+    # 宜蘭縣 only has a stranger's ticket, so it is not in this caller's area list either.
+    res = await client.get(
+        TICKETS_VALUE_URL, params={"tz": "UTC", "y": "total_tickets", "county": "宜蘭縣"}, headers=headers
+    )
+    assert res.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -1215,6 +1325,10 @@ async def test_station_filters_and_the_operating_count(client, db_session, redis
     assert await total(station_type="water", status="active") == 1
     assert await total(county="花蓮縣") == 2
     assert await total(village="冬山村") == 1
+    res = await client.get(
+        STATIONS_VALUE_URL, params={"tz": "UTC", "y": "station_count", "county": "XYZ"}, headers=headers
+    )
+    assert res.status_code == 422
     # Operating stations: active ones only, wherever and whenever they were made.
     old = {"start_date": "2001-01-01", "end_date": "2001-01-02"}
     assert await total(y="operating_station_count") == 2
