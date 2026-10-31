@@ -6,7 +6,7 @@ import { Box } from '@mui/material';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
 
-import { TicketCreateDrawer } from '../ticket-create/ticket-create-drawer';
+import { TicketCreateSheet } from '../ticket-board/ticket-create-sheet';
 import { TicketReportDrawer } from '../ticket-report/ticket-report-drawer';
 import {
   createTicketReportRecord,
@@ -330,14 +330,8 @@ export function TicketListPage() {
         onClose={closeReportDrawer}
         onCreate={createReport}
       />
-      <TicketCreateDrawer
-        open={createDrawerOpen}
-        onClose={closeCreateDrawer}
-        onCreated={(row) => {
-          setRows((currentRows) => [row, ...currentRows]);
-          setCreateDrawerOpen(false);
-        }}
-      />
+      {/* The ticket goes to the backend; this page's rows are its own mock list. */}
+      <TicketCreateSheet open={createDrawerOpen} onClose={closeCreateDrawer} />
     </Box>
   );
 }

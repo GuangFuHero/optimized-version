@@ -112,25 +112,34 @@ async def test_the_back_office_marker_does_not_make_a_citizen_official(client, r
     assert await _stored_source(station["name"]) == []
 
 
-async def test_a_back_office_account_on_the_site_makes_the_users(client, redis):
-    """Holding a back-office identity and the site's `user`, a request in the site's realm makes `user`."""
+async def _holding_both(redis) -> str:
+    """A back-office token for an account that also holds the site's `user`."""
     await _ensure_platform_role("user", CITIZEN_GRANTS)
     grants = [(Perm.STATION_ADD, "all"), (Perm.TICKET_ADD, "all"), (Perm.TICKET_EDIT, "all")]
     user_uuid, token = await _create_user_with_grants(redis, grants)
     async with db_ctx() as db:
         site = await db.scalar(select(Role).where(Role.name == "user"))
         db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=site.uuid))
+    return token
+
+
+SITE_REALM = {"X-WG-Realm": "site"}
+
+
+async def test_a_back_office_account_on_the_site_makes_the_users(client, redis):
+    """Holding a back-office identity and the site's `user`, a request in the site's realm makes `user`."""
+    token = await _holding_both(redis)
     station = _station(name=f"雙身份站-{random.random()}", source="official")
 
-    body = (await _create(client, token, station, headers={"X-WG-Realm": "site"})).json()
+    body = (await _create(client, token, station, headers=SITE_REALM)).json()
 
     assert body["data"]["createStation"]["station"]["source"] == "user", body
     assert await _stored_source(station["name"]) == ["user"]
 
 
-async def _post(client, token, query, variables) -> dict:
+async def _post(client, token, query, variables, headers=None) -> dict:
     body = {"query": query, "variables": variables}
-    resp = await client.post("/graphql", json=body, headers=auth_header(token))
+    resp = await client.post("/graphql", json=body, headers={**auth_header(token), **(headers or {})})
     return resp.json()
 
 
@@ -141,7 +150,7 @@ async def _task_sources(task_uuids) -> list[str | None]:
         )
 
 
-async def _file_and_add(client, token, sent: str) -> list[str]:
+async def _file_and_add(client, token, sent: str, headers=None) -> list[str]:
     """A ticket with one task sending `source: sent`, then a second task added the same way."""
     point = [140 + random.random() * 20, -40 + random.random() * 20]
     ticket_input = {
@@ -151,7 +160,9 @@ async def _file_and_add(client, token, sent: str) -> list[str]:
         "priority": "high",
         "tasks": [{"taskType": "rescue", "taskName": "抽水", "source": sent}],
     }
-    created = (await _post(client, token, CREATE_TICKET, {"input": ticket_input}))["data"]["createTicket"]
+    created = (await _post(client, token, CREATE_TICKET, {"input": ticket_input}, headers))["data"][
+        "createTicket"
+    ]
     added = (
         await _post(
             client,
@@ -165,6 +176,7 @@ async def _file_and_add(client, token, sent: str) -> list[str]:
                     "source": sent,
                 }
             },
+            headers,
         )
     )["data"]["createTicketTask"]
     return [created["tasks"][0]["uuid"], added["task"]["uuid"]]
@@ -182,6 +194,13 @@ async def test_tasks_made_in_the_back_office_are_official_whatever_they_send(cli
     tasks = await _file_and_add(client, await _back_office_identity(redis), sent="user")
 
     assert await _task_sources(tasks) == ["official", "official"]
+
+
+async def test_tasks_from_a_back_office_account_on_the_site_are_the_users(client, redis):
+    """The same account files from the site as its `user` grant, so both its tasks are `user`."""
+    tasks = await _file_and_add(client, await _holding_both(redis), sent="official", headers=SITE_REALM)
+
+    assert await _task_sources(tasks) == ["user", "user"]
 
 
 CREATE_HELP_REQUEST = """

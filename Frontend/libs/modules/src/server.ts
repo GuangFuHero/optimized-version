@@ -10,7 +10,6 @@ export {
 export { withClientIpAsync } from './server/client-ip';
 export { requestOriginAsync } from './server/request-origin';
 
-export { reverseGeocode } from './server/reverse-geocode';
 export {
   createBackendGraphqlHandler,
   createBackendRestHandler,

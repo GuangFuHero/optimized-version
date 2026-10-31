@@ -155,6 +155,8 @@ export interface RescueMapPinAppearance {
   dimmed?: boolean;
   /** Outlined, enlarged and lifted above the other pins. */
   selected?: boolean;
+  /** A teardrop unless set; square marks a 開啟空間 space on the admin ticket map. */
+  shape?: 'drop' | 'square';
 }
 
 /** Opt-in hover tooltip for a marker. Plain text; it is escaped. */

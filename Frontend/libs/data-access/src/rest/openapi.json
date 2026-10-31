@@ -5156,13 +5156,71 @@
         }
       }
     },
+    "/api/v1/bulk/tickets/export/counts": {
+      "get": {
+        "tags": [
+          "批量匯入匯出"
+        ],
+        "summary": "各任務型別匯出會有幾列",
+        "description": "Count each task type's export rows in the caller's scope, with the most one export may hold.\n\nA type with no rows is left out. A count over `max_rows` is still the real one, so a page can\nsay that type's export will be refused before anyone asks for it.",
+        "operationId": "count_ticket_exports_api_v1_bulk_tickets_export_counts_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketExportCountsResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission Denied"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/bulk/tickets/export": {
       "get": {
         "tags": [
           "批量匯入匯出"
         ],
         "summary": "匯出求助單（CSV / XLSX）",
-        "description": "Export one task type's rows; contact fields are masked per row (ADR-109).",
+        "description": "Export one task type's rows; contact fields are masked per row (ADR-109).\n\nWith `template`, the header row alone, for an importer to fill in.",
         "operationId": "export_tickets_api_v1_bulk_tickets_export_get",
         "security": [
           {
@@ -5192,6 +5250,18 @@
               "title": "Format"
             },
             "description": "檔案格式：csv / xlsx"
+          },
+          {
+            "name": "template",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export",
+              "default": false,
+              "title": "Template"
+            },
+            "description": "只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export"
           },
           {
             "name": "X-WG-Realm",
@@ -11970,6 +12040,30 @@
         ],
         "title": "TeamStatusRequest",
         "description": "Body for suspending or restoring a team (Spec/026, ADR-357)."
+      },
+      "TicketExportCountsResponse": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts",
+            "description": "任務型別 → 匯出會有幾列；沒有列的型別不列"
+          },
+          "max_rows": {
+            "type": "integer",
+            "title": "Max Rows",
+            "description": "單次匯出的上限；筆數超過的型別，匯出會被拒絕"
+          }
+        },
+        "type": "object",
+        "required": [
+          "counts",
+          "max_rows"
+        ],
+        "title": "TicketExportCountsResponse",
+        "description": "How many rows each task type's export would hold, and the most one export may hold."
       },
       "TicketForReviewResponse": {
         "properties": {
