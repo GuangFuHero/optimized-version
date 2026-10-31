@@ -86,6 +86,12 @@ _PARTS_WITHOUT_LINE = (
     _ADDRESS_COLUMNS.replace(", full_address", "").replace(", alley, lane, section", "")
     + f"('b0000000-0000-4000-8000-000000000004', {TICKET}, 'address', '花蓮縣', '光復鄉', '糖廠街', '19號')"
 )
+# Blank lines: one with parts, one with none; both count as no line, as a NULL does.
+_BLANK_LINES = (
+    _ADDRESS_COLUMNS.replace(", alley, lane, section", "")
+    + f"('b0000000-0000-4000-8000-000000000005', {TICKET}, 'address', '', '花蓮縣', '光復鄉', NULL, NULL),"
+    f" ('b0000000-0000-4000-8000-000000000006', {TICKET}, 'address', ' \n', NULL, NULL, NULL, NULL)"
+)
 
 
 async def _alembic(url: str, *args: str) -> tuple[int, str]:
@@ -220,7 +226,7 @@ async def outcomes():
     return {
         "repairable": await _run("repairable", addresses=(_ADDRESSES,)),
         "unparsed": await _run("unparsed", addresses=(_ADDRESSES, _UNPARSED_ADDRESS)),
-        "lineless": await _run("lineless", addresses=(_ADDRESSES, _PARTS_WITHOUT_LINE)),
+        "lineless": await _run("lineless", addresses=(_ADDRESSES, _PARTS_WITHOUT_LINE, _BLANK_LINES)),
     }
 
 
@@ -289,7 +295,15 @@ async def test_parts_with_no_line_are_kept_and_the_line_is_built_from_them(outco
     done = outcomes["lineless"]
     assert done["upgraded"] and done["upgraded_again"]
     assert done["addresses"]["4"] == (None, None, None, "花蓮縣光復鄉糖廠街19號")
-    assert "2 rows re-parsed, 0 would rebuild" in done["says"]
+    assert "3 rows re-parsed, 0 would rebuild" in done["says"]
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_a_blank_line_counts_as_no_line(outcomes):
+    """An empty or whitespace-only line becomes NULL: it does not stop the upgrade, and parts survive it."""
+    addresses = outcomes["lineless"]["addresses"]
+    assert addresses["5"] == (None, None, None, "花蓮縣光復鄉")
+    assert addresses["6"] == (None, None, None, None)
 
 
 @pytest.mark.asyncio(loop_scope="module")

@@ -180,7 +180,11 @@ def _address_up() -> None:
     op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.remainder IS '解析不出來的地址文字'")
     # A derived-column rewrite, not an edit anyone made, so it stays out of the audit log.
     op.execute(f"ALTER TABLE {_ADDRESSES} DISABLE TRIGGER audit_trigger_{_ADDRESSES}")
-    op.execute(f"UPDATE {_ADDRESSES} SET user_input_address = full_address WHERE user_input_address IS NULL")
+    # A blank line counts as no line.
+    op.execute(
+        f"UPDATE {_ADDRESSES} SET user_input_address = NULLIF(btrim(full_address, E' \\t\\r\\n'), '')"
+        " WHERE user_input_address IS NULL"
+    )
 
     stored_parts = ", ".join(_PARTS)
     rows = bind.execute(
@@ -194,7 +198,7 @@ def _address_up() -> None:
         parts = parse_tw_address(line)
         values = {**parts.as_dict(), "remainder": parts.remainder}
         values.pop("full_address")
-        if join_address(**values) != stored:
+        if join_address(**values) != ((stored or "").strip() or None):
             differing.append(str(uuid))
         changes.append({"uuid": uuid, **values})
     log.info(
@@ -230,7 +234,7 @@ def _address_down() -> None:
 
 
 def upgrade() -> None:
-    """Apply the three fixes; the second and third stop with a message if the data cannot take them."""
+    """Apply the three fixes; the address step stops with a message if a line would not rebuild to itself."""
     _role_kind_up()
     _stamps_up()
     _address_up()
