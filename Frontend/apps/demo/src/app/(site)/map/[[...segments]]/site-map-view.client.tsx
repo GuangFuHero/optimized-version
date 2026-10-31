@@ -151,8 +151,7 @@ function SiteMapViewportDataLayer({
     useState<RescueMapMarkerItem | null>(null);
 
   // A link to a ticket the view never fetched — past its 200, outside it, left out by a filter, or
-  // not there at all — asks the backend (ADR-444): the ticket, or why there is none. Either goes to
-  // the map as its linked item, which opens even when the map's status filter leaves the pin out.
+  // not there at all — asks the backend (ADR-444): the ticket, or why there is none.
   const lookUpLinkedTicket = useLinkedTicketLookup();
   const [linkedTicketMarker, setLinkedTicketMarker] =
     useState<RescueMapMarkerItem | null>(null);
@@ -194,6 +193,13 @@ function SiteMapViewportDataLayer({
       liveDataSnapshot.markers,
     ],
   );
+
+  // Opened from a building or a link, a ticket opens even when the map's status filter leaves its
+  // pin out: the map is handed it as its linked item, and shows it as long as it is selected.
+  const linkedItem =
+    [buildingTicketMarker, linkedTicketMarker, goneTicket].find(
+      (item) => item && item.id === selectedMarkerId,
+    ) ?? null;
 
   // The viewport read when pressed, as for a share: kept in the callback, every pan would make a new one.
   const openBuildingTicket = useCallback(
@@ -346,18 +352,20 @@ function SiteMapViewportDataLayer({
 
   // A claim, a release or a stop can change a ticket's status, which its pin shows; the next fetch
   // would bring it, but the person who did it should not have to wait for one. A ticket found gone
-  // (null — deleted) loses its pin, and its looked-up copy if a link opened it, and with them the
-  // selection, so its drawer shuts.
+  // (null — deleted) loses its pin, and its copy if a building or a link opened it, and with them
+  // the selection, so its drawer shuts.
   const showReloadedTicketStatus = useCallback(
     (ticketUuid: string, reloaded: ReloadedTicket | null) => {
       if (!reloaded) {
+        const dropGone = (current: RescueMapMarkerItem | null) =>
+          current?.id === ticketUuid ? null : current;
+
         liveDataStore.dismissMarker(ticketUuid);
         setGoneTicketIds((current) =>
           current.includes(ticketUuid) ? current : [...current, ticketUuid],
         );
-        setLinkedTicketMarker((current) =>
-          current?.id === ticketUuid ? null : current,
-        );
+        setBuildingTicketMarker(dropGone);
+        setLinkedTicketMarker(dropGone);
         return;
       }
 
@@ -414,7 +422,7 @@ function SiteMapViewportDataLayer({
             ticketDetailOverrides={createTicketDetailOverrides}
             stationDetailSecondaryAction={stationDetailSecondaryAction}
             stationLayout="site"
-            linkedItem={linkedTicketMarker ?? goneTicket}
+            linkedItem={linkedItem}
             viewMemoryKey="site"
           />
         </Box>

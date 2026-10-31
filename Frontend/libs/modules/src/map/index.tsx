@@ -232,9 +232,9 @@ interface MapProps {
   /** 站點詳情的版面：前台傳 `'site'`；後台不傳，維持後台的版面。 */
   stationLayout?: RescueMapStationLayout;
   /**
-   * A linked ticket the caller looked up itself (ADR-444), opened when selected: the ticket, even
-   * when the map's own filters leave its pin out, or the word that it was deleted or never was. The
-   * map does not look it up itself.
+   * A ticket the caller holds beside the markers — opened from a building, or looked up for a link
+   * (ADR-444) — opened when selected: the ticket, even when the map's own filters leave its pin out,
+   * or the word that it was deleted or never was. The map does not look it up itself.
    */
   linkedItem?: RescueMapMarkerItem | RescueMapGoneTicket | null;
   /** 是否顯示比例尺。 */
