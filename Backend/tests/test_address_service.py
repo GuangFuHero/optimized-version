@@ -370,13 +370,18 @@ def test_a_sub_alley_is_graded_by_the_line_the_database_will_build():
 
 
 def test_a_line_that_splits_into_the_stored_parts_is_the_same_address():
-    """A unit cut from the line or a blank part changes nothing; another part or a remainder does."""
+    """A unit sent back as a field or a blank part changes nothing; another part or a remainder does."""
     stored = SimpleNamespace(**apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None))
-    assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號"}, point=None))
+    door = {"full_address": "花蓮縣光復鄉糖廠街19號", "floor": "3樓"}
+    assert same_address(stored, apply_address(door, point=None))
     stored.section = ""
-    assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號"}, point=None))
-    assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街21號"}, point=None))
-    assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號後面"}, point=None))
+    assert same_address(stored, apply_address(door, point=None))
+    assert not same_address(
+        stored, apply_address({**door, "full_address": "花蓮縣光復鄉糖廠街21號"}, point=None)
+    )
+    assert not same_address(
+        stored, apply_address({**door, "full_address": "花蓮縣光復鄉糖廠街19號後面"}, point=None)
+    )
 
 
 def test_a_different_unit_written_in_the_line_is_a_different_address():
@@ -399,3 +404,12 @@ def test_a_unit_in_the_line_is_compared_with_the_rows_own_columns():
     )
     assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉中正路7號3樓"}, point=None))
     assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉中正路7號5樓"}, point=None))
+
+
+def test_an_edit_that_clears_or_changes_the_floor_replaces_a_raw_line_that_names_it():
+    """The echo without the floor keeps the line only when the floor is sent back as a field."""
+    stored = SimpleNamespace(**apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None))
+    echo = {"full_address": "花蓮縣光復鄉糖廠街19號"}
+    assert same_address(stored, apply_address({**echo, "floor": "3樓"}, point=None))
+    assert not same_address(stored, apply_address({**echo, "floor": None}, point=None))
+    assert not same_address(stored, apply_address({**echo, "floor": "5樓"}, point=None))

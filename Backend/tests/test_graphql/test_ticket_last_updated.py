@@ -9,6 +9,7 @@ from app.models.geo import BaseGeometry
 from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TicketTask
 from app.services.ticket_audit import flag_need_audit
+from scripts.resplit_addresses import drifted
 from tests.test_graphql.conftest import auth_header, test_db
 
 # Every test first puts the ticket's updatedAt back to this, so "moved" and "unchanged" are exact.
@@ -183,6 +184,33 @@ async def test_another_floor_in_the_line_replaces_the_raw_line_but_the_forms_ech
     await send({"fullAddress": "花蓮縣光復鄉糖廠街19號", "floor": "5樓"})
     assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號5樓"
     assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
+async def test_clearing_the_floor_through_the_echo_replaces_the_raw_line_and_leaves_no_drift(
+    client, coordinator_auth, sample_ticket
+):
+    """The raw line must not name a floor the row no longer has, or a re-split would put it back."""
+    _, admin = coordinator_auth
+
+    async def send(address: dict) -> None:
+        await _gql(
+            client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}
+        )
+
+    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號3樓"})
+    await _set_earlier(sample_ticket)
+
+    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號", "floor": None})
+
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號"
+    assert await _updated_at(client, admin, sample_ticket) > EARLIER
+    async with test_db() as db:
+        floor = await db.scalar(
+            select(SecondaryLocation.floor).where(SecondaryLocation.geometry_uuid == sample_ticket)
+        )
+        assert floor is None
+        assert await drifted(db) == {}
 
 
 @pytest.mark.asyncio

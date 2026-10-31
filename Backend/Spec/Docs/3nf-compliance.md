@@ -132,9 +132,10 @@ Removed: see F6.
   keeps the line as received and overwrites the parts and `remainder`. The GraphQL inputs do not take them.
   A ticket inside a building copies the building's already-split address.
 - **Guards for a parser change or a direct SQL write**: `scripts/resplit_addresses.py` re-parses
-  `user_input_address` for every row and prints what would change (`--apply` writes it);
-  `scripts/check_address_drift.py` lists the rows whose stored parts differ from a re-parse and exits 1 if
-  there are any. Both need Python, since SQL cannot run the parser. A row with parts but no line (left by an
+  `user_input_address` for every row and prints what would change (`--apply` writes it, and also fills an empty
+  棟/樓/室 column the line carries, never overwriting a filled one);
+  `scripts/check_address_drift.py` lists the rows whose stored parts differ from a re-parse (or that have an
+  empty 棟/樓/室 column the line carries) and exits 1 if there are any. Both need Python, since SQL cannot run the parser. A row with parts but no line (left by an
   earlier rename) has nothing to re-parse: the upgrade keeps its parts and leaves `user_input_address` NULL, the
   re-split leaves it alone, and both scripts list it as parts-only, which is not drift (the check still exits 0).
 - **Tests**: `tests/test_address_service.py`, `tests/test_address_parse.py`, `tests/test_address_tools.py`.
