@@ -1012,7 +1012,7 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
    `_fill_role_kind` 與所有 `role_kind=` 一併移除。
 2. 加 CHECK `ck_ticket_tasks_stamps_match_status`。upgrade 先回報不一致的列數，再依狀態修（缺的時間戳補 `updated_at`、
    不該有的清掉），最後用有守衛的 DO 區塊加上 CHECK。
-3. 加 `user_input_address`（使用者輸入原文，去掉頭尾空白，欄寬 500，比 `full_address` 的 255 寬，因為解析器會丟掉空白；地址真的改了才整行覆蓋，重送的地址拆出來跟已存的各欄一樣就保留原文，除非這次編輯清掉或改掉了原文裡寫的棟／樓／室）與 `remainder`（解析器放不進各欄的文字）；`full_address`
+3. 加 `user_input_address`（使用者輸入原文，去掉頭尾空白，欄寬 500，比 `full_address` 的 255 寬，因為解析器會丟掉空白；只有編輯真的改到這一列的其他欄位才寫入，所以重送同樣的地址、換個寫法的樓層、或欄位蓋過原文的樓層都保留原文、不算編輯，原本只有各欄沒有原文的列也維持 NULL，直到下一次真正的修改）與 `remainder`（解析器放不進各欄的文字）；`full_address`
    改成 `GENERATED ALWAYS AS (縣市…號、remainder 串起來) STORED`。解析器讓 衖／衕 留在 `alley` 裡（`3弄2衖`），
    重新串出來的行跟原本解析器回傳的 `full_address` 逐字相同。各欄仍是解析器對 `user_input_address` 的結果，這是唯一保留的例外
    （解析器需要 Python，資料庫算不出來），由 `scripts/resplit_addresses.py`（重新拆解，預設只印報告）與

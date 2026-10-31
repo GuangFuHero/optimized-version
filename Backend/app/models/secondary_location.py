@@ -60,7 +60,9 @@ class SecondaryLocation(Base, UUIDPKMixin):
     road: Mapped[str | None] = mapped_column(String(100), comment="路／街／大道")
     section: Mapped[str | None] = mapped_column(String(10), comment="段，例如 一段")
     lane: Mapped[str | None] = mapped_column(String(20), comment="巷，例如 469巷")
-    alley: Mapped[str | None] = mapped_column(String(20), comment="弄，例如 1弄")
+    alley: Mapped[str | None] = mapped_column(
+        String(20), comment="弄，例如 1弄；其後的衖／衕也在這欄，例如 3弄2衖"
+    )
     no: Mapped[str | None] = mapped_column(String(20), comment="號，例如 19號、19之1號")
     # verified / pin_mismatch / unverified, set from the address token on every write.
     normalization_status: Mapped[str | None] = mapped_column(

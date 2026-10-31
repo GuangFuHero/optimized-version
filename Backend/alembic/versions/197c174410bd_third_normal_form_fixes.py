@@ -178,6 +178,7 @@ def _address_up() -> None:
     op.execute(f"ALTER TABLE {_ADDRESSES} ADD COLUMN IF NOT EXISTS remainder varchar(255)")
     op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.user_input_address IS '使用者輸入的地址原文'")
     op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.remainder IS '解析不出來的地址文字'")
+    op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.alley IS '弄，例如 1弄；其後的衖／衕也在這欄，例如 3弄2衖'")
     # A derived-column rewrite, not an edit anyone made, so it stays out of the audit log.
     op.execute(f"ALTER TABLE {_ADDRESSES} DISABLE TRIGGER audit_trigger_{_ADDRESSES}")
     op.execute(f"UPDATE {_ADDRESSES} SET user_input_address = full_address WHERE user_input_address IS NULL")
@@ -235,6 +236,7 @@ def _address_up() -> None:
 
 def _address_down() -> None:
     op.execute(f"ALTER TABLE {_ADDRESSES} ALTER COLUMN full_address DROP EXPRESSION")
+    op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.alley IS '巷弄——欄位名為 alley，但實際存巷弄'")
     op.execute(f"ALTER TABLE {_ADDRESSES} DROP COLUMN remainder")
     op.execute(f"ALTER TABLE {_ADDRESSES} DROP COLUMN user_input_address")
 

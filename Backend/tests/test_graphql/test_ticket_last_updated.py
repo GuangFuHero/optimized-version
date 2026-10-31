@@ -137,27 +137,54 @@ async def _raw_address(ticket: str) -> str | None:
         )
 
 
+async def _file_and_resend(client, admin, ticket: str, first: dict, *resends: dict) -> None:
+    """File the address, put updatedAt back, then send each resend; callers assert on the end state."""
+    for address in (first, None, *resends):
+        if address is None:
+            await _set_earlier(ticket)
+            continue
+        await _gql(client, admin, UPDATE_TICKET, {"uuid": ticket, "input": {"secondaryLocation": address}})
+
+
 @pytest.mark.asyncio
 async def test_sending_back_the_line_it_read_keeps_the_raw_line_and_changes_nothing(
     client, coordinator_auth, sample_ticket
 ):
-    """The form returns the line without its floor; that is the same address, so the raw line stays."""
+    """The form returns the line without its floor; nothing else changes, so the raw line stays."""
     _, admin = coordinator_auth
-    raw = "花蓮縣光復鄉糖廠街19號3樓"
-    await _gql(
-        client,
-        admin,
-        UPDATE_TICKET,
-        {"uuid": sample_ticket, "input": {"secondaryLocation": {"fullAddress": raw}}},
-    )
-    await _set_earlier(sample_ticket)
-
+    first = {"fullAddress": "花蓮縣光復鄉糖廠街19號3樓"}
     read_back = {"fullAddress": "花蓮縣光復鄉糖廠街19號", "floor": "3樓"}
-    await _gql(
-        client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": read_back}}
+
+    await _file_and_resend(client, admin, sample_ticket, first, read_back)
+
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號3樓"
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
+async def test_a_unit_spelled_another_way_is_not_an_edit(client, coordinator_auth, sample_ticket):
+    """The floor field still says 3樓, so a line spelling it `3F` changes only the raw line, which is kept."""
+    _, admin = coordinator_auth
+    first = {"fullAddress": "花蓮縣光復鄉糖廠街19號3樓", "floor": "3樓"}
+    spelled = {"fullAddress": "花蓮縣光復鄉糖廠街19號3F", "floor": "3樓"}
+
+    await _file_and_resend(client, admin, sample_ticket, first, spelled)
+
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號3樓"
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
+async def test_a_sent_field_that_overrides_the_line_is_not_an_edit(client, coordinator_auth, sample_ticket):
+    """Filed as `…9號3樓` with floor 5樓 (the field wins); sending `…9號4樓` with 5樓 changes nothing."""
+    _, admin = coordinator_auth
+    first = {"fullAddress": "花蓮縣光復鄉中正路9號3樓", "floor": "5樓"}
+
+    await _file_and_resend(
+        client, admin, sample_ticket, first, {"fullAddress": "花蓮縣光復鄉中正路9號4樓", "floor": "5樓"}
     )
 
-    assert await _raw_address(sample_ticket) == raw
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉中正路9號3樓"
     assert await _updated_at(client, admin, sample_ticket) == EARLIER
 
 
@@ -165,23 +192,17 @@ async def test_sending_back_the_line_it_read_keeps_the_raw_line_and_changes_noth
 async def test_another_floor_in_the_line_replaces_the_raw_line_but_the_forms_echo_keeps_it(
     client, coordinator_auth, sample_ticket
 ):
-    """The same door with a different 樓 written in the line is an edit; the line without it is not."""
+    """The same door with a different 樓 written in the line is an edit; the echo of the result is not."""
     _, admin = coordinator_auth
+    first = {"fullAddress": "花蓮縣光復鄉糖廠街19號3樓"}
 
-    async def send(address: dict) -> None:
-        await _gql(
-            client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}
-        )
-
-    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號3樓"})
-    await _set_earlier(sample_ticket)
-
-    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號5樓"})
+    await _file_and_resend(client, admin, sample_ticket, first, {"fullAddress": "花蓮縣光復鄉糖廠街19號5樓"})
     assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號5樓"
     assert await _updated_at(client, admin, sample_ticket) > EARLIER
 
     await _set_earlier(sample_ticket)
-    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號", "floor": "5樓"})
+    echo = {"fullAddress": "花蓮縣光復鄉糖廠街19號", "floor": "5樓"}
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": echo}})
     assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號5樓"
     assert await _updated_at(client, admin, sample_ticket) == EARLIER
 
@@ -190,18 +211,13 @@ async def test_another_floor_in_the_line_replaces_the_raw_line_but_the_forms_ech
 async def test_clearing_the_floor_through_the_echo_replaces_the_raw_line_and_leaves_no_drift(
     client, coordinator_auth, sample_ticket
 ):
-    """The raw line must not name a floor the row no longer has, or a re-split would put it back."""
+    """The floor really changes, so the raw line is replaced and a re-split cannot put the old floor back."""
     _, admin = coordinator_auth
+    first = {"fullAddress": "花蓮縣光復鄉糖廠街19號3樓"}
 
-    async def send(address: dict) -> None:
-        await _gql(
-            client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}
-        )
-
-    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號3樓"})
-    await _set_earlier(sample_ticket)
-
-    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號", "floor": None})
+    await _file_and_resend(
+        client, admin, sample_ticket, first, {"fullAddress": "花蓮縣光復鄉糖廠街19號", "floor": None}
+    )
 
     assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號"
     assert await _updated_at(client, admin, sample_ticket) > EARLIER
@@ -214,58 +230,33 @@ async def test_clearing_the_floor_through_the_echo_replaces_the_raw_line_and_lea
 
 
 @pytest.mark.asyncio
-async def test_a_floor_the_field_set_over_the_line_is_unchanged_by_a_resend(
-    client, coordinator_auth, sample_ticket
-):
-    """Filed as `…9號3樓` with floor 5樓 (the field wins), sending `…9號` with 5樓 back changes nothing."""
-    _, admin = coordinator_auth
-
-    async def send(address: dict) -> None:
-        await _gql(
-            client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}
-        )
-
-    await send({"fullAddress": "花蓮縣光復鄉中正路9號3樓", "floor": "5樓"})
-    await _set_earlier(sample_ticket)
-
-    await send({"fullAddress": "花蓮縣光復鄉中正路9號", "floor": "5樓"})
-
-    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉中正路9號3樓"
-    assert await _updated_at(client, admin, sample_ticket) == EARLIER
-
-
-@pytest.mark.asyncio
 async def test_the_same_line_with_the_rows_own_floor_written_in_changes_nothing(
     client, coordinator_auth, sample_ticket
 ):
     """A ticket filed with its floor in its own field: sending the floor inside the line is not an edit."""
     _, admin = coordinator_auth
+    first = {"fullAddress": "花蓮縣光復鄉中正路7號", "floor": "3樓"}
 
-    async def send(address: dict) -> None:
-        await _gql(
-            client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}
-        )
-
-    await send({"fullAddress": "花蓮縣光復鄉中正路7號", "floor": "3樓"})
-    await _set_earlier(sample_ticket)
-
-    await send({"fullAddress": "花蓮縣光復鄉中正路7號3樓"})
+    await _file_and_resend(client, admin, sample_ticket, first, {"fullAddress": "花蓮縣光復鄉中正路7號3樓"})
     assert await _raw_address(sample_ticket) == "花蓮縣光復鄉中正路7號"
     assert await _updated_at(client, admin, sample_ticket) == EARLIER
 
-    await send({"fullAddress": "花蓮縣光復鄉中正路7號5樓"})
+    await _gql(
+        client,
+        admin,
+        UPDATE_TICKET,
+        {"uuid": sample_ticket, "input": {"secondaryLocation": {"fullAddress": "花蓮縣光復鄉中正路7號5樓"}}},
+    )
     assert await _raw_address(sample_ticket) == "花蓮縣光復鄉中正路7號5樓"
     assert await _updated_at(client, admin, sample_ticket) > EARLIER
 
 
 @pytest.mark.asyncio
-async def test_a_row_with_no_raw_line_gets_one_from_the_first_save_and_keeps_it_after(
-    client, coordinator_auth, sample_ticket
-):
-    """A row kept with parts but no line (from before the raw line existed) gets the received line once."""
+async def test_a_parts_only_row_keeps_no_raw_line_until_a_real_edit(client, coordinator_auth, sample_ticket):
+    """A parts-only row: re-sending its address changes nothing; a real edit sets the line."""
     _, admin = coordinator_auth
-    line = {"secondaryLocation": {"fullAddress": "花蓮縣光復鄉糖廠街19號"}}
-    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": line})
+    line = {"fullAddress": "花蓮縣光復鄉糖廠街19號"}
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": line}})
     async with test_db() as db:
         await db.execute(
             update(SecondaryLocation)
@@ -274,13 +265,14 @@ async def test_a_row_with_no_raw_line_gets_one_from_the_first_save_and_keeps_it_
         )
     await _set_earlier(sample_ticket)
 
-    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": line})
-    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號"
-    assert await _updated_at(client, admin, sample_ticket) > EARLIER
-
-    await _set_earlier(sample_ticket)
-    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": line})
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": line}})
+    assert await _raw_address(sample_ticket) is None
     assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+    changed = {"fullAddress": "花蓮縣光復鄉糖廠街21號"}
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": changed}})
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街21號"
+    assert await _updated_at(client, admin, sample_ticket) > EARLIER
 
 
 @pytest.mark.asyncio

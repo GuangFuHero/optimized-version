@@ -4,7 +4,6 @@ import asyncio
 import html
 import json
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -13,7 +12,7 @@ from jose import jwt
 from app.core.config import settings
 from app.core.security import _decode_access_payload
 from app.services import address
-from app.services.address import apply_address, lookup_address, reverse_geocode, same_address
+from app.services.address import apply_address, lookup_address, reverse_geocode
 
 # Replies as TGOS sent them during a live run, keys never included.
 DOOR = {
@@ -367,60 +366,3 @@ def test_a_sub_alley_is_graded_by_the_line_the_database_will_build():
     token = _token(line)
     stored = apply_address({"full_address": line, "address_token": token}, point=NEAR_DOOR)
     assert stored["alley"] == "2弄3衖" and stored["normalization_status"] == "verified"
-
-
-def test_a_line_that_splits_into_the_stored_parts_is_the_same_address():
-    """A unit sent back as a field or a blank part changes nothing; another part or a remainder does."""
-    stored = SimpleNamespace(**apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None))
-    door = {"full_address": "花蓮縣光復鄉糖廠街19號", "floor": "3樓"}
-    assert same_address(stored, apply_address(door, point=None))
-    stored.section = ""
-    assert same_address(stored, apply_address(door, point=None))
-    assert not same_address(
-        stored, apply_address({**door, "full_address": "花蓮縣光復鄉糖廠街21號"}, point=None)
-    )
-    assert not same_address(
-        stored, apply_address({**door, "full_address": "花蓮縣光復鄉糖廠街19號後面"}, point=None)
-    )
-
-
-def test_a_different_unit_written_in_the_line_is_a_different_address():
-    """The same door with another 樓 changes the address; a line with no unit, or the same one, does not."""
-    stored = SimpleNamespace(**apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None))
-    assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號5樓"}, point=None))
-    assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None))
-    assert same_address(
-        stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號", "floor": "3樓"}, point=None)
-    )
-    assert not same_address(
-        stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號A棟3樓"}, point=None)
-    )
-
-
-def test_a_unit_in_the_line_is_compared_with_the_rows_own_columns():
-    """A row filed with its floor in its own field is unchanged by the line with that floor written in."""
-    stored = SimpleNamespace(
-        **apply_address({"full_address": "花蓮縣光復鄉中正路7號", "floor": "3樓"}, point=None)
-    )
-    assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉中正路7號3樓"}, point=None))
-    assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉中正路7號5樓"}, point=None))
-
-
-def test_an_edit_that_clears_or_changes_the_floor_replaces_a_raw_line_that_names_it():
-    """The echo without the floor keeps the line only when the floor is sent back as a field."""
-    stored = SimpleNamespace(**apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None))
-    echo = {"full_address": "花蓮縣光復鄉糖廠街19號"}
-    assert same_address(stored, apply_address({**echo, "floor": "3樓"}, point=None))
-    assert not same_address(stored, apply_address({**echo, "floor": None}, point=None))
-    assert not same_address(stored, apply_address({**echo, "floor": "5樓"}, point=None))
-
-
-def test_a_unit_the_edit_leaves_as_it_was_does_not_replace_the_raw_line():
-    """The field wins over the line: a row filed as 3樓 with floor 5樓, sent back unchanged, is no edit."""
-    stored = SimpleNamespace(
-        **apply_address({"full_address": "花蓮縣光復鄉中正路9號3樓", "floor": "5樓"}, point=None)
-    )
-    door = {"full_address": "花蓮縣光復鄉中正路9號", "floor": "5樓"}
-    assert same_address(stored, apply_address(door, point=None))
-    assert not same_address(stored, apply_address({**door, "floor": None}, point=None))
-    assert not same_address(stored, apply_address({**door, "floor": "6樓"}, point=None))

@@ -33,7 +33,7 @@ from app.repositories.tickets_repository import (
     ticket_repository,
     ticket_task_repository,
 )
-from app.services.address import apply_address, point_of, same_address
+from app.services.address import apply_address, point_of
 from app.services.authz import require_scope
 from app.services.building_map import place_ticket
 from app.services.geo_validation import (
@@ -526,19 +526,20 @@ async def update_ticket(
 async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, values: dict) -> bool:
     """Overwrite the address row for a geometry, or create it when there is none; say whether it changed.
 
-    A whole-input replacement, so clearing a member means sending it null, not omitting it. A line that
-    splits into the parts already stored keeps the raw line it was first saved with, when it has one.
+    A whole-input replacement, so clearing a member means sending it null, not omitting it. The raw line
+    is written only when something else changes, so an edit that changes nothing visible stays a no-op.
     Flush only: `update_ticket` commits.
     """
     existing = await secondary_location_repository.get_by_geometry(db, geometry_uuid)
     if existing is None:
         await secondary_location_repository.add(db, obj_in={"geometry_uuid": geometry_uuid, **values})
         return True
-    if same_address(existing, values) and existing.user_input_address:
-        values = {k: v for k, v in values.items() if k != "user_input_address"}
     for field, value in values.items():
-        setattr(existing, field, value)
+        if field != "user_input_address":
+            setattr(existing, field, value)
     changed = edited(existing)
+    if changed:
+        existing.user_input_address = values.get("user_input_address")
     await db.flush()
     return changed
 
