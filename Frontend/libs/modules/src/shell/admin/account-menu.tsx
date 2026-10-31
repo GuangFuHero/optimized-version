@@ -129,7 +129,12 @@ export function AccountMenu() {
                 color: color.fg.neutral.muted,
               }}
             >
-              <Box component={ArrowLeftRight} sx={{ width: 12, height: 12 }} />
+              {identities.length > 1 ? (
+                <Box
+                  component={ArrowLeftRight}
+                  sx={{ width: 12, height: 12 }}
+                />
+              ) : null}
               {identityLabel(identity)}
             </Box>
           )}
