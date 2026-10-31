@@ -258,9 +258,16 @@ def apply_address(sl: dict | None, *, point: tuple[float, float] | None) -> dict
 def same_address(existing, values: dict) -> bool:
     """Whether `values` (from `apply_address`) split into the parts and remainder `existing` already holds.
 
-    A blank part and a missing one read the same.
+    A blank part and a missing one read the same. A 棟/樓/室 written in the new line must also match the one
+    in the stored line; a line without one, such as the edit form's echo, matches any.
     """
-    return all((getattr(existing, c) or None) == (values.get(c) or None) for c in _ADDRESS_COLUMNS)
+    if not all((getattr(existing, c) or None) == (values.get(c) or None) for c in _ADDRESS_COLUMNS):
+        return False
+    sent, stored = (
+        parse_tw_address(values.get("user_input_address")),
+        parse_tw_address(existing.user_input_address),
+    )
+    return all(not getattr(sent, u) or getattr(sent, u) == getattr(stored, u) for u in _UNIT_FIELDS)
 
 
 async def unverify_if_moved(db: AsyncSession, geometry_uuid: str, old_geometry, new_geometry: dict) -> None:

@@ -161,6 +161,31 @@ async def test_sending_back_the_line_it_read_keeps_the_raw_line_and_changes_noth
 
 
 @pytest.mark.asyncio
+async def test_another_floor_in_the_line_replaces_the_raw_line_but_the_forms_echo_keeps_it(
+    client, coordinator_auth, sample_ticket
+):
+    """The same door with a different 樓 written in the line is an edit; the line without it is not."""
+    _, admin = coordinator_auth
+
+    async def send(address: dict) -> None:
+        await _gql(
+            client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}
+        )
+
+    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號3樓"})
+    await _set_earlier(sample_ticket)
+
+    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號5樓"})
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號5樓"
+    assert await _updated_at(client, admin, sample_ticket) > EARLIER
+
+    await _set_earlier(sample_ticket)
+    await send({"fullAddress": "花蓮縣光復鄉糖廠街19號", "floor": "5樓"})
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街19號5樓"
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
 async def test_a_row_with_no_raw_line_gets_one_from_the_first_save_and_keeps_it_after(
     client, coordinator_auth, sample_ticket
 ):

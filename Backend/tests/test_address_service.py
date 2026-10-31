@@ -377,3 +377,16 @@ def test_a_line_that_splits_into_the_stored_parts_is_the_same_address():
     assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號"}, point=None))
     assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街21號"}, point=None))
     assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號後面"}, point=None))
+
+
+def test_a_different_unit_written_in_the_line_is_a_different_address():
+    """The same door with another 樓 changes the address; a line with no unit, or the same one, does not."""
+    stored = SimpleNamespace(**apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None))
+    assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號5樓"}, point=None))
+    assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None))
+    assert same_address(
+        stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號", "floor": "3樓"}, point=None)
+    )
+    assert not same_address(
+        stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號A棟3樓"}, point=None)
+    )
