@@ -16,9 +16,10 @@ Three facts the schema stored twice are stored once.
    `updated_at` where a time is missing, then adds the CHECK.
 
 3. `secondary_locations.full_address` becomes a generated column, the parts and a new `remainder` joined.
-   `user_input_address` keeps the line as received; rows from before this hold the parsed line there, since
-   the raw input was never stored. Each row is parsed again to fill `remainder` and the 衖/衕 kept in
-   `alley`; if any row would then rebuild to a different line than it holds, the upgrade stops and says so.
+   `user_input_address` (500 wide) keeps the line as received, outer whitespace trimmed; rows from before
+   this hold the parsed line there, since the raw input was never stored. Each row is parsed again to fill
+   `remainder` and the 衖/衕 kept in `alley`; if any row would then rebuild to a different line than it
+   holds, the upgrade stops and says so.
    A row that holds parts but no line (left by an earlier rename) is kept as it is: it has nothing to parse,
    so its parts stay, `user_input_address` stays NULL and the generated line is built from the parts.
    The audit trigger is off for that backfill, which rewrites derived columns only.
@@ -173,7 +174,7 @@ def _stamps_down() -> None:
 
 def _address_up() -> None:
     bind = op.get_bind()
-    op.execute(f"ALTER TABLE {_ADDRESSES} ADD COLUMN IF NOT EXISTS user_input_address varchar(255)")
+    op.execute(f"ALTER TABLE {_ADDRESSES} ADD COLUMN IF NOT EXISTS user_input_address varchar(500)")
     op.execute(f"ALTER TABLE {_ADDRESSES} ADD COLUMN IF NOT EXISTS remainder varchar(255)")
     op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.user_input_address IS '使用者輸入的地址原文'")
     op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.remainder IS '解析不出來的地址文字'")

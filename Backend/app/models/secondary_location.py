@@ -29,16 +29,22 @@ _FULL_ADDRESS = (
 )
 
 
+# Wider than the 255 of `full_address`: the line is kept as typed, and the parser drops whitespace.
+USER_INPUT_ADDRESS_LENGTH = 500
+
+
 class SecondaryLocation(Base, UUIDPKMixin):
     """ORM model for a secondary address or pole location linked to a geometry."""
 
     __tablename__ = "secondary_locations"
     geometry_uuid: Mapped[str] = mapped_column(ForeignKey("base_geometries.uuid"), index=True)
     location_type: Mapped[str] = mapped_column(String(50))  # address/pole
-    # The address as the user typed it, overwritten on every address edit. The parser splits it into
-    # the parts below at save time; rows from before the split held only the parsed line, so for them
-    # this is that line.
-    user_input_address: Mapped[str | None] = mapped_column(String(255), comment="使用者輸入的地址原文")
+    # The address as the user typed it, outer whitespace trimmed, overwritten by an edit that changes
+    # the address. The parser splits it into the parts below at save time; rows from before the split
+    # held only the parsed line, so for them this is that line.
+    user_input_address: Mapped[str | None] = mapped_column(
+        String(USER_INPUT_ADDRESS_LENGTH), comment="使用者輸入的地址原文"
+    )
     # The address split into its parts, each numbered one keeping its unit (3鄰, 一段, 469巷).
     # `remainder` is what the parser could not place: the text after the 號 that is not a unit, or the
     # whole line when nothing was recognized.

@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.address import MAX_ADDRESS_LENGTH, AddressParts, fold, parse_tw_address
 from app.core.config import settings
 from app.graphql.scalars import geom_to_geojson
-from app.models.secondary_location import SecondaryLocation
+from app.models.secondary_location import USER_INPUT_ADDRESS_LENGTH, SecondaryLocation
 from app.repositories.geo_repository import secondary_location_repository
 from app.services.column_lengths import check_lengths
 
@@ -229,25 +229,29 @@ def apply_address(sl: dict | None, *, point: tuple[float, float] | None) -> dict
 
     Returns the values to store, which callers save in place of their input; only a part too long for
     its column is refused. `full_address` is never written: the database builds it from the parts.
+    The received line is kept with its outer whitespace trimmed.
     """
     if sl is None:
         return None
     values = dict(sl)
     token = values.pop("address_token", None)
-    received = values.pop("full_address", None)
+    received = (values.pop("full_address", None) or "").strip() or None
     parts = parse_tw_address(received)
     values |= {k: getattr(parts, k) for k in _ADDRESS_COLUMNS} | {"user_input_address": received}
     # A 棟/樓/室 typed into the line fills its field only when that was left empty; a filled field wins.
     for unit in _UNIT_FIELDS:
         values[unit] = values.get(unit) or getattr(parts, unit)
     values["normalization_status"] = _grade(token, parts.full_address, point) if parts.full_address else None
-    # The line is checked as `full_address`, the name the API gives it, so a line too long is refused
-    # with the message it has always had; its column holds the same 255 as `user_input_address`.
+    # The folded line is checked as `full_address`, the name the API gives it, so a line too long is
+    # refused with the message it has always had; the raw line and the remainder never exceed it by
+    # more than whitespace, which the raw line's wider column holds.
     check_lengths(
         SecondaryLocation,
-        full_address=received,
-        **{k: v for k, v in values.items() if k != "user_input_address"},
+        full_address=parts.full_address,
+        **{k: v for k, v in values.items() if k not in ("user_input_address", "remainder")},
     )
+    if received and len(received) > USER_INPUT_ADDRESS_LENGTH:
+        raise ValueError(f"full_address must be at most {USER_INPUT_ADDRESS_LENGTH} characters")
     return values
 
 

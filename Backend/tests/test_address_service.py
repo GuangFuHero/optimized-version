@@ -308,6 +308,32 @@ def test_a_line_too_long_to_store_is_refused():
         apply_address({"full_address": "花蓮縣光復鄉糖廠街19號" + "糖" * 250}, point=None)
 
 
+def test_a_line_padded_with_whitespace_is_checked_by_its_folded_length():
+    """Outer whitespace is neither stored nor counted: 250 characters and 10 spaces is still a line."""
+    door = "花蓮縣光復鄉糖廠街19號"
+    for sent in (door + "糖" * 240 + " " * 10, door + " " * 250, " " * 10 + door + "\n" * 250):
+        stored = apply_address({"full_address": sent}, point=None)
+        assert stored["user_input_address"] == sent.strip()
+
+
+def test_a_line_that_widens_past_the_limit_is_refused_as_full_address():
+    """Compatibility folding can lengthen a line; the message names `full_address`, never `remainder`."""
+    with pytest.raises(ValueError, match="full_address must be at most 255 characters"):
+        apply_address({"full_address": "㎞" * 200}, point=None)
+
+
+def test_a_line_whose_folded_form_fits_but_whose_raw_form_is_too_long_is_refused():
+    """Interior whitespace is kept in the raw line, which has its own limit of 500."""
+    with pytest.raises(ValueError, match="full_address must be at most 500 characters"):
+        apply_address({"full_address": "花蓮縣" + " " * 600 + "光復鄉糖廠街19號"}, point=None)
+
+
+def test_a_blank_line_stores_nothing():
+    """Only whitespace was sent: no line, no parts."""
+    stored = apply_address({"full_address": " \n "}, point=None)
+    assert stored["user_input_address"] is None and stored["county"] is None
+
+
 def test_an_address_token_is_not_a_login():
     """An address token cannot pass as an access token."""
     with pytest.raises(Exception, match="401"):
@@ -315,10 +341,10 @@ def test_an_address_token_is_not_a_login():
 
 
 def test_the_line_is_kept_as_received_and_full_address_is_never_written():
-    """`user_input_address` holds the line exactly as sent; the parts and remainder come from the parser."""
-    sent = "  花蓮縣 光復鄉糖廠街19號後面的鐵皮屋 "
+    """`user_input_address` holds the line as sent, outer whitespace trimmed; the parser gives the rest."""
+    sent = "  花蓮縣 光復鄉糖廠街19號後面的鐵皮屋 \n"
     stored = apply_address({"location_type": "address", "full_address": sent}, point=None)
-    assert stored["user_input_address"] == sent
+    assert stored["user_input_address"] == "花蓮縣 光復鄉糖廠街19號後面的鐵皮屋"
     assert "full_address" not in stored
     assert (stored["county"], stored["road"], stored["no"], stored["remainder"]) == (
         "花蓮縣",

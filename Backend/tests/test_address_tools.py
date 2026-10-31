@@ -87,6 +87,17 @@ async def test_the_database_builds_the_line_the_parser_returned(db, line):
     assert await _full_address(db, row_uuid) == parse_tw_address(line).full_address
 
 
+async def test_a_raw_line_wider_than_the_built_line_is_stored_whole(db):
+    """The raw column holds 500: interior whitespace is kept there and dropped from the built line."""
+    sent = "花蓮縣" + " " * 300 + "光復鄉糖廠街19號"
+    row_uuid = await _save(db, sent)
+    stored = await db.scalar(
+        text("SELECT user_input_address FROM secondary_locations WHERE uuid = :u"), {"u": row_uuid}
+    )
+    assert stored == sent and len(stored) > 255
+    assert await _full_address(db, row_uuid) == "花蓮縣光復鄉糖廠街19號"
+
+
 async def test_a_blank_address_has_no_line(db):
     """All parts NULL means NULL, not an empty string."""
     row_uuid = await _save(db, None)
