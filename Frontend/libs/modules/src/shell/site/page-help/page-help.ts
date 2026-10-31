@@ -6,21 +6,30 @@
 
 export type SitePageHelpKey = 'site:map' | 'site:list' | 'site:briefing';
 
+/** A titled part between 你可以 and 注意: a paragraph, a list, or both. */
+export interface PageHelpSection {
+  title: string;
+  body?: string;
+  items?: readonly string[];
+}
+
+/** Any of its text may set words in bold between `**`, as the prototype's `rich` does. */
 export interface PageHelp {
   title: string;
   /** One sentence: what the page is for. */
   what: string;
   /** 你可以 — what a person can do here. */
   can: readonly string[];
+  sections?: readonly PageHelpSection[];
   /** 注意, in a grey box at the foot. */
   note?: string;
 }
 
 /**
- * The designer's drafts (`wg-help.jsx:101-115`), read against the site as it is and approved by the
- * team on 2026-10-01: 在這裡新增 came after the drafts, and a guest is kept from a
- * ticket's address and photos as well as its point (backend ADR-281), on the list too.
- * 回報站點資訊有誤 is the station detail's 修改建議.
+ * The designer's words (`wg-help.jsx:133-148`), as 糖 lined them up with Carol's in Notion
+ * (prototype `27edcb9a`, 2026-10-31). 在這裡新增, and a guest kept from a ticket's address and photos
+ * (backend ADR-281), were here already (team, 2026-10-01); 回報站點資訊有誤 now reads 對站點提出修改建議,
+ * as the station detail's button does.
  */
 export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
   'site:map': {
@@ -29,7 +38,7 @@ export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
     can: [
       '切換「站點」與「任務」，點圖示看詳細資訊',
       '需要幫忙時，按「請求協助」；也可以先點地圖上的位置，再按「在這裡新增」',
-      '登入後可以承接任務，或回報站點資訊有誤',
+      '登入後可以承接任務，或對站點提出修改建議',
     ],
     note: '沒有登入時，任務的位置會用格子顯示，也看不到地址與照片，保護求助者的隱私。',
   },
@@ -39,11 +48,11 @@ export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
     can: [
       '搜尋、篩選站點或任務',
       '點一筆看詳細資訊',
-      '登入後可以承接任務，或回報站點資訊有誤',
+      '登入後可以承接任務，或對站點提出修改建議',
     ],
     note: '沒有登入時，看不到任務的地址與照片，保護求助者的隱私。',
   },
-  // The designer's draft as it stands (`wg-help.jsx:141-145`), not yet read by the team.
+  // The designer's draft as it stands (`wg-help.jsx:149-153`), not yet read by the team.
   'site:briefing': {
     title: '志工行前資訊',
     what: '出發當志工之前，先看這一頁。',
@@ -54,6 +63,28 @@ export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
     ],
   },
 };
+
+/** A stretch of help text, bold or not. */
+export interface HelpTextRun {
+  text: string;
+  bold: boolean;
+}
+
+/**
+ * Help text split where `**` marks bold, as the prototype's `rich` splits it: every other stretch is
+ * bold, so a mark left open runs bold to the end.
+ */
+export function helpTextRuns(text: string): HelpTextRun[] {
+  return text
+    .split('**')
+    .map((part, index) => ({ text: part, bold: index % 2 === 1 }))
+    .filter((run) => run.text !== '');
+}
+
+/** As wide as the prototype's panel: 400 when a section holds a list, 340 otherwise. */
+export function pageHelpWidth(help: PageHelp): number {
+  return help.sections?.some((section) => section.items?.length) ? 400 : 340;
+}
 
 /** The page an address is on, if it has words of its own: the account pages do not. */
 export function pageHelpKey(pathname: string): SitePageHelpKey | null {
