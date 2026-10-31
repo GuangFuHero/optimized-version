@@ -13,7 +13,10 @@ export interface PageHelpSection {
   items?: readonly string[];
 }
 
-/** Any of its text may set words in bold between `**`, as the prototype's `rich` does. */
+/**
+ * Its sentences and list items (not the titles) may set words in bold between `**`, as the
+ * prototype's `rich` does.
+ */
 export interface PageHelp {
   title: string;
   /** One sentence: what the page is for. */
@@ -26,10 +29,8 @@ export interface PageHelp {
 }
 
 /**
- * The designer's words (`wg-help.jsx:133-148`), as 糖 lined them up with Carol's in Notion
- * (prototype `27edcb9a`, 2026-10-31). 在這裡新增, and a guest kept from a ticket's address and photos
- * (backend ADR-281), were here already (team, 2026-10-01); 回報站點資訊有誤 now reads 對站點提出修改建議,
- * as the station detail's button does.
+ * The designer's words (`wg-help.jsx:133-148`). 對站點提出修改建議 is the station detail's 修改建議
+ * button.
  */
 export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
   'site:map': {

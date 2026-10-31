@@ -148,7 +148,7 @@ export function PageHelpPanel({
               <HelpText text={section.body} />
             </Typography>
           ) : null}
-          {section.items ? (
+          {section.items?.length ? (
             <Box component="ul" sx={{ ...BODY_SX, pl: 2.25 }}>
               {section.items.map((item) => (
                 <li key={item}>
