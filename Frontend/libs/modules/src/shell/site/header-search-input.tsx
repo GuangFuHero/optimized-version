@@ -44,7 +44,7 @@ function SiteHeaderSearchField({
   return (
     <Box
       // The input is one line tall in a 40px box: a tap on the rest of the box, or on the icon, would
-      // not reach it on a phone. Anywhere but the clear button focuses it (design, 2026-10-30).
+      // not reach it on a phone. Anywhere but the clear button focuses it.
       onClick={(event) => {
         if (!(event.target as HTMLElement).closest('button')) {
           inputRef.current?.focus();

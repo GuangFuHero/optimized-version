@@ -161,7 +161,7 @@ export function PhotoLinkEditor({
         </Box>
       ) : null}
 
-      {/* 48px on a phone, a thumb's size (design 2026-10-30); the field takes what 加入 leaves. */}
+      {/* 48px on a phone, a thumb's size; the field takes what 加入 leaves. */}
       <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start' }}>
         <TextField
           fullWidth
