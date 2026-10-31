@@ -343,6 +343,7 @@ export function AdminAreaDrawPanel({
 export function AdminAreaFormPanel({
   initial,
   teams,
+  canAssign,
   isSubmitting,
   onBack,
   onCancel,
@@ -350,6 +351,8 @@ export function AdminAreaFormPanel({
 }: {
   initial: AreaFormValues;
   teams: readonly AreaTeamOption[];
+  /** Creating a 責任區 assigns its first team in the same request, which needs this. */
+  canAssign: boolean;
   isSubmitting: boolean;
   /** Goes back to the outline; what was typed comes along, to be there again on return. */
   onBack: (values: AreaFormValues) => void;
@@ -406,46 +409,51 @@ export function AdminAreaFormPanel({
         這一區是做什麼的？
       </Typography>
       <Stack spacing={1} role="radiogroup" aria-label="區域類型">
-        {KIND_ORDER.map((option) => (
-          <ButtonBase
-            key={option}
-            role="radio"
-            aria-checked={kind === option}
-            onClick={() => set('kind', option)}
-            sx={{
-              alignItems: 'flex-start',
-              gap: 1.25,
-              px: 1.5,
-              py: 1.25,
-              textAlign: 'left',
-              borderRadius: `${radius.md}px`,
-              border: `${kind === option ? 2 : 1}px solid ${
-                kind === option
-                  ? color.brand.primary.default
-                  : color.border.default
-              }`,
-              bgcolor:
-                kind === option
-                  ? color.bg.primary.subtle
-                  : color.bg.neutral.default,
-            }}
-          >
-            <AreaSwatch kind={option} sx={{ mt: '3px' }} />
-            <Box>
-              <Typography sx={{ ...typography.label[400] }}>
-                {AREA_KIND_LABELS[option]}
-              </Typography>
-              <Typography sx={{ ...typography.body[300], lineHeight: 1.6 }}>
-                {KIND_CARDS[option].description}
-              </Typography>
-              <Typography
-                sx={{ ...typography.label[300], color: color.fg.neutral.muted }}
-              >
-                {KIND_CARDS[option].example}
-              </Typography>
-            </Box>
-          </ButtonBase>
-        ))}
+        {KIND_ORDER.filter((option) => canAssign || option !== 'team_zone').map(
+          (option) => (
+            <ButtonBase
+              key={option}
+              role="radio"
+              aria-checked={kind === option}
+              onClick={() => set('kind', option)}
+              sx={{
+                alignItems: 'flex-start',
+                gap: 1.25,
+                px: 1.5,
+                py: 1.25,
+                textAlign: 'left',
+                borderRadius: `${radius.md}px`,
+                border: `${kind === option ? 2 : 1}px solid ${
+                  kind === option
+                    ? color.brand.primary.default
+                    : color.border.default
+                }`,
+                bgcolor:
+                  kind === option
+                    ? color.bg.primary.subtle
+                    : color.bg.neutral.default,
+              }}
+            >
+              <AreaSwatch kind={option} sx={{ mt: '3px' }} />
+              <Box>
+                <Typography sx={{ ...typography.label[400] }}>
+                  {AREA_KIND_LABELS[option]}
+                </Typography>
+                <Typography sx={{ ...typography.body[300], lineHeight: 1.6 }}>
+                  {KIND_CARDS[option].description}
+                </Typography>
+                <Typography
+                  sx={{
+                    ...typography.label[300],
+                    color: color.fg.neutral.muted,
+                  }}
+                >
+                  {KIND_CARDS[option].example}
+                </Typography>
+              </Box>
+            </ButtonBase>
+          ),
+        )}
       </Stack>
       {kind ? (
         <>

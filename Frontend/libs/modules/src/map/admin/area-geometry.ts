@@ -79,18 +79,20 @@ export interface AreaView {
 
 const MAX_ZOOM = 17;
 const MIN_ZOOM = 5;
-// The map is about this wide when an area is brought into view, less its side panel.
-const VIEW_WIDTH_PX = 760;
+// How wide the map is taken to be when the caller does not know: a desktop's, less its side panel.
+const DEFAULT_VIEW_WIDTH_PX = 760;
 const TILE_PX = 256;
 // Room round the area, as a share of its size.
 const VIEW_PADDING = 1.25;
 
 /**
  * Where the map looks to take in a whole area: its middle, and the zoom at which its width fits.
- * An area with no points has no view.
+ * `widthPx` is the map's own width, which on a phone is the screen's. An area with no points has no
+ * view.
  */
 export function viewOfArea(
   area: Pick<RescueMapArea, 'polygons'>,
+  widthPx: number = DEFAULT_VIEW_WIDTH_PX,
 ): AreaView | null {
   const points = area.polygons.flat(2);
 
@@ -109,7 +111,7 @@ export function viewOfArea(
     MAX_ZOOM,
     Math.max(
       MIN_ZOOM,
-      Math.floor(Math.log2((360 * VIEW_WIDTH_PX) / (lngSpan * TILE_PX))),
+      Math.floor(Math.log2((360 * Math.max(widthPx, 1)) / (lngSpan * TILE_PX))),
     ),
   );
 

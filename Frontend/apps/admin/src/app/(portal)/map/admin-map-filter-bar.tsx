@@ -162,7 +162,9 @@ export function AdminMapFilterBar({
           }}
         />
         <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
-          {filters.layers.tickets ? `${shownTickets}${ticketsMayBeMore ? '+' : ''} 張任務單` : '任務單已隱藏'}
+          {filters.layers.tickets
+            ? `${shownTickets}${ticketsMayBeMore ? '+' : ''} 張任務單`
+            : '任務單已隱藏'}
         </Typography>
         <Typography sx={{ color: color.border.default }}>·</Typography>
         <Typography sx={{ ...typography.body[300], whiteSpace: 'nowrap' }}>
@@ -221,6 +223,9 @@ export function AdminMapFilterBar({
             }}
           >
             篩選只影響<b>看到什麼</b>。區域清單與區域裡的數量不受篩選影響。
+            {ticketsMayBeMore
+              ? '地圖只載入範圍內最新的 200 張任務單，篩選只在這些裡面找。'
+              : null}
           </Typography>
         </Box>
       ) : null}
