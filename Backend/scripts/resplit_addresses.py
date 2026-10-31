@@ -20,7 +20,7 @@ from app.core.address import parse_tw_address
 from app.core.config import settings
 from app.models.secondary_location import SecondaryLocation
 
-# The columns the parser fills from `user_input_address`; the units are left alone.
+# The columns the parser fills from `user_input_address`.
 PARSED_COLUMNS = (
     "county",
     "town",
@@ -33,33 +33,39 @@ PARSED_COLUMNS = (
     "no",
     "remainder",
 )
+# The units the parser cuts from the line; a re-split fills one only when it is empty, as a save does.
+UNIT_COLUMNS = ("building_section", "floor", "room")
 
 
 def _blank(line: str | None) -> bool:
     return not (line or "").strip()
 
 
-async def _rows(db: AsyncSession):
-    """Every row's uuid, `user_input_address` and stored parsed columns."""
-    columns = [getattr(SecondaryLocation, name) for name in PARSED_COLUMNS]
-    return (
-        await db.execute(select(SecondaryLocation.uuid, SecondaryLocation.user_input_address, *columns))
-    ).all()
+async def _rows(db: AsyncSession) -> list[tuple]:
+    """Every row as (uuid, `user_input_address`, stored parsed columns, stored unit columns)."""
+    columns = [getattr(SecondaryLocation, name) for name in (*PARSED_COLUMNS, *UNIT_COLUMNS)]
+    rows = await db.execute(select(SecondaryLocation.uuid, SecondaryLocation.user_input_address, *columns))
+    split = len(PARSED_COLUMNS)
+    return [(uuid, line, stored[:split], stored[split:]) for uuid, line, *stored in rows]
 
 
 async def drifted(db: AsyncSession) -> dict[str, dict[str, tuple]]:
     """Each row whose stored parts differ from a re-parse of its `user_input_address`.
 
-    Maps the row's uuid to {column: (stored, re-parsed)} for the columns that differ. A row with parts
-    but no line has nothing to re-parse, so it is not here; see `lineless`.
+    Maps the row's uuid to {column: (stored, re-parsed)} for the columns that differ. A unit column counts
+    only when it is empty and the line carries one. A row with parts but no line has nothing to re-parse,
+    so it is not here; see `lineless`.
     """
     found = {}
-    for uuid, line, *stored in await _rows(db):
+    for uuid, line, stored, units in await _rows(db):
         if _blank(line) and any(stored):
             continue
         parsed = parse_tw_address(line)
         expected = [getattr(parsed, name) for name in PARSED_COLUMNS]
         differing = {n: (s, e) for n, s, e in zip(PARSED_COLUMNS, stored, expected, strict=True) if s != e}
+        for name, held in zip(UNIT_COLUMNS, units, strict=True):
+            if not held and getattr(parsed, name):
+                differing[name] = (held, getattr(parsed, name))
         if differing:
             found[str(uuid)] = differing
     return found
@@ -67,7 +73,7 @@ async def drifted(db: AsyncSession) -> dict[str, dict[str, tuple]]:
 
 async def lineless(db: AsyncSession) -> list[str]:
     """The uuids of rows that hold address parts but no `user_input_address`; a re-split leaves them alone."""
-    return [str(uuid) for uuid, line, *stored in await _rows(db) if _blank(line) and any(stored)]
+    return [str(uuid) for uuid, line, stored, _ in await _rows(db) if _blank(line) and any(stored)]
 
 
 async def survey(db: AsyncSession) -> tuple[dict[str, dict[str, tuple]], list[str]]:

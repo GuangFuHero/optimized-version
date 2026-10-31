@@ -390,3 +390,12 @@ def test_a_different_unit_written_in_the_line_is_a_different_address():
     assert not same_address(
         stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號A棟3樓"}, point=None)
     )
+
+
+def test_a_unit_in_the_line_is_compared_with_the_rows_own_columns():
+    """A row filed with its floor in its own field is unchanged by the line with that floor written in."""
+    stored = SimpleNamespace(
+        **apply_address({"full_address": "花蓮縣光復鄉中正路7號", "floor": "3樓"}, point=None)
+    )
+    assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉中正路7號3樓"}, point=None))
+    assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉中正路7號5樓"}, point=None))

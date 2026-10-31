@@ -186,6 +186,30 @@ async def test_another_floor_in_the_line_replaces_the_raw_line_but_the_forms_ech
 
 
 @pytest.mark.asyncio
+async def test_the_same_line_with_the_rows_own_floor_written_in_changes_nothing(
+    client, coordinator_auth, sample_ticket
+):
+    """A ticket filed with its floor in its own field: sending the floor inside the line is not an edit."""
+    _, admin = coordinator_auth
+
+    async def send(address: dict) -> None:
+        await _gql(
+            client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}
+        )
+
+    await send({"fullAddress": "花蓮縣光復鄉中正路7號", "floor": "3樓"})
+    await _set_earlier(sample_ticket)
+
+    await send({"fullAddress": "花蓮縣光復鄉中正路7號3樓"})
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉中正路7號"
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+    await send({"fullAddress": "花蓮縣光復鄉中正路7號5樓"})
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉中正路7號5樓"
+    assert await _updated_at(client, admin, sample_ticket) > EARLIER
+
+
+@pytest.mark.asyncio
 async def test_a_row_with_no_raw_line_gets_one_from_the_first_save_and_keeps_it_after(
     client, coordinator_auth, sample_ticket
 ):

@@ -199,3 +199,18 @@ async def test_a_row_with_parts_but_no_line_is_reported_and_never_cleared(db, ca
     assert finish({}, unplaced) == 0  # parts-only rows alone are informational, not drift
     assert bare in capsys.readouterr().out
     assert finish(found, unplaced) == 1
+
+
+async def test_the_resplit_fills_an_empty_unit_from_the_line_but_never_overwrites_one(db):
+    """A unit the line carries and the row lacks is reported and filled; a filled one is left as it is."""
+    empty = await _save(db, "花蓮縣光復鄉糖廠街19號3樓", floor=None)
+    filled = await _save(db, "花蓮縣光復鄉糖廠街19號3樓", floor="5樓")
+
+    found = await check()
+
+    assert found == {empty: {"floor": (None, "3樓")}}
+    assert report(found) == [f"{empty}: floor None -> '3樓'"]
+    assert set(await resplit(apply=True)) == {empty}
+    floors = dict((await db.execute(text("SELECT uuid::text, floor FROM secondary_locations"))).all())
+    assert floors[empty] == "3樓" and floors[filled] == "5樓"
+    assert await check() == {}
