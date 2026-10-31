@@ -10,6 +10,7 @@ import {
   Stack,
   SwipeableDrawer,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 
 import {
@@ -79,7 +80,7 @@ function RescueMapLayerPanelContent({
             選擇底圖與目前可用的疊加圖層。
           </Typography>
         </Box>
-        {/* As in the prototype (`site-map.jsx`, 關閉圖層控制), at every width. */}
+        {/* At every width: on a phone it is the way out that needs no drag. */}
         <IconButton
           aria-label="關閉圖層控制"
           onClick={controller.closeLayerPanel}
@@ -309,17 +310,20 @@ function RescueMapLayerPanelContent({
 }
 
 export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
+  // Each drawer opens at its own width only. One hidden by CSS is still an open modal, the top one,
+  // so MUI hid the other from screen readers and only the hidden one heard Esc.
+  const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
+
   return (
     <>
       {/*
-       * On a phone, a bottom sheet that drags down to close (糖, 2026-10-31): once the list is
-       * scrolled back to the top, dragging further closes it. It stops short of the top, so a strip
-       * of map stays to tap as well. It only opens from the layer button: a swipe up from the
-       * screen's edge is the map's.
+       * On a phone, a bottom sheet that drags down to close: once the list is scrolled back to the
+       * top, dragging further closes it. It stops short of the top, so a strip of map stays to tap
+       * as well. It only opens from the layer button: a swipe up from the screen's edge is the map's.
        */}
       <SwipeableDrawer
         anchor="bottom"
-        open={controller.layerPanelOpen}
+        open={controller.layerPanelOpen && isPhone}
         onOpen={controller.openLayerPanel}
         onClose={controller.closeLayerPanel}
         disableSwipeToOpen
@@ -338,8 +342,8 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
             borderTopLeftRadius: radius.lg,
             borderTopRightRadius: radius.lg,
             boxShadow: shadow.lg,
-            // As the shared bottom sheet (`SheetFrame`).
-            maxHeight: '92dvh',
+            // 92% of the space under the announcement banner, so a strip of map stays above it.
+            maxHeight: '92%',
             px: 2,
             pt: 1.25,
             pb: safeAreaBottom(24),
@@ -351,7 +355,7 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
 
       <Drawer
         anchor="right"
-        open={controller.layerPanelOpen}
+        open={controller.layerPanelOpen && !isPhone}
         onClose={controller.closeLayerPanel}
         slotProps={{
           backdrop: {
