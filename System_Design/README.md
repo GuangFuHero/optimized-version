@@ -146,7 +146,7 @@ uv run python scripts/export_mindmap.py
 
 ## 授權
 
-GPL v3 - 詳見 [LICENSE](../LICENSE)
+GPL-3.0-only（GNU General Public License v3.0）- 詳見 [LICENSE](../LICENSE)
 
 ---
 
