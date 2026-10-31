@@ -3,7 +3,7 @@
 import { Hexagon } from 'lucide-react';
 
 import { Box, ButtonBase, IconButton, Stack, Typography } from '@mui/material';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type Ref, useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   Button,
@@ -153,6 +153,41 @@ export function LocationCellDetail({
     cell,
     loadMembers,
   );
+  const listRef = useRef<HTMLDivElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  // Where a page asked for under the list starts. The button pressed for it goes away when the
+  // last page is in or the page fails, and a keyboard user's focus would go with it.
+  const askedFromRef = useRef<number | null>(null);
+  const askFromFoot = (ask: () => void) => () => {
+    askedFromRef.current = members.length;
+    ask();
+  };
+
+  useEffect(() => {
+    const from = askedFromRef.current;
+
+    if (from === null || status === 'loading') {
+      return;
+    }
+
+    askedFromRef.current = null;
+
+    // Moved on only if focus fell back with the pressed button, to the page or to the drawer that
+    // holds the list, and not if it went elsewhere since.
+    if (!document.activeElement?.contains(listRef.current)) {
+      return;
+    }
+
+    // The list holds its tickets in order, then its foot: the first ticket the page added, or 再試一次.
+    const target =
+      status === 'error'
+        ? retryRef.current
+        : listRef.current?.children.item(from);
+
+    if (target instanceof HTMLElement) {
+      target.focus();
+    }
+  }, [status]);
 
   return (
     <Box
@@ -240,6 +275,7 @@ export function LocationCellDetail({
       </Box>
 
       <Stack
+        ref={listRef}
         sx={{
           flex: 1,
           minHeight: 0,
@@ -302,8 +338,9 @@ export function LocationCellDetail({
           status={status}
           hasMore={hasMore}
           listed={members.length > 0}
-          onLoadMore={loadMore}
-          onRetry={retry}
+          retryRef={retryRef}
+          onLoadMore={askFromFoot(loadMore)}
+          onRetry={askFromFoot(retry)}
         />
       </Stack>
     </Box>
@@ -315,6 +352,7 @@ function CellMembersFooter({
   status,
   hasMore,
   listed,
+  retryRef,
   onLoadMore,
   onRetry,
 }: {
@@ -322,6 +360,7 @@ function CellMembersFooter({
   hasMore: boolean;
   /** Some tickets are listed already: a load is then for the next page, under the button. */
   listed: boolean;
+  retryRef: Ref<HTMLButtonElement>;
   onLoadMore: () => void;
   onRetry: () => void;
 }) {
@@ -352,7 +391,7 @@ function CellMembersFooter({
         >
           讀不到這個區塊的求助，請再試一次。
         </Typography>
-        <Button variant="outline" size="sm" onClick={onRetry}>
+        <Button ref={retryRef} variant="outline" size="sm" onClick={onRetry}>
           再試一次
         </Button>
       </Stack>

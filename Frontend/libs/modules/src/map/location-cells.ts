@@ -75,7 +75,7 @@ export function buildLocationCells(
  *
  * 給了後端數過的格子（`cells`）時，格子只在裡面找：格子裡的單不一定在這一頁 markers 裡，而手上留著
  * 的單（點開格子時讀的）可能是換篩選之前讀的。數字讀不到、又換了篩選時，格子就算不見了，只剩地圖
- * 底部的提示（HC 在 #181）。
+ * 底部的提示。
  */
 export function hasRescueMapDetailItem(
   markers: readonly RescueMapMarkerItem[],

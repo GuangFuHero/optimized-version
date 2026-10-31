@@ -14,6 +14,15 @@ import {
 const CELL_A = latLngToCell(23.6654321, 121.4312345, 8);
 const CELL_B = latLngToCell(23.7654321, 121.4312345, 8);
 
+// As the backend sends it: the refusal with its ceiling after it (`app/core/search.py`).
+const TIME_LIMIT_ERROR = {
+  graphQLErrors: [
+    {
+      message: '這個範圍的單太多，計算逾時已中止，請放大地圖再試（上限 3 秒）',
+    },
+  ],
+};
+
 describe('ticketCellStatuses', () => {
   it('sends nothing when no status is picked: the filter then means all of them', () => {
     expect(ticketCellStatuses(undefined)).toBeUndefined();
@@ -89,11 +98,10 @@ describe('toLocationCells', () => {
 
 describe('ticketCellsNotice', () => {
   it("says the backend's sentence, with zooming in, only for the count's time limit", () => {
-    expect(
-      ticketCellsNotice({
-        graphQLErrors: [{ message: TICKET_CELLS_TIME_LIMIT_REFUSAL }],
-      }),
-    ).toEqual({ text: TICKET_CELLS_TIME_LIMIT_REFUSAL, zoomIn: true });
+    expect(ticketCellsNotice(TIME_LIMIT_ERROR)).toEqual({
+      text: TICKET_CELLS_TIME_LIMIT_REFUSAL,
+      zoomIn: true,
+    });
   });
 
   it("says a fixed line, without zooming in, for the backend's other errors", () => {
@@ -134,11 +142,7 @@ describe('readTicketCells', () => {
   });
 
   it('keeps the cells it is given when the read failed, and says why', () => {
-    const read = readTicketCells(
-      null,
-      { graphQLErrors: [{ message: TICKET_CELLS_TIME_LIMIT_REFUSAL }] },
-      kept,
-    );
+    const read = readTicketCells(null, TIME_LIMIT_ERROR, kept);
 
     expect(read.cells).toBe(kept);
     expect(read.notice?.zoomIn).toBe(true);

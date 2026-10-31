@@ -17,9 +17,9 @@ export interface TicketCellRow {
 
 /**
  * The map's status filter as `ticketCells` and `tickets` take it. Leaving it out means every status,
- * and an empty list means none (coordinator 468), so a filter that picks nothing — which on the map
- * means all of them — and one that picks every status both leave it out. Picked statuses go once
- * each, in one order, so the same filter is the same query.
+ * and an empty list means none, so a filter that picks nothing — which on the map means all of
+ * them — and one that picks every status both leave it out. Picked statuses go once each, in one
+ * order, so the same filter is the same query.
  */
 export function ticketCellStatuses(
   subDataTypes: readonly string[] | undefined,
@@ -34,9 +34,10 @@ export function ticketCellStatuses(
 }
 
 /**
- * The backend's refusal when counting runs past its time limit, word for word (backend
- * `ticketCells`, `app/graphql/tickets/queries.py`). It sends no error code, so this sentence is how
- * the map tells the time limit from any other failure.
+ * The backend's refusal when counting runs past its time limit (backend `ticketCells`,
+ * `app/graphql/tickets/queries.py`), which it sends with the limit after it: （上限 3 秒）. It sends
+ * no error code, so a message that starts with this sentence is how the map tells the time limit
+ * from any other failure.
  */
 export const TICKET_CELLS_TIME_LIMIT_REFUSAL =
   '這個範圍的單太多，計算逾時已中止，請放大地圖再試';
@@ -60,8 +61,8 @@ type TicketCellsError = { graphQLErrors?: readonly { message: string }[] };
 export function ticketCellsNotice(
   error: TicketCellsError | null | undefined,
 ): TicketCellsNotice {
-  const timedOut = (error?.graphQLErrors ?? []).some(
-    ({ message }) => message.trim() === TICKET_CELLS_TIME_LIMIT_REFUSAL,
+  const timedOut = (error?.graphQLErrors ?? []).some(({ message }) =>
+    message.trim().startsWith(TICKET_CELLS_TIME_LIMIT_REFUSAL),
   );
 
   return timedOut
