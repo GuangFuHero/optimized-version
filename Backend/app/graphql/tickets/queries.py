@@ -28,6 +28,8 @@ from app.graphql.tickets.types import (
     MyTaskAssignmentType,
     TaskAssignmentType,
     TaskPropertyType,
+    TicketAvailability,
+    TicketAvailabilityType,
     TicketCellType,
     TicketConnection,
     TicketListOrder,
@@ -87,6 +89,16 @@ def _status_values(statuses: list[TicketStatus] | None) -> list[str] | None:
     entry is one driver parameter; repeats would add both without changing a single row.
     """
     return None if statuses is None else sorted({s.value for s in statuses})
+
+
+async def _in_view_scope(info: strawberry.types.Info, scope: Scope, uuid) -> bool:
+    """Whether ticket `uuid` is in the caller's ticket.view `scope`, deleted or not, as `ticket` checks it."""
+    if scope == Scope.ALL:
+        return True
+    # ticket.view is public (ADR-273), so no caller gets here today.
+    user, db = info.context["user"], info.context["db"]
+    m = await ticket_repository.get_by_uuid(db, uuid)
+    return user is not None and await in_scope(scope, actor=user, resource=m, db=db)
 
 
 def _list_filters(need_type: str | None, open_needs_only: bool, audit_status: AuditStatus | None) -> list:
@@ -319,6 +331,36 @@ class RequestQuery:
         return [
             TicketCellType(cell=cell, ticket_count=count, urgent_count=urgent) for cell, count, urgent in rows
         ]
+
+    @strawberry.field(
+        description=(
+            "Whether ticket(uuid) gives this ticket, and if not, whether it was merged into another, "
+            "deleted, or never was, so a share link can say which and send a merged one on. Ask it "
+            "beside ticket(uuid). The state and the kept ticket's uuid alone, nothing of the ticket "
+            "(ADR-444)"
+        )
+    )
+    async def ticket_availability(self, info: strawberry.types.Info, uuid: UUID) -> TicketAvailabilityType:
+        """`available` exactly when `ticket` returns it; else read from `delete_at` and `replaced_by_uuid`.
+
+        Scope comes before deletion, so a ticket out of it reads `not_found` whether deleted or not.
+        A merged ticket follows `replaced_by_uuid` on to the first one still there; each was live when
+        a merge pointed at it and a deleted ticket never comes back, so the trail cannot loop.
+        """
+        db = info.context["db"]
+        scope = await check_permission(info, Perm.TICKET_VIEW)
+        gone = await ticket_repository.deletion(db, uuid)
+        if gone is None or not await _in_view_scope(info, scope, uuid):
+            return TicketAvailabilityType(status=TicketAvailability.not_found)
+        if not gone.deleted:
+            return TicketAvailabilityType(status=TicketAvailability.available)
+        kept = gone.replaced_by_uuid
+        while kept is not None and await _in_view_scope(info, scope, kept):
+            gone = await ticket_repository.deletion(db, kept)
+            if not gone.deleted:
+                return TicketAvailabilityType(status=TicketAvailability.merged, replaced_by_uuid=kept)
+            kept = gone.replaced_by_uuid
+        return TicketAvailabilityType(status=TicketAvailability.deleted)
 
     @strawberry.field
     async def ticket(

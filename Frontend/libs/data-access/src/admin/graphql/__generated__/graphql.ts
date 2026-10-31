@@ -1035,6 +1035,8 @@ export type Query = {
   teamZone?: Maybe<TeamZoneType>;
   teamZones: TeamZoneConnection;
   ticket?: Maybe<TicketType>;
+  /** Whether ticket(uuid) gives this ticket, and if not, whether it was merged into another, deleted, or never was, so a share link can say which and send a merged one on. Ask it beside ticket(uuid). The state and the kept ticket's uuid alone, nothing of the ticket (ADR-444) */
+  ticketAvailability: TicketAvailabilityType;
   ticketCells: Array<TicketCellType>;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketTasks: Array<TicketTaskType>;
@@ -1196,6 +1198,10 @@ export type QueryTeamZonesArgs = {
 export type QueryTicketArgs = {
   uuid: Scalars['UUID']['input'];
   zoom?: InputMaybe<Scalars['Float']['input']>;
+};
+
+export type QueryTicketAvailabilityArgs = {
+  uuid: Scalars['UUID']['input'];
 };
 
 export type QueryTicketCellsArgs = {
@@ -1767,6 +1773,23 @@ export type TicketAuditEntryType = {
   note?: Maybe<Scalars['String']['output']>;
   /** The audit status it moved to */
   status: Scalars['String']['output'];
+};
+
+export const TicketAvailability = {
+  Available: 'available',
+  Deleted: 'deleted',
+  Merged: 'merged',
+  NotFound: 'not_found',
+} as const;
+
+export type TicketAvailability =
+  (typeof TicketAvailability)[keyof typeof TicketAvailability];
+/** What a share link finds at a ticket's uuid: the state, nothing of the ticket */
+export type TicketAvailabilityType = {
+  __typename?: 'TicketAvailabilityType';
+  /** Set only when status is merged: the ticket the request now lives in, which ticket(uuid) gives */
+  replacedByUuid?: Maybe<Scalars['UUID']['output']>;
+  status: TicketAvailability;
 };
 
 /** How many tickets one H3 cell holds, of those its caller is shown as the cell */

@@ -962,6 +962,11 @@ type Query {
     """
     statuses: [TicketStatus!] = null
   ): [TicketCellType!]!
+
+  """
+  Whether ticket(uuid) gives this ticket, and if not, whether it was merged into another, deleted, or never was, so a share link can say which and send a merged one on. Ask it beside ticket(uuid). The state and the kept ticket's uuid alone, nothing of the ticket (ADR-444)
+  """
+  ticketAvailability(uuid: UUID!): TicketAvailabilityType!
   ticket(
     uuid: UUID!
 
@@ -1709,6 +1714,25 @@ type TicketAuditEntryType {
   """Who moved it; null for the scan"""
   actorUuid: String
   actorName: String
+}
+
+enum TicketAvailability {
+  available
+  merged
+  deleted
+  not_found
+}
+
+"""
+What a share link finds at a ticket's uuid: the state, nothing of the ticket
+"""
+type TicketAvailabilityType {
+  status: TicketAvailability!
+
+  """
+  Set only when status is merged: the ticket the request now lives in, which ticket(uuid) gives
+  """
+  replacedByUuid: UUID
 }
 
 """
