@@ -41,6 +41,9 @@ import { resolveTicketSearch } from '../ticket/ticket-search';
 import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
 import {
+  countFloor,
+  listCountLabel,
+  listPaging,
   listTickets,
   pageFoldedAway,
   showsClosedTickets,
@@ -69,6 +72,7 @@ export function SiteListView() {
   const {
     markers: sourceMarkers,
     ticketQuery,
+    error,
     isFetching,
     hasFetchedOnce,
     hasNextPage,
@@ -114,9 +118,19 @@ export function SiteListView() {
     marker: RescueMapMarkerItem;
     needs?: ListedTicket['needs'];
   }[] = ticketList?.tickets ?? controller.markers.map((marker) => ({ marker }));
-  // Past a page that folded away entirely, only finished tickets are left to fetch (含已滿額 off).
-  const canLoadMore =
-    hasNextPage && !(ticketList && pageFoldedAway(pageIds, ticketList.tickets));
+  // Past a page that folded away entirely, only finished tickets are left to fetch (含已滿額 off):
+  // where the list stops paging, and which of its counts are floors.
+  const { canLoadMore, countMore, fullMore } = listPaging({
+    hasNextPage,
+    pageFolded: Boolean(
+      ticketList && pageFoldedAway(pageIds, ticketList.tickets),
+    ),
+    foldsFullNeeds: !showFullNeeds && !closedTicketsAsked,
+    loading: isFetching || !hasFetchedOnce,
+  });
+  // The first page failed — or the first after a filter or a search reloaded the list — so nothing
+  // is loaded: neither 共 0 nor 沒有符合條件的資料 would be true.
+  const loadFailed = Boolean(error) && sourceMarkers.length === 0;
   const searchTooShort =
     dataType === 'ticket' &&
     resolveTicketSearch(state.search).kind === 'too-short';
@@ -387,17 +401,26 @@ export function SiteListView() {
             direction="row"
             sx={{ ml: 'auto', alignItems: 'center', gap: 1.5 }}
           >
-            {/* The ticket side lists needs, so it counts them: the count matches the lines shown. */}
-            <Typography
-              sx={{
-                fontSize: displayTextSize[13],
-                color: color.fg.neutral.subtle,
-              }}
-            >
-              {ticketList
-                ? `共 ${ticketList.needCount} 筆需求`
-                : `共 ${controller.markers.length} 筆`}
-            </Typography>
+            {/* The ticket side lists needs, so it counts them: the count matches the lines shown.
+                Either side counts the loaded pages, so while the list can load more, or a page is on its
+                way, it is a floor (N+). */}
+            {loadFailed ? null : (
+              <Typography
+                sx={{
+                  fontSize: displayTextSize[13],
+                  color: color.fg.neutral.subtle,
+                }}
+              >
+                {ticketList
+                  ? listCountLabel(ticketList.needCount, {
+                      more: countMore,
+                      what: '需求',
+                    })
+                  : listCountLabel(controller.markers.length, {
+                      more: countMore,
+                    })}
+              </Typography>
+            )}
             {ticketList &&
             ticketList.fullNeedCount > 0 &&
             !closedTicketsAsked ? (
@@ -409,7 +432,8 @@ export function SiteListView() {
                     <VisibilityOffRoundedIcon sx={ACTION_ICON} />
                   )
                 }
-                label={`含已滿額（${ticketList.fullNeedCount}）`}
+                // Pages left unloaded once the list stops hold finished tickets, all full needs.
+                label={`含已滿額（${countFloor(ticketList.fullNeedCount, fullMore)}）`}
                 aria-pressed={showFullNeeds}
                 onClick={() => setShowFullNeeds((current) => !current)}
                 // Greyed while off, as the prototype has it — but in readable greys, since it
@@ -454,10 +478,23 @@ export function SiteListView() {
               as empty between keystrokes. Nor while a later page may still list something: the
               rows so far may all have folded away (含已滿額), and only the sentinel below can ask
               for the next page. */}
-          {listRows.length === 0 &&
-          hasFetchedOnce &&
-          !isFetching &&
-          !canLoadMore ? (
+          {loadFailed ? (
+            <Stack
+              sx={{
+                height: '100%',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: color.fg.neutral.muted,
+              }}
+            >
+              <Typography role="alert" sx={{ fontSize: displayTextSize[14] }}>
+                讀不到列表，請重新整理頁面後再試一次。
+              </Typography>
+            </Stack>
+          ) : listRows.length === 0 &&
+            hasFetchedOnce &&
+            !isFetching &&
+            !canLoadMore ? (
             <Stack
               sx={{
                 height: '100%',
