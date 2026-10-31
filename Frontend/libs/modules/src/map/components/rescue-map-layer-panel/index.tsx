@@ -24,6 +24,7 @@ import {
   designTokens,
   displayTextSize,
   Icons,
+  layoutSizes,
   safeAreaBottom,
   withAlpha,
 } from '@rescue-frontend/ui';
@@ -32,6 +33,14 @@ const { color, radius, shadow } = designTokens;
 const CloseIcon = Icons.close;
 // The panel's heading, and the name a screen reader gives it when it opens.
 const LAYER_PANEL_TITLE = '圖層切換';
+// What the bottom sheet leaves above it, under the announcement banner: the top bar (the back
+// office's is the taller) and a strip of map. A share of the height was less than the top bar on a
+// short phone.
+const SHEET_TOP_CLEARANCE =
+  Math.max(
+    layoutSizes.site.mobileTopNavBarHeight,
+    layoutSizes.admin.topNavBarHeight,
+  ) + 56;
 
 interface RescueMapLayerPanelProps {
   controller: RescueMapControllerValue;
@@ -344,13 +353,15 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         sx={{
           display: { mobile: 'block', tablet: 'none' },
           '& .MuiDrawer-paper': {
-            bgcolor: withAlpha(color.bg.neutral.default, 0.92),
-            backdropFilter: 'blur(10px)',
+            // Solid, without the blur: it moves with the finger, and the blur of the map under it
+            // was drawn again at every move.
+            bgcolor: color.bg.neutral.default,
             borderTopLeftRadius: radius.lg,
             borderTopRightRadius: radius.lg,
             boxShadow: shadow.lg,
-            // 92% of the space under the announcement banner, so a strip of map stays above it.
-            maxHeight: '92%',
+            maxHeight: `calc(100% - ${SHEET_TOP_CLEARANCE}px)`,
+            // A drag down from the top of its list moves the sheet alone, without the list bouncing.
+            overscrollBehaviorY: 'none',
             px: 2,
             pt: 1.25,
             pb: safeAreaBottom(24),
