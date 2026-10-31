@@ -1326,6 +1326,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/duplicate-pairs/{pair_uuid}/resolve/preview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview Duplicate Pair Resolve
+     * @description What the resolve with this body would leave, with nothing saved.
+     *
+     *     Same permission and refusals as the resolve: 409 for a card or ticket that changed, 422 for a
+     *     request that cannot be carried out.
+     */
+    post: operations['preview_duplicate_pair_resolve_api_v1_admin_duplicate_pairs__pair_uuid__resolve_preview_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/admin/audit-logs': {
     parameters: {
       query?: never;
@@ -3621,6 +3644,16 @@ export interface components {
       status: string | null;
       /** Comment */
       comment: string | null;
+      /**
+       * Label
+       * @description The item's display name from the need kind's field settings, inactive ones included; null when there is none
+       */
+      label?: string | null;
+      /**
+       * Sort Order
+       * @description The item's display order from the same field settings; null when there is none
+       */
+      sort_order?: number | null;
     };
     /**
      * RefreshRequest
@@ -3721,6 +3754,56 @@ export interface components {
        * @enum {string}
        */
       action: 'keep' | 'cancel';
+    };
+    /**
+     * ResolvePreviewResponse
+     * @description What a resolve with the same body would leave, worked out without saving anything.
+     */
+    ResolvePreviewResponse: {
+      /**
+       * Primary Uuid
+       * Format: uuid
+       */
+      primary_uuid: string;
+      /**
+       * Secondary Uuid
+       * Format: uuid
+       */
+      secondary_uuid: string;
+      /** Kept Tasks */
+      kept_tasks: components['schemas']['ResolvePreviewTask'][];
+      /** Canceled Tasks */
+      canceled_tasks: string[];
+    };
+    /**
+     * ResolvePreviewTask
+     * @description A need the primary ticket would keep, its own or moved over, as the resolve would leave it.
+     */
+    ResolvePreviewTask: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /** Task Type */
+      task_type: string;
+      /** Quantity */
+      quantity: number | null;
+      /**
+       * Headcount
+       * @description People on it after the merge; someone on two merged needs counts once
+       */
+      headcount: number;
+      /**
+       * Absorbed
+       * @description The other ticket's needs it would absorb
+       */
+      absorbed: string[];
+      /**
+       * Moved
+       * @description Whether it is the other ticket's need moved over whole
+       */
+      moved: boolean;
     };
     /**
      * ResolvePrimaryTask
@@ -6966,6 +7049,43 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['DuplicatePairDetail'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  preview_duplicate_pair_resolve_api_v1_admin_duplicate_pairs__pair_uuid__resolve_preview_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        pair_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ResolveRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ResolvePreviewResponse'];
         };
       };
       /** @description Validation Error */

@@ -4388,6 +4388,81 @@
         }
       }
     },
+    "/api/v1/admin/duplicate-pairs/{pair_uuid}/resolve/preview": {
+      "post": {
+        "tags": [
+          "重複審核"
+        ],
+        "summary": "Preview Duplicate Pair Resolve",
+        "description": "What the resolve with this body would leave, with nothing saved.\n\nSame permission and refusals as the resolve: 409 for a card or ticket that changed, 422 for a\nrequest that cannot be carried out.",
+        "operationId": "preview_duplicate_pair_resolve_api_v1_admin_duplicate_pairs__pair_uuid__resolve_preview_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pair_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Pair Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/audit-logs": {
       "get": {
         "tags": [
@@ -10438,6 +10513,30 @@
               }
             ],
             "title": "Comment"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "The item's display name from the need kind's field settings, inactive ones included; null when there is none"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order",
+            "description": "The item's display order from the same field settings; null when there is none"
           }
         },
         "type": "object",
@@ -10632,6 +10731,98 @@
         ],
         "title": "ResolvePhoto",
         "description": "One photo of either ticket: kept on the primary, or cancelled (ADR-384).\n\nA kept photo of the other ticket moves over to the primary."
+      },
+      "ResolvePreviewResponse": {
+        "properties": {
+          "primary_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Primary Uuid"
+          },
+          "secondary_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Secondary Uuid"
+          },
+          "kept_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ResolvePreviewTask"
+            },
+            "type": "array",
+            "title": "Kept Tasks"
+          },
+          "canceled_tasks": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Canceled Tasks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "primary_uuid",
+          "secondary_uuid",
+          "kept_tasks",
+          "canceled_tasks"
+        ],
+        "title": "ResolvePreviewResponse",
+        "description": "What a resolve with the same body would leave, worked out without saving anything."
+      },
+      "ResolvePreviewTask": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "task_type": {
+            "type": "string",
+            "title": "Task Type"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "headcount": {
+            "type": "integer",
+            "title": "Headcount",
+            "description": "People on it after the merge; someone on two merged needs counts once"
+          },
+          "absorbed": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Absorbed",
+            "description": "The other ticket's needs it would absorb"
+          },
+          "moved": {
+            "type": "boolean",
+            "title": "Moved",
+            "description": "Whether it is the other ticket's need moved over whole"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "task_type",
+          "quantity",
+          "headcount",
+          "absorbed",
+          "moved"
+        ],
+        "title": "ResolvePreviewTask",
+        "description": "A need the primary ticket would keep, its own or moved over, as the resolve would leave it."
       },
       "ResolvePrimaryTask": {
         "properties": {
