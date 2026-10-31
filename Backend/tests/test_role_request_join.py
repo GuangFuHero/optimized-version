@@ -51,7 +51,7 @@ async def _applicant(db, *, phone: str | None = PHONE, email: str | None = None,
 async def _join(db, user: User, team: Team) -> None:
     """Make `user` a member of `team`, as add_team_member leaves it."""
     member = await _role(db, "member", {}, kind="team")
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=member.uuid, team_uuid=team.uuid, role_kind="team"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=member.uuid, team_uuid=team.uuid))
     await db.flush()
 
 

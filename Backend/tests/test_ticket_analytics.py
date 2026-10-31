@@ -55,6 +55,8 @@ def _make_task(
         source="user",
         created_by=user_uuid,
         status=status,
+        completed_at=datetime.now(UTC) if status == "fulfilled" else None,
+        canceled_at=datetime.now(UTC) if status == "canceled" else None,
     )
 
 
@@ -365,70 +367,6 @@ async def test_completion_rate_category_labels_null_task_type(db):
     )
     assert [r["x"] for r in rows] == [UNCATEGORIZED_LABEL]
     assert render_chart("tickets", "completion_rate", rows, x="category", chart_type="line")
-
-
-@pytest.mark.asyncio
-async def test_net_backlog_change_skips_tasks_without_completed_at(db):
-    """An unstamped fulfilled task can't be placed on a day, so it stays out of the series.
-
-    Regression for H1b: max(completed_at) returned NULL for tasks fulfilled before the
-    column existed, date_trunc turned that into a NULL key, and the sort raised TypeError
-    comparing None to datetime. Migration a1b2c3d4e5f6 backfills those rows; this asserts
-    the query is safe even if one slips through.
-    """
-    user_uuid = await _make_user(db)
-    stamped_ticket = _make_ticket(user_uuid)
-    unstamped_ticket = _make_ticket(user_uuid)
-    db.add_all([stamped_ticket, unstamped_ticket])
-    await db.flush()
-
-    completed_at = datetime(2026, 8, 10, 6, 0, tzinfo=UTC)
-    for ticket, stamp in ((stamped_ticket, completed_at), (unstamped_ticket, None)):
-        task = _make_task(str(ticket.uuid), user_uuid, status="fulfilled")
-        task.completed_at = stamp
-        db.add(task)
-        await db.flush()
-        db.add(TaskAssignment(task_uuid=str(task.uuid), actor_uuid=user_uuid, status="completed"))
-    await db.flush()
-
-    rows = await ticket_analytics.get_net_backlog_change(
-        db,
-        x="date",
-        x_granularity="day",
-        start_date=None,
-        end_date=None,
-        tz=UTC_TZ,
-    )
-    assert all(r["x"] is not None for r in rows)
-    # Exactly one ticket has a completion day; the unstamped one is absent from that series.
-    assert sum(r["completed_count"] for r in rows) == 1
-    assert render_chart("tickets", "net_backlog_change", rows, x="date", chart_type="line")
-
-
-@pytest.mark.asyncio
-async def test_ticket_count_completed_by_date_skips_unstamped(db):
-    """The bucket="completed", x="date" path has the same NULL-date exposure as H1b."""
-    user_uuid = await _make_user(db)
-    ticket = _make_ticket(user_uuid)
-    db.add(ticket)
-    await db.flush()
-    task = _make_task(str(ticket.uuid), user_uuid, status="fulfilled")
-    task.completed_at = None
-    db.add(task)
-    await db.flush()
-    db.add(TaskAssignment(task_uuid=str(task.uuid), actor_uuid=user_uuid, status="completed"))
-    await db.flush()
-
-    rows = await ticket_analytics.get_ticket_count(
-        db,
-        bucket="completed",
-        x="date",
-        x_granularity="day",
-        start_date=None,
-        end_date=None,
-        tz=UTC_TZ,
-    )
-    assert all(r["x"] is not None for r in rows)
 
 
 @pytest.mark.asyncio

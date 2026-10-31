@@ -1,8 +1,8 @@
 """Address lookups against TGOS, and the address step of every write.
 
 The frontend looks an address up before saving it, and each address TGOS confirms comes back with
-a signed token. A save never calls TGOS: `apply_address` splits the line into columns and grades it
-by that token.
+a signed token. A save never calls TGOS: `apply_address` keeps the line as received, splits it into
+columns and grades it by that token.
 """
 
 import asyncio
@@ -49,7 +49,10 @@ _STRING_RE = re.compile(r"<string[^>]*>(.*)</string>", re.S)
 _TOKEN_TYPE = "address"
 _TOKEN_LIFETIME = timedelta(days=1)  # long enough to finish a form
 _UNIT_FIELDS = ("building_section", "floor", "room")
-_ADDRESS_COLUMNS = tuple(f for f in AddressParts.__dataclass_fields__ if f not in _UNIT_FIELDS)
+# The parts apply_address writes; `full_address` is built by the database from them.
+_ADDRESS_COLUMNS = tuple(
+    f for f in AddressParts.__dataclass_fields__ if f not in (*_UNIT_FIELDS, "full_address")
+)
 
 # QueryAddr takes every parameter on every call. Exact matches only: fuzzy matching lands on the
 # nearest existing number, which can be a different house.
@@ -222,22 +225,29 @@ def _grade(token: str | None, full_address: str, point: tuple[float, float] | No
 
 
 def apply_address(sl: dict | None, *, point: tuple[float, float] | None) -> dict | None:
-    """The address step of every write: split `full_address` into columns and grade it by its token.
+    """The address step of every write: keep the received line, split it into columns, grade it by its token.
 
     Returns the values to store, which callers save in place of their input; only a part too long for
-    its column is refused.
+    its column is refused. `full_address` is never written: the database builds it from the parts.
     """
     if sl is None:
         return None
     values = dict(sl)
     token = values.pop("address_token", None)
-    parts = parse_tw_address(values.get("full_address"))
-    values |= {k: getattr(parts, k) for k in _ADDRESS_COLUMNS}
+    received = values.pop("full_address", None)
+    parts = parse_tw_address(received)
+    values |= {k: getattr(parts, k) for k in _ADDRESS_COLUMNS} | {"user_input_address": received}
     # A 棟/樓/室 typed into the line fills its field only when that was left empty; a filled field wins.
     for unit in _UNIT_FIELDS:
         values[unit] = values.get(unit) or getattr(parts, unit)
     values["normalization_status"] = _grade(token, parts.full_address, point) if parts.full_address else None
-    check_lengths(SecondaryLocation, **values)
+    # The line is checked as `full_address`, the name the API gives it, so a line too long is refused
+    # with the message it has always had; its column holds the same 255 as `user_input_address`.
+    check_lengths(
+        SecondaryLocation,
+        full_address=received,
+        **{k: v for k, v in values.items() if k != "user_input_address"},
+    )
     return values
 
 

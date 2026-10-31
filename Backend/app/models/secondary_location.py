@@ -6,6 +6,28 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, UUIDPKMixin
 from app.models.search import plain, search_text_expression, search_text_index
 
+# The generated line is the parts and the remainder in this order. `core.address.join_address` does
+# the same in Python; the two must stay equal.
+_FULL_ADDRESS = (
+    "NULLIF("
+    + " || ".join(
+        f"COALESCE({column}, '')"
+        for column in (
+            "county",
+            "town",
+            "village",
+            "neighborhood",
+            "road",
+            "section",
+            "lane",
+            "alley",
+            "no",
+            "remainder",
+        )
+    )
+    + ", '')"
+)
+
 
 class SecondaryLocation(Base, UUIDPKMixin):
     """ORM model for a secondary address or pole location linked to a geometry."""
@@ -13,9 +35,18 @@ class SecondaryLocation(Base, UUIDPKMixin):
     __tablename__ = "secondary_locations"
     geometry_uuid: Mapped[str] = mapped_column(ForeignKey("base_geometries.uuid"), index=True)
     location_type: Mapped[str] = mapped_column(String(50))  # address/pole
+    # The address as the user typed it, overwritten on every address edit. The parser splits it into
+    # the parts below at save time; rows from before the split held only the parsed line, so for them
+    # this is that line.
+    user_input_address: Mapped[str | None] = mapped_column(String(255), comment="使用者輸入的地址原文")
     # The address split into its parts, each numbered one keeping its unit (3鄰, 一段, 469巷).
-    # `full_address` is the whole line: official when TGOS confirmed it, as typed otherwise.
-    full_address: Mapped[str | None] = mapped_column(String(255), comment="完整地址（不含樓、室）")
+    # `remainder` is what the parser could not place: the text after the 號 that is not a unit, or the
+    # whole line when nothing was recognized.
+    remainder: Mapped[str | None] = mapped_column(String(255), comment="解析不出來的地址文字")
+    # The whole line, built by the database from the parts and the remainder; nobody writes it.
+    full_address: Mapped[str | None] = mapped_column(
+        String(255), Computed(_FULL_ADDRESS, persisted=True), comment="完整地址（不含樓、室）"
+    )
     county: Mapped[str | None] = mapped_column(String(50), comment="縣市")
     town: Mapped[str | None] = mapped_column(String(50), comment="鄉鎮市區")
     village: Mapped[str | None] = mapped_column(String(50), comment="村里")
@@ -90,3 +121,5 @@ class SecondaryLocation(Base, UUIDPKMixin):
     )
 
     __table_args__ = (search_text_index("secondary_locations"),)
+    # Read the generated columns back after every write: an async session cannot load them lazily.
+    __mapper_args__ = {"eager_defaults": True}

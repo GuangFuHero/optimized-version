@@ -446,7 +446,7 @@ async def _grant_data_auditor(db: AsyncSession, applicant_uuid) -> str:
     # Nothing to add if an admin granted the role another way since the application was sent.
     await db.execute(
         insert(UserRoleAssign)
-        .values(user_uuid=applicant_uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform")
+        .values(user_uuid=applicant_uuid, role_uuid=role.uuid, team_uuid=None)
         .on_conflict_do_nothing(
             index_elements=["user_uuid", "role_uuid"], index_where=text("team_uuid IS NULL")
         )

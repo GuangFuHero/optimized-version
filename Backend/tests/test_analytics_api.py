@@ -571,6 +571,7 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
         source="user",
         created_by=user_uuid,
         status="fulfilled",
+        completed_at=datetime.fromisoformat("2026-08-02T12:00:00+00:00"),
     )
     db_session.add(task)
     await db_session.flush()
@@ -805,6 +806,7 @@ async def test_data_completion_rate_is_a_percentage(client, db_session, redis):
         source="user",
         created_by=user_uuid,
         status="fulfilled",
+        completed_at=datetime.fromisoformat("2026-08-02T12:00:00+00:00"),
     )
     db_session.add(task)
     await db_session.flush()
