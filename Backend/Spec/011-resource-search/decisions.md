@@ -1012,7 +1012,7 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
    `_fill_role_kind` 與所有 `role_kind=` 一併移除。
 2. 加 CHECK `ck_ticket_tasks_stamps_match_status`。upgrade 先回報不一致的列數，再依狀態修（缺的時間戳補 `updated_at`、
    不該有的清掉），最後用有守衛的 DO 區塊加上 CHECK。
-3. 加 `user_input_address`（使用者輸入原文，去掉頭尾空白，欄寬 500，比 `full_address` 的 255 寬，因為解析器會丟掉空白；地址真的改了才整行覆蓋，重送的地址拆出來跟已存的各欄一樣就保留原文）與 `remainder`（解析器放不進各欄的文字）；`full_address`
+3. 加 `user_input_address`（使用者輸入原文，去掉頭尾空白，欄寬 500，比 `full_address` 的 255 寬，因為解析器會丟掉空白；地址真的改了才整行覆蓋，重送的地址拆出來跟已存的各欄一樣就保留原文，除非這次編輯清掉或改掉了原文裡寫的棟／樓／室）與 `remainder`（解析器放不進各欄的文字）；`full_address`
    改成 `GENERATED ALWAYS AS (縣市…號、remainder 串起來) STORED`。解析器讓 衖／衕 留在 `alley` 裡（`3弄2衖`），
    重新串出來的行跟原本解析器回傳的 `full_address` 逐字相同。各欄仍是解析器對 `user_input_address` 的結果，這是唯一保留的例外
    （解析器需要 Python，資料庫算不出來），由 `scripts/resplit_addresses.py`（重新拆解，預設只印報告）與
@@ -1025,6 +1025,6 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
 ➖ 規則從宣告式的 CHECK 變成兩個 trigger；`create_all` 蓋出來的測試資料庫靠模型上的 DDL 事件一起建同樣的 trigger。
 ➖ 遷移前的地址列，`user_input_address` 放的是當時解析器存的行，不是使用者原本輸入的。
 ➖ 遷移前只有各欄、沒有整行的列（先前改名留下的），各欄原樣保留、`user_input_address` 維持 NULL，`full_address` 由各欄串出；重新拆解跳過它們，drift 檢查把它們列為「只有各欄」，不算 drift。
-➖ 帶 衖／衕 的地址，`alley` 欄的值變長（`3弄` → `3弄2衖`）；API 的各欄不增不減。
+➖ 帶 衖／衕 的地址，`alley` 欄的值變長（`3弄` → `3弄2衖`）；API 的各欄不增不減。關鍵字搜尋也跟著變：`search_text` 含 `alley`，所以搜 `2衖` 找得到、搜 `3弄5號` 不再找到 `3弄2衖5號`（那本來就是另一戶）。
 ◾ 測試：`tests/test_identity_model.py`、`tests/test_migration_third_normal_form.py`、`tests/test_ticket_task_stamps.py`、
   `tests/test_address_parse.py`、`tests/test_address_service.py`、`tests/test_address_tools.py`。

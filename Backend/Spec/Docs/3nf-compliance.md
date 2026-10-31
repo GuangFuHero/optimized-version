@@ -100,7 +100,7 @@ How it was applied:
 
 - **Was**: `full_address` was the parser's version of the line and the nine parts were its split, both stored;
   text the parser did not place existed only in the line. A 衖 or 衕 was in the line and in no part.
-- **Now**: `user_input_address` (500 characters) holds the line as received, outer whitespace trimmed (overwritten by an edit that changes the address; sending back a line that splits into the stored parts keeps it).
+- **Now**: `user_input_address` (500 characters) holds the line as received, outer whitespace trimmed (overwritten by an edit that changes the address; sending back a line that splits into the stored parts keeps it, unless the edit clears or changes a 棟/樓/室 the stored line names).
   `apply_address` parses it and writes the parts and `remainder`, the text the parser could not place (after
   the 號 when that is not 棟/樓/室, or the whole line when nothing was recognized). `full_address` is
   `GENERATED ALWAYS AS (…) STORED`: county, town, village, neighborhood, road, section, lane, alley, no and
