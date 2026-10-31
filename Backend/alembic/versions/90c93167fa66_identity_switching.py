@@ -7,10 +7,10 @@ gain one.
 
 Two things here are worth reading before editing:
 
-`role_kind` on user_role_assign is deliberately redundant with `roles.kind`. The invariant
-"platform grants carry no team, team grants must carry one" has to see the role's kind,
-which a plain CHECK cannot reach across tables; copying the kind onto the grant lets CHECK
-do it, and the composite FK to roles(uuid, kind) stops the copy from drifting.
+`role_kind` on user_role_assign copies `roles.kind`, so that a CHECK and a composite FK to
+roles(uuid, kind) can enforce "platform grants carry no team, team grants must carry one".
+Migration 197c174410bd removed the copy, a second copy of the same fact, and enforces the rule
+with triggers instead.
 
 The unique keys come in pairs. `UNIQUE(user, role, team)` does not stop a user collecting
 duplicate platform grants, because Postgres does not treat two NULLs as equal, so each
@@ -41,16 +41,16 @@ of its own. Re-pointing keeps one head at every step. Safe here because none of 
 been applied outside development.
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from alembic import op
-
 # revision identifiers, used by Alembic.
-revision: str = '90c93167fa66'
-down_revision: str | Sequence[str] | None = '07ac630e0009'
+revision: str = "90c93167fa66"
+down_revision: str | Sequence[str] | None = "07ac630e0009"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -197,42 +197,49 @@ def upgrade() -> None:
         "user_role_assign_team_uuid_fkey", "user_role_assign", "teams", ["team_uuid"], ["uuid"]
     )
     op.create_foreign_key(
-        "fk_ura_role_kind", "user_role_assign", "roles",
-        ["role_uuid", "role_kind"], ["uuid", "kind"],
+        "fk_ura_role_kind",
+        "user_role_assign",
+        "roles",
+        ["role_uuid", "role_kind"],
+        ["uuid", "kind"],
     )
     op.create_check_constraint(
-        "ck_ura_role_team_kind", "user_role_assign",
-        "(role_kind = 'platform' AND team_uuid IS NULL)"
-        " OR (role_kind = 'team' AND team_uuid IS NOT NULL)",
+        "ck_ura_role_team_kind",
+        "user_role_assign",
+        "(role_kind = 'platform' AND team_uuid IS NULL) OR (role_kind = 'team' AND team_uuid IS NOT NULL)",
     )
     op.drop_constraint("uq_user_role", "user_role_assign", type_="unique")
-    op.create_unique_constraint(
-        "uq_user_role", "user_role_assign", ["user_uuid", "role_uuid", "team_uuid"]
-    )
+    op.create_unique_constraint("uq_user_role", "user_role_assign", ["user_uuid", "role_uuid", "team_uuid"])
     op.create_index(
-        "uq_user_role_platform", "user_role_assign", ["user_uuid", "role_uuid"],
-        unique=True, postgresql_where=sa.text("team_uuid IS NULL"),
+        "uq_user_role_platform",
+        "user_role_assign",
+        ["user_uuid", "role_uuid"],
+        unique=True,
+        postgresql_where=sa.text("team_uuid IS NULL"),
     )
 
     # 3. user_permission_assign: same shape, no backfill — the seed creates none of these.
-    op.add_column(
-        "user_permission_assign", sa.Column("team_uuid", postgresql.UUID(), nullable=True)
-    )
-    op.create_index(
-        "ix_user_permission_assign_team_uuid", "user_permission_assign", ["team_uuid"]
-    )
+    op.add_column("user_permission_assign", sa.Column("team_uuid", postgresql.UUID(), nullable=True))
+    op.create_index("ix_user_permission_assign_team_uuid", "user_permission_assign", ["team_uuid"])
     op.create_foreign_key(
-        "user_permission_assign_team_uuid_fkey", "user_permission_assign", "teams",
-        ["team_uuid"], ["uuid"],
+        "user_permission_assign_team_uuid_fkey",
+        "user_permission_assign",
+        "teams",
+        ["team_uuid"],
+        ["uuid"],
     )
     op.drop_constraint("uq_user_perm", "user_permission_assign", type_="unique")
     op.create_unique_constraint(
-        "uq_user_perm", "user_permission_assign",
+        "uq_user_perm",
+        "user_permission_assign",
         ["user_uuid", "permission_uuid", "team_uuid"],
     )
     op.create_index(
-        "uq_user_perm_platform", "user_permission_assign", ["user_uuid", "permission_uuid"],
-        unique=True, postgresql_where=sa.text("team_uuid IS NULL"),
+        "uq_user_perm_platform",
+        "user_permission_assign",
+        ["user_uuid", "permission_uuid"],
+        unique=True,
+        postgresql_where=sa.text("team_uuid IS NULL"),
     )
     op.create_index("ix_user_role_assign_team_uuid", "user_role_assign", ["team_uuid"])
 
@@ -301,12 +308,8 @@ def downgrade() -> None:
 
     op.drop_index("uq_user_perm_platform", table_name="user_permission_assign")
     op.drop_constraint("uq_user_perm", "user_permission_assign", type_="unique")
-    op.create_unique_constraint(
-        "uq_user_perm", "user_permission_assign", ["user_uuid", "permission_uuid"]
-    )
-    op.drop_constraint(
-        "user_permission_assign_team_uuid_fkey", "user_permission_assign", type_="foreignkey"
-    )
+    op.create_unique_constraint("uq_user_perm", "user_permission_assign", ["user_uuid", "permission_uuid"])
+    op.drop_constraint("user_permission_assign_team_uuid_fkey", "user_permission_assign", type_="foreignkey")
     op.drop_index("ix_user_permission_assign_team_uuid", table_name="user_permission_assign")
     op.drop_column("user_permission_assign", "team_uuid")
 
