@@ -132,6 +132,8 @@ export function RegisterFormClient({
           placeholder="請輸入 6 碼驗證碼"
           disabled={isVerifying}
           autoComplete="one-time-code"
+          // The code is what is left to type, and the 註冊 button pressed to get here is gone.
+          autoFocus
         />
 
         {verificationError ? (
