@@ -5657,6 +5657,79 @@
         }
       }
     },
+    "/api/v1/history/tickets/{uuid}/public": {
+      "get": {
+        "tags": [
+          "異動時間軸"
+        ],
+        "summary": "求助單的公開時間軸",
+        "description": "What happened to this help request, newest first, without anyone's name (ADR-421).\n\nNo sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who\nclaimed a need is a count, who acted is a role, and a change to the contact details is told\nwithout them.",
+        "operationId": "ticket_public_history_api_v1_history_tickets__uuid__public_get",
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHistoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found（不存在或已刪除）"
+          },
+          "429": {
+            "description": "rate_limited"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/history/stations/{uuid}": {
       "get": {
         "tags": [
@@ -10338,6 +10411,134 @@
         ],
         "title": "PropertyForReviewResponse",
         "description": "One live item under a need (Spec 028 §2)."
+      },
+      "PublicHistoryEventResponse": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "ticket_created / ticket_updated / need_added / need_updated / need_filled / need_stopped / need_reopened / need_removed / volunteer_joined / volunteer_left"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "actor_role": {
+            "type": "string",
+            "title": "Actor Role",
+            "description": "requester / volunteer / staff / system"
+          },
+          "need": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicNeedResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "這個事件的需求（需求與承接事件）"
+          },
+          "needs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PublicNeedResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs",
+            "description": "建單時的需求（ticket_created）"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeResponse"
+            },
+            "type": "array",
+            "title": "Changes",
+            "description": "改了什麼。標題、說明、地點、聯絡方式、受困／危險、需求名稱、進度備註、需求細項只有 changed=true；檢核不列（ADR-421）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "at",
+          "actor_role"
+        ],
+        "title": "PublicHistoryEventResponse",
+        "description": "What happened to a ticket, and in what role, with nobody's name (ADR-421)."
+      },
+      "PublicHistoryResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PublicHistoryEventResponse"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/HistoryMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "PublicHistoryResponse",
+        "description": "The standard envelope around a page of the public timeline."
+      },
+      "PublicNeedResponse": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "需求現在的名稱（不是當時的，ADR-421）"
+          },
+          "matched": {
+            "type": "integer",
+            "title": "Matched",
+            "description": "已承接人數"
+          },
+          "required": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required",
+            "description": "需要人數；沒填為 null"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "matched",
+          "required"
+        ],
+        "title": "PublicNeedResponse",
+        "description": "A need in an event: its name as it is now, and how many were coming of how many asked right after."
       },
       "RefreshRequest": {
         "properties": {

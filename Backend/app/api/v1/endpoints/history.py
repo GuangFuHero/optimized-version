@@ -13,12 +13,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.endpoints.auth.deps import get_rate_limiter
 from app.core import security
 from app.models.auth import User
-from app.schemas.history import HistoryMeta, HistoryResponse
-from app.services import history
+from app.schemas.history import HistoryMeta, HistoryResponse, PublicHistoryResponse
+from app.services import history, history_public
 
 router = APIRouter()
+
+# The public timeline needs no sign-in and replays the ticket's whole audit trail, so it is metered
+# per caller. Far above what one person opening tickets reaches.
+PUBLIC_TIMELINE_PER_MINUTE = 60
 
 
 async def _timeline(
@@ -64,6 +69,39 @@ async def ticket_history(
     """
     return await _timeline(
         db, actor=current_user, entity=history.TICKET, uuid=uuid, limit=limit, offset=offset
+    )
+
+
+@router.get(
+    "/tickets/{uuid}/public",
+    response_model=PublicHistoryResponse,
+    summary="求助單的公開時間軸",
+    responses={
+        404: {"description": "Not Found（不存在或已刪除）"},
+        429: {"description": "rate_limited"},
+    },
+    dependencies=[Depends(get_rate_limiter(PUBLIC_TIMELINE_PER_MINUTE, 60))],
+)
+async def ticket_public_history(
+    uuid: UUID,
+    limit: int = Query(50, ge=1, le=history.MAX_PAGE),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(security.get_db),
+):
+    """What happened to this help request, newest first, without anyone's name (ADR-421).
+
+    No sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who
+    claimed a need is a count, who acted is a role, and a change to the contact details is told
+    without them.
+    """
+    result = await history_public.load_public_timeline(db, uuid=str(uuid), limit=limit, offset=offset)
+    if result is None:
+        # Only a ticket that is not there: any other error stays a 500, its message kept from a guest.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ticket not found")
+
+    return PublicHistoryResponse(
+        data=result.events,
+        meta=HistoryMeta(total=result.total, truncated=result.truncated, limit=limit, offset=offset),
     )
 
 
