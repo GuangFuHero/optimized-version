@@ -1,7 +1,7 @@
 """Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
 from geoalchemy2 import Geography
-from sqlalchemy import and_, case, cast, delete, exists, false, func, not_, or_, select
+from sqlalchemy import Row, and_, case, cast, delete, exists, false, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
@@ -251,15 +251,18 @@ class TicketRepository(GenericRepository[Tickets]):
             whens.append((open_ticket, 1))
         return case(*whens, else_=2)
 
-    async def is_deleted(self, db: AsyncSession, uuid) -> bool | None:
-        """Whether the ticket `uuid` was deleted; None when no ticket has that uuid (ADR-444).
+    async def deletion(self, db: AsyncSession, uuid) -> Row | None:
+        """Whether the ticket `uuid` was deleted, and the ticket a merge replaced it with (ADR-444).
 
-        Reads `delete_at` and nothing else, so a caller asking whether a ticket is gone never holds
-        what was in it.
+        A row of `deleted` and `replaced_by_uuid`; None when no ticket has that uuid. Reads those two
+        columns and nothing else, so a caller asking whether a ticket is gone never holds what was in it.
         """
-        return await db.scalar(
-            select(self.model.delete_at.is_not(None)).select_from(self.model).where(self.model.uuid == uuid)
+        result = await db.execute(
+            select(self.model.delete_at.is_not(None).label("deleted"), self.model.replaced_by_uuid)
+            .select_from(self.model)
+            .where(self.model.uuid == uuid)
         )
+        return result.one_or_none()
 
     async def list_active(
         self,
