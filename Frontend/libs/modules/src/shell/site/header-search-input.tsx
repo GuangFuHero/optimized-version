@@ -110,11 +110,13 @@ function SiteHeaderSearchField({
             p: 0,
             fontFamily: typography.body[400].fontFamily,
             // Set here, the size would win over the theme's 16px for phones (`MuiInputBase`), and a
-            // focused input under 16px makes iOS Safari zoom the whole page in.
+            // focused input under 16px makes iOS Safari zoom the whole page in. A phone held sideways
+            // is as wide as a tablet, so a touch screen of any width gets 16px too; a mouse does not.
             fontSize: {
               mobile: IOS_NO_ZOOM_INPUT_PX,
               tablet: compact ? 15 : 14,
             },
+            '@media (pointer: coarse)': { fontSize: IOS_NO_ZOOM_INPUT_PX },
             lineHeight: compact ? '22px' : '20px',
             fontWeight: 600,
             color: color.fg.neutral.default,
