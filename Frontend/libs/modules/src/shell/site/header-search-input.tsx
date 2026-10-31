@@ -40,7 +40,9 @@ function SiteHeaderSearchField({
         maxWidth: compact ? 'none' : 520,
         minWidth: 0,
         height: compact ? 40 : 42,
-        px: compact ? 1.5 : 1.75,
+        // Tight in the phone's bar, with the icon close to the text: at 16px the placeholder needs
+        // 160px, and a signed-out 375px phone leaves the box little more.
+        px: compact ? 1 : 1.75,
         display: 'flex',
         alignItems: 'center',
         gap: 1,
@@ -68,7 +70,7 @@ function SiteHeaderSearchField({
               fontSize: compact ? 18 : 20,
               color: color.fg.neutral.muted,
               flexShrink: 0,
-              mr: 1,
+              mr: compact ? 0.5 : 1,
             }}
           />
         }
