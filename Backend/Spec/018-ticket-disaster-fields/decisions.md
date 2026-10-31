@@ -1,4 +1,4 @@
-# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387）
+# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387、ADR-422、ADR-437、ADR-444）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/016-resource-history/decisions.md`（ADR-243 為目前全 repo 最大值）。
@@ -781,6 +781,7 @@ floor 是 RF、nF、Bn     → 往下驗 room
 之後 Postgres 換成 generic plan 就正常。既有的 `tickets(bounds)` 訪客列表是同一個現象（同樣前 5 次約 3 秒），
 不是這條造成的，另案處理。`tickets(locationCell:)` 走 geography 索引，1～100 ms。
 前 5 次接近 3 秒的 ceiling，量級到 1 萬張在畫面裡時，前幾次可能回「請放大地圖」，修計畫的問題時一起看。
+（這兩支的計畫問題由 ADR-437 修掉。）
 ◾ 「有急件就整格紅」這條規則本身在等糖、Carol；規則改了，改 `CALM_PRIORITIES` 和那個條件就好。寫入時驗證
 priority 另議：會改到每一個寫入路徑，已經存進去的資料也不會跟著變。
 
@@ -813,3 +814,122 @@ priority 另議：會改到每一個寫入路徑，已經存進去的資料也�
 ➕ 跟 `zone` 權限同一個判斷，詳情寫的和誰管得到這張單不會對不上。
 ➖ 訪客看不到誰負責；要看就登入，或到地圖點那一區的標籤。
 ◾ 只看得到團隊，看不到是哪一區；前台照地圖標籤的寫法只寫「負責：A、B」。
+
+### ADR-437 訪客地圖的格子查詢，從每條連線的第一次就用 generic plan
+
+**白話**：部署後或尖峰時開出來的新連線，前幾次查格子要好幾秒，甚至被「請放大地圖」擋掉；改成第一次就用
+平常那個快的查詢計畫。
+
+HC 2026-10-28 在 #121 的 review 問：新連線的前幾次查詢會超過 3 秒，能不能在前台改用 `ticketCells` 之前修掉。
+Dan 2026-10-29 決定用這個做法（A），另開一支 PR 接在 #121 後面，一起修訪客的 `tickets(bounds:)`；先量，小框
+變慢就改用改寫 SQL 的做法（B）。
+
+**Context**：
+
+- asyncpg 每一句都用 prepared statement。Postgres 對同一條連線上的 prepared statement，前 5 次用帶入參數值
+  的 custom plan，之後才看要不要換成 generic plan。計畫存在連線上，所以每條新連線都要重來一次。
+- 訪客的框是用格子中心比（ADR-282）。custom plan 把這個條件估成 1 列，選了對每一張畫面裡的單都掃一次
+  `tickets` 的 nested loop；generic plan 走 GIST 索引的粗篩。ADR-387 記過這個現象。
+- 2026-10-29 在 5433 的臨時資料庫量（畫面內 1 萬張、畫面外 1 萬張，每個情境開一條新連線連跑 7 次，量完刪掉）：
+
+  | 情境 | 現在：第 1～5 次 | 現在：第 6 次起 | generic：第 1 次 | generic：之後 |
+  |---|---|---|---|---|
+  | `ticketCells` 大框（res 8，169 格） | 1.7～2.0 s | 57 ms | 114 ms | 57～60 ms |
+  | `ticketCells` 小框（2 格） | 4～57 ms | 5 ms | 61 ms | 4～7 ms |
+  | `ticketCells` 拉遠（res 6，981 格） | 4.6～4.9 s | 80 ms | 137 ms | 83～86 ms |
+  | 訪客 `tickets(bounds:)` 大框（9,569 張，一頁 200） | 3.5～3.7 s | 74 ms | 159 ms | 77～83 ms |
+  | 訪客 `tickets(bounds:)` 小框（113 張） | 8～81 ms | 10～11 ms | 95 ms | 12～16 ms |
+
+  第 1 次多出的約 50 ms 兩種計畫都有，是新連線的第一次查詢本身的成本。拉遠那一組在現在的寫法下，每條新連線
+  的前 5 次都超過 3 秒的 ceiling，會回「請放大地圖」。
+
+**Decision**：
+
+- `app/db/plans.generic_plan(db)`：在這個交易裡設 `plan_cache_mode = force_generic_plan`
+  （`set_config(..., true)`），離開時 `RESET`。一個 GraphQL 請求是同一個交易、同一個 session，視窗之後的
+  讀取要照原本的方式規劃，所以要還原；巢狀時只有最外層會設、會還原，跟 statement ceiling 同一套規矩
+  （ADR-156／157）。裡面的語句失敗、交易已中止時，RESET 也會失敗；這時吞掉 RESET 的錯，讓原本的錯誤往上傳，
+  rollback 本來就會丟掉這個設定。
+- 視窗開著的時候，同一個請求裡並列的 root field 也在這個 session 上交錯執行（`app/graphql/context.py`），
+  剛好落在視窗裡的讀取也會用 generic plan，哪幾句看執行順序（popo 2026-10-30 在 #167 review 實測）。不另外
+  隔離：
+  - 結果不變，只差那幾次的計畫。還原後 Postgres 照沒被套過的樣子規劃：2026-10-30 在 5433 量，視窗裡跑過
+    一次的語句，還原後前 5 次照樣是 custom plan。
+  - 設定、計數、還原是三次分開的來回，縮小視窗關不掉這個縫；要隔離得讓計數另外拿一條連線，每次拖地圖多
+    佔一條。statement ceiling 開著時，並列的讀取也一樣會被管到。
+- 用在兩處，都在 resolver：
+  - `ticketCells`：呼叫者有看不到精確位置的單（`detail_filters` 不是空的）時，整個計數包在裡面（外面再套
+    原本的 ceiling）。看得到所有精確位置的人沒有格子，不查也不包。
+  - `tickets`：有帶 `bounds`、而且呼叫者有看不到精確位置的單（`detail_filters` 不是空的）時才包，count
+    和 list 一起。看得到所有精確位置的人比的是點本身，走原本的計畫。
+- 不用的做法：
+  - 改寫 SQL（B）：先用 GIST 索引把框裡的候選做成 MATERIALIZED CTE，再算格子中心，讓 custom plan 估得準。
+    改動大，ADR-282 的等價測試要重驗；量出來 A 在小框也沒有變慢，不需要。
+  - 整個 app 都設 `force_generic_plan`（連線參數）：其他查詢的參數分布差很多，custom plan 對它們可能比較好，
+    沒量過不動。
+
+**Consequences**：
+➕ 新連線也不會因為計畫被「請放大地圖」擋掉；前台可以改用 `ticketCells`。
+➖ 小框的訪客列表在新連線的第 2～5 次多 3～5 ms（generic 12～16 ms，custom 8～11 ms），第 6 次起一樣。
+➖ 跟 `ticketCells` 或訪客框的 `tickets` 並列在同一個請求的欄位，落在視窗裡的讀取也用 generic plan。popo 量的
+主鍵查詢兩種都 1～3 ms；目前前台沒有把這兩支跟別的 root field 放在同一個請求。
+◾ 測試量不了時間，所以測的是設定：`tests/test_generic_plan.py` 釘住這個視窗（裡面是 generic、出去還原、
+巢狀不提早還原、失敗時留原本的錯），`test_ticket_cells.py` 釘住哪幾條路有包、哪幾條沒有。
+
+### ADR-444 分享連結分得出「已刪除」「已合併到另一張」和「找不到」：另一個只回狀態的查詢
+
+**白話**：打開一張單的分享連結時，前台分得出單是被刪了、被合併到另一張（帶得過去）、還是根本沒有這張單；
+分的時候不給單的任何內容。
+
+**Date**: 2026-10-31（糖要前台分得出「這張任務單已刪除」和「找不到這張任務單」兩種畫面，Dan 定這個做法；
+同日 HC review #192 後加 `merged`、先看範圍再看刪了沒，Dan 同意）
+
+**Context**：
+
+- `ticket(uuid)` 用 `get_by_uuid_active`，刪掉的單和不存在的 uuid 都回 null（`graphql/tickets/queries.py`）。
+- 刪單都是軟刪除：建單者刪（`services/ticket.py::delete_ticket`）和重複審核合併掉的那張
+  （`services/dedup_resolve.py::_cancel_secondary`）都寫 `cancelled`＋`delete_at`。網站沒有硬刪單的路徑。
+- 合併掉的那張另外寫 `replaced_by_uuid`，指向留下那張（ADR-372）。需求還在，只是搬到留下那張上。
+- 分享頁在伺服器端讀 `ticket`（`point-share/target.ts`），拿到 null 就沒有東西可以分。
+
+**Decision**：
+
+- 加 `Query.ticketAvailability(uuid: UUID!): TicketAvailabilityType!`。`status` 是 `TicketAvailability`
+  （`available`／`merged`／`deleted`／`not_found`），`replacedByUuid` 只有 `merged` 時有值。
+  前台跟 `ticket(uuid)` 放在同一個 request 問，`ticket` 是 null 時看這裡。
+- 先看範圍：這張單不在呼叫者的 `ticket.view` 範圍內，不管刪了沒都是 `not_found`，跟 `ticket(uuid)` 一樣。
+  先看刪了沒的話，範圍外的單會因為刪了沒而回不同的值，跟 `ticket(uuid)` 對範圍外的單一律回 null 不一致。
+  `ticket.view` 是公開能力（ADR-273），所以現在每個人都是 ALL，這段不會走到。
+- `available`：`tickets` 有這個 uuid，`delete_at` 是 NULL，就是 `ticket(uuid)` 會回這張單的時候。
+- `merged`：這張刪了、`replaced_by_uuid` 有值，而且順著它找得到一張還在、呼叫者看得到的單。`replacedByUuid`
+  就是那張，`ticket(replacedByUuid)` 拿得到。
+  - 留下那張後來又被合併進別張，就一路順著 `replaced_by_uuid` 走到還在的那張：A 併進 B、B 又併進 C，A 和 B
+    都回 `merged`＋C。拿著分享連結的人要找的是需求，需求現在在 C 上。
+  - 這條鏈不會繞回自己：合併時兩張都要還在，有一張已經取消或刪了就回 409
+    （`services/dedup_resolve.py::_locked_snapshot`），所以每一步指到的單，在那一步時都還在；刪掉的單沒有路徑
+    變回還在（沒有地方把 `delete_at` 清回 NULL），所以不會指回鏈上前面的單。
+- `deleted`：建單者刪的（`replaced_by_uuid` 是 NULL）；或順著鏈走到一張建單者刪的；或走到呼叫者看不到的。
+  最後這種，呼叫者看得到一開始那張，說它沒了是對的，但不給看不到那張的 uuid。
+- `not_found`：其他都是。包括從來沒有這個 uuid、別種東西的 uuid（站點、區域、需求；只查 `tickets`）、硬刪的、
+  呼叫者看不到的。
+- 每看一張單一句主鍵查詢，只讀 `delete_at` 和 `replaced_by_uuid` 兩欄（`ticket_repository.deletion`）：
+  還在、刪了、找不到都是一句，合併掉的每多走一張多一句。回的只有狀態和留下那張的 uuid：不給標題、地址、
+  聯絡人、刪除時間，也不給單本身。
+- `replaced_by_uuid` 原本 GraphQL 不回（ADR-372）。這裡只在 `merged` 時回鏈最後那張的 uuid，`TicketType` 仍然
+  不回這個欄位。
+- `ticket(uuid)` 不動。
+- 不用的做法：
+  - `ticket(uuid)` 改回 union（單／已刪除／找不到）：改了現有查詢的型別，前台、管理平台、分享頁都要一起改。
+  - 刪掉的單讓 `ticket(uuid)` 回 error code：每個呼叫的地方都會當失敗，「沒有」跟「出錯」混在一起。
+  - 刪掉的單照樣回 `TicketType`、其他欄位清空：每個欄位 resolver 都要記得擋，漏一個就露出內容。
+  - `tickets` 加刪除狀態欄位：跟 `delete_at` 重複（3NF），還要 migration。
+  - 合併掉的單也回 `deleted`（本 ADR 第一版）：拿著分享連結的人會以為需求沒了，其實還在留下那張上。
+  - 只走一層，留下那張又被合併就回 `deleted`：需求其實在鏈的最後一張上，跟上一條一樣。
+
+**Consequences**：
+➕ 現有的 `ticket` 呼叫都不用改；分享頁同一個 request 多問一個欄位就分得出來。
+➕ 不露內容不靠每個欄位各自擋：這個查詢拿不到內容。
+➕ 不存新欄位、不用 migration：刪除只記在 `delete_at`，合併記在 `replaced_by_uuid`。
+➕ 合併掉的單的分享連結帶得到需求現在所在的單。
+➖ 多一個 root query；合併掉的單每多一層多一句查詢（通常只有一層）。
+◾ mock seed 清掉的單（含測試者用 mock 帳號建的）是硬刪，分享連結是「找不到」。

@@ -27,7 +27,9 @@ import { createQrDataUrl, downloadQrSvg } from './qr-code';
 import {
   copyPointShareUrl,
   createPointShareLinks,
+  isShareSheetDismissal,
   openPointShareLink,
+  sharesThroughDeviceSheet,
 } from './share-links';
 import type { PointShareChannel, PointShareTarget } from './types';
 
@@ -91,6 +93,8 @@ export function PointShareDrawer({
   // After mount: the server has no `navigator`, and most desktop browsers have no share sheet —
   // a button that does nothing is left out rather than shown.
   const [canShareNatively, setCanShareNatively] = useState(false);
+  // A finger, not a mouse: where a channel's own app may be installed and take its links.
+  const touchScreen = useMediaQuery('(pointer: coarse)');
   const links = useMemo(
     () => (target ? createPointShareLinks(target) : []),
     [target],
@@ -114,15 +118,20 @@ export function PointShareDrawer({
     window.setTimeout(() => setCopyState('idle'), 1400);
   };
 
-  const handleNativeShare = () => {
+  const handleNativeShare = (fallbackHref?: string) => {
     if (!target) {
       return;
     }
 
-    // A dismissed sheet rejects; there is nothing to tell the person who dismissed it.
+    // A dismissed sheet rejects; there is nothing to tell the person who dismissed it. One that
+    // fails, opened from a channel's tile, gives way to that channel's page.
     navigator
       .share({ title: target.title, text: target.description, url: target.url })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (fallbackHref && !isShareSheetDismissal(error)) {
+          openPointShareLink(fallbackHref);
+        }
+      });
   };
 
   return (
@@ -255,7 +264,7 @@ export function PointShareDrawer({
               <Button
                 variant="contained"
                 startIcon={<IosShareRoundedIcon />}
-                onClick={handleNativeShare}
+                onClick={() => handleNativeShare()}
                 sx={{ textTransform: 'none', fontWeight: 700 }}
               >
                 分享到⋯
@@ -283,7 +292,14 @@ export function PointShareDrawer({
                 {links.map((link) => (
                   <ButtonBase
                     key={link.channel}
-                    onClick={() => openPointShareLink(link.href)}
+                    onClick={() =>
+                      sharesThroughDeviceSheet(link.channel, {
+                        canShareNatively,
+                        touchScreen,
+                      })
+                        ? handleNativeShare(link.href)
+                        : openPointShareLink(link.href)
+                    }
                     sx={tileSx}
                   >
                     {channelIcons[link.channel]}

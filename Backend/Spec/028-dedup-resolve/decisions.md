@@ -130,6 +130,10 @@ commit 前再掃一次，避免與其他 open PR 撞號。
 
 **Date**: 2026-10-24　**Status**: Accepted（Notion §12b 第 6 項；欄位形式為慣例，未另外拍板）
 
+> **「GraphQL 不回傳」部分被 ADR-444 取代（2026-10-31，`Spec/018-ticket-disaster-fields/decisions.md`）**：
+> 分享連結用的 `ticketAvailability` 順著 `tickets.replaced_by_uuid` 找到還在的那張，回 `merged` 時帶它的 uuid。
+> `TicketType` 仍不回這個欄位，`merged_into_uuid` 照舊不回。
+
 **背景**：Notion §10e 第 2 項：刪掉 B 之後，B 上看不出是因為和 A 重複，只有配對卡知道。
 
 **決定**：兩張表各加一個 nullable FK，只做紀錄。
