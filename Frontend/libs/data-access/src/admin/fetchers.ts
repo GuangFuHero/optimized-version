@@ -310,6 +310,47 @@ export function useStationAnalyticsValue(
   });
 }
 
+/**
+ * The chart endpoints return the Plotly figure itself (`data`/`layout`/`config`), which the browser
+ * draws with `Plotly.react`. The backend's `html` form is unusable here: its inline `<script>` never
+ * runs once React has inserted the markup.
+ */
+export type AnalyticsChartFigure = components['schemas']['ChartResponse'];
+
+export type TicketAnalyticsChartQuery = NonNullable<
+  paths['/api/v1/analytics/tickets/chart']['get']['parameters']['query']
+>;
+export interface TicketAnalyticsChartParams {
+  query: TicketAnalyticsChartQuery;
+}
+
+export const ticketAnalyticsChartQuery = (params: TicketAnalyticsChartParams) =>
+  queryOptions({
+    queryKey: ['admin', 'analytics', 'TicketAnalyticsChart', params],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/analytics/tickets/chart', { params, signal })
+        .then(responseData),
+  });
+
+export type StationAnalyticsChartQuery = NonNullable<
+  paths['/api/v1/analytics/stations/chart']['get']['parameters']['query']
+>;
+export interface StationAnalyticsChartParams {
+  query: StationAnalyticsChartQuery;
+}
+
+export const stationAnalyticsChartQuery = (
+  params: StationAnalyticsChartParams,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'analytics', 'StationAnalyticsChart', params],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/analytics/stations/chart', { params, signal })
+        .then(responseData),
+  });
+
 export type StationAnalyticsDataQuery = NonNullable<
   paths['/api/v1/analytics/stations/data']['get']['parameters']['query']
 >;
