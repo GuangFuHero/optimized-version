@@ -30,6 +30,8 @@ import {
 
 const { color, radius, shadow } = designTokens;
 const CloseIcon = Icons.close;
+// The panel's heading, and the name a screen reader gives it when it opens.
+const LAYER_PANEL_TITLE = '圖層切換';
 
 interface RescueMapLayerPanelProps {
   controller: RescueMapControllerValue;
@@ -68,7 +70,7 @@ function RescueMapLayerPanelContent({
               color: color.fg.neutral.default,
             }}
           >
-            圖層切換
+            {LAYER_PANEL_TITLE}
           </Typography>
           <Typography
             sx={{
@@ -328,6 +330,11 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         onClose={controller.closeLayerPanel}
         disableSwipeToOpen
         slotProps={{
+          paper: {
+            role: 'dialog',
+            'aria-modal': true,
+            'aria-label': LAYER_PANEL_TITLE,
+          },
           backdrop: {
             sx: {
               backgroundColor: 'transparent',
@@ -358,6 +365,11 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         open={controller.layerPanelOpen && !isPhone}
         onClose={controller.closeLayerPanel}
         slotProps={{
+          paper: {
+            role: 'dialog',
+            'aria-modal': true,
+            'aria-label': LAYER_PANEL_TITLE,
+          },
           backdrop: {
             sx: {
               backgroundColor: 'transparent',
