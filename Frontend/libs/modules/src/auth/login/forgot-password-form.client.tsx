@@ -91,7 +91,8 @@ export function ForgotPasswordFormClient() {
           placeholder={
             identityType === 'email' ? 'name@example.com' : '0912345678'
           }
-          autoComplete="username"
+          // No password on this page for a manager to pair `username` with: the address itself.
+          autoComplete={identityType === 'email' ? 'email' : 'tel'}
           value={identity}
           onChange={(value) => {
             setIdentity(value);

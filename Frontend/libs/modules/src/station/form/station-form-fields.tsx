@@ -40,6 +40,8 @@ export interface StationFormFieldsProps {
 /** The prototype's filled input: 46px, neutral subtle fill, a hairline that thickens on focus. */
 const filledInputSx = {
   '& .MuiInputBase-root': {
+    // What autofill is painted over with (the theme's `MuiInputBase`).
+    '--wg-field-bg': color.bg.neutral.subtle,
     minHeight: 46,
     borderRadius: `${radius.md}px`,
     bgcolor: color.bg.neutral.subtle,
