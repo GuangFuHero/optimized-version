@@ -25,8 +25,9 @@ export type LinkedTicket =
  * - `let-go`: a station, a guest's location cell (`cell:…`), or a ticket seen loaded and gone since —
  *   left out by a filter or a pan, not deleted;
  * - `look-up`: a ticket's uuid never seen loaded, which only the backend can say is there or gone;
- * - `replace`: a link pasted with punctuation or spaces after its uuid (「…。」 in a chat), whose
- *   `?id=` becomes the uuid alone, then looked up as any;
+ * - `replace`: a link pasted with punctuation or spaces after its uuid (「…。」 in a chat), or with
+ *   the uuid in upper case, whose `?id=` becomes the uuid alone in lower case — as the ticket comes
+ *   back, so the two meet — then looked up as any;
  * - `gone`: a link cut short, which no answer from the backend is needed to know names no ticket.
  */
 export type LinkedSelection =
@@ -36,7 +37,7 @@ export type LinkedSelection =
   | { kind: 'gone'; ticket: RescueMapGoneTicket };
 
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const TRAILING_PUNCTUATION_OR_SPACE = /[\s\p{P}]+$/u;
 
 export function readLinkedSelection({
@@ -52,14 +53,14 @@ export function readLinkedSelection({
     return { kind: 'let-go' };
   }
 
-  if (UUID_PATTERN.test(selectedId)) {
-    return { kind: 'look-up' };
-  }
+  const uuid = selectedId
+    .replace(TRAILING_PUNCTUATION_OR_SPACE, '')
+    .toLowerCase();
 
-  const trimmed = selectedId.replace(TRAILING_PUNCTUATION_OR_SPACE, '');
-
-  if (UUID_PATTERN.test(trimmed)) {
-    return { kind: 'replace', uuid: trimmed };
+  if (UUID_PATTERN.test(uuid)) {
+    return uuid === selectedId
+      ? { kind: 'look-up' }
+      : { kind: 'replace', uuid };
   }
 
   return {

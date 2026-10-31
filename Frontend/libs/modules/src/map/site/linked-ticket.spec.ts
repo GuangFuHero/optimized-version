@@ -164,6 +164,12 @@ describe('readLinkedSelection', () => {
     ).toEqual(Array(5).fill({ kind: 'replace', uuid: UUID }));
   });
 
+  it('writes an upper-case uuid in lower case, as the ticket comes back, so the two meet', () => {
+    expect(
+      [UUID.toUpperCase(), `${UUID.toUpperCase()}。`].map(unseenTicket),
+    ).toEqual(Array(2).fill({ kind: 'replace', uuid: UUID }));
+  });
+
   it('says a link cut short names no ticket, without asking the backend', () => {
     expect(
       ['d0000000-0000-40', 'd0000000-0000-40。'].map(unseenTicket),
