@@ -260,8 +260,8 @@ def same_address(existing, values: dict) -> bool:
 
     A blank part and a missing one read the same. A 棟/樓/室 written in the new line must also match the one
     in the row's own columns, which are what the API shows; a line without one, such as the edit form's
-    echo, matches any. Every 棟/樓/室 written in the stored line must in turn match the value about to be
-    stored, so an edit that clears or changes the floor replaces a raw line that would contradict it.
+    echo, matches any. An edit that clears or changes a 棟/樓/室 the stored line names replaces it, so the row
+    never holds a unit its raw line contradicts; a unit the edit leaves as it was does not count.
     """
     if not all((getattr(existing, c) or None) == (values.get(c) or None) for c in _ADDRESS_COLUMNS):
         return False
@@ -269,7 +269,12 @@ def same_address(existing, values: dict) -> bool:
     kept = parse_tw_address(existing.user_input_address)
     return all(
         not getattr(sent, u) or getattr(sent, u) == getattr(existing, u) for u in _UNIT_FIELDS
-    ) and all(not getattr(kept, u) or getattr(kept, u) == values.get(u) for u in _UNIT_FIELDS)
+    ) and all(
+        (getattr(existing, u) or None) == (values.get(u) or None)
+        or not getattr(kept, u)
+        or getattr(kept, u) == values.get(u)
+        for u in _UNIT_FIELDS
+    )
 
 
 async def unverify_if_moved(db: AsyncSession, geometry_uuid: str, old_geometry, new_geometry: dict) -> None:

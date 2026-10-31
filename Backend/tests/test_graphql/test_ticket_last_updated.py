@@ -214,6 +214,27 @@ async def test_clearing_the_floor_through_the_echo_replaces_the_raw_line_and_lea
 
 
 @pytest.mark.asyncio
+async def test_a_floor_the_field_set_over_the_line_is_unchanged_by_a_resend(
+    client, coordinator_auth, sample_ticket
+):
+    """Filed as `…9號3樓` with floor 5樓 (the field wins), sending `…9號` with 5樓 back changes nothing."""
+    _, admin = coordinator_auth
+
+    async def send(address: dict) -> None:
+        await _gql(
+            client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}
+        )
+
+    await send({"fullAddress": "花蓮縣光復鄉中正路9號3樓", "floor": "5樓"})
+    await _set_earlier(sample_ticket)
+
+    await send({"fullAddress": "花蓮縣光復鄉中正路9號", "floor": "5樓"})
+
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉中正路9號3樓"
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
 async def test_the_same_line_with_the_rows_own_floor_written_in_changes_nothing(
     client, coordinator_auth, sample_ticket
 ):

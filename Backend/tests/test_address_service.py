@@ -413,3 +413,14 @@ def test_an_edit_that_clears_or_changes_the_floor_replaces_a_raw_line_that_names
     assert same_address(stored, apply_address({**echo, "floor": "3樓"}, point=None))
     assert not same_address(stored, apply_address({**echo, "floor": None}, point=None))
     assert not same_address(stored, apply_address({**echo, "floor": "5樓"}, point=None))
+
+
+def test_a_unit_the_edit_leaves_as_it_was_does_not_replace_the_raw_line():
+    """The field wins over the line: a row filed as 3樓 with floor 5樓, sent back unchanged, is no edit."""
+    stored = SimpleNamespace(
+        **apply_address({"full_address": "花蓮縣光復鄉中正路9號3樓", "floor": "5樓"}, point=None)
+    )
+    door = {"full_address": "花蓮縣光復鄉中正路9號", "floor": "5樓"}
+    assert same_address(stored, apply_address(door, point=None))
+    assert not same_address(stored, apply_address({**door, "floor": None}, point=None))
+    assert not same_address(stored, apply_address({**door, "floor": "6樓"}, point=None))
