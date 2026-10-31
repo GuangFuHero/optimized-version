@@ -270,6 +270,8 @@ export function SiteListView() {
 
       if (linked.kind === 'ticket') {
         setUnlistedItem(linked.marker);
+      } else if (linked.kind === 'replace') {
+        controller.setSelectedMarkerId(linked.uuid);
       } else if (linked.kind === 'gone') {
         setUnlistedItem(linked.ticket);
       } else {

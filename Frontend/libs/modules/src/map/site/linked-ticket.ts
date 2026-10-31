@@ -8,12 +8,15 @@ import { mapTicketToMarker } from './markers';
  * What a link to a ticket no loaded page holds comes to, once the backend is asked (ADR-444):
  * - `ticket`: it is there — past the loaded pages, outside the map's view, or left out by a filter —
  *   and opens as any ticket does;
+ * - `replace`: 重複審核 merged it into another ticket, whose uuid the link's `?id=` becomes, to open
+ *   that one;
  * - `gone`: it was deleted, or never was, and its drawer says which;
  * - `unknown`: the request failed, or the ticket has no point to place. Neither is said to be gone:
  *   the selection lets go, as it did before there was anything to tell.
  */
 export type LinkedTicket =
   | { kind: 'ticket'; marker: RescueMapMarkerItem }
+  | { kind: 'replace'; uuid: string }
   | { kind: 'gone'; ticket: RescueMapGoneTicket }
   | { kind: 'unknown' };
 
@@ -71,9 +74,10 @@ export function readLinkedSelection({
 
 /**
  * Reads `GetLinkedTicket`. Gone only on the backend's word: a null ticket is `deleted` or
- * `not_found` as `ticketAvailability` says, never as the loaded pages suggest. `available` beside a
- * null ticket — deleted or moved out of reach between the two fields — is told as not found, the one
- * that claims nothing about the ticket.
+ * `not_found` as `ticketAvailability` says, never as the loaded pages suggest; `merged` sends the
+ * link on to the ticket the request now lives in, the last of a chain of merges. `available` beside
+ * a null ticket — deleted or moved out of reach between the two fields — and `merged` naming no
+ * ticket are told as not found, the one that claims nothing about the ticket.
  */
 export function resolveLinkedTicket(
   uuid: string,
@@ -91,12 +95,18 @@ export function resolveLinkedTicket(
     return marker ? { kind: 'ticket', marker } : { kind: 'unknown' };
   }
 
+  const { status, replacedByUuid } = ticketAvailability;
+
+  if (status === 'merged' && replacedByUuid) {
+    return { kind: 'replace', uuid: replacedByUuid };
+  }
+
   return {
     kind: 'gone',
     ticket: {
       id: uuid,
       detailType: 'gone-ticket',
-      availability: ticketAvailability === 'deleted' ? 'deleted' : 'not_found',
+      availability: status === 'deleted' ? 'deleted' : 'not_found',
     },
   };
 }

@@ -265,11 +265,13 @@ function SiteMapViewportDataLayer({
       return;
     }
 
-    const letGo = () =>
+    // `?id=` replaced, not pushed: going back skips the link as it was.
+    const select = (uuid: string | undefined) =>
       onReplaceRouteState({
         ...mergedRouteState,
-        selectedMarkerId: undefined,
+        selectedMarkerId: uuid,
       });
+    const letGo = () => select(undefined);
 
     const linkedSelection = readLinkedSelection({
       selectedId,
@@ -283,10 +285,7 @@ function SiteMapViewportDataLayer({
     }
 
     if (linkedSelection.kind === 'replace') {
-      onReplaceRouteState({
-        ...mergedRouteState,
-        selectedMarkerId: linkedSelection.uuid,
-      });
+      select(linkedSelection.uuid);
       return;
     }
 
@@ -304,6 +303,8 @@ function SiteMapViewportDataLayer({
 
       if (linked.kind === 'ticket') {
         setLinkedTicketMarker(linked.marker);
+      } else if (linked.kind === 'replace') {
+        select(linked.uuid);
       } else if (linked.kind === 'gone') {
         setGoneTicket(linked.ticket);
       } else {

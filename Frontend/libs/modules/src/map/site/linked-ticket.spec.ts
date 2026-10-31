@@ -3,6 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { readLinkedSelection, resolveLinkedTicket } from './linked-ticket';
 
 const UUID = 'd0000000-0000-4000-8000-000000000051';
+const KEPT_UUID = 'd0000000-0000-4000-8000-000000000052';
+
+/** `ticketAvailability` as `GetLinkedTicket` selects it. */
+function availability(
+  status: 'available' | 'merged' | 'deleted' | 'not_found',
+  replacedByUuid: string | null = null,
+) {
+  return { status, replacedByUuid };
+}
 
 /** A ticket as `GetLinkedTicket` returns it. The fragment's masking is only in the types. */
 function ticket(overrides: Record<string, unknown> = {}) {
@@ -31,7 +40,10 @@ describe('resolveLinkedTicket', () => {
   it('opens a ticket the backend gives, whatever the availability beside it', () => {
     expect(
       resolveLinkedTicket(UUID, {
-        data: { ticket: ticket(), ticketAvailability: 'available' },
+        data: {
+          ticket: ticket(),
+          ticketAvailability: availability('available'),
+        },
       }),
     ).toMatchObject({
       kind: 'ticket',
@@ -43,10 +55,29 @@ describe('resolveLinkedTicket', () => {
     });
   });
 
+  it('sends a ticket merged into another on to the one it now lives in', () => {
+    expect(
+      resolveLinkedTicket(UUID, {
+        data: {
+          ticket: null,
+          ticketAvailability: availability('merged', KEPT_UUID),
+        },
+      }),
+    ).toEqual({ kind: 'replace', uuid: KEPT_UUID });
+  });
+
+  it('tells merged with no ticket to send it on to as not found, which claims nothing about it', () => {
+    expect(
+      resolveLinkedTicket(UUID, {
+        data: { ticket: null, ticketAvailability: availability('merged') },
+      }),
+    ).toMatchObject({ kind: 'gone', ticket: { availability: 'not_found' } });
+  });
+
   it('says deleted only when the backend does, carrying the link and nothing of the ticket', () => {
     expect(
       resolveLinkedTicket(UUID, {
-        data: { ticket: null, ticketAvailability: 'deleted' },
+        data: { ticket: null, ticketAvailability: availability('deleted') },
       }),
     ).toEqual({
       kind: 'gone',
@@ -57,7 +88,7 @@ describe('resolveLinkedTicket', () => {
   it('says not found for a uuid that never was, or one the caller cannot see', () => {
     expect(
       resolveLinkedTicket(UUID, {
-        data: { ticket: null, ticketAvailability: 'not_found' },
+        data: { ticket: null, ticketAvailability: availability('not_found') },
       }),
     ).toEqual({
       kind: 'gone',
@@ -72,7 +103,7 @@ describe('resolveLinkedTicket', () => {
   it('tells a null ticket beside available as not found, which claims nothing about it', () => {
     expect(
       resolveLinkedTicket(UUID, {
-        data: { ticket: null, ticketAvailability: 'available' },
+        data: { ticket: null, ticketAvailability: availability('available') },
       }),
     ).toMatchObject({ kind: 'gone', ticket: { availability: 'not_found' } });
   });
@@ -89,7 +120,7 @@ describe('resolveLinkedTicket', () => {
       resolveLinkedTicket(UUID, {
         data: {
           ticket: ticket({ geometry: null }),
-          ticketAvailability: 'available',
+          ticketAvailability: availability('available'),
         },
       }),
     ).toEqual({ kind: 'unknown' });
