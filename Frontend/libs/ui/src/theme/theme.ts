@@ -175,6 +175,46 @@ export const theme = extendTheme({
         }),
       },
     },
+    // A small outlined field is 40px tall, under the 44px a fingertip needs on a phone. There it grows
+    // to 44px, 10.5px above and below its 23px line, and its label waits 2px lower to stay centred.
+    // A multiline one is taller already; a field that sets its own padding or height keeps it.
+    MuiOutlinedInput: {
+      styleOverrides: {
+        input: ({ theme: t }) => ({
+          variants: [
+            {
+              props: ({ ownerState }) =>
+                ownerState.size === 'small' && !ownerState.multiline,
+              style: {
+                [t.breakpoints.down('tablet')]: {
+                  paddingTop: 10.5,
+                  paddingBottom: 10.5,
+                },
+              },
+            },
+          ],
+        }),
+      },
+    },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: ({ theme: t }) => ({
+          variants: [
+            {
+              props: ({ ownerState }) =>
+                ownerState.variant === 'outlined' &&
+                ownerState.size === 'small' &&
+                !ownerState.shrink,
+              style: {
+                [t.breakpoints.down('tablet')]: {
+                  transform: 'translate(14px, 11px) scale(1)',
+                },
+              },
+            },
+          ],
+        }),
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
