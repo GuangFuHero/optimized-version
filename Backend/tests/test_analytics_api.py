@@ -236,7 +236,7 @@ async def test_the_x_refusal_names_what_the_metric_does_allow(client, db_session
         params={"tz": "UTC", "y": "task_completion_distribution", "x": "date"},
         headers=headers,
     )
-    assert res.json()["detail"] == "「子任務完成比例」不支援 x=date；此指標不分組"
+    assert res.json()["detail"] == "「子任務完成比例」不支援 x=date；此指標的分組是固定的，請不帶 x"
 
 
 @pytest.mark.asyncio

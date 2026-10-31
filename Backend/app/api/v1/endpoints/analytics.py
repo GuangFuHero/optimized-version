@@ -301,7 +301,7 @@ def _require_allowed_x(domain: str, y: str, x: str | None) -> None:
     if x is None or x in spec["allowed_x"]:
         return
     usable = "、".join(v for v in spec["allowed_x"] if v is not None)
-    hint = f"可用的 x：{usable}" if usable else "此指標不分組"
+    hint = f"可用的 x：{usable}" if usable else "此指標的分組是固定的，請不帶 x"
     if None in spec["allowed_x"] and usable:
         hint += "，或不帶 x"
     raise HTTPException(
@@ -327,8 +327,7 @@ async def _query_metric(
 
     Shared by the chart and value endpoints. `extra_filters` is the caller's RBAC row
     filter; see the service module docstrings. Raises HTTPException (bad tz, an `x` the metric
-    does not allow) or
-    AnalyticsInputError (unknown y, bad chart_type, over-wide trend range).
+    does not allow) or AnalyticsInputError (unknown y, bad chart_type, over-wide trend range).
     """
     tzinfo = _parse_tz(tz)
     _require_allowed_x(domain, y.value, x)
