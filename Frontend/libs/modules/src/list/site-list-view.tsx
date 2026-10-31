@@ -14,6 +14,7 @@ import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 
+import { BuildingDrawer } from '../building';
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from '../map/constants';
 import { countDetailOpenings } from '../map/detail-openings';
@@ -41,6 +42,7 @@ import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
 import {
   listTickets,
+  pageFoldedAway,
   showsClosedTickets,
   type ListedTicket,
 } from './ticket-list-rules';
@@ -71,6 +73,7 @@ export function SiteListView() {
     hasFetchedOnce,
     hasNextPage,
     loadNextPage,
+    pageIds,
     loadTicketMarker,
     replaceTicket,
   } = usePaginatedRescueMapMarkers(state);
@@ -111,6 +114,9 @@ export function SiteListView() {
     marker: RescueMapMarkerItem;
     needs?: ListedTicket['needs'];
   }[] = ticketList?.tickets ?? controller.markers.map((marker) => ({ marker }));
+  // Past a page that folded away entirely, only finished tickets are left to fetch (含已滿額 off).
+  const canLoadMore =
+    hasNextPage && !(ticketList && pageFoldedAway(pageIds, ticketList.tickets));
   const searchTooShort =
     dataType === 'ticket' &&
     resolveTicketSearch(state.search).kind === 'too-short';
@@ -258,7 +264,7 @@ export function SiteListView() {
   useEffect(() => {
     const target = loadMoreRef.current;
 
-    if (!target || !hasNextPage) {
+    if (!target || !canLoadMore) {
       return;
     }
 
@@ -277,7 +283,7 @@ export function SiteListView() {
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasNextPage, loadNextPage]);
+  }, [canLoadMore, loadNextPage]);
 
   const closeDetail = () => {
     setDetailOpen(false);
@@ -295,11 +301,26 @@ export function SiteListView() {
     );
   };
 
+  // 現場分區: the building a ticket's 看各樓層 opened, shut again on opening one of its tickets.
+  const [buildingUuid, setBuildingUuid] = useState<string | null>(null);
+
+  // One of a building's tickets, from its drawer or 上一張／下一張. One the list holds opens as any
+  // card does; one it does not — past the loaded pages, or left out by a filter — as a linked one does.
+  const openBuildingTicket = (marker: RescueMapMarkerItem) => {
+    if (!controller.markers.some((listed) => listed.id === marker.id)) {
+      setUnlistedMarker(marker);
+    }
+
+    controller.setSelectedMarkerId(marker.id);
+  };
+
   const createTicketDetailOverrides = (marker: RescueMapMarkerItem) =>
     createTaskMatchTicketDetailOverrides({
       marker,
       isAuthenticated,
       onShare: () => openPointShare(marker),
+      onOpenBuilding: setBuildingUuid,
+      onSelectTicket: openBuildingTicket,
     });
 
   const view = (
@@ -430,12 +451,13 @@ export function SiteListView() {
             </Typography>
           ) : null}
           {/* Not while a page is on its way: every search reloads the list, and it would read
-              as empty between keystrokes. Nor while pages remain: the rows so far may all have
-              folded away (含已滿額), and only the sentinel below can ask for the next page. */}
+              as empty between keystrokes. Nor while a later page may still list something: the
+              rows so far may all have folded away (含已滿額), and only the sentinel below can ask
+              for the next page. */}
           {listRows.length === 0 &&
           hasFetchedOnce &&
           !isFetching &&
-          !hasNextPage ? (
+          !canLoadMore ? (
             <Stack
               sx={{
                 height: '100%',
@@ -577,6 +599,16 @@ export function SiteListView() {
         open={Boolean(shareTarget)}
         target={shareTarget}
         onClose={() => setShareTarget(null)}
+      />
+
+      <BuildingDrawer
+        buildingUuid={buildingUuid}
+        isAuthenticated={isAuthenticated}
+        onClose={() => setBuildingUuid(null)}
+        onOpenTicket={(marker) => {
+          setBuildingUuid(null);
+          openBuildingTicket(marker);
+        }}
       />
     </Box>
   );

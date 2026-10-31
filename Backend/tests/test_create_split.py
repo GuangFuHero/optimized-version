@@ -1,8 +1,9 @@
 """Ticket, station and ticket-task creation split into validate → insert → commit.
 
 A deduplicated create must validate before the dedup check and insert without committing, so the
-new row, its pair card and its audit row land in one transaction. Batch import still calls
-`create_*`, so these tests also pin that `create_*` keeps its signature and behaviour.
+new row, its pair card and its audit row land in one transaction. `create_*` were kept for
+batch import (ADR-299), which since ADR-398 validates and inserts itself; these tests still pin
+that `create_*` keep their signature and behaviour.
 """
 
 import inspect
@@ -31,7 +32,7 @@ pytestmark = pytest.mark.asyncio
 POINT = {"type": "Point", "coordinates": [121.5601, 23.6701]}
 ADDRESS = {"location_type": "address", "full_address": "花蓮縣光復鄉"}
 
-# The keyword names batch import and the GraphQL resolvers call `create_*` with.
+# The keyword names `create_*` take, as batch import called them until ADR-398.
 CREATE_TICKET_PARAMS = [
     "db", "actor", "geometry", "title", "description", "contact_name", "contact_email",
     "contact_phone", "priority", "task_type", "disaster_types",
@@ -40,7 +41,7 @@ CREATE_TICKET_PARAMS = [
 ]  # fmt: skip
 CREATE_STATION_PARAMS = [
     "db", "actor", "geometry", "type", "name", "description", "op_hour", "level", "comment",
-    "source", "visibility", "contact_name", "contact_email", "contact_phone",
+    "visibility", "contact_name", "contact_email", "contact_phone",
     "operational_status", "supply_status", "secondary_location",
 ]  # fmt: skip
 
@@ -90,7 +91,6 @@ def _station_fields(**overrides) -> dict:
         "op_hour": "24h",
         "level": 1,
         "comment": None,
-        "source": "manual",
         "visibility": "public",
         "contact_name": "  李主任  ",
         "contact_phone": "0912345678",
@@ -166,7 +166,7 @@ async def test_create_ticket_behaves_as_before(db):
 
 
 async def test_create_ticket_keeps_its_signature():
-    """Batch import calls create_ticket by these keyword names."""
+    """Scripts call create_ticket by these keyword names (scripts/verify/history_timeline.py)."""
     assert list(inspect.signature(ticket_service.create_ticket).parameters) == CREATE_TICKET_PARAMS
 
 
@@ -233,7 +233,7 @@ async def test_create_station_behaves_as_before_and_still_notifies(db, monkeypat
 
 
 async def test_create_station_keeps_its_signature():
-    """Batch import calls create_station by these keyword names."""
+    """Unchanged since batch import called it by these keyword names (ADR-299)."""
     assert list(inspect.signature(station_service.create_station).parameters) == CREATE_STATION_PARAMS
 
 
@@ -241,7 +241,7 @@ async def test_create_station_keeps_its_signature():
 
 CREATE_TICKET_TASK_PARAMS = [
     "db", "actor", "ticket_uuid", "task_type", "task_name", "task_description", "quantity",
-    "source", "route_uuid",
+    "route_uuid",
 ]  # fmt: skip
 
 
@@ -251,7 +251,6 @@ def _task_fields(**overrides) -> dict:
         "task_name": "抽水",
         "task_description": "一樓積水",
         "quantity": 2,
-        "source": "user",
         "route_uuid": None,
     }
     return fields | overrides
@@ -266,7 +265,8 @@ async def test_validate_ticket_task_writes_nothing_and_needs_no_ticket(db):
     """Validation stands alone: a new ticket's tasks are validated before the ticket exists."""
     actor = await _actor(db, Perm.TICKET_ADD)
     fields = await ticket_service.validate_ticket_task(db, actor=actor, **_task_fields())
-    assert fields.values == _task_fields()
+    # The actor's role is not the site's `user`, so the task is official.
+    assert fields.values == {**_task_fields(), "source": "official"}
     assert await _rows(db, TicketTask) == 0
 
 

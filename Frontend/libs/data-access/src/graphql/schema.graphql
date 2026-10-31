@@ -912,6 +912,11 @@ type Query {
 
     """Only tickets at this audit status"""
     auditStatus: AuditStatus = null
+
+    """
+    NEWEST (default): newest first, best match first when searching. NEEDS_FIRST: tickets still taking people first, one with an open rescue need ahead, then as NEWEST; a need the signed-in caller claimed counts as open
+    """
+    order: TicketListOrder! = NEWEST
   ): TicketConnection!
   ticket(
     uuid: UUID!
@@ -1617,6 +1622,11 @@ type TicketDisasterDetailType {
   value: String!
 }
 
+enum TicketListOrder {
+  NEWEST
+  NEEDS_FIRST
+}
+
 type TicketPropertyConfigType {
   uuid: UUID!
 
@@ -1835,6 +1845,11 @@ type TicketType {
   """
   responsibleTeams: [AssignedTeamType!]!
   disasterDetails: [TicketDisasterDetailType!]!
+
+  """
+  The building map this ticket was filed under (createTicket's buildingMapUuid). Null when it was not filed under one, when that building map is deleted, and to a caller without ticket.view_detail here
+  """
+  buildingMapUuid: UUID
 }
 
 enum TriState {
