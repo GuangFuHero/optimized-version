@@ -1,19 +1,22 @@
 # Database normal forms: what conforms, and the redundancy we keep on purpose
 
 The tender asks for a database in third normal form (3NF). This document is the acceptance statement: the
-standard we checked against, the two places that did not conform and how they were fixed, the
+standard we checked against, the five places that did not conform and how they were fixed, the
 redundancy we keep on purpose and what keeps it consistent, and SQL to check a deployed database.
 
 The audit was done on `main` at `023bb069` (2026-10-28), reading `Backend/app/models/` and
-`Backend/alembic/versions/`. Paths below are relative to `Backend/`.
+`Backend/alembic/versions/`; three more fixes (F6 to F8) were made on 2026-10-30. Paths below are
+relative to `Backend/`.
 
 ## Result
 
 - Every table is in 3NF, except for the deliberate redundancies listed under
   [Kept on purpose](#kept-on-purpose-controlled-redundancy). Each of those is kept consistent by the
   database itself (a constraint or a generated column) or by a single function that is the only writer.
-- Two places did not conform and are fixed: `stations.is_official` (F1, ADR-438) and
-  `notifications.read` (F2, ADR-439). Both are now enforced by the database.
+- Five places did not conform and are fixed: `stations.is_official` (F1, ADR-438), `notifications.read`
+  (F2, ADR-439), and, in migration `197c174410bd` (ADR-440), `user_role_assign.role_kind` (F6), the
+  timestamps of `ticket_tasks` (F7) and the address line of `secondary_locations` (F8). All are now
+  enforced by the database.
 - Two duplications are known and low risk, and are not yet enforced by the database (F3, F4). One more is
   suspected and waits for the slow dedup layer (F5). See
   [Known, not yet constrained](#known-not-yet-constrained).
@@ -67,36 +70,73 @@ How it was applied:
   `ix_notifications_recipient_unread` is built on it.
 - **Tests**: `tests/test_migration_notification_read_check.py`.
 
+### F6 `user_role_assign.role_kind` copied `roles.kind` (ADR-440, reverses ADR-073)
+
+- **Was**: `role_uuid → role_kind` (equal to `roles.kind`), kept so a CHECK could see the role's kind, with a
+  composite foreign key `(role_uuid, role_kind) → roles(uuid, kind)` stopping the copy from drifting. A
+  second copy of the fact, and part of the candidate key `(user_uuid, role_uuid, team_uuid)`, so strictly a
+  2NF and 3NF violation. This was listed as the controlled redundancy E1.
+- **Now**: the column, `ck_ura_role_team_kind`, `fk_ura_role_kind` and `roles.uq_roles_uuid_kind` are gone.
+  Two triggers keep the rule "a platform grant carries no team, a team grant carries one":
+  `user_role_assign_check_kind_trigger` (BEFORE INSERT OR UPDATE OF `role_uuid`, `team_uuid`) reads the
+  role's kind with `SELECT … FOR SHARE` and raises `check_violation` for `ck_ura_role_team_kind`, so callers
+  still get an IntegrityError; `roles_kind_in_use_trigger` (BEFORE UPDATE OF `kind`) refuses a change of
+  kind while any grant holds the role. The `_fill_role_kind` hook and every `role_kind=` are removed.
+- **Tests**: `tests/test_identity_model.py`.
+
+### F7 `ticket_tasks.completed_at` and `canceled_at` agree with `status` (ADR-440)
+
+- **Was**: `completed_at` is set when `status` becomes `fulfilled` and `canceled_at` when it becomes
+  `canceled`, by the actions that move the status (`app/services/ticket.py`, `app/services/dedup_resolve.py`).
+  The database did not check it: a transitive dependency `status → completed_at, canceled_at`.
+- **Now**: `CHECK ck_ticket_tasks_stamps_match_status`: `completed_at` is set exactly when the status is
+  `fulfilled`, `canceled_at` exactly when it is `canceled`. Every writer already kept this: filling, giving a
+  place back, stopping recruitment, deletion, and a duplicate review's cancel and settle. The migration
+  reports how many rows disagreed, repaired them from the status (stamping with `updated_at`), then added the
+  CHECK.
+- **Tests**: `tests/test_ticket_task_stamps.py`, `tests/test_migration_third_normal_form.py`.
+
+### F8 `secondary_locations.full_address` and the address parts (ADR-440)
+
+- **Was**: `full_address` was the parser's version of the line and the nine parts were its split, both stored;
+  text the parser did not place existed only in the line. A 衖 or 衕 was in the line and in no part.
+- **Now**: `user_input_address` holds the line exactly as received (overwritten on each address edit).
+  `apply_address` parses it and writes the parts and `remainder`, the text the parser could not place (after
+  the 號 when that is not 棟/樓/室, or the whole line when nothing was recognized). `full_address` is
+  `GENERATED ALWAYS AS (…) STORED`: county, town, village, neighborhood, road, section, lane, alley, no and
+  remainder joined, NULL when all are NULL. The parser keeps a 衖/衕 inside `alley` (`3弄2衖`), so the
+  rebuilt line is, for every input, the line the parser returned before. The API is unchanged.
+- **Rows from before**: they never stored the raw input, so their `user_input_address` is the parsed line
+  that was in `full_address`.
+- **What is left**: the parts still follow from `user_input_address` through a Python parser; see E2.
+- **Tests**: `tests/test_address_parse.py` (the parts join to the line, over every case in the file and a
+  generated set), `tests/test_address_service.py`, `tests/test_migration_third_normal_form.py`.
+
 ## Kept on purpose (controlled redundancy)
 
 Each entry: the dependency, why it is kept, what keeps it consistent, and the sentence for acceptance.
 
-### E1 `user_role_assign.role_kind`
+### E1 was `user_role_assign.role_kind`
 
-- **Dependency**: `role_uuid → role_kind` (equal to `roles.kind`). It is part of the candidate key
-  `(user_uuid, role_uuid, team_uuid)`, so strictly this breaks both 2NF and 3NF.
-- **Why**: a CHECK must ensure that a platform role carries no team and a team role always does
-  (ADR-073), and a CHECK cannot read another table, so the kind is copied here.
-- **Consistency**: a composite foreign key `(role_uuid, role_kind) → roles(uuid, kind)` rejects a wrong
-  copy; the model fills it in before flush when a caller leaves it out (`app/models/rbac.py`).
-- **Tests**: `tests/test_identity_model.py` (a wrong copy is refused; the copy is filled in).
-- **Acceptance**: controlled redundancy, enforced by a foreign key to its source; an update anomaly cannot
-  happen.
+Removed: see F6.
 
-### E2 the split address columns of `secondary_locations`
+### E2 the address parts derived from `user_input_address` (the one remaining exception)
 
-- **Dependency**: `full_address → county, town, village, neighborhood, road, section, lane, alley, no`.
-  The reverse does not hold: text the parser does not recognise stays only in `full_address`.
-- **Why**: search and the bulk import's match keys use the split columns. Splitting needs the Python parser
-  (`app/core/address.py`, `parse_tw_address`), so it cannot be a SQL view or a generated column.
+- **Dependency**: `user_input_address → county, town, village, neighborhood, road, section, lane, alley, no,
+  remainder`, through `parse_tw_address` (`app/core/address.py`). `full_address` is no longer part of it: the
+  database builds it from those columns, so it cannot disagree with them (F8).
+- **Why**: search and the bulk import's match keys use the split columns. Splitting needs the Python parser,
+  so it cannot be a SQL view or a generated column.
 - **Consistency**: every write goes through one function, `apply_address` (`app/services/address.py`), which
-  splits `full_address` and overwrites the nine columns. The GraphQL inputs do not take the nine columns.
+  keeps the line as received and overwrites the parts and `remainder`. The GraphQL inputs do not take them.
   A ticket inside a building copies the building's already-split address.
-- **Tests**: `tests/test_address_service.py`, `tests/test_address_parse.py`.
-- **Risk**: a parser change does not re-split old rows; a direct SQL write could disagree. Checking existing
-  rows needs Python (re-run `parse_tw_address` on each row); SQL cannot do it.
-- **Acceptance**: derived columns of the full address, written by one function only, used for search and
-  matching.
+- **Guards for a parser change or a direct SQL write**: `scripts/resplit_addresses.py` re-parses
+  `user_input_address` for every row and prints what would change (`--apply` writes it);
+  `scripts/check_address_drift.py` lists the rows whose stored parts differ from a re-parse and exits 1 if
+  there are any. Both need Python, since SQL cannot run the parser.
+- **Tests**: `tests/test_address_service.py`, `tests/test_address_parse.py`, `tests/test_address_tools.py`.
+- **Acceptance**: derived columns of the raw address line, written by one function only, used for search and
+  matching, with a command to re-derive them and a check that finds a row where they disagree.
 
 ### E3 the `search_text` generated columns
 
@@ -169,7 +209,7 @@ a constraint, without changing code or the API.
 - **Consistency today**: the service checks the item belongs to the station before writing
   (`app/services/station.py`); the database does not.
 - **Fix when wanted**: UNIQUE `(uuid, station_uuid)` on `station_properties`, and a composite foreign key
-  `(item_uuid, station_uuid) → station_properties(uuid, station_uuid)` on `crowd_sourcing`, as E1 does.
+  `(item_uuid, station_uuid) → station_properties(uuid, station_uuid)` on `crowd_sourcing`.
 
 ### F4 `role_requests.team_uuid` repeats the invite's team
 
@@ -210,10 +250,15 @@ SELECT count(*)
 FROM role_requests r JOIN team_invites i ON i.uuid = r.invite_uuid
 WHERE r.team_uuid IS DISTINCT FROM i.team_uuid;
 
--- E1: role_kind different from roles.kind (the foreign key keeps this at 0)
+-- F6: grants whose team disagrees with the role's kind (the triggers keep this at 0)
 SELECT count(*)
 FROM user_role_assign u JOIN roles r ON r.uuid = u.role_uuid
-WHERE u.role_kind <> r.kind;
+WHERE (r.kind = 'platform' AND u.team_uuid IS NOT NULL) OR (r.kind = 'team' AND u.team_uuid IS NULL);
+
+-- F7: needs whose timestamps disagree with their status (the CHECK keeps this at 0)
+SELECT count(*) FROM ticket_tasks
+WHERE NOT ((completed_at IS NOT NULL) = (status = 'fulfilled')
+           AND (canceled_at IS NOT NULL) = (status = 'canceled'));
 
 -- E4: stored ticket status different from the derived one (cancelled tickets and tickets that never
 -- had a need are left out)
@@ -238,12 +283,13 @@ SELECT * FROM (
 WHERE stored <> derived;
 ```
 
-E2 (split addresses) cannot be checked in SQL: re-run `parse_tw_address(full_address)` from
-`app/core/address.py` on each row in Python and compare the nine columns.
+E2 (the split addresses) cannot be checked in SQL: run `python -m scripts.check_address_drift` from
+`Backend/`, which re-parses `user_input_address` on each row and lists the rows whose parts differ.
 
 ## Keeping it true
 
 - A new column that can be worked out from another column of the same row should be a generated column,
   or be listed above with what keeps it consistent.
-- A copy of another table's value kept for a CHECK should use a composite foreign key, as E1 does.
+- A copy of another table's value kept for a CHECK is a second copy of the fact: do not keep one; read the
+  source row in a trigger, as F6 does.
 - A snapshot of a value at the time of an event is not a violation; say so in the column's comment.
