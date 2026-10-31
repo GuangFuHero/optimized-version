@@ -463,6 +463,40 @@
     const segments = building ? Bridge.buildingSegments(building) : [];
     if (!open || !building || !ActionDrawer) return null;
 
+    /* SPACE-FE-104（2026-11-01 Sucre：「後台新增，前台不會連動出現」）：
+       前台預設是未登入，原本訪客完全看不到空間 —— 跟 08-22 S-2「入口一律顯示，擋在送出前」相反。
+       🔒 訪客看得到這一棟、看得到有哪幾層、可以按「在這一層請求協助」（送出前才擋登入）。
+       🔒 但**不給訪客看任何數字或單**（GUEST_CAN_SEE_MATRIX 仍是 false）：
+          ❌ 不能沿用下面的樓層清單 —— 訪客拿到的單沒有樓層，每一層都會寫「尚無通報」，
+             而那一層其實可能有人在等。對訪客說「沒有」比不說更危險。 */
+    if (!isAuthenticated) {
+      return (
+        <ActionDrawer open={open} onClose={onClose}
+          title={building.alias || building.address} subtitle={building.address}>
+          <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+            <p data-space-guest-note style={{ margin: 0, font: '400 var(--fs-13)/1.6 var(--font-body)',
+              color: 'var(--color-fg-neutral-subtle)' }}>
+              登入後才看得到這一棟每一層的求助。人在這一棟、需要幫忙的話，選你所在的那一層（送出前會請你登入）。
+            </p>
+            {segments.map((name) => (
+              <button key={name} type="button" data-space-guest-floor={name}
+                onClick={() => onCreateAtCell({ floor: name, unit: null })}
+                style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minHeight: 44,
+                  padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                  border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)',
+                  textAlign: 'left', font: 'inherit', color: 'inherit' }}>
+                <span style={{ font: '700 var(--fs-14)/1 var(--font-data)', minWidth: 40 }}>{name}</span>
+                <span style={{ flex: 1, font: '400 var(--fs-13)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+                  在這一層請求協助
+                </span>
+                <WGIcon n="ChevronRight" s={16} c="var(--color-fg-neutral-muted)" />
+              </button>
+            ))}
+          </div>
+        </ActionDrawer>
+      );
+    }
+
     /* 預設展開「有未結案搜救」或「還缺人」的分區；使用者手動開合後以他的選擇為準。
        🔒 搜救排在缺人前面 —— 一個還沒找到的人，比清淤缺五個人更該先被看見。 */
     const segOpen = (key, list) => {
@@ -512,6 +546,16 @@
             </span>
           </div>
 
+          {/* SPACE-FE-102（2026-11-01）：剛開好的空間每一層都是收起來的「尚無通報」，
+              「在這一層請求協助」要展開才看得到，沒有任何東西告訴人可以點。整棟 0 張時說一句。
+              🚨 文案是 Claude 定的。 */}
+          {totals.ticketCount === 0 && isAuthenticated ? (
+            <p data-space-empty-hint style={{ margin: 0, font: '400 var(--fs-13)/1.6 var(--font-body)',
+              color: 'var(--color-fg-neutral-subtle)' }}>
+              這一棟還沒有人求助。點你所在的那一層，就能在那一層請求協助。
+            </p>
+          ) : null}
+
           <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
             {segments.map((name) => {
               const list = grouped.bySegment[name] || [];
@@ -550,10 +594,87 @@
     );
   }
 
+  /* ═══ SPACE-FE-103（2026-11-01 Sucre：「前台列表頁也加空間的入口」）════════════════
+     列表頁沒有地圖可以點建築標記，原本只能從「某一張單的詳情 →看各樓層」進去 ——
+     **0 張單的空間在列表上完全找不到**，跟地圖上 SPACE-FE-101 修掉的是同一個洞。
+     🔒 放在任務列表最上面、一棟一列，點下去開同一個 BuildingDrawer（不另做一套）。
+     🔒 看「任務」時才有。🔄 SPACE-FE-104：訪客也有（只有名稱、不給數字）。
+     🔒 跟著搜尋框走：有搜尋字時只列名稱或地址對得上的；對不上就整塊不出現。
+        **不受子分類篩選影響** —— 空間不是任務單，沒有類型可篩。
+     🔒 排序：還缺人多的在前，再來是有單的，最後是還沒有求助的。
+     🔒 超過 3 棟先收起，給「看全部 N 棟」—— 不能讓這一塊把真正的求助單推出第一屏。
+     🚨 標題、文案、3 棟、排序都是 Claude 定的。 */
+  function SpaceEntryList({ buildings, isAuthenticated, getTaskMatchState, searchTerm, onOpen }) {
+    const [expanded, setExpanded] = useState(false);
+    const rows = useMemo(() => {
+      const term = String(searchTerm || '').trim().toLowerCase();
+      return (buildings || [])
+        .filter((b) => !term || [b.alias, b.address].some((x) => String(x || '').toLowerCase().includes(term)))
+        .map((b) => {
+          /* SPACE-FE-104：訪客不給數字（不比六邊形格子更精確） */
+          if (!isAuthenticated) return { b, open: 0, lack: 0 };
+          const all = SD.queryBuildingMarkers(b, { isAuthenticated }).filter((mk) => mk.detailType === 'ticket');
+          const sum = summarizeList(all, getTaskMatchState);
+          return { b, open: sum.ticketCount - sum.closedCount, lack: sum.lack };
+        })
+        .sort((x, y) => (y.lack - x.lack) || (y.open - x.open)
+          || String(x.b.alias || x.b.address).localeCompare(String(y.b.alias || y.b.address), 'zh-Hant'));
+    }, [buildings, isAuthenticated, getTaskMatchState, searchTerm]);
+    if (!rows.length) return null;
+    const LIMIT = 3;
+    const shown = expanded ? rows : rows.slice(0, LIMIT);
+    return (
+      <section data-space-entry aria-label="可以看各樓層的大樓"
+        style={{ display: 'grid', gap: 'var(--space-2)', padding: 'var(--space-3)',
+          borderRadius: 'var(--radius-lg)', background: 'var(--color-bg-neutral-default)',
+          border: '1px solid var(--color-border-default)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <span style={{ font: '700 var(--fs-14)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-default)' }}>
+            這些大樓可以看各樓層
+          </span>
+          <span style={{ font: '400 var(--fs-12)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-muted)' }}>
+            人在大樓裡要求助，從這裡選樓層
+          </span>
+        </div>
+        {shown.map(({ b, open, lack }) => (
+          <button key={b.id} type="button" data-space-row={b.id} onClick={() => onOpen(b)}
+            style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', width: '100%', minHeight: 44,
+              padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-subtle)',
+              textAlign: 'left', font: 'inherit', color: 'inherit' }}>
+            <WGIcon n="Building2" s={18} c="var(--color-fg-neutral-subtle)" />
+            <span style={{ minWidth: 0, flex: 1, display: 'grid' }}>
+              <span style={{ font: '600 var(--fs-14)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-default)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.alias || b.address}</span>
+              {b.alias ? (
+                <span style={{ font: '400 var(--fs-12)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-muted)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.address}</span>
+              ) : null}
+            </span>
+            {/* 與地圖標記同一套：「N 件」＋紅底「缺 M」；沒有單寫「還沒有求助」（不寫 0 件）。 */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              font: '600 var(--fs-12)/1 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+              {!isAuthenticated ? '看各樓層' : open > 0 ? open + ' 件' : '還沒有求助'}
+              {lack > 0 ? <span className="wg-bld__lack">缺 {lack}</span> : null}
+            </span>
+            <WGIcon n="ChevronRight" s={16} c="var(--color-fg-neutral-muted)" />
+          </button>
+        ))}
+        {rows.length > LIMIT ? (
+          <button type="button" data-space-more onClick={() => setExpanded((v) => !v)}
+            style={{ justifySelf: 'start', minHeight: 32, padding: '0 var(--space-2)', border: 0, background: 'none',
+              cursor: 'pointer', font: '600 var(--fs-13)/1 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textDecoration: 'underline' }}>
+            {expanded ? '收起' : '看全部 ' + rows.length + ' 棟'}
+          </button>
+        ) : null}
+      </section>
+    );
+  }
+
 /* 🔒 2026-10-26 Sucre（BE-036 前台用字）：前台用**具體的字**「這一棟／這一層」，不用「分區」也不用「空間」。
    後台叫「開啟空間」是管理的動作；V1 只有大樓、只有樓層，民眾看到的就是那棟樓的名字。V2 加車廂／自訂時再改。 */
   Object.assign(window, {
-    BuildingDrawer, SegmentSection, TicketRow, buildingTicketOrder,
+    BuildingDrawer, SegmentSection, TicketRow, buildingTicketOrder, SpaceEntryList,
     summarizeTicket, summarizeList, sortForStack, useBuildingForAddress,
     isClosedBuildingMarker: isClosedMarker,
   });

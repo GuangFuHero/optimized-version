@@ -543,6 +543,8 @@
     const listBridgeVersion = window.WGBridge.useBridgeVersion();
     const [buildingOpen, setBuildingOpen] = useState(null);
     const [seedCell, setSeedCell] = useState(null);
+    /* SPACE-FE-103：後台開啟的空間（含 0 張單的）。listBridgeVersion 一變就重讀，後台新開的會即時出現。 */
+    const spaceList = useMemo(() => window.WGBridge.readBuildings(), [listBridgeVersion]);
     const selectedBuilding = useMemo(() => {
       if (!window.WGBridge || !selectedMarker) return null;
       if (selectedMarker.detailType !== 'ticket') return null;
@@ -633,6 +635,15 @@
           <div className="wg-site-list-scroll"
             style={{ minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
               padding: 'var(--space-4) var(--space-6) var(--space-8)' }}>
+            {/* SPACE-FE-103：空間的入口（規則見 site-building.jsx SpaceEntryList）。
+                放在空狀態判斷**外面** —— 搜尋「糖廠」沒有任何單時，那棟樓仍要找得到。 */}
+            {dataType === 'ticket' && window.SpaceEntryList ? (
+              <div style={{ maxWidth: 720, marginBottom: 'var(--space-3)' }}>
+                <SpaceEntryList buildings={spaceList} isAuthenticated={session.isAuthenticated}
+                  getTaskMatchState={getTaskMatchState} searchTerm={state.search}
+                  onOpen={setBuildingOpen} />
+              </div>
+            ) : null}
             {(dataType === 'ticket' ? needCards.length === 0 : controller.markers.length === 0) && !isFetching ? (
               <div style={{ height: '100%', display: 'grid', placeItems: 'center', gap: 'var(--space-2)' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--color-fg-neutral-muted)' }}>

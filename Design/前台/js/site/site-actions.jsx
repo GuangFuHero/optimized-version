@@ -1782,7 +1782,9 @@
        lazy initializer：必須在第一次 render 前就有值（理由同下方 landmark）。 */
     const [address, setAddress] = useState(() => d0.address || (seedCell && seedCell.building && seedCell.building.address) || '');
     const [floor, setFloor] = useState(() => d0.floor != null ? d0.floor : (seedCell ? String(seedCell.floor) : ''));
-    const [room, setRoom] = useState(() => d0.room != null ? d0.room : (seedCell ? String(seedCell.unit) : ''));
+    /* 🔴 2026-11-01：樓層清單起手時 unit 是 null（V1 只有樓層），`String(null)` 會存成字串 "null"，
+       詳情就寫出「3樓 null 室」。沒有戶／室就留空。 */
+    const [room, setRoom] = useState(() => d0.room != null ? d0.room : (seedCell && seedCell.unit != null ? String(seedCell.unit) : ''));
     const [contactName, setContactName] = useState(d0.contactName || '');
     const [contactPhone, setContactPhone] = useState(d0.contactPhone || '');
     const [desc, setDesc] = useState(d0.desc || '');
@@ -2103,7 +2105,11 @@
                   <div style={{ font: '600 var(--fs-13)/1.4 var(--font-body)' }}>
                     {(seedCell.building && (seedCell.building.alias || seedCell.building.address)) || address}
                     {'　'}
-                    {window.WGBridge ? window.WGBridge.floorLabel(seedCell.floor) : seedCell.floor} 樓 {seedCell.unit} 室
+                    {/* 🔴 2026-11-01：矩陣時代 floor 是數字、unit 一定有，才寫「N 樓 M 室」。
+                        V1 起 floor 是樓層名稱（3F／RF／B1），unit 是 null —— 原本會印成「3F 樓 室」。 */}
+                    {typeof seedCell.floor === 'number' && window.WGBridge
+                      ? window.WGBridge.floorLabel(seedCell.floor) + ' 樓' : seedCell.floor}
+                    {seedCell.unit != null && seedCell.unit !== '' ? ' ' + seedCell.unit + ' 室' : ''}
                   </div>
                   <div style={{ font: '400 var(--fs-11)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
                     {address}

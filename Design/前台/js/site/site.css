@@ -154,6 +154,8 @@ button { font-family: inherit; }
   transition: transform var(--transition-spring);
 }
 .wg-bld__n { font: 700 var(--fs-13)/1 var(--font-data); }
+/* SPACE-FE-101：還沒有單的空間。字比「N 件」小一階、用正文字型（它是一句話不是數字）。 */
+.wg-bld__n--empty { font: 600 var(--fs-12)/1 var(--font-body); }
 /* 「缺 N」用 danger —— 與列表、矩陣同一套語意（還缺人＝紅）。
    標記上只放這一個數字，因為它是志工唯一要做的判斷。 */
 .wg-bld__lack {

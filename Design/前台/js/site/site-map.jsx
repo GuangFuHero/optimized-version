@@ -108,8 +108,21 @@
 
   /** 把同一棟的任務單收成一個建築標記；其餘原樣帶過。
    *  回傳的建築項目是**合成的**，不是真的 marker —— 它沒有 id 對應任何一張單，
-   *  所以不能餵給 setSelectedMarkerId。點擊走 openBuilding。 */
-  function groupBuildingMarkers(list) {
+   *  所以不能餵給 setSelectedMarkerId。點擊走 openBuilding。
+   *
+   *  🔴 SPACE-FE-101（2026-11-01 Sucre）：「後台開啟空間後，前台沒有任何地方顯示，
+   *     使用者沒有辦法找到這個空間並且在空間內開單。」
+   *     原本只有「同一個地址已經有 2 張以上的單」才畫成一棟 —— 那是 09-18 的規則，
+   *     當時一棟是從地址**自動湊出來**的。現在空間是後台**刻意開的**（BE-036），
+   *     剛開好一定是 0 張單，照舊規則就永遠不會出現，前台也就永遠開不了第一張。
+   *  🔒 `showSpaces` 為 true（已登入、看的是任務）時：**每一個開啟的空間都畫**，
+   *     0 張、1 張也畫。
+   *  ❌ 不要改回「2 張以上才畫」—— 空間的入口不能等到裡面已經有單才出現。
+   *  🔄 SPACE-FE-104（同日）：**訪客也畫**。前台預設未登入，不畫等於「後台開了、前台沒出現」。
+   *     訪客的單已被遮成格子、不會進 members，所以標記一律是「看各樓層」，不洩漏件數；
+   *     點下去是訪客版抽屜（只有樓層按鈕，見 site-building.jsx）。看站點時不畫（空間是放任務單的）。
+   *  ⚠️ 沒有座標的舊空間、又沒有任何單可以借位置 → 畫不出來，跳過。 */
+  function groupBuildingMarkers(list, showSpaces, getTaskMatchState) {
     const B = window.WGBridge;
     if (!B || !window.SiteData) return list;
     const out = [];
@@ -123,16 +136,30 @@
       if (!byBld.has(b.id)) byBld.set(b.id, { building: b, members: [] });
       byBld.get(b.id).members.push(m);
     });
-    byBld.forEach(({ building, members }) => {
-      /* 只有一張單的地址不值得換一種形狀 —— 那看起來像「這裡很特別」，
-         而它其實跟旁邊的單一模一樣。等到真的有兩張以上才收成一棟。 */
-      if (members.length < 2) { members.forEach((m) => out.push(m)); return; }
-      let lack = 0;
-      members.forEach((m) => {
-        const need = m.requiredVolunteers || 0;
-        const got = m.matchedVolunteers || 0;
-        lack += Math.max(0, need - got);
+    /* SPACE-FE-101：還沒有任何單（或單都被篩選掉）的空間也要有入口。 */
+    if (showSpaces) {
+      B.readBuildings().forEach((b) => {
+        if (byBld.has(b.id)) return;
+        if (typeof b.lat !== 'number' || typeof b.lng !== 'number') return;
+        byBld.set(b.id, { building: b, members: [] });
       });
+    }
+    byBld.forEach(({ building, members }) => {
+      /* 09-18：只有一張單的地址不值得換一種形狀 —— 那看起來像「這裡很特別」。
+         🔄 SPACE-FE-101：只適用於**不是後台開的**情況（showSpaces 為 false，例如訪客）。
+         後台開了空間，這裡就是一棟要分樓層看的樓，一張單也收成一棟。 */
+      if (!showSpaces && members.length < 2) { members.forEach((m) => out.push(m)); return; }
+      /* 🔄 2026-11-01：「缺 N」改用樓層抽屜同一個算法（site-building.jsx summarizeList：
+         只算人力／物資、不算搜救與已結案，09-20 規則）。原本這裡自己加總，同一棟在地圖寫
+         「缺 16」、點進去各層加起來是 12，前台列表的空間入口（SPACE-FE-103）也是 12。 */
+      let lack = 0;
+      if (window.summarizeList && getTaskMatchState) {
+        lack = window.summarizeList(members, getTaskMatchState).lack;
+      } else {
+        members.forEach((m) => {
+          lack += Math.max(0, (m.requiredVolunteers || 0) - (m.matchedVolunteers || 0));
+        });
+      }
       out.push({
         id: 'bld:' + building.id,
         detailType: 'building',
@@ -140,6 +167,7 @@
         title: building.alias || building.address,
         position: (typeof building.lat === 'number' && typeof building.lng === 'number')
           ? [building.lat, building.lng] : members[0].position,
+        /* 0 ＝ 目前畫面上沒有這一棟的單（可能真的沒有，也可能被篩選掉）。 */
         ticketCount: members.length,
         lack,
       });
@@ -169,12 +197,19 @@
     const html = '<div class="wg-marker-stack">'
       + '<div class="wg-bld' + (active ? ' wg-bld--active' : '') + '">'
       + lucideSvg('Building2', 18)
-      + '<span class="wg-bld__n">' + item.ticketCount + ' 件</span>'
+      /* SPACE-FE-101：0 張時寫「看各樓層」不寫「0 件」—— 可能只是被篩選掉，
+         寫 0 件會讓人以為這一棟沒事；而且這顆就是開第一張單的入口，要說得出點下去會怎樣。 */
+      + (item.ticketCount > 0
+        ? '<span class="wg-bld__n">' + item.ticketCount + ' 件</span>'
+        : '<span class="wg-bld__n wg-bld__n--empty">看各樓層</span>')
       + (item.lack > 0 ? '<span class="wg-bld__lack">缺 ' + item.lack + '</span>' : '')
       + '</div>'
       + '<div class="wg-marker__label wg-marker__label--ticket">' + escapeHtml(item.title) + '</div>'
       + '</div>';
-    return L.divIcon({ className: 'wg-marker-wrapper', html, iconSize: [140, 64], iconAnchor: [70, 40], popupAnchor: [0, -34] });
+    /* SPACE-FE-104：沒有件數的空間（多半是訪客看到的）整張卡放在點的**上方**，
+       不壓住同一處六邊形格子中央的「N 求助」。有件數的維持原本置中。 */
+    const anchorY = item.ticketCount ? 40 : 72;
+    return L.divIcon({ className: 'wg-marker-wrapper', html, iconSize: [140, 64], iconAnchor: [70, anchorY], popupAnchor: [0, -34] });
   }
 
   /** 以中心點＋公尺半徑算出地理六邊形頂點（固定真實大小，隨縮放自然貼合）。 */
@@ -377,7 +412,7 @@
   }
 
   /* ── Leaflet 畫布 ──────────────────────────────────────────────────────── */
-  function RescueMapCanvas({ controller, onSelectMarker, onOpenBuilding, buildingOpen, blankSpot, getTaskMatchState }) {
+  function RescueMapCanvas({ controller, onSelectMarker, onOpenBuilding, buildingOpen, blankSpot, getTaskMatchState, showSpaces }) {
     const hostRef = useRef(null);
     const mapRef = useRef(null);
     const tileRef = useRef(null);
@@ -540,7 +575,7 @@
          ⚠️ 只對已登入者做 —— 訪客的單已經被遮成格子了，而且訪客本來就看不到矩陣
             （`SiteData.GUEST_CAN_SEE_MATRIX`）。對訪客分群等於把「這一棟有幾件」
             這個比格子精確的資訊送出去。 */
-      const items = groupBuildingMarkers(plain);
+      const items = groupBuildingMarkers(plain, showSpaces, matchRef.current);
 
       const nextIds = new Set(items.map((m) => m.id));
       markerRefs.current.forEach((marker, id) => {
@@ -556,18 +591,27 @@
           : isCell ? createCellIcon(item, L, active)
           : createMapMarkerIcon(item, L, active,
               item.detailType === 'ticket' && matchRef.current ? matchRef.current(item) : undefined);
+        const title = isCell ? item.count + ' 筆求助（概略區塊）'
+          : isBld ? item.title + '：' + (item.ticketCount ? item.ticketCount + ' 件求助' : '看各樓層、在這一棟開單') + (item.lack ? '，還缺 ' + item.lack + ' 位' : '')
+          : item.title;
+        /* SPACE-FE-104：沒有件數的空間標記（訪客、或還沒有單）壓在格子數字底下 ——
+           格子的「N 求助」是訪客唯一看得到的量，不能被一個入口蓋住（ZONE-LABEL-102 也是數字最優先）。 */
+        const zOffset = isBld && !item.ticketCount ? -1000 : 0;
         const existing = markerRefs.current.get(item.id);
         if (existing) {
           existing.setIcon(icon);
           existing.setLatLng(item.position);
+          /* setIcon 會重建元素但沿用建立當時的 title —— 一棟從 0 件變 6 件，報讀還是「看各樓層」。 */
+          existing.options.title = title;
+          existing.setZIndexOffset(zOffset);
+          const el = existing.getElement && existing.getElement();
+          if (el) { el.title = title; el.setAttribute('aria-label', title); }
           return;
         }
         const marker = L.marker(item.position, {
           icon,
-          title: isCell ? item.count + ' 筆求助（概略區塊）'
-            : isBld ? item.title + '：' + item.ticketCount + ' 件求助' + (item.lack ? '，還缺 ' + item.lack + ' 位' : '')
-            : item.title,
-          riseOnHover: true, keyboard: true,
+          title,
+          riseOnHover: true, keyboard: true, zIndexOffset: zOffset,
         });
         /* 建築標記點下去**直接開整棟**，不進單張單的詳情 ——
            這就是「點進來才發現是直立地圖」的修法：入口本身就說明了它是什麼。 */
@@ -626,7 +670,7 @@
       }
       // 格子數字與圖釘換了位置或大小 → 區域標籤重新找空位（ZONE-LABEL-102）
       requestAnimationFrame(() => { if (placeLabelsRef.current) placeLabelsRef.current(); });
-    }, [controller.markers, controller.selectedMarkerId]);
+    }, [controller.markers, controller.selectedMarkerId, showSpaces]);
 
     // 封閉區域疊圖
     useEffect(() => {
@@ -1247,7 +1291,8 @@
         <div style={{ gridColumn: 1, gridRow: 1, position: 'relative', minWidth: 0, minHeight: 0 }}>
           <RescueMapCanvas controller={controller} onSelectMarker={controller.setSelectedMarkerId}
             onOpenBuilding={setBuildingOpen} buildingOpen={buildingOpen} blankSpot={blankSpot}
-            getTaskMatchState={getTaskMatchState} />
+            getTaskMatchState={getTaskMatchState}
+            showSpaces={controller.dataType === 'ticket'} />
           <SiteMapControls controller={controller} isMobile={isMobile} />
         {/* 點地圖空白處浮出的動作泡泡。未登入也顯示 —— 擋在送出前，不擋在入口前。 */}
           {/* 十字準星：標出「剛剛點到的到底是哪一點」。
