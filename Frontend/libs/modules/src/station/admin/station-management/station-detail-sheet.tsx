@@ -30,7 +30,7 @@ import {
   type StationDetailView,
 } from './model/station-detail-view';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
-import { StatusBadge } from './station-cells';
+import { StatusBadge, TypeChip } from './station-cells';
 import {
   StationHistoryPanel,
   useLoadedStationVersion,
@@ -256,6 +256,10 @@ function StationInfo({
 }) {
   return (
     <Box sx={{ '& > :first-of-type': { borderTop: 'none', pt: 0 } }}>
+      {/* The prototype's type line opens 基本資料, above the rows. */}
+      <Box sx={{ mb: '4px' }}>
+        <TypeChip type={station.type} />
+      </Box>
       <DetailRow label="指派團隊">
         {station.assignedTeam?.name ?? <Muted inline>未指派</Muted>}
       </DetailRow>

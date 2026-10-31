@@ -25,7 +25,7 @@ import type { ReactNode } from 'react';
 import { Muted } from '../../../admin/shared/muted';
 import { getStationTypeIcon, type StationTypeValue } from '../../type-options';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
-import { StatusBadge } from './station-cells';
+import { StatusBadge, TypeChip } from './station-cells';
 import type { StationRow } from './model/station-row';
 
 const { color, radius, typography } = designTokens;
@@ -95,7 +95,7 @@ export function StationTable({
       id: 'type',
       header: '類型',
       meta: { width: '120px' },
-      cell: ({ row }) => <TypeCell row={row.original} />,
+      cell: ({ row }) => <TypeChip type={row.original.type} />,
     },
     {
       id: 'area',
@@ -361,29 +361,6 @@ export function TeamText({ name }: { name: string | null }) {
     >
       {name ?? '未指派'}
     </Typography>
-  );
-}
-
-/** The prototype's `TypeChip` (station-shared.jsx): a muted icon before the type in subtle grey. */
-function TypeCell({ row }: { row: StationRow }) {
-  const TypeIcon = getStationTypeIcon(row.type);
-  return (
-    <Box
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        minWidth: 0,
-      }}
-    >
-      <TypeIcon sx={{ fontSize: 16, color: color.fg.neutral.muted }} />
-      <Typography
-        noWrap
-        sx={{ ...typography.label[400], color: color.fg.neutral.subtle }}
-      >
-        {row.typeLabel}
-      </Typography>
-    </Box>
   );
 }
 
