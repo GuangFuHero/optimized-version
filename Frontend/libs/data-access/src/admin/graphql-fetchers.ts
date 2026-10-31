@@ -1,7 +1,9 @@
 'use client';
 
 import {
+  keepPreviousData,
   queryOptions,
+  type QueryClient,
   useMutation,
   useQuery,
   useQueryClient,
@@ -9,16 +11,120 @@ import {
 import { adminGraphqlClient, graphqlResponseData } from './client';
 import { collectAllPages } from './collect-pages';
 import * as documents from './graphql/__generated__/graphql';
+import {
+  ticketDetailUuid,
+  ticketKeys,
+  ticketWriteKeys,
+} from './ticket-query-keys';
+
+/** Every space's tickets: `buildingMapTicketsQuery`, one per space (BE-036). */
+const SPACE_TICKETS_KEY = ['admin', 'buildingMaps', 'tickets'] as const;
+
+/**
+ * What a space write makes stale, and no more: the board keeps every space's tickets mounted, one
+ * query each, so a blanket refresh would reload them all. A new space has no tickets yet, and an
+ * edit changes only the building, so neither touches tickets; a deletion unlinks that space's
+ * tickets, which fall back to the ticket lists as ordinary ones.
+ */
+export function buildingMapWriteKeys(
+  write: 'create' | 'update' | 'delete',
+  uuid?: string,
+): unknown[][] {
+  const list = ['admin', 'buildingMaps', 'list'];
+  if (write === 'create' || !uuid) return [list];
+  const one = ['admin', 'buildingMaps', 'one', { uuid }];
+  if (write === 'update') return [list, one];
+  return [
+    list,
+    one,
+    [...SPACE_TICKETS_KEY, { buildingMapUuid: uuid }],
+    ['admin', 'tickets'],
+  ];
+}
+
+function invalidateBuildingMapWrite(
+  queryClient: QueryClient,
+  write: 'create' | 'update' | 'delete',
+  uuid?: string,
+) {
+  return Promise.all(
+    buildingMapWriteKeys(write, uuid).map((queryKey) =>
+      queryClient.invalidateQueries({ queryKey }),
+    ),
+  );
+}
+
+/**
+ * The spaces' ticket loads a ticket write can move: a space keeps no state of its own and works
+ * it out from these. Only those, never every space, as the board keeps one mounted per space:
+ *
+ * - a write naming its ticket: the spaces whose tickets hold it;
+ * - a new household: the space it was filed in, which doesn't hold it yet;
+ * - a write naming only a need, photo or assignment: it comes from an open ticket's sheet, so the
+ *   spaces holding a ticket whose detail is on screen.
+ */
+export function spaceTicketKeysForWrite(
+  queryClient: QueryClient,
+  ticketUuid?: string | null,
+  buildingMapUuid?: string | null,
+): unknown[][] {
+  const cache = queryClient.getQueryCache();
+  const written = new Set<string>();
+  if (ticketUuid) written.add(ticketUuid);
+  else {
+    for (const query of cache.findAll({
+      queryKey: ticketKeys.details(),
+      type: 'active',
+    })) {
+      const uuid = ticketDetailUuid(query.queryKey);
+      if (uuid) written.add(uuid);
+    }
+  }
+
+  const keys: unknown[][] = buildingMapUuid
+    ? [[...SPACE_TICKETS_KEY, { buildingMapUuid }]]
+    : [];
+  for (const [
+    queryKey,
+    data,
+  ] of queryClient.getQueriesData<documents.AdminBuildingMapTicketsQuery>({
+    queryKey: SPACE_TICKETS_KEY,
+  })) {
+    if (data?.buildingMapTickets.some((ticket) => written.has(ticket.uuid)))
+      keys.push([...queryKey]);
+  }
+  return keys;
+}
+
+/**
+ * After a ticket write: refetch the lists, the stats, that ticket's sheet and the spaces it
+ * moves where they are on screen; anything else is only marked stale, never reloaded now.
+ */
+export function invalidateTicketWrite(
+  queryClient: QueryClient,
+  ticketUuid?: string | null,
+  buildingMapUuid?: string | null,
+) {
+  return Promise.all(
+    [
+      ...ticketWriteKeys(ticketUuid),
+      ...spaceTicketKeysForWrite(queryClient, ticketUuid, buildingMapUuid),
+    ].map((queryKey) =>
+      queryClient.invalidateQueries({ queryKey, refetchType: 'active' }),
+    ),
+  );
+}
 
 export interface AdminQueryOptions {
   enabled?: boolean;
 }
 
+/** One page of `tickets`: a board list page, or the map's load of the visible area. */
 export const ticketsQuery = (
   variables: documents.AdminTicketsQueryVariables = {},
 ) =>
   queryOptions({
-    queryKey: ['admin', 'tickets', 'tickets', variables],
+    queryKey: [...ticketKeys.lists(), variables],
     queryFn: ({ signal }) =>
       adminGraphqlClient
         .query(documents.AdminTicketsDocument, variables, {
@@ -28,16 +134,113 @@ export const ticketsQuery = (
         .then(graphqlResponseData),
   });
 
+/**
+ * Keep the last result on screen until the next one lands: always, or only when this holds for
+ * the last load's variables (say, it differs from this one just by its page).
+ */
+type KeepPrevious<V> = boolean | ((previous: V) => boolean);
+
+function placeholderFor<V>(keepPrevious: KeepPrevious<V> | undefined) {
+  if (typeof keepPrevious !== 'function') {
+    return keepPrevious ? keepPreviousData : undefined;
+  }
+  return <D>(
+    previousData: D | undefined,
+    previousQuery?: { queryKey: readonly unknown[] },
+  ) => {
+    const previous = previousQuery?.queryKey.at(-1) as V | undefined;
+    return previous && keepPrevious(previous) ? previousData : undefined;
+  };
+}
+
 export function useTickets(
   variables: documents.AdminTicketsQueryVariables = {},
+  options: AdminQueryOptions & {
+    keepPrevious?: KeepPrevious<documents.AdminTicketsQueryVariables>;
+  } = {},
+) {
+  return useQuery({
+    ...ticketsQuery(variables),
+    enabled: options.enabled,
+    placeholderData: placeholderFor(options.keepPrevious),
+  });
+}
+
+/** The map's load of the visible area: only the fields its pins and notices read. */
+export const ticketMapPinsQuery = (
+  variables: documents.AdminTicketMapPinsQueryVariables = {},
+) =>
+  queryOptions({
+    queryKey: [...ticketKeys.mapPins(), variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminTicketMapPinsDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useTicketMapPins(
+  variables: documents.AdminTicketMapPinsQueryVariables = {},
+  options: AdminQueryOptions & {
+    keepPrevious?: KeepPrevious<documents.AdminTicketMapPinsQueryVariables>;
+  } = {},
+) {
+  return useQuery({
+    ...ticketMapPinsQuery(variables),
+    enabled: options.enabled,
+    placeholderData: placeholderFor(options.keepPrevious),
+  });
+}
+
+/** How many tickets match the filters, and the box their points span: the map frames it. */
+export const ticketsExtentQuery = (
+  variables: documents.AdminTicketsExtentQueryVariables = {},
+) =>
+  queryOptions({
+    queryKey: [...ticketKeys.extents(), variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminTicketsExtentDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useTicketsExtent(
+  variables: documents.AdminTicketsExtentQueryVariables = {},
   options: AdminQueryOptions = {},
 ) {
-  return useQuery({ ...ticketsQuery(variables), enabled: options.enabled });
+  return useQuery({
+    ...ticketsExtentQuery(variables),
+    enabled: options.enabled,
+  });
+}
+
+/** The board's counts over every ticket the caller may list, whatever the filters. */
+export const ticketStatsQuery = () =>
+  queryOptions({
+    queryKey: ticketKeys.stats(),
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(
+          documents.AdminTicketStatsDocument,
+          {},
+          { fetchOptions: { credentials: 'include', signal } },
+        )
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useTicketStats(options: AdminQueryOptions = {}) {
+  return useQuery({ ...ticketStatsQuery(), enabled: options.enabled });
 }
 
 export const ticketQuery = (variables: documents.AdminTicketQueryVariables) =>
   queryOptions({
-    queryKey: ['admin', 'tickets', 'ticket', variables],
+    queryKey: [...ticketKeys.details(), variables],
     queryFn: ({ signal }) =>
       adminGraphqlClient
         .query(documents.AdminTicketDocument, variables, {
@@ -61,7 +264,7 @@ export const ticketTasksQuery = (
   variables: documents.AdminTicketTasksQueryVariables,
 ) =>
   queryOptions({
-    queryKey: ['admin', 'tickets', 'ticketTasks', variables],
+    queryKey: [...ticketKeys.tasks(), variables],
     queryFn: ({ signal }) =>
       adminGraphqlClient
         .query(documents.AdminTicketTasksDocument, variables, {
@@ -183,6 +386,100 @@ export function useReverseGeocode(
     // The address is only a head start: a failed lookup leaves the form blank, no toast.
     retry: false,
     meta: { quietErrors: true },
+  });
+}
+
+/**
+ * A typed address line checked against TGOS, with the pin when there is one. Never kept: a token
+ * lasts a day, and an `unavailable` kept here would answer a later check of the same line.
+ */
+export const normalizeAddressQuery = (
+  variables: documents.AdminNormalizeAddressQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'address', 'normalizeAddress', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminNormalizeAddressDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+    staleTime: 0,
+    gcTime: 0,
+  });
+
+/** Buildings opened as spaces (BE-036). Their tickets come from `buildingMapTicketsQuery`. */
+export const buildingMapsQuery = (
+  variables: documents.AdminBuildingMapsQueryVariables = {},
+) =>
+  queryOptions({
+    queryKey: ['admin', 'buildingMaps', 'list', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminBuildingMapsDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useBuildingMaps(
+  variables: documents.AdminBuildingMapsQueryVariables = {},
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...buildingMapsQuery(variables),
+    enabled: options.enabled,
+  });
+}
+
+export const buildingMapQuery = (
+  variables: documents.AdminBuildingMapQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'buildingMaps', 'one', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminBuildingMapDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useBuildingMap(
+  variables: documents.AdminBuildingMapQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...buildingMapQuery(variables),
+    enabled: Boolean(variables.uuid) && options.enabled !== false,
+  });
+}
+
+/** Under `buildingMaps`, so changing a building or filing a ticket under it refreshes its floors. */
+export const buildingMapTicketsQuery = (
+  variables: documents.AdminBuildingMapTicketsQueryVariables,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'buildingMaps', 'tickets', variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminBuildingMapTicketsDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useBuildingMapTickets(
+  variables: documents.AdminBuildingMapTicketsQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...buildingMapTicketsQuery(variables),
+    enabled: Boolean(variables.buildingMapUuid) && options.enabled !== false,
   });
 }
 
@@ -436,8 +733,16 @@ export function useCreateTicket() {
         .mutation(documents.AdminCreateTicketDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: (data) =>
+      invalidateTicketWrite(
+        queryClient,
+        data.createTicket.__typename === 'TicketCreated'
+          ? data.createTicket.ticket.uuid
+          : null,
+        data.createTicket.__typename === 'TicketCreated'
+          ? data.createTicket.ticket.buildingMapUuid
+          : null,
+      ),
   });
 }
 
@@ -449,8 +754,8 @@ export function useUpdateTicket() {
         .mutation(documents.AdminUpdateTicketDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: (_data, variables) =>
+      invalidateTicketWrite(queryClient, variables.uuid),
   });
 }
 
@@ -462,21 +767,8 @@ export function useDeleteTicket() {
         .mutation(documents.AdminDeleteTicketDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
-  });
-}
-
-export function useAuditTicket() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminAuditTicketMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminAuditTicketDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: (_data, variables) =>
+      invalidateTicketWrite(queryClient, variables.uuid),
   });
 }
 
@@ -490,8 +782,8 @@ export function useSetTicketDisasterDetails() {
         .mutation(documents.AdminSetTicketDisasterDetailsDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: (_data, variables) =>
+      invalidateTicketWrite(queryClient, variables.uuid),
   });
 }
 
@@ -503,8 +795,62 @@ export function useCreateTicketTask() {
         .mutation(documents.AdminCreateTicketTaskDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: (_data, variables) =>
+      invalidateTicketWrite(queryClient, variables.input.ticketUuid),
+  });
+}
+
+export function useStopTaskRecruiting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminStopRecruitingMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminStopRecruitingDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: (data) =>
+      invalidateTicketWrite(queryClient, data.stopRecruiting.ticketUuid),
+  });
+}
+
+export function useDeleteTicketTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: documents.AdminDeleteTicketTaskMutationVariables) =>
+      adminGraphqlClient
+        .mutation(documents.AdminDeleteTicketTaskDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () => invalidateTicketWrite(queryClient),
+  });
+}
+
+export function useAttachTicketPhoto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminAttachTicketPhotoMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminAttachTicketPhotoDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: (_data, variables) =>
+      invalidateTicketWrite(queryClient, variables.ticketUuid),
+  });
+}
+
+export function useDetachTicketPhoto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminDetachTicketPhotoMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminDetachTicketPhotoDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
 
@@ -516,8 +862,8 @@ export function useUpdateTicketTask() {
         .mutation(documents.AdminUpdateTicketTaskDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: (data) =>
+      invalidateTicketWrite(queryClient, data.updateTicketTask.ticketUuid),
   });
 }
 
@@ -529,8 +875,7 @@ export function useAssignTaskActor() {
         .mutation(documents.AdminAssignTaskActorDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
 
@@ -544,8 +889,7 @@ export function useUpdateTaskAssignment() {
         .mutation(documents.AdminUpdateTaskAssignmentDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
 
@@ -559,8 +903,7 @@ export function useUnassignTaskActor() {
         .mutation(documents.AdminUnassignTaskActorDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
 
@@ -600,6 +943,51 @@ export function useDeleteStation() {
         .then(graphqlResponseData),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
+  });
+}
+
+export function useCreateBuildingMap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminCreateBuildingMapMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminCreateBuildingMapDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: () => invalidateBuildingMapWrite(queryClient, 'create'),
+  });
+}
+
+export function useUpdateBuildingMap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminUpdateBuildingMapMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminUpdateBuildingMapDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: (_, variables) =>
+      invalidateBuildingMapWrite(queryClient, 'update', variables.uuid),
+  });
+}
+
+/** The building's tickets stay, unlinked from it, so the ticket list is refreshed too. */
+export function useDeleteBuildingMap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      variables: documents.AdminDeleteBuildingMapMutationVariables,
+    ) =>
+      adminGraphqlClient
+        .mutation(documents.AdminDeleteBuildingMapDocument, variables)
+        .toPromise()
+        .then(graphqlResponseData),
+    onSuccess: (_, variables) =>
+      invalidateBuildingMapWrite(queryClient, 'delete', variables.uuid),
   });
 }
 
@@ -714,8 +1102,7 @@ export function useCreateTaskProperty() {
         .mutation(documents.AdminCreateTaskPropertyDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
 
@@ -729,8 +1116,7 @@ export function useUpdateTaskProperty() {
         .mutation(documents.AdminUpdateTaskPropertyDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }
 

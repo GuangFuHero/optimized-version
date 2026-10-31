@@ -14,7 +14,7 @@ happening to agree (ADR-119).
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -32,6 +32,7 @@ from app.models.station_property import StationProperty
 from app.models.ticket_task import TaskProperty, TicketTask
 from app.services.authz import require_scope, stable_actor
 from app.services.bulk_columns import station_columns, ticket_columns
+from app.services.ticket import TASK_TYPES
 
 CSV_FORMAT = "csv"
 XLSX_FORMAT = "xlsx"
@@ -76,9 +77,14 @@ async def _known_types(db: AsyncSession, *, data_column, config_column) -> set[s
     return values - {_CONFIG_WILDCARD}
 
 
-async def _require_known_type(db: AsyncSession, value: str, *, data_column, config_column) -> None:
-    """Refuse a type nobody uses, before it reaches the query or the file name (ADR-214)."""
-    known = await _known_types(db, data_column=data_column, config_column=config_column)
+async def _require_known_type(
+    db: AsyncSession, value: str, *, data_column, config_column, also: frozenset[str] = frozenset()
+) -> None:
+    """Refuse a type nobody uses, before it reaches the query or the file name (ADR-214).
+
+    `also` names types known without data or config, such as the kinds of need a ticket can ask for.
+    """
+    known = await _known_types(db, data_column=data_column, config_column=config_column) | also
     if value not in known:
         raise BulkExportError(f"沒有「{value}」這個型別；目前可用的是：{'、'.join(sorted(known))}")
 
@@ -317,6 +323,27 @@ def _contact_fields(ticket: Tickets, *, visible: bool) -> dict[str, str]:
     }
 
 
+async def count_ticket_exports(db: AsyncSession, *, actor: User) -> dict[str, int]:
+    """Count the rows each task type's export would hold, so a page can show them first.
+
+    The same rows `export_tickets` writes — one per (ticket, task) pair in the caller's
+    ticket.export scope — grouped by `task_type`; a type with no rows is left out.
+    """
+    async with stable_actor(db, actor):
+        scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
+        rows = await db.execute(
+            select(TicketTask.task_type, func.count())
+            .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
+            .where(
+                TicketTask.delete_at.is_(None),
+                Tickets.delete_at.is_(None),
+                *scope_filter(scope, actor=actor, model=Tickets),
+            )
+            .group_by(TicketTask.task_type)
+        )
+        return {task_type: count for task_type, count in rows.all()}
+
+
 async def export_tickets(
     db: AsyncSession, *, actor: User, task_type: str, file_format: str = CSV_FORMAT
 ) -> ExportFile:
@@ -413,3 +440,25 @@ async def export_tickets(
             rows.append(row)
 
         return _render(columns, rows, stem=f"tickets-{task_type}", file_format=file_format)
+
+
+async def ticket_import_template(
+    db: AsyncSession, *, actor: User, task_type: str, file_format: str = CSV_FORMAT
+) -> ExportFile:
+    """A `task_type` ticket file with its header row and no rows, for an importer to fill in.
+
+    The export's columns, which the importer reads (ADR-119), so it needs `ticket.import` and not
+    `ticket.export`: it holds no data. A kind of need nobody has filed or configured yet still has one.
+    """
+    _require_supported_format(file_format)
+    async with stable_actor(db, actor):
+        await require_scope(actor, Perm.TICKET_IMPORT, db)
+        await _require_known_type(
+            db,
+            task_type,
+            data_column=TicketTask.task_type,
+            config_column=TaskPropertyConfig.task_type,
+            also=TASK_TYPES,
+        )
+        columns = await ticket_columns(db, task_type)
+        return _render(columns, [], stem=f"tickets-{task_type}-template", file_format=file_format)

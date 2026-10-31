@@ -10,7 +10,8 @@ import {
   Map,
   readRescueMapMarkers,
   StationCreateDrawer,
-  TicketCreateDrawer,
+  TicketCreateSheet,
+  toCreatedTicketMarker,
   type RescueMapMarkerItem,
 } from '@rescue-frontend/modules';
 
@@ -240,15 +241,20 @@ export function AdminMapPageClient() {
         }}
       />
 
-      <TicketCreateDrawer
+      <TicketCreateSheet
         open={ticketDrawerOpen}
         onClose={() => {
           setTicketDrawerOpen(false);
           resetCreateFlow();
         }}
-        initialPosition={currentInitialPosition}
-        onCreatedMarker={(marker) => {
-          setMarkers((current) => [marker, ...current]);
+        initialPoint={
+          currentInitialPosition
+            ? { lat: currentInitialPosition[0], lng: currentInitialPosition[1] }
+            : null
+        }
+        onCreated={(ticket) => {
+          const marker = toCreatedTicketMarker(ticket);
+          if (marker) setMarkers((current) => [marker, ...current]);
         }}
       />
     </>
