@@ -1024,6 +1024,7 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
 ➕ 地址整行不可能跟各欄矛盾（它就是各欄串出來的）。
 ➖ 規則從宣告式的 CHECK 變成兩個 trigger；`create_all` 蓋出來的測試資料庫靠模型上的 DDL 事件一起建同樣的 trigger。
 ➖ 遷移前的地址列，`user_input_address` 放的是當時解析器存的行，不是使用者原本輸入的。
+➖ 遷移前只有各欄、沒有整行的列（先前改名留下的），各欄原樣保留、`user_input_address` 維持 NULL，`full_address` 由各欄串出；重新拆解跳過它們，drift 檢查把它們列為「只有各欄」，不算 drift。
 ➖ 帶 衖／衕 的地址，`alley` 欄的值變長（`3弄` → `3弄2衖`）；API 的各欄不增不減。
 ◾ 測試：`tests/test_identity_model.py`、`tests/test_migration_third_normal_form.py`、`tests/test_ticket_task_stamps.py`、
   `tests/test_address_parse.py`、`tests/test_address_service.py`、`tests/test_address_tools.py`。

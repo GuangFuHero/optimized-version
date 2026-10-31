@@ -284,13 +284,12 @@ async def test_a_line_that_would_not_rebuild_stops_the_upgrade_and_changes_nothi
 
 
 @pytest.mark.asyncio(loop_scope="module")
-async def test_parts_with_no_line_stop_the_upgrade_instead_of_being_cleared(outcomes):
-    """A row holding parts but no line has nothing to re-parse, so the upgrade stops and changes nothing."""
-    stopped = outcomes["lineless"]
-    assert stopped["upgraded"] is False
-    assert "1 secondary_locations rows would rebuild to a different address line" in stopped["says"]
-    assert "b0000000-0000-4000-8000-000000000004" in stopped["says"]
-    assert stopped["role_kind_column_left"] == 1
+async def test_parts_with_no_line_are_kept_and_the_line_is_built_from_them(outcomes):
+    """Nothing to re-parse: the upgrade succeeds, the parts stay, user_input_address stays NULL."""
+    done = outcomes["lineless"]
+    assert done["upgraded"] and done["upgraded_again"]
+    assert done["addresses"]["4"] == (None, None, None, "花蓮縣光復鄉糖廠街19號")
+    assert "2 rows re-parsed, 0 would rebuild" in done["says"]
 
 
 @pytest.mark.asyncio(loop_scope="module")

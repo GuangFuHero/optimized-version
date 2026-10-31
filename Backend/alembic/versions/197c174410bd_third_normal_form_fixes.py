@@ -18,8 +18,9 @@ Three facts the schema stored twice are stored once.
 3. `secondary_locations.full_address` becomes a generated column, the parts and a new `remainder` joined.
    `user_input_address` keeps the line as received; rows from before this hold the parsed line there, since
    the raw input was never stored. Each row is parsed again to fill `remainder` and the 衖/衕 kept in
-   `alley`; if any row would then rebuild to a different line than it holds, or holds parts but no line,
-   the upgrade stops and says so.
+   `alley`; if any row would then rebuild to a different line than it holds, the upgrade stops and says so.
+   A row that holds parts but no line (left by an earlier rename) is kept as it is: it has nothing to parse,
+   so its parts stay, `user_input_address` stays NULL and the generated line is built from the parts.
    The audit trigger is off for that backfill, which rewrites derived columns only.
 
 Downgrade restores a plain `full_address` with its values and the copied `role_kind` with its constraints,
@@ -186,24 +187,25 @@ def _address_up() -> None:
     ).all()
     changes, differing = [], []
     for uuid, line, stored, *held in rows:
+        if not (line or "").strip() and any(held):
+            # Parts with no line: nothing to re-parse, and a rewrite would clear them.
+            continue
         parts = parse_tw_address(line)
         values = {**parts.as_dict(), "remainder": parts.remainder}
         values.pop("full_address")
-        # Parts with no line to re-parse would be cleared by the rewrite, so they count as differing.
-        parts_without_line = not (line or "").strip() and any(held)
-        if join_address(**values) != stored or parts_without_line:
+        if join_address(**values) != stored:
             differing.append(str(uuid))
         changes.append({"uuid": uuid, **values})
     log.info(
         "secondary_locations: %s rows re-parsed, %s would rebuild to a different line",
-        len(rows),
+        len(changes),
         len(differing),
     )
     if differing:
         raise RuntimeError(
             f"{len(differing)} secondary_locations rows would rebuild to a different address line than "
-            "they hold (parts with no line count), so full_address cannot become a generated column yet. "
-            "List them with: SELECT * FROM secondary_locations WHERE uuid IN "
+            "they hold, so full_address cannot become a generated column yet. List them with: "
+            "SELECT uuid, full_address FROM secondary_locations WHERE uuid IN "
             f"({', '.join(repr(u) for u in differing[:20])}{', …' if len(differing) > 20 else ''}); "
             "fix or clear them, then upgrade again."
         )

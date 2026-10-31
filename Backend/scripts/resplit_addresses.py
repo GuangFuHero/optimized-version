@@ -6,7 +6,7 @@ and writes nothing unless `--apply` is given; `full_address` follows by itself, 
 builds it from the parts. Rows from before the raw line was kept hold the parsed line in
 `user_input_address`, so for them this re-parses that. The writes go through the audit trigger, with
 no actor, as the other scripts' do. A row that holds parts but no line has nothing to re-parse, so it
-is listed and left untouched.
+is reported as parts-only and left untouched.
 """
 
 import argparse
@@ -115,7 +115,7 @@ def main() -> None:
     found, unplaced = asyncio.run(_run(apply=args.apply))
     print("\n".join(report(found)))
     if unplaced:
-        print(f"{len(unplaced)} rows hold parts but no user_input_address and were left as they are:")
+        print(f"{len(unplaced)} parts-only rows (no user_input_address) were left as they are:")
         print("\n".join(unplaced))
     verb = "updated" if args.apply else "would change"
     print(

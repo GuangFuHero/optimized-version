@@ -107,7 +107,8 @@ How it was applied:
   remainder joined, NULL when all are NULL. The parser keeps a 衖/衕 inside `alley` (`3弄2衖`), so the
   rebuilt line is, for every input, the line the parser returned before. The API is unchanged.
 - **Rows from before**: they never stored the raw input, so their `user_input_address` is the parsed line
-  that was in `full_address`.
+  that was in `full_address`. A row left with parts and no line by an earlier rename keeps its parts and a NULL
+  `user_input_address`; its generated line is built from those parts.
 - **What is left**: the parts still follow from `user_input_address` through a Python parser; see E2.
 - **Tests**: `tests/test_address_parse.py` (the parts join to the line, over every case in the file and a
   generated set), `tests/test_address_service.py`, `tests/test_migration_third_normal_form.py`.
@@ -133,8 +134,9 @@ Removed: see F6.
 - **Guards for a parser change or a direct SQL write**: `scripts/resplit_addresses.py` re-parses
   `user_input_address` for every row and prints what would change (`--apply` writes it);
   `scripts/check_address_drift.py` lists the rows whose stored parts differ from a re-parse and exits 1 if
-  there are any. Both need Python, since SQL cannot run the parser. A row with parts but no line has nothing
-  to re-parse: the upgrade stops on one, the re-split leaves it alone, and both scripts list it.
+  there are any. Both need Python, since SQL cannot run the parser. A row with parts but no line (left by an
+  earlier rename) has nothing to re-parse: the upgrade keeps its parts and leaves `user_input_address` NULL, the
+  re-split leaves it alone, and both scripts list it as parts-only, which is not drift (the check still exits 0).
 - **Tests**: `tests/test_address_service.py`, `tests/test_address_parse.py`, `tests/test_address_tools.py`.
 - **Acceptance**: derived columns of the raw address line, written by one function only, used for search and
   matching, with a command to re-derive them and a check that finds a row where they disagree.

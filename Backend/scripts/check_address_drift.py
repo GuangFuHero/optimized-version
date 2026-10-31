@@ -2,8 +2,8 @@
 
 The parts of `secondary_locations` are derived from `user_input_address` by the parser, and the database
 cannot check that (it needs Python). Read-only; exits 1 when any row differs, so it can run in a check.
-Fix a drifted row with `python -m scripts.resplit_addresses --apply`; a row with parts but no line needs
-its line set by hand.
+Fix a drifted row with `python -m scripts.resplit_addresses --apply`. A row with parts but no line has
+nothing to compare with, so it is listed as parts-only and does not count as drift.
 """
 
 import asyncio
@@ -32,14 +32,18 @@ async def check() -> dict[str, dict[str, tuple]]:
 
 
 def main() -> int:
-    """Print the drifted rows and the rows with parts but no line; 1 when there are any, else 0."""
-    found, unplaced = asyncio.run(_survey())
+    """Print the drifted and parts-only rows; 1 when a row drifted, else 0."""
+    return finish(*asyncio.run(_survey()))
+
+
+def finish(found: dict[str, dict[str, tuple]], parts_only: list[str]) -> int:
+    """Print both lists; 1 when a row drifted, 0 otherwise (parts-only rows are informational)."""
     print("\n".join(report(found)))
     print(f"{len(found)} rows differ from a re-parse of their user_input_address.")
-    if unplaced:
-        print(f"{len(unplaced)} rows hold parts but no user_input_address (a re-split leaves them alone):")
-        print("\n".join(unplaced))
-    return 1 if found or unplaced else 0
+    if parts_only:
+        print(f"{len(parts_only)} parts-only rows (no user_input_address, nothing to compare; not drift):")
+        print("\n".join(parts_only))
+    return 1 if found else 0
 
 
 if __name__ == "__main__":
