@@ -44,6 +44,11 @@ declare module '@mui/material/styles' {
 
 const { color, focusRing } = designTokens;
 
+// An autofilled input, hovered, focused or pressed too, its class doubled (see `MuiInputBase` below).
+const AUTOFILLED = ['', ':hover', ':focus', ':active']
+  .map((state) => `&&:-webkit-autofill${state}`)
+  .join(', ');
+
 export const theme = extendTheme({
   breakpoints: {
     values: {
@@ -158,20 +163,22 @@ export const theme = extendTheme({
     // Autofill paints the input in the browser's own yellow or blue, a square inside the field's
     // rounded edge, and changes the text colour. It is painted over with the field's own background
     // and text colour: white and the default text unless the field says otherwise through
-    // `--wg-field-bg` / `--wg-field-fg`, as one on a tinted fill does.
+    // `--wg-field-bg` / `--wg-field-fg`, as one on a tinted fill does. The doubled `&&` outranks
+    // OutlinedInput's and FilledInput's own autofill rule, blue with white text, which comes after this
+    // and is meant for dark mode only: with no `colorSchemeSelector`, MUI's dark selector is `&`, so in
+    // this light-only theme it always applies.
     MuiInputBase: {
       styleOverrides: {
         input: ({ theme: t }) => ({
           [t.breakpoints.down('tablet')]: { fontSize: IOS_NO_ZOOM_INPUT_PX },
-          '&:-webkit-autofill, &:-webkit-autofill:hover, &:-webkit-autofill:focus, &:-webkit-autofill:active':
-            {
-              WebkitTextFillColor: `var(--wg-field-fg, ${color.fg.neutral.default})`,
-              caretColor: `var(--wg-field-fg, ${color.fg.neutral.default})`,
-              WebkitBoxShadow: `0 0 0 100px var(--wg-field-bg, ${color.bg.neutral.default}) inset`,
-              boxShadow: `0 0 0 100px var(--wg-field-bg, ${color.bg.neutral.default}) inset`,
-              borderRadius: 'inherit',
-              transition: 'background-color 9999s ease-out 0s',
-            },
+          [AUTOFILLED]: {
+            WebkitTextFillColor: `var(--wg-field-fg, ${color.fg.neutral.default})`,
+            caretColor: `var(--wg-field-fg, ${color.fg.neutral.default})`,
+            WebkitBoxShadow: `0 0 0 100px var(--wg-field-bg, ${color.bg.neutral.default}) inset`,
+            boxShadow: `0 0 0 100px var(--wg-field-bg, ${color.bg.neutral.default}) inset`,
+            borderRadius: 'inherit',
+            transition: 'background-color 9999s ease-out 0s',
+          },
         }),
       },
     },
