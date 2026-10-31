@@ -47,6 +47,7 @@ import {
 import {
   notMarkedRead,
   readSiteNotices,
+  readsNextPageUnasked,
   ticketOfNeed,
   withReadState,
   type SiteNotice,
@@ -370,6 +371,26 @@ function SiteNotifyContent({
     }
   }, [empty, onEmpty]);
 
+  // Pages that show nothing, with more after them, would leave only 載入更多 under the subtitle: the
+  // next is read without a tap, a round at a time. Not while a read is on its way (each opening reads
+  // the pages it has again first), nor after one failed, which 載入更多 tries again.
+  const readingOn =
+    notices !== null &&
+    readsNextPageUnasked({
+      shown: notices.length,
+      pagesRead: list.data?.pages.length ?? 0,
+      hasNextPage: list.hasNextPage,
+      nextPageFailed: list.isFetchNextPageError,
+    });
+  const readNext = readingOn && !list.isFetching;
+  const { fetchNextPage } = list;
+
+  useEffect(() => {
+    if (readNext) {
+      void fetchNextPage();
+    }
+  }, [readNext, fetchNextPage]);
+
   if (!notices || !listsSettled) {
     return list.isError ? (
       <Notice>讀不到通知，請稍後再試一次。</Notice>
@@ -383,6 +404,9 @@ function SiteNotifyContent({
     claims: claims.data?.myTaskAssignments ?? [],
   };
   const unread = notices.filter((notice) => !notice.read);
+  // Nothing shown yet and the next page on its way, by itself or from a tap: one loading line, no button.
+  const searching =
+    notices.length === 0 && (readingOn || list.isFetchingNextPage);
 
   const openNotice = (
     event: MouseEvent<HTMLElement>,
@@ -428,6 +452,15 @@ function SiteNotifyContent({
 
       {empty ? (
         <SiteNotifyEmpty />
+      ) : notices.length === 0 ? (
+        // Not empty, so more follow: a round read without finding any, or a read that failed.
+        <Notice>
+          {searching
+            ? '載入中…'
+            : list.isFetchNextPageError
+              ? '讀不到通知，請稍後再試一次。'
+              : '最近的通知都是管理平台的，這裡不顯示。'}
+        </Notice>
       ) : (
         notices.map((notice) => {
           const ticketUuid =
@@ -445,7 +478,7 @@ function SiteNotifyContent({
         })
       )}
 
-      {list.hasNextPage ? (
+      {list.hasNextPage && !searching ? (
         <ButtonBase
           disabled={list.isFetchingNextPage}
           onClick={() => void list.fetchNextPage()}
