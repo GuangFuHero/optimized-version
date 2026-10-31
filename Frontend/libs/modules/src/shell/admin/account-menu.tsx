@@ -21,6 +21,7 @@ import type { components } from '@rescue-frontend/data-access/openapi';
 
 import { Avatar, Badge, designTokens } from '@rescue-frontend/ui';
 import {
+  backOfficeIdentities,
   identityLabel,
   ROLE_DESCRIPTIONS,
   ROLE_DISPLAY_NAMES,
@@ -57,7 +58,7 @@ export function AccountMenu() {
   const session = useAuthSession();
   const name = user?.name ?? session.user?.name ?? '';
   const identity = user?.active_identity;
-  const identities = user?.identities ?? [];
+  const identities = backOfficeIdentities(user?.identities ?? []);
   const switchIdentity = useSwitchIdentity();
   const canViewTeams = Boolean(
     identity?.team_uuid && user?.capabilities.includes('team.view'),
@@ -135,7 +136,12 @@ export function AccountMenu() {
                 color: color.fg.neutral.muted,
               }}
             >
-              <Box component={ArrowLeftRight} sx={{ width: 12, height: 12 }} />
+              {identities.length > 1 ? (
+                <Box
+                  component={ArrowLeftRight}
+                  sx={{ width: 12, height: 12 }}
+                />
+              ) : null}
               {identityLabel(identity)}
             </Box>
           )}
