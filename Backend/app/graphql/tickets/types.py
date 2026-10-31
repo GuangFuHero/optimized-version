@@ -228,14 +228,12 @@ class TicketVerificationType:
     state: TicketVerificationState = strawberry.field(
         description=(
             "'disputed': a card on this ticket or one of its needs waits for a verdict, or was judged a "
-            "duplicate and not merged yet"
+            "duplicate and not merged yet, and 重複審核 can still merge it: its far side is another "
+            "ticket, neither cancelled nor deleted"
         )
     )
     duplicate_of: list[TicketDuplicateRefType] = strawberry.field(
-        description=(
-            "The tickets on the far side of those cards, each once, oldest card first. A ticket cancelled "
-            "or deleted is left out, so this can be empty while the card still waits"
-        )
+        description="The tickets on the far side of those cards, each once, oldest card first; never empty"
     )
 
 
