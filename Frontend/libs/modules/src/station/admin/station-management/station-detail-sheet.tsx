@@ -30,7 +30,7 @@ import {
   type StationDetailView,
 } from './model/station-detail-view';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
-import { StatusBadge } from './station-cells';
+import { StatusBadge, TypeChip } from './station-cells';
 import {
   StationHistoryPanel,
   useLoadedStationVersion,
@@ -158,7 +158,6 @@ function StationDetailContent({
 
   return (
     <SheetLayout
-      eyebrow={view.typeLabel}
       title={view.title}
       closeLabel="關閉站點詳情"
       headerContent={
@@ -182,7 +181,7 @@ function StationDetailContent({
             {view.verification.verified ? (
               <Badge tone="success">已驗證</Badge>
             ) : (
-              <Badge>未驗證</Badge>
+              <Badge tone="warning">未驗證</Badge>
             )}
             {view.pendingFieldCount > 0 ? (
               <Badge tone="warning">{view.pendingFieldCount} 欄待審</Badge>
@@ -257,6 +256,10 @@ function StationInfo({
 }) {
   return (
     <Box sx={{ '& > :first-of-type': { borderTop: 'none', pt: 0 } }}>
+      {/* The prototype's type line opens 基本資料, above the rows. */}
+      <Box sx={{ mb: '4px' }}>
+        <TypeChip type={station.type} />
+      </Box>
       <DetailRow label="指派團隊">
         {station.assignedTeam?.name ?? <Muted inline>未指派</Muted>}
       </DetailRow>

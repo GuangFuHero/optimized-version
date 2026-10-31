@@ -5,6 +5,7 @@ import {
   exportFilename,
   importFieldLabel,
   mergeMapping,
+  offersImport,
   STATION_IMPORT_FIELDS,
   stationImportTemplate,
 } from './import';
@@ -100,5 +101,16 @@ describe('countExportableByType', () => {
     const counts = countExportableByType(rows);
     expect(counts.get('shelter')).toBe(2);
     expect(counts.get('water')).toBeUndefined();
+  });
+});
+
+describe('offersImport', () => {
+  it('offers 匯入 to whoever may both add and import stations', () => {
+    expect(offersImport({ canAdd: true, canImport: true })).toBe(true);
+  });
+
+  it('hides it without 新增, whose dropdown is the only way in', () => {
+    expect(offersImport({ canAdd: false, canImport: true })).toBe(false);
+    expect(offersImport({ canAdd: true, canImport: false })).toBe(false);
   });
 });
