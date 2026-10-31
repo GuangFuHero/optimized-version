@@ -102,3 +102,26 @@ describe('a ticket pin', () => {
     expect(html).not.toContain(`fill="${color.fg.inverse}"`);
   });
 });
+
+describe('a teardrop pin (`pin`)', () => {
+  const pin = { color: '#BA1A1A' };
+
+  it('is a teardrop unless asked for a square', () => {
+    const html = pinHtml({ pin });
+
+    expect(html).toContain('class="map-pin"');
+    expect(html).not.toContain('map-pin--square');
+  });
+
+  it('is square for a space, with a building drawn in it (designer: only a space is square)', () => {
+    const html = pinHtml({ pin: { ...pin, shape: 'square' } });
+
+    expect(html).toContain('class="map-pin map-pin--square"');
+    expect(html).toContain('<svg');
+    expect(pinHtml({ pin })).not.toContain('<svg');
+  });
+
+  it('escapes the colour it is handed', () => {
+    expect(pinHtml({ pin: { color: '"><b>&' } })).not.toContain('"><b>');
+  });
+});

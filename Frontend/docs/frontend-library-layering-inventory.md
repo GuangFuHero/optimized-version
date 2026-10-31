@@ -90,7 +90,6 @@
 
 ### `ticket/`
 
-- `admin/ticket-create/*`
 - `admin/ticket-detail/*`
 - `admin/ticket-list/*`
 - `admin/ticket-report/*`

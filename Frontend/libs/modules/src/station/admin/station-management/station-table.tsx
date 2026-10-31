@@ -22,8 +22,10 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { Muted } from '../../../admin/shared/muted';
 import { getStationTypeIcon, type StationTypeValue } from '../../type-options';
-import { FreshnessCell, StatusBadge } from './station-cells';
+import { FreshnessCell } from '../../../admin/shared/freshness-cell';
+import { StatusBadge } from './station-cells';
 import type { StationRow } from './model/station-row';
 
 const { color, radius, typography } = designTokens;
@@ -162,7 +164,7 @@ export function StationTable({
         empty={
           loading ? (
             <Box sx={{ p: 4, textAlign: 'center' }}>
-              <Muted>載入中…</Muted>
+              <Muted cell>載入中…</Muted>
             </Box>
           ) : (
             <StationEmptyState
@@ -405,16 +407,5 @@ function AreaCell({ area }: { area: string }) {
         {area || '—'}
       </Typography>
     </Box>
-  );
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return (
-    <Typography
-      noWrap
-      sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
-    >
-      {children}
-    </Typography>
   );
 }

@@ -2,7 +2,6 @@
 
 import {
   Box,
-  ButtonBase,
   Dialog as MuiDialog,
   IconButton,
   TextField,
@@ -15,29 +14,31 @@ import {
 import type { components } from '@rescue-frontend/data-access/openapi';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { CircleCheck, Download, FolderOpen, Upload, X } from 'lucide-react';
-import {
-  type ChangeEvent,
-  type ReactNode,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import {
+  ErrorList,
+  ImportResult,
+  Step,
+  TypeChip,
+} from '../../../admin/shared/import-dialog-parts';
+import { Muted } from '../../../admin/shared/muted';
 import {
   getStationTypeIcon,
   getStationTypeLabel,
   STATION_TYPE_OPTIONS,
 } from '../../type-options';
 import {
+  downloadBlob,
+  importSummary,
+} from '../../../admin/shared/model/bulk-import';
+import {
   ImportSuspectsBulkActions,
   ImportSuspectsStep,
 } from './import-suspects-step';
 import {
-  downloadBase64,
-  downloadBlob,
   importFieldLabel,
-  importSummary,
   mergeMapping,
   STATION_IMPORT_FIELDS,
   stationImportTemplate,
@@ -51,7 +52,7 @@ import {
   keepFiled,
 } from './model/import-suspects';
 
-const { color, focusRing, motion, radius, typography } = designTokens;
+const { color, focusRing, radius, typography } = designTokens;
 
 type Preview = components['schemas']['BulkPreviewResponse'];
 type Result = components['schemas']['BulkImportResponse'];
@@ -250,7 +251,19 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
       </Box>
 
       {result ? (
-        <ImportResult result={result} filed={filed} onClose={onClose} />
+        <ImportResult
+          result={result}
+          onClose={onClose}
+          createdUnit="列"
+          showUpdated
+          note="新增的站點請到現場確認營運狀態，並補上聯絡人與電話。"
+          partialNote="站點已寫入，但它的部分欄位沒有寫入（多半是缺少填寫站點欄位的權限）。請打開這些站點核對欄位，再補齊或請有權限的人補上。"
+          fieldLabel={importFieldLabel}
+          badges={<SuspectBadges result={result} />}
+          reportLabel="下載沒匯入的列"
+        >
+          <SuspectNotes result={result} filed={filed} />
+        </ImportResult>
       ) : (
         <>
           <Box
@@ -271,17 +284,20 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                 aria-label="站點類型"
                 sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
               >
-                {STATION_TYPE_OPTIONS.map((option) => (
-                  <TypeChip
-                    key={option.value}
-                    value={option.value}
-                    label={option.label}
-                    active={stationType === option.value}
-                    // A preview still running would land after the switch cleared its file.
-                    disabled={busy}
-                    onSelect={() => chooseType(option.value)}
-                  />
-                ))}
+                {STATION_TYPE_OPTIONS.map((option) => {
+                  const Icon = getStationTypeIcon(option.value);
+                  return (
+                    <TypeChip
+                      key={option.value}
+                      icon={<Icon sx={{ fontSize: 16 }} aria-hidden />}
+                      label={option.label}
+                      active={stationType === option.value}
+                      // A preview still running would land after the switch cleared its file.
+                      disabled={busy}
+                      onSelect={() => chooseType(option.value)}
+                    />
+                  );
+                })}
               </Box>
             </Step>
 
@@ -459,7 +475,10 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                   </Muted>
                 ) : null}
                 {preview.errors.length > 0 ? (
-                  <ErrorList errors={preview.errors} />
+                  <ErrorList
+                    errors={preview.errors}
+                    fieldLabel={importFieldLabel}
+                  />
                 ) : null}
               </Step>
             ) : null}
@@ -535,141 +554,50 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function TypeChip({
-  value,
-  label,
-  active,
-  disabled,
-  onSelect,
-}: {
-  value: string;
-  label: string;
-  active: boolean;
-  disabled: boolean;
-  onSelect: () => void;
-}) {
-  const Icon = getStationTypeIcon(value);
+/** The counts a duplicate check adds to the result's row: rows declined, and rows held (ADR-398). */
+function SuspectBadges({ result }: { result: Result }) {
   return (
-    <ButtonBase
-      role="radio"
-      aria-checked={active}
-      onClick={onSelect}
-      disabled={disabled}
-      disableRipple
-      sx={{
-        ...typography.label[400],
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        height: 34,
-        px: '12px',
-        borderRadius: `${radius.full}px`,
-        border: `1px solid ${
-          active ? color.brand.primary.default : color.border.default
-        }`,
-        bgcolor: active ? color.bg.primary.subtle : color.bg.neutral.default,
-        color: color.fg.neutral.default,
-        transition: `background-color ${motion.transition.fast}`,
-        '&:hover': {
-          bgcolor: active ? color.bg.primary.subtle : color.bg.neutral.subtle,
-        },
-        '&.Mui-focusVisible': {
-          outline: `${focusRing.width}px solid ${focusRing.color}`,
-          outlineOffset: `${focusRing.offset}px`,
-        },
-        '&.Mui-disabled': { color: color.fg.disable },
-      }}
-    >
-      <Icon sx={{ fontSize: 16 }} aria-hidden />
-      {label}
-    </ButtonBase>
+    <>
+      {result.declined > 0 ? (
+        <Badge tone="neutral">選了不建立 {result.declined} 列</Badge>
+      ) : null}
+      {result.suspected > 0 ? (
+        <Badge tone="warning">疑似重複未建立 {result.suspected} 列</Badge>
+      ) : null}
+    </>
   );
 }
 
-function ImportResult({
+/** What the duplicate check left: rows declined or held, and each held row with what it looks like. */
+function SuspectNotes({
   result,
   filed,
-  onClose,
 }: {
   result: Result;
   /** What the importer chose to file anyway, to tell apart the rows the commit held all the same. */
   filed: FiledRows;
-  onClose: () => void;
 }) {
   const held = result.suspects ?? [];
   const changed = heldThoughFiled(filed, held);
   return (
     <>
-      <Box
-        sx={{
-          p: '20px 22px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '14px',
-        }}
-      >
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          <Badge tone="success">新增 {result.created} 列</Badge>
-          <Badge tone="info">更新 {result.updated} 列</Badge>
-          {result.declined > 0 ? (
-            <Badge tone="neutral">選了不建立 {result.declined} 列</Badge>
-          ) : null}
-          {result.suspected > 0 ? (
-            <Badge tone="warning">疑似重複未建立 {result.suspected} 列</Badge>
-          ) : null}
-          <Badge tone={result.failed ? 'danger' : 'neutral'}>
-            失敗 {result.failed} 列
-          </Badge>
-          <Badge tone="neutral">批次 {result.batch_id}</Badge>
-        </Box>
-        {result.created > 0 ? (
-          <Muted>新增的站點請到現場確認營運狀態，並補上聯絡人與電話。</Muted>
-        ) : null}
-        {result.declined > 0 ? (
-          <Muted>
-            選了不建立的 {result.declined} 列沒有建立，也放進了報告檔。
-          </Muted>
-        ) : null}
-        {result.dedup_checked === false ? (
-          <Callout tone="warning">
-            這次沒有比對重複，新增的站點可能跟現有的重複。
-          </Callout>
-        ) : null}
-        {result.suspected > 0 ? (
-          <Callout tone="warning">
-            {result.suspected}{' '}
-            列疑似重複，沒有建立，已放進報告檔。確認不是重複的話，重新上傳報告檔，再選「仍要建立」。
-          </Callout>
-        ) : null}
-        {held.length > 0 ? <HeldList held={held} changed={changed} /> : null}
-        {result.failed > 0 ? (
-          <Callout tone="warning">
-            失敗的列沒有寫入。修正後再匯入一次即可 —— 已成功的列不會重複建立。
-          </Callout>
-        ) : null}
-        {result.errors.length > 0 ? <ErrorList errors={result.errors} /> : null}
-      </Box>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: '10px',
-          p: '14px 22px',
-          borderTop: `1px solid ${color.border.default}`,
-        }}
-      >
-        {result.error_report ? (
-          <Button
-            variant="outline"
-            onClick={() =>
-              result.error_report && downloadBase64(result.error_report)
-            }
-          >
-            下載沒匯入的列
-          </Button>
-        ) : null}
-        <Button onClick={onClose}>關閉</Button>
-      </Box>
+      {result.declined > 0 ? (
+        <Muted>
+          選了不建立的 {result.declined} 列沒有建立，也放進了報告檔。
+        </Muted>
+      ) : null}
+      {result.dedup_checked === false ? (
+        <Callout tone="warning">
+          這次沒有比對重複，新增的站點可能跟現有的重複。
+        </Callout>
+      ) : null}
+      {result.suspected > 0 ? (
+        <Callout tone="warning">
+          {result.suspected}{' '}
+          列疑似重複，沒有建立，已放進報告檔。確認不是重複的話，重新上傳報告檔，再選「仍要建立」。
+        </Callout>
+      ) : null}
+      {held.length > 0 ? <HeldList held={held} changed={changed} /> : null}
     </>
   );
 }
@@ -732,92 +660,5 @@ function HeldList({
         );
       })}
     </Box>
-  );
-}
-
-function ErrorList({
-  errors,
-}: {
-  errors: readonly components['schemas']['RowErrorResponse'][];
-}) {
-  return (
-    <Box
-      sx={{
-        maxHeight: 220,
-        overflow: 'auto',
-        border: `1px solid ${color.border.default}`,
-        borderRadius: `${radius.md}px`,
-      }}
-    >
-      {errors.map((error, i) => (
-        <Box
-          key={`${error.line}-${error.column}-${i}`}
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: '80px 120px 1fr',
-            gap: '8px',
-            p: '6px 12px',
-            borderBottom: `1px solid ${color.border.subtle}`,
-            ...typography.body[300],
-          }}
-        >
-          <span>第 {error.line} 列</span>
-          <span>{importFieldLabel(error.column)}</span>
-          <Box component="span" sx={{ color: color.fg.danger }}>
-            {error.message}
-          </Box>
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
-function Step({
-  title,
-  caption,
-  aside,
-  trailing,
-  children,
-}: {
-  title: string;
-  caption?: string;
-  /** A note or badges right after the title. */
-  aside?: ReactNode;
-  /** Actions at the end of the title row. */
-  trailing?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '8px 10px',
-        }}
-      >
-        <Typography sx={typography.label[400]}>{title}</Typography>
-        {aside}
-        <Box sx={{ flex: 1 }} />
-        {trailing ? (
-          <Box sx={{ display: 'inline-flex', flexWrap: 'wrap', gap: '8px' }}>
-            {trailing}
-          </Box>
-        ) : null}
-      </Box>
-      {caption ? <Muted>{caption}</Muted> : null}
-      {children}
-    </Box>
-  );
-}
-
-function Muted({ children, sx }: { children: ReactNode; sx?: object }) {
-  return (
-    <Typography
-      sx={{ ...typography.body[300], color: color.fg.neutral.muted, ...sx }}
-    >
-      {children}
-    </Typography>
   );
 }
