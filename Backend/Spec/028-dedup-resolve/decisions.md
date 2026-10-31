@@ -414,3 +414,24 @@ ADR-388～390（386、387 已被 `018-ticket-disaster-fields` 用掉）。review
 - 不動 `app/dedup_engine/` 與 `tools/dedup_eval/`：評估工具的 `confirmed` 是它自己資料集的標籤，不是配對卡狀態。
 
 **為什麼不用 `is_duplicate`**：`is_duplicate` 已經是 `ticket_tasks`、`stations` 上的欄位名（慢層用），同名容易混。
+
+---
+
+## ADR-440：詳情的兩張單附上地點（地址到樓、室，或電線桿）
+
+**Date**: 2026-10-29　**Status**: Accepted（使用者拍板：欄位範圍、權限跟聯絡人一樣、要算進 `version`）
+
+**背景**：DEDUP-008 的 mock 規定「審核員選了哪一邊的地址，那一張就是主要單」（DUP-BE-431），因為處理時不能改地址（ADR-367）。
+但 `TicketForReview` 只有座標，沒有地址。地址存在 `secondary_locations`（以 `geometry_uuid` 對到單），
+審核頁讀不到，就沒辦法照 mock 選主要單。
+
+**決定**：
+- `tickets.low`／`tickets.high` 多一個 `location`：
+  `location_type`（`address`／`pole`）、`full_address`、`building_section`、`floor`、`room`、`pole_id`。單沒有地點時為 `null`。
+- **不給**地標補充、空間描述、求救者所在空間、可否進入、電線桿備註和照片。這些是自由文字，不是分辨兩張單是否同一處的依據。
+- 一張單照慣例只有一筆地點（沒有 constraint）。有多筆時取 uuid 最小的一筆，和 `secondary_location_repository.get_by_geometry` 一樣。
+- **權限跟聯絡人一樣**：有 `ai_duplicate.view` 就給，不另外檢查 `ticket.view_detail`／`ticket.view_pii`。
+  選主要單一定要看地址，和聯絡人不遮的理由相同（ADR-373）。目前持有 `ai_duplicate.view` 的兩個角色本來就都看得到工單地址。
+- **算進 `version`**（ADR-374）：審核員讀完之後有人改了地址，送出處理會收到 409，要重新讀、重新比對。
+  沒給的自由文字欄位不算進去，改了不會 409。
+- 處理時仍然不能改地址（ADR-367 不變）。`merged` 事件的 `before_state` 會一併記下兩張單的地點，被取消那張的地址也有紀錄。

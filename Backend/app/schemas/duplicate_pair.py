@@ -1,4 +1,4 @@
-"""Pydantic schemas for the AI 重複審核 queue in the back office (Spec 025 §2)."""
+"""Pydantic schemas for the 重複審核 queue in the back office (Spec 025 §2)."""
 
 from datetime import datetime
 from typing import Literal
@@ -46,6 +46,7 @@ class DuplicatePairResponse(BaseModel):
     hint_outcome: str | None
     created_at: datetime
     reviewed_by: UUID | None
+    reviewed_by_name: str | None = Field(description="The nickname of `reviewed_by` (ADR-441)")
     reviewed_at: datetime | None
     low: EntitySummaryResponse
     high: EntitySummaryResponse
@@ -66,6 +67,7 @@ class DedupEventResponse(BaseModel):
     uuid: UUID
     event_type: str
     actor_uuid: UUID | None
+    actor_name: str | None = Field(default=None, description="The nickname of `actor_uuid` (ADR-441)")
     source_layer: SourceLayer
     decision_reason: str | None
     engine_version: str | None
@@ -113,6 +115,19 @@ class PhotoForReviewResponse(BaseModel):
     created_at: datetime | None
 
 
+class LocationForReviewResponse(BaseModel):
+    """Where a ticket is: the address down to the room, or the pole (ADR-440). Read-only here."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    location_type: str = Field(description="'address' or 'pole'")
+    full_address: str | None
+    building_section: str | None
+    floor: str | None
+    room: str | None
+    pole_id: str | None
+
+
 class TicketForReviewResponse(BaseModel):
     """A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).
 
@@ -142,6 +157,9 @@ class TicketForReviewResponse(BaseModel):
     tasks: list[TaskForReviewResponse]
     photos: list[PhotoForReviewResponse]
     disaster_details: dict[str, list[str]]
+    location: LocationForReviewResponse | None = Field(
+        description="Where the ticket is; null when it has no address or pole. A resolve cannot change it"
+    )
 
 
 class TicketsForReviewResponse(BaseModel):

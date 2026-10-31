@@ -1,9 +1,9 @@
-"""The two whole tickets behind a duplicate pair card, for the AI 重複審核 page (Spec 028 §2, ADR-373/374).
+"""The two whole tickets behind a duplicate pair card, for the 重複審核 page (Spec 028 §2, ADR-373/374).
 
 A fast-layer card compares one need with another (`ticket_task`), but a resolve acts on whole
 tickets, so the reviewer has to see both tickets in full first: their fields, contacts, every live
-need with its headcount and items. `version` lets a resolve tell whether either ticket changed
-since the reviewer read it.
+need with its headcount and items, and where the ticket is. `version` lets a resolve tell whether
+either ticket changed since the reviewer read it.
 
 Read with `ai_duplicate.view` (checked by the caller, `dedup_review.get_pair`). A fixed number of
 queries, however many needs and items the tickets have.
@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.dedup import DuplicatePair
 from app.models.photo import Photo
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 
@@ -44,6 +45,22 @@ class PhotoForReview:
     uuid: str
     url: str
     created_at: datetime | None
+
+
+@dataclass(frozen=True)
+class LocationForReview:
+    """Where the ticket is, as far as the reviewer compares it (ADR-440).
+
+    The address down to the room, or the pole. The free text about the place (landmark, space,
+    access) is left out: it is not what tells two tickets apart, and it stays out of the version.
+    """
+
+    location_type: str
+    full_address: str | None
+    building_section: str | None
+    floor: str | None
+    room: str | None
+    pole_id: str | None
 
 
 @dataclass(frozen=True)
@@ -90,6 +107,7 @@ class TicketForReview:
     tasks: tuple[TaskForReview, ...]
     photos: tuple[PhotoForReview, ...] = ()
     disaster_details: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    location: LocationForReview | None = None
 
 
 # What a claim moves, which must not move the version (ADR-374): a need's headcount and the status
@@ -104,7 +122,8 @@ def ticket_version(ticket: TicketForReview) -> str:
     Made from the content itself, not from `updated_at`, which also moves for what the reviewer
     does not compare, such as a status worked out again after a claim. Every field the
     reviewer can compare or edit goes in — the ticket's, each live need's and item's, its photos
-    and disaster-field answers (ADR-384, 385) — with needs, items and photos sorted by uuid.
+    and disaster-field answers (ADR-384, 385) and where it is (ADR-440) — with needs, items and
+    photos sorted by uuid.
     What a claim moves stays out: the headcount is checked under the locks when resolving, and a
     claim need not send the reviewer back.
     """
@@ -169,6 +188,7 @@ class _Parts:
     claims: dict
     photos: list
     details: list
+    locations: dict
 
 
 async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
@@ -215,7 +235,18 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
             .order_by(TicketDisasterDetail.property_name, TicketDisasterDetail.value)
         )
     ).all()
-    return _Parts(tasks=tasks, properties=properties, claims=claims, photos=photos, details=details)
+    # One row per geometry by convention, not by constraint: take the first by uuid, as
+    # `secondary_location_repository.get_by_geometry` does.
+    locations: dict[str, SecondaryLocation] = {}
+    for location in await db.scalars(
+        select(SecondaryLocation)
+        .where(SecondaryLocation.geometry_uuid.in_(live))
+        .order_by(SecondaryLocation.uuid)
+    ):
+        locations.setdefault(str(location.geometry_uuid), location)
+    return _Parts(
+        tasks=tasks, properties=properties, claims=claims, photos=photos, details=details, locations=locations
+    )
 
 
 def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
@@ -274,8 +305,22 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
             if str(photo.ref_uuid) == str(ticket.uuid)
         ),
         disaster_details={name: tuple(values) for name, values in answers.items()},
+        location=_location(parts.locations.get(str(ticket.uuid))),
     )
     return replace(review, version=ticket_version(review))
+
+
+def _location(row: SecondaryLocation | None) -> LocationForReview | None:
+    if row is None:
+        return None
+    return LocationForReview(
+        location_type=row.location_type,
+        full_address=row.full_address,
+        building_section=row.building_section,
+        floor=row.floor,
+        room=row.room,
+        pole_id=row.pole_id,
+    )
 
 
 async def tickets_for_pair(
