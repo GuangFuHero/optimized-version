@@ -131,6 +131,8 @@ async def _run(suffix: str, *, addresses: tuple[str, ...]) -> dict:
         async with engine.begin() as conn:
             for statement in (*_SETUP, *addresses):
                 await conn.execute(text(statement))
+        audit_rows = "SELECT count(*) FROM audit_logs WHERE table_name = 'secondary_locations'"
+        audited_before = await _scalar(engine, audit_rows)
         code, stderr = await _alembic(url, "upgrade", _REVISION)
         result = {"upgraded": code == 0, "says": stderr}
         if code != 0:
@@ -175,6 +177,11 @@ async def _run(suffix: str, *, addresses: tuple[str, ...]) -> dict:
                     )
                 ).all()
             }
+        result["audit_rows_added"] = await _scalar(engine, audit_rows) - audited_before
+        result["audit_trigger_enabled"] = await _scalar(
+            engine,
+            "SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'audit_trigger_secondary_locations'",
+        )
         result["generated"] = await _refused(engine, "UPDATE secondary_locations SET full_address = 'x'")
 
         assert (await _alembic(url, "downgrade", _BEFORE))[0] == 0
@@ -252,6 +259,13 @@ async def test_each_address_is_split_again_and_the_line_is_rebuilt_unchanged(out
         "臺北市中山區民生東路一段1巷2弄3衖4號後面",
     )
     assert "full_address" in outcomes["repairable"]["generated"]
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_the_backfill_writes_no_audit_rows_and_leaves_the_audit_trigger_on(outcomes):
+    """Rewriting the derived columns is not an edit, and later edits are still audited."""
+    assert outcomes["repairable"]["audit_rows_added"] == 0
+    assert outcomes["repairable"]["audit_trigger_enabled"] == "O"
 
 
 @pytest.mark.asyncio(loop_scope="module")

@@ -175,6 +175,8 @@ def _address_up() -> None:
     op.execute(f"ALTER TABLE {_ADDRESSES} ADD COLUMN IF NOT EXISTS remainder varchar(255)")
     op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.user_input_address IS '使用者輸入的地址原文'")
     op.execute(f"COMMENT ON COLUMN {_ADDRESSES}.remainder IS '解析不出來的地址文字'")
+    # A derived-column rewrite, not an edit anyone made, so it stays out of the audit log.
+    op.execute(f"ALTER TABLE {_ADDRESSES} DISABLE TRIGGER audit_trigger_{_ADDRESSES}")
     op.execute(f"UPDATE {_ADDRESSES} SET user_input_address = full_address WHERE user_input_address IS NULL")
 
     rows = bind.execute(sa.text(f"SELECT uuid, user_input_address, full_address FROM {_ADDRESSES}")).all()
@@ -200,11 +202,9 @@ def _address_up() -> None:
             "fix or clear them, then upgrade again."
         )
     if changes:
-        # A derived-column rewrite, not an edit anyone made, so it stays out of the audit log.
-        op.execute(f"ALTER TABLE {_ADDRESSES} DISABLE TRIGGER audit_trigger_{_ADDRESSES}")
         assignments = ", ".join(f"{c} = :{c}" for c in (*_PARTS, "remainder"))
         bind.execute(sa.text(f"UPDATE {_ADDRESSES} SET {assignments} WHERE uuid = :uuid"), changes)
-        op.execute(f"ALTER TABLE {_ADDRESSES} ENABLE TRIGGER audit_trigger_{_ADDRESSES}")
+    op.execute(f"ALTER TABLE {_ADDRESSES} ENABLE TRIGGER audit_trigger_{_ADDRESSES}")
 
     op.execute(f"ALTER TABLE {_ADDRESSES} DROP COLUMN full_address")
     op.execute(

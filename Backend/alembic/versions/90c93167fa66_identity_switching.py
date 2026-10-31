@@ -9,7 +9,7 @@ Two things here are worth reading before editing:
 
 `role_kind` on user_role_assign copies `roles.kind`, so that a CHECK and a composite FK to
 roles(uuid, kind) can enforce "platform grants carry no team, team grants must carry one".
-Migration 197c174410bd removed the copy, a second copy of the same fact, and enforces the rule
+Migration 197c174410bd removed that copy, which stored the fact a second time, and enforces the rule
 with triggers instead.
 
 The unique keys come in pairs. `UNIQUE(user, role, team)` does not stop a user collecting
@@ -168,6 +168,7 @@ $$ LANGUAGE plpgsql;
 
 
 def upgrade() -> None:
+    """Move the team onto the grant rows and key them by it."""
     # 1. The composite FK below needs a unique key to point at. uuid is already the PK, so a
     #    UNIQUE that merely includes it costs nothing.
     op.create_unique_constraint("uq_roles_uuid_kind", "roles", ["uuid", "kind"])
@@ -254,6 +255,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Put the team back on users and drop the grants' team columns."""
     # Function first: dropping the column out from under a trigger that still inserts into it
     # would break every audited write.
     op.execute(_AUDIT_FUNC_WITHOUT_CONTEXT)
