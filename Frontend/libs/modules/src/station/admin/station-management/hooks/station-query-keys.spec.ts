@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 describe('station status counts query', () => {
   it('sits under the key every station mutation invalidates', () => {
     const { queryKey } = stationAnalyticsDataQuery({
-      query: { y: 'station_status_count', x: 'category' },
+      query: { y: 'station_status_count', x: 'category', tz: 'Asia/Taipei' },
     });
     expect(queryKey.slice(0, 2)).toEqual(['admin', 'stations']);
   });
