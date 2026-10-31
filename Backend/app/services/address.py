@@ -251,6 +251,14 @@ def apply_address(sl: dict | None, *, point: tuple[float, float] | None) -> dict
     return values
 
 
+def same_address(existing, values: dict) -> bool:
+    """Whether `values` (from `apply_address`) split into the parts and remainder `existing` already holds.
+
+    A blank part and a missing one read the same.
+    """
+    return all((getattr(existing, c) or None) == (values.get(c) or None) for c in _ADDRESS_COLUMNS)
+
+
 async def unverify_if_moved(db: AsyncSession, geometry_uuid: str, old_geometry, new_geometry: dict) -> None:
     """Drop a confirmed address to unverified when its point moves, since its token is gone."""
     if point_of(geom_to_geojson(old_geometry)) == point_of(new_geometry):

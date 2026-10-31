@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import select, update
 
 from app.models.geo import BaseGeometry
+from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TicketTask
 from app.services.ticket_audit import flag_need_audit
 from tests.test_graphql.conftest import auth_header, test_db
@@ -125,6 +126,55 @@ async def test_a_new_address_moves_it_and_sending_the_same_one_again_does_not(
     await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": address})
 
     assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+async def _raw_address(ticket: str) -> str | None:
+    """The address line the ticket's row keeps as received."""
+    async with test_db() as db:
+        return await db.scalar(
+            select(SecondaryLocation.user_input_address).where(SecondaryLocation.geometry_uuid == ticket)
+        )
+
+
+@pytest.mark.asyncio
+async def test_sending_back_the_line_it_read_keeps_the_raw_line_and_changes_nothing(
+    client, coordinator_auth, sample_ticket
+):
+    """The form returns the line without its floor; that is the same address, so the raw line stays."""
+    _, admin = coordinator_auth
+    raw = "花蓮縣光復鄉糖廠街19號3樓"
+    await _gql(
+        client,
+        admin,
+        UPDATE_TICKET,
+        {"uuid": sample_ticket, "input": {"secondaryLocation": {"fullAddress": raw}}},
+    )
+    await _set_earlier(sample_ticket)
+
+    read_back = {"fullAddress": "花蓮縣光復鄉糖廠街19號", "floor": "3樓"}
+    await _gql(
+        client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": read_back}}
+    )
+
+    assert await _raw_address(sample_ticket) == raw
+    assert await _updated_at(client, admin, sample_ticket) == EARLIER
+
+
+@pytest.mark.asyncio
+async def test_a_changed_address_overwrites_the_raw_line_and_moves_it(
+    client, coordinator_auth, sample_ticket
+):
+    """Different parts mean a real edit: the new line replaces the old one."""
+    _, admin = coordinator_auth
+    first = {"fullAddress": "花蓮縣光復鄉糖廠街19號3樓"}
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": first}})
+    await _set_earlier(sample_ticket)
+
+    second = {"fullAddress": "花蓮縣光復鄉糖廠街21號"}
+    await _gql(client, admin, UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": second}})
+
+    assert await _raw_address(sample_ticket) == "花蓮縣光復鄉糖廠街21號"
+    assert await _updated_at(client, admin, sample_ticket) > EARLIER
 
 
 @pytest.mark.asyncio

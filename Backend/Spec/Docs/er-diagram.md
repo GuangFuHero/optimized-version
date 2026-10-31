@@ -506,7 +506,7 @@ secondary_locations {
     uuid uuid PK
     uuid geometry_uuid FK "FK to base_geometries"
     string location_type "address/pole"
-    string user_input_address "nullable, String(255) — the line exactly as received, overwritten on each address edit; rows from before this column hold the parsed line"
+    string user_input_address "nullable, String(255) — the line exactly as received, overwritten by an edit that changes the address; rows from before this column hold the parsed line"
     string remainder "nullable, String(255) — what the parser could not place: the text after the 號 that is not a unit, or the whole line when nothing was recognized"
     string full_address "nullable, String(255), GENERATED ALWAYS AS NULLIF(county+town+village+neighborhood+road+section+lane+alley+no+remainder, ''), STORED — the whole line without 樓/室"
     string county "nullable, 縣市"

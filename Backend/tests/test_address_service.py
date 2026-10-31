@@ -4,6 +4,7 @@ import asyncio
 import html
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -12,7 +13,7 @@ from jose import jwt
 from app.core.config import settings
 from app.core.security import _decode_access_payload
 from app.services import address
-from app.services.address import apply_address, lookup_address, reverse_geocode
+from app.services.address import apply_address, lookup_address, reverse_geocode, same_address
 
 # Replies as TGOS sent them during a live run, keys never included.
 DOOR = {
@@ -340,3 +341,13 @@ def test_a_sub_alley_is_graded_by_the_line_the_database_will_build():
     token = _token(line)
     stored = apply_address({"full_address": line, "address_token": token}, point=NEAR_DOOR)
     assert stored["alley"] == "2弄3衖" and stored["normalization_status"] == "verified"
+
+
+def test_a_line_that_splits_into_the_stored_parts_is_the_same_address():
+    """A unit cut from the line or a blank part changes nothing; another part or a remainder does."""
+    stored = SimpleNamespace(**apply_address({"full_address": "花蓮縣光復鄉糖廠街19號3樓"}, point=None))
+    assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號"}, point=None))
+    stored.section = ""
+    assert same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號"}, point=None))
+    assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街21號"}, point=None))
+    assert not same_address(stored, apply_address({"full_address": "花蓮縣光復鄉糖廠街19號後面"}, point=None))
