@@ -74,7 +74,7 @@ export function AccountMenu() {
   const open = Boolean(anchorEl);
   const itemSx = {
     gap: '10px',
-    minHeight: 0,
+    minHeight: 44,
     px: '10px',
     borderRadius: `${radius.sm}px`,
     ...typography.label[400],
@@ -91,8 +91,10 @@ export function AccountMenu() {
         aria-expanded={open}
         onClick={(event) => setAnchorEl(event.currentTarget)}
         sx={{
-          gap: '10px',
-          p: '5px 9px 5px 5px',
+          gap: { mobile: 0, tablet: '10px' },
+          minHeight: 44,
+          minWidth: 44,
+          p: { mobile: '4px', tablet: '5px 9px 5px 5px' },
           borderRadius: `${radius.full}px`,
           bgcolor: open ? color.bg.neutral.subtle : 'transparent',
           textAlign: 'left',
@@ -101,7 +103,12 @@ export function AccountMenu() {
         }}
       >
         <Avatar name={name} size={36} />
-        <Box sx={{ lineHeight: 1.25 }}>
+        <Box
+          sx={{
+            lineHeight: 1.25,
+            display: { mobile: 'none', tablet: 'block' },
+          }}
+        >
           <Box
             sx={{
               display: 'flex',
@@ -136,6 +143,7 @@ export function AccountMenu() {
         <Box
           component={ChevronDown}
           sx={{
+            display: { mobile: 'none', tablet: 'block' },
             width: 16,
             height: 16,
             color: color.fg.neutral.muted,

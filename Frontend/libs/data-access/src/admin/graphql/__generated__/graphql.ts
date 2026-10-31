@@ -2015,9 +2015,9 @@ export type TicketVerificationState =
 /** Where a ticket stands in 重複審核 (ADR-443) */
 export type TicketVerificationType = {
   __typename?: 'TicketVerificationType';
-  /** The tickets on the far side of those cards, each once, oldest card first. A ticket cancelled or deleted is left out, so this can be empty while the card still waits */
+  /** The tickets on the far side of those cards, each once, oldest card first; never empty */
   duplicateOf: Array<TicketDuplicateRefType>;
-  /** 'disputed': a card on this ticket or one of its needs waits for a verdict, or was judged a duplicate and not merged yet */
+  /** 'disputed': a card on this ticket or one of its needs waits for a verdict, or was judged a duplicate and not merged yet, and 重複審核 can still merge it: its far side is another ticket, neither cancelled nor deleted */
   state: TicketVerificationState;
 };
 

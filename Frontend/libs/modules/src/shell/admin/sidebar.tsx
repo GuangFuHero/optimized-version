@@ -72,6 +72,7 @@ export function AdminSidebar({
         bgcolor: color.bg.neutral.subtle,
         borderRight: `1px solid ${color.border.default}`,
         transition: `width ${motion.transition.base}`,
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
       <EventHeader collapsed={collapsed} onToggle={onToggle} />
@@ -187,7 +188,12 @@ function EventHeader({
     <IconButton
       aria-label={collapsed ? '展開選單' : '收合選單'}
       onClick={onToggle}
-      sx={{ color: color.fg.neutral.default, borderRadius: `${radius.sm}px` }}
+      sx={{
+        width: 44,
+        height: 44,
+        color: color.fg.neutral.default,
+        borderRadius: `${radius.sm}px`,
+      }}
     >
       {collapsed ? <ChevronsRight /> : <ChevronsLeft />}
     </IconButton>

@@ -189,12 +189,15 @@ async def test_a_card_between_two_tickets_counts_too(client, redis):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("gone", ["cancelled", "deleted"])
-async def test_a_far_ticket_that_is_gone_is_not_named_but_the_card_still_counts(client, redis, gone):
-    """The card still waits in 重複審核, so the ticket stays disputed; there is no ticket to name."""
+async def test_a_card_whose_far_ticket_is_gone_does_not_count(client, redis, gone):
+    """重複審核 cannot merge it any more; a card on a ticket still there counts as before."""
     _, token = await _create_user_with_grants(redis, REVIEWER)
     tag = uuid_mod.uuid4().hex[:10]
-    a, b = await _ticket(f"{tag} a"), await _ticket(f"{tag} b")
-    await _card(await _need(a), await _need(b))
+    a, b, c = await _ticket(f"{tag} a"), await _ticket(f"{tag} b"), await _ticket(f"{tag} c")
+    alone = await _ticket(f"{tag} alone")
+    await _card(await _need(a), await _need(b), age=2)
+    await _card(await _need(a), await _need(c), age=1)
+    await _card(await _need(alone), await _need(b))
     async with gql_conftest.test_db() as db:
         ticket = await db.get(Tickets, uuid_mod.UUID(b))
         if gone == "cancelled":
@@ -202,7 +205,30 @@ async def test_a_far_ticket_that_is_gone_is_not_named_but_the_card_still_counts(
         else:
             ticket.delete_at = datetime.now(UTC)
 
-    assert (await _states(client, token, tag))["a"] == _disputed()
+    states = await _states(client, token, tag)
+    assert (states["a"], states["alone"]) == (_disputed((c, f"{tag} c")), None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("second_need", ["folded", "moved"])
+async def test_the_cards_a_merge_leaves_behind_do_not_count(client, redis, second_need):
+    """Two needs like a's gave b two cards; resolving one folds b into a, and the other is left.
+
+    Its far side is now b, cancelled, or a itself when b's need was moved over: neither can be merged.
+    """
+    _, token = await _create_user_with_grants(redis, REVIEWER)
+    tag = uuid_mod.uuid4().hex[:10]
+    a, b = await _ticket(f"{tag} a"), await _ticket(f"{tag} b")
+    pump_a, water_a, pump_b, water_b = await _need(a), await _need(a), await _need(b), await _need(b)
+    await _merged(await _card(pump_a, pump_b), primary=a)
+    await _card(water_a, water_b)
+    async with gql_conftest.test_db() as db:
+        ticket, now = await db.get(Tickets, uuid_mod.UUID(b)), datetime.now(UTC)
+        ticket.status, ticket.delete_at = "cancelled", now
+        need = {"ticket_uuid": a} if second_need == "moved" else {"delete_at": now}
+        await db.execute(update(TicketTask).where(TicketTask.uuid == water_b).values(**need))
+
+    assert await _states(client, token, tag) == {"a": None}
 
 
 @pytest.mark.asyncio

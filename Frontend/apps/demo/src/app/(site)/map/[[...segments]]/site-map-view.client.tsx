@@ -6,6 +6,7 @@ import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box } from '@mui/material';
 
 import {
+  BuildingDrawer,
   createPointShareTarget,
   createTaskMatchTicketDetailOverrides,
   dedupeMarkersById,
@@ -139,17 +140,52 @@ function SiteMapViewportDataLayer({
   // dropped here, or it would stand in for the fetched one it was waiting for.
   const [goneTicketIds, setGoneTicketIds] = useState<readonly string[]>([]);
 
+  // 現場分區: the building a ticket's 看各樓層 opened, and the last of its tickets opened from it —
+  // from its drawer or 上一張／下一張 — which the view may not have fetched (past its pages).
+  const [buildingUuid, setBuildingUuid] = useState<string | null>(null);
+  const [buildingTicketMarker, setBuildingTicketMarker] =
+    useState<RescueMapMarkerItem | null>(null);
+
+  // Let go once another ticket is opened, or none — judged when the selection moves, not when the
+  // ticket is set: the selection follows it a render later.
+  useEffect(() => {
+    setBuildingTicketMarker((current) =>
+      current && current.id !== selectedMarkerId ? null : current,
+    );
+  }, [selectedMarkerId]);
+
   // A ticket made here stays on the map until the view fetches it too; from then on the fetched
-  // one, being fresher, is the one shown.
+  // one, being fresher, is the one shown. So does one opened from a building, while open.
   const visibleMarkers = useMemo(
     () =>
       dedupeMarkersById([
         ...liveDataSnapshot.markers,
-        ...createdMarkers.filter(
-          (marker) => !goneTicketIds.includes(marker.id),
-        ),
+        ...[
+          ...createdMarkers,
+          ...(buildingTicketMarker ? [buildingTicketMarker] : []),
+        ].filter((marker) => !goneTicketIds.includes(marker.id)),
       ]),
-    [createdMarkers, goneTicketIds, liveDataSnapshot.markers],
+    [
+      buildingTicketMarker,
+      createdMarkers,
+      goneTicketIds,
+      liveDataSnapshot.markers,
+    ],
+  );
+
+  // The viewport read when pressed, as for a share: kept in the callback, every pan would make a new one.
+  const openBuildingTicket = useCallback(
+    (marker: RescueMapMarkerItem) => {
+      setBuildingTicketMarker(marker);
+      onMapRouteStateChange({
+        ...mergeRouteStateWithViewport(
+          baseRouteState,
+          viewportStore.getSnapshot(),
+        ),
+        selectedMarkerId: marker.id,
+      });
+    },
+    [baseRouteState, onMapRouteStateChange, viewportStore],
   );
 
   const createCurrentPointShareTarget = useCallback(
@@ -224,8 +260,15 @@ function SiteMapViewportDataLayer({
         marker,
         isAuthenticated,
         onShare: () => onOpenShareTarget(createCurrentPointShareTarget(marker)),
+        onOpenBuilding: setBuildingUuid,
+        onSelectTicket: openBuildingTicket,
       }),
-    [createCurrentPointShareTarget, isAuthenticated, onOpenShareTarget],
+    [
+      createCurrentPointShareTarget,
+      isAuthenticated,
+      onOpenShareTarget,
+      openBuildingTicket,
+    ],
   );
 
   // A claim, a release or a stop can change a ticket's status, which its pin shows; the next fetch
@@ -299,6 +342,15 @@ function SiteMapViewportDataLayer({
         </Box>
         <MapRequestHelpBar />
       </Box>
+      <BuildingDrawer
+        buildingUuid={buildingUuid}
+        isAuthenticated={isAuthenticated}
+        onClose={() => setBuildingUuid(null)}
+        onOpenTicket={(marker) => {
+          setBuildingUuid(null);
+          openBuildingTicket(marker);
+        }}
+      />
     </NeedClaimProvider>
   );
 }
