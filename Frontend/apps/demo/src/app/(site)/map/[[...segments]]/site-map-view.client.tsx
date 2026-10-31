@@ -315,11 +315,17 @@ function SiteMapViewportDataLayer({
     [liveDataStore],
   );
 
+  // Drawn with the controls, inside the map's own column: centred on the map, and clear of a detail
+  // panel open beside it, where the panel's list ends in 再顯示 200 筆 or 再試一次.
+  const cellsNotice = liveDataSnapshot.cellsNotice;
   const renderControls = useCallback(
     (controller: RescueMapControllerValue) => (
-      <SiteMapControls controller={controller} />
+      <>
+        <SiteMapControls controller={controller} />
+        {cellsNotice ? <MapCellsNotice notice={cellsNotice} /> : null}
+      </>
     ),
-    [],
+    [cellsNotice],
   );
 
   const stationDetailSecondaryAction = useCallback(
@@ -343,7 +349,7 @@ function SiteMapViewportDataLayer({
           gridTemplateRows: 'minmax(0, 1fr) auto',
         }}
       >
-        <Box sx={{ minHeight: 0, position: 'relative' }}>
+        <Box sx={{ minHeight: 0 }}>
           <Map
             markers={visibleMarkers}
             locationCells={liveDataSnapshot.cells}
@@ -365,9 +371,6 @@ function SiteMapViewportDataLayer({
             stationLayout="site"
             viewMemoryKey="site"
           />
-          {liveDataSnapshot.cellsNotice ? (
-            <MapCellsNotice notice={liveDataSnapshot.cellsNotice} />
-          ) : null}
         </Box>
         <MapRequestHelpBar />
       </Box>
