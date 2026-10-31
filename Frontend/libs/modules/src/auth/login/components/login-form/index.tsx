@@ -288,6 +288,9 @@ export function LoginForm({
         value={identityType}
         disabled={isSubmitting}
         onChange={(value) => {
+          if (value === identityType) {
+            return;
+          }
           setIdentityType(value);
           // Emptied, not reset to the one the form opened with: that was the other kind.
           resetField('identity', { defaultValue: '' });
