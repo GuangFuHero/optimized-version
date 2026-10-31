@@ -266,7 +266,11 @@ export function AdminMapPageClient() {
     }
 
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      const typing =
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement;
+
+      if (event.key === 'Escape' && !typing) {
         handleBackToAreaList();
       }
     };
