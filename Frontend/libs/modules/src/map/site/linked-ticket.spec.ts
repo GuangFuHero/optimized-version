@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveLinkedTicket, shouldLookUpLinkedTicket } from './linked-ticket';
+import { readLinkedSelection, resolveLinkedTicket } from './linked-ticket';
 
 const UUID = 'd0000000-0000-4000-8000-000000000051';
 
@@ -96,41 +96,63 @@ describe('resolveLinkedTicket', () => {
   });
 });
 
-describe('shouldLookUpLinkedTicket', () => {
+describe('readLinkedSelection', () => {
+  const unseenTicket = (selectedId: string) =>
+    readLinkedSelection({ selectedId, dataType: 'ticket', seenLoaded: false });
+
   it('looks up a ticket uuid the loaded pages never held', () => {
-    expect(
-      shouldLookUpLinkedTicket({
-        selectedId: UUID,
-        dataType: 'ticket',
-        seenLoaded: false,
-      }),
-    ).toBe(true);
+    expect(unseenTicket(UUID)).toEqual({ kind: 'look-up' });
   });
 
   it('lets go of one seen loaded and gone since: a filter or a pan left it out', () => {
     expect(
-      shouldLookUpLinkedTicket({
+      readLinkedSelection({
         selectedId: UUID,
         dataType: 'ticket',
         seenLoaded: true,
       }),
-    ).toBe(false);
+    ).toEqual({ kind: 'let-go' });
   });
 
   it("never looks up a station, nor a guest's location cell", () => {
     expect(
-      shouldLookUpLinkedTicket({
+      readLinkedSelection({
         selectedId: UUID,
         dataType: 'station',
         seenLoaded: false,
       }),
-    ).toBe(false);
+    ).toEqual({ kind: 'let-go' });
+    expect(unseenTicket('cell:8a4ba0a40d6ffff')).toEqual({ kind: 'let-go' });
+  });
+
+  it('takes the uuid out of a link pasted with punctuation or spaces after it', () => {
     expect(
-      shouldLookUpLinkedTicket({
-        selectedId: 'cell:8a4ba0a40d6ffff',
-        dataType: 'ticket',
-        seenLoaded: false,
-      }),
-    ).toBe(false);
+      [`${UUID}。`, `${UUID}.`, `${UUID}）`, `${UUID}， `, `${UUID} `].map(
+        unseenTicket,
+      ),
+    ).toEqual(Array(5).fill({ kind: 'replace', uuid: UUID }));
+  });
+
+  it('says a link cut short names no ticket, without asking the backend', () => {
+    expect(
+      ['d0000000-0000-40', 'd0000000-0000-40。'].map(unseenTicket),
+    ).toEqual([
+      {
+        kind: 'gone',
+        ticket: {
+          id: 'd0000000-0000-40',
+          detailType: 'gone-ticket',
+          availability: 'not_found',
+        },
+      },
+      {
+        kind: 'gone',
+        ticket: {
+          id: 'd0000000-0000-40。',
+          detailType: 'gone-ticket',
+          availability: 'not_found',
+        },
+      },
+    ]);
   });
 });

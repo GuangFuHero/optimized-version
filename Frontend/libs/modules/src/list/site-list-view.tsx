@@ -39,7 +39,7 @@ import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { resolveTicketSearch } from '../ticket/ticket-search';
 import {
-  shouldLookUpLinkedTicket,
+  readLinkedSelection,
   useLinkedTicketLookup,
   usePaginatedRescueMapMarkers,
 } from '../map/site';
@@ -238,15 +238,26 @@ export function SiteListView() {
 
     // Listed before and gone now: a filter left it out, and the drawer goes with it. Never listed:
     // a link to a ticket past the loaded pages, or one not there at all, looked up on its own — only
-    // the backend says it is gone (ADR-444). Stations are not looked up.
-    if (
-      !shouldLookUpLinkedTicket({
-        selectedId,
-        dataType,
-        seenLoaded: listedSelectionRef.current === selectedId,
-      })
-    ) {
+    // the backend says it is gone (ADR-444), but for a link cut short, which names no ticket at all.
+    // Stations are not looked up.
+    const linkedSelection = readLinkedSelection({
+      selectedId,
+      dataType,
+      seenLoaded: listedSelectionRef.current === selectedId,
+    });
+
+    if (linkedSelection.kind === 'let-go') {
       clearSelection();
+      return;
+    }
+
+    if (linkedSelection.kind === 'replace') {
+      controller.setSelectedMarkerId(linkedSelection.uuid);
+      return;
+    }
+
+    if (linkedSelection.kind === 'gone') {
+      setUnlistedItem(linkedSelection.ticket);
       return;
     }
 

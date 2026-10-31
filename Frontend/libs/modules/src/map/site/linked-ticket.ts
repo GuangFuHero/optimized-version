@@ -1,5 +1,6 @@
 import type { GetLinkedTicketQuery } from '@rescue-frontend/data-access';
 
+import { isLocationCellId } from '../location-cells';
 import type { RescueMapGoneTicket, RescueMapMarkerItem } from '../types';
 import { mapTicketToMarker } from './markers';
 
@@ -16,15 +17,26 @@ export type LinkedTicket =
   | { kind: 'gone'; ticket: RescueMapGoneTicket }
   | { kind: 'unknown' };
 
+/**
+ * What to do with a selection none of the loaded markers holds:
+ * - `let-go`: a station, a guest's location cell (`cell:…`), or a ticket seen loaded and gone since —
+ *   left out by a filter or a pan, not deleted;
+ * - `look-up`: a ticket's uuid never seen loaded, which only the backend can say is there or gone;
+ * - `replace`: a link pasted with punctuation or spaces after its uuid (「…。」 in a chat), whose
+ *   `?id=` becomes the uuid alone, then looked up as any;
+ * - `gone`: a link cut short, which no answer from the backend is needed to know names no ticket.
+ */
+export type LinkedSelection =
+  | { kind: 'let-go' }
+  | { kind: 'look-up' }
+  | { kind: 'replace'; uuid: string }
+  | { kind: 'gone'; ticket: RescueMapGoneTicket };
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TRAILING_PUNCTUATION_OR_SPACE = /[\s\p{P}]+$/u;
 
-/**
- * Whether a selection none of the loaded markers holds is worth asking the backend about. Only a
- * ticket's uuid, and only one never seen loaded: one seen and gone since was left out by a filter or
- * a pan, not deleted. A guest's location cell (`cell:…`) and a station are never looked up.
- */
-export function shouldLookUpLinkedTicket({
+export function readLinkedSelection({
   selectedId,
   dataType,
   seenLoaded,
@@ -32,8 +44,29 @@ export function shouldLookUpLinkedTicket({
   selectedId: string;
   dataType: string;
   seenLoaded: boolean;
-}): boolean {
-  return dataType === 'ticket' && !seenLoaded && UUID_PATTERN.test(selectedId);
+}): LinkedSelection {
+  if (dataType !== 'ticket' || isLocationCellId(selectedId) || seenLoaded) {
+    return { kind: 'let-go' };
+  }
+
+  if (UUID_PATTERN.test(selectedId)) {
+    return { kind: 'look-up' };
+  }
+
+  const trimmed = selectedId.replace(TRAILING_PUNCTUATION_OR_SPACE, '');
+
+  if (UUID_PATTERN.test(trimmed)) {
+    return { kind: 'replace', uuid: trimmed };
+  }
+
+  return {
+    kind: 'gone',
+    ticket: {
+      id: selectedId,
+      detailType: 'gone-ticket',
+      availability: 'not_found',
+    },
+  };
 }
 
 /**

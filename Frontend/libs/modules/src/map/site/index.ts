@@ -1,4 +1,4 @@
-export { shouldLookUpLinkedTicket } from './linked-ticket';
+export { readLinkedSelection } from './linked-ticket';
 export { dedupeMarkersById } from './markers';
 export { SiteMapControls } from './site-map-controls';
 export { useCreatedTicketMarker } from './use-created-ticket-marker';

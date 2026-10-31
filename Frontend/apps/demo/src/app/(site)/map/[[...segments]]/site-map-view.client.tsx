@@ -16,7 +16,7 @@ import {
   NeedClaimProvider,
   PlaceHereAction,
   PointShareDrawer,
-  shouldLookUpLinkedTicket,
+  readLinkedSelection,
   SITE_FALLBACK_DATA_TYPE,
   SiteMapControls,
   syncDocumentMetadata,
@@ -271,14 +271,27 @@ function SiteMapViewportDataLayer({
         selectedMarkerId: undefined,
       });
 
-    if (
-      !shouldLookUpLinkedTicket({
-        selectedId,
-        dataType: baseRouteState.dataType ?? SITE_FALLBACK_DATA_TYPE,
-        seenLoaded: seenSelectionRef.current === selectedId,
-      })
-    ) {
+    const linkedSelection = readLinkedSelection({
+      selectedId,
+      dataType: baseRouteState.dataType ?? SITE_FALLBACK_DATA_TYPE,
+      seenLoaded: seenSelectionRef.current === selectedId,
+    });
+
+    if (linkedSelection.kind === 'let-go') {
       letGo();
+      return;
+    }
+
+    if (linkedSelection.kind === 'replace') {
+      onReplaceRouteState({
+        ...mergedRouteState,
+        selectedMarkerId: linkedSelection.uuid,
+      });
+      return;
+    }
+
+    if (linkedSelection.kind === 'gone') {
+      setGoneTicket(linkedSelection.ticket);
       return;
     }
 

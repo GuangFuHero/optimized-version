@@ -68,7 +68,7 @@ export type {
 
 export {
   dedupeMarkersById,
-  shouldLookUpLinkedTicket,
+  readLinkedSelection,
   SiteMapControls,
   SiteMapRouteProvider,
   useCreatedTicketMarker,
