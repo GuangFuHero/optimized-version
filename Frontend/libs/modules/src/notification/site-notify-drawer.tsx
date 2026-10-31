@@ -387,8 +387,15 @@ function SiteNotifyContent({
     ? readSiteNotices(list.data.pages.flatMap((page) => page.items))
     : null;
   // Told once the notices are in, and not taken back while they load again at the next opening:
-  // the subtitle would come and go each time.
-  const empty = notices && listsSettled ? notices.length === 0 : null;
+  // the subtitle would come and go each time. A page that shows nothing is not empty while another
+  // follows it, as the site shows only some kinds of notice; a read that fails puts the subtitle back
+  // beside its message.
+  const empty =
+    notices && listsSettled
+      ? notices.length === 0 && !list.hasNextPage
+      : list.isError
+        ? false
+        : null;
 
   useEffect(() => {
     if (empty !== null) {
@@ -452,7 +459,7 @@ function SiteNotifyContent({
         </ButtonBase>
       ) : null}
 
-      {notices.length === 0 ? (
+      {empty ? (
         <SiteNotifyEmpty />
       ) : (
         notices.map((notice) => {
