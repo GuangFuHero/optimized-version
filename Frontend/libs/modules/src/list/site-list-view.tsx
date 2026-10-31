@@ -14,6 +14,7 @@ import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 
+import { BuildingDrawer } from '../building';
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from '../map/constants';
 import { countDetailOpenings } from '../map/detail-openings';
@@ -300,11 +301,26 @@ export function SiteListView() {
     );
   };
 
+  // 現場分區: the building a ticket's 看各樓層 opened, shut again on opening one of its tickets.
+  const [buildingUuid, setBuildingUuid] = useState<string | null>(null);
+
+  // One of a building's tickets, from its drawer or 上一張／下一張. One the list holds opens as any
+  // card does; one it does not — past the loaded pages, or left out by a filter — as a linked one does.
+  const openBuildingTicket = (marker: RescueMapMarkerItem) => {
+    if (!controller.markers.some((listed) => listed.id === marker.id)) {
+      setUnlistedMarker(marker);
+    }
+
+    controller.setSelectedMarkerId(marker.id);
+  };
+
   const createTicketDetailOverrides = (marker: RescueMapMarkerItem) =>
     createTaskMatchTicketDetailOverrides({
       marker,
       isAuthenticated,
       onShare: () => openPointShare(marker),
+      onOpenBuilding: setBuildingUuid,
+      onSelectTicket: openBuildingTicket,
     });
 
   const view = (
@@ -583,6 +599,16 @@ export function SiteListView() {
         open={Boolean(shareTarget)}
         target={shareTarget}
         onClose={() => setShareTarget(null)}
+      />
+
+      <BuildingDrawer
+        buildingUuid={buildingUuid}
+        isAuthenticated={isAuthenticated}
+        onClose={() => setBuildingUuid(null)}
+        onOpenTicket={(marker) => {
+          setBuildingUuid(null);
+          openBuildingTicket(marker);
+        }}
       />
     </Box>
   );

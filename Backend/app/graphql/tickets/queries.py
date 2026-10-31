@@ -19,6 +19,7 @@ from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout, statement_ceiling
 from app.core.security import resolve_scope
 from app.db.h3 import COARSE_MAX_H3_RESOLUTION, cell_resolution, coarse_resolution, h3_is_valid_cell
+from app.db.plans import generic_plan
 from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import BoundsInput
 from app.graphql.shared import PageInfo
@@ -258,7 +259,10 @@ class RequestQuery:
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
         # own set_config/RESET, so this costs two round-trips where it used to cost six.
-        async with search_timeout(db, normalize_query(q)):
+        # A box the caller sees cells in tests cell centres, as `ticketCells` does, so it is planned
+        # generically from a connection's first run too (ADR-437).
+        cells_in_box = bounds is not None and bool(detail_filters)
+        async with generic_plan(db, needed=cells_in_box), search_timeout(db, normalize_query(q)):
             total = await ticket_repository.count_active(
                 db,
                 bounds=bounds,
@@ -317,12 +321,15 @@ class RequestQuery:
         is a pin, not a cell, so a caller holding ticket.view_detail on every ticket gets none.
 
         Anonymous and called on every pan, so the count runs under keyword search's statement
-        ceiling: past it the caller is asked to zoom in rather than holding a connection.
+        ceiling: past it the caller is asked to zoom in rather than holding a connection. It is
+        planned generically from a connection's first run, which is what keeps a fresh connection
+        under that ceiling (ADR-437).
         """
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         detail_filters = await _detail_filters(info)
-        async with statement_ceiling(db, refusal="這個範圍的單太多，計算逾時已中止，請放大地圖再試"):
+        refusal = "這個範圍的單太多，計算逾時已中止，請放大地圖再試"
+        async with generic_plan(db, needed=bool(detail_filters)), statement_ceiling(db, refusal=refusal):
             rows = await ticket_repository.count_by_cell(
                 db,
                 bounds=bounds,
