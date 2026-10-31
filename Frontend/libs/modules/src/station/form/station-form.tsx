@@ -13,14 +13,15 @@ import {
 import { Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { toast } from 'sonner';
 
+import { applyReverseGeocode } from '../../admin/shared/model/address-fill';
 import { useAuthSession } from '../../session/auth-session';
 import { getStationTypeLabel } from '../type-options';
 import { StationFormFields } from './station-form-fields';
 import {
-  applyReverseGeocode,
   buildCreateInput,
   buildUpdateInput,
   emptyStationForm,
+  followStationPin,
   formPosition,
   stationToForm,
   updateStationForm,
@@ -161,11 +162,7 @@ function LoadedStationForm(props: LoadedStationFormProps) {
   // A pin moved on the map while the form is open: follow it.
   useEffect(() => {
     if (pinLat == null || pinLng == null) return;
-    setForm((current) => ({
-      ...current,
-      latitude: String(pinLat),
-      longitude: String(pinLng),
-    }));
+    setForm((current) => followStationPin(current, [pinLat, pinLng]));
   }, [pinLat, pinLng]);
 
   // Once per pin: the query caches each position, so a lookup is never repeated.

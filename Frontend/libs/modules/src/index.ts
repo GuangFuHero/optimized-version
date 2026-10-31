@@ -139,10 +139,13 @@ export {
 } from './station';
 
 export {
-  TicketCreateDrawer,
+  TicketBoardPage,
+  TicketCreateSheet,
   TicketDetailDrawer,
   createTaskMatchTicketDetailOverrides,
+  toCreatedTicketMarker,
 } from './ticket';
+export * from './ticket/admin/space';
 export { NeedClaimProvider } from './ticket/needs';
 export type { ReloadedTicket } from './ticket/needs';
 export {

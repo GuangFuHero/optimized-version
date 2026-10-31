@@ -20,7 +20,9 @@ from pathlib import Path
 import asyncpg
 import pytest
 import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.services.ticket_verification import disputes_by_ticket
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -737,3 +739,28 @@ async def test_the_seed_marks_its_official_stations_by_source(seeded):
     )
     official = {(source, flag): count for source, flag, count in rows if source == "official" or flag}
     assert official == {("official", True): 17}
+
+
+def _seed_ticket(n: int) -> str:
+    return f"d0000000-0000-4000-8000-{n:012d}"
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_the_seed_marks_suspected_duplicates_in_each_state_the_review_page_leaves(seeded):
+    """ADR-443: a need card filed past the hint, a ticket card waiting, one judged a duplicate and not merged.
+
+    Each marks both of its tickets, naming the other, as the board reads them; no other ticket is marked.
+    """
+    tickets = [row[0] for row in await _fetch(_CASE_DSN, "SELECT uuid::text FROM tickets")]
+    engine = create_async_engine(f"{_SERVER}/{_CASE_DB}")
+    try:
+        async with AsyncSession(engine) as db:
+            disputes = await disputes_by_ticket(db, tickets)
+    finally:
+        await engine.dispose()
+
+    named = {mine: [ref.uuid for ref in refs] for mine, refs in disputes.items()}
+    pairs = [(7, 25), (10, 12), (17, 19)]
+    assert named == {
+        _seed_ticket(mine): [_seed_ticket(theirs)] for a, b in pairs for mine, theirs in ((a, b), (b, a))
+    }
