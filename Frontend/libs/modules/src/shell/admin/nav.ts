@@ -8,7 +8,7 @@ import {
   MapPin,
   Settings,
   LayoutDashboard,
-  ShieldCheck,
+  ScanSearch,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -101,9 +101,10 @@ export const ADMIN_NAV_SECTIONS: readonly {
       },
       {
         id: 'audit',
-        label: '資料檢核',
+        // DEDUP-008 decision 1: 重複審核, no "AI"; 資料檢核 is the separate ticket data check.
+        label: '重複審核',
         href: '/audit',
-        Icon: ShieldCheck,
+        Icon: ScanSearch,
         description: '可能重複的任務單與站點',
         capability: 'ai_duplicate.view',
       },
