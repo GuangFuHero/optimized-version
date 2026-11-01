@@ -7,6 +7,7 @@
   function matches(t, q) {
     if (!q) return true;
     const s = q.trim().toLowerCase();
+    if ([...s].length < 2) return true;   // INP-104：打滿 2 個字才開始篩（規則寫在 placeholder）
     const bag = [t.title, window.tkAddress(t), t.floor, t.desc, t.contact_name, t.team, t.region,
       window.TK_PRIORITY[t.priority] && window.TK_PRIORITY[t.priority].label,
       window.TK_STATUS[window.tkStatus(t)].label,
@@ -292,7 +293,7 @@
             <Icon n={open ? "ChevronUp" : "ChevronDown"} s={15} c="var(--color-fg-neutral-muted)" />
           </button>
           <Input value={q} onChange={(e) => setQ(e.target.value)} leadingIcon={<Icon n="Search" s={16} c="var(--color-fg-neutral-muted)" />}
-            placeholder="搜尋標題／地址／需求／聯絡人…" style={{ width: 320, height: 42 }} />
+            placeholder="打 2 個字以上搜尋標題、地址…" style={{ width: 320, height: 42 }} />
           {(activeCount > 0 || q) && <button onClick={() => { reset(); setQ(""); }} style={{ border: "none", background: "none", cursor: "pointer", font: "var(--font-label-300)", color: "var(--color-fg-neutral-subtle)", textDecoration: "underline" }}>清除</button>}
           {scopeHint}
           <span className="wg-caption" style={{ marginLeft: "auto", color: "var(--color-fg-neutral-muted)" }}>{ticketCount} 筆任務{spacesShown.length ? ` · ${spacesShown.length} 個空間` : ""}</span>

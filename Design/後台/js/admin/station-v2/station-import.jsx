@@ -197,6 +197,47 @@
     });
   }
 
+  // ── 疑似重複：匯入前逐列決定要不要建立 ─────────────────────────────────
+  // 🔒 DUP-IMP-101（#97，Carol／Sucre 10-27）：批次匯入先只跟資料庫比（同檔內的靠重複審核佇列）；
+  //    每列只有「仍要建立／不建立」兩個選項，**預設不建立**；有「全部」按鈕；不建立的列進錯誤報告；照列號排；
+  //    每筆顯示名稱、類型、營運狀態、距離、建立時間，不顯示相似度。原型判準：同類型、50 公尺內（🚨 我定的，正式版由後端給）。
+  function importSuspects(result, existing, type) {
+    if (!result || result.fatal) return [];
+    const olds = existing.filter((s) => !s.deleted && s.lat != null && s.type === type);
+    return result.plans.filter((p) => p.kind === "create" && !p.errs.length && p.v.latitude && p.v.longitude).map((p) => {
+      const at = [Number(p.v.latitude), Number(p.v.longitude)];
+      const near = olds.map((s) => ({ s, m: Math.round(meters(at, [s.lat, s.lng])) })).filter((x) => x.m <= 50).sort((a, b) => a.m - b.m);
+      return near.length ? { line: p.line, name: p.v.name, near } : null;
+    }).filter(Boolean);
+  }
+  // 🔒 DUP-IMP-102 二選一的樣子（Sucre 11-01，回 PR #233；補 BTN-107）：
+  //    沒選中＝灰框黑字，滑過只變淡灰、不上浮；選中＝淡橘底橘框橘字＋打勾（不只靠顏色）。
+  //    ❌ 不要讓沒選中的那顆滑過時變淡橘 —— 跟選中一模一樣，一時分不出哪個才是選中的。
+  function ChoicePair({ value, onChange, line }) {
+    const B2 = window.WGButton;
+    // 沒載入共用按鈕（wg-button.jsx）的頁面：用同一套規則的簡單版，不要整個對話框掛掉
+    const plain = (v, label) => {
+      const on = value === v;
+      return React.createElement("button", { key: v, type: "button", "aria-pressed": on, "data-dup-choice": v + "-" + line, onClick: () => onChange(v),
+        className: on ? "" : "wg-choice-plain",
+        style: { display: "inline-flex", alignItems: "center", gap: 6, height: 36, padding: "0 14px", borderRadius: "var(--radius-full)", cursor: "pointer",
+          font: "var(--font-label-400)", fontWeight: 700,
+          border: "1.5px solid " + (on ? "var(--color-border-accent)" : "var(--color-border-default)"),
+          background: on ? "var(--color-bg-primary-subtle)" : "var(--color-bg-neutral-default)",
+          color: on ? "var(--color-brand-primary-subtle)" : "var(--color-fg-neutral-default)" } },
+        on ? React.createElement(Icon, { n: "Check", s: 15 }) : null, label);
+    };
+    const opt = (v, label) => {
+      if (!B2) return plain(v, label);
+      const on = value === v;
+      return React.createElement(B2, { key: v, variant: "outline", size: "sm", selected: on, className: on ? "" : "wg-btn--choice", "data-dup-choice": v + "-" + line,
+        startIcon: on ? React.createElement(Icon, { n: "Check", s: 15 }) : null, onClick: () => onChange(v) }, label);
+    };
+    return React.createElement("span", { role: "radiogroup", "aria-label": `第 ${line} 列要不要建立`, style: { display: "inline-flex", gap: 8 } },
+      !B2 && React.createElement("style", null, ".wg-choice-plain:hover{background:var(--color-bg-neutral-subtle)!important}"),
+      opt("skip", "不建立"), opt("file", "仍要建立"));
+  }
+
   // ── 匯入對話框（介面同任務單）──────────────────────────────────────────
   function StationImportDialog({ existing, onClose, onApply }) {
     const [type, setType] = React.useState(null);
@@ -208,6 +249,10 @@
     const fileRef = React.useRef(null);
     const result = React.useMemo(() => (type && rows && rows.length > 1 && mapping ? preview(rows, mapping, type, existing) : null), [type, rows, mapping, existing]);
     const failedLines = result ? Array.from(new Set(result.errors.map((e) => e.line))).length : 0;
+    const suspects = React.useMemo(() => importSuspects(result, existing, type), [result, existing, type]);
+    const [choice, setChoice] = React.useState({});            // line → "file"｜"skip"；沒有＝預設不建立
+    const pick = (line) => choice[line] || "skip";
+    const skipped = suspects.filter((x) => pick(x.line) === "skip").map((x) => x.line);
 
     function take(r, name) {
       setLoadErr(""); setDone(null);
@@ -219,7 +264,7 @@
       e.target.value = "";
       if (f) B.readFile(f).then((r) => take(r, f.name)).catch((x) => setLoadErr(x.message));
     }
-    function commit() { setDone(Object.assign({ failed: failedLines }, onApply(result.plans.filter((p) => !p.errs.length), type))); }
+    function commit() { setDone(Object.assign({ failed: failedLines, declined: skipped.length }, onApply(result.plans.filter((p) => !p.errs.length && skipped.indexOf(p.line) < 0), type))); }
 
     const box = { border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-md)", background: "var(--color-bg-neutral-subtle)" };
     const selCss = { flex: 1, minWidth: 0, height: 32, padding: "0 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border-default)", background: "var(--color-bg-neutral-default)", font: "var(--font-data-300)", color: "var(--color-fg-neutral-default)" };
@@ -234,6 +279,7 @@
             <Badge tone="success">新增 {done.created} 列</Badge>
             <Badge tone="info">更新 {done.updated} 列</Badge>
             {done.failed > 0 && <Badge tone="danger">失敗 {done.failed} 列</Badge>}
+            {done.declined > 0 && <Badge tone="neutral">選了不建立 {done.declined} 列</Badge>}
             <span className="wg-data-xs" style={{ alignSelf: "center", color: "var(--color-fg-neutral-muted)" }}>批次 {done.batchId}</span>
           </div>
           {done.created > 0 && (
@@ -258,7 +304,9 @@
       );
     }
 
-    const canCommit = result && !result.fatal && (result.to_create + result.to_update) > 0;
+    const AllBtn = window.WGButton || Button;   // 沒載入 wg-button.jsx 的頁面退回設計系統的 Button
+    const willWrite = result ? result.to_create + result.to_update - skipped.length : 0;
+    const canCommit = result && !result.fatal && willWrite > 0;
     return (
       <window.StationModal title="匯入資源站點" width={800} onClose={onClose} icon={<Icon n="Upload" s={20} c="var(--color-fg-neutral-subtle)" />}
         footer={<React.Fragment>
@@ -266,7 +314,7 @@
             {result && !result.fatal ? `新增 ${result.to_create}・更新 ${result.to_update}・失敗 ${failedLines}（共 ${result.row_count} 列）` : ""}
           </span>
           <Button variant="ghost" onClick={onClose}>取消</Button>
-          <Button variant="primary" disabled={!canCommit} startIcon={<Icon n="Upload" s={17} />} onClick={commit}>{canCommit ? `確認匯入 ${result.to_create + result.to_update} 列` : "確認匯入"}</Button>
+          <Button variant="primary" disabled={!canCommit} startIcon={<Icon n="Upload" s={17} />} onClick={commit}>{canCommit ? `確認匯入 ${willWrite} 列` : "確認匯入"}</Button>
         </React.Fragment>}>
 
         <div>
@@ -328,6 +376,33 @@
               {!result.fatal && <Badge tone="info">更新 {result.to_update}</Badge>}
               {failedLines > 0 && <Badge tone="danger">失敗 {failedLines}</Badge>}
             </div>
+            {suspects.length > 0 && (
+              <div data-st-import-suspects style={Object.assign({}, box, { marginBottom: 10, background: "var(--color-bg-neutral-default)" })}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: "1px solid var(--color-bg-neutral-sunken)", flexWrap: "wrap" }}>
+                  <Icon n="ScanSearch" s={16} c="var(--color-fg-warning)" />
+                  <span className="wg-label-sm" style={{ fontWeight: 700 }}>{suspects.length} 列可能跟既有站點重複</span>
+                  <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>沒選「仍要建立」的列不會建立</span>
+                  <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6 }}>
+                    <AllBtn variant="ghost" size="sm" onClick={() => setChoice(Object.fromEntries(suspects.map((x) => [x.line, "skip"])))}>全部不建立</AllBtn>
+                    <AllBtn variant="ghost" size="sm" onClick={() => setChoice(Object.fromEntries(suspects.map((x) => [x.line, "file"])))}>全部仍要建立</AllBtn>
+                  </span>
+                </div>
+                {suspects.map((x) => (
+                  <div key={x.line} style={{ display: "grid", gridTemplateColumns: "64px 1fr auto", gap: 12, alignItems: "center", padding: "10px 12px", borderBottom: "1px solid var(--color-bg-neutral-sunken)" }}>
+                    <span className="wg-data-xs" style={{ color: "var(--color-fg-neutral-muted)" }}>第 {x.line} 列</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="wg-label-sm" style={{ fontWeight: 700 }}>{x.name}</div>
+                      {x.near.slice(0, 2).map((n) => (
+                        <div key={n.s.id} className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>
+                          像：{n.s.name}・{typeLabel(n.s.type)}・{(SD.STATUS[n.s.status] || {}).label || "—"}・相距 {n.m} 公尺{n.s.established ? "・建立於 " + n.s.established : ""}
+                        </div>
+                      ))}
+                    </div>
+                    <ChoicePair line={x.line} value={pick(x.line)} onChange={(v) => setChoice((c) => Object.assign({}, c, { [x.line]: v }))} />
+                  </div>
+                ))}
+              </div>
+            )}
             {result.to_update > 0 && (
               <div className="wg-caption" data-st-import-update-note style={{ marginBottom: 8, color: "var(--color-fg-neutral-muted)" }}>
                 「更新」是站名＋縣市＋鄉鎮對到既有的站點；只會改說明、開放時間、level、comment、公開範圍和位置（經緯度），空白的格子不動。站名與地址建立後不能用匯入改。
@@ -346,7 +421,7 @@
             )}
             <div style={{ display: "flex", gap: 10, padding: "10px 12px", marginTop: 10, borderRadius: "var(--radius-md)", background: "var(--color-bg-warning-subtle)", alignItems: "flex-start" }}>
               <Icon n="Info" s={16} c="var(--color-fg-warning)" style={{ flexShrink: 0, marginTop: 1 }} />
-              <span className="wg-caption">新增的站點是「開設中」、標為官方（後台匯入視為可信來源）。可能重複的會送進「重複審核」，不會在這裡擋下。</span>
+              <span className="wg-caption">新增的站點是「開設中」、標為官方（後台匯入視為可信來源）。跟既有站點像的在上面逐列選要不要建立；同一個檔案裡互相重複的，建立後送進「重複審核」。</span>
             </div>
           </div>
         )}

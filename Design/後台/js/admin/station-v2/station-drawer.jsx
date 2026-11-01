@@ -57,7 +57,8 @@
               React.createElement(Icon, { n: "X", s: 20, c: "currentColor" }))
           ),
           !editing && station && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" } },
-            React.createElement(StatusBadge, { status: station.status, solid: true }),
+            // 🔒 11-01 Sucre（PR #236）：營運狀態一律淡底，照元件頁標籤表；實心只留給「要立刻看到」的（TAG-103）
+            React.createElement(StatusBadge, { status: station.status }),
             React.createElement(OfficialTag, { official: station.isOfficial }),
             station.verified
               ? React.createElement(Badge, { tone: "success" }, "已驗證")

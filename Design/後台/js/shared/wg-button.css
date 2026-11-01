@@ -10,6 +10,7 @@
  * BTN-105 loading：顯示轉圈、不可再點、保持原寬度（不跳動）；aria-busy。
  * BTN-106 iconOnly：正方形（寬＝高），一定要有 aria-label。
  * BTN-107 selected：切換／分段控制用（aria-pressed），不是 variant 的一種。
+ * BTN-107b 二選一沒選中的那顆加 wg-btn--choice：灰框黑字、滑過淡灰不上浮；選中的加打勾。
  * BTN-108 鍵盤焦點：:focus-visible 兩圈外框（白＋品牌深藍），所有 variant 一致。
  * BTN-109 工具鈕用 variant="neutral"（白底灰框黑字）：篩選、審查、匯出、開啟空間。
  *         橘色只留給「新增」這種要做事的主要動作；工具列整排都橘框，眼睛找不到主要動作在哪。
@@ -101,6 +102,10 @@
 
 /* selected（BTN-107） */
 .wg-btn--selected, .wg-btn[aria-pressed="true"] { --btn-bg: var(--color-bg-primary-subtle); --btn-fg: var(--color-brand-primary-subtle); --btn-border: var(--color-border-accent); }
+/* BTN-107b（11-01，PR #233）二選一／分段裡「沒選中」的那顆：灰框黑字，滑過只變淡灰、不上浮；選中的加打勾（startIcon）。
+   ❌ 不要沿用 outline 的滑過（淡橘）—— 跟選中一模一樣。 */
+.wg-btn--choice { --btn-border: var(--color-border-default); --btn-fg: var(--color-fg-neutral-default); --btn-bg-hover: var(--color-bg-neutral-subtle); }
+.wg-btn--choice:hover:not(:disabled), .wg-btn--choice.is-hover { transform: none; }
 
 /* disabled */
 .wg-btn:disabled, .wg-btn.is-disabled {

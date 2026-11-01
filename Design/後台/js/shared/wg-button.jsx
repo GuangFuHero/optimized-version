@@ -78,4 +78,14 @@ function WGSearch(p) {
     p.icon || null, React.createElement("input", input));
 }
 
-Object.assign(window, { WGButton, WGSearch, WGCount, WGSplitButton });
+/* 🔒 INP-104 搜尋框的字數規則（Sucre 11-01，回 PR #236）：**不另外出提示**，規則寫在框裡的 placeholder（例：「打 2 個字以上搜尋標題、地址…」）。
+ *   ❌ 不要在框下方加一行提示 —— 它會佔位置，工具列從 44 撐到 66px、旁邊的按鈕被往下推（staging 的做法）。
+ *   ❌ 也不要浮在框下方 —— 會壓到下面那一列的上緣。
+ *   字數不夠時就是不搜尋、列表不變；打滿 2 個字才開始篩。 */
+function WGSearchWithHint(p) {
+  const own = {}; Object.keys(p).forEach((k) => { if (k !== "rulePlaceholder") own[k] = p[k]; });
+  if (p.rulePlaceholder) own.placeholder = p.rulePlaceholder;
+  return React.createElement(WGSearch, own);
+}
+
+Object.assign(window, { WGButton, WGSearch, WGCount, WGSplitButton, WGSearchWithHint });

@@ -18,11 +18,18 @@ function WGTag({ tone = "neutral", fill = "subtle", size = "md", dot, icon = nul
 
 /* value／max：max 為 0 或空（數量留空）→ 不畫條（PRG-104）。tone: brand|neutral。label 在左、數字在右。 */
 /* complete：「人數滿了」不一定等於「做完了」（後台的在途 3/3＝都有人接、還沒完成）—— 這種情況傳 complete={false}，不變綠 */
-function WGProgress({ value = 0, max, tone = "brand", size = "md", label, valueText, complete }) {
+// 🔒 PRG-105（Sucre 11-01，回 PR #233）文字三種寫法，「已滿」只看人數（現在不會自動額滿，沒招滿就不可能已滿）：
+//   還在招人「3/8 · 還缺 5 人」｜人數夠了（含超過）「已滿 8/8」「已滿 10/8」｜已結束但沒滿（ended）「已結束 · 3/8」
+//   ❌ 不要用 complete 決定文字 —— complete 只管顏色（綠不綠）
+function WGProgress({ value = 0, max, tone = "brand", size = "md", label, valueText, complete, ended }) {
   const has = typeof max === "number" && max > 0;
-  const done = complete !== undefined ? complete : has && value >= max;
+  const full = has && value >= max;
+  const done = complete !== undefined ? complete : full;
   const pct = has ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  const text = valueText || (has ? (done ? "已滿 " + value + "/" + max : value + "/" + max) : "已有 " + value + " 人");
+  const text = valueText || (!has ? "已有 " + value + " 人"
+    : full ? "已滿 " + value + "/" + max
+    : ended ? "已結束 · " + value + "/" + max
+    : value + "/" + max + " · 還缺 " + (max - value) + " 人");
   const cls = ["wg-progress", "wg-progress--" + tone, size === "sm" ? "wg-progress--sm" : "", done ? "wg-progress--done" : ""].filter(Boolean).join(" ");
   return React.createElement("div", { className: cls },
     React.createElement("div", { className: "wg-progress__head" }, label ? React.createElement("span", null, label) : null, React.createElement("b", null, text)),

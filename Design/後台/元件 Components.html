@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>共用元件 Components</title>
 <link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
-<link rel="stylesheet" href="js/shared/wg-button.css">
-<link rel="stylesheet" href="js/shared/wg-ui.css">
+<link rel="stylesheet" href="js/shared/wg-button.css?v=20261101i6">
+<link rel="stylesheet" href="js/shared/wg-ui.css?v=20261101i6">
 <style>
   /* 各頁都有這條重設；漏了的話設計系統的 Chip 會吃到瀏覽器預設的 2px outset 外框，看起來像 3D 按鍵 */
   button { border: 0; font-family: inherit; }
@@ -61,8 +61,8 @@ window.WGIcon = function WGIcon({ n, s = 18, c = "currentColor" }) {
 </script>
 <!-- 站點類型與圖示的唯一來源（前台用的同一份） -->
 <script src="../前台/js/site/site-route.js"></script>
-<script type="text/babel" src="js/shared/wg-button.jsx" data-presets="react"></script>
-<script type="text/babel" src="js/shared/wg-ui.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/shared/wg-button.jsx?v=20261101i6" data-presets="react"></script>
+<script type="text/babel" src="js/shared/wg-ui.jsx?v=20261101i6" data-presets="react"></script>
 <script type="text/babel" data-presets="react">
 const { Input, Field, Chip, Badge, Button, Switch, Checkbox } = window.WanGuardDesignSystem_9c8f68;
 
@@ -485,10 +485,12 @@ function App() {
           <div className="card">
             <span className="ok">前台（tone="brand"，md 6px）</span>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <WGProgress label="清淤人力" value={3} max={8} valueText="3/8 · 還缺 5 人" />
+              <WGProgress label="清淤人力" value={3} max={8} />
               <WGProgress label="飲用水" value={4} max={4} />
               <WGProgress label="陪伴長者" value={2} max={0} />
-              <WGProgress label="尚無人承接" value={0} max={5} valueText="0/5 · 還缺 5 人" />
+              <WGProgress label="尚無人承接" value={0} max={5} />
+              <WGProgress label="搬運（超過需要）" value={10} max={8} />
+              <WGProgress label="已結束但沒滿" value={3} max={8} ended complete={false} />
             </div>
           </div>
           <div className="card">
@@ -500,7 +502,7 @@ function App() {
             </div>
           </div>
         </div>
-        <p className="cap">滿了一律綠色；數量留空（陪伴長者）不畫條，只寫「已有 N 人」—— 看不出比例的條比沒有條更誤導。後台維持灰色，是因為任務管理那頁只讓優先級和待處理兩處有顏色。</p>
+        <p className="cap">PRG-105 文字三種：還在招人「3/8 · 還缺 5 人」；人數夠了（含超過）「已滿」；已結束但沒滿「已結束 · 3/8」。「已滿」只看人數。滿了一律綠色；數量留空（陪伴長者）不畫條，只寫「已有 N 人」—— 看不出比例的條比沒有條更誤導。後台維持灰色，是因為任務管理那頁只讓優先級和待處理兩處有顏色。</p>
       </Section>
 
       <Section id="icons" title="8. 資源站點圖示" sub="11 種站點類型各一個 lucide 圖示。staging 目前用 MUI 實心款，下個版本換成這一套。">
@@ -525,6 +527,72 @@ function App() {
               <tr><td>鍵盤焦點</td><td>MUI 預設</td><td>統一兩圈外框</td></tr>
             </tbody>
           </table>
+        </div>
+      </Section>
+
+      <Section id="pending" title="10. 搜尋字數規則、二選一（11-01 定案）" sub="回 PR #233／#236。INP-104：規則寫在搜尋框裡，不另外出提示。BTN-107b：二選一沒選中的灰框、滑過淡灰；選中加打勾。">
+        <h3>A. 搜尋框下方的提示（文字是示意）</h3>
+        <div className="card scroll">
+          <span className="ok" style={{ background: "var(--color-bg-neutral-subtle)", color: "var(--color-fg-neutral-subtle)" }}>❌ 不採用：提示佔位置，整列從 44 撐到約 66px，右邊按鈕被往下推</span>
+          <div className="row" style={{ flexWrap: "nowrap", minWidth: 940, alignItems: "center", marginTop: 8 }}>
+            <WGButton variant="neutral" startIcon={I("SlidersHorizontal")} endIcon={I("ChevronDown")}>篩選</WGButton>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <WGSearch icon={I("Search")} defaultValue="大" style={{ width: 260 }} />
+              <span style={{ font: "var(--font-label-300)", color: "var(--color-fg-neutral-muted)", paddingLeft: 16 }}>再打一個字就開始搜尋</span>
+            </div>
+            <span style={{ marginLeft: "auto" }} />
+            <WGButton variant="neutral" startIcon={I("Download")}>匯出</WGButton>
+            <WGSplitButton label="新增任務" icon={I("Plus")} items={[{ label: "新增一張" }, { label: "從 CSV／Excel 匯入多張" }]} />
+          </div>
+        </div>
+        <div className="card scroll">
+          <span className="ok">❌ 不採用：提示浮在搜尋框正下方（會壓到下一列上緣）</span>
+          <div className="row" style={{ flexWrap: "nowrap", minWidth: 940, marginTop: 8, marginBottom: 22 }}>
+            <WGButton variant="neutral" startIcon={I("SlidersHorizontal")} endIcon={I("ChevronDown")}>篩選</WGButton>
+            <div style={{ position: "relative" }}>
+              <WGSearch icon={I("Search")} defaultValue="大" style={{ width: 260 }} />
+              <span style={{ position: "absolute", left: 16, top: "calc(100% + 4px)", whiteSpace: "nowrap", font: "var(--font-label-300)", color: "var(--color-fg-neutral-muted)" }}>再打一個字就開始搜尋</span>
+            </div>
+            <span style={{ marginLeft: "auto" }} />
+            <WGButton variant="neutral" startIcon={I("Download")}>匯出</WGButton>
+            <WGSplitButton label="新增任務" icon={I("Plus")} items={[{ label: "新增一張" }, { label: "從 CSV／Excel 匯入多張" }]} />
+          </div>
+          <p className="cap">工具列高度不變、按鈕不動；提示壓在下面那一列（表格或統計格）的上緣空白裡。</p>
+        </div>
+        <div className="card scroll">
+          <span className="ok">✅ 採用（INP-104）：不另外出提示，規則寫在框裡</span>
+          <div className="row" style={{ flexWrap: "nowrap", minWidth: 940, marginTop: 8 }}>
+            <WGButton variant="neutral" startIcon={I("SlidersHorizontal")} endIcon={I("ChevronDown")}>篩選</WGButton>
+            <WGSearch icon={I("Search")} placeholder="打 2 個字以上搜尋標題、地址…" style={{ width: 260 }} />
+            <span style={{ marginLeft: "auto" }} />
+            <WGButton variant="neutral" startIcon={I("Download")}>匯出</WGButton>
+            <WGSplitButton label="新增任務" icon={I("Plus")} items={[{ label: "新增一張" }, { label: "從 CSV／Excel 匯入多張" }]} />
+          </div>
+          <p className="cap">最簡單；缺點是打了一個字之後，框裡的說明就不見了。</p>
+        </div>
+
+        <h3>B. 二選一（匯入時的「不建立／仍要建立」）</h3>
+        <div className="two">
+          <div className="card">
+            <span className="ok" style={{ background: "var(--color-bg-neutral-subtle)", color: "var(--color-fg-neutral-subtle)" }}>❌ 不採用：BTN-107＋outline 的滑過</span>
+            <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "12px 12px", alignItems: "center", marginTop: 8 }}>
+              <span className="cap" style={{ margin: 0 }}>都沒滑過</span>
+              <div className="row"><WGButton variant="outline" size="sm" selected>不建立</WGButton><WGButton variant="outline" size="sm" selected={false}>仍要建立</WGButton></div>
+              <span className="cap" style={{ margin: 0 }}>滑過右邊</span>
+              <div className="row"><WGButton variant="outline" size="sm" selected>不建立</WGButton><WGButton variant="outline" size="sm" selected={false} className="is-hover">仍要建立</WGButton></div>
+            </div>
+            <p className="cap">滑過沒選的那顆，底色跟選中的一樣，還上浮 2px —— 一時分不出哪個才是選中的。</p>
+          </div>
+          <div className="card">
+            <span className="ok">✅ 採用（BTN-107b）：滑過用灰底、不上浮；選中多一個打勾</span>
+            <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "12px 12px", alignItems: "center", marginTop: 8 }}>
+              <span className="cap" style={{ margin: 0 }}>都沒滑過</span>
+              <div className="row"><WGButton variant="outline" size="sm" selected startIcon={I("Check")}>不建立</WGButton><WGButton variant="outline" size="sm" selected={false} style={{ "--btn-border": "var(--color-border-default)", "--btn-fg": "var(--color-fg-neutral-default)" }}>仍要建立</WGButton></div>
+              <span className="cap" style={{ margin: 0 }}>滑過右邊</span>
+              <div className="row"><WGButton variant="outline" size="sm" selected startIcon={I("Check")}>不建立</WGButton><WGButton variant="outline" size="sm" selected={false} className="is-hover" style={{ "--btn-border": "var(--color-border-default)", "--btn-fg": "var(--color-fg-neutral-default)", "--btn-bg-hover": "var(--color-bg-neutral-subtle)", transform: "none" }}>仍要建立</WGButton></div>
+            </div>
+            <p className="cap">沒選的那顆是灰框黑字，滑過只變淡灰；選中的是淡橘底、橘框、橘字＋打勾，不只靠顏色。</p>
+          </div>
         </div>
       </Section>
     </div>
