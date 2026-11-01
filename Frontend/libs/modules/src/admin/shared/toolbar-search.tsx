@@ -17,10 +17,9 @@ interface ToolbarSearchProps {
   onToggleFilter: () => void;
   /** 清除: empties the filters and the query. */
   onClear: () => void;
+  /** Says the rule too, such as the 2 characters a search needs (INP-104): there is no other note. */
   placeholder: string;
   ariaLabel: string;
-  /** The note in the box for what is typed, if any (a query too short to send, say). */
-  hint: (draft: string) => string | undefined;
 }
 
 /**
@@ -37,7 +36,6 @@ export function ToolbarSearch({
   onClear,
   placeholder,
   ariaLabel,
-  hint,
 }: ToolbarSearchProps) {
   const [box, setBox] = useState(() => initialSearchBox(query));
   // An IME (注音, 倉頡) is mid-word: its keystrokes are not a query yet.
@@ -81,7 +79,6 @@ export function ToolbarSearch({
   };
 
   const showClear = activeFilterCount > 0 || followed.draft.trim().length > 0;
-  const hintText = hint(followed.draft);
 
   return (
     <>
@@ -99,18 +96,15 @@ export function ToolbarSearch({
         篩選
       </Button>
 
-      {/* 180–320px (INP-103): the box gives up its extra width first, but once the row is short of
-          180px for it, the row wraps and the last items (新增) go to a second line. Narrow widths wait
-          on the designer. */}
-      <Box sx={{ flex: '1 1 180px', minWidth: 180, maxWidth: 320 }}>
-        {/* The hint sits inside the box, so typing never makes the row taller. */}
+      {/* 140–320px (INP-103): the box shrinks first, down to 140px, before the row wraps, so 新增
+          stays on the first line at 1024px with the sidebar open. */}
+      <Box sx={{ flex: '1 1 140px', minWidth: 140, maxWidth: 320 }}>
         <SearchField
           fullWidth
           value={followed.draft}
           onChange={(event) => changeDraft(event.target.value)}
           placeholder={placeholder}
           aria-label={ariaLabel}
-          hint={hintText}
           inputProps={{
             onCompositionStart: () => {
               composing.current = true;

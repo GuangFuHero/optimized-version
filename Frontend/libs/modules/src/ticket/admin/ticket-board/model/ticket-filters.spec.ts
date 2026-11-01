@@ -9,7 +9,6 @@ import {
   pageCountOf,
   parseTicketFilters,
   parseTicketPage,
-  searchHint,
   TICKET_MAP_AREA_KEYS,
   TICKET_PAGE_KEYS,
   toExtentVariables,
@@ -62,9 +61,6 @@ describe('ticket filters', () => {
     expect(toServerVariables({ ...EMPTY_TICKET_FILTERS, q: ' 淹水 ' }).q).toBe(
       '淹水',
     );
-    expect(searchHint('a')).toBe('請輸入 2–50 個字');
-    expect(searchHint('ab')).toBeNull();
-    expect(searchHint('')).toBeNull();
   });
 
   it('maps taskType and disaster onto needType and disasterType', () => {

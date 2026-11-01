@@ -8,7 +8,6 @@ import { type ReactNode } from 'react';
 import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
 import { boardCountLine } from '../space/board-count';
 import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
-import { searchHint } from './model/ticket-filters';
 
 const { color, typography } = designTokens;
 
@@ -75,9 +74,8 @@ export function TicketToolbar({
         filterOpen={filterOpen}
         onToggleFilter={onToggleFilter}
         onClear={onClear}
-        placeholder="搜尋標題／描述／需求…"
+        placeholder="打 2 個字以上搜尋標題／描述／需求…"
         ariaLabel="搜尋任務單"
-        hint={(draft) => searchHint(draft) ?? undefined}
       />
 
       <Typography
