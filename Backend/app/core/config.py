@@ -92,6 +92,8 @@ class Settings(BaseSettings):
     # The host each provider is registered to call back, the site's: one redirect URI per provider, for
     # both apps (ADR-331).
     OAUTH_REDIRECT_BASE_URL: str = os.getenv("OAUTH_REDIRECT_BASE_URL", "http://localhost:3000")
+    # The public URL MCP clients reach this backend at; the MCP endpoint is `{MCP_BASE_URL}/mcp`.
+    MCP_BASE_URL: str = os.getenv("MCP_BASE_URL", "http://localhost:8000")
 
     @property
     def allowed_origins(self) -> frozenset[str]:
