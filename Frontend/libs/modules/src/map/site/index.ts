@@ -6,8 +6,10 @@ export {
   useSiteMapRouteState,
 } from './use-site-map-route-state';
 export {
+  createSiteMapViewportStore,
   useSiteMapViewportState,
   useSiteMapViewportStore,
+  type SiteMapViewportStore,
 } from './use-site-map-viewport-state';
 export {
   createSiteMapLiveDataStore,

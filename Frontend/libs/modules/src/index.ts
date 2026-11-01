@@ -55,7 +55,17 @@ export { BuildingDrawer } from './building';
 
 export { Map, readRescueMapMarkers } from './map';
 export { hasRescueMapDetailItem } from './map/location-cells';
+export {
+  AREA_KIND_LABELS,
+  AREA_LABEL_NAME_MAX,
+  type RescueMapAreaKind,
+} from './map/areas';
+export { PUBLIC_ZONE_COLORS } from './map/constants';
 export type {
+  RescueMapClosureArea,
+  RescueMapDraftArea,
+  RescueMapEditArea,
+  RescueMapPublicZone,
   RescueMapBaseLayer,
   RescueMapControllerValue,
   RescueMapDataType,
@@ -66,6 +76,37 @@ export type {
 } from './map/types';
 
 export {
+  activeFilterCount,
+  ADMIN_MAP_PRIORITIES,
+  ADMIN_MAP_STATION_TYPES,
+  ADMIN_MAP_STATUSES,
+  areaErrorMessage,
+  boundaryChange,
+  countInsideArea,
+  editableOutline,
+  DEFAULT_ADMIN_MAP_FILTERS,
+  filterMarkers,
+  isFiltering,
+  toggleValue,
+  type AdminMapFilters,
+  isInArea,
+  polygonAreaKm2,
+  polygonSelfIntersects,
+  toGeoJsonPolygon,
+  holdRequest,
+  UNDO_MS,
+  useAdminMapAreas,
+  ADMIN_MAP_LIVE_QUERY_LIMIT,
+  useAdminMapLiveMarkers,
+  viewOfArea,
+  type AdminMapAreas,
+  type AdminMapLiveMarkers,
+  type AreaContents,
+  type BoundaryChange,
+} from './map/admin';
+
+export {
+  createSiteMapViewportStore,
   dedupeMarkersById,
   SiteMapControls,
   SiteMapRouteProvider,
@@ -76,6 +117,7 @@ export {
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
+  type SiteMapViewportStore,
 } from './map/site';
 
 export {

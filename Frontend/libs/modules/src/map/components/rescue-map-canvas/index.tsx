@@ -32,7 +32,9 @@ import type {
   RescueMapArea,
   RescueMapClusterAppearance,
   RescueMapControllerValue,
+  RescueMapDraftArea,
   RescueMapDraftPoint,
+  RescueMapEditArea,
   RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapPublicZone,
@@ -52,7 +54,12 @@ interface RescueMapCanvasProps {
   /** 點選訪客的概略區塊（ADR-281）。未提供時格子只畫不接點擊。 */
   onLocationCellClick?: (cell: RescueMapLocationCell) => void;
   previewMarker?: RescueMapMarkerItem | null;
+  /** The outline being drawn: see `Map`'s prop of the same name. */
+  draftArea?: RescueMapDraftArea | null;
+  /** The boundary being changed: see `Map`'s prop of the same name. */
+  editArea?: RescueMapEditArea | null;
   cursor?: string;
+  disableDoubleClickZoom?: boolean;
   onMapClick?: (position: [number, number]) => void;
   layoutKey: string;
   showScale?: boolean;
@@ -300,18 +307,32 @@ const HAZARD_ZONE_STYLE: L.PathOptions = {
   fillOpacity: 0.6,
 };
 
-/** 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx`, 2026-10-23). */
+/** The edge of the area picked in the admin list: heavier, so it stands out among the rest. */
+const HIGHLIGHTED_WEIGHT = 5;
+
+function getHazardZoneStyle(area: RescueMapArea): L.PathOptions {
+  return area.highlighted
+    ? { ...HAZARD_ZONE_STYLE, weight: HIGHLIGHTED_WEIGHT }
+    : HAZARD_ZONE_STYLE;
+}
+
+/**
+ * 責任區 and 標示區: a light fill in their kind's colour (prototype `site-map.jsx`, 2026-10-23). A
+ * 標示區 the public cannot see (admin only) is drawn dashed and fainter, so an admin can tell it apart.
+ */
 function getPublicZoneStyle(zone: RescueMapPublicZone): L.PathOptions {
   const zoneColor = PUBLIC_ZONE_COLORS[zone.kind];
+  const hidden = zone.isPublic === false;
 
   return {
     pane: PUBLIC_ZONE_PANE,
     interactive: false,
     color: zoneColor,
-    weight: 2.5,
+    weight: zone.highlighted ? HIGHLIGHTED_WEIGHT : 2.5,
     opacity: 0.95,
     fillColor: zoneColor,
-    fillOpacity: 0.14,
+    fillOpacity: hidden ? 0.06 : 0.14,
+    ...(hidden ? { dashArray: '8 6' } : {}),
   };
 }
 
@@ -861,12 +882,37 @@ function syncLocationCellLayer({
   return labels;
 }
 
+/** A corner of a boundary being changed: a white dot with a dark rim, big enough to grab. */
+function createEditCornerIcon(invalid: boolean): L.DivIcon {
+  const stroke = invalid ? color.bg.danger.default : color.fg.neutral.default;
+
+  return L.divIcon({
+    className: 'rescue-map-edit-corner',
+    html: `<span style="display:block;width:16px;height:16px;border-radius:50%;background:${color.bg.neutral.default};border:3px solid ${stroke};box-sizing:border-box;cursor:move"></span>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+}
+
+/** The plus between two corners: a click puts a new corner there, to drag where it should go. */
+function createEditMidpointIcon(): L.DivIcon {
+  return L.divIcon({
+    className: 'rescue-map-edit-midpoint',
+    html: `<span style="display:flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:${color.bg.neutral.default};border:1.5px solid ${color.fg.neutral.muted};color:${color.fg.neutral.muted};font:700 11px/1 sans-serif;box-sizing:border-box;cursor:copy">+</span>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+}
+
 export function RescueMapCanvas({
   controller,
   onMarkerClick,
   onLocationCellClick,
   previewMarker,
+  draftArea,
+  editArea,
   cursor,
+  disableDoubleClickZoom = false,
   onMapClick,
   layoutKey,
   showScale = false,
@@ -896,6 +942,8 @@ export function RescueMapCanvas({
   const cellLayerSignatureRef = useRef<string | null>(null);
   const cellLabelsRef = useRef<LocationCellLabel[]>([]);
   const previewMarkerRef = useRef<L.Marker | null>(null);
+  const draftAreaLayerRef = useRef<L.LayerGroup | null>(null);
+  const editAreaLayerRef = useRef<L.LayerGroup | null>(null);
   const draftMarkerRef = useRef<L.Marker | null>(null);
   const draftBubbleRef = useRef<L.Marker | null>(null);
   // While the crosshair is dragged, the map autopans: that move is not the person moving the map.
@@ -1261,6 +1309,20 @@ export function RescueMapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
+
+    if (!map) {
+      return;
+    }
+
+    if (disableDoubleClickZoom) {
+      map.doubleClickZoom.disable();
+    } else {
+      map.doubleClickZoom.enable();
+    }
+  }, [disableDoubleClickZoom]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     const currentTileLayer = tileLayerRef.current;
     const nextTileLayer = controller.tileLayer;
 
@@ -1373,7 +1435,7 @@ export function RescueMapCanvas({
       overlayLayer,
       areas: controller.closureAreas,
       handles: closureAreaHandlesRef.current,
-      style: () => HAZARD_ZONE_STYLE,
+      style: getHazardZoneStyle,
     });
     queueAreaLabelsRef.current?.();
   }, [controller.closureAreas]);
@@ -1419,6 +1481,148 @@ export function RescueMapCanvas({
     marker.addTo(map);
     previewMarkerRef.current = marker;
   }, [previewMarker]);
+
+  // The outline being drawn: a dashed line through the corners, filled once there are three, red
+  // while it crosses itself. Not interactive, so a click on it still reaches the map and adds a corner.
+  useEffect(() => {
+    const map = mapRef.current;
+
+    draftAreaLayerRef.current?.remove();
+    draftAreaLayerRef.current = null;
+
+    if (!map || !draftArea || draftArea.points.length === 0) {
+      return;
+    }
+
+    const stroke = draftArea.invalid
+      ? color.bg.danger.default
+      : color.fg.neutral.default;
+    const layer = L.layerGroup();
+
+    if (draftArea.points.length >= 3) {
+      L.polygon(draftArea.points, {
+        interactive: false,
+        color: stroke,
+        weight: 2.5,
+        dashArray: '6 6',
+        fillColor: stroke,
+        fillOpacity: 0.18,
+      }).addTo(layer);
+    } else {
+      L.polyline(draftArea.points, {
+        interactive: false,
+        color: stroke,
+        weight: 2.5,
+        dashArray: '6 6',
+      }).addTo(layer);
+    }
+
+    draftArea.points.forEach((point) => {
+      L.circleMarker(point, {
+        interactive: false,
+        radius: 6,
+        color: stroke,
+        weight: 3,
+        fillColor: color.bg.neutral.default,
+        fillOpacity: 1,
+      }).addTo(layer);
+    });
+
+    layer.addTo(map);
+    draftAreaLayerRef.current = layer;
+
+    return () => {
+      layer.remove();
+    };
+  }, [draftArea]);
+
+  // The boundary being changed. A corner is dragged on the map's own layers and reported once it is
+  // let go: reported on every step, the corners would be made again under the hand that holds one.
+  useEffect(() => {
+    const map = mapRef.current;
+
+    editAreaLayerRef.current?.remove();
+    editAreaLayerRef.current = null;
+
+    if (!map || !editArea) {
+      return;
+    }
+
+    const { points, invalid, onChange } = editArea;
+    const stroke = invalid ? color.bg.danger.default : color.fg.neutral.default;
+    const layer = L.layerGroup();
+    const corners = points.map((point): [number, number] => [...point]);
+    const outline = L.polygon(corners, {
+      interactive: false,
+      color: stroke,
+      weight: 2.5,
+      dashArray: '6 6',
+      fillColor: stroke,
+      fillOpacity: 0.18,
+    }).addTo(layer);
+    // A click comes right after the drag is let go; it is not a click on the corner.
+    let justDragged = false;
+
+    corners.forEach((corner, index) => {
+      const handle = L.marker(corner, {
+        draggable: true,
+        keyboard: false,
+        icon: createEditCornerIcon(invalid),
+        zIndexOffset: 1000,
+      }).addTo(layer);
+
+      handle.on('drag', () => {
+        const { lat, lng } = handle.getLatLng();
+        corners[index] = [lat, lng];
+        outline.setLatLngs(corners);
+      });
+      handle.on('dragend', () => {
+        justDragged = true;
+        window.setTimeout(() => {
+          justDragged = false;
+        }, 50);
+        onChange(corners.map((point): [number, number] => [...point]));
+      });
+      handle.on('click', () => {
+        // A boundary keeps three corners at the least.
+        if (!justDragged && corners.length > 3) {
+          onChange(
+            corners
+              .filter((_, other) => other !== index)
+              .map((point): [number, number] => [...point]),
+          );
+        }
+      });
+    });
+
+    corners.forEach((corner, index) => {
+      const next = corners[(index + 1) % corners.length];
+      const middle: [number, number] = [
+        (corner[0] + next[0]) / 2,
+        (corner[1] + next[1]) / 2,
+      ];
+
+      L.marker(middle, {
+        keyboard: false,
+        icon: createEditMidpointIcon(),
+      })
+        .on('click', () =>
+          onChange([
+            ...corners.slice(0, index + 1),
+            middle,
+            ...corners.slice(index + 1),
+          ]),
+        )
+        .addTo(layer);
+    });
+
+    layer.addTo(map);
+    editAreaLayerRef.current = layer;
+
+    return () => {
+      layer.remove();
+    };
+  }, [editArea]);
 
   const draftLat = draftPoint?.lat;
   const draftLng = draftPoint?.lng;

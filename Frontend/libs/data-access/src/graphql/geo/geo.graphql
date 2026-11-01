@@ -49,7 +49,12 @@ query GetStations(
   $skip: Int = 0
   $limit: Int = 50
 ) {
-  stations(bounds: $bounds, stationType: $stationType, skip: $skip, limit: $limit) {
+  stations(
+    bounds: $bounds
+    stationType: $stationType
+    skip: $skip
+    limit: $limit
+  ) {
     items {
       ...StationFields
     }
@@ -99,14 +104,26 @@ query GetStation($uuid: UUID!) {
 
 # The public map's areas, all three kinds at once (ADR-311): every 危險區 and 責任區, and the 標示區
 # switched to public. A team zone names its teams (ADR-311 point 8).
-query GetMapAreas($bounds: BoundsInput, $skip: Int = 0, $limit: Int = 50) {
-  areas(bounds: $bounds, skip: $skip, limit: $limit) {
+# `includePrivate` adds the 標示區 not switched to public; it needs `work_zone.view` (the admin 互助地圖).
+query GetMapAreas(
+  $bounds: BoundsInput
+  $includePrivate: Boolean = false
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  areas(
+    bounds: $bounds
+    includePrivate: $includePrivate
+    skip: $skip
+    limit: $limit
+  ) {
     items {
       uuid
       type
       name
       note
       geometry
+      isPublic
       assignedTeams {
         uuid
         name

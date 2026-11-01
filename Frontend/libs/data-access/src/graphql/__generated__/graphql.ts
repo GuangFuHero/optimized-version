@@ -2196,6 +2196,7 @@ export type GetStationQuery = {
 
 export type GetMapAreasQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
+  includePrivate?: InputMaybe<Scalars['Boolean']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
@@ -2211,6 +2212,7 @@ export type GetMapAreasQuery = {
       name?: string | null;
       note?: string | null;
       geometry?: Geometry | null;
+      isPublic: boolean;
       assignedTeams: Array<{
         __typename?: 'AssignedTeamType';
         uuid: string;
@@ -3693,6 +3695,15 @@ export const GetMapAreasDocument = {
         },
         {
           kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'includePrivate' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Boolean' } },
+          defaultValue: { kind: 'BooleanValue', value: false },
+        },
+        {
+          kind: 'VariableDefinition',
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           defaultValue: { kind: 'IntValue', value: '0' },
@@ -3720,6 +3731,14 @@ export const GetMapAreasDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'bounds' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'includePrivate' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'includePrivate' },
                 },
               },
               {
@@ -3755,6 +3774,10 @@ export const GetMapAreasDocument = {
                       {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'geometry' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'isPublic' },
                       },
                       {
                         kind: 'Field',

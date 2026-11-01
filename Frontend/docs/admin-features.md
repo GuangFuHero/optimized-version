@@ -45,9 +45,10 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 - `page.tsx` + `admin-map-page.client.tsx` 已存在
 - 使用 `@rescue-frontend/modules` 的 `Map`
-- 已有「新增站點 / 新增任務」控制 UI
-- 依賴 `StationCreateDrawer`（共用的 `StationFormDrawer` 新增模式）、`TicketCreateSheet`（任務管理的 `TicketForm` 新增模式，以點下的位置為圖釘）
-- 只有登入狀態會顯示建立 controls
+- 顯示任務單與資源站點（可依優先級、狀態、站點類型篩選）與各種區域；右側為區域清單與詳情
+- 可圈選、編輯、調整範圍、升為危險區、刪除區域，並指派責任區團隊（依 `work_zone.*` 權限）；
+  刪除、團隊與範圍的變更會先等 5 秒，期間可按「復原」
+- 地圖上不再放圖釘新增站點或任務（設計沒有這個流程）；新增任務請到任務管理
 
 ### `/stations`（資源站點管理 v2，ADMIN-026）
 
