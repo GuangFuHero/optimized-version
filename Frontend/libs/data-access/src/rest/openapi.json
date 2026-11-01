@@ -11853,6 +11853,18 @@
             ],
             "title": "New Team Name"
           },
+          "granted_team_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted Team Uuid"
+          },
           "via_invite": {
             "type": "boolean",
             "title": "Via Invite",
@@ -11987,6 +11999,18 @@
               }
             ],
             "title": "New Team Name"
+          },
+          "granted_team_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted Team Uuid"
           },
           "via_invite": {
             "type": "boolean",

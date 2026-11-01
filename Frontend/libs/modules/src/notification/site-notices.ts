@@ -118,6 +118,36 @@ export function readSiteNotices(
   });
 }
 
+/**
+ * How many pages the drawer reads without a tap while none of them holds a notice it shows. The newest
+ * of a gov or team account can all be the back office's, one for each station an import adds, so it
+ * stops after a round of these and waits for 載入更多, which reads another round.
+ */
+export const PAGES_READ_UNASKED = 5;
+
+/**
+ * Whether the drawer reads the next page by itself: the pages it has show nothing, another follows,
+ * the last read did not fail, and a round of `PAGES_READ_UNASKED` is not over.
+ */
+export function readsNextPageUnasked({
+  shown,
+  pagesRead,
+  hasNextPage,
+  nextPageFailed,
+}: {
+  shown: number;
+  pagesRead: number;
+  hasNextPage: boolean;
+  nextPageFailed: boolean;
+}): boolean {
+  return (
+    shown === 0 &&
+    hasNextPage &&
+    !nextPageFailed &&
+    pagesRead % PAGES_READ_UNASKED !== 0
+  );
+}
+
 type FiledTicket = MyTicketsQuery['myTickets'][number];
 type Claim = MyTaskAssignmentsQuery['myTaskAssignments'][number];
 

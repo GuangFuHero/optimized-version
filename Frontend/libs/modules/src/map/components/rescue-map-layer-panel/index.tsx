@@ -24,12 +24,24 @@ import {
   designTokens,
   displayTextSize,
   Icons,
+  layoutSizes,
   safeAreaBottom,
   withAlpha,
 } from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
 const CloseIcon = Icons.close;
+// The panel's heading, and the name a screen reader gives it when it opens.
+const LAYER_PANEL_TITLE = '圖層切換';
+// What the bottom sheet leaves above it: the top bar (the back office's is the taller) and a strip
+// of map. A share of the height was less than the top bar on a short phone. On the site it is
+// counted from under the announcement banners, as the site moves every modal below them; the back
+// office does not, so there it assumes no banner is up, and one or two take the strip or more.
+const SHEET_TOP_CLEARANCE =
+  Math.max(
+    layoutSizes.site.mobileTopNavBarHeight,
+    layoutSizes.admin.topNavBarHeight,
+  ) + 56;
 
 interface RescueMapLayerPanelProps {
   controller: RescueMapControllerValue;
@@ -68,7 +80,7 @@ function RescueMapLayerPanelContent({
               color: color.fg.neutral.default,
             }}
           >
-            圖層切換
+            {LAYER_PANEL_TITLE}
           </Typography>
           <Typography
             sx={{
@@ -328,6 +340,11 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         onClose={controller.closeLayerPanel}
         disableSwipeToOpen
         slotProps={{
+          paper: {
+            role: 'dialog',
+            'aria-modal': true,
+            'aria-label': LAYER_PANEL_TITLE,
+          },
           backdrop: {
             sx: {
               backgroundColor: 'transparent',
@@ -337,13 +354,17 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         sx={{
           display: { mobile: 'block', tablet: 'none' },
           '& .MuiDrawer-paper': {
-            bgcolor: withAlpha(color.bg.neutral.default, 0.92),
-            backdropFilter: 'blur(10px)',
+            // Solid, without the theme's paper blur: it moves with the finger, and the blur of the map
+            // under it was drawn again at every move.
+            bgcolor: color.bg.neutral.default,
+            backdropFilter: 'none',
+            WebkitBackdropFilter: 'none',
             borderTopLeftRadius: radius.lg,
             borderTopRightRadius: radius.lg,
             boxShadow: shadow.lg,
-            // 92% of the space under the announcement banner, so a strip of map stays above it.
-            maxHeight: '92%',
+            maxHeight: `calc(100% - ${SHEET_TOP_CLEARANCE}px)`,
+            // A drag down from the top of its list moves the sheet alone, without the list bouncing.
+            overscrollBehaviorY: 'none',
             px: 2,
             pt: 1.25,
             pb: safeAreaBottom(24),
@@ -358,6 +379,11 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         open={controller.layerPanelOpen && !isPhone}
         onClose={controller.closeLayerPanel}
         slotProps={{
+          paper: {
+            role: 'dialog',
+            'aria-modal': true,
+            'aria-label': LAYER_PANEL_TITLE,
+          },
           backdrop: {
             sx: {
               backgroundColor: 'transparent',
