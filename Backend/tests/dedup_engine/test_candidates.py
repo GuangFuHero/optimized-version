@@ -52,8 +52,12 @@ async def _ticket(db, owner, *, east_deg=0.0, **overrides) -> Tickets:
 
 
 async def _task(db, owner, ticket, **overrides) -> str:
-    fields = {"task_type": "rescue", "task_name": "抽水", "status": "pending"}
-    task = TicketTask(ticket_uuid=ticket.uuid, created_by=owner, **(fields | overrides))
+    fields = {"task_type": "rescue", "task_name": "抽水", "status": "pending"} | overrides
+    stamps = {
+        "completed_at": datetime.now(UTC) if fields["status"] == "fulfilled" else None,
+        "canceled_at": datetime.now(UTC) if fields["status"] == "canceled" else None,
+    }
+    task = TicketTask(ticket_uuid=ticket.uuid, created_by=owner, **stamps, **fields)
     db.add(task)
     await db.flush()
     return str(task.uuid)

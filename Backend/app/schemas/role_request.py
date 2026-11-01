@@ -35,8 +35,12 @@ class RoleRequestResponse(BaseModel):
     reviewed_by: UUID | None
     created_at: datetime
     closed_at: datetime | None
+    # What was applied for: the team to join, or None for a new team (Spec 026, ADR-350).
     team_uuid: UUID | None = None
     new_team_name: str | None = None
+    # What approval handed out (ADR-411): the team joined, or the one a new-team application founded.
+    # None until approved, and for a data auditor.
+    granted_team_uuid: UUID | None = None
     via_invite: bool = False
     applicant_details: ApplicantDetails | None = None
 

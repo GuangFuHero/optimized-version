@@ -10,6 +10,11 @@ export interface EmptyStateProps {
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
+  /**
+   * For an empty state that is all a panel holds, as the notification drawer's: a larger circle,
+   * and the title and description a step darker.
+   */
+  prominent?: boolean;
 }
 
 export function EmptyState({
@@ -17,7 +22,11 @@ export function EmptyState({
   title,
   description,
   action,
+  prominent = false,
 }: EmptyStateProps) {
+  const circle = prominent ? 64 : 56;
+  const glyph = prominent ? 28 : 26;
+
   return (
     <Stack
       sx={{
@@ -31,22 +40,25 @@ export function EmptyState({
         sx={{
           display: 'grid',
           placeItems: 'center',
-          width: 56,
-          height: 56,
+          width: circle,
+          height: circle,
           borderRadius: `${radius.full}px`,
           bgcolor: color.bg.neutral.subtle,
           color: color.fg.neutral.muted,
           '& .MuiSvgIcon-root, & .lucide': {
-            width: 26,
-            height: 26,
-            fontSize: 26,
+            width: glyph,
+            height: glyph,
+            fontSize: glyph,
           },
         }}
       >
         {icon}
       </Box>
       <Typography
-        sx={{ ...typography.label[500], color: color.fg.neutral.subtle }}
+        sx={{
+          ...typography.label[500],
+          color: prominent ? color.fg.neutral.default : color.fg.neutral.subtle,
+        }}
       >
         {title}
       </Typography>
@@ -55,7 +67,7 @@ export function EmptyState({
           sx={{
             ...typography.body[300],
             maxWidth: 380,
-            color: color.fg.neutral.muted,
+            color: prominent ? color.fg.neutral.subtle : color.fg.neutral.muted,
           }}
         >
           {description}

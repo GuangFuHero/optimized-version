@@ -39,6 +39,17 @@ export const STATION_IMPORT_FIELDS: readonly {
 ];
 
 /**
+ * Whether 匯入 is offered: it is one of 新增站點's ways in, in its dropdown and beside it on the
+ * empty list, so whoever may not add a station never sees it.
+ */
+export function offersImport(caps: {
+  canAdd: boolean;
+  canImport: boolean;
+}): boolean {
+  return caps.canAdd && caps.canImport;
+}
+
+/**
  * A starter file for a station import. The headers are the system field names, so the preview maps
  * them without help.
  */

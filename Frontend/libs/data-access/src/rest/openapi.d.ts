@@ -4050,6 +4050,8 @@ export interface components {
       team_uuid?: string | null;
       /** New Team Name */
       new_team_name?: string | null;
+      /** Granted Team Uuid */
+      granted_team_uuid?: string | null;
       /**
        * Via Invite
        * @default false
@@ -4096,6 +4098,8 @@ export interface components {
       team_uuid?: string | null;
       /** New Team Name */
       new_team_name?: string | null;
+      /** Granted Team Uuid */
+      granted_team_uuid?: string | null;
       /**
        * Via Invite
        * @default false
