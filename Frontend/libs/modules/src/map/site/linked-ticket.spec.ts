@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { readLinkedSelection, resolveLinkedTicket } from './linked-ticket';
+import {
+  linkedTicketUuid,
+  readLinkedSelection,
+  resolveLinkedTicket,
+} from './linked-ticket';
 
 const UUID = 'd0000000-0000-4000-8000-000000000051';
 const KEPT_UUID = 'd0000000-0000-4000-8000-000000000052';
@@ -191,5 +195,17 @@ describe('readLinkedSelection', () => {
         },
       },
     ]);
+  });
+});
+
+describe('linkedTicketUuid', () => {
+  it("reads the uuid a link names as the backend writes it, for the page's metadata too", () => {
+    expect(
+      [UUID, `${UUID}。`, `${UUID.toUpperCase()} `].map(linkedTicketUuid),
+    ).toEqual([UUID, UUID, UUID]);
+  });
+
+  it('names nothing for a link cut short', () => {
+    expect(linkedTicketUuid('d0000000-0000-40。')).toBeNull();
   });
 });
