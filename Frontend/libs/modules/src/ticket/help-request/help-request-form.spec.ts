@@ -5,9 +5,9 @@ import {
   emptyHelpRequestForm,
   emptyNeed,
   findMissingFields,
-  hasRescueNeed,
   isQuantityMissing,
   MAX_NEEDS,
+  rescueNeedRow,
   SITE_NEED_OPTIONS,
   toHelpRequestInput,
   type HelpRequestForm,
@@ -149,20 +149,31 @@ describe('canAddNeedRow', () => {
   });
 });
 
-describe('hasRescueNeed', () => {
-  it('is true once someone is trapped or hurt, for the 119 notice at the top', () => {
+describe('rescueNeedRow', () => {
+  it('is the row with someone trapped or hurt, for the 119 notice under it', () => {
     expect(
-      hasRescueNeed([
+      rescueNeedRow([
         { need: 'cleanup', name: '', quantity: '' },
         { need: 'rescue', name: '', quantity: '' },
+        { need: 'repair', name: '', quantity: '' },
       ]),
-    ).toBe(true);
+    ).toBe(1);
   });
 
-  it('is false for other needs and rows not chosen yet', () => {
+  it('is the first of two such rows, so the notice shows once', () => {
     expect(
-      hasRescueNeed([emptyNeed(), { need: 'repair', name: '', quantity: '' }]),
-    ).toBe(false);
+      rescueNeedRow([
+        { need: 'cleanup', name: '', quantity: '' },
+        { need: 'rescue', name: '', quantity: '' },
+        { need: 'rescue', name: '', quantity: '' },
+      ]),
+    ).toBe(1);
+  });
+
+  it('is none for other needs and rows not chosen yet', () => {
+    expect(
+      rescueNeedRow([emptyNeed(), { need: 'repair', name: '', quantity: '' }]),
+    ).toBe(-1);
   });
 });
 
