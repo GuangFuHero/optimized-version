@@ -539,17 +539,7 @@ async def test_completion_rate_axis_is_a_percentage(client, db_session, redis):
 async def test_category_axis_shows_display_names(client, db_session, redis):
     """Raw task_type keys become their zh-TW names on the axis; the series name is zh-TW too."""
     user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
-    db_session.add(
-        Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid,
-            title="t",
-            contact_name="c",
-            status="pending",
-            priority="high",
-            task_type="rescue",
-        )
-    )
+    await _filed(db_session, user_uuid, task_type="rescue")
     await db_session.commit()
 
     res = await client.get(
@@ -672,6 +662,7 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
         )
         for _ in range(2)
     )
+    done_ticket.status = "completed"
     db_session.add_all([open_ticket, done_ticket])
     await db_session.flush()
     task = TicketTask(
@@ -853,7 +844,9 @@ async def test_data_requires_the_domain_permission(client, db_session, redis):
 async def test_data_matches_what_the_chart_plots(client, db_session, redis):
     """Same query, same numbers: the data endpoint is the figure's series without the figure."""
     user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
-    db_session.add_all([_ticket(user_uuid, "rescue"), _ticket(user_uuid, "hr"), _ticket(user_uuid, None)])
+    await _filed(db_session, user_uuid, task_type="rescue")
+    await _filed(db_session, user_uuid, task_type="hr")
+    db_session.add(_ticket(user_uuid, "rescue"))  # no needs, so uncategorised whatever its own column says
     await db_session.commit()
 
     params = {"tz": "UTC", "y": "total_tickets", "x": "category"}
@@ -908,6 +901,7 @@ async def test_data_completion_rate_is_a_percentage(client, db_session, redis):
     """Like `/value`, the series is in the catalog unit: 1 of 2 completed is 50.0, not 0.5."""
     user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
     open_ticket, done_ticket = _ticket(user_uuid), _ticket(user_uuid)
+    done_ticket.status = "completed"
     db_session.add_all([open_ticket, done_ticket])
     await db_session.flush()
     task = TicketTask(
@@ -1037,11 +1031,12 @@ async def test_data_durations_are_days_as_numbers(client, db_session, redis):
 
 
 async def _filed(db, owner, *, county=None, town=None, village=None, task_type="rescue", status="pending"):
-    """A ticket, with an address when `county` is given."""
-    ticket = _ticket(owner, task_type)
+    """A ticket with one need of `task_type` and no type of its own; an address when `county` is given."""
+    ticket = _ticket(owner, None)
     ticket.status = status
     db.add(ticket)
     await db.flush()
+    db.add(_need(ticket.uuid, owner, task_type))
     if county:
         db.add(
             SecondaryLocation(
@@ -1050,6 +1045,17 @@ async def _filed(db, owner, *, county=None, town=None, village=None, task_type="
         )
     await db.flush()
     return ticket
+
+
+def _need(ticket_uuid, owner: str, task_type: str) -> TicketTask:
+    return TicketTask(
+        ticket_uuid=ticket_uuid,
+        task_type=task_type,
+        task_name="n",
+        source="user",
+        created_by=owner,
+        status="pending",
+    )
 
 
 async def _total(client, headers, url=TICKETS_VALUE_URL, y="total_tickets", **filters) -> int:
@@ -1137,6 +1143,97 @@ async def test_ticket_filters_by_task_type_and_status(client, db_session, redis)
     assert await _total(client, headers, task_type="supply", status="in_progress") == 1
     assert await _total(client, headers, task_type="medical") == 0
     assert await _total(client, headers, status="cancelled") == 0
+
+
+@pytest.mark.asyncio
+async def test_task_type_filter_reads_the_live_needs(client, db_session, redis):
+    """A ticket matches a type through its live needs, once however many match; a deleted need never."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    two_needs = await _filed(db_session, user_uuid, task_type="supply")
+    db_session.add(_need(two_needs.uuid, user_uuid, "supply"))
+    deleted = await _filed(db_session, user_uuid, task_type="rescue")
+    gone = _need(deleted.uuid, user_uuid, "medical")
+    gone.delete_at = datetime.now(UTC)
+    db_session.add(gone)
+    await db_session.commit()
+
+    assert await _total(client, headers, task_type="supply") == 1
+    assert await _total(client, headers, task_type="medical") == 0
+    assert await _total(client, headers, task_type="rescue") == 1
+
+
+@pytest.mark.asyncio
+async def test_include_deleted_counts_deleted_tickets_as_canceled_within_scope(client, db_session, redis):
+    """A deleted ticket is in no bucket by default; with include_deleted it is canceled, in scope only."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW, scope="own")
+    stranger = User(name="somebody else")
+    db_session.add(stranger)
+    await db_session.flush()
+    await _filed(db_session, user_uuid)
+    # The last one was deleted before deleting set the status, so it is still pending.
+    deleted = ((user_uuid, "cancelled"), (str(stranger.uuid), "cancelled"), (user_uuid, "pending"))
+    for owner, status in deleted:
+        ticket = await _filed(db_session, owner, status=status)
+        ticket.delete_at = datetime.now(UTC)
+    await db_session.commit()
+
+    assert await _total(client, headers) == 1
+    assert await _total(client, headers, y="canceled_tickets") == 0
+    assert await _total(client, headers, include_deleted="true") == 3
+    assert await _total(client, headers, y="canceled_tickets", include_deleted="true") == 2
+    assert await _total(client, headers, y="unassigned_tickets", include_deleted="true") == 1
+
+    async def series(y, include_deleted):
+        params = {"tz": "UTC", "y": y, "include_deleted": include_deleted}
+        if y != "age_distribution":
+            params["x"] = "date"
+        res = await client.get(TICKETS_DATA_URL, params=params, headers=headers)
+        assert res.status_code == 200, res.text
+        return {s["name"]: sum(s["values"]) for s in res.json()["series"]}
+
+    assert await series("canceled_tickets", "false") == {"已取消": 0}
+    assert await series("canceled_tickets", "true") == {"已取消": 2}
+    assert (await series("net_backlog_change", "false"))["取消"] == 0
+    assert (await series("net_backlog_change", "true"))["取消"] == 2
+    assert await series("age_distribution", "true") == {"任務單": 1}
+
+
+@pytest.mark.asyncio
+async def test_need_level_metrics_read_the_needs_own_type(client, db_session, redis):
+    """Filtered to a type, the need metrics leave out the other needs of a matching ticket."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    ticket = await _filed(db_session, user_uuid, task_type="supply")
+    for kind in ("supply", "hr"):
+        filled = _need(ticket.uuid, user_uuid, kind)
+        filled.status, filled.completed_at = "fulfilled", datetime.now(UTC)
+        db_session.add(filled)
+    db_session.add(_need(ticket.uuid, user_uuid, "hr"))
+    await db_session.commit()
+
+    async def data(**params):
+        res = await client.get(
+            TICKETS_DATA_URL, params={"tz": "UTC", "task_type": "supply", **params}, headers=headers
+        )
+        assert res.status_code == 200, res.text
+        return res.json()
+
+    distribution = await data(y="task_completion_distribution")
+    assert distribution["series"][0]["values"] == [1, 1]  # one supply need filled, one open
+    durations = await data(y="time_to_completion", x="category")
+    assert durations["x_values"] == [chart_render.display_name("supply")]
+
+
+@pytest.mark.asyncio
+async def test_status_filter_counts_a_deleted_ticket_as_cancelled(client, db_session, redis):
+    """With include_deleted, a deleted ticket left at pending matches status=cancelled, not pending."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    await _filed(db_session, user_uuid)
+    ticket = await _filed(db_session, user_uuid)
+    ticket.delete_at = datetime.now(UTC)
+    await db_session.commit()
+
+    assert await _total(client, headers, status="pending", include_deleted="true") == 1
+    assert await _total(client, headers, status="cancelled", include_deleted="true") == 1
 
 
 @pytest.mark.asyncio
