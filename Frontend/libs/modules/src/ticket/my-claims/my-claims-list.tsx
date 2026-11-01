@@ -201,7 +201,7 @@ function MyClaimRow({
           color: color.brand.secondary.subtle,
         }}
       >
-        <Icons.handHeart sx={{ fontSize: 14 }} />
+        <Icons.heartHandshake sx={{ fontSize: 14 }} />
         <Typography
           sx={{
             fontSize: displayTextSize[13],
@@ -374,7 +374,7 @@ export function MyClaimsList({
       <>
         <Notice
           icon={
-            <Icons.handHeart
+            <Icons.heartHandshake
               sx={{ fontSize: 28, color: color.fg.neutral.muted }}
             />
           }

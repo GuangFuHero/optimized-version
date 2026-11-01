@@ -48,7 +48,7 @@ function RequestHelpPill({
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      <Icons.handshake sx={{ fontSize: iconSize }} />
+      <Icons.heartHandshake sx={{ fontSize: iconSize }} />
       請求協助
     </ButtonBase>
   );

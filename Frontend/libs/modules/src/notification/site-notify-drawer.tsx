@@ -57,7 +57,7 @@ const NEED_LISTS_QUERY_CONTEXT = { suspense: false } as const;
  */
 const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
   claimed: {
-    icon: <Icons.handHeart />,
+    icon: <Icons.heartHandshake />,
     tone: color.brand.secondary.subtle,
   },
   assigned: {
@@ -65,7 +65,7 @@ const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
     tone: color.brand.secondary.subtle,
   },
   'need-full': { icon: <Icons.circleCheck />, tone: color.fg.success },
-  'called-off': { icon: <Icons.circleMinus />, tone: color.fg.danger },
+  'called-off': { icon: <Icons.circleSlash />, tone: color.fg.danger },
   // Not in the prototype, which has no notice for a duplicate review.
   merged: { icon: <Icons.merge />, tone: color.brand.secondary.subtle },
   // Not in the prototype either. A warning, not red: the ticket stands, only something in it may be
@@ -73,7 +73,7 @@ const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
   'audit-issue': { icon: <Icons.triangleAlert />, tone: color.fg.warning },
   'role-approved': { icon: <Icons.badgeCheck />, tone: color.fg.success },
   'role-rejected': {
-    icon: <Icons.circleX />,
+    icon: <Icons.badgeX />,
     tone: color.fg.neutral.subtle,
   },
 };
@@ -127,8 +127,8 @@ function Notice({ children }: { children: ReactNode }) {
 
 // What brings a notice, one short line each: in a phone's drawer a paragraph would not show three.
 const EMPTY_REASONS = [
-  { icon: Icons.handHeart, text: '有人承接了你建立的求助' },
-  { icon: Icons.circleMinus, text: '你承接的任務有異動' },
+  { icon: Icons.heartHandshake, text: '有人承接了你建立的求助' },
+  { icon: Icons.circleSlash, text: '你承接的任務有異動' },
   { icon: Icons.badgeCheck, text: '你的申請有審核結果' },
 ];
 

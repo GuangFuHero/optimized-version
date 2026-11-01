@@ -140,7 +140,7 @@ export function SiteListRow({
                 {/* 官方認定：只有官方站點掛 chip，非官方不掛。 */}
                 {isStation && marker.stationMeta?.isOfficial ? (
                   <SiteBadge tone="secondary" variant="subtle">
-                    <Icons.shield sx={{ fontSize: 12 }} />
+                    <Icons.shieldCheck sx={{ fontSize: 12 }} />
                     官方
                   </SiteBadge>
                 ) : null}

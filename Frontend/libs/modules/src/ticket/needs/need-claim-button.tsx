@@ -37,9 +37,9 @@ const LOOKS = {
 const ICONS: Record<NeedClaimKind, typeof Icons.check> = {
   mine: Icons.check,
   guest: Icons.lock,
-  open: Icons.handHeart,
-  full: Icons.handHeart,
-  fulfilled: Icons.handHeart,
+  open: Icons.heartHandshake,
+  full: Icons.heartHandshake,
+  fulfilled: Icons.heartHandshake,
 };
 
 const SIZES = {

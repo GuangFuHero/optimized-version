@@ -216,7 +216,7 @@ export function DeleteTicketDialog({
                     '& svg': { fontSize: 14 },
                   }}
                 >
-                  <Icons.handHeart />
+                  <Icons.heartHandshake />
                 </Box>
                 <Typography
                   sx={{ fontSize: displayTextSize[13], lineHeight: 1.6 }}

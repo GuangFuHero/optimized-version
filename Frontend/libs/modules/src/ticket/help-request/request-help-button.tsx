@@ -19,7 +19,7 @@ export function RequestHelpButton() {
     <Button
       variant="contained"
       size="small"
-      startIcon={<Icons.handshake sx={{ fontSize: 16 }} />}
+      startIcon={<Icons.heartHandshake sx={{ fontSize: 16 }} />}
       onClick={() => openHelpRequest()}
       aria-label="請求協助"
       title="需要有人幫忙？在這裡說明你的需求"

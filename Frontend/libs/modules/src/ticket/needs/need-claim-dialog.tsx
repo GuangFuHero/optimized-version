@@ -109,7 +109,7 @@ export function NeedClaimDialog({
       onConfirm={onConfirm}
       title="確認承接這一筆？"
       confirmLabel={submitting ? '承接中...' : '確認承接'}
-      confirmIcon={<Icons.handHeart />}
+      confirmIcon={<Icons.heartHandshake />}
       confirmDisabled={!claim || settled}
       cancelLabel={settled || dialog.box === 'gone' ? '關閉' : '取消'}
       error={dialog.refusal}

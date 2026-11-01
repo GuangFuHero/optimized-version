@@ -255,7 +255,7 @@ export function PointShareDrawer({
             {canShareNatively ? (
               <Button
                 variant="contained"
-                startIcon={<Icons.iosShare />}
+                startIcon={<Icons.share />}
                 onClick={() => handleNativeShare()}
                 sx={{ textTransform: 'none', fontWeight: 700 }}
               >

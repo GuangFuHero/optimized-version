@@ -224,7 +224,7 @@ export function TaskMatchTicketDetailsPanel({
       {needs.length > 0 || isTicketFetching || canAddNeed ? (
         <SectionCard
           title={needs.length > 0 ? `需求（${needs.length} 筆）` : '需求'}
-          icon={<Icons.handHeart sx={{ fontSize: 18 }} />}
+          icon={<Icons.heartHandshake sx={{ fontSize: 18 }} />}
         >
           {/* Under the title, not beside it: on a phone the two squeezed each other onto two lines. */}
           {needs.length > 1 ? (

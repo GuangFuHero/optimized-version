@@ -194,7 +194,7 @@ function SiteSidebarNav({
 
       <Stack sx={{ mt: 'auto', gap: '8px' }}>
         <SidebarItem
-          icon={<Icons.handshake />}
+          icon={<Icons.heartHandshake />}
           label="請求協助"
           collapsed={collapsed}
           onClick={() => {

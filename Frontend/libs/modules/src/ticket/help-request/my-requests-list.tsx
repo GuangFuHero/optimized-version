@@ -191,7 +191,7 @@ export function MyRequestsList({
         <Button
           variant="contained"
           size="small"
-          startIcon={<Icons.handshake sx={{ fontSize: 16 }} />}
+          startIcon={<Icons.heartHandshake sx={{ fontSize: 16 }} />}
           onClick={() => {
             onLeave();
             openHelpRequest();
