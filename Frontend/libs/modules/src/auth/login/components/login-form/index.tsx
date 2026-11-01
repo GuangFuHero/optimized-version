@@ -60,7 +60,11 @@ interface LoginFormProps {
   onForgotPasswordAsync?: AuthAsyncAction;
   onSmsLoginAsync?: AuthAsyncAction;
   secondaryActionLabel?: string;
-  onSecondaryAction?: AuthAsyncAction;
+  /** Given the tab and the address as they stand, for the page it goes to to open with them. */
+  onSecondaryAction?: (current: {
+    identityType: AuthIdentityType;
+    identity: string;
+  }) => Promise<void> | void;
   successMessage?: string;
 }
 
@@ -187,6 +191,13 @@ export function LoginForm({
     successMessage ??
     (mode === 'register' ? loginFormText.registerSuccessMessage : undefined);
   const shouldShowProviderActions = resolvedProviderActions.length > 0;
+  // Opened filled in, focus goes to the first field left to fill: the name, when only the address
+  // came along from the login page; else the password. It also needs a place to go: the button
+  // pressed to get here is gone.
+  const focusesName =
+    mode === 'register' &&
+    initialValues !== undefined &&
+    !initialValues.name?.trim();
 
   const handleFormSubmit = handleSubmit(async (values) => {
     setSubmissionError(undefined);
@@ -277,6 +288,7 @@ export function LoginForm({
               onChange={field.onChange}
               placeholder={loginFormText.displayNamePlaceholder}
               autoComplete="nickname"
+              autoFocus={focusesName}
               disabled={isSubmitting}
               errorText={fieldState.error?.message}
             />
@@ -347,9 +359,7 @@ export function LoginForm({
             autoComplete={
               mode === 'register' ? 'new-password' : 'current-password'
             }
-            // Opened filled in, the one field left to fill. Focus also needs a place to go: the
-            // button pressed to come back is gone.
-            autoFocus={initialValues !== undefined}
+            autoFocus={initialValues !== undefined && !focusesName}
             disabled={isSubmitting}
             errorText={fieldState.error?.message}
           />
@@ -423,7 +433,12 @@ export function LoginForm({
           variant="outline"
           type="button"
           onClick={() => {
-            void runAction(onSecondaryAction);
+            void runAction(() =>
+              onSecondaryAction({
+                identityType,
+                identity: identityValue.trim(),
+              }),
+            );
           }}
           disabled={isSubmitting}
           sx={{ width: '100%', height: 40, minHeight: 40 }}

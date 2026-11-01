@@ -31,22 +31,29 @@ async def create_account(
     user = User(name=name)
     db.add(user)
     await db.flush()  # populate user.uuid for the FK rows below
-    db.add(UserIdentity(
-        user_uuid=user.uuid, provider=provider,
-        provider_subject=provider_subject, password_hash=password_hash,
-    ))
+    db.add(
+        UserIdentity(
+            user_uuid=user.uuid,
+            provider=provider,
+            provider_subject=provider_subject,
+            password_hash=password_hash,
+        )
+    )
     if contact_type and value:
-        db.add(UserContact(
-            user_uuid=user.uuid, type=contact_type, value=value,
-            verified=True, verified_at=datetime.now(UTC),
-        ))
+        db.add(
+            UserContact(
+                user_uuid=user.uuid,
+                type=contact_type,
+                value=value,
+                verified=True,
+                verified_at=datetime.now(UTC),
+            )
+        )
     # If seed hasn't run yet, this role won't exist and the user is silently left roleless
     # (same tradeoff the old Login-User-group assignment had) — documented, not fixed here.
     role = await role_repository.get_by_name(db, name=DEFAULT_PLATFORM_ROLE)
     if role:
-        db.add(UserRoleAssign(
-            user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform"
-        ))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None))
     await db.commit()
     await db.refresh(user)
     return user

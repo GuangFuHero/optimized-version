@@ -217,7 +217,7 @@
 > 「`users.team_uuid` 是唯一事實來源」之上；該欄位已經移除，team 現在就住在授予列上
 > （`user_role_assign.team_uuid`、`user_permission_assign.team_uuid`）。原本擔心的雙重事實來源不再存在，
 > 因為只剩一份。授予列同時冗餘一個 `role_kind`，由複合 FK `(role_uuid, role_kind) → roles(uuid, kind)`
-> 擔保它不會漂掉，好讓 CHECK 能跨表看到角色種類。
+> 擔保它不會漂掉，好讓 CHECK 能跨表看到角色種類。（`role_kind` 後來又被 ADR-440 拿掉，改由 trigger 檢查。）
 **Context**：本文件原稿 §2B 曾把 `UserRoleAssign` 設計成連 `team_uuid` 都存一份（`team_uuid: Mapped[str | None]`），Phase 0 落地時發現這會造成雙重事實來源。
 **Decision**：`UserRoleAssign` 不帶 `team_uuid` 欄位；team 角色永遠透過 `users.team_uuid` 判定（ADR-019「一人一 team」的唯一事實來源）。實作見 `app/models/rbac.py:UserRoleAssign` docstring。
 **Consequences**：➕ 不會有「使用者的 `team_uuid` 跟他某筆角色指派上存的 `team_uuid` 兜不起來」的資料漂移問題。➖ 無——一人一 team 本來就代表這欄位是多餘的。

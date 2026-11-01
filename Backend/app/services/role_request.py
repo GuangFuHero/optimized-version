@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 from fastapi import status as http_status
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -446,7 +446,7 @@ async def _grant_data_auditor(db: AsyncSession, applicant_uuid) -> str:
     # Nothing to add if an admin granted the role another way since the application was sent.
     await db.execute(
         insert(UserRoleAssign)
-        .values(user_uuid=applicant_uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform")
+        .values(user_uuid=applicant_uuid, role_uuid=role.uuid, team_uuid=None)
         .on_conflict_do_nothing(
             index_elements=["user_uuid", "role_uuid"], index_where=text("team_uuid IS NULL")
         )
@@ -598,7 +598,11 @@ async def list_for_review(
     if kind is not None:
         query = query.where(_kind_filter(kind))
     if team_uuid is not None:
-        query = query.where(RoleRequest.team_uuid == team_uuid)
+        # The team applied for, or the one approval handed out: a new-team application has no
+        # `team_uuid`, only the team it founded (ADR-423).
+        query = query.where(
+            or_(RoleRequest.team_uuid == team_uuid, RoleRequest.granted_team_uuid == team_uuid)
+        )
     rows = await db.execute(
         query.order_by(RoleRequest.created_at, RoleRequest.uuid).offset(skip).limit(limit)
     )

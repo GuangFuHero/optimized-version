@@ -58,7 +58,7 @@ async def _actor(db, *perms: Perm) -> User:
         db.add(permission)
         await db.flush()
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, role_kind="platform"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     acting_as(user, role)  # before the commit expires `role`
     seed_disaster_types(db)
     await db.commit()
@@ -113,7 +113,7 @@ async def test_validate_ticket_writes_nothing(db):
     assert fields.values["contact_name"] == "王小明"  # normalized, ready to insert
     assert fields.values["disaster_types"] == ["flood"]
     assert fields.point == POINT
-    assert fields.secondary_location | ADDRESS == fields.secondary_location  # split, not replaced
+    assert fields.secondary_location["user_input_address"] == ADDRESS["full_address"]  # kept, and split
     assert (fields.secondary_location["county"], fields.secondary_location["town"]) == ("花蓮縣", "光復鄉")
     assert await _rows(db, Tickets) == 0
     assert await _rows(db, SecondaryLocation) == 0

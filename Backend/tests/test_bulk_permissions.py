@@ -12,7 +12,6 @@ os.environ["ENV"] = "testing"
 
 import pytest
 from fastapi import HTTPException
-from scripts.seed_rbac import ROLES_DATA
 from sqlalchemy import select
 
 from app.core.permissions import PUBLIC_PERMS, Perm
@@ -22,6 +21,7 @@ from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.team import Team
 from app.services.authz import require_scope
+from scripts.seed_rbac import ROLES_DATA
 from tests.conftest import acting_as
 
 BULK_PERMS = (Perm.STATION_EXPORT, Perm.STATION_IMPORT, Perm.TICKET_EXPORT, Perm.TICKET_IMPORT)
@@ -63,11 +63,7 @@ async def _assign_seed_role(db, user: User, role_name: str, *, team_type: str = 
             permission = Permission(key=perm.value)
             db.add(permission)
             await db.flush()
-        db.add(
-            RolePermissionAssign(
-                role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-            )
-        )
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     # A team-kind role must carry a team and a platform-kind one must not (ADR-073's CHECK),
     # so the fixture follows the seed's own `kind` rather than assuming platform.
     team = None
@@ -75,10 +71,13 @@ async def _assign_seed_role(db, user: User, role_name: str, *, team_type: str = 
         team = Team(name=f"team-for-{role_name}", type=team_type)
         db.add(team)
         await db.flush()
-    db.add(UserRoleAssign(
-        user_uuid=user.uuid, role_uuid=role.uuid,
-        team_uuid=team.uuid if team is not None else None, role_kind=spec["kind"],
-    ))
+    db.add(
+        UserRoleAssign(
+            user_uuid=user.uuid,
+            role_uuid=role.uuid,
+            team_uuid=team.uuid if team is not None else None,
+        )
+    )
     # Without an active identity `get_user_permissions` returns {} — the fail-closed default
     # since feature 010, and not what these tests are exercising.
     acting_as(user, role, team)
