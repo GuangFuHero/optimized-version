@@ -259,10 +259,14 @@
       });
       return { total: tk.tickets.length, by, gapPeople, gapNeeds };
     }, [tk.tickets]);
-    const statTiles = window.WGStatTiles && tk.tickets.length > 0 && (
+    // 🔒 STAT-107（Sucre 11-01 接受 PR #232）：多一格「已取消」—— 後端有這個狀態，少了它各格加起來對不上「全部」。
+    //    篩選面板的狀態 chip 也一起加，兩邊同一個 state（STAT-103）。
+    // 🔒 STAT-108（同上）：沒有任何單、還在載入時這排照樣出現，不等有資料才長出來（數字沒載到時寫「—」，STAT-105）。
+    const TK_STAT_KEYS = [...window.TK_STATUS_EDITABLE, "canceled"];
+    const statTiles = window.WGStatTiles && (
       <window.WGStatTiles value={fStatus} onChange={setFStatus}
         items={[{ key: "all", label: "全部", count: stats.total },
-          ...window.TK_STATUS_EDITABLE.map((k) => ({ key: k, label: window.TK_STATUS[k].label, count: stats.by[k] || 0 }))]}
+          ...TK_STAT_KEYS.map((k) => ({ key: k, label: window.TK_STATUS[k].label, count: stats.by[k] || 0 }))]}
         extras={[{ label: "志工缺口", icon: "Users", tone: "warning", count: stats.gapPeople ? { main: `缺 ${stats.gapPeople} 人`, sub: `${stats.gapNeeds} 項需求` } : 0,
           title: "還沒結束的單裡，有寫數量的需求還差幾人" }]} />
     );
@@ -312,7 +316,7 @@
         {open && (
           <Card>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <FilterChips label="狀態" value={fStatus} onChange={setFStatus} options={window.TK_STATUS_EDITABLE.map((k) => [k, window.TK_STATUS[k].label])} />
+              <FilterChips label="狀態" value={fStatus} onChange={setFStatus} options={TK_STAT_KEYS.map((k) => [k, window.TK_STATUS[k].label])} />
               <FilterChips label="優先級" value={fPriority} onChange={setFPriority} options={Object.entries(window.TK_PRIORITY).map(([k, v]) => [k, v.label])} />
               <FilterChips label="需求" value={fKind} onChange={setFKind} options={Object.entries(window.TK_TASK_KIND).map(([k, v]) => [k, v.label])} />
               <FilterChips label="行政區域" value={fRegion} onChange={setFRegion} options={regionOpts} />

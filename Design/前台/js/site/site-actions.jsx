@@ -1473,13 +1473,14 @@
    *      1. 檢查永遠通過（`filter(n => n.need)` 對預設值恆真）—— 死碼
    *      2. 有人來登記送餐、跳過這一段直接送出，後台收到「清淤／搬運」——
    *         **他從頭到尾沒選過清淤**。預設值靜默造假資料，比沒檢查更糟。
-   * ⚠️ `quantity` 預設空字串。ERD 的 `ticket_tasks.quantity` 是 **nullable**，
-   *    且 08-04 決議明載「報案當下還沒有需求⋯還沒拆成搜救幾人、物資幾件」。
-   *    逼一個算不出來的人給數字，拿到的是假數字。 */
+   * ⚠️ `quantity` 預設空字串，但 🔄 **2026-11-01 起必填**（NEED-QTY-101，Sucre 接受前端 PR #215／後端 ADR-448，
+   *    推翻 08-22 S-7「數量可留空」）。選「人員受困／急難」時自動帶 1（NEED-QTY-102），
+   *    其他種類照樣要自己填；沒填擋在送出前，寫「還沒填數量」。
+   *    舊資料仍可能是 null —— 顯示端的「未填數量 · 已 N 人」（A6）不要拿掉。 */
   const emptyNeed = () => ({ need: null, name: '', quantity: '' });
 
   /** 需求列，對齊後台 `tk-form.jsx` 的 `TaskRow`（種類／名稱／數量／可刪除）。 */
-  function SiteNeedRow({ row, index, onChange, onRemove, canRemove, showIndex, invalid }) {
+  function SiteNeedRow({ row, index, onChange, onRemove, canRemove, showIndex, invalid, quantityInvalid }) {
     const isMobile = useIsMobile();
     const opt = getNeedOption(row.need);   // 未選時為 null
     return (
@@ -1515,7 +1516,12 @@
           </div>
         ) : null}
         <ChipRadioGroup ariaLabel={'你需要什麼幫忙（第 ' + (index + 1) + ' 件）'} options={SITE_NEED_OPTIONS}
-          value={row.need} onChange={(v) => onChange({ ...row, need: v })} />
+          value={row.need} onChange={(v) => {
+            /* NEED-QTY-102：選搜救時數量空著就帶 1（受困的人至少一個）；已經填了就不蓋掉。 */
+            const o = getNeedOption(v);
+            const quantity = (o && o.kind === 'rescue' && String(row.quantity).trim() === '') ? '1' : row.quantity;
+            onChange({ ...row, need: v, quantity });
+          }} />
 
         {/* 🔒 **選了種類才問細節。**
             上一版一打開就擺著「說明」與「數量」兩個空欄位，而說明的 placeholder
@@ -1532,10 +1538,18 @@
                 aria-label={'第 ' + (index + 1) + ' 件的說明'}
                 placeholder={opt.value === 'supplies' ? '例：晚餐便當' : '例：清淤人力、圓鍬'} />
               <Input value={row.quantity} onChange={(e) => onChange({ ...row, quantity: e.target.value })}
-                type="number" min="1" aria-label={'第 ' + (index + 1) + ' 件需要幾個／幾人（選填）'} placeholder="幾個／幾人" />
+                type="number" min="1" required aria-invalid={quantityInvalid ? 'true' : undefined}
+                aria-label={'第 ' + (index + 1) + ' 件需要幾個／幾人'} placeholder="幾個／幾人"
+                style={quantityInvalid ? { borderColor: 'var(--color-fg-danger)' } : undefined} />
             </div>
+            {quantityInvalid ? (
+              <div role="alert" style={{ marginTop: 6, font: '400 var(--fs-13)/1.5 var(--font-body)', color: 'var(--color-fg-danger)' }}>
+                還沒填數量
+              </div>
+            ) : null}
+            {/* NEED-QTY-101：數量必填之後，「不知道就留空」那半句拿掉（PR #215） */}
             <div style={{ marginTop: 6, font: '400 var(--fs-12)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-muted)' }}>
-              說明留空就用「{opt.label}」；數量不知道就留空，志工到現場再回報。
+              說明留空就用「{opt.label}」。
             </div>
           </React.Fragment>
         ) : (
@@ -1961,13 +1975,16 @@
     if (!address.trim()) missing.push({ key: 'address', label: '地址' });
     if (!contactName.trim()) missing.push({ key: 'contact', label: '現場聯絡人' });
     if (namedNeeds.length === 0) missing.push({ key: 'needs', label: '至少要選一項你需要的幫忙' });
+    /* NEED-QTY-101：選了種類就要有數量 */
+    const qtyMissing = (n) => Boolean(n.need) && !(parseInt(n.quantity, 10) >= 1);
+    if (namedNeeds.some(qtyMissing)) missing.push({ key: 'needs', label: '需要幫忙的數量' });
     const needsInvalid = touched && namedNeeds.length === 0;
-
-    /* getNeedOption 未選時回 null，所以要先取再判 —— 直接 `.kind` 會 TypeError。 */
-    const hasRescue = needs.some((n) => {
+    /* RESCUE-119-101：119 提醒只出現一次，放在第一件「人員受困／急難」的正下方（PR #218）。 */
+    const firstRescueIndex = needs.findIndex((n) => {
       const o = getNeedOption(n.need);
       return Boolean(o) && o.kind === 'rescue';
     });
+
 
     /* 疑似重複的比對結果。`null` ＝ 還沒比對過；`[]` ＝ 比過了沒找到。 */
     const [dupMatches, setDupMatches] = useState(null);
@@ -2000,9 +2017,8 @@
           return {
             kind: opt.kind,                        // ticket_tasks.task_type：hr / supply / rescue
             name: n.name.trim() || opt.label,      // 民眾原話進 task_name（ERD: task_name NOT NULL）
-            /* 未填就送 null，不自動補 1 —— 對應 ERD 的 nullable。
-               「不知道要幾個人」是真實答案，假的 1 會讓建立者以為已經講清楚了。 */
-            quantity: n.quantity.trim() === '' ? null : Math.max(1, parseInt(n.quantity, 10) || 1),
+            /* NEED-QTY-101：必填，送出前已擋掉空的 */
+            quantity: Math.max(1, parseInt(n.quantity, 10) || 1),
             siteNeed: opt.value,                   // 保留民眾選的那一格，後台可看出原始語意
           };
         }),
@@ -2057,12 +2073,9 @@
         </>}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
 
-          {hasRescue ? (
-            <Alert tone="danger" title="請先撥打 119">
-              有人受困、失聯或受傷時，<strong>119 才是第一線</strong>。
-              這張單補的是後續人力，不取代緊急救護。
-            </Alert>
-          ) : null}
+          {/* RESCUE-119-101：119 提醒搬到第一件「人員受困／急難」底下（見需求列表），不放表單最上面。
+              🔒 Sucre 11-01 接受 PR #218：放在選的那一件旁邊，看得出是因為選了它才跳出來；
+              放最上面時選完往下填的人看不到。 */}
 
           {/* DS 的必填星號帶 aria-hidden，讀螢幕的人聽不到 ——
               所以在表單開頭用一句話把規則講出來，不是只靠一個符號。
@@ -2208,11 +2221,20 @@
               </span>
             ) : null}
             {needs.map((row, i) => (
-              <SiteNeedRow key={i} row={row} index={i} showIndex={needs.length > 1}
-                invalid={needsInvalid && !row.need}
-                onChange={(next) => setNeeds((rs) => rs.map((r, idx) => (idx === i ? next : r)))}
-                onRemove={() => setNeeds((rs) => rs.filter((_, idx) => idx !== i))}
-                canRemove={needs.length > 1} />
+              <React.Fragment key={i}>
+                <SiteNeedRow row={row} index={i} showIndex={needs.length > 1}
+                  invalid={needsInvalid && !row.need}
+                  quantityInvalid={touched && qtyMissing(row)}
+                  onChange={(next) => setNeeds((rs) => rs.map((r, idx) => (idx === i ? next : r)))}
+                  onRemove={() => setNeeds((rs) => rs.filter((_, idx) => idx !== i))}
+                  canRemove={needs.length > 1} />
+                {i === firstRescueIndex ? (
+                  <Alert tone="danger" title="請先撥打 119">
+                    有人受困、失聯或受傷時，<strong>119 才是第一線</strong>。
+                    這張單補的是後續人力，不取代緊急救護。
+                  </Alert>
+                ) : null}
+              </React.Fragment>
             ))}
             {/* 🔒 「還需要別的嗎？」只在**上一件已經選好種類**之後才長出來。
                 先前這顆按鈕一直都在，等於在人還沒填完第一件時就先告訴他

@@ -289,7 +289,8 @@
     //    「全部」＝列表上的「N 站」（含站點群）。站點群本身沒有營運狀態，所以各狀態加起來可能少於「全部」，滑過「全部」會講。
     const live = stations.filter((s) => !s.deleted);
     const noStatus = live.filter((s) => !SD.STATUS[s.status]).length;
-    const statTiles = window.WGStatTiles && live.length > 0 && React.createElement(window.WGStatTiles, {
+    // 🔒 STAT-108：沒有站點時也顯示（Sucre 11-01 接受 PR #232）
+    const statTiles = window.WGStatTiles && React.createElement(window.WGStatTiles, {
       value: fStatus, onChange: setFStatus,
       items: [{ key: "all", label: "全部", count: live.length, title: noStatus ? `含 ${noStatus} 個站點群（站點群沒有營運狀態）` : undefined },
         ...SD.STATUS_ORDER.map((k) => ({ key: k, label: SD.STATUS[k].label, count: live.filter((s) => s.status === k).length }))],
