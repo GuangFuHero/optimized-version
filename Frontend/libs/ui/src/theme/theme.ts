@@ -13,7 +13,11 @@ import type { CssVarsTheme } from '@mui/material/styles';
 import { extendTheme } from '@mui/material/styles';
 
 import { designExtensions } from './bridge';
-import { designTokens, IOS_NO_ZOOM_INPUT_PX } from './design-tokens';
+import {
+  designTokens,
+  IOS_NO_ZOOM_INPUT_PX,
+  TOUCH_FIELD_MEDIA,
+} from './design-tokens';
 import {
   colorSchemes as cs,
   moduleColorSchemes,
@@ -188,25 +192,22 @@ export const theme = extendTheme({
     // taller already; a field that sets its own padding or height keeps it.
     MuiOutlinedInput: {
       styleOverrides: {
-        input: ({ theme: t }) => ({
+        input: {
           variants: [
             {
               props: ({ ownerState }) =>
                 ownerState.size === 'small' && !ownerState.multiline,
               style: {
-                [`${t.breakpoints.down('tablet')}, (pointer: coarse)`]: {
-                  paddingTop: 10.5,
-                  paddingBottom: 10.5,
-                },
+                [TOUCH_FIELD_MEDIA]: { paddingTop: 10.5, paddingBottom: 10.5 },
               },
             },
           ],
-        }),
+        },
       },
     },
     MuiInputLabel: {
       styleOverrides: {
-        root: ({ theme: t }) => ({
+        root: {
           variants: [
             {
               props: ({ ownerState }) =>
@@ -214,13 +215,13 @@ export const theme = extendTheme({
                 ownerState.size === 'small' &&
                 !ownerState.shrink,
               style: {
-                [`${t.breakpoints.down('tablet')}, (pointer: coarse)`]: {
+                [TOUCH_FIELD_MEDIA]: {
                   transform: 'translate(14px, 11px) scale(1)',
                 },
               },
             },
           ],
-        }),
+        },
       },
     },
     MuiButton: {

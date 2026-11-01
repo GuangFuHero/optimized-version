@@ -21,6 +21,7 @@ export {
   semanticSpacing,
   semanticTypography,
   semanticTypographyMobile,
+  TOUCH_FIELD_MEDIA,
   withAlpha,
 } from './design-tokens';
 export type { DesignTokens, DisplayTextStep, TypeStyle } from './design-tokens';

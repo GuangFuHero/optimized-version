@@ -14,7 +14,11 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  TOUCH_FIELD_MEDIA,
+} from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../../shell/site/site-badge';
 import {
@@ -161,13 +165,17 @@ export function PhotoLinkEditor({
         </Box>
       ) : null}
 
-      {/* 48px on a phone, a thumb's size; the field takes what 加入 leaves. */}
+      {/* 48px wherever a small field is 44px (a phone, or any touch screen), a thumb's size; the
+          field takes what 加入 leaves. */}
       <Stack direction="row" sx={{ gap: 1, alignItems: 'flex-start' }}>
         <TextField
           fullWidth
           size="small"
           sx={{
-            '& .MuiInputBase-root': { height: { mobile: 48, tablet: 40 } },
+            '& .MuiInputBase-root': {
+              height: 40,
+              [TOUCH_FIELD_MEDIA]: { height: 48 },
+            },
           }}
           value={draft}
           disabled={full}
@@ -191,7 +199,11 @@ export function PhotoLinkEditor({
           variant="outlined"
           onClick={add}
           disabled={!draft.trim() || full}
-          sx={{ flexShrink: 0, height: { mobile: 48, tablet: 40 } }}
+          sx={{
+            flexShrink: 0,
+            height: 40,
+            [TOUCH_FIELD_MEDIA]: { height: 48 },
+          }}
         >
           加入
         </Button>

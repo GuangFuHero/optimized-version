@@ -10,6 +10,7 @@ import {
   fontStack,
   fontVariables,
   IOS_NO_ZOOM_INPUT_PX,
+  TOUCH_FIELD_MEDIA,
   type DisplayTextStep,
 } from './design-tokens';
 import { theme } from './theme';
@@ -347,5 +348,12 @@ describe('display text scale', () => {
   /** Below 16px, iOS Safari zooms the page on focus and the user has to pinch back out. */
   it('keeps inputs at the size iOS will not zoom', () => {
     expect(IOS_NO_ZOOM_INPUT_PX).toBe(16);
+  });
+
+  /** A phone held sideways is wider than the cutoff, so a touch screen of any width counts too. */
+  it('grows small fields on phones and on any touch screen', () => {
+    expect(TOUCH_FIELD_MEDIA).toBe(
+      '@media (max-width:767.95px), (pointer: coarse)',
+    );
   });
 });

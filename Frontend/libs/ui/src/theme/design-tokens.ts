@@ -474,6 +474,13 @@ export function displayTextSizeCss(step: DisplayTextStep) {
 /** Smallest font size iOS Safari will not zoom a focused input to. See `theme.ts` `MuiInputBase`. */
 export const IOS_NO_ZOOM_INPUT_PX = 16;
 
+/**
+ * Where a small outlined field grows from 40px to 44px, enough for a fingertip: a phone's width, or a
+ * touch screen of any width, since a phone held sideways is as wide as a tablet (`theme.ts`
+ * `MuiOutlinedInput`). A control sized to sit beside such a field switches here too.
+ */
+export const TOUCH_FIELD_MEDIA = `${DISPLAY_SCALE_MOBILE_MEDIA}, (pointer: coarse)`;
+
 /* ────────────────────────────────────────────────────────────────────────────
  * Elevation & motion
  * ──────────────────────────────────────────────────────────────────────────── */
