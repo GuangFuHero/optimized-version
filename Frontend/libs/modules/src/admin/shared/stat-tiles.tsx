@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, ButtonBase, Typography } from '@mui/material';
-import { designTokens } from '@rescue-frontend/ui';
+import { Button, Callout, designTokens } from '@rescue-frontend/ui';
 import type { ReactNode } from 'react';
 
 import {
@@ -12,7 +12,13 @@ import {
   type StatTileParts,
 } from './model/stat-tiles';
 
-const { color, radius, typography } = designTokens;
+const { color, primitives, radius, typography } = designTokens;
+
+/**
+ * A count in two parts shrinks with its tile, from 20px down to 16px (STAT-106). No token follows a
+ * container's width, so the step between (7cqi, as drawn) is written here; its ends are tokens.
+ */
+const FITTED_COUNT_SIZE = `clamp(${primitives.fontSize.base}px, 7cqi, ${primitives.fontSize.xl}px)`;
 
 /** A tile that only shows (STAT-105): no filter answers it, and a button would seem not to work. */
 export interface StatTileExtra {
@@ -24,11 +30,11 @@ export interface StatTileExtra {
   title?: string;
 }
 
-interface StatTilesProps {
-  items: readonly StatTileItem[];
-  /** The status filtered by: a tile's key, or STAT_TILE_ALL for none. */
-  value: string;
-  onChange: (value: string) => void;
+interface StatTilesProps<K extends string> {
+  items: readonly StatTileItem<K>[];
+  /** The status filtered by, or null for none (全部). */
+  value: K | null;
+  onChange: (value: K | null) => void;
   extras?: readonly StatTileExtra[];
 }
 
@@ -37,14 +43,14 @@ interface StatTilesProps {
  * STAT-101–106): a tile filters the list by its status, picked again it clears the filter; the
  * selected tile is outlined. The counts are the page's to read over every row in scope, whatever
  * the filters (STAT-102): filtered, every other tile would read 0 and there would be nothing to
- * move on to. It scrolls away with the page.
+ * move on to. It does not stick: the page puts it where the list scrolls it away (STAT-101).
  */
-export function StatTiles({
+export function StatTiles<K extends string>({
   items,
   value,
   onChange,
   extras = [],
-}: StatTilesProps) {
+}: StatTilesProps<K>) {
   return (
     <Box
       role="group"
@@ -52,18 +58,14 @@ export function StatTiles({
       sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
     >
       {items.map((item) => {
-        const active = item.key === value;
+        const active = item.key === (value ?? STAT_TILE_ALL);
         return (
           <ButtonBase
             key={item.key}
             aria-pressed={active}
             title={
               item.title ??
-              (item.key === STAT_TILE_ALL
-                ? undefined
-                : active
-                  ? '再點一次取消篩選'
-                  : `只看「${item.label}」`)
+              (active ? '再點一次取消篩選' : `只看「${item.label}」`)
             }
             onClick={() => onChange(nextStatTile(value, item.key))}
             sx={{
@@ -213,8 +215,9 @@ function TileContent({
         <Typography
           component="span"
           sx={{
-            ...typography.heading[700],
-            fontSize: parts ? 'clamp(16px, 7cqi, 20px)' : 20,
+            // Heading 600: the drawn count, 20px in the heading face.
+            ...typography.heading[600],
+            ...(parts ? { fontSize: FITTED_COUNT_SIZE } : null),
             lineHeight: 1.1,
             whiteSpace: 'nowrap',
             color: warn ? color.fg.warning : color.fg.neutral.default,
@@ -236,5 +239,23 @@ function TileContent({
         ) : null}
       </Box>
     </>
+  );
+}
+
+/** The counts did not load: the row's own 重試, as the list may have loaded fine. */
+export function StatTilesRetry({
+  retrying,
+  onRetry,
+}: {
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <Callout tone="danger">
+      無法載入統計，請稍後再試
+      <Button variant="ghost" size="sm" disabled={retrying} onClick={onRetry}>
+        重試
+      </Button>
+    </Callout>
   );
 }

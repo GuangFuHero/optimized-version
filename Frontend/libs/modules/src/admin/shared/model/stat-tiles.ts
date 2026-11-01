@@ -5,11 +5,11 @@ export const STAT_TILE_ALL = 'all';
 export type StatTileCount = number | null;
 
 /** A tile that filters by its key: 全部 (`STAT_TILE_ALL`) or a status. */
-export interface StatTileItem {
-  key: string;
+export interface StatTileItem<K extends string = string> {
+  key: K | typeof STAT_TILE_ALL;
   label: string;
   count: StatTileCount;
-  /** What hovering the tile says, beyond its label. */
+  /** What hovering the tile says, instead of 只看「…」 or 再點一次取消篩選. */
   title?: string;
 }
 
@@ -20,11 +20,13 @@ export interface StatTileParts {
 }
 
 /**
- * The status filter after a tile is picked (STAT-103): that tile's status, or none when the tile
- * already selected, or 全部, is picked — the way back to every row is the tile in hand.
+ * The status filter after a tile is picked (STAT-103): that tile's status, or none (null) when the
+ * tile already selected, or 全部, is picked — the way back to every row is the tile in hand.
  */
-export function nextStatTile(current: string, picked: string): string {
-  return picked === STAT_TILE_ALL || picked === current
-    ? STAT_TILE_ALL
-    : picked;
+export function nextStatTile<K extends string>(
+  current: K | null,
+  picked: K | typeof STAT_TILE_ALL,
+): K | null {
+  if (picked === STAT_TILE_ALL) return null;
+  return picked === current ? null : picked;
 }

@@ -21,12 +21,8 @@ describe('stationStatTiles', () => {
     ]);
   });
 
-  it('reads — on every tile while the counts are not in', () => {
-    expect(stationStatTiles(null).map((tile) => tile.count)).toEqual([
-      null,
-      null,
-      null,
-      null,
-    ]);
+  it('draws no row while the counts are not in, or with no station', () => {
+    expect(stationStatTiles(null)).toBeNull();
+    expect(stationStatTiles({ total: 0, byStatus: [] })).toBeNull();
   });
 });

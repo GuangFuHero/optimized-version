@@ -34,27 +34,33 @@ export function toTicketStats(
   };
 }
 
+/** The statuses with a tile: the design leaves 已取消 out. */
+const TILE_STATUSES = TICKET_STATUS_OPTIONS.filter(
+  (option) => option.value !== 'cancelled',
+);
+
 /**
- * The board's tiles (prototype tk-table.jsx): 全部 and each status, to filter by; and 志工缺口, which
- * only shows — no filter answers it (STAT-105). Null while the stats are not in: every count reads —.
+ * The board's tiles (prototype tk-table.jsx): 全部, 待處理, 處理中 and 已完成, to filter by; and 志工缺口,
+ * which only shows — no filter answers it (STAT-105). None while the stats are not in, or with no
+ * ticket: the prototype draws the row only once there are tickets.
  */
 export function ticketStatTiles(stats: TicketStats | null): {
-  items: StatTileItem[];
+  items: StatTileItem<TicketStatus>[];
   /** The people still short and the needs short of them; 0 with none short. */
-  gap: StatTileParts | 0 | null;
-} {
+  gap: StatTileParts | 0;
+} | null {
+  if (!stats || stats.total === 0) return null;
   return {
     items: [
-      { key: STAT_TILE_ALL, label: '全部', count: stats?.total ?? null },
-      ...TICKET_STATUS_OPTIONS.map((option) => ({
+      { key: STAT_TILE_ALL, label: '全部', count: stats.total },
+      ...TILE_STATUSES.map((option) => ({
         key: option.value,
         label: option.label,
-        count: stats?.byStatus[option.value] ?? null,
+        count: stats.byStatus[option.value],
       })),
     ],
-    gap: !stats
-      ? null
-      : stats.gapPeople > 0
+    gap:
+      stats.gapPeople > 0
         ? { main: `缺 ${stats.gapPeople} 人`, sub: `${stats.gapNeeds} 項需求` }
         : 0,
   };

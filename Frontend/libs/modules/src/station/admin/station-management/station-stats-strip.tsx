@@ -1,9 +1,9 @@
 'use client';
 
+import { Box } from '@mui/material';
 import { useStationFacets } from '@rescue-frontend/data-access/admin';
 
-import { STAT_TILE_ALL } from '../../../admin/shared/model/stat-tiles';
-import { StatTiles } from '../../../admin/shared/stat-tiles';
+import { StatTiles, StatTilesRetry } from '../../../admin/shared/stat-tiles';
 import type { OperationalStatus } from '../../operational-status';
 import { stationStatTiles } from './model/station-stats';
 
@@ -15,23 +15,29 @@ interface StationStatsStripProps {
 
 /**
  * The stations' counts by operational status, each a filter on it (prototype station-table.jsx).
- * Counted over every station in scope, whatever the filters; a count that did not load reads —.
+ * Counted over every station in scope, whatever the filters. Counts that did not load get their own
+ * 重試, as the 任務管理 row does.
  */
 export function StationStatsStrip({
   status,
   onStatusChange,
 }: StationStatsStripProps) {
   const facets = useStationFacets();
+  const tiles = stationStatTiles(facets.data?.stationFacets ?? null);
+  const failed = facets.error != null;
+  if (!failed && !tiles) return null;
 
   return (
-    <StatTiles
-      items={stationStatTiles(facets.data?.stationFacets ?? null)}
-      value={status ?? STAT_TILE_ALL}
-      onChange={(next) =>
-        onStatusChange(
-          next === STAT_TILE_ALL ? null : (next as OperationalStatus),
-        )
-      }
-    />
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {failed ? (
+        <StatTilesRetry
+          retrying={facets.isFetching}
+          onRetry={() => void facets.refetch()}
+        />
+      ) : null}
+      {tiles ? (
+        <StatTiles items={tiles} value={status} onChange={onStatusChange} />
+      ) : null}
+    </Box>
   );
 }
