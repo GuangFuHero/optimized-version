@@ -142,7 +142,9 @@ async def merge_station_suggestions(
     """Decide the pending suggestions on the given fields of one station (requires station.review).
 
     Only fields with a pending suggestion can be decided; anything else is a station.edit.
-    Every pending row on a decided field shares the decision, and fields left out stay pending.
+    A decided field closes every pending row on it. A rejected field rejects them all; an approved
+    one approves the rows whose own value it wrote and marks the rest not_adopted (WG-125).
+    Fields left out stay pending.
     """
     _check_length(review_note=review_note)
     for decision in decisions:
@@ -193,9 +195,14 @@ async def merge_station_suggestions(
     )
     db.add(merge)
     await db.flush()
+    written = {(c["target_uuid"], c["field_name"]): c["after"] for c in changes}
     for decision in decisions:
-        for row in rows_by_field[(decision.target_uuid, decision.field_name)]:
-            row.status = "approved" if decision.approve else "rejected"
+        key = (decision.target_uuid, decision.field_name)
+        for row in rows_by_field[key]:
+            if not decision.approve:
+                row.status = "rejected"
+            else:
+                row.status = "approved" if _adopted(row, written[key]) else "not_adopted"
             row.reviewed_by = actor_uid
             row.review_note = review_note
             row.merge_uuid = merge.uuid
@@ -295,9 +302,7 @@ async def _apply_decisions(
             continue
         if decision.value is None:
             raise ValueError(f"'{decision.field_name}' needs a value to approve")
-        value = coerce_and_validate(target_type, decision.field_name, decision.value)
-        if target_type == "station" and decision.field_name == "supply_status":
-            value = normalize_supply_status(value)
+        value = _merge_value(target_type, decision.field_name, decision.value)
         before = getattr(target, decision.field_name)
         change = {
             "target_type": target_type,
@@ -348,6 +353,22 @@ async def _revoke_target(db: AsyncSession, station: Station, change: dict):
         if prop and prop.delete_at is not None and str(prop.station_uuid) == str(station.uuid):
             return None
     return await _station_target(db, station, change["target_type"], change["target_uuid"])
+
+
+def _merge_value(target_type: str, field_name: str, raw: str):
+    """A value as a merge writes it: typed for its column, a supply status stripped (ADR-333)."""
+    value = coerce_and_validate(target_type, field_name, raw)
+    if target_type == "station" and field_name == "supply_status":
+        value = normalize_supply_status(value)
+    return value
+
+
+def _adopted(row: StationUpdateSuggestion, written) -> bool:
+    """Whether a merge wrote this suggestion's own value; one its field no longer accepts was not."""
+    try:
+        return _merge_value(row.target_type, row.field_name, row.new_value) == written
+    except ValueError:
+        return False
 
 
 def _check_length(**fields: str | None) -> None:

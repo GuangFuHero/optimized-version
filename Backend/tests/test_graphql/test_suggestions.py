@@ -272,6 +272,111 @@ async def test_merge_decides_every_suggestion_on_a_field_and_leaves_others_pendi
     assert statuses == ["rejected", "rejected"]
 
 
+async def _field_statuses(target_uuid, field_name):
+    """Every suggestion on one field as (proposed value, status, merge uuid), sorted."""
+    async with test_db() as db:
+        rows = (await db.execute(
+            select(
+                StationUpdateSuggestion.new_value,
+                StationUpdateSuggestion.status,
+                StationUpdateSuggestion.merge_uuid,
+            ).where(
+                StationUpdateSuggestion.target_uuid == target_uuid,
+                StationUpdateSuggestion.field_name == field_name,
+            )
+        )).all()
+    return sorted((value, status, str(merge)) for value, status, merge in rows)
+
+
+@pytest.mark.asyncio
+async def test_approving_a_field_approves_only_the_suggestions_whose_value_it_wrote(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """WG-125: of two values on one field, the one written is approved and the other not adopted."""
+    _, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second = (await _create_user_with_role(redis, "Login User"))[1]
+    third = (await _create_user_with_role(redis, "Login User"))[1]
+    await _create(client, first, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, second, "station", sample_station, "op_hour", "09:00-17:00")
+    await _create(client, third, "station", sample_station, "op_hour", "08:00-20:00")
+
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", "08:00-20:00"),
+    ]))["data"]["mergeStationSuggestions"]
+
+    assert await _field_statuses(sample_station, "op_hour") == [
+        ("08:00-20:00", "approved", merge["uuid"]),
+        ("08:00-20:00", "approved", merge["uuid"]),
+        ("09:00-17:00", "not_adopted", merge["uuid"]),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_value_the_reviewer_typed_adopts_no_suggestion(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """A reviewer's own value is written, and no suggestion on the field is adopted."""
+    _, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second = (await _create_user_with_role(redis, "Login User"))[1]
+    await _create(client, first, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, second, "station", sample_station, "op_hour", "09:00-17:00")
+
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", "08:00-17:00"),
+    ]))["data"]["mergeStationSuggestions"]
+
+    assert merge["changes"][0]["after"] == "08:00-17:00"
+    assert [status for _, status, _ in await _field_statuses(sample_station, "op_hour")] == [
+        "not_adopted", "not_adopted",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_suggestion_is_matched_as_the_merge_reads_it(
+    client, redis, auditor_auth, login_user_auth, sample_station, sample_station_property
+):
+    """A quantity matches as a number and a blank supply status as none, not as raw text."""
+    _, first = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, first, "station_property", sample_station_property, "quantity", "42")
+    await _create(client, first, "station", sample_station, "supply_status", "")
+
+    await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station_property, "quantity", "042"),
+        _decide(sample_station, "supply_status", " "),
+    ])
+
+    assert [status for _, status, _ in await _field_statuses(sample_station_property, "quantity")] == [
+        "approved",
+    ]
+    assert [status for _, status, _ in await _field_statuses(sample_station, "supply_status")] == [
+        "approved",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_revoking_a_merge_revokes_only_the_adopted_suggestions(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """The suggestion the merge did not adopt stays not_adopted once the merge is revoked."""
+    _, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second = (await _create_user_with_role(redis, "Login User"))[1]
+    await _create(client, first, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, second, "station", sample_station, "op_hour", "09:00-17:00")
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", "08:00-20:00"),
+    ]))["data"]["mergeStationSuggestions"]
+
+    await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
+
+    assert [(value, status) for value, status, _ in await _field_statuses(sample_station, "op_hour")] == [
+        ("08:00-20:00", "revoked"), ("09:00-17:00", "not_adopted"),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_merge_refuses_unsuggested_field_and_duplicates(
     client, auditor_auth, login_user_auth, sample_station

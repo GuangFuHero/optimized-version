@@ -40,8 +40,9 @@ class StationUpdateSuggestion(Base, UUIDPKMixin, TimestampMixin):
 
     Polymorphic target (like ``photos.ref_type``/``ref_uuid``): ``target_type`` selects
     the table and ``target_uuid`` the row. ``new_value`` is stored as text. A reviewer decides
-    every pending row on a field at once through a merge, which sets ``merge_uuid``; a revoked
-    merge moves its approved rows to ``revoked``.
+    every pending row on a field at once through a merge, which sets ``merge_uuid``: rows whose
+    value an approval wrote are ``approved`` and the rest ``not_adopted``; a rejection rejects them
+    all. A revoked merge moves its approved rows to ``revoked``.
     """
 
     __tablename__ = "station_update_suggestions"
@@ -50,7 +51,8 @@ class StationUpdateSuggestion(Base, UUIDPKMixin, TimestampMixin):
     field_name: Mapped[str] = mapped_column(String(100))
     new_value: Mapped[str] = mapped_column(String)
     comment: Mapped[str | None] = mapped_column(String)
-    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/approved/rejected/revoked
+    # pending/approved/not_adopted/rejected/revoked
+    status: Mapped[str] = mapped_column(String(20), default="pending")
     review_note: Mapped[str | None] = mapped_column(String)
     reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"))
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
