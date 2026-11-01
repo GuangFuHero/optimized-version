@@ -33,8 +33,8 @@ git worktree add --detach ../design-latest origin/sucrelindesign     # 要開原
 `main` 刪掉了舊的 `Design/前台/`、改寫了這份 `README.md`。直接 merge 會把設計分支上沒改過的檔（`_ds/`、字型、logo）**直接刪掉，不會出現衝突**。第一次一定要這樣合（在設計分支上 `git cat-file -e HEAD:Design/CLAUDE.md` 失敗就是第一次）：
 
 ```sh
-git switch sucrelindesign
-git fetch origin && git merge --no-commit origin/main   # 已經在 merge 中（停在衝突、有 MERGE_HEAD）就跳過這行，直接做下一行
+git switch sucrelindesign                                # 已經在 merge 中（停在衝突、有 MERGE_HEAD）就跳過這行和下一行；不要用 git merge --quit
+git fetch origin && git merge --no-commit origin/main
 git checkout HEAD -- "Design/前台" Design/README.md   # 拿回設計分支的版本
 git diff --stat HEAD -- Design/                        # 只能剩 Design/CLAUDE.md、Design/AGENTS.md
 git commit
