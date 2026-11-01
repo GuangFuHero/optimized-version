@@ -10,6 +10,7 @@ export {
   fontStack,
   fontVariables,
   IOS_NO_ZOOM_INPUT_PX,
+  LABEL_400_SIZE_VAR,
   MOBILE_BREAKPOINT_PX,
   primitives,
   semanticColor,

@@ -1018,6 +1018,9 @@ export type Query = {
   teamZone?: Maybe<TeamZoneType>;
   teamZones: TeamZoneConnection;
   ticket?: Maybe<TicketType>;
+  /** Whether ticket(uuid) gives this ticket, and if not, whether it was merged into another, deleted, or never was, so a share link can say which and send a merged one on. Ask it beside ticket(uuid). The state and the kept ticket's uuid alone, nothing of the ticket (ADR-444) */
+  ticketAvailability: TicketAvailabilityType;
+  ticketCells: Array<TicketCellType>;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
@@ -1153,6 +1156,16 @@ export type QueryTicketArgs = {
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
+export type QueryTicketAvailabilityArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type QueryTicketCellsArgs = {
+  bounds: BoundsInput;
+  statuses?: InputMaybe<Array<TicketStatus>>;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+};
+
 export type QueryTicketPropertyConfigsArgs = {
   disasterTypes: Array<Scalars['String']['input']>;
   includeInactive?: Scalars['Boolean']['input'];
@@ -1170,6 +1183,7 @@ export type QueryTicketsArgs = {
   auditStatus?: InputMaybe<AuditStatus>;
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
+  locationCell?: InputMaybe<Scalars['String']['input']>;
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
   order?: TicketListOrder;
@@ -1177,6 +1191,7 @@ export type QueryTicketsArgs = {
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   status?: InputMaybe<Scalars['String']['input']>;
+  statuses?: InputMaybe<Array<TicketStatus>>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
@@ -1228,6 +1243,8 @@ export type RoleRequestType = {
   /** Spec 019 only; no longer sent (ADR-355) */
   contact?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['DateTime']['output'];
+  /** The team approval handed out: the one joined, or the one a new-team application founded */
+  grantedTeam?: Maybe<RoleRequestTeam>;
   /** The team a new-team application founds */
   newTeamName?: Maybe<Scalars['String']['output']>;
   reason: Scalars['String']['output'];
@@ -1663,6 +1680,33 @@ export type TicketAuditEntryType = {
   status: Scalars['String']['output'];
 };
 
+export const TicketAvailability = {
+  Available: 'available',
+  Deleted: 'deleted',
+  Merged: 'merged',
+  NotFound: 'not_found',
+} as const;
+
+export type TicketAvailability =
+  (typeof TicketAvailability)[keyof typeof TicketAvailability];
+/** What a share link finds at a ticket's uuid: the state, nothing of the ticket */
+export type TicketAvailabilityType = {
+  __typename?: 'TicketAvailabilityType';
+  /** Set only when status is merged: the ticket the request now lives in, which ticket(uuid) gives */
+  replacedByUuid?: Maybe<Scalars['UUID']['output']>;
+  status: TicketAvailability;
+};
+
+/** How many tickets one H3 cell holds, of those its caller is shown as the cell */
+export type TicketCellType = {
+  __typename?: 'TicketCellType';
+  /** H3 index (hex), the same value TicketType.locationCell carries for these tickets */
+  cell: Scalars['String']['output'];
+  ticketCount: Scalars['Int']['output'];
+  /** Of those, how many are urgent: a priority other than 'low' or 'medium' (trimmed, any case), and not 'in_progress' — the rule the site colours a ticket urgent by */
+  urgentCount: Scalars['Int']['output'];
+};
+
 export type TicketConnection = {
   __typename?: 'TicketConnection';
   items: Array<TicketType>;
@@ -1721,6 +1765,14 @@ export type TicketPropertyConfigType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export const TicketStatus = {
+  Cancelled: 'cancelled',
+  Completed: 'completed',
+  InProgress: 'in_progress',
+  Pending: 'pending',
+} as const;
+
+export type TicketStatus = (typeof TicketStatus)[keyof typeof TicketStatus];
 export type TicketTaskCreated = {
   __typename?: 'TicketTaskCreated';
   task: TicketTaskType;
@@ -2502,6 +2554,7 @@ export type TicketNeedFieldsFragment = {
 export type GetTicketsQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
   status?: InputMaybe<Scalars['String']['input']>;
+  statuses?: InputMaybe<Array<TicketStatus> | TicketStatus>;
   priority?: InputMaybe<Scalars['String']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -2523,6 +2576,42 @@ export type GetTicketsQuery = {
       hasNextPage: boolean;
       hasPreviousPage: boolean;
     };
+  };
+};
+
+export type GetTicketCellsQueryVariables = Exact<{
+  bounds: BoundsInput;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+  statuses?: InputMaybe<Array<TicketStatus> | TicketStatus>;
+}>;
+
+export type GetTicketCellsQuery = {
+  __typename?: 'Query';
+  ticketCells: Array<{
+    __typename?: 'TicketCellType';
+    cell: string;
+    ticketCount: number;
+    urgentCount: number;
+  }>;
+};
+
+export type GetCellTicketsQueryVariables = Exact<{
+  locationCell: Scalars['String']['input'];
+  statuses?: InputMaybe<Array<TicketStatus> | TicketStatus>;
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+export type GetCellTicketsQuery = {
+  __typename?: 'Query';
+  tickets: {
+    __typename?: 'TicketConnection';
+    items: Array<
+      { __typename?: 'TicketType' } & {
+        ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
+      }
+    >;
+    pageInfo: { __typename?: 'PageInfo'; hasNextPage: boolean };
   };
 };
 
@@ -2611,6 +2700,24 @@ export type GetTicketQuery = {
         >;
       } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } })
     | null;
+};
+
+export type GetLinkedTicketQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type GetLinkedTicketQuery = {
+  __typename?: 'Query';
+  ticket?:
+    | ({ __typename?: 'TicketType' } & {
+        ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
+      })
+    | null;
+  ticketAvailability: {
+    __typename?: 'TicketAvailabilityType';
+    status: TicketAvailability;
+    replacedByUuid?: string | null;
+  };
 };
 
 export type GetTicketTasksQueryVariables = Exact<{
@@ -4863,6 +4970,23 @@ export const GetTicketsDocument = {
           kind: 'VariableDefinition',
           variable: {
             kind: 'Variable',
+            name: { kind: 'Name', value: 'statuses' },
+          },
+          type: {
+            kind: 'ListType',
+            type: {
+              kind: 'NonNullType',
+              type: {
+                kind: 'NamedType',
+                name: { kind: 'Name', value: 'TicketStatus' },
+              },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
             name: { kind: 'Name', value: 'priority' },
           },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
@@ -4909,6 +5033,14 @@ export const GetTicketsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'status' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'statuses' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'statuses' },
                 },
               },
               {
@@ -5019,6 +5151,259 @@ export const GetTicketsDocument = {
     },
   ],
 } as unknown as DocumentNode<GetTicketsQuery, GetTicketsQueryVariables>;
+export const GetTicketCellsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetTicketCells' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'bounds' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'BoundsInput' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'zoom' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'statuses' },
+          },
+          type: {
+            kind: 'ListType',
+            type: {
+              kind: 'NonNullType',
+              type: {
+                kind: 'NamedType',
+                name: { kind: 'Name', value: 'TicketStatus' },
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'ticketCells' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'bounds' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'bounds' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'zoom' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'zoom' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'statuses' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'statuses' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'cell' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'ticketCount' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'urgentCount' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetTicketCellsQuery, GetTicketCellsQueryVariables>;
+export const GetCellTicketsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetCellTickets' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'locationCell' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'statuses' },
+          },
+          type: {
+            kind: 'ListType',
+            type: {
+              kind: 'NonNullType',
+              type: {
+                kind: 'NamedType',
+                name: { kind: 'Name', value: 'TicketStatus' },
+              },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          defaultValue: { kind: 'IntValue', value: '0' },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'limit' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          defaultValue: { kind: 'IntValue', value: '200' },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'tickets' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'locationCell' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'locationCell' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'statuses' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'statuses' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'skip' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'skip' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'limit' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'limit' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'items' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'FragmentSpread',
+                        name: { kind: 'Name', value: 'TicketFields' },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'pageInfo' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'hasNextPage' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetCellTicketsQuery, GetCellTicketsQueryVariables>;
 export const GetTicketsWithNeedsDocument = {
   kind: 'Document',
   definitions: [
@@ -5506,6 +5891,111 @@ export const GetTicketDocument = {
     },
   ],
 } as unknown as DocumentNode<GetTicketQuery, GetTicketQueryVariables>;
+export const GetLinkedTicketDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetLinkedTicket' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'ticket' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'TicketFields' },
+                },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'ticketAvailability' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'replacedByUuid' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  GetLinkedTicketQuery,
+  GetLinkedTicketQueryVariables
+>;
 export const GetTicketTasksDocument = {
   kind: 'Document',
   definitions: [

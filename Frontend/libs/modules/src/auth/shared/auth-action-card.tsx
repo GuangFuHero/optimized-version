@@ -10,6 +10,8 @@ const { color, radius, shadow } = designTokens;
 interface AuthActionCardProps {
   title: string;
   description: string;
+  /** The description's id, for a field inside to be described by. */
+  descriptionId?: string;
   children: ReactNode;
 }
 
@@ -17,6 +19,7 @@ interface AuthActionCardProps {
 export function AuthActionCard({
   title,
   description,
+  descriptionId,
   children,
 }: AuthActionCardProps) {
   return (
@@ -44,6 +47,7 @@ export function AuthActionCard({
           {title}
         </Typography>
         <Typography
+          id={descriptionId}
           sx={{
             fontSize: displayTextSize[13],
             lineHeight: 1.6,
