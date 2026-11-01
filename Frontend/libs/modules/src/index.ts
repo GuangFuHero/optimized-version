@@ -67,6 +67,7 @@ export type {
 
 export {
   dedupeMarkersById,
+  floorHelpForOpenBuilding,
   pinnedBesideBuildings,
   requestHelpOnBuildingFloor,
   SiteMapControls,

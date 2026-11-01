@@ -1,6 +1,7 @@
 export { pinnedBesideBuildings } from './building-markers';
 export { dedupeMarkersById } from './markers';
 export {
+  floorHelpForOpenBuilding,
   requestHelpOnBuildingFloor,
   useSiteMapBuildings,
 } from './use-site-map-buildings';

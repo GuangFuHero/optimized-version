@@ -10,6 +10,7 @@ import {
   createPointShareTarget,
   createTaskMatchTicketDetailOverrides,
   dedupeMarkersById,
+  floorHelpForOpenBuilding,
   hasRescueMapDetailItem,
   Map,
   MapRequestHelpBar,
@@ -17,7 +18,6 @@ import {
   pinnedBesideBuildings,
   PlaceHereAction,
   PointShareDrawer,
-  requestHelpOnBuildingFloor,
   SITE_FALLBACK_DATA_TYPE,
   SiteMapControls,
   syncDocumentMetadata,
@@ -192,15 +192,11 @@ function SiteMapViewportDataLayer({
   );
 
   // 在這一層請求協助 in the drawer of a building the map knows the point of.
-  const openedBuilding = buildings.entries.find(
-    (building) => building.uuid === buildingUuid && building.point,
+  const requestHelpOnFloor = floorHelpForOpenBuilding(
+    buildings.entries,
+    buildingUuid,
+    () => setBuildingUuid(null),
   );
-  const requestHelpOnFloor = openedBuilding
-    ? (floor: string) => {
-        setBuildingUuid(null);
-        requestHelpOnBuildingFloor(openedBuilding, floor);
-      }
-    : undefined;
 
   // The viewport read when pressed, as for a share: kept in the callback, every pan would make a new one.
   const openBuildingTicket = useCallback(

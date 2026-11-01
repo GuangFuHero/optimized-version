@@ -43,7 +43,7 @@ import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { resolveTicketSearch } from '../ticket/ticket-search';
 import {
-  requestHelpOnBuildingFloor,
+  floorHelpForOpenBuilding,
   usePaginatedRescueMapMarkers,
 } from '../map/site';
 import { SiteListRow } from './site-list-row';
@@ -100,6 +100,14 @@ export function SiteListView() {
   });
 
   const dataType = controller.dataType ?? SITE_FALLBACK_DATA_TYPE;
+
+  // The open buildings, for 這些大樓可以看各樓層 and for 在這一層請求協助 in their drawer: on 任務 only.
+  const { buildings, loading: buildingsLoading } = useBuildingMaps({
+    enabled: dataType === 'ticket',
+  });
+  // The first page shows with the buildings above it, not before them: come second, the buildings
+  // would push down the cards, and a tap aimed at one would land on a building.
+  const firstPageIn = hasFetchedOnce && !buildingsLoading;
 
   // 含已滿額: full needs, and the tickets left with nothing else, fold away until asked for.
   const [showFullNeeds, setShowFullNeeds] = useState(false);
@@ -285,7 +293,9 @@ export function SiteListView() {
   useEffect(() => {
     const target = loadMoreRef.current;
 
-    if (!target || !canLoadMore) {
+    // Not while the first page waits for the buildings: with no card above it, the sentinel would ask
+    // for the second at once.
+    if (!target || !canLoadMore || !firstPageIn) {
       return;
     }
 
@@ -304,7 +314,7 @@ export function SiteListView() {
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [canLoadMore, loadNextPage]);
+  }, [canLoadMore, firstPageIn, loadNextPage]);
 
   const closeDetail = () => {
     setDetailOpen(false);
@@ -324,17 +334,11 @@ export function SiteListView() {
 
   // 現場分區: the building a ticket's 看各樓層 opened, shut again on opening one of its tickets.
   const [buildingUuid, setBuildingUuid] = useState<string | null>(null);
-  // The open buildings, for 這些大樓可以看各樓層 and for 在這一層請求協助 in their drawer: on 任務 only.
-  const { buildings } = useBuildingMaps({ enabled: dataType === 'ticket' });
-  const openedBuilding = buildings.find(
-    (building) => building.uuid === buildingUuid && building.point,
+  const requestHelpOnFloor = floorHelpForOpenBuilding(
+    buildings,
+    buildingUuid,
+    () => setBuildingUuid(null),
   );
-  const requestHelpOnFloor = openedBuilding
-    ? (floor: string) => {
-        setBuildingUuid(null);
-        requestHelpOnBuildingFloor(openedBuilding, floor);
-      }
-    : undefined;
 
   // One of a building's tickets, from its drawer or 上一張／下一張. One the list holds opens as any
   // card does; one it does not — past the loaded pages, or left out by a filter — as a linked one does.
@@ -497,14 +501,12 @@ export function SiteListView() {
           ) : null}
           {/* The buildings one can open floor by floor, those with no ticket too. Outside the
               no-match branch below: a street searched that has no ticket may still have a building. */}
-          {dataType === 'ticket' ? (
-            <Box sx={{ mb: 1.5 }}>
-              <BuildingEntryList
-                buildings={buildings}
-                q={ticketQuery}
-                onOpen={setBuildingUuid}
-              />
-            </Box>
+          {dataType === 'ticket' && firstPageIn ? (
+            <BuildingEntryList
+              buildings={buildings}
+              q={ticketQuery}
+              onOpen={setBuildingUuid}
+            />
           ) : null}
           {/* Not while a page is on its way: every search reloads the list, and it would read
               as empty between keystrokes. Nor while a later page may still list something: the
@@ -524,7 +526,7 @@ export function SiteListView() {
               </Typography>
             </Stack>
           ) : listRows.length === 0 &&
-            hasFetchedOnce &&
+            firstPageIn &&
             !isFetching &&
             !canLoadMore ? (
             <Stack
@@ -539,7 +541,7 @@ export function SiteListView() {
             </Stack>
           ) : (
             <Stack spacing={1.5}>
-              {listRows.map(({ marker, needs }) => (
+              {(firstPageIn ? listRows : []).map(({ marker, needs }) => (
                 <SiteListRow
                   key={marker.id}
                   marker={marker}
@@ -551,7 +553,7 @@ export function SiteListView() {
                 />
               ))}
               <Box ref={loadMoreRef} sx={{ height: 1 }} />
-              {isFetching ? (
+              {isFetching || buildingsLoading ? (
                 <Typography
                   sx={{
                     pt: 1,

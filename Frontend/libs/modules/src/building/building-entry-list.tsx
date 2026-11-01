@@ -55,6 +55,8 @@ export function BuildingEntryList({
       sx={{
         display: 'grid',
         gap: `${spacing[2]}px`,
+        // Its own, so that the gap above the tickets goes with the block.
+        mb: 1.5,
         p: `${spacing[3]}px`,
         borderRadius: `${radius.lg}px`,
         bgcolor: color.bg.neutral.default,
@@ -160,7 +162,7 @@ export function BuildingEntryList({
           aria-expanded={expanded}
           sx={{
             justifySelf: 'start',
-            minHeight: 32,
+            minHeight: 44,
             px: `${spacing[2]}px`,
             fontSize: displayTextSize[13],
             fontWeight: 600,

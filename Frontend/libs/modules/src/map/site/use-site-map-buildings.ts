@@ -26,7 +26,7 @@ const NONE: SiteMapBuildings = { entries: [], markers: [], drawn: new Set() };
  * gives floors and no counts. None on the map of stations: a building holds tickets.
  */
 export function useSiteMapBuildings(shown: boolean): SiteMapBuildings {
-  const { buildings } = useBuildingMaps();
+  const { buildings } = useBuildingMaps({ enabled: shown });
 
   return useMemo(() => {
     if (!shown) {
@@ -64,4 +64,25 @@ export function requestHelpOnBuildingFloor(
   const [lat, lng] = building.point;
 
   openHelpRequest({ lat, lng, place: { address: building.address, floor } });
+}
+
+/**
+ * The drawer's 在這一層請求協助 for the building open in it, the same on the map and the list: it shuts
+ * the drawer and asks on the floor picked. None while no building is open, or for one with no point.
+ */
+export function floorHelpForOpenBuilding(
+  buildings: readonly BuildingMapEntry[],
+  openUuid: string | null,
+  closeDrawer: () => void,
+): ((floor: string) => void) | undefined {
+  const building = buildings.find(
+    (entry) => entry.uuid === openUuid && entry.point,
+  );
+
+  return building
+    ? (floor) => {
+        closeDrawer();
+        requestHelpOnBuildingFloor(building, floor);
+      }
+    : undefined;
 }
