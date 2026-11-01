@@ -213,7 +213,7 @@ Dan 同意）
   所以 `disputed` 時至少有一張。
 - **誰看得到**：在這張單上持有 `ai_duplicate.view` 的人（超管、資料檢核員，ADR-337），跟重複審核頁同一個權限；
   其他人（含前台、訪客）拿到 null，也不查。審核頁已經給整張單，標題不會多給。前台標「疑似重複」另讀公開的
-  `suspectedDuplicateOf`（ADR-447）。
+  `suspectedDuplicateOf`（ADR-454）。
 - **怎麼查**：`disputes_by_ticket` DataLoader（`app/services/ticket_verification.py`），一頁的單一起查：
   卡一句、對方單的標題一句，不隨筆數增加。
 - **不做**：不能用它篩選或排序；不加存資料的欄位、不用 migration；不改 `ticket_audit`／`auditStatus`／通知；
@@ -237,7 +237,7 @@ Dan 同意）
 
 ---
 
-## ADR-447：任務單加公開的 `suspectedDuplicateOf`，前台標「疑似重複」
+## ADR-454：任務單加公開的 `suspectedDuplicateOf`，前台標「疑似重複」
 
 **Date**: 2026-11-01　**Status**: Accepted（使用者 2026-11-01 照建議；糖要前台標「疑似重複」，必做；
 介面跟前台對過）

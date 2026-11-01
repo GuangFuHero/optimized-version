@@ -1,7 +1,7 @@
 """Whether 重複審核 still waits on a ticket, read from its cards.
 
 TicketType.verificationStatus tells a reviewer (ADR-443); suspectedDuplicateOf tells anyone which
-tickets those are, and nothing more (ADR-447).
+tickets those are, and nothing more (ADR-454).
 """
 
 import uuid as uuid_mod

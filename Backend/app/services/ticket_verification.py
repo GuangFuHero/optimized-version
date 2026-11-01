@@ -7,7 +7,7 @@ resolve, so the condition is taken from there. Nothing is stored on the ticket: 
 written by the dedup layers and the review page, and read here as they stand.
 
 `TicketType.verification_status` reads it with `ai_duplicate.view`, checked there;
-`TicketType.suspected_duplicate_of` gives anyone the far tickets alone (ADR-447).
+`TicketType.suspected_duplicate_of` gives anyone the far tickets alone (ADR-454).
 """
 
 from collections.abc import Iterable
