@@ -15,8 +15,10 @@ way, and app.services.chart_render.resolve() is what guarantees each function on
 ever receives an `x` value that's actually valid for it (see that module's CATALOG).
 
 `extra_filters` is the caller's RBAC row filter — a list of WHERE clauses from
-app.core.rbac_scopes.scope_filter against `Tickets`, empty for `all` scope. Every
-function must apply it; an aggregate that skips it leaks numbers, if not rows.
+app.core.rbac_scopes.scope_filter against `Tickets`, empty for `all` scope — plus the
+endpoint's own filters. Every function must apply it; an aggregate that skips it leaks
+numbers, if not rows. The ticket-level counts leave deleted tickets out unless it holds
+analytics_filters.INCLUDE_DELETED; a deleted ticket is cancelled, so it then counts as canceled.
 
 Grouped rows use a uniform `"x"` output column regardless of what's being grouped by
 (day/week bucket, task_type, ...) so chart_render.py never needs per-metric field
@@ -59,7 +61,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
-from sqlalchemy.sql.expression import ColumnClause
 from sqlalchemy.sql.visitors import replacement_traverse
 
 from app.core.search import statement_ceiling
@@ -76,6 +77,7 @@ from app.services.analytics_common import (
     local_bounds,
     resolve_granularity,
 )
+from app.services.analytics_filters import NEED_TYPE, live_tickets
 from app.services.dedup_review import PENDING_STATUSES
 from app.services.ticket_status import OPEN_NEED_STATUSES
 
@@ -98,8 +100,9 @@ def _bucket_expr():
 def _exited_subquery(bucket: str, extra_filters: list | None):
     """Tickets now in exit `bucket`, each with the moment it left: columns ticket_uuid, stamp.
 
-    The moment is when its last need, deleted ones included, was filled, stopped or canceled. A
-    ticket with no such need, such as one cancelled by hand, falls back to its own updated_at.
+    The moment is when its last need, deleted ones included, was filled, stopped or canceled. Only
+    a ticket with no such need falls back to its own updated_at, so a ticket cancelled by hand that
+    has one is dated by that need, not by the cancel.
     """
     need_stamp = func.max(func.greatest(TicketTask.completed_at, TicketTask.canceled_at))
     return (
@@ -109,7 +112,7 @@ def _exited_subquery(bucket: str, extra_filters: list | None):
         )
         .select_from(Tickets)
         .outerjoin(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
-        .where(Tickets.delete_at.is_(None), _bucket_expr() == bucket, *(extra_filters or []))
+        .where(*live_tickets(extra_filters), _bucket_expr() == bucket, *(extra_filters or []))
         .group_by(Tickets.uuid)
         .subquery()
     )
@@ -137,10 +140,11 @@ async def get_ticket_count(
     matching get_net_backlog_change's exit series; the rest group by `Tickets.created_at`,
     since they haven't left.
 
-    The exit day is point-in-time, not history: services/ticket.py clears a need's
-    timestamps when it leaves 'fulfilled'/'canceled', so re-opening one moves its ticket's
-    exit day and the same query run twice can report a different past. Faithful history
-    needs a status-transition table, out of scope here.
+    The exit day is the ticket's last need event, point-in-time, not history: re-opening a need
+    clears its timestamps and deleting one stamps it anew, so the exit day can move and the same
+    query run twice can report a different past. A ticket cancelled by hand is dated by its last
+    stamped need when it has one, not by the cancel. Faithful history needs a status-transition
+    table, out of scope here.
     """
     bucket_expr = _bucket_expr()
     lower, upper = local_bounds(start_date, end_date, tz)
@@ -171,7 +175,7 @@ async def get_ticket_count(
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = select(*cols).select_from(Tickets).where(Tickets.delete_at.is_(None), *(extra_filters or []))
+    query = select(*cols).select_from(Tickets).where(*live_tickets(extra_filters), *(extra_filters or []))
     if bucket is not None:
         query = query.where(bucket_expr == bucket)
     if lower is not None:
@@ -221,7 +225,7 @@ async def get_completion_rate(
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = select(*cols).select_from(Tickets).where(Tickets.delete_at.is_(None), *(extra_filters or []))
+    query = select(*cols).select_from(Tickets).where(*live_tickets(extra_filters), *(extra_filters or []))
     if lower is not None:
         query = query.where(Tickets.created_at >= lower)
     if upper is not None:
@@ -275,7 +279,7 @@ async def get_age_distribution(
         select(age_bucket.label("x"), func.count(Tickets.uuid).label("count"))
         .select_from(Tickets)
         .where(
-            Tickets.delete_at.is_(None),
+            *live_tickets(extra_filters),
             bucket_expr.notin_(("completed", "canceled")),
             *(extra_filters or []),
         )
@@ -375,7 +379,7 @@ async def get_net_backlog_change(
 
     new_period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
     new_query = select(new_period.label("x"), func.count(Tickets.uuid).label("count")).where(
-        Tickets.delete_at.is_(None), *(extra_filters or [])
+        *live_tickets(extra_filters), *(extra_filters or [])
     )
     if lower is not None:
         new_query = new_query.where(Tickets.created_at >= lower)
@@ -536,15 +540,11 @@ def _versions_at(table: str, live, days, *, of_live_rows: bool = False):
 
 
 def _on_need_type(clauses: list, need_type):
-    """`clauses` with the ticket's task_type read as the need's own, as the other need metrics do."""
+    """`clauses` with the need-type filter read as the need's own type rather than any need of the ticket."""
 
     def swap(element):
-        if (
-            isinstance(element, ColumnClause)
-            and element.table is Tickets.__table__
-            and element.name == "task_type"
-        ):
-            return need_type
+        if NEED_TYPE in element._annotations:
+            return need_type == element._annotations[NEED_TYPE]
         return None
 
     return [replacement_traverse(clause, {}, swap) for clause in clauses]

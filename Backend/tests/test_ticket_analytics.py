@@ -25,6 +25,7 @@ from app.schemas.analytics import ChartStyle, TicketTaskType
 from app.services import ticket as ticket_service
 from app.services import ticket_analytics
 from app.services.analytics_common import MAX_TREND_DAYS, UNCATEGORIZED_LABEL, AnalyticsInputError
+from app.services.analytics_filters import ticket_filters
 from app.services.chart_render import _render_pivoted, chart_series, render_chart, resolve
 from app.services.ticket_status import recompute_ticket_status
 
@@ -133,6 +134,27 @@ async def test_ticket_count_buckets_follow_the_ticket_status(db):
     backlog = await _metric(db, ticket_analytics.get_net_backlog_change, x="date")
     assert [(r["new_count"], r["completed_count"], r["canceled_count"]) for r in backlog] == [(4, 1, 1)]
     assert backlog[0]["net_change"] == 2
+
+
+@pytest.mark.asyncio
+async def test_a_ticket_whose_needs_were_all_deleted_exits_on_the_day_of_the_deletion(db):
+    """Deleting a ticket's only need completes it, and the exit day is the deletion, not today."""
+    user_uuid = await _make_user(db)
+    ticket = _make_ticket(user_uuid)
+    db.add(ticket)
+    await db.flush()
+    need = _make_task(str(ticket.uuid), user_uuid)
+    db.add(need)
+    await db.flush()
+    deleted_at = datetime.now(UTC) - timedelta(days=5)
+    ticket_service.mark_need_deleted(need, deleted_at)
+    await db.flush()
+    await recompute_ticket_status(db, ticket_uuid=ticket.uuid)
+    await db.commit()
+
+    assert await _count(db, bucket="completed") == 1
+    by_day = await _metric(db, ticket_analytics.get_ticket_count, bucket="completed", x="date")
+    assert [(row["x"].date(), row["count"]) for row in by_day] == [(deleted_at.date(), 1)]
 
 
 @pytest.mark.asyncio
@@ -486,7 +508,10 @@ async def test_volunteer_totals_by_category_follow_the_needs_task_type(db):
     rows = await _volunteers(db, "matched", x="category")
     assert {r["x"]: r["count"] for r in rows} == {"supply": 2, "medical": 1, "hr": 0}
     # The ticket says supply for all four; the filter still sees the medical need's own type.
-    assert await _volunteers(db, "needed", extra_filters=[Tickets.task_type == "medical"]) == [{"count": 5}]
+    medical = ticket_filters(
+        task_type=TicketTaskType("medical"), status=None, county=None, town=None, village=None
+    )
+    assert await _volunteers(db, "needed", extra_filters=medical) == [{"count": 5}]
 
 
 @pytest.mark.asyncio

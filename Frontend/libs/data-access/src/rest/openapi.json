@@ -6228,10 +6228,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type."
           },
           {
             "name": "status",
@@ -6304,6 +6304,18 @@
               "title": "Village"
             },
             "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it."
           },
           {
             "name": "X-WG-Realm",
@@ -6461,10 +6473,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type."
           },
           {
             "name": "status",
@@ -6537,6 +6549,18 @@
               "title": "Village"
             },
             "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it."
           },
           {
             "name": "X-WG-Realm",
@@ -6665,10 +6689,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type."
           },
           {
             "name": "status",
@@ -6741,6 +6765,18 @@
               "title": "Village"
             },
             "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it."
           },
           {
             "name": "X-WG-Realm",

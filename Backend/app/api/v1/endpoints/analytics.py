@@ -195,7 +195,9 @@ async def _require_known_area(
 
 async def _ticket_filters(
     task_type: TicketTaskType | None = Query(
-        None, description="Only tickets of this task type; the volunteer metrics read each need's own type."
+        None,
+        description="Only tickets with a need of this type, as the public tickets list matches it; "
+        "the volunteer metrics read each need's own type.",
     ),
     ticket_status: TicketStatus | None = Query(
         None, alias="status", description="Only tickets with this status."
@@ -203,6 +205,11 @@ async def _ticket_filters(
     county: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="縣市")),
     town: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="鄉鎮市區")),
     village: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="村里")),
+    include_deleted: bool = Query(
+        False,
+        description="Also count deleted tickets, as 已取消 and in the total; only the ticket counts, "
+        "completion rate, open-ticket age and backlog change read it.",
+    ),
     scope: Scope = security.has_permission(Perm.TICKET_VIEW),
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
@@ -212,7 +219,12 @@ async def _ticket_filters(
         db, Tickets, scope_filter(scope, actor=current_user, model=Tickets), county, town, village
     )
     return analytics_filters.ticket_filters(
-        task_type=task_type, status=ticket_status, county=county, town=town, village=village
+        task_type=task_type,
+        status=ticket_status,
+        county=county,
+        town=town,
+        village=village,
+        include_deleted=include_deleted,
     )
 
 

@@ -1039,11 +1039,12 @@ async def test_data_durations_are_days_as_numbers(client, db_session, redis):
 
 
 async def _filed(db, owner, *, county=None, town=None, village=None, task_type="rescue", status="pending"):
-    """A ticket, with an address when `county` is given."""
-    ticket = _ticket(owner, task_type)
+    """A ticket with one need of `task_type` and no type of its own; an address when `county` is given."""
+    ticket = _ticket(owner, None)
     ticket.status = status
     db.add(ticket)
     await db.flush()
+    db.add(_need(ticket.uuid, owner, task_type))
     if county:
         db.add(
             SecondaryLocation(
@@ -1052,6 +1053,17 @@ async def _filed(db, owner, *, county=None, town=None, village=None, task_type="
         )
     await db.flush()
     return ticket
+
+
+def _need(ticket_uuid, owner: str, task_type: str) -> TicketTask:
+    return TicketTask(
+        ticket_uuid=ticket_uuid,
+        task_type=task_type,
+        task_name="n",
+        source="user",
+        created_by=owner,
+        status="pending",
+    )
 
 
 async def _total(client, headers, url=TICKETS_VALUE_URL, y="total_tickets", **filters) -> int:
@@ -1139,6 +1151,43 @@ async def test_ticket_filters_by_task_type_and_status(client, db_session, redis)
     assert await _total(client, headers, task_type="supply", status="in_progress") == 1
     assert await _total(client, headers, task_type="medical") == 0
     assert await _total(client, headers, status="cancelled") == 0
+
+
+@pytest.mark.asyncio
+async def test_task_type_filter_reads_the_live_needs(client, db_session, redis):
+    """A ticket matches a type through its live needs, once however many match; a deleted need never."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    two_needs = await _filed(db_session, user_uuid, task_type="supply")
+    db_session.add(_need(two_needs.uuid, user_uuid, "supply"))
+    deleted = await _filed(db_session, user_uuid, task_type="rescue")
+    gone = _need(deleted.uuid, user_uuid, "medical")
+    gone.delete_at = datetime.now(UTC)
+    db_session.add(gone)
+    await db_session.commit()
+
+    assert await _total(client, headers, task_type="supply") == 1
+    assert await _total(client, headers, task_type="medical") == 0
+    assert await _total(client, headers, task_type="rescue") == 1
+
+
+@pytest.mark.asyncio
+async def test_include_deleted_counts_deleted_tickets_as_canceled_within_scope(client, db_session, redis):
+    """A deleted ticket is in no bucket by default; with include_deleted it is canceled, in scope only."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW, scope="own")
+    stranger = User(name="somebody else")
+    db_session.add(stranger)
+    await db_session.flush()
+    await _filed(db_session, user_uuid)
+    for owner in (user_uuid, str(stranger.uuid)):
+        ticket = await _filed(db_session, owner, status="cancelled")
+        ticket.delete_at = datetime.now(UTC)
+    await db_session.commit()
+
+    assert await _total(client, headers) == 1
+    assert await _total(client, headers, y="canceled_tickets") == 0
+    assert await _total(client, headers, include_deleted="true") == 2
+    assert await _total(client, headers, y="canceled_tickets", include_deleted="true") == 1
+    assert await _total(client, headers, y="unassigned_tickets", include_deleted="true") == 1
 
 
 @pytest.mark.asyncio
