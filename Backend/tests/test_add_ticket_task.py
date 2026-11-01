@@ -154,9 +154,9 @@ async def _ticket_status(db, ticket_uuid: str) -> str:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("task_type", "quantity"), [("hr", 3), ("rescue", None)])
+@pytest.mark.parametrize(("task_type", "quantity"), [("hr", 3), ("rescue", 1)])
 async def test_the_requester_adds_a_need_to_their_ticket(db, task_type, quantity):
-    """The need is open, and recorded as added by the requester; a rescue need need not say how many."""
+    """The need is open, and recorded as added by the requester."""
     ticket = await _ticket(db, status="in_progress")
     await _need(db, ticket, claims=1)
     requester = await _requester(db, ticket)
@@ -297,8 +297,9 @@ async def test_a_need_the_site_would_misread_is_refused(db, name, quantity, mess
 
 
 @pytest.mark.asyncio
-async def test_a_need_of_a_kind_the_back_office_made_up_must_say_how_many_too(db):
-    """Any need but a rescue (ADR-291 point 7), not only the four the site sends.
+@pytest.mark.parametrize("task_type", ["rescue", "food"])
+async def test_a_rescue_or_a_kind_the_back_office_made_up_must_say_how_many_too(db, task_type):
+    """Every need says how many (ADR-291 point 7): a rescue asks for one person at least, too.
 
     createTicketTask takes any task_type, as the back office may configure fields for a kind of
     its own (ADR-214). Such a need without a quantity would never fill, nor its ticket complete.
@@ -307,8 +308,8 @@ async def test_a_need_of_a_kind_the_back_office_made_up_must_say_how_many_too(db
     ticket_uuid = str(ticket.uuid)
     requester = await _requester(db, ticket)
 
-    with pytest.raises(ValueError, match="quantity is required for a food task"):
-        await _add(db, requester, ticket_uuid, task_type="food", quantity=None)
+    with pytest.raises(ValueError, match=f"quantity is required for a {task_type} task"):
+        await _add(db, requester, ticket_uuid, task_type=task_type, quantity=None)
 
     assert await _needs(db, ticket_uuid) == 0
 

@@ -431,7 +431,16 @@ async def test_ticket_preview_and_commit_are_wired_up(client, db_session, redis)
         Perm.TICKET_ADD,
         Perm.TICKET_EDIT,
     )
-    columns = ("title", "contact_name", "contact_phone", "latitude", "longitude", "task_type", "task_name")
+    columns = (
+        "title",
+        "contact_name",
+        "contact_phone",
+        "latitude",
+        "longitude",
+        "task_type",
+        "task_name",
+        "task_quantity",
+    )
     raw = write_csv(
         columns,
         [
@@ -443,6 +452,7 @@ async def test_ticket_preview_and_commit_are_wired_up(client, db_session, redis)
                 "longitude": "121.5",
                 "task_type": "rescue",
                 "task_name": "送水",
+                "task_quantity": "1",
             }
         ],
     )

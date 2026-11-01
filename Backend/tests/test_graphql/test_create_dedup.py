@@ -78,7 +78,7 @@ REMOVED_FROM_SDL = (
     "DuplicateSuspected",
     "DuplicateStationSuspected",
 )
-PUMP = {"taskType": "rescue", "taskName": "一樓淹水需要抽水機", "taskDescription": "水深及膝"}
+PUMP = {"taskType": "rescue", "taskName": "一樓淹水需要抽水機", "taskDescription": "水深及膝", "quantity": 1}
 WATER = {"taskType": "supply", "taskName": "需要飲用水", "taskDescription": "二十人份", "quantity": 20}
 
 
@@ -267,6 +267,17 @@ async def test_a_ticket_without_tasks_is_created_directly(client, login_user_aut
     body = await _post(client, token, CREATE_TICKET, {"input": _ticket_input()})
     assert body["data"]["createTicket"]["__typename"] == "TicketCreated"
     assert body["data"]["createTicket"]["tasks"] == []
+
+
+async def test_a_rescue_need_without_a_quantity_holds_back_the_whole_ticket(client, login_user_auth):
+    """新增任務 asks how many for a rescue too (ADR-448): refused, with no ticket or need written."""
+    _, token = login_user_auth
+    blank = {key: value for key, value in PUMP.items() if key != "quantity"}
+
+    body = await _post(client, token, CREATE_TICKET, {"input": _ticket_input([WATER, blank])})
+
+    assert [error["message"] for error in body["errors"]] == ["quantity is required for a rescue task"]
+    assert (await _count(Tickets), await _count(TicketTask)) == (0, 0)
 
 
 async def test_an_unrelated_task_elsewhere_is_created_directly(client, login_user_auth):

@@ -158,7 +158,7 @@ async def _file_and_add(client, token, sent: str, headers=None) -> list[str]:
         "title": f"來源測試單-{random.random()}",
         "contactName": "王小明",
         "priority": "high",
-        "tasks": [{"taskType": "rescue", "taskName": "抽水", "source": sent}],
+        "tasks": [{"taskType": "rescue", "taskName": "抽水", "quantity": 1, "source": sent}],
     }
     created = (await _post(client, token, CREATE_TICKET, {"input": ticket_input}, headers))["data"][
         "createTicket"
@@ -173,6 +173,7 @@ async def _file_and_add(client, token, sent: str, headers=None) -> list[str]:
                     "ticketUuid": created["ticket"]["uuid"],
                     "taskType": "rescue",
                     "taskName": "送水",
+                    "quantity": 1,
                     "source": sent,
                 }
             },

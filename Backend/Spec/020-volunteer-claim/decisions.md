@@ -2,7 +2,7 @@
 
 Part of the site revamp: a volunteer claims one need of a request, not the whole request, and a
 request's owner can stop recruiting for one need. Numbering continues the repo-wide ADR sequence: this
-spec holds ADR-291 to ADR-293 (`Spec/019-role-requests` holds ADR-287 to ADR-290 and ADR-294).
+spec holds ADR-291 to ADR-293 and ADR-448 (`Spec/019-role-requests` holds ADR-287 to ADR-290 and ADR-294).
 
 The rules below were set by the team on 2026-09-28 and by the product owner between 2026-09-26 and
 2026-09-30.
@@ -79,6 +79,7 @@ remembered to change it.
    import, whose preview fails the row before its ticket is written. A `rescue` need may leave it out —
    whoever is trapped does not know how many it takes, and the design leaves rescues out of the 缺額
    count — and then has no cap, as point 1 says. Needs filed before this keep their null quantity.
+   *The rescue exception was removed on 2026-11-01: every need says how many (ADR-448).*
 
 **Consequences**:
 ➕ "Full" and "fulfilled" are kept by the backend, not by someone remembering to set them.
@@ -186,3 +187,52 @@ on the site.
 ➖ Needs still carrying a status from before (`in_progress`, `completed`) are not migrated. The claim check
 takes both as open, like `pending`; working out a request's status (`OPEN_NEED_STATUSES`) counts
 `in_progress` as open but not `completed`. Reset or migrate such data before relying on either.
+
+---
+
+### ADR-448 A rescue need says how many too: at least one person
+
+> **Status: ACCEPTED (2026-11-01).** The product owner's call on 2026-10-31: a rescue follows the rule
+> every other need does, at least one person. Approved for the backend on 2026-11-01; point 4, how a
+> merge treats a need filed blank, was set the same day, once the review page was found to have no field
+> to give it a count, and narrowed on 2026-11-02: a blank need that absorbs another must take a count.
+
+**In plain words**: a rescue need must say how many people it takes, as every other need does. Leaving it
+blank is refused, on the site and in the back office alike. Rescue needs filed blank before this stay as
+they are.
+
+**Context**: ADR-291 point 7 let a rescue leave its quantity out, since whoever is trapped may not know how
+many it takes (`QUANTITY_OPTIONAL_TASK_TYPES`). Such a need never fills, so its request never completes on
+its own: its owner or a coordinator has to stop recruiting by hand. The site's form and the back office's
+already ask for a count on every other need.
+
+**Decision**:
+
+1. **Every need says how many, at least 1, rescue included.** `_validate_need_size` refuses a missing
+   quantity for any kind with `quantity is required for a {kind} task`. That is every path that files a need:
+   a help request (`createHelpRequest`), the needs of `createTicket`, adding one (`createTicketTask`, the
+   site's 「再加一件」 and the back office alike), and a bulk import, whose preview fails the row with
+   「每個需求都要填人數」 before its ticket is written. `QUANTITY_OPTIONAL_TASK_TYPES` is gone.
+2. **The GraphQL inputs keep `quantity: Int`, nullable.** Only the descriptions change. A blank sent by a
+   form not yet updated gets the error above, not a schema failure for the whole request.
+3. **Needs already stored without a quantity are left as they are.** They read and take claims as before,
+   with no cap (ADR-291 point 1). No data is changed and there is no migration.
+4. **A merge checks the quantity it writes (ADR-370).** A quantity the reviewer sends must be at least 1,
+   for a rescue too, and cannot be cleared. A need filed blank that is kept or moved on its own, with its
+   quantity left alone, stays blank with no cap, as point 3 leaves it: the review page can keep or drop
+   such a need without giving it a count, so refusing it would leave its ticket unmergeable. A need that
+   absorbs another must have a quantity, its own or one the merge gives it, checked against everyone on
+   the needs folded together; left blank it is refused, since it would take in the other need's people
+   and, with no cap, never fill. The review page asks for the count of needs it folds together, so it
+   asks for a rescue's too. This holds for a blank need of any kind, so one filed before ADR-291 point 7,
+   refused until now, merges too when it is kept on its own.
+
+**Consequences**:
+➕ A rescue need fills once its people are on it, and its request completes on its own like any other.
+➕ A ticket holding a need filed blank can still be merged from the review page, and a merge never
+leaves a need with people from both tickets and no cap.
+➖ The site's and the back office's forms must ask for a count on a rescue before this is deployed, or a
+blank one is refused with the error above. That frontend change is a separate PR.
+➖ The review page must ask for a count when it folds needs into one filed blank, a rescue's included.
+➖ A rescue need filed blank before this still never fills; it is stopped by hand, as before.
+◾ The site's 缺額 still leaves rescues out: that count is the frontend's, and it does not change here.

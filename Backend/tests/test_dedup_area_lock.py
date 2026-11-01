@@ -49,7 +49,12 @@ from tests.test_dedup_submission import LAT, LON, _count, _existing_ticket, _hel
 
 pytestmark = pytest.mark.asyncio
 
-PUMP = {"task_type": "rescue", "task_name": "一樓淹水需要抽水機", "task_description": "水深及膝"}
+PUMP = {
+    "task_type": "rescue",
+    "task_name": "一樓淹水需要抽水機",
+    "task_description": "水深及膝",
+    "quantity": 1,
+}
 HERE = GeoPoint(LON, LAT)
 FAR = GeoPoint(LON + 0.03, LAT)  # about 3 km east: a different area
 

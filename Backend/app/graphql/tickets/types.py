@@ -464,8 +464,8 @@ class TicketTaskType:
     quantity: int | None = strawberry.field(
         default=None,
         description=(
-            "Number of people or units needed. Null means unspecified and uncapped: a rescue need "
-            "may leave it out, and needs filed before every other kind had to give one"
+            "Number of people or units needed. Null only on a need filed before every need had to "
+            "give one: unspecified and uncapped"
         ),
     )
     status: str = strawberry.field(
@@ -630,9 +630,7 @@ class CreateTicketTaskInput:
     task_description: str | None = None
     quantity: int | None = strawberry.field(
         default=None,
-        description=(
-            "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
-        ),
+        description="People or units needed, at least 1; required, for a 'rescue' task too",
     )
     source: str = strawberry.field(
         default="user",
@@ -653,9 +651,7 @@ class HelpRequestTaskInput:
     task_description: str | None = None
     quantity: int | None = strawberry.field(
         default=None,
-        description=(
-            "People or units needed, at least 1; required except for a 'rescue' need, which may omit it"
-        ),
+        description="People or units needed, at least 1; required, for a 'rescue' need too",
     )
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,
@@ -1400,7 +1396,10 @@ class CreateTicketTaskDraft:
     task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str
     task_description: str | None = None
-    quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
+    quantity: int | None = strawberry.field(
+        default=None,
+        description="People or units needed, at least 1; required, for a 'rescue' task too",
+    )
     source: str = strawberry.field(
         default="user",
         description="Not read: the identity making the task decides it",

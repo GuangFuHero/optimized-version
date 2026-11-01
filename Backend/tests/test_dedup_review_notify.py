@@ -90,7 +90,7 @@ def _pending(calls) -> list[dict]:
 
 
 def _task(name="抽水", ack=None) -> TaskSubmission:
-    return TaskSubmission(task_type="rescue", task_name=name, acknowledged_duplicate_of=ack)
+    return TaskSubmission(task_type="rescue", task_name=name, quantity=1, acknowledged_duplicate_of=ack)
 
 
 async def test_one_created_anyway_task_sends_one_notice(db, sent):
