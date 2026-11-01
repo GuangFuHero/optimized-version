@@ -12,7 +12,6 @@ import {
   Toilet,
   Zap,
   type LucideIcon,
-  type LucideProps,
 } from 'lucide-react';
 
 import { themedIcon } from '@rescue-frontend/ui';
@@ -61,21 +60,4 @@ export function getStationTypeIcon(type?: string | null) {
   }
 
   return component;
-}
-
-export interface StationTypeIconProps extends Omit<LucideProps, 'type'> {
-  /** The station's type (water, shelter…). LucideProps' own `type` is an SVG attribute, unused here. */
-  type?: string | null;
-}
-
-/** 16px beside text, 22px on its own. */
-export function StationTypeIcon({
-  type,
-  size = 16,
-  strokeWidth = 2,
-  ...rest
-}: StationTypeIconProps) {
-  const Icon = getStationTypeLucideIcon(type);
-
-  return <Icon size={size} strokeWidth={strokeWidth} aria-hidden {...rest} />;
 }
