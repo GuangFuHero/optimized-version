@@ -10,7 +10,7 @@
  * BTN-103 tone="danger" 配 outline／ghost＝紅字的次要破壞性動作（丟棄草稿、從前台下架）。
  *         實心紅 variant="danger" 只給「確認對話框裡真正執行刪除」那一顆。
  * BTN-104 sm 36px 的可點範圍用 ::after 補到 44px 高，視覺不變（手機、戴手套）。
- * BTN-105 loading：轉圈、點了沒反應、寬度不變（文字與圖示 visibility:hidden）。
+ * BTN-105 loading：轉圈、點了沒反應、寬度不變（文字與圖示 opacity:0，螢幕閱讀器仍讀得到按鈕名稱）、滑過不變色不上浮。
  *         ❌ 不要用 MUI 自己的 loading／disabled —— 會套上停用的灰色，看起來像「不能按」而不是「正在送」。
  * BTN-106 iconOnly：正方形，一定要給 aria-label。
  * BTN-107 selected：分段／切換用（aria-pressed），不是另一種 variant。
@@ -184,7 +184,7 @@ export function Button({
             '&:not([aria-expanded="true"]) .MuiButton-startIcon, &:not([aria-expanded="true"]) .MuiButton-endIcon':
               { color: color.fg.neutral.subtle },
           }),
-          '&:hover': {
+          '&:hover:not([aria-busy="true"])': {
             bgcolor: v.hover,
             transform: flat ? 'none' : 'translateY(-2px)',
             boxShadow: variant === 'primary' ? shadow.md : 'none',
@@ -218,7 +218,7 @@ export function Button({
           '&[aria-busy="true"]': { cursor: 'progress' },
           '&[aria-busy="true"] .MuiButton-startIcon, &[aria-busy="true"] .MuiButton-endIcon':
             {
-              visibility: 'hidden',
+              opacity: 0,
             },
           '&.Mui-disabled': {
             bgcolor: color.bg.disable,
@@ -237,7 +237,8 @@ export function Button({
           alignItems: 'center',
           justifyContent: 'center',
           gap: s.gap,
-          visibility: loading ? 'hidden' : 'visible',
+          // opacity 而不是 visibility：藏起來的字仍是按鈕的名稱，寬度也不變。
+          opacity: loading ? 0 : undefined,
         }}
       >
         {children}

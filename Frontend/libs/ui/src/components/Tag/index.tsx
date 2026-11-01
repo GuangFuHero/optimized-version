@@ -26,7 +26,7 @@ import { type ReactNode } from 'react';
 
 import { designTokens, withAlpha } from '../../theme';
 
-const { color, radius, typography } = designTokens;
+const { color, focusRing, radius, typography } = designTokens;
 
 const TONES = {
   neutral: {
@@ -194,6 +194,10 @@ export function Tag({
             alignItems: 'center',
             justifyContent: 'center',
             '&:hover': { bgcolor: withAlpha('#000000', 0.06) },
+            '&:focus-visible': {
+              outline: `${focusRing.width}px solid ${focusRing.color}`,
+              outlineOffset: `${focusRing.offset}px`,
+            },
           }}
         >
           <X size={12} aria-hidden />

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { openingTag, render } from '../../testing/markup';
 import { designTokens, withAlpha } from '../../theme';
-import { tagColors } from './index';
+import { Tag, tagColors } from './index';
 
 const { color } = designTokens;
 
@@ -35,5 +36,38 @@ describe('tagColors', () => {
       fg: '#2592B9',
       bg: withAlpha('#2592B9', 0.1),
     });
+  });
+});
+
+describe('Tag', () => {
+  const noop = () => undefined;
+
+  it('is words, not a control, unless it can be removed (TAG-101)', () => {
+    expect(render(<Tag>官方</Tag>).markup).not.toContain('<button');
+  });
+
+  it('names its × for a screen reader (TAG-106)', () => {
+    expect(
+      openingTag(
+        render(<Tag onRemove={noop}>水災</Tag>).markup,
+        /<button[^>]*>/,
+      ),
+    ).toContain('aria-label="移除"');
+    expect(
+      openingTag(
+        render(
+          <Tag onRemove={noop} removeLabel="移除條件：水災">
+            水災
+          </Tag>,
+        ).markup,
+        /<button[^>]*>/,
+      ),
+    ).toContain('aria-label="移除條件：水災"');
+  });
+
+  it('keeps its dot out of what is read, the words saying it all (TAG-104)', () => {
+    const { markup } = render(<Tag dot>待處理</Tag>);
+
+    expect(markup).toMatch(/<span[^>]*aria-hidden="true"[^>]*><\/span>待處理/);
   });
 });

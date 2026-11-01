@@ -33,6 +33,7 @@ function SettingsExample() {
       >
         <RadioCards
           name="scope"
+          aria-label="誰看得到"
           value={scope}
           onChange={setScope}
           options={[

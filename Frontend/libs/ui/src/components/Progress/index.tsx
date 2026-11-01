@@ -12,7 +12,7 @@
  */
 
 import { Box } from '@mui/material';
-import { type ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 
 import { designTokens } from '../../theme';
 
@@ -70,6 +70,9 @@ export function Progress({
   const reading = readProgress(value, max, complete);
   const { hasMax, done } = reading;
   const text = valueText ?? reading.text;
+  // 進度條的名字：有 label 用 label，沒有就用右側的數字（同原型 WGProgress 的 aria-label）。
+  const labelId = useId();
+  const textId = useId();
   const fill = done
     ? color.bg.success.default
     : tone === 'neutral'
@@ -89,9 +92,10 @@ export function Progress({
           color: color.fg.neutral.subtle,
         }}
       >
-        {label ? <span>{label}</span> : null}
+        {label ? <span id={labelId}>{label}</span> : null}
         <Box
           component="b"
+          id={textId}
           sx={{
             ml: 'auto',
             whiteSpace: 'nowrap',
@@ -104,7 +108,9 @@ export function Progress({
       {hasMax ? (
         <Box
           role="progressbar"
-          aria-valuenow={value}
+          aria-labelledby={label ? labelId : textId}
+          // 超過總數（5/4）時 aria-valuenow 不能大於 aria-valuemax。
+          aria-valuenow={Math.min(Math.max(value, 0), max ?? 0)}
           aria-valuemin={0}
           aria-valuemax={max}
           sx={{

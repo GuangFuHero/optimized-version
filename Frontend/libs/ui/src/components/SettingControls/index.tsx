@@ -17,7 +17,7 @@ import { type ChangeEvent, type ReactNode } from 'react';
 
 import { designTokens, IOS_NO_ZOOM_INPUT_PX } from '../../theme';
 
-const { color, radius, typography } = designTokens;
+const { color, focusRing, radius, typography } = designTokens;
 
 export interface SettingRowProps {
   title: ReactNode;
@@ -76,6 +76,9 @@ export interface RadioCardsProps<T extends string> {
   value: T;
   options: readonly RadioCardOption<T>[];
   onChange: (value: T) => void;
+  /** 這組選項的名稱（radiogroup 要有名字）：aria-label 或 aria-labelledby 給一個。 */
+  'aria-label'?: string;
+  'aria-labelledby'?: string;
 }
 
 export function RadioCards<T extends string>({
@@ -83,10 +86,14 @@ export function RadioCards<T extends string>({
   value,
   options,
   onChange,
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledby,
 }: RadioCardsProps<T>) {
   return (
     <Box
       role="radiogroup"
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledby}
       sx={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
@@ -114,8 +121,8 @@ export function RadioCards<T extends string>({
                 ? `inset 0 0 0 1.5px ${color.border.accent}`
                 : `inset 0 0 0 1px ${color.border.default}`,
               '&:has(input:focus-visible)': {
-                outline: `3px solid ${color.brand.secondary.default}`,
-                outlineOffset: '2px',
+                outline: `${focusRing.width}px solid ${focusRing.color}`,
+                outlineOffset: `${focusRing.offset}px`,
               },
             }}
           >

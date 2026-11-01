@@ -13,7 +13,7 @@
  * 沒有 items（例：沒有匯入權限）→ 只剩一顆一般按鈕，連箭頭都不 render。
  */
 
-import { Box, ListItemIcon, ListItemText, Menu, MenuItem } from '@mui/material';
+import { Box, Menu, MenuItem } from '@mui/material';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { type ReactNode, useId, useRef, useState } from 'react';
 
@@ -85,8 +85,8 @@ export function SplitButton({
         '& > .WgSplit-arrow[aria-expanded="true"]': {
           borderRadius: `${half}px`,
         },
-        // 兩塊是一個整體，不各自上浮
-        '& > .MuiButton-root:hover, & > .MuiButton-root:active': {
+        // 兩塊是一個整體，不各自上浮。&& 讓這條贏過 Button 自己的 :hover:not([aria-busy])。
+        '&& > .MuiButton-root:hover, && > .MuiButton-root:active': {
           transform: 'none',
         },
       }}
@@ -137,19 +137,23 @@ export function SplitButton({
               setOpen(false);
               item.onClick();
             }}
-            sx={{
+            sx={(theme) => ({
+              gap: '8px',
               minHeight: 44,
+              // MenuItem 在 600px 以上把 minHeight 設回 auto，同一個斷點再設一次才會是 44px。
+              [theme.breakpoints.up('sm')]: { minHeight: 44 },
               mx: '6px',
+              px: '12px',
+              py: 0,
               borderRadius: `${radius.sm}px`,
               ...typography.label[400],
               fontWeight: 400,
               color: color.fg.neutral.default,
-            }}
+              '& > svg': { flexShrink: 0 },
+            })}
           >
-            {item.icon ? (
-              <ListItemIcon sx={{ color: 'inherit' }}>{item.icon}</ListItemIcon>
-            ) : null}
-            <ListItemText>{item.label}</ListItemText>
+            {item.icon}
+            {item.label}
           </MenuItem>
         ))}
       </Menu>
