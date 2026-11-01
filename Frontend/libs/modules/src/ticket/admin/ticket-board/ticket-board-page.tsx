@@ -55,13 +55,7 @@ const PAGE_HELP = '檢視並處理各地點的任務單與需求';
 const FRAME_GAP = '12px';
 const SECTION_SX = { px: '28px' };
 const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
-// Gone while there is no row to show, so the toolbar keeps its place at the top.
-const LEAD_SX = {
-  ...SECTION_SX,
-  pt: FRAME_GAP,
-  '&:empty': { display: 'none' },
-  '& > *': COLUMN_SX,
-};
+const LEAD_SX = { ...SECTION_SX, pt: FRAME_GAP, '& > *': COLUMN_SX };
 
 export function TicketBoardPage() {
   const router = useRouter();
@@ -197,7 +191,7 @@ export function TicketBoardPage() {
         // The counts scroll away with the list; the toolbar stays (STAT-101).
         lead={
           <Box sx={LEAD_SX}>
-            {/* A failed count is unknown, not zero: no row, but its own 重試. */}
+            {/* A failed count is unknown, not zero: it shows as loading does, with its own 重試. */}
             <TicketStatsStrip
               stats={stats}
               failed={statCountsFailed(statsQuery)}

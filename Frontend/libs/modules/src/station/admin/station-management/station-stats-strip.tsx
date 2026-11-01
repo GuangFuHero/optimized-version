@@ -16,17 +16,15 @@ interface StationStatsStripProps {
 
 /**
  * The stations' counts by operational status, each a filter on it (prototype station-table.jsx).
- * Counted over every station in scope, whatever the filters. Counts that did not load get their own
- * 重試, as the 任務管理 row does.
+ * Counted over every station in scope, whatever the filters; a count not in reads — (STAT-108).
+ * Counts that did not load get their own 重試, as the 任務管理 row does.
  */
 export function StationStatsStrip({
   status,
   onStatusChange,
 }: StationStatsStripProps) {
   const facets = useStationFacets();
-  const tiles = stationStatTiles(facets.data?.stationFacets ?? null);
   const failed = statCountsFailed(facets);
-  if (!failed && !tiles) return null;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -36,9 +34,11 @@ export function StationStatsStrip({
           onRetry={() => void facets.refetch()}
         />
       ) : null}
-      {tiles ? (
-        <StatTiles items={tiles} value={status} onChange={onStatusChange} />
-      ) : null}
+      <StatTiles
+        items={stationStatTiles(facets.data?.stationFacets ?? null)}
+        value={status}
+        onChange={onStatusChange}
+      />
     </Box>
   );
 }

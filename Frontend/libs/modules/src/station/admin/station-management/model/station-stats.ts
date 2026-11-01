@@ -17,22 +17,20 @@ type StationFacets = Pick<
 /**
  * The stations page's tiles (prototype station-table.jsx): 全部 and each operational status, from
  * `stationFacets` read with no filter, so they count every station in the caller's scope (STAT-102).
- * None while the counts are not in, or with no station: the prototype draws the row only once there
- * are stations.
+ * The row shows while the counts are not in, every tile reading — (STAT-108), and with no station.
  */
 export function stationStatTiles(
   facets: StationFacets | null,
-): StatTileItem<OperationalStatus>[] | null {
-  if (!facets || facets.total === 0) return null;
+): StatTileItem<OperationalStatus>[] {
   const counted = new Map(
-    facets.byStatus.map(({ status, count }) => [status, count]),
+    (facets?.byStatus ?? []).map(({ status, count }) => [status, count]),
   );
   return [
-    { key: STAT_TILE_ALL, label: '全部', count: facets.total },
+    { key: STAT_TILE_ALL, label: '全部', count: facets?.total ?? null },
     ...OPERATIONAL_STATUS_OPTIONS.map((option) => ({
       key: option.value,
       label: option.label,
-      count: counted.get(option.value) ?? 0,
+      count: facets ? (counted.get(option.value) ?? 0) : null,
     })),
   ];
 }

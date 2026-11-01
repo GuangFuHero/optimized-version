@@ -46,13 +46,7 @@ const { color } = designTokens;
 const FRAME_GAP = '12px';
 const SECTION_SX = { px: '28px' };
 const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
-// Gone while there is no row to show, so the toolbar keeps its place at the top.
-const LEAD_SX = {
-  ...SECTION_SX,
-  pt: FRAME_GAP,
-  '&:empty': { display: 'none' },
-  '& > *': COLUMN_SX,
-};
+const LEAD_SX = { ...SECTION_SX, pt: FRAME_GAP, '& > *': COLUMN_SX };
 
 /** What the header's ? explains: the page in one line. */
 const PAGE_HELP = '維護資源站點並審查民眾送來的修改建議';

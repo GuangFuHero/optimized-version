@@ -8,7 +8,7 @@ import { ticketStatTiles, type TicketStats } from './model/ticket-stats';
 import type { TicketStatus } from './model/ticket-row';
 
 interface TicketStatsStripProps {
-  /** Null while loading or after a failure: the row waits for the counts. */
+  /** Null while loading or after a failure: an unknown count shows as —, never as 0 (STAT-108). */
   stats: TicketStats | null;
   /** The counts did not load: its own 重試, as the list may have loaded fine. */
   failed: boolean;
@@ -30,28 +30,25 @@ export function TicketStatsStrip({
   status,
   onStatusChange,
 }: TicketStatsStripProps) {
-  const tiles = ticketStatTiles(stats);
-  if (!failed && !tiles) return null;
+  const { items, gap } = ticketStatTiles(stats);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {failed ? <StatTilesRetry retrying={retrying} onRetry={onRetry} /> : null}
-      {tiles ? (
-        <StatTiles
-          items={tiles.items}
-          value={status}
-          onChange={onStatusChange}
-          extras={[
-            {
-              label: '志工缺口',
-              icon: <Users size={15} />,
-              tone: 'warning',
-              count: tiles.gap,
-              title: '還沒結束的單裡，有寫數量的需求還差幾人',
-            },
-          ]}
-        />
-      ) : null}
+      <StatTiles
+        items={items}
+        value={status}
+        onChange={onStatusChange}
+        extras={[
+          {
+            label: '志工缺口',
+            icon: <Users size={15} />,
+            tone: 'warning',
+            count: gap,
+            title: '還沒結束的單裡，有寫數量的需求還差幾人',
+          },
+        ]}
+      />
     </Box>
   );
 }
