@@ -4,6 +4,7 @@ import {
   formatNeedHeadcount,
   formatNeedQuota,
   resolveNeedClaim,
+  summarizeNeedsProgress,
   type TicketNeed,
 } from './need-claim';
 
@@ -177,5 +178,88 @@ describe('formatNeedHeadcount', () => {
     expect(formatNeedHeadcount(need({ quantity: 3, assignedCount: 1 }), 'fulfilled')).toBe(
       '目前 1/3 人',
     );
+  });
+});
+
+describe('summarizeNeedsProgress', () => {
+  it('adds up the people each need has and asks for', () => {
+    expect(
+      summarizeNeedsProgress(
+        [
+          need({ uuid: 'a', quantity: 3, assignedCount: 1 }),
+          need({
+            uuid: 'b',
+            quantity: 2,
+            assignedCount: 2,
+            status: 'fulfilled',
+          }),
+        ],
+        'in_progress',
+      ),
+    ).toEqual({ matched: 3, required: 5, needCount: 2 });
+  });
+
+  it('counts an over-sent need as full, so it does not hide another that still lacks people', () => {
+    expect(
+      summarizeNeedsProgress(
+        [
+          need({ uuid: 'a', quantity: 2, assignedCount: 4 }),
+          need({ uuid: 'b', quantity: 3, assignedCount: 0 }),
+        ],
+        'in_progress',
+      ),
+    ).toEqual({ matched: 2, required: 5, needCount: 2 });
+  });
+
+  it('asks for no more people on a need that stopped recruiting, or on a completed ticket', () => {
+    // It still counts the people it has, and only them: nobody else went.
+    expect(
+      summarizeNeedsProgress(
+        [
+          need({
+            uuid: 'a',
+            quantity: 4,
+            assignedCount: 1,
+            status: 'fulfilled',
+          }),
+          need({ uuid: 'b', quantity: 2, assignedCount: 0 }),
+        ],
+        'pending',
+      ),
+    ).toEqual({ matched: 1, required: 3, needCount: 2 });
+    expect(
+      summarizeNeedsProgress(
+        [need({ quantity: 4, assignedCount: 1 })],
+        'completed',
+      ),
+    ).toEqual({ matched: 1, required: 1, needCount: 1 });
+  });
+
+  it('gives nothing to draw when every need stopped with nobody on it', () => {
+    expect(
+      summarizeNeedsProgress(
+        [need({ quantity: 3, assignedCount: 0, status: 'fulfilled' })],
+        'completed',
+      ),
+    ).toBeNull();
+  });
+
+  it('leaves out a need without a quantity, as its own row draws no bar', () => {
+    expect(
+      summarizeNeedsProgress(
+        [
+          need({ uuid: 'a', quantity: null, assignedCount: 2 }),
+          need({ uuid: 'b', quantity: 3 }),
+        ],
+        'in_progress',
+      ),
+    ).toEqual({ matched: 1, required: 3, needCount: 2 });
+  });
+
+  it('gives nothing to draw when no need says how many it asks for', () => {
+    expect(summarizeNeedsProgress([], 'pending')).toBeNull();
+    expect(
+      summarizeNeedsProgress([need({ quantity: null })], 'pending'),
+    ).toBeNull();
   });
 });

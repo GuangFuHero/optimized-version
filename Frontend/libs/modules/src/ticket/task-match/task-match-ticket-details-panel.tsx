@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
 
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
+import { FileText, MapPin, Tag, User } from 'lucide-react';
+
 import { Alert, Box, Stack, Typography } from '@mui/material';
 import { useQuery } from 'urql';
 
@@ -18,25 +18,23 @@ import { responsibleTeamsText } from '../../map/areas';
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
+import { SiteDetailLabel, SiteDetailRow } from '../../shell/site/detail-info';
 import { formatTicketStreet, formatTicketUnit } from '../address';
 import { requesterAuditNotice } from '../audit-issue';
 import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
-import { NeedRow, readTicketNeeds, useNeedClaim } from '../needs';
+import {
+  NeedRow,
+  readTicketNeeds,
+  summarizeNeedsProgress,
+  useNeedClaim,
+  VolunteerProgress,
+} from '../needs';
 import { PhotoThumb } from '../photos';
-import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
+import { formatTicketTypeLabel } from '../status';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
-const { color } = designTokens;
-
-const detailPalette = {
-  surface: color.bg.neutral.default,
-  border: color.border.default,
-  heading: color.fg.neutral.default,
-  text: color.fg.neutral.default,
-  muted: color.fg.neutral.muted,
-  accent: color.brand.secondary.subtle,
-};
+const { color, spacing } = designTokens;
 
 // 詳情面板自行顯示載入狀態，停用 suspense 避免整頁因抓取任務資料而閃爍重渲染。
 const DETAIL_QUERY_CONTEXT = { suspense: false } as const;
@@ -46,89 +44,12 @@ interface TicketPhotoItem {
   url: string;
 }
 
-function SectionCard({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <Stack
-      spacing={1.5}
-      sx={{
-        p: 2,
-        borderRadius: 3,
-        bgcolor: detailPalette.surface,
-        border: `1px solid ${detailPalette.border}`,
-      }}
-    >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 1,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{ color: detailPalette.accent, display: 'grid', placeItems: 'center' }}>
-            {icon}
-          </Box>
-          <Typography
-            sx={{
-              color: detailPalette.heading,
-              fontSize: displayTextSize[15],
-              lineHeight: '22px',
-              fontWeight: 800,
-            }}
-          >
-            {title}
-          </Typography>
-        </Box>
-      </Box>
-      {children}
-    </Stack>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
-  return (
-    <Stack spacing={0.5}>
-      <Typography
-        sx={{
-          color: detailPalette.muted,
-          fontSize: displayTextSize[12],
-          lineHeight: '18px',
-          fontWeight: 700,
-        }}
-      >
-        {label}
-      </Typography>
-      {typeof value === 'string' ? (
-        <Typography
-          sx={{
-            color: detailPalette.text,
-            fontSize: displayTextSize[14],
-            lineHeight: '21px',
-          }}
-        >
-          {value}
-        </Typography>
-      ) : (
-        value
-      )}
-    </Stack>
-  );
-}
+/** A row's second, smaller line under its value: a hint, a room, the coordinates. */
+const secondaryLine = {
+  fontSize: displayTextSize[12],
+  lineHeight: 1.6,
+  color: color.fg.neutral.subtle,
+} as const;
 
 export function TaskMatchTicketDetailsPanel({
   marker,
@@ -210,9 +131,11 @@ export function TaskMatchTicketDetailsPanel({
   const responsible = responsibleTeamsText(
     ticketData?.ticket?.responsibleTeams.map((team) => team.name) ?? [],
   );
+  const progress = summarizeNeedsProgress(needs, ticketStatus);
 
   return (
-    <Stack spacing={2}>
+    // No cards, as in the prototype: blocks set apart by space, each under a small heading.
+    <Stack sx={{ gap: `${spacing[4]}px` }}>
       {/* At the very top, as the design has it: orange, not red, as the ticket stands. */}
       {auditNotice ? <Alert severity="warning">{auditNotice}</Alert> : null}
 
@@ -222,20 +145,23 @@ export function TaskMatchTicketDetailsPanel({
         </Alert>
       ) : null}
 
-      {/* First, as in the prototype (site-detail.jsx:330-332): what a volunteer came to decide. */}
+      {/* The whole ticket first, then each need: how far it is from having its people. */}
+      {progress ? <VolunteerProgress progress={progress} /> : null}
+
+      {/* First, as in the prototype: what a volunteer came to decide. */}
       {needs.length > 0 || isTicketFetching || canAddNeed ? (
-        <SectionCard
-          title={needs.length > 0 ? `需求（${needs.length} 筆）` : '需求'}
-          icon={<VolunteerActivismRoundedIcon sx={{ fontSize: 18 }} />}
-        >
-          {/* Under the title, not beside it: on a phone the two squeezed each other onto two lines. */}
+        <Box>
+          <SiteDetailLabel>
+            {needs.length > 0 ? `需求（${needs.length} 筆）` : '需求'}
+          </SiteDetailLabel>
+          {/* Under the heading, not beside it: on a phone the two squeezed each other onto two lines. */}
           {needs.length > 1 ? (
-            <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12], lineHeight: 1.5 }}>
+            <Typography sx={{ ...secondaryLine, mt: -0.5, mb: 1 }}>
               一筆一筆接，可以接多筆
             </Typography>
           ) : null}
           {needs.length > 0 ? (
-            <Stack spacing={1}>
+            <Stack sx={{ gap: `${spacing[2]}px` }}>
               {needs.map((need) => (
                 <NeedRow
                   key={need.uuid}
@@ -248,14 +174,18 @@ export function TaskMatchTicketDetailsPanel({
               ))}
             </Stack>
           ) : (
-            <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
+            <Typography
+              sx={{ ...secondaryLine, fontSize: displayTextSize[13] }}
+            >
               {isTicketFetching ? '載入需求中...' : '這張單目前沒有需求。'}
             </Typography>
           )}
           {canAddNeed ? (
-            <AddNeedPanel ticketUuid={marker.id} needCount={needs.length} />
+            <Box sx={{ mt: `${spacing[2]}px` }}>
+              <AddNeedPanel ticketUuid={marker.id} needCount={needs.length} />
+            </Box>
           ) : null}
-        </SectionCard>
+        </Box>
       ) : null}
 
       {coarse ? (
@@ -267,139 +197,88 @@ export function TaskMatchTicketDetailsPanel({
 
       {/* The rest of the prototype's 詳情, in its order: what this is, then where and whom to ask.
           Nothing of the back office's — 母單／子任務, review state, notes, times — which the
-          prototype does not show. */}
-      <SectionCard
-        title="任務資訊"
-        icon={<InfoOutlinedIcon sx={{ fontSize: 18 }} />}
-      >
-        <Stack spacing={1.25}>
-          <DetailRow
-            label="狀態"
-            value={formatTicketStatusLabel(ticketStatus)}
-          />
-          {coarse ? null : (
-            <DetailRow
-              label="任務說明"
-              value={ticket?.description?.trim() || marker.subtitle}
-            />
-          )}
-          <DetailRow
-            label="任務類型"
-            value={formatTicketTypeLabel(ticket?.taskType ?? marker.ticketMeta?.taskType)}
-          />
-          {/* Withheld with the location — a scene photo can show the house number (AC-03) — and
+          prototype does not show. The status is a badge under the title. */}
+      {coarse ? null : (
+        <SiteDetailRow label="任務說明" icon={<FileText size={16} />}>
+          {ticket?.description?.trim() || marker.subtitle}
+        </SiteDetailRow>
+      )}
+      <SiteDetailRow label="任務類型" icon={<Tag size={16} />}>
+        {formatTicketTypeLabel(ticket?.taskType ?? marker.ticketMeta?.taskType)}
+      </SiteDetailRow>
+      {/* Withheld with the location — a scene photo can show the house number (AC-03) — and
               left out when there are none, as in the prototype. All at once, as thumbnails that
               open the image itself (prototype site-detail.jsx:353), and each failing on its own
               into a card with its link. No 上傳者 or time: the one is an account's uuid, which
               tells a reader nothing and ties the photo to an account. */}
-          {!coarse && photos.length > 0 ? (
-            <DetailRow
-              label={`現場照片（${photos.length}）`}
-              value={
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gridTemplateColumns:
-                      'repeat(auto-fill, minmax(120px, 1fr))',
-                    gap: 1,
-                  }}
-                >
-                  {photos.map((photo, index) => (
-                    <PhotoThumb
-                      key={photo.uuid}
-                      url={photo.url}
-                      index={index}
-                      linksOut
-                    />
-                  ))}
-                </Box>
-              }
-            />
-          ) : null}
-          {/* Not beside a coarse location, as in the prototype: a caller without ticket.view_pii
-              gets it masked (王◯◯ / 09*****678 — backend `graphql/tickets/types.py`), which
-              tells a guest nothing and reaches no one. */}
-          {coarse ? null : <DetailRow label="現場聯絡人" value={contact} />}
-          {marker.locationCell ? (
-            <DetailRow
-              label="位置資訊"
-              value={
-                <Stack spacing={0.25}>
-                  <Typography sx={{ color: detailPalette.text, fontSize: displayTextSize[14], lineHeight: '21px' }}>
-                    概略區塊（{describeLocationCellSpan(marker.locationCell)}範圍）
-                  </Typography>
-                  <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12], lineHeight: '19px' }}>
-                    同一區塊內的求助會顯示在一起，看不出是哪一戶
-                  </Typography>
-                </Stack>
-              }
-            />
-          ) : (
-            <DetailRow
-              label="位置資訊"
-              value={
-                // The prototype's order (site-detail.jsx:402-420): the address, then which floor
-                // and room — what someone going there needs first — and the coordinates last.
-                <Stack spacing={0.25}>
-                  {street || !isTicketFetching ? (
-                    <Typography
-                      sx={{
-                        color: detailPalette.text,
-                        fontSize: displayTextSize[14],
-                        lineHeight: '21px',
-                      }}
-                    >
-                      {street ?? '未填地址'}
-                    </Typography>
-                  ) : null}
-                  {unit ? (
-                    <Typography
-                      sx={{
-                        color: detailPalette.text,
-                        fontSize: displayTextSize[13],
-                        lineHeight: '20px',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {unit}
-                    </Typography>
-                  ) : null}
-                  {/* Who answers for this place, as the map's 責任區 label writes it (ADR-422). */}
-                  {responsible ? (
-                    <Typography
-                      sx={{
-                        color: detailPalette.text,
-                        fontSize: displayTextSize[13],
-                        lineHeight: '20px',
-                      }}
-                    >
-                      {responsible}
-                    </Typography>
-                  ) : null}
-                  <Typography
-                    sx={{
-                      color: detailPalette.muted,
-                      fontSize: displayTextSize[12],
-                      lineHeight: '19px',
-                    }}
-                  >
-                    緯度 {marker.position[0].toFixed(6)} / 經度{' '}
-                    {marker.position[1].toFixed(6)}
-                  </Typography>
-                  {buildingUuid && onOpenBuilding && onSelectTicket ? (
-                    <BuildingTicketNavigation
-                      buildingUuid={buildingUuid}
-                      ticketUuid={marker.id}
-                      onOpenBuilding={onOpenBuilding}
-                      onSelectTicket={onSelectTicket}
-                    />
-                  ) : null}
-                </Stack>
-              }
-            />
-          )}
-        </Stack>
-      </SectionCard>
+      {!coarse && photos.length > 0 ? (
+        <Box>
+          <SiteDetailLabel>現場照片（{photos.length}）</SiteDetailLabel>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+              gap: `${spacing[2]}px`,
+            }}
+          >
+            {photos.map((photo, index) => (
+              <PhotoThumb
+                key={photo.uuid}
+                url={photo.url}
+                index={index}
+                linksOut
+              />
+            ))}
+          </Box>
+        </Box>
+      ) : null}
+      {/* Not beside a coarse location, as in the prototype: a caller without ticket.view_pii
+          gets it masked (王◯◯ / 09*****678 — backend `graphql/tickets/types.py`), which
+          tells a guest nothing and reaches no one. */}
+      {coarse ? null : (
+        <SiteDetailRow label="現場聯絡人" icon={<User size={16} />}>
+          {contact}
+        </SiteDetailRow>
+      )}
+      <SiteDetailRow label="位置資訊" icon={<MapPin size={16} />}>
+        {marker.locationCell ? (
+          <>
+            概略區塊（{describeLocationCellSpan(marker.locationCell)}範圍）
+            <Box sx={secondaryLine}>
+              同一區塊內的求助會顯示在一起，看不出是哪一戶
+            </Box>
+          </>
+        ) : (
+          // The prototype's order: the address, then which floor and room — what someone going
+          // there needs first — and the coordinates last.
+          <>
+            {street || !isTicketFetching ? (
+              <Box>{street ?? '未填地址'}</Box>
+            ) : null}
+            {unit ? (
+              <Box sx={{ fontSize: displayTextSize[13], fontWeight: 600 }}>
+                {unit}
+              </Box>
+            ) : null}
+            {/* Who answers for this place, as the map's 責任區 label writes it (ADR-422). */}
+            {responsible ? (
+              <Box sx={{ fontSize: displayTextSize[13] }}>{responsible}</Box>
+            ) : null}
+            <Box sx={secondaryLine}>
+              緯度 {marker.position[0].toFixed(6)} / 經度{' '}
+              {marker.position[1].toFixed(6)}
+            </Box>
+            {buildingUuid && onOpenBuilding && onSelectTicket ? (
+              <BuildingTicketNavigation
+                buildingUuid={buildingUuid}
+                ticketUuid={marker.id}
+                onOpenBuilding={onOpenBuilding}
+                onSelectTicket={onSelectTicket}
+              />
+            ) : null}
+          </>
+        )}
+      </SiteDetailRow>
     </Stack>
   );
 }
