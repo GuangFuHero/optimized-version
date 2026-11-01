@@ -9,7 +9,7 @@ import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
-import { floorName, groupByFloor } from './floors';
+import { floorName, groupByFloor, orderFloors } from './floors';
 import { FloorSection } from './floor-section';
 import {
   opensByItself,
@@ -321,7 +321,8 @@ function GuestBuildingFloors({
           : '登入後才看得到這一棟每一層的求助。'}
       </Typography>
       {onRequestHelpOnFloor
-        ? building.floors.map((floor) => (
+        ? // In the signed-in drawer's order (`groupByFloor`), not the backend's top floor first.
+          orderFloors(building.floors).map((floor) => (
             <ButtonBase
               key={floor.label}
               onClick={() => onRequestHelpOnFloor(floor.label)}
