@@ -17,6 +17,7 @@ import {
   ADMIN_MAP_ASSIGNMENTS,
   ADMIN_MAP_STATUSES,
   DEFAULT_ADMIN_MAP_FILTERS,
+  toggleExclusive,
   toggleValue,
   type AdminMapFilters,
 } from '@rescue-frontend/modules';
@@ -129,9 +130,15 @@ export function AdminMapFilterBar({
       layers: { ...filters.layers, [layer]: !filters.layers[layer] },
     });
   const set = (
-    key: 'priorities' | 'statuses' | 'assignments' | 'stationTypes',
+    key: 'priorities' | 'statuses' | 'stationTypes',
     value: string,
   ) => onChange({ ...filters, [key]: toggleValue(filters[key], value) });
+  // 已指派 and 未指派 exclude each other: one is picked, or neither.
+  const setAssignment = (value: string) =>
+    onChange({
+      ...filters,
+      assignments: toggleExclusive(filters.assignments, value),
+    });
 
   useEffect(() => {
     if (disabled) {
@@ -289,7 +296,7 @@ export function AdminMapFilterBar({
                 <Chip
                   key={assignment.value}
                   on={filters.assignments.includes(assignment.value)}
-                  onClick={() => set('assignments', assignment.value)}
+                  onClick={() => setAssignment(assignment.value)}
                 >
                   {assignment.label}
                 </Chip>

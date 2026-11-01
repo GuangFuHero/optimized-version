@@ -5,6 +5,7 @@ import {
   DEFAULT_ADMIN_MAP_FILTERS,
   filterMarkers,
   isFiltering,
+  toggleExclusive,
   toggleValue,
   type AdminMapFilters,
 } from './map-filter';
@@ -106,6 +107,14 @@ describe('filterMarkers', () => {
         layers: { tickets: true, stations: false, areas: true },
       }),
     ).toEqual(['t-critical', 't-low', 't-done']);
+  });
+});
+
+describe('toggleExclusive', () => {
+  it('picks one at a time, and picking it again clears it', () => {
+    expect(toggleExclusive([], 'assigned')).toEqual(['assigned']);
+    expect(toggleExclusive(['assigned'], 'unassigned')).toEqual(['unassigned']);
+    expect(toggleExclusive(['assigned'], 'assigned')).toEqual([]);
   });
 });
 

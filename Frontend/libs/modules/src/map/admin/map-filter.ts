@@ -56,6 +56,14 @@ export function toggleValue(list: readonly string[], value: string): string[] {
     : [...list, value];
 }
 
+/** Picks `value` and drops any other; picking the one already picked clears it (a radio that unticks). */
+export function toggleExclusive(
+  list: readonly string[],
+  value: string,
+): string[] {
+  return list.includes(value) ? [] : [value];
+}
+
 /**
  * The markers the filters let through. A way of looking, not of choosing (MAP-ZD-128): the counts in
  * the area list are taken from all the markers, not from these.
