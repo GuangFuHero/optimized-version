@@ -29,7 +29,11 @@ import {
 } from '../../../ticket/site-detail/site-ticket-detail-drawer';
 import { formatTicketTypeLabel } from '../../../ticket/status';
 import { describeLocationCellSpan } from '../../location-cells';
-import type { RescueMapDetailItem, RescueMapMarkerItem } from '../../types';
+import type {
+  LocationCellMembersLoader,
+  RescueMapDetailItem,
+  RescueMapMarkerItem,
+} from '../../types';
 import { GoneTicketDetail } from '../gone-ticket-detail';
 import { LocationCellDetail } from '../location-cell-detail';
 
@@ -52,6 +56,8 @@ interface RescueMapDetailDrawerProps {
   onClose: () => void;
   /** 從概略區塊的清單點進某一筆時切換選取。 */
   onSelectMarker?: (markerId: string) => void;
+  /** 後端數好的格子不帶成員，打開時用這個讀（見 `Map` 的同名 prop）。 */
+  loadLocationCellMembers?: LocationCellMembersLoader;
   /** 只影響訪客提示文案（「登入後可看」），不決定遮不遮 —— 遮在後端。 */
   isAuthenticated?: boolean;
   /**
@@ -233,6 +239,7 @@ export function RescueMapDetailDrawer({
   marker,
   onClose,
   onSelectMarker,
+  loadLocationCellMembers,
   isAuthenticated = false,
   ticketDetailOverrides,
   stationSecondaryAction,
@@ -259,7 +266,10 @@ export function RescueMapDetailDrawer({
   if (marker.detailType === 'cell') {
     return (
       <LocationCellDetail
+        // A cell opened again, or another cell, reads its tickets from the first page again.
+        key={marker.id}
         cell={marker}
+        loadMembers={loadLocationCellMembers}
         isAuthenticated={isAuthenticated}
         onClose={onClose}
         onSelectMember={(markerId) => onSelectMarker?.(markerId)}

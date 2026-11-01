@@ -68,9 +68,11 @@ export type {
 
 export {
   dedupeMarkersById,
+  MapCellsNotice,
   readLinkedSelection,
   SiteMapControls,
   SiteMapRouteProvider,
+  useCellMembersLoader,
   useCreatedTicketMarker,
   useLinkedTicketLookup,
   useSiteMapLiveData,

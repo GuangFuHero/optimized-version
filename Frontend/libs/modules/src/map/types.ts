@@ -235,8 +235,9 @@ export interface RescueMapMarkerItem {
 
 /**
  * Tickets that share one H3 cell, drawn as that region instead of as pins stacked on its centre
- * (every ticket in a cell comes back with the same coordinate). Built by `buildLocationCells`;
- * never part of `markers`, so everything keyed on tickets and stations is unaffected.
+ * (every ticket in a cell comes back with the same coordinate). Built by `buildLocationCells` from
+ * the markers, or from the backend's count per cell (`toLocationCells`); never part of `markers`,
+ * so everything keyed on tickets and stations is unaffected.
  */
 export interface RescueMapLocationCell {
   /** `cell:<H3 index>` — selectable like a marker id, never colliding with a uuid. */
@@ -247,8 +248,25 @@ export interface RescueMapLocationCell {
   position: [number, number];
   /** The most urgent member decides the colour, as with a cluster. */
   variant: Extract<RescueMapMarkerVariant, 'urgent-ticket' | 'in-progress'>;
+  /** How many tickets the cell holds: the number written in it. */
+  count: number;
+  /** The tickets themselves, when they came with the cell; a counted cell reads them on opening. */
   members: readonly RescueMapMarkerItem[];
 }
+
+/** A page of the tickets one counted cell stands for (`LocationCellDetail`). */
+export interface LocationCellMembersPage {
+  members: readonly RescueMapMarkerItem[];
+  /** How many tickets the page held, drawn as members or not: the next page starts after them. */
+  read: number;
+  hasMore: boolean;
+}
+
+/** Reads a counted cell's tickets a page at a time, `skip` of them in. */
+export type LocationCellMembersLoader = (
+  cell: string,
+  skip: number,
+) => Promise<LocationCellMembersPage>;
 
 /**
  * A ticket a link names that is not there: deleted, or never was (ADR-444). It holds the link's uuid
