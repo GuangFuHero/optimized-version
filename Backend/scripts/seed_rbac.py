@@ -277,6 +277,9 @@ ROLES_DATA = [
             Perm.TEAM_MEMBER_VIEW: "team",  # Spec/026: their own team's member list
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.PROJECT_VIEW: "all",  # ADR-324, see the admin role above
+            # ADR-453: field workers export the tickets they work, their zone's, as the admin does
+            # (ADR-111). Not stations, and no import: batch writes stay with the admin.
+            Perm.TICKET_EXPORT: "zone",
         },
     },
 ]

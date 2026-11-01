@@ -140,6 +140,7 @@
 ➕ `data_auditor` 拿 export 是它的本職（oversight，已持有 `ticket.view_pii: all`），不給 import 因為它全範圍無寫權（`scripts/seed_rbac.py:59`）。
 ➕ team admin 的 export=zone 讓匯出檔天然只含自己負責區的資料，不需要另外做範圍參數。
 ➖ 現場人員要一份自己負責區的清單只能請團隊管理員匯。
+*2026-11-01 起 member 也有 `ticket.export: zone`（ADR-453），現場人員可以自己匯出負責區的單；站點匯出和匯入仍不給。*
 
 **import 的 scope 為什麼一律 all**：checkpoint 1 只回答「有沒有這個能力」，真正的逐筆保護來自 `*.add` / `*.edit` 的 own/zone 判斷。給 import 一個 zone scope 只會製造一個看起來有意義、實際上不影響任何行為的設定。
 
@@ -897,3 +898,34 @@ Notion 票：https://app.notion.com/p/406bc24b8353813d9f1afba3465ab9e2
   又比到時照舊寫提示、更新或沒有的列號不理、領頭列帶著後續列；真引擎：被擋再確認、同一份檔裡很像的兩列都建立）、
   `tests/test_bulk_endpoints.py`（`decisions` 和 `declined` 的格式、走一趟 HTTP）。
   `test_a_different_phone_makes_it_a_different_ticket` 改成先被擋、確認後才建立。
+
+### ADR-453 團隊成員也能匯出負責區的單（member 加 `ticket.export: zone`）
+
+**白話**：團隊成員（現場人員）在任務管理也能按「匯出」，檔案只有自己團隊責任區裡的單，跟團隊管理員一樣。站點匯出和
+匯入還是只有管理員能用。
+
+**Date**：2026-11-01。WG-159（Notion 手動測試表）的預期結果：「團隊管理員與團隊成員都能匯出；檔案只含責任區內的任務」，
+依據含 PM 11/01 的回覆。使用者把它排進這一版。
+
+**Context**：
+
+- ADR-111 只給 team admin `ticket.export: zone`，member 沒有，所以成員按匯出會被 403 擋下。
+- 匯出的範圍由 scope 決定，沒有另外的範圍參數（ADR-111）：`zone` 就是團隊責任區裡的單（`bulk_export.py` 的
+  `require_scope(actor, Perm.TICKET_EXPORT, db)`）。
+- 管理平台的匯出按鈕看 `ticket.export` 決定顯示（`use-ticket-capabilities.ts` 的 `canExport`），前端不用改。
+
+**Decision**：
+
+1. `scripts/seed_rbac.py` 的 member 角色加 `Perm.TICKET_EXPORT: "zone"`，跟 admin 同一個 scope。
+2. 不給 member 站點匯出（`station.export`），也不給匯入（`ticket.import`、`station.import`）：WG-159 只講任務的匯出，
+   批次寫入還是只有管理員能做。
+3. 不用 migration：seed 是只補不改的 bootstrap（ADR-055），每次部署都會跑（`deploy.sh` 的 `seed_rbac.py`）。現有資料庫的
+   member 角色會補上這一筆；在管理平台手動改過的授權不會被蓋掉。
+4. `RBAC_RESOURCE_ROLE_MATRIX.md` 的 `ticket.export` 那一列，member 改成 `zone`。
+
+**取代**：ADR-111 表裡 member 的 `ticket.export`（原本 —）。ADR-111 其他格不變。
+
+➕ 現場人員不用再請管理員幫忙匯出負責區的清單。
+➖ 匯出的檔有聯絡人資料時，現場人員拿到的跟畫面上看得到的一樣（`ticket.view_pii: all`，ADR-286），不會更多。
+◾ 測試：`tests/test_bulk_permissions.py`（seed 矩陣、成員只有 `ticket.export` 是 zone，其他三個批次權限都 403）、
+  `tests/test_bulk_export.py`（照 seed 的 member 授權匯出，只拿到責任區內的單）。
