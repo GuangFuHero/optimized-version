@@ -13,6 +13,11 @@ fragment TicketFields on TicketType {
   priority
   taskType
   auditStatus
+  # The tickets this one may repeat, to anyone (ADR-447): a tag on the list and a line on the detail.
+  suspectedDuplicateOf {
+    uuid
+    title
+  }
   createdBy
   createdAt
   updatedAt

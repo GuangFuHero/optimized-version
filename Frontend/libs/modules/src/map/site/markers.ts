@@ -220,6 +220,7 @@ export function mapTicketToMarker(
       contactPhone: ticket.contactPhone,
       createdBy: ticket.createdBy,
       auditStatus: ticket.auditStatus,
+      suspectedDuplicateOf: ticket.suspectedDuplicateOf,
       createdAt: ticket.createdAt?.toString() ?? null,
       updatedAt: ticket.updatedAt?.toString() ?? null,
     },

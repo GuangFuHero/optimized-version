@@ -335,6 +335,8 @@ export function SiteListView() {
       onShare: () => openPointShare(marker),
       onOpenBuilding: setBuildingUuid,
       onSelectTicket: openBuildingTicket,
+      // As a link to it: one the list does not hold is looked up.
+      onOpenTicket: controller.setSelectedMarkerId,
     });
 
   const view = (

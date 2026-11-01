@@ -1616,6 +1616,12 @@ type TicketDisasterDetailType {
   value: String!
 }
 
+"""Another ticket a disputed ticket may duplicate"""
+type TicketDuplicateRefType {
+  uuid: UUID!
+  title: String!
+}
+
 enum TicketListOrder {
   NEWEST
   NEEDS_FIRST
@@ -1792,6 +1798,11 @@ type TicketType {
   A fingerprint of the ticket's content as it now stands, to pass back to auditTicket so the verdict is refused if the ticket changes in between. Null to a caller without ticket.audit here. Read it on one ticket at a time
   """
   auditContentHash: String
+
+  """
+  Other tickets this one may repeat, to anyone (ADR-447): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them
+  """
+  suspectedDuplicateOf: [TicketDuplicateRefType!]!
 
   """
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here

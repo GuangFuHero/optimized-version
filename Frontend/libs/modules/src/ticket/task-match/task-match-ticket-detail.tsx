@@ -22,6 +22,8 @@ interface TaskMatchTicketDetailOptions {
   onOpenBuilding?: (buildingUuid: string) => void;
   /** Its 上一張／下一張: open that ticket of the same building instead. */
   onSelectTicket?: (marker: RescueMapMarkerItem) => void;
+  /** Its 看那張: open a ticket it may repeat, by uuid, as a share link would. */
+  onOpenTicket?: (ticketUuid: string) => void;
 }
 
 function createFooterActions({
@@ -47,6 +49,7 @@ export function createTaskMatchTicketDetailOverrides({
   onShare,
   onOpenBuilding,
   onSelectTicket,
+  onOpenTicket,
 }: TaskMatchTicketDetailOptions): RescueMapTicketDetailOverrides {
   const priority = marker.ticketMeta?.priority;
 
@@ -81,6 +84,7 @@ export function createTaskMatchTicketDetailOverrides({
         isAuthenticated={isAuthenticated}
         onOpenBuilding={onOpenBuilding}
         onSelectTicket={onSelectTicket}
+        onOpenTicket={onOpenTicket}
       />
     ),
     footerLead: (

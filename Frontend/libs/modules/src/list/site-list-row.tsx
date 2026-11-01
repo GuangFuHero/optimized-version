@@ -15,6 +15,10 @@ import { getStationTypeIcon } from '../station/type-options';
 import { NeedLine, type TicketNeed } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
 import { getTicketStatusTone } from '../ticket/status';
+import {
+  SuspectedDuplicateBadge,
+  SuspectedDuplicateLine,
+} from '../ticket/suspected-duplicate-tag';
 
 const { color, radius, shadow, spacing, motion, iconSize } = designTokens;
 
@@ -136,6 +140,9 @@ export function SiteListRow({
                   priority={marker.ticketMeta?.priority}
                   high="solid"
                 />
+                <SuspectedDuplicateBadge
+                  duplicates={marker.ticketMeta?.suspectedDuplicateOf}
+                />
                 {/* 官方認定：只有官方站點掛 chip，非官方不掛。 */}
                 {isStation && marker.stationMeta?.isOfficial ? (
                   <SiteBadge tone="secondary" variant="subtle">
@@ -162,6 +169,10 @@ export function SiteListRow({
                 {availability?.headline ?? marker.label}
               </SiteBadge>
             </Stack>
+
+            <SuspectedDuplicateLine
+              duplicates={marker.ticketMeta?.suspectedDuplicateOf}
+            />
 
             <Typography
               sx={{

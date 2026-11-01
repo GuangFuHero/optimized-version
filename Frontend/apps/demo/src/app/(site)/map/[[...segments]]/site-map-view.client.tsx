@@ -188,6 +188,19 @@ function SiteMapViewportDataLayer({
     [baseRouteState, onMapRouteStateChange, viewportStore],
   );
 
+  // A ticket by its uuid alone, as a link to it opens: one this ticket may repeat, from 看那張.
+  const openTicket = useCallback(
+    (ticketUuid: string) =>
+      onMapRouteStateChange({
+        ...mergeRouteStateWithViewport(
+          baseRouteState,
+          viewportStore.getSnapshot(),
+        ),
+        selectedMarkerId: ticketUuid,
+      }),
+    [baseRouteState, onMapRouteStateChange, viewportStore],
+  );
+
   const createCurrentPointShareTarget = useCallback(
     (marker: RescueMapMarkerItem) =>
       createPointShareTarget({
@@ -262,12 +275,14 @@ function SiteMapViewportDataLayer({
         onShare: () => onOpenShareTarget(createCurrentPointShareTarget(marker)),
         onOpenBuilding: setBuildingUuid,
         onSelectTicket: openBuildingTicket,
+        onOpenTicket: openTicket,
       }),
     [
       createCurrentPointShareTarget,
       isAuthenticated,
       onOpenShareTarget,
       openBuildingTicket,
+      openTicket,
     ],
   );
 
