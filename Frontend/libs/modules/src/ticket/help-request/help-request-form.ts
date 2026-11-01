@@ -140,9 +140,18 @@ export interface HelpRequestForm {
   description: string;
   /** Links to scene photos kept elsewhere, each checked as it was added. Optional. */
   photoUrls: string[];
+  /**
+   * The open building (開啟空間) it is filed in, from 在這一層請求協助: the point and the address are
+   * the building's, `floor` is one of its floors, and `room` one of that floor's areas where it has
+   * them. Null for any other request.
+   */
+  building: string | null;
 }
 
-/** At `place`, a building's floor, the form starts with its address and that floor filled in. */
+/**
+ * At `place`, a building's floor, the form is filed in that building, on that floor; its address is
+ * filled in too, should the building be dropped.
+ */
 export function emptyHelpRequestForm(
   landmark: PickedPoint | null = null,
   place: HelpRequestPlace | null = null,
@@ -150,6 +159,7 @@ export function emptyHelpRequestForm(
   return {
     title: '',
     landmark,
+    building: place?.buildingUuid ?? null,
     address: place?.address ?? '',
     floor: place?.floor ?? '',
     room: '',
@@ -186,7 +196,8 @@ function chosenNeeds(needs: readonly NeedDraft[]) {
 
 /**
  * What still has to be filled in, in the form's order from the top, so the first is the one to
- * scroll to. At least one need is required, and how many of each but a rescue.
+ * scroll to. At least one need is required, and how many of each but a rescue. Filed in a building,
+ * the place is the building's: no landmark or address is asked for.
  */
 export function findMissingFields(form: HelpRequestForm): MissingField[] {
   const missing: MissingField[] = [];
@@ -194,10 +205,10 @@ export function findMissingFields(form: HelpRequestForm): MissingField[] {
   if (!form.title.trim()) {
     missing.push({ key: 'title', label: '標題' });
   }
-  if (!form.landmark) {
+  if (!form.building && !form.landmark) {
     missing.push({ key: 'landmark', label: '地標' });
   }
-  if (!form.address.trim()) {
+  if (!form.building && !form.address.trim()) {
     missing.push({ key: 'address', label: '地址' });
   }
   if (!form.contactName.trim()) {
@@ -235,6 +246,41 @@ function readQuantity(value: string): number | null {
 }
 
 /**
+ * Where the request is: filed in a building, the building, whose point and address the backend
+ * copies (and refuses a point beside it), with the floor and room alone; else the landmark and the
+ * address line.
+ */
+function toPlaceInput(
+  form: HelpRequestForm,
+): Pick<
+  CreateHelpRequestInput,
+  'geometry' | 'buildingMapUuid' | 'secondaryLocation'
+> {
+  if (form.building) {
+    return {
+      buildingMapUuid: form.building,
+      secondaryLocation: {
+        floor: textOrNull(form.floor),
+        room: textOrNull(form.room),
+      },
+    };
+  }
+
+  const landmark = form.landmark;
+
+  if (!landmark) {
+    throw new Error('toHelpRequestInput needs a form with its landmark set');
+  }
+
+  return {
+    geometry: { type: 'Point', coordinates: [landmark.lng, landmark.lat] },
+    // One line, as the lookup filled it in or as typed: the backend splits it, and keeps what it
+    // cannot split as it is.
+    secondaryLocation: toAddressInput(form),
+  };
+}
+
+/**
  * For a form `findMissingFields` finds complete. `acknowledged`, once the requester said it is not
  * the same thing: for each need held, by its place among the needs sent, the suspect to name
  * (`readHeldHelpRequest`).
@@ -243,21 +289,12 @@ export function toHelpRequestInput(
   form: HelpRequestForm,
   acknowledged: Readonly<Record<number, string>> = {},
 ): CreateHelpRequestInput {
-  const landmark = form.landmark;
-
-  if (!landmark) {
-    throw new Error('toHelpRequestInput needs a form with its landmark set');
-  }
-
   return {
     title: form.title.trim(),
     description: textOrNull(form.description),
-    geometry: { type: 'Point', coordinates: [landmark.lng, landmark.lat] },
+    ...toPlaceInput(form),
     contactName: form.contactName.trim(),
     contactPhone: textOrNull(form.contactPhone),
-    // One line, as the lookup filled it in or as typed: the backend splits it, and keeps what it
-    // cannot split as it is.
-    secondaryLocation: toAddressInput(form),
     tasks: form.needs
       .flatMap((row) => {
         const need = toNeedInput(row);

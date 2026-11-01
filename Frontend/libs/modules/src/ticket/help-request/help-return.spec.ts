@@ -6,6 +6,8 @@ import {
   stripHelpReturn,
 } from './help-return';
 
+const BUILDING = '20000000-0000-4000-8000-000000000101';
+
 /** The page a sign-in link sends the guest back to. */
 function callbackOf(href: string): URL {
   const callbackUrl = new URL(href, 'http://site.test').searchParams.get(
@@ -51,6 +53,23 @@ describe('buildHelpSignInHref', () => {
 
     expect(back.searchParams.get('help')).toBe('23.672500,121.423500');
   });
+
+  it("carries a building's floor beside its point, to be filed in it once back", () => {
+    const back = callbackOf(
+      buildHelpSignInHref(
+        { pathname: '/map', search: '' },
+        {
+          lat: 23.6703,
+          lng: 121.4335,
+          place: { buildingUuid: BUILDING, address: '光復鄉', floor: 'B1' },
+        },
+      ),
+    );
+
+    expect(back.searchParams.get('help')).toBe('23.670300,121.433500');
+    expect(back.searchParams.get('helpBuilding')).toBe(BUILDING);
+    expect(back.searchParams.get('helpFloor')).toBe('B1');
+  });
 });
 
 describe('readHelpReturn', () => {
@@ -74,6 +93,33 @@ describe('readHelpReturn', () => {
     expect(readHelpReturn(query('help=abc'))).toEqual({ seed: null });
     expect(readHelpReturn(query('help=123,456'))).toEqual({ seed: null });
   });
+
+  it("reopens on the building's floor that went with the point, its address to be read again", () => {
+    expect(
+      readHelpReturn(
+        query(
+          `help=23.670300,121.433500&helpBuilding=${BUILDING}&helpFloor=3F`,
+        ),
+      ),
+    ).toEqual({
+      seed: {
+        lat: 23.6703,
+        lng: 121.4335,
+        place: { buildingUuid: BUILDING, address: null, floor: '3F' },
+      },
+    });
+  });
+
+  it('drops a building that is not a uuid, or has no point to go with it', () => {
+    expect(
+      readHelpReturn(
+        query('help=23.670300,121.433500&helpBuilding=x&helpFloor=3F'),
+      ),
+    ).toEqual({ seed: { lat: 23.6703, lng: 121.4335 } });
+    expect(
+      readHelpReturn(query(`help=1&helpBuilding=${BUILDING}&helpFloor=3F`)),
+    ).toEqual({ seed: null });
+  });
 });
 
 describe('stripHelpReturn', () => {
@@ -81,6 +127,14 @@ describe('stripHelpReturn', () => {
     expect(stripHelpReturn('/list/ticket?id=t-1&help=1')).toBe(
       '/list/ticket?id=t-1',
     );
+  });
+
+  it("takes a building's floor off with it", () => {
+    expect(
+      stripHelpReturn(
+        `/map?help=1,2&helpBuilding=${BUILDING}&helpFloor=3F&id=t-1`,
+      ),
+    ).toBe('/map?id=t-1');
   });
 
   it('hands an address without one back as it came', () => {

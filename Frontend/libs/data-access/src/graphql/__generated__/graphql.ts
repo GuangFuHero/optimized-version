@@ -353,6 +353,8 @@ export type CreateCrowdSourcingInput = {
 };
 
 export type CreateHelpRequestInput = {
+  /** File the request inside this building map, as createTicket does: its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it */
+  buildingMapUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Optional; the account's own email is never filled in for it */
   contactEmail?: InputMaybe<Scalars['String']['input']>;
   /** Who to ask for at the place */
@@ -360,8 +362,8 @@ export type CreateHelpRequestInput = {
   /** Phone number or LINE ID, as the person typed it */
   contactPhone?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
-  /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
-  geometry: Scalars['GeoJSON']['input'];
+  /** GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted */
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
   /** Scene photos as links to images kept elsewhere — the platform stores no image. At most 10, each an https:// URL of at most 500 characters */
   photoUrls?: InputMaybe<Array<Scalars['String']['input']>>;
   /** The address line goes in `fullAddress` (with its `addressToken` if looked up), with `floor` and `room` */
