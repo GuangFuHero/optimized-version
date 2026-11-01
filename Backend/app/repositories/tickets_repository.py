@@ -86,6 +86,7 @@ class TicketRepository(GenericRepository[Tickets]):
         self,
         *,
         bounds=None,
+        outside_bounds=None,
         status: str | None = None,
         statuses: list[str] | None = None,
         priority: str | None = None,
@@ -117,6 +118,8 @@ class TicketRepository(GenericRepository[Tickets]):
 
         `statuses` keeps the rows in any of them, as the map's filter ticks several; an empty
         list keeps none, so unticking every status shows nothing. With `status` too, both apply.
+
+        `outside_bounds` keeps the rows `bounds` would leave out for that box (ADR-452).
         """
         conditions = [self.model.delete_at.is_(None), *extra_filters]
         seen = self._seen(detail_filters)
@@ -135,26 +138,14 @@ class TicketRepository(GenericRepository[Tickets]):
             )
             conditions.append(h3_cell_text(self.model.geometry, coarse_resolution) == location_cell)
         if bounds:
-            envelope = func.ST_MakeEnvelope(
-                bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
-            )
-            exact = func.ST_Intersects(self.model.geometry, envelope)
-            if seen is None:
-                conditions.append(exact)
-            else:
-                # The coarse branch uses the cell centre at the resolution the caller is
-                # shown, so every row returned lies inside the box it asked about. The centre
-                # is an expression no index can serve, so a pre-filter comes first: a row
-                # whose centre is in the box has its point within one cell of it, and "point
-                # in the grown box" is a question the GIST index on `geometry` answers. Only
-                # ever a superset — the centre test below still decides every row, so the
-                # pre-filter narrows the scan without widening what can be learned (ADR-282).
-                dx, dy = coarse_margin_degrees(
-                    coarse_resolution, max(abs(bounds.min_lat), abs(bounds.max_lat))
-                )
-                conditions.append(func.ST_Intersects(self.model.geometry, func.ST_Expand(envelope, dx, dy)))
-                coarse = func.ST_Intersects(h3_centroid(self.model.geometry, coarse_resolution), envelope)
-                conditions.append(or_(and_(seen, exact), and_(not_(seen), coarse)))
+            in_box, pre_filter = self._in_box(bounds, seen, coarse_resolution)
+            conditions += [*pre_filter, in_box]
+        if outside_bounds:
+            # Exactly the rows `bounds` would not keep for the same box, decided row by row the same
+            # way, so the two split every match between them (ADR-452). No pre-filter: the rows outside
+            # a box are most of them, and a grown box cannot narrow that. A row with no point is outside.
+            in_box, _ = self._in_box(outside_bounds, seen, coarse_resolution)
+            conditions.append(not_(func.coalesce(in_box, false())))
         conditions += self._column_conditions(
             status=status, statuses=statuses, priority=priority, disaster_type=disaster_type
         )
@@ -172,6 +163,25 @@ class TicketRepository(GenericRepository[Tickets]):
                     )
                 )
         return conditions
+
+    def _in_box(self, bounds, seen, coarse_resolution: int) -> tuple:
+        """Whether a row lies in `bounds` as its caller sees it, and conditions to narrow the scan first.
+
+        A row whose point the caller sees is matched by that point. One it is shown as a cell is matched by
+        the cell centre at the resolution it is shown, so every row returned lies inside the box asked about.
+        The centre is an expression no index can serve, so a pre-filter comes with it: a row whose centre is
+        in the box has its point within one cell of it, and "point in the grown box" is a question the GIST
+        index on `geometry` answers. Only ever a superset — the centre test still decides every row, so the
+        pre-filter narrows the scan without widening what can be learned (ADR-282).
+        """
+        envelope = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
+        exact = func.ST_Intersects(self.model.geometry, envelope)
+        if seen is None:
+            return exact, []
+        dx, dy = coarse_margin_degrees(coarse_resolution, max(abs(bounds.min_lat), abs(bounds.max_lat)))
+        pre_filter = func.ST_Intersects(self.model.geometry, func.ST_Expand(envelope, dx, dy))
+        coarse = func.ST_Intersects(h3_centroid(self.model.geometry, coarse_resolution), envelope)
+        return or_(and_(seen, exact), and_(not_(seen), coarse)), [pre_filter]
 
     @staticmethod
     def _seen(detail_filters):
@@ -294,6 +304,7 @@ class TicketRepository(GenericRepository[Tickets]):
         db: AsyncSession,
         *,
         bounds=None,
+        outside_bounds=None,
         status: str | None = None,
         statuses: list[str] | None = None,
         priority: str | None = None,
@@ -310,8 +321,8 @@ class TicketRepository(GenericRepository[Tickets]):
     ) -> list[Tickets]:
         """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope.
 
-        `statuses` / `detail_filters` / `coarse_resolution` / `location_cell`: see
-        _active_conditions (ADR-281/282/387).
+        `outside_bounds` / `statuses` / `detail_filters` / `coarse_resolution` / `location_cell`: see
+        _active_conditions (ADR-281/282/387/452).
 
         `order` is one of TICKET_ORDERS. "needs_first" puts _needs_tier ahead of the standing
         order — ahead of relevance too, when searching (ADR-419) — and `viewer_uuid`, the caller
@@ -322,6 +333,7 @@ class TicketRepository(GenericRepository[Tickets]):
         term = normalize_query(q)
         conditions = self._active_conditions(
             bounds=bounds,
+            outside_bounds=outside_bounds,
             status=status,
             statuses=statuses,
             priority=priority,
@@ -352,6 +364,7 @@ class TicketRepository(GenericRepository[Tickets]):
         db: AsyncSession,
         *,
         bounds=None,
+        outside_bounds=None,
         status: str | None = None,
         statuses: list[str] | None = None,
         priority: str | None = None,
@@ -365,6 +378,7 @@ class TicketRepository(GenericRepository[Tickets]):
         """Count active tickets — MUST use the same conditions as list_active()."""
         conditions = self._active_conditions(
             bounds=bounds,
+            outside_bounds=outside_bounds,
             status=status,
             statuses=statuses,
             priority=priority,
