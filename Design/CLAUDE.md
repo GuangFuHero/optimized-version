@@ -21,6 +21,7 @@ Design/
 - 原型頁面放 `前台/` 或 `後台/`；裁示與規格放那一側的 `docs/`。
 - 詳細的更新說明照舊寫在那一側的 `更新說明.md` 或 `docs/`。`CHANGELOG.md` 只放工程師要接的**簡短待辦清單**，每一筆連到那份詳細說明。
 - 給工程師的程式碼放 `handoff/<元件名>/index.tsx`。以前放在 `components/`，下一次合併起改放 `handoff/`（把現有的搬過去，並在 CHANGELOG 記一筆）。
+- handoff 的 TSX：給前台畫面的用 MUI 圖示（`@mui/icons-material`），給後台畫面的用 Lucide（`lucide-react`）。
 - 只動 `Design/` 底下的檔案。**不要改 `Frontend/` 的任何東西**，包括 `design-tokens.ts`；那是工程師照你的 handoff 與 CHANGELOG 去改。
 
 ## Tokens（設計系統匯出）

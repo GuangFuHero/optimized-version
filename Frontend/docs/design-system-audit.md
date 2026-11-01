@@ -67,6 +67,25 @@
 
 9. `pnpm lint` 通過、該模組 0 個 design-system warning，才算完成。
 
+## 圖示（資訊，不在這次修正範圍）
+
+規則：前台用 MUI 圖示、後台用 Lucide（見 `design-system.md`「圖示」）。既有程式還有混用，下表是 import 該套件的檔案數（不含測試與 story），**不在這次修正範圍，要不要統一另外決定**。沒有圖示的 lint 規則。
+
+| 區域                                                         | Lucide | MUI |
+| ------------------------------------------------------------ | ------ | --- |
+| `libs/ui`（兩邊共用）                                        | 9      | 0   |
+| `apps/admin`                                                 | 1      | 0   |
+| `apps/demo`                                                  | 0      | 2   |
+| 模組的後台部分（`admin/`、`*/admin/`、`shell/admin`）        | 58     | 0   |
+| `map`（前台／共用）                                          | 8      | 1   |
+| `station`（前台／共用）                                      | 3      | 2   |
+| `auth`                                                       | 2      | 1   |
+| 其他前台模組（`ticket`、`shell/site`、`route`、`building`…） | 0      | 47  |
+
+之後的項目（未排程）：
+
+- 前台改用 Lucide：之後會做，時間未定。在那之前不要搬。
+
 ## lint 抓不到的（review 時要看）
 
 - 巢狀的響應式值：`fontSize: { mobile: 14, tablet: 16 }`。
