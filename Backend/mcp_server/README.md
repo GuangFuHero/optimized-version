@@ -51,8 +51,9 @@ Every per-IP rate limit (sign-in included) keys on the address `resolve_client_i
 believes `X-Forwarded-For` only from peers in `TRUSTED_PROXIES` (default: loopback and the private
 ranges, where the site's proxy sits today) and uses the socket address otherwise. So:
 
-- the edge must **overwrite** `X-Forwarded-For` with the real client IP, never append to what the
-  client sent, and it must reach the backend from an address in `TRUSTED_PROXIES`;
+- the edge must put the real client IP as the **last** entry of `X-Forwarded-For` (appending to what
+  the client sent is fine: the header is read right to left, past trusted hops, so entries the client
+  wrote are never reached), and it must reach the backend from an address in `TRUSTED_PROXIES`;
 - if the edge reaches the backend from somewhere else, add its address to `TRUSTED_PROXIES`; if
   untrusted callers could reach the backend from a private address (e.g. Docker Desktop's port
   publishing, which makes every outside caller look private), narrow `TRUSTED_PROXIES` to the
