@@ -186,7 +186,7 @@ class BackendOAuthProvider(OAuthProvider):
             await repo.revoke_session(sid)
 
 
-consent_router = APIRouter()
+consent_router = APIRouter(include_in_schema=False)
 
 _PAGE = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>授權 MCP 用戶端</title>
