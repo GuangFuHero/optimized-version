@@ -1008,7 +1008,7 @@ class TicketType:
 
     @strawberry.field(
         description=(
-            "Other tickets this one may repeat, to anyone (ADR-447): the tickets verificationStatus "
+            "Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus "
             "names, each once, oldest card first; empty when there are none. Not whether a verdict "
             "was given on them"
         )
