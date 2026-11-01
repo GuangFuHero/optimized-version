@@ -79,7 +79,7 @@ main: Frontend/
 | `Avatar`                             | 頭像（沒圖時顯示姓名首字）                                                                   | —                                                  |
 | `MapMarker` 系列                     | 地圖上的站點、任務、建築、叢集標記                                                           | 前台地圖、後台地圖                                 |
 | `Markdown`、`MarkdownEditor`         | 顯示／編輯 Markdown（行前資訊等）                                                            | 後台 `js/admin/brief/`                             |
-| `Icons`                              | 共用圖示集（目前是 Lucide；前台要不要用見「圖示」）                                          | —                                                  |
+| `Icons`                              | 共用圖示集（Lucide，前台、後台都用；見「圖示」）                                             | —                                                  |
 
 「第 N 節」指設計分支的 `Design/後台/元件 Components.html`；表中其他原型路徑也都在設計分支的 `Design/` 底下。缺 variant 時擴充這裡的元件，不要在頁面裡改 MUI 元件的樣子。
 
@@ -116,20 +116,17 @@ main: Frontend/
 - **浮層**：有遮罩的一律 45% 遮罩；沒有遮罩的（Menu、Popover）自己畫細框。已在 theme 設好，新的浮層用 MUI 元件就會繼承。
 - **z 軸 base 沒有陰影**；卡片的 `shadow.md` 跟著卡片走。
 - **前台字級**：民眾在戶外用手機看、很多是長輩，所以**手機的字比桌機大**（`textSize`），與設計系統自己的 `typographyMobile`（手機縮小）方向相反，兩者不要混用。
-- **handoff 元件的規則**（搬進來之前也照做）：Tag（TAG-101〜106，說明用、不能點，24px）、Progress（PRG-101〜104，膠囊、一定有數字）、SearchField（INP-103，工具列的搜尋框是膠囊 44px）、設定元件（SET-101〜104，立即生效用 Switch、要儲存才生效用 Checkbox）、站點圖示（ICON-101〜103；原型畫的是 Lucide，產品裡跟著顯示的那一側：前台 MUI、後台 Lucide，見「圖示」）。全文在各 handoff 檔案開頭。
+- **handoff 元件的規則**（搬進來之前也照做）：Tag（TAG-101〜106，說明用、不能點，24px）、Progress（PRG-101〜104，膠囊、一定有數字）、SearchField（INP-103，工具列的搜尋框是膠囊 44px）、設定元件（SET-101〜104，立即生效用 Switch、要儲存才生效用 Checkbox）、站點圖示（ICON-101〜103；前台、後台都用原型的 Lucide 圖示，見「圖示」）。全文在各 handoff 檔案開頭。
 
 ## 圖示
 
-| 畫面                                           | 新程式用                       |
-| ---------------------------------------------- | ------------------------------ |
-| 前台（民眾網站：`apps/demo` 與模組的前台部分） | MUI 圖示 `@mui/icons-material` |
-| 後台（`apps/admin` 與模組的 `admin/` 部分）    | Lucide `lucide-react`          |
+前台和後台都用 Lucide（`lucide-react`）。`@mui/icons-material` 已經拿掉，不要加回來，也不要加別的圖示套件。
 
-- 前台之後也會改用 Lucide，時間未定；在那之前新程式照用 MUI 圖示。
-- 兩個套件都已安裝，不要再加別的圖示套件。
-- 原型畫的是另一套的圖示時，用這一側最接近的圖示；大小用 `iconSize`、顏色用 token。
-- 既有程式不因這條規則搬遷；目前各區的數量見 [`design-system-audit.md`](design-system-audit.md)。
-- **尚未決定**：兩邊共用的 `libs/ui` 元件（目前 9 個元件檔 import Lucide，包括 `Icons`）該用哪一套，或改成由呼叫端傳入圖示，等設計師與 HC 決定。`libs/ui/src/components/Icon/README.md` 說「新圖示加進 `Icons`、不要 import `@mui/icons-material`」，寫在這條規則之前；前台的新程式以本節為準。
+- 新圖示加進 `libs/ui` 的 `Icons`，頁面用 `Icons.xxx`；寫法見 `libs/ui/src/components/Icon/README.md`。
+  後台也可以直接 import `lucide-react`。
+- 原型畫了哪個 Lucide 圖示就用同一個；原型沒畫到的，在 PR 說明列出來請設計師看。大小用 `iconSize`、顏色用 token。
+- 站點類型的圖示用 `libs/modules/src/station/station-type-icon.tsx`（設計師 `StationTypeIcon` 的對照表；不認得的類型用地圖釘）。
+- Google、LINE、Facebook、X 的品牌標誌是 `Icons` 裡的 SVG（`generated/`），不是 Lucide。
 
 ## 手機
 

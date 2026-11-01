@@ -9,4 +9,4 @@
 
 ## For new code
 
-Use `Icons`, for example `Icons.search`. If the icon you need is not in `Icons` yet, add it there, named as Lucide names it. Back-office components can import icons directly from `lucide-react`. Use `size` for a fixed size, or render the icon with MUI `Box` when it needs `sx` styles; `themedIcon` wraps a Lucide icon kept outside `Icons` so it takes `sx` too.
+Use `Icons`, for example `Icons.search`. If the icon you need is not in `Icons` yet, add it there. Most keys are the Lucide name in camelCase, but some name the use or drop a variant suffix (`pin` is MapPin, `pushPin` is Pin, `trash` is Trash2), so check the import beside a key before you trust its name. Back-office components can import icons directly from `lucide-react`. Use `size` for a fixed size, or render the icon with MUI `Box` when it needs `sx` styles; `themedIcon` wraps a Lucide icon kept outside `Icons` so it takes `sx` too.
