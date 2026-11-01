@@ -1,14 +1,15 @@
 'use client';
 
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
-import { Alert, Box, Stack, Typography } from '@mui/material';
+import { Alert, Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { SiteActionDrawer } from '../shell/site/site-action-drawer';
-import { floorName, groupByFloor } from './floors';
+import { floorName, groupByFloor, orderFloors } from './floors';
 import { FloorSection } from './floor-section';
 import {
   opensByItself,
@@ -90,6 +91,7 @@ interface BuildingDrawerContentProps {
   isAuthenticated: boolean;
   scrollRef: RefObject<HTMLDivElement | null>;
   onOpenTicket: (marker: RescueMapMarkerItem) => void;
+  onRequestHelpOnFloor?: (floorLabel: string) => void;
 }
 
 function BuildingDrawerContent({
@@ -100,6 +102,7 @@ function BuildingDrawerContent({
   isAuthenticated,
   scrollRef,
   onOpenTicket,
+  onRequestHelpOnFloor,
 }: BuildingDrawerContentProps) {
   const [showClosed, setShowClosed] = useState(
     () => (viewMemory.get(uuid) ?? DEFAULT_VIEW).showClosed,
@@ -221,6 +224,20 @@ function BuildingDrawerContent({
         </Typography>
       ) : null}
 
+      {/* A building just opened has every floor folded, 尚無通報, and 在這一層請求協助 inside: nothing
+          would say a floor can be tapped. The design's words (SPACE-FE-102). */}
+      {totals.ticketCount === 0 && onRequestHelpOnFloor ? (
+        <Typography
+          sx={{
+            fontSize: displayTextSize[13],
+            lineHeight: 1.6,
+            color: color.fg.neutral.subtle,
+          }}
+        >
+          這一棟還沒有人求助。點你所在的那一層，就能在那一層請求協助。
+        </Typography>
+      ) : null}
+
       <Stack spacing={1}>
         {groups.floors.map(({ floor, tickets: list }) => (
           <FloorSection
@@ -234,6 +251,11 @@ function BuildingDrawerContent({
             showKind={showKind}
             isAuthenticated={isAuthenticated}
             onOpenTicket={onOpenTicket}
+            onRequestHelp={
+              onRequestHelpOnFloor
+                ? () => onRequestHelpOnFloor(floor.label)
+                : undefined
+            }
           />
         ))}
 
@@ -266,20 +288,103 @@ interface BuildingDrawerProps {
   onClose: () => void;
   /** A row pressed: the page closes the drawer and opens that ticket's detail. */
   onOpenTicket: (marker: RescueMapMarkerItem) => void;
+  /**
+   * 在這一層請求協助 pressed, with the floor's label: the page opens 請求協助 on that floor. Left out,
+   * no floor offers it, and a guest gets the floors' names only.
+   */
+  onRequestHelpOnFloor?: (floorLabel: string) => void;
+}
+
+/**
+ * A guest's drawer (SPACE-FE-104): the building and its floors, and nothing of what was reported on
+ * them. A guest's tickets come back without a floor, so the floors' boxes would say 尚無通報 on every
+ * one, where someone may be waiting: telling a guest there is nothing is worse than not telling.
+ */
+function GuestBuildingFloors({
+  building,
+  onRequestHelpOnFloor,
+}: {
+  building: BuildingMap;
+  onRequestHelpOnFloor?: (floorLabel: string) => void;
+}) {
+  return (
+    <Stack spacing={1.5}>
+      <Typography
+        sx={{
+          fontSize: displayTextSize[13],
+          lineHeight: 1.6,
+          color: color.fg.neutral.subtle,
+        }}
+      >
+        {onRequestHelpOnFloor
+          ? '登入後才看得到這一棟每一層的求助。人在這一棟、需要幫忙的話，選你所在的那一層（送出前會請你登入）。'
+          : '登入後才看得到這一棟每一層的求助。'}
+      </Typography>
+      {onRequestHelpOnFloor
+        ? // In the signed-in drawer's order (`groupByFloor`), not the backend's top floor first.
+          orderFloors(building.floors).map((floor) => (
+            <ButtonBase
+              key={floor.label}
+              onClick={() => onRequestHelpOnFloor(floor.label)}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                gap: 1.5,
+                minHeight: 44,
+                px: 1.5,
+                py: 1,
+                borderRadius: `${radius.md}px`,
+                border: `1px solid ${color.border.default}`,
+                bgcolor: color.bg.neutral.default,
+                textAlign: 'left',
+                color: color.fg.neutral.default,
+              }}
+            >
+              <Typography
+                component="span"
+                sx={{
+                  minWidth: 40,
+                  fontSize: displayTextSize[14],
+                  fontWeight: 700,
+                }}
+              >
+                {floorName(floor.label)}
+              </Typography>
+              <Typography
+                component="span"
+                sx={{
+                  flex: 1,
+                  fontSize: displayTextSize[13],
+                  lineHeight: 1.4,
+                  color: color.fg.neutral.subtle,
+                }}
+              >
+                在這一層請求協助
+              </Typography>
+              <ChevronRightRoundedIcon
+                sx={{ fontSize: 16, color: color.fg.neutral.muted }}
+              />
+            </ButtonBase>
+          ))
+        : null}
+    </Stack>
+  );
 }
 
 /**
  * 現場分區 (prototype `BuildingDrawer`, `site-building.jsx`, revised 2026-09-20): a building's tickets,
  * one box per floor, each holding that floor's tickets as narrow rows. Floors only — rooms are free
  * text on the ticket — since floors are what can be known after a disaster, and how many households
- * each holds cannot. Opened from a ticket's 看各樓層; within the site's `NeedClaimProvider`, which its
- * 接這筆 claims through.
+ * each holds cannot. Opened from a ticket's 看各樓層, or from the building on the map; within the
+ * site's `NeedClaimProvider`, which its 接這筆 claims through.
  */
 export function BuildingDrawer({
   buildingUuid,
   isAuthenticated,
   onClose,
   onOpenTicket,
+  onRequestHelpOnFloor,
 }: BuildingDrawerProps) {
   // Kept through the closing slide, so the title and the floors do not blank out on the way.
   const [shownUuid, setShownUuid] = useState(buildingUuid);
@@ -311,6 +416,13 @@ export function BuildingDrawer({
     content = (
       <Typography sx={bodyText}>找不到這一棟，可能已經被刪除。</Typography>
     );
+  } else if (!isAuthenticated) {
+    content = (
+      <GuestBuildingFloors
+        building={building}
+        onRequestHelpOnFloor={onRequestHelpOnFloor}
+      />
+    );
   } else {
     content = (
       <BuildingDrawerContent
@@ -322,6 +434,7 @@ export function BuildingDrawer({
         isAuthenticated={isAuthenticated}
         scrollRef={scrollRef}
         onOpenTicket={onOpenTicket}
+        onRequestHelpOnFloor={onRequestHelpOnFloor}
       />
     );
   }

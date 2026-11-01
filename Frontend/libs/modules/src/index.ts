@@ -69,7 +69,9 @@ export type {
 export {
   dedupeMarkersById,
   MapCellsNotice,
+  pinnedBesideBuildings,
   readLinkedSelection,
+  requestHelpOnBuildingFloor,
   SiteMapControls,
   SiteMapRouteProvider,
   useCellMembersLoader,
@@ -78,6 +80,7 @@ export {
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   usePaginatedRescueMapMarkers,
+  useSiteMapBuildings,
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,

@@ -215,6 +215,7 @@ export function mapTicketToMarker(
       status: ticket.status,
       priority: ticket.priority,
       taskType: ticket.taskType,
+      buildingMapUuid: ticket.buildingMapUuid,
       contactName: ticket.contactName,
       contactEmail: ticket.contactEmail,
       contactPhone: ticket.contactPhone,

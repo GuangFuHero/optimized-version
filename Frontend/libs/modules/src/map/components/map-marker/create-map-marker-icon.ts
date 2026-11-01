@@ -105,6 +105,35 @@ function createMapMarkerIconHtml(item: RescueMapMarkerItem): string {
   ].join('');
 }
 
+/** Lucide's Building, stroked in the text's colour. */
+const BUILDING_GLYPH =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>';
+
+/**
+ * An open building's entry (`item.building`, prototype `createBuildingIcon`): 看各樓層, never 0 件 —
+ * it may only have its tickets filtered out, and it is the way in to file the first one, so it says
+ * what a tap does. The card stands above the point, clear of the 「N 求助」 a guest's cell shows there.
+ */
+function createBuildingIcon(
+  item: RescueMapMarkerItem,
+  leaflet: typeof import('leaflet'),
+): import('leaflet').DivIcon {
+  return leaflet.divIcon({
+    className: 'map-marker-wrapper',
+    html: [
+      '<div class="map-marker-stack">',
+      `<div class="map-building">${BUILDING_GLYPH}<span class="map-building__text">看各樓層</span></div>`,
+      '<div class="map-marker__label map-marker__label--ticket">',
+      `<span class="map-marker__label-text">${escapeHtml(item.label)}</span>`,
+      '</div>',
+      '</div>',
+    ].join(''),
+    iconSize: [140, 64],
+    iconAnchor: [70, 72],
+    popupAnchor: [0, -34],
+  });
+}
+
 /**
  * The opt-in teardrop pin (`item.pin`), from the admin station map prototype
  * (`Design/後台/js/admin/station-v2/station-map.jsx` pinHtml). The look lives in `styles.ts`;
@@ -158,6 +187,10 @@ export function createMapMarkerIcon(
 ): import('leaflet').DivIcon {
   if (item.pin) {
     return createPinIcon(item.pin, leaflet);
+  }
+
+  if (item.building) {
+    return createBuildingIcon(item, leaflet);
   }
 
   const { iconSize, iconAnchor } = getMapMarkerDimensions(item.variant);

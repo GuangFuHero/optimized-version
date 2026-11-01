@@ -15,9 +15,11 @@ import {
   MapCellsNotice,
   MapRequestHelpBar,
   NeedClaimProvider,
+  pinnedBesideBuildings,
   PlaceHereAction,
   PointShareDrawer,
   readLinkedSelection,
+  requestHelpOnBuildingFloor,
   SITE_FALLBACK_DATA_TYPE,
   SiteMapControls,
   syncDocumentMetadata,
@@ -25,6 +27,7 @@ import {
   useCellMembersLoader,
   useCreatedTicketMarker,
   useLinkedTicketLookup,
+  useSiteMapBuildings,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   useSiteMapRouteState,
@@ -191,29 +194,53 @@ function SiteMapViewportDataLayer({
     setGoneTicket(letGo);
   }, [selectedMarkerId]);
 
+  // The open buildings, on the map of tickets only.
+  const buildings = useSiteMapBuildings(
+    (baseRouteState.dataType ?? SITE_FALLBACK_DATA_TYPE) === 'ticket',
+  );
+
   // A ticket made here stays on the map until the view fetches it too; from then on the fetched
   // one, being fresher, is the one shown. So does one opened from a building or a link, while open,
-  // and one read with its cell.
+  // and one read with its cell. A building's tickets are its entry's to show, but for the one open.
   const visibleMarkers = useMemo(
-    () =>
-      dedupeMarkersById([
-        ...liveDataSnapshot.markers,
-        ...[
-          ...createdMarkers,
-          ...(buildingTicketMarker ? [buildingTicketMarker] : []),
-          ...(linkedTicketMarker ? [linkedTicketMarker] : []),
-          ...cellMembers,
-        ].filter((marker) => !goneTicketIds.includes(marker.id)),
-      ]),
+    () => [
+      ...pinnedBesideBuildings(
+        dedupeMarkersById([
+          ...liveDataSnapshot.markers,
+          ...[
+            ...createdMarkers,
+            ...(buildingTicketMarker ? [buildingTicketMarker] : []),
+            ...(linkedTicketMarker ? [linkedTicketMarker] : []),
+            ...cellMembers,
+          ].filter((marker) => !goneTicketIds.includes(marker.id)),
+        ]),
+        buildings.drawn,
+        selectedMarkerId,
+      ),
+      ...buildings.markers,
+    ],
     [
       buildingTicketMarker,
+      buildings,
       cellMembers,
       createdMarkers,
       goneTicketIds,
       linkedTicketMarker,
       liveDataSnapshot.markers,
+      selectedMarkerId,
     ],
   );
+
+  // 在這一層請求協助 in the drawer of a building the map knows the point of.
+  const openedBuilding = buildings.entries.find(
+    (building) => building.uuid === buildingUuid && building.point,
+  );
+  const requestHelpOnFloor = openedBuilding
+    ? (floor: string) => {
+        setBuildingUuid(null);
+        requestHelpOnBuildingFloor(openedBuilding, floor);
+      }
+    : undefined;
 
   // Opened from a building or a link, a ticket opens even when the map's status filter leaves its
   // pin out: the map is handed it as its linked item, and shows it as long as it is selected.
@@ -457,6 +484,7 @@ function SiteMapViewportDataLayer({
             stationLayout="site"
             linkedItem={linkedItem}
             viewMemoryKey="site"
+            onOpenBuilding={setBuildingUuid}
           />
         </Box>
         <MapRequestHelpBar />
@@ -469,6 +497,7 @@ function SiteMapViewportDataLayer({
           setBuildingUuid(null);
           openBuildingTicket(marker);
         }}
+        onRequestHelpOnFloor={requestHelpOnFloor}
       />
     </NeedClaimProvider>
   );

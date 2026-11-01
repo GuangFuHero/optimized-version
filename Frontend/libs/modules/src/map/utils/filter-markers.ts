@@ -64,6 +64,9 @@ export function filterRescueMapMarkers(
           return false;
         }
       } else if (
+        // A building has no status of its own: it stays under any, as the way in to its floors and
+        // to the tickets it holds, which are not drawn beside it.
+        !marker.building &&
         !matchesTicketStatusSelection(
           marker.ticketMeta?.status,
           selectedSubDataTypes,

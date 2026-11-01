@@ -284,6 +284,8 @@ interface MapProps {
    * remembers nothing and opens at the event's view.
    */
   viewMemoryKey?: RescueMapMemoryKey;
+  /** A tap on an open building's entry (`marker.building`), which selects nothing: its floors. */
+  onOpenBuilding?: (buildingUuid: string) => void;
   /**
    * Opt-in: the guest's cells as the backend counts them (`ticketCells`, ADR-387), in place of
    * grouping the coarse tickets among `markers`, which holds a page of them only. Default: grouped.
@@ -319,6 +321,7 @@ export const Map = memo(function Map({
   clusterMaxZoom,
   onMapReady,
   viewMemoryKey,
+  onOpenBuilding,
   locationCells: countedCells,
   loadLocationCellMembers,
 }: MapProps = {}) {
@@ -468,6 +471,12 @@ export const Map = memo(function Map({
 
   const handleMarkerClick = (marker: RescueMapMarkerItem) => {
     controller.closeLayerPanel();
+
+    if (marker.building) {
+      onOpenBuilding?.(marker.building.uuid);
+      return;
+    }
+
     controller.setSelectedMarkerId(marker.id);
   };
 
