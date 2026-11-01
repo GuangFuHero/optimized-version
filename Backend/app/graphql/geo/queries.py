@@ -37,6 +37,7 @@ from app.graphql.geo.types import (
     StationTypeCountType,
 )
 from app.graphql.shared import PageInfo
+from app.graphql.tickets.queries import TICKET_LIST_MAX_LIMIT
 from app.models.geo import BuildingMap, HazardousZone, Station
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty, StationUpdateSuggestion
@@ -458,8 +459,14 @@ class GeoQuery:
     ) -> BuildingMapConnection:
         """List building maps within an optional geographic bounding box, paginated.
 
-        Requires map.view permission (public — Guest may call this).
+        Requires map.view permission (public — Guest may call this). At most TICKET_LIST_MAX_LIMIT a
+        page, as `tickets` and `buildingMapTickets` (ADR-450): the site reads every building at once,
+        and each page's counts are one statement over its buildings.
         """
+        if limit > TICKET_LIST_MAX_LIMIT:
+            raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
+        if limit < 0 or skip < 0:
+            raise ValueError("limit and skip must not be negative")
         db = info.context["db"]
         scope = await check_permission(info, Perm.MAP_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=BuildingMap)
