@@ -8,6 +8,7 @@ from sqlalchemy.dialects import postgresql
 
 from app.graphql.geo.queries import _has_pending_suggestion
 from app.models.geo import Station
+from app.models.notification import Notification
 from app.models.station_property import StationProperty, StationSuggestionMerge, StationUpdateSuggestion
 from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
 
@@ -374,6 +375,40 @@ async def test_revoking_a_merge_revokes_only_the_adopted_suggestions(
 
     assert [(value, status) for value, status, _ in await _field_statuses(sample_station, "op_hour")] == [
         ("08:00-20:00", "revoked"), ("09:00-17:00", "not_adopted"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_each_suggester_is_told_whether_their_suggestion_was_adopted(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """WG-125: a decision notifies each suggester, adopted or not; a rejected field is not adopted."""
+    first_uuid, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second_uuid, second = await _create_user_with_role(redis, "Login User")
+    await _create(client, first, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, second, "station", sample_station, "op_hour", "03:00-03:10")
+    await _create(client, second, "station", sample_station, "name", "來亂站")
+
+    await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", "08:00-20:00"),
+        _decide(sample_station, "name", approve=False),
+    ])
+
+    async with test_db() as db:
+        sent = (await db.execute(
+            select(Notification.recipient_uuid, Notification.type, Notification.body).where(
+                Notification.type.like("station_suggestion_%adopted"),
+                Notification.recipient_uuid.in_([first_uuid, second_uuid]),
+            )
+        )).all()
+    assert sorted((str(r), kind) for r, kind, _ in sent) == sorted([
+        (str(first_uuid), "station_suggestion_adopted"),
+        (str(second_uuid), "station_suggestion_not_adopted"),
+        (str(second_uuid), "station_suggestion_not_adopted"),
+    ])
+    assert sorted(body[body.rindex("「"):] for _, _, body in sent) == [
+        "「服務時間」的修改建議已採用。", "「服務時間」的修改建議未採用。", "「站點名稱」的修改建議未採用。",
     ]
 
 
