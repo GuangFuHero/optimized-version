@@ -575,9 +575,7 @@ input CreateTicketTaskInput {
   taskName: String!
   taskDescription: String = null
 
-  """
-  People or units needed, at least 1; required except for a 'rescue' task, which may omit it
-  """
+  """People or units needed, at least 1; required, for a 'rescue' task too"""
   quantity: Int = null
 
   """Not read: the identity making the task decides it"""
@@ -739,9 +737,7 @@ input HelpRequestTaskInput {
   taskName: String!
   taskDescription: String = null
 
-  """
-  People or units needed, at least 1; required except for a 'rescue' need, which may omit it
-  """
+  """People or units needed, at least 1; required, for a 'rescue' need too"""
   quantity: Int = null
 
   """

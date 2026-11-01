@@ -600,7 +600,7 @@ async def test_a_need_for_nobody_fails_its_own_row_before_anything_is_written(db
 
 @pytest.mark.asyncio
 async def test_an_hr_need_without_a_quantity_fails_its_own_row_before_anything_is_written(db):
-    """Any need but a rescue must say how many (ADR-291 point 7): refused at preview, no ticket left."""
+    """Every need must say how many (ADR-291 point 7): refused at preview, no ticket left."""
     actor = await _importer(db)
     hr_row = {**_row("清淤"), "task_type": "hr"}
     raw, filename = _file([hr_row, {**hr_row, "title": "搬家具", "task_quantity": ""}])
@@ -627,15 +627,17 @@ async def test_a_need_of_a_kind_of_its_own_without_a_quantity_fails_its_own_row_
 
 
 @pytest.mark.asyncio
-async def test_a_rescue_need_may_still_leave_out_how_many(db):
-    """A rescue may not know how many it takes; it alone comes without a quantity."""
+async def test_a_rescue_need_must_say_how_many_too(db):
+    """A rescue asks for at least one person, as every need does, so its row fails without a quantity."""
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([{**_row("人員受困"), "task_quantity": ""}])
 
     outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
-    assert (outcome.created, outcome.failed) == (1, 0), outcome.errors
+    assert (outcome.created, outcome.failed) == (0, 1)
+    assert await _ticket_titled(db, "人員受困") is None
+    assert "人數" in " ".join(e.message for e in outcome.errors)
 
 
 @pytest.mark.asyncio

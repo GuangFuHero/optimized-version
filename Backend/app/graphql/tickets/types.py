@@ -630,9 +630,7 @@ class CreateTicketTaskInput:
     task_description: str | None = None
     quantity: int | None = strawberry.field(
         default=None,
-        description=(
-            "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
-        ),
+        description="People or units needed, at least 1; required, for a 'rescue' task too",
     )
     source: str = strawberry.field(
         default="user",
@@ -653,9 +651,7 @@ class HelpRequestTaskInput:
     task_description: str | None = None
     quantity: int | None = strawberry.field(
         default=None,
-        description=(
-            "People or units needed, at least 1; required except for a 'rescue' need, which may omit it"
-        ),
+        description="People or units needed, at least 1; required, for a 'rescue' need too",
     )
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,

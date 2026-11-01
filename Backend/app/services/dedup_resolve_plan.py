@@ -18,7 +18,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from app.services.dedup_review_tickets import TicketForReview
-from app.services.ticket import TICKET_TITLE_MAX_LENGTH, _check_disaster_detail_size, _validate_need_size
+from app.services.ticket import (
+    TICKET_TITLE_MAX_LENGTH,
+    _check_disaster_detail_size,
+    _validate_need_name,
+    _validate_need_size,
+)
 
 RESOLVABLE_KINDS = ("ticket", "ticket_task")
 
@@ -238,14 +243,19 @@ def _task_changes(entry, task) -> dict:
 def _check_size(task, changes: dict, people: int) -> None:
     """The need's name and quantity after the changes, against its kind and its people (ADR-370).
 
-    The kind's rules are create's own (`ticket._validate_need_size`); only the headcount is new.
+    The kind's rules are create's own (`ticket._validate_need_size`); only the headcount is new. A
+    need filed without a quantity, before every need had to give one, keeps having none while the
+    merge leaves it alone (ADR-448): the review page has nowhere to give it one.
     """
     task_name = changes.get("task_name", task.task_name)
     quantity = changes.get("quantity", task.quantity)
     if not task_name or not task_name.strip():
         raise ResolveRefused(f"Need {task.uuid}: task_name is required")
     try:
-        _validate_need_size(task.task_type, task_name, quantity)
+        if quantity is None and "quantity" not in changes:
+            _validate_need_name(task_name)
+        else:
+            _validate_need_size(task.task_type, task_name, quantity)
     except ValueError as err:
         raise ResolveRefused(f"Need {task.uuid}: {err}") from err
     if quantity is not None and people > quantity:

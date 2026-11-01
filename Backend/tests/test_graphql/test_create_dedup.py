@@ -78,7 +78,7 @@ REMOVED_FROM_SDL = (
     "DuplicateSuspected",
     "DuplicateStationSuspected",
 )
-PUMP = {"taskType": "rescue", "taskName": "一樓淹水需要抽水機", "taskDescription": "水深及膝"}
+PUMP = {"taskType": "rescue", "taskName": "一樓淹水需要抽水機", "taskDescription": "水深及膝", "quantity": 1}
 WATER = {"taskType": "supply", "taskName": "需要飲用水", "taskDescription": "二十人份", "quantity": 20}
 
 

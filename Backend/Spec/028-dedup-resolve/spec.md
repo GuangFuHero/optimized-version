@@ -240,7 +240,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 | 有需求沒列到、列了兩次、或列了不屬於這兩張單的需求 | 422 |
 | `absorb` 的需求類型（`task_type`）和併入的那一項不同 | 422（ADR-370） |
 | 處理後某項需求的接單人數大於 `quantity` | 422（ADR-370） |
-| `quantity` 不合 `_validate_need_size`（rescue 以外必填、至少 1） | 422 |
+| 送來的 `quantity` 不合 `_validate_need_size`（必填、至少 1，rescue 也一樣）；沒送、原本就空白的不檢查 | 422（ADR-448） |
 | `keep`／`move` 的項目漏列、重複列細項，或列了不屬於它的細項 | 422（ADR-380） |
 | 主要單處理後沒有任何需求 | 422 |
 | `priority` 超過 20 字、`task_type` 超過 50 字 | 422（ADR-381） |

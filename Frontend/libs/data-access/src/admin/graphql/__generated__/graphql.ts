@@ -492,7 +492,7 @@ export type CreateTicketTaskDraft = {
 };
 
 export type CreateTicketTaskInput = {
-  /** People or units needed, at least 1; required except for a 'rescue' task, which may omit it */
+  /** People or units needed, at least 1; required, for a 'rescue' task too */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
@@ -620,7 +620,7 @@ export type HazardousZoneType = {
 export type HelpRequestTaskInput = {
   /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
   acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
-  /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
+  /** People or units needed, at least 1; required, for a 'rescue' need too */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   /** What is needed, at most 200 characters */

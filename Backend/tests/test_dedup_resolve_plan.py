@@ -240,14 +240,22 @@ def test_a_quantity_equal_to_the_headcount_passes():
     assert _plan(claimants=claimants)
 
 
-def test_a_rescue_need_may_go_without_a_quantity():
-    """Rescue alone may have no quantity, and then has no cap."""
-    low = replace(LOW, tasks=(replace(LOW.tasks[0], task_type="rescue", quantity=None), LOW.tasks[1]))
-    high = replace(HIGH, tasks=(replace(HIGH.tasks[0], task_type="rescue", quantity=None), *HIGH.tasks[1:]))
+@pytest.mark.parametrize("task_type", ["rescue", "hr"])
+def test_a_need_filed_without_a_quantity_is_carried_over_without_one(task_type):
+    """Kept or moved with its quantity left alone, a blank need stays blank, with no cap (ADR-448)."""
+    blank = {"quantity": None, "task_type": task_type}
+    low = replace(LOW, tasks=(replace(LOW.tasks[0], **blank), LOW.tasks[1]))
+    high = replace(
+        HIGH, tasks=(replace(HIGH.tasks[0], **blank), HIGH.tasks[1], replace(HIGH.tasks[2], quantity=None))
+    )
     request = _request()
     request.primary_tasks[0].values = None
 
-    assert _plan(request, low=low, high=high, claimants={_u("a1"): {f"p{n}" for n in range(9)}})
+    plan = _plan(request, low=low, high=high, claimants={_u("a1"): {f"p{n}" for n in range(9)}})
+
+    kept = {k.uuid: k for k in plan.kept_tasks}
+    assert (kept[_u("a1")].changes, kept[_u("a1")].headcount) == ({}, 9)
+    assert kept[_u("b3")].moved
 
 
 # --- refusals (Spec 028 §3.4) -------------------------------------------------------------
@@ -338,12 +346,14 @@ def test_a_moved_need_is_held_to_its_own_headcount():
     assert "more than the quantity 3" in _refused(request, claimants=claimants)
 
 
-@pytest.mark.parametrize("quantity", [None, 0])
-def test_a_quantity_a_non_rescue_need_cannot_have_is_refused(quantity):
-    """Only rescue may go without a quantity, and none may ask for zero."""
+@pytest.mark.parametrize(("task_type", "quantity"), [("hr", None), ("hr", 0), ("rescue", None)])
+def test_a_quantity_a_need_cannot_have_is_refused(task_type, quantity):
+    """A merge may not clear a need's quantity, a rescue's included, nor ask for zero."""
+    low = replace(LOW, tasks=(replace(LOW.tasks[0], task_type=task_type), LOW.tasks[1]))
+    high = replace(HIGH, tasks=(replace(HIGH.tasks[0], task_type=task_type), *HIGH.tasks[1:]))
     request = _request()
     request.primary_tasks[0].values.quantity = quantity
-    message = _refused(request)
+    message = _refused(request, low=low, high=high)
     assert "quantity" in message
 
 

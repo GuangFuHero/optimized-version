@@ -636,7 +636,7 @@ async def get_volunteer_metric(
 ) -> list[dict]:
     """Volunteers needed, matched or still missing, as of now, or as of the end of `end_date`.
 
-    Backs 3 y-metrics via a fixed `metric`. Over the needs that give a quantity (a rescue may not)
+    Backs 3 y-metrics via a fixed `metric`. Over the needs that give a quantity (older ones may not)
     and are not canceled or merged into another (a merge cancels the absorbed need):
 
         needed   -- sum of quantity
