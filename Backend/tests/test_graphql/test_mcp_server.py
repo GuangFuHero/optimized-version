@@ -610,6 +610,49 @@ async def test_an_mcp_refresh_token_is_refused_outside_the_token_endpoint(client
     assert await redis.ttl(f"mcp_client:{client_id}".encode()) > 3600
 
 
+async def test_a_refresh_after_the_chosen_identity_is_removed_lands_on_the_default(
+    client, redis, sample_ticket
+):
+    """Losing the identity the client switched to does not cost it its tokens: it reads as the default."""
+    user_uuid, login_role, history_role = await _two_identity_user()
+    client_id, code, verifier, redirect, _ = await _authorize_through_consent(
+        client, redis, user_uuid, login_role
+    )
+    path = f"/api/v1/history/tickets/{sample_ticket}"
+    async with mcp_http() as http:
+        grant = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect,
+            "client_id": client_id,
+            "code_verifier": verifier,
+        }
+        tokens = (await http.post("/token", data=grant)).json()
+        switched, _ = await call(http, tokens["access_token"], "switch_identity", {"role_uuid": history_role})
+        async with gql.test_db() as db:
+            assignment = await db.scalar(
+                select(UserRoleAssign).where(
+                    UserRoleAssign.user_uuid == uuid_mod.UUID(user_uuid),
+                    UserRoleAssign.role_uuid == uuid_mod.UUID(history_role),
+                )
+            )
+            await db.delete(assignment)
+        refreshed = await http.post(
+            "/token",
+            data={
+                "grant_type": "refresh_token",
+                "client_id": client_id,
+                "refresh_token": tokens["refresh_token"],
+            },
+        )
+        _, refused = await call(http, refreshed.json()["access_token"], "rest_get", {"path": path})
+    assert switched["role_uuid"] == history_role
+    assert refreshed.status_code == 200
+    payload = _decode_access_payload(refreshed.json()["access_token"])
+    assert history_role not in payload["act"] and payload["mcp"] is True
+    assert "403" in refused
+
+
 async def test_register_is_rate_limited_and_unused_clients_expire_soon(client, redis):
     """Registration has a per-IP allowance, and a client that never signs in is kept an hour at most."""
     body = {"redirect_uris": ["http://127.0.0.1:9/cb"], "token_endpoint_auth_method": "none"}
