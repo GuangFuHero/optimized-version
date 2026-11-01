@@ -1,12 +1,14 @@
 'use client';
 
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { Box, ButtonBase, Portal, Snackbar, Typography } from '@mui/material';
 import Link from 'next/link';
 
-import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  Icons,
+  RowAction,
+} from '@rescue-frontend/ui';
 
 import { BRIEFING_HREF } from '../../briefing/href';
 
@@ -60,7 +62,7 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
             boxShadow: shadow.lg,
           }}
         >
-          <CheckCircleRoundedIcon sx={{ fontSize: 20, mt: '1px', color: color.fg.success }} />
+          <Icons.circleCheck sx={{ fontSize: 20, mt: '1px', color: color.fg.success }} />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
               sx={{
@@ -94,7 +96,7 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
               label={
                 <>
                   看行前資訊
-                  <ChevronRightRoundedIcon sx={{ fontSize: 14 }} />
+                  <Icons.chevronRight sx={{ fontSize: 14 }} />
                 </>
               }
               sx={{ mt: 1.5, minHeight: 44 }}
@@ -111,7 +113,7 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
               color: color.fg.neutral.subtle,
             }}
           >
-            <CloseRoundedIcon sx={{ fontSize: 16 }} />
+            <Icons.close sx={{ fontSize: 16 }} />
           </ButtonBase>
         </Box>
       </Snackbar>

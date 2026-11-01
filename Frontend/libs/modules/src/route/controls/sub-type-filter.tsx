@@ -1,12 +1,9 @@
 'use client';
 
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import PushPinRoundedIcon from '@mui/icons-material/PushPinRounded';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import { Box, ButtonBase, Menu, MenuItem, Stack } from '@mui/material';
 import { useState, type MouseEvent } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { SITE_SUB_DATA_TYPE_OPTIONS } from '../constants';
 import type { RescueMapDataType } from '../types';
@@ -79,7 +76,7 @@ export function SiteSubTypeFilter({
             whiteSpace: 'nowrap',
           }}
         >
-          <TuneRoundedIcon sx={{ fontSize: 16 }} />
+          <Icons.sliders sx={{ fontSize: 16 }} />
           篩選
           {selectedCount > 0 ? (
             <Box
@@ -175,7 +172,7 @@ export function SiteSubTypeFilter({
                     color: color.fg.onPrimary,
                   }}
                 >
-                  {checked ? <CheckRoundedIcon sx={{ fontSize: 13 }} /> : null}
+                  {checked ? <Icons.check sx={{ fontSize: 13 }} /> : null}
                 </Box>
                 <Box
                   component="span"
@@ -220,7 +217,7 @@ export function SiteSubTypeFilter({
                       : 'transparent',
                   }}
                 >
-                  <PushPinRoundedIcon sx={{ fontSize: 16 }} />
+                  <Icons.pushPin sx={{ fontSize: 16 }} />
                 </ButtonBase>
               ) : null}
             </MenuItem>

@@ -13,5 +13,5 @@ export const SITE_MODULE_META: Record<
   { label: string; Icon: typeof Icons.map }
 > = {
   map: { label: '地圖', Icon: Icons.map },
-  list: { label: '列表', Icon: Icons.dataGrid },
+  list: { label: '列表', Icon: Icons.layoutList },
 };

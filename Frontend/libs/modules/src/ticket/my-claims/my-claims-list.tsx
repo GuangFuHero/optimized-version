@@ -1,12 +1,5 @@
 'use client';
 
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import LockRoundedIcon from '@mui/icons-material/LockRounded';
-import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
-import PersonRemoveRoundedIcon from '@mui/icons-material/PersonRemoveRounded';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
@@ -18,7 +11,12 @@ import {
   ReleaseClaimDocument,
   type MyTaskAssignmentsQuery,
 } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  RowAction,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { BRIEFING_HREF } from '../../briefing/href';
 import { useSiteRouteState } from '../../route';
@@ -113,7 +111,7 @@ function BriefingDepartureBar({ onLeave }: Pick<MyClaimsListProps, 'onLeave'>) {
         border: `1px solid ${color.brand.secondary.default}`,
       }}
     >
-      <MenuBookRoundedIcon
+      <Icons.bookOpen
         sx={{ fontSize: 20, color: color.brand.secondary.subtle }}
       />
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -138,7 +136,7 @@ function BriefingDepartureBar({ onLeave }: Pick<MyClaimsListProps, 'onLeave'>) {
           怎麼過來、帶什麼、到了找誰
         </Typography>
       </Box>
-      <ChevronRightRoundedIcon
+      <Icons.chevronRight
         sx={{ fontSize: 18, color: color.brand.secondary.subtle }}
       />
     </ButtonBase>
@@ -203,7 +201,7 @@ function MyClaimRow({
           color: color.brand.secondary.subtle,
         }}
       >
-        <VolunteerActivismRoundedIcon sx={{ fontSize: 14 }} />
+        <Icons.heartHandshake sx={{ fontSize: 14 }} />
         <Typography
           sx={{
             fontSize: displayTextSize[13],
@@ -215,10 +213,10 @@ function MyClaimRow({
         </Typography>
       </Stack>
       {claim.address ? (
-        <DetailLine icon={<PlaceRoundedIcon />}>{claim.address}</DetailLine>
+        <DetailLine icon={<Icons.pin />}>{claim.address}</DetailLine>
       ) : null}
       {claim.contact ? (
-        <DetailLine icon={<PersonRoundedIcon />}>{claim.contact}</DetailLine>
+        <DetailLine icon={<Icons.user />}>{claim.contact}</DetailLine>
       ) : null}
       <Stack
         direction="row"
@@ -243,14 +241,14 @@ function MyClaimRow({
               color: color.fg.neutral.muted,
             }}
           >
-            <LockRoundedIcon sx={{ fontSize: 14 }} />
+            <Icons.lock sx={{ fontSize: 14 }} />
             <Typography sx={{ fontSize: displayTextSize[12], lineHeight: 1.5 }}>
               建單者已停止招募，名單已固定
             </Typography>
           </Stack>
         ) : (
           <RowAction
-            icon={<PersonRemoveRoundedIcon sx={{ fontSize: 14 }} />}
+            icon={<Icons.userMinus sx={{ fontSize: 14 }} />}
             label="釋出名額"
             onClick={onRelease}
             aria-label={`釋出名額：${claim.needName}・${claim.ticketTitle}`}
@@ -376,7 +374,7 @@ export function MyClaimsList({
       <>
         <Notice
           icon={
-            <VolunteerActivismRoundedIcon
+            <Icons.heartHandshake
               sx={{ fontSize: 28, color: color.fg.neutral.muted }}
             />
           }

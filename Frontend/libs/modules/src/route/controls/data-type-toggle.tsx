@@ -1,10 +1,8 @@
 'use client';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded';
 import { ButtonBase, Stack } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { SITE_DATA_TYPES, SITE_DATA_TYPE_LABELS } from '../constants';
 import type { RescueMapDataType } from '../types';
@@ -12,9 +10,9 @@ import { SiteControlSurface } from './control-surface';
 
 const { color, radius, spacing, typography, motion } = designTokens;
 
-const DATA_TYPE_ICONS: Record<RescueMapDataType, typeof AssignmentRoundedIcon> = {
-  station: Inventory2RoundedIcon,
-  ticket: AssignmentRoundedIcon,
+const DATA_TYPE_ICONS: Record<RescueMapDataType, typeof Icons.clipboardList> = {
+  station: Icons.resources,
+  ticket: Icons.clipboardList,
 };
 
 /**

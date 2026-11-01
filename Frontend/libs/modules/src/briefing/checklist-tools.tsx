@@ -1,12 +1,9 @@
 'use client';
 
-import ChecklistRoundedIcon from '@mui/icons-material/ChecklistRounded';
-import PrintRoundedIcon from '@mui/icons-material/PrintRounded';
-import SyncRoundedIcon from '@mui/icons-material/SyncRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import type { BriefingChecklist } from './briefing-checklist';
 
@@ -98,7 +95,7 @@ export function ChecklistTools({
             color: color.fg.info,
           }}
         >
-          <SyncRoundedIcon sx={{ fontSize: 16, mt: '4px', flexShrink: 0 }} />
+          <Icons.refresh sx={{ fontSize: 16, mt: '4px', flexShrink: 0 }} />
           <Typography
             sx={{
               flex: '1 1 220px',
@@ -134,7 +131,7 @@ export function ChecklistTools({
           boxShadow: `inset 0 0 0 1px ${color.border.default}`,
         }}
       >
-        <ChecklistRoundedIcon
+        <Icons.listChecks
           sx={{ fontSize: 16, color: color.fg.neutral.subtle }}
         />
         <Typography
@@ -154,7 +151,7 @@ export function ChecklistTools({
         <Box sx={{ ml: 'auto', display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
           {done ? <Pill onClick={checklist.clear}>全部清除</Pill> : null}
           <Pill onClick={onPrint}>
-            <PrintRoundedIcon />
+            <Icons.printer />
             列印清單
           </Pill>
         </Box>

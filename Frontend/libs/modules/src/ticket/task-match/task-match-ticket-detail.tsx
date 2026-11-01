@@ -1,6 +1,5 @@
 'use client';
 
-import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Icons } from '@rescue-frontend/ui';
 
 import type { RescueMapTicketDetailOverrides } from '../../map/components/rescue-map-detail-drawer';
@@ -34,7 +33,7 @@ function createFooterActions({
         {
           id: 'share-point',
           label: '分享',
-          icon: <ShareRoundedIcon />,
+          icon: <Icons.share />,
           onClick: onShare,
         },
       ]

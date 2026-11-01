@@ -1,9 +1,8 @@
 'use client';
 
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
 import { Button } from '@mui/material';
 
-import { displayTextSize } from '@rescue-frontend/ui';
+import { displayTextSize, Icons } from '@rescue-frontend/ui';
 
 /**
  * A guest's 登入 in both top bars: the icon and the word, not the icon alone (prototype
@@ -23,7 +22,7 @@ export function SiteSignInButton({
       variant="contained"
       color="secondary"
       size="small"
-      startIcon={<LoginRoundedIcon sx={{ fontSize: 16 }} />}
+      startIcon={<Icons.logIn sx={{ fontSize: 16 }} />}
       onClick={onClick}
       sx={{
         flexShrink: 0,

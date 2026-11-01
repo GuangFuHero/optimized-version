@@ -1,12 +1,11 @@
 'use client';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import { Alert, Button, ButtonBase, Stack, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useMutation } from 'urql';
 
 import { CreateTicketTaskDocument } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { addNeedErrorMessage } from '../needs/claim-error';
 import { useNeedClaim } from '../needs/need-claim-provider';
@@ -159,7 +158,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
             fontWeight: 500,
           }}
         >
-          <AddRoundedIcon sx={{ fontSize: 16 }} />
+          <Icons.plus sx={{ fontSize: 16 }} />
           再加一件需要的幫忙
         </ButtonBase>
         {dialog}
