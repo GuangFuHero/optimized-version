@@ -347,7 +347,8 @@ users ||--o{ announcements : "last published"
 %% type values: announcement_published, zone_assigned, zone_unassigned, team_member_added,
 %%   ticket_task_moderation_update, task_assignment_created, task_assignment_removed, task_claimed,
 %%   task_full, task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
-%%   station_assigned, station_unassigned, station_suggestion_created, dedup_review_pending,
+%%   station_assigned, station_unassigned, station_suggestion_created,
+%%   station_suggestion_adopted, station_suggestion_not_adopted, dedup_review_pending,
 %%   dedup_task_merged, dedup_task_canceled, dedup_ticket_merged, dedup_ticket_updated,
 %%   dedup_ticket_contact_changed,
 %%   role_request_submitted, role_request_approved, role_request_rejected, team_suspended
