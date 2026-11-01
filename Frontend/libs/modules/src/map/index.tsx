@@ -74,6 +74,15 @@ const RescueMapCanvas = dynamic(
   },
 );
 
+/**
+ * Starts fetching the canvas and Leaflet, which the map otherwise asks for only once it knows where
+ * to open (the event read, a round trip) and has laid itself out. A page that opens on a map calls it
+ * as its code runs, so the two are under way together.
+ */
+export function preloadRescueMapCanvas() {
+  void import('./components/rescue-map-canvas');
+}
+
 // 與資料維度無關的靜態全域樣式，避免每次 render 重建樣式物件。
 const MAP_STATIC_GLOBAL_STYLES = {
   '.leaflet-container': {

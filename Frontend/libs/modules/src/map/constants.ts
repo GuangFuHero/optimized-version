@@ -137,6 +137,13 @@ export const BASE_LAYER_CONFIG: Record<
   },
 };
 
+/**
+ * Where the tiles of the base layer a map opens on (`osm-direct`, until the viewer picks another)
+ * come from: a page that opens on a map connects to it ahead, before the first tile is asked for.
+ */
+export const DEFAULT_TILE_ORIGIN = new URL(BASE_LAYER_CONFIG['osm-direct'].url)
+  .origin;
+
 /** 可選取並寫入偏好設定的底圖：已知、未隱藏且未停用。 */
 export function isSelectableBaseLayer(
   layer: string,
