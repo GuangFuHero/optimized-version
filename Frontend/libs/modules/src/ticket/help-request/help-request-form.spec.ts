@@ -150,7 +150,7 @@ describe('canAddNeedRow', () => {
 });
 
 describe('hasRescueNeed', () => {
-  it('is true once someone is trapped or hurt, for the 119 notice at the top', () => {
+  it('is true once someone is trapped or hurt, for the 119 notice under the needs', () => {
     expect(
       hasRescueNeed([
         { need: 'cleanup', name: '', quantity: '' },

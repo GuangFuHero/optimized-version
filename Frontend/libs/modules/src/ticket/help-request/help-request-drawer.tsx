@@ -651,8 +651,6 @@ function HelpRequestFormDrawer({
           </Alert>
         ) : null}
 
-        {hasRescueNeed(form.needs) ? <EmergencyCallNotice /> : null}
-
         {/* The asterisk is hidden from screen readers, so the rule is said in words, up front. */}
         <Typography
           sx={{
@@ -848,6 +846,9 @@ function HelpRequestFormDrawer({
               />
             ))}
           </Stack>
+          {/* Under the kind that brings it up, as the form is read from the top down: at the top, it
+              came up out of sight of whoever picked someone trapped or hurt. */}
+          {hasRescueNeed(form.needs) ? <EmergencyCallNotice /> : null}
           {/* Offered only once the last one has its kind: not a blank second row up front. At the
               most one request files, said instead — 「再加一件」 on the ticket takes the rest. */}
           {lastNeed?.need && !canAddNeedRow(form.needs) ? (
