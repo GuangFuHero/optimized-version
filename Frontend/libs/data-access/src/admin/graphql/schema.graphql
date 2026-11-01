@@ -847,6 +847,44 @@ type MyRoleRequestsType {
   requests: [RoleRequestType!]!
 }
 
+type MyStationSuggestionType {
+  uuid: UUID!
+
+  """'station' or 'station_property'"""
+  targetType: String!
+
+  """
+  The station it is about, or its property's; null once deleted or out of the caller's view, by the rules of `station`
+  """
+  station: StationType
+  fieldName: String!
+
+  """
+  The field's value when last sent, as text ('' for none); null for a suggestion sent before this was recorded
+  """
+  previousValue: String
+
+  """The value suggested, the latest if sent again"""
+  newValue: String!
+  comment: String
+
+  """'pending', 'approved', 'rejected', or 'revoked'"""
+  status: String!
+
+  """
+  Approved or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded
+  """
+  appliedValue: String
+
+  """When it was first sent"""
+  submittedAt: DateTime!
+
+  """
+  When it was approved or rejected, or for a revoked one when the approval was undone; for one decided before merges were recorded, when the row last changed. Null while pending
+  """
+  decidedAt: DateTime
+}
+
 """One of the caller's claims, with the need and the ticket it is for"""
 type MyTaskAssignmentType {
   assignment: TaskAssignmentType!
@@ -1029,6 +1067,7 @@ type Query {
   briefings(state: BriefingState = null, tag: String = null, status: BriefingStatusFilter! = PUBLISHED): [BriefingType!]!
   briefing(uuid: UUID!): BriefingType
   suggestableFields(targetType: String!): [SuggestableFieldType!]!
+  myStationSuggestions(limit: Int! = 100, skip: Int! = 0): [MyStationSuggestionType!]!
   areas(bounds: BoundsInput = null, includePrivate: Boolean! = false, skip: Int! = 0, limit: Int! = 50): AreaConnection!
   teamZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): TeamZoneConnection!
   teamZone(uuid: UUID!): TeamZoneType

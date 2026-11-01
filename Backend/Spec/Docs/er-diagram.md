@@ -681,6 +681,7 @@ station_update_suggestions {
     string target_uuid "uuid of the target row — no DB FK, polymorphic"
     string field_name "String(100), the single field being changed"
     string new_value "stored as text; coerced to the field's data type on approval"
+    string previous_value "nullable, the field's value at the last submit ('' for none); ADR-420"
     string comment "nullable, submitter's rationale"
     string status "pending/approved/rejected/revoked, String(20), default pending"
     string review_note "nullable, reviewer's rationale"
