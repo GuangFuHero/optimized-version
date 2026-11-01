@@ -22,15 +22,14 @@ Grouped rows use a uniform `"x"` output column regardless of what's being groupe
 (day/week bucket, task_type, ...) so chart_render.py never needs per-metric field
 lookups.
 
-Per Spec/Docs/er-diagram.md, `tickets.status` doesn't track work progress at the
-granularity needed here, so bucket-based metrics classify a ticket by rolling up its
-`ticket_tasks` (and their `task_assignments`) instead. The four buckets are exclusive
-and exhaustive:
+Bucket-based metrics classify a ticket by `tickets.status`, which
+app.services.ticket_status works out from its needs, so the dashboard and the ticket list
+always agree. The four buckets are exclusive and exhaustive:
 
-    unassigned  -- no task_assignments at all: nobody has picked it up yet
-    canceled    -- someone did, but every task has since been canceled
-    completed   -- >=1 task still standing, and all of them 'fulfilled'
-    ongoing     -- anything else: picked up, work still outstanding
+    unassigned  -- pending: a need is open and nobody is on any need
+    ongoing     -- in_progress: a need is open and somebody is on one
+    completed   -- completed: no need is open (filled, stopped or deleted)
+    canceled    -- cancelled: the ticket was called off
 
 `canceled` is an outcome, not a flavour of `ongoing`: such a ticket must leave the
 backlog, count toward neither success nor failure, and stop ageing.
@@ -80,56 +79,39 @@ from app.services.analytics_common import (
 from app.services.dedup_review import PENDING_STATUSES
 from app.services.ticket_status import OPEN_NEED_STATUSES
 
-# The two buckets a ticket exits through, and the task column recording when. Per-task, so
-# a ticket's own exit date is max() over its tasks. "unassigned"/"ongoing" have no exit date.
-_DRAIN_TIMESTAMP = {
-    "completed": TicketTask.completed_at,
-    "canceled": TicketTask.canceled_at,
+# The two buckets a ticket exits through; "unassigned"/"ongoing" have no exit date.
+_EXIT_BUCKETS = ("completed", "canceled")
+
+_BUCKET_OF_STATUS = {
+    "pending": "unassigned",
+    "in_progress": "ongoing",
+    "completed": "completed",
+    "cancelled": "canceled",
 }
 
 
-def _task_rollup_subquery():
-    """Per-ticket task/assignment counts feeding the bucket classification in _bucket_expr."""
+def _bucket_expr():
+    """CASE naming the module docstring's bucket for the ticket's status."""
+    return case(_BUCKET_OF_STATUS, value=Tickets.status)
+
+
+def _exited_subquery(bucket: str, extra_filters: list | None):
+    """Tickets now in exit `bucket`, each with the moment it left: columns ticket_uuid, stamp.
+
+    The moment is when its last need, deleted ones included, was filled, stopped or canceled. A
+    ticket with no such need, such as one cancelled by hand, falls back to its own updated_at.
+    """
+    need_stamp = func.max(func.greatest(TicketTask.completed_at, TicketTask.canceled_at))
     return (
         select(
-            TicketTask.ticket_uuid.label("ticket_uuid"),
-            func.count(func.distinct(TicketTask.uuid))
-            .filter(TicketTask.status != "canceled")
-            .label("active_tasks"),
-            func.count(func.distinct(TicketTask.uuid))
-            .filter(TicketTask.status == "fulfilled")
-            .label("fulfilled_tasks"),
-            func.count(func.distinct(TaskAssignment.uuid)).label("assigned_count"),
+            Tickets.uuid.label("ticket_uuid"),
+            func.coalesce(need_stamp, func.max(Tickets.updated_at)).label("stamp"),
         )
-        .select_from(TicketTask)
-        .outerjoin(TaskAssignment, TaskAssignment.task_uuid == TicketTask.uuid)
-        .where(TicketTask.delete_at.is_(None))
-        .group_by(TicketTask.ticket_uuid)
+        .select_from(Tickets)
+        .outerjoin(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
+        .where(Tickets.delete_at.is_(None), _bucket_expr() == bucket, *(extra_filters or []))
+        .group_by(Tickets.uuid)
         .subquery()
-    )
-
-
-def _bucket_expr(rollup):
-    """CASE assigning a ticket one of the module docstring's four buckets.
-
-    `active_tasks` excludes canceled tasks, so it reaches zero exactly when every task was
-    called off. That branch must precede "completed": "all active tasks fulfilled" is
-    trivially true of zero, so the other order reports withdrawn work as delivered.
-    """
-    return case(
-        (
-            (rollup.c.assigned_count.is_(None)) | (rollup.c.assigned_count == 0),
-            "unassigned",
-        ),
-        (
-            rollup.c.active_tasks == 0,
-            "canceled",
-        ),
-        (
-            and_(rollup.c.active_tasks > 0, rollup.c.fulfilled_tasks == rollup.c.active_tasks),
-            "completed",
-        ),
-        else_="ongoing",
     )
 
 
@@ -151,44 +133,21 @@ async def get_ticket_count(
     labelling NULLs (analytics_common.UNCATEGORIZED_LABEL).
 
     `x="date"` groups by whichever date the metric is really about. The two exit buckets
-    (completed, canceled) group by the day the ticket left — `max()` of the relevant task
-    timestamp — matching get_net_backlog_change's exit series; the rest group by
-    `Tickets.created_at`, since they haven't left.
+    (completed, canceled) group by the day the ticket left (see _exited_subquery),
+    matching get_net_backlog_change's exit series; the rest group by `Tickets.created_at`,
+    since they haven't left.
 
-    The exit-date path needs a timestamp, not just a status, so it drops tickets whose
-    columns are NULL. Migration a1b2c3d4e5f6 backfills pre-existing rows, so in practice
-    the two paths agree. It is also point-in-time, not history: services/ticket.py clears
-    those timestamps when a task leaves 'fulfilled'/'canceled', so re-opening one erases
-    its exit day and the same query run twice can report a different past. Faithful
-    history needs a status-transition table, out of scope here.
+    The exit day is point-in-time, not history: services/ticket.py clears a need's
+    timestamps when it leaves 'fulfilled'/'canceled', so re-opening one moves its ticket's
+    exit day and the same query run twice can report a different past. Faithful history
+    needs a status-transition table, out of scope here.
     """
-    rollup = _task_rollup_subquery()
-    bucket_expr = _bucket_expr(rollup)
+    bucket_expr = _bucket_expr()
     lower, upper = local_bounds(start_date, end_date, tz)
     granularity = resolve_granularity(x_granularity)
 
-    if bucket in _DRAIN_TIMESTAMP and x == "date":
-        stamp = _DRAIN_TIMESTAMP[bucket]
-        drained = (
-            select(
-                Tickets.uuid.label("ticket_uuid"),
-                func.max(stamp).label("stamp"),
-            )
-            .select_from(Tickets)
-            .join(rollup, rollup.c.ticket_uuid == Tickets.uuid)
-            .join(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
-            .where(
-                Tickets.delete_at.is_(None),
-                TicketTask.delete_at.is_(None),
-                bucket_expr == bucket,
-                # No exit timestamp, no day to plot it on. Without this the NULL survives
-                # max() and the caller's sort raises TypeError comparing it to a datetime.
-                stamp.is_not(None),
-                *(extra_filters or []),
-            )
-            .group_by(Tickets.uuid)
-            .subquery()
-        )
+    if bucket in _EXIT_BUCKETS and x == "date":
+        drained = _exited_subquery(bucket, extra_filters)
         period = func.date_trunc(granularity, func.timezone(tz.key, drained.c.stamp))
         query = select(period.label("x"), func.count(drained.c.ticket_uuid).label("count")).select_from(
             drained
@@ -212,12 +171,7 @@ async def get_ticket_count(
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = (
-        select(*cols)
-        .select_from(Tickets)
-        .outerjoin(rollup, rollup.c.ticket_uuid == Tickets.uuid)
-        .where(Tickets.delete_at.is_(None), *(extra_filters or []))
-    )
+    query = select(*cols).select_from(Tickets).where(Tickets.delete_at.is_(None), *(extra_filters or []))
     if bucket is not None:
         query = query.where(bucket_expr == bucket)
     if lower is not None:
@@ -249,8 +203,7 @@ async def get_completion_rate(
     `x="date"` is a cohort rate — grouped by creation day, but reflecting each ticket's
     *current* status, not the rate as of that day.
     """
-    rollup = _task_rollup_subquery()
-    bucket_expr = _bucket_expr(rollup)
+    bucket_expr = _bucket_expr()
     lower, upper = local_bounds(start_date, end_date, tz)
     granularity = resolve_granularity(x_granularity)
 
@@ -268,12 +221,7 @@ async def get_completion_rate(
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = (
-        select(*cols)
-        .select_from(Tickets)
-        .outerjoin(rollup, rollup.c.ticket_uuid == Tickets.uuid)
-        .where(Tickets.delete_at.is_(None), *(extra_filters or []))
-    )
+    query = select(*cols).select_from(Tickets).where(Tickets.delete_at.is_(None), *(extra_filters or []))
     if lower is not None:
         query = query.where(Tickets.created_at >= lower)
     if upper is not None:
@@ -312,8 +260,7 @@ async def get_age_distribution(
     `allowed_x={None}`, a fixed shape like get_task_completion_distribution. Duration-
     based, so `tz` only affects start/end filtering, not the buckets themselves.
     """
-    rollup = _task_rollup_subquery()
-    bucket_expr = _bucket_expr(rollup)
+    bucket_expr = _bucket_expr()
     lower, upper = local_bounds(start_date, end_date, tz)
 
     age_hours = func.extract("epoch", func.now() - Tickets.created_at) / 3600.0
@@ -327,7 +274,6 @@ async def get_age_distribution(
     query = (
         select(age_bucket.label("x"), func.count(Tickets.uuid).label("count"))
         .select_from(Tickets)
-        .outerjoin(rollup, rollup.c.ticket_uuid == Tickets.uuid)
         .where(
             Tickets.delete_at.is_(None),
             bucket_expr.notin_(("completed", "canceled")),
@@ -418,17 +364,13 @@ async def get_net_backlog_change(
     `x_granularity` is the only param that varies this query's shape.
 
     The three series are independent: "new" groups by creation day, each exit series by
-    the day the ticket's last task reached that state. A ticket created before the window
+    the day the ticket left that way. A ticket created before the window
     can still appear as an exit inside it.
 
-    Exits with no timestamp are missing from their series (a1b2c3d4e5f6 backfills the
-    pre-existing ones), and the timestamps are mutable — see get_ticket_count for both
-    caveats.
+    The exit timestamps are mutable — see get_ticket_count for that caveat.
     """
     granularity = resolve_granularity(x_granularity)
     lower, upper = local_bounds(start_date, end_date, tz)
-    rollup = _task_rollup_subquery()
-    bucket_expr = _bucket_expr(rollup)
     empty_row = {"new_count": 0, "completed_count": 0, "canceled_count": 0}
 
     new_period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
@@ -447,22 +389,7 @@ async def get_net_backlog_change(
 
         Both exits have the same shape, so this runs twice instead of being written twice.
         """
-        stamp = _DRAIN_TIMESTAMP[bucket]
-        exited = (
-            select(Tickets.uuid.label("ticket_uuid"), func.max(stamp).label("stamp"))
-            .select_from(Tickets)
-            .join(rollup, rollup.c.ticket_uuid == Tickets.uuid)
-            .join(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
-            .where(
-                Tickets.delete_at.is_(None),
-                TicketTask.delete_at.is_(None),
-                bucket_expr == bucket,
-                stamp.is_not(None),  # see get_ticket_count: no timestamp, no day
-                *(extra_filters or []),
-            )
-            .group_by(Tickets.uuid)
-            .subquery()
-        )
+        exited = _exited_subquery(bucket, extra_filters)
         period = func.date_trunc(granularity, func.timezone(tz.key, exited.c.stamp))
         query = select(period.label("x"), func.count(exited.c.ticket_uuid).label("count")).select_from(exited)
         if lower is not None:

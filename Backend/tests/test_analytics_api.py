@@ -672,6 +672,7 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
         )
         for _ in range(2)
     )
+    done_ticket.status = "completed"
     db_session.add_all([open_ticket, done_ticket])
     await db_session.flush()
     task = TicketTask(
@@ -908,6 +909,7 @@ async def test_data_completion_rate_is_a_percentage(client, db_session, redis):
     """Like `/value`, the series is in the catalog unit: 1 of 2 completed is 50.0, not 0.5."""
     user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
     open_ticket, done_ticket = _ticket(user_uuid), _ticket(user_uuid)
+    done_ticket.status = "completed"
     db_session.add_all([open_ticket, done_ticket])
     await db_session.flush()
     task = TicketTask(

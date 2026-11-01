@@ -62,7 +62,7 @@ _TICKET_CATALOG = {
     "completed_tickets": {
         "label": "已完成",
         "unit": "件",
-        "description": "子任務全部完成；預設近 30 天",
+        "description": "需求都已額滿、停止招募或刪除；預設近 30 天",
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "line", "pie"),
