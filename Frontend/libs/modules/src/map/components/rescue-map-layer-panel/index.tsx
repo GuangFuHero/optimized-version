@@ -33,9 +33,10 @@ const { color, radius, shadow } = designTokens;
 const CloseIcon = Icons.close;
 // The panel's heading, and the name a screen reader gives it when it opens.
 const LAYER_PANEL_TITLE = '圖層切換';
-// What the bottom sheet leaves above it, under the announcement banner: the top bar (the back
-// office's is the taller) and a strip of map. A share of the height was less than the top bar on a
-// short phone.
+// What the bottom sheet leaves above it: the top bar (the back office's is the taller) and a strip
+// of map. A share of the height was less than the top bar on a short phone. On the site it is
+// counted from under the announcement banners, as the site moves every modal below them; the back
+// office does not, so there it assumes no banner is up, and one or two take the strip or more.
 const SHEET_TOP_CLEARANCE =
   Math.max(
     layoutSizes.site.mobileTopNavBarHeight,
