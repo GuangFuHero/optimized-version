@@ -2949,12 +2949,12 @@ export interface components {
       hint_rate: number | null;
       /**
        * Overridden
-       * @description 看到提示還是送出的次數：跳提示之後，民眾確認不是重複、還是送出的次數。每一次都會開一張配對卡
+       * @description 按「仍要建立」的次數：跳提示之後，民眾確認不是重複、還是把資料建起來的次數。每一次都會開一張配對卡
        */
       overridden: number;
       /**
        * Reviewed
-       * @description 已審的配對卡數：看到提示還是送出時開出來的配對卡裡，資料檢核員已經判定「是重複」或「不是重複」的張數
+       * @description 已審的配對卡數：按「仍要建立」時開出來的配對卡裡，資料檢核員已經判定「是重複」或「不是重複」的張數
        */
       reviewed: number;
       /**
@@ -2964,17 +2964,17 @@ export interface components {
       judged_not_duplicate: number;
       /**
        * False Alarm Rate Without Auditors
-       * @description 誤報率（不用審核結果）＝ 看到提示還是送出的次數 ÷ 跳提示的次數（overridden ÷ hinted）。只要民眾看到提示還是送出，就當作那次提示錯了
+       * @description 誤報率（不用審核結果）＝ 按「仍要建立」的次數 ÷ 跳提示的次數（overridden ÷ hinted）。只要民眾按「仍要建立」，就當作那次提示錯了
        */
       false_alarm_rate_without_auditors: number | null;
       /**
        * False Alarm Rate With Auditors
-       * @description 誤報率（用審核結果）＝ 看到提示還是送出的次數 ×（判不是重複的配對卡數 ÷ 已審的配對卡數）÷ 跳提示的次數（overridden × judged_not_duplicate ÷ reviewed ÷ hinted）。假設還沒審的配對卡裡，「不是重複」的比例跟已審的一樣。還沒有配對卡審過時是 null
+       * @description 誤報率（用審核結果）＝ 按「仍要建立」的次數 ×（判不是重複的配對卡數 ÷ 已審的配對卡數）÷ 跳提示的次數（overridden × judged_not_duplicate ÷ reviewed ÷ hinted）。假設還沒審的配對卡裡，「不是重複」的比例跟已審的一樣。還沒有配對卡審過時是 null
        */
       false_alarm_rate_with_auditors: number | null;
       /**
        * Review Coverage
-       * @description 已審比例 ＝ 已審的配對卡數 ÷ 看到提示還是送出的次數（reviewed ÷ overridden）。太低的話，用審核結果的誤報率不太可靠
+       * @description 已審比例 ＝ 已審的配對卡數 ÷ 按「仍要建立」的次數（reviewed ÷ overridden）。太低的話，用審核結果的誤報率不太可靠
        */
       review_coverage: number | null;
     };
