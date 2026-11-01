@@ -52,7 +52,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 ### `/stations`（資源站點管理 v2，ADMIN-026）
 
 - `page.tsx` 掛載 `StationManagementPage`（`libs/modules/src/station/admin/station-management/`），接真實 API
-- 篩選（類型、營運狀態、行政區、指派 Team、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換。列表上方的狀態統計（各營運狀態的數量卡片）照設計拿掉（糖 2026-10-31）
+- 篩選（類型、營運狀態、行政區、指派 Team、官方認定、成立、更新時間、關鍵字，存在 URL）、列表／地圖切換。列表上方一排統計：全部和三種營運狀態的數量（`stationFacets` 不帶篩選），點一格篩那個營運狀態，再點一次或點「全部」取消，跟篩選面板是同一個篩選；讀不到時格子寫「—」，上方一行小字加重試（糖 2026-11-01，STAT-101～109）
 - 列表會分頁讀完權限範圍內所有站點（上限 5,000），官方認定、更新時間篩選與排序（開設中優先、最近更新優先）在前端做
 - 站點抽屜是 `/stations` 自己的 `StationDetailSheet`（libs/ui 的 `SheetFrame` 加 `variant="admin"`，詳情與編輯是同一個 frame 裡切換的 `SheetLayout`，不會疊第二層），不用地圖的 `StationDetailDrawer`：基本資料、照片、資源、聯絡資訊（無 `station.view_pii` 時顯示遮罩值且不可改）、版本歷史；`/stations?station=<uuid>` 直接開啟，給通知連結用
 - 新增／編輯用 `station/form` 的 `StationForm`，與兩張 `/map` 的新增共用同一份表單與同一套欄位版面（設計稿 `station-drawer.jsx`）；新增都用 `StationFormDrawer`，`/stations` 傳 `variant="admin"`，編輯則把 `StationFormLayout` 放進站點抽屜；地址只在新增時送出（`UpdateStationInput` 不能改 `secondaryLocation`）
@@ -93,6 +93,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 - 已有 page 檔案
 - 對應的 reusable modules 位於 `ticket/admin/*`
+- 列表上方一排統計：全部、待處理、處理中、已完成、已取消的數量（`ticketStats`），點一格篩那個狀態，再點一次或點「全部」取消，跟篩選面板是同一個篩選；志工缺口只顯示、不能點。讀不到時格子寫「—」，上方一行小字加重試（糖 2026-11-01，STAT-101～109）
 - 任務詳情的「系統資訊」只有查核狀態（疑似重複的單才出現）；設計稿的公開範圍、自動封存沒有：後端的任務單沒有公開範圍欄位，也沒有自動封存規則與封存天數設定，等後端有了再加
 - 每項需求可寫「進度備註」（`updateTicketTask` 的 `progressNote`，要有該單的 `ticket.edit`）；清空後儲存即刪除。需求狀態仍不能手改（BE-034）
 - 地圖視圖左邊清單：範圍內有圖釘的空間排在任務單前面，點了開逐層檢視
