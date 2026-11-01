@@ -6,9 +6,9 @@
 | 路徑 | 內容 |
 | --- | --- |
 | `前台/` | 民眾看到的網站：原型頁面（`*.html`）、`js/`、`docs/`（裁示與規格）、`_ds/`（設計系統匯出） |
-| `後台/` | 管理平台，結構同 `前台/`；`元件 Components.html` 是共用元件的設計稿 |
-| `handoff/` | 給工程師搬進 `Frontend/libs/ui` 的 TSX |
-| `CHANGELOG.md` | 每次合併的變更、token 異動與「Frontend 待辦」 |
+| `後台/` | 管理平台，結構同 `前台/`；`元件 Components.html` 是共用元件的設計稿（設計師下一次合併後才會出現） |
+| `handoff/` | 給工程師搬進 `Frontend/libs/ui` 的 TSX（設計師下一次合併後才會出現） |
+| `CHANGELOG.md` | 工程師的簡短待辦清單：每次合併的變更摘要、token 異動與「Frontend 待辦」，連到各側 `更新說明.md`／`docs/` 的詳細說明 |
 
 ## 怎麼打開原型
 

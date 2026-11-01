@@ -14,11 +14,12 @@ Design/
 │   └── _ds/wan-guard-design-system-…/   設計系統匯出（tokens/*.css、字型）
 ├── 後台/                 管理平台（admin），結構同上；元件 Components.html 也在這
 ├── handoff/              給工程師搬進 Frontend/libs/ui 的 TSX，一個元件一個資料夾
-├── CHANGELOG.md          每次合併一筆；工程師從這裡接工作
+├── CHANGELOG.md          每次合併一筆；工程師從這裡接工作（簡短的待辦清單）
 └── README.md
 ```
 
 - 原型頁面放 `前台/` 或 `後台/`；裁示與規格放那一側的 `docs/`。
+- 詳細的更新說明照舊寫在那一側的 `更新說明.md` 或 `docs/`。`CHANGELOG.md` 只放工程師要接的**簡短待辦清單**，每一筆連到那份詳細說明。
 - 給工程師的程式碼放 `handoff/<元件名>/index.tsx`。以前放在 `components/`，下一次合併起改放 `handoff/`（把現有的搬過去，並在 CHANGELOG 記一筆）。
 - 只動 `Design/` 底下的檔案。**不要改 `Frontend/` 的任何東西**，包括 `design-tokens.ts`；那是工程師照你的 handoff 與 CHANGELOG 去改。
 
@@ -37,21 +38,28 @@ Design/
 
 ## 每次合併到 main 的 PR
 
-1. 只含 `Design/` 底下的路徑。
-2. 保留工程師在 `CHANGELOG.md` 打的勾（以 `main` 上的版本為準）。
-3. `CHANGELOG.md` 最上面加一筆（格式見該檔），結尾一定有「Frontend 待辦」清單；沒有待辦就寫「無」。
+1. **先把 `main` 合進設計分支**，有衝突就在設計分支上解決：
+
+   ```sh
+   git switch sucrelindesign
+   git fetch origin && git merge origin/main
+   ```
+
+   這份守則合進 `main` 後先合一次（守則才會進到設計分支），之後每次開 PR 前再合一次。
+   工程師在 `CHANGELOG.md` 打的勾、`main` 上較新的 `Design/` 檔案都會跟著進來。
+2. 設計分支上也有 `Frontend/` 的 commit，所以不要直接從它開 PR。合完之後，切一個只有 `Design/` 的分支：
+
+   ```sh
+   git switch -c design/<這次的主題> origin/main        # 從最新的 main 開新分支
+   git checkout sucrelindesign -- Design/                # 只帶過來 Design/
+   git status                                            # 只能看到 Design/ 底下的路徑
+   git diff --stat origin/main -- Design/                # 每個檔案都要是這次有改的；不是就 git checkout origin/main -- <檔案>
+   git diff origin/main -- Design/CHANGELOG.md           # 工程師打的 [x] 不可以變回 [ ]；有就改回 [x]
+   git commit -m "design: <這次的主題>" && git push -u origin HEAD   # 再開 PR 到 main
+   ```
+
+3. `CHANGELOG.md` 最上面加一筆（格式見該檔）：簡短列出這次的變更，連到詳細說明（`更新說明.md` 或 `docs/`），結尾一定有「Frontend 待辦」清單；沒有待辦就寫「無」。
 4. PR 說明列出受影響的畫面（原型檔名）。
-
-設計分支上也有 `Frontend/` 的 commit，所以不要直接從它開 PR。照這樣切一個只有 `Design/` 的分支：
-
-```sh
-git fetch origin
-git switch -c design/<這次的主題> origin/main        # 從最新的 main 開新分支
-git checkout sucrelindesign -- Design/                # 只帶過來 Design/
-git status                                            # 只能看到 Design/ 底下的路徑
-git diff origin/main -- Design/CHANGELOG.md           # 工程師打的 [x] 不可以變回 [ ]；有就改回 [x]
-git commit -m "design: <這次的主題>" && git push -u origin HEAD   # 再開 PR 到 main
-```
 
 - 設計分支上刪掉的檔案不會跟著過來；要刪的話在新分支上 `git rm`。
 - 設計分支裡 `Frontend/` 的改動**不放進這個 PR**：要給工程師的程式碼放 `handoff/`，或在 #uiux 告訴工程師。
