@@ -143,6 +143,10 @@ class _SignedOut(Exception):
     """The browser stepping up holds no live session: nothing a refresh could fix."""
 
 
+class _IdentityReset(Exception):
+    """The identity stepping up was taken away; the session has moved to the default one (Spec 029)."""
+
+
 # What a refresh fixes. A step-up's start answers these as any request would, so the site's proxy refreshes
 # and sends the start again (ADR-361).
 _REFRESH_FIXES = frozenset({ErrorCode.ACCESS_TOKEN_EXPIRED, ErrorCode.ACCESS_TOKEN_STALE})
@@ -152,7 +156,8 @@ async def _account_stepping_up(request: Request, db: AsyncSession, redis) -> tup
     """The signed-in account a step-up proves, and its session; raises `_SignedOut` when there is none.
 
     Authenticated as any request is (ADR-328). A token that needs refreshing, and a session store that cannot
-    be reached, keep their usual answers; any other 401 means signed out, which a navigation cannot show.
+    be reached, keep their usual answers; `identity_reset` is not signed out (ADR-404) and raises
+    `_IdentityReset`; any other 401 means signed out, which a navigation cannot show.
     """
     try:
         token = await security.get_access_token(request)
@@ -160,6 +165,8 @@ async def _account_stepping_up(request: Request, db: AsyncSession, redis) -> tup
     except ApiError as err:
         if err.status_code != status.HTTP_401_UNAUTHORIZED or err.code in _REFRESH_FIXES:
             raise
+        if err.code == ErrorCode.IDENTITY_RESET:
+            raise _IdentityReset from err
         raise _SignedOut from err
     return account, security.session_id_of_access_token(token)
 
@@ -297,6 +304,11 @@ async def start_oauth(
             account, sid = await _account_stepping_up(request, db, redis)
         except _SignedOut:
             return _signed_out(request, app_url)
+        except _IdentityReset:
+            # Back to the page, cookies kept, as any request is answered (ADR-404); the page refreshes.
+            if not _is_path_on_our_site(return_to):
+                return _to_sign_in_page(app_url, ErrorCode.OAUTH_REQUEST_INVALID)
+            return _back_to_page(app_url, return_to, step_up_error=ErrorCode.IDENTITY_RESET)
     oauth = oauth_provider(provider)
     usable = oauth is not None and oauth.configured and provider in _SIGN_IN_WITH
     if not usable or not _is_path_on_our_site(return_to):

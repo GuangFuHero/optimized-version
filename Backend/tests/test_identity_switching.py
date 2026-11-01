@@ -158,7 +158,7 @@ async def test_login_with_a_malformed_remembered_identity_falls_back(client, db_
 
 
 async def test_refresh_with_a_malformed_identity_is_401(client, db_session):
-    """`identity` is free-form too; a value that parses to nothing is treated as vanished."""
+    """`identity` is free-form too; a value that parses to nothing is treated as vanished (ADR-403)."""
     await _account_with_two_identities(db_session)
     tokens = await _login(client)
 
@@ -167,7 +167,7 @@ async def test_refresh_with_a_malformed_identity_is_401(client, db_session):
         json={"refresh_token": tokens["refresh_token"], "identity": "garbage:"},
     )
     assert resp.status_code == 401
-    assert resp.json()["code"] == ErrorCode.IDENTITY_REVOKED
+    assert resp.json()["code"] == ErrorCode.IDENTITY_RESET
 
 
 # --- switching ---------------------------------------------------------------------------

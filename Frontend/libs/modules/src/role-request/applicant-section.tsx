@@ -69,6 +69,7 @@ export function ApplicantSection({
           placeholder="例：王志豪"
           error={Boolean(nameError)}
           helperText={nameError ?? '管理平台上其他人看到的名字，建議用真實姓名'}
+          slotProps={{ htmlInput: { autoComplete: 'name' } }}
         />
 
         {account.verifiedPhone ? (
