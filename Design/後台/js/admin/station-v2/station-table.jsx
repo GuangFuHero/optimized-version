@@ -166,7 +166,7 @@
   // ── 主元件 ────────────────────────────────────────────────────────────
   function StationTable({
     stations, caps, view, density,
-    onOpenStation, onQuickStatus, onAssign, onNew, onOpenReview, onExport, onImport,
+    onOpenStation, onQuickStatus, onAssign, onNew, onOpenReview, onImport, onToast,
     onAddStationAt, onCount, pendingCount,
   }) {
     const [q, setQ] = React.useState("");
@@ -239,10 +239,10 @@
     const emptyState = noData
       ? React.createElement(EmptyState, {
           icon: "MapPinPlus", title: "還沒有任何資源站點",
-          caption: "新增站點、從 CSV 匯入，或民眾在前台回報的站點經審查通過後，會出現在這裡。",
+          caption: "從「新增站點 ▾」一筆筆建立或從 CSV／Excel 匯入，或民眾在前台回報的站點經審查通過後，會出現在這裡。",
           actions: [
-            caps.canImport && onImport && React.createElement(Button, { key: "imp", variant: "outline", size: "sm", startIcon: React.createElement(Icon, { n: "Upload", s: 15 }), onClick: onImport }, "匯入 CSV"),
-            caps.canCreate && onNew && React.createElement(Button, { key: "new", variant: "primary", size: "sm", startIcon: React.createElement(Icon, { n: "Plus", s: 15 }), onClick: onNew }, "新增站點"),
+            // 匯入收在「新增站點 ▾」裡（跟工具列同一顆）
+            caps.canCreate && onNew && React.createElement(window.WGNewSplitButton, { key: "new", label: "新增站點", newItem: "新增一個", importItem: "從 CSV／Excel 匯入多個", onNew, onImport: caps.canImport ? onImport : null }),
           ].filter(Boolean),
         })
       : React.createElement(EmptyState, { title: "沒有符合條件的站點", caption: "調整篩選或搜尋關鍵字再試。" });
@@ -315,13 +315,13 @@
           React.createElement(Icon, { n: "GitPullRequestArrow", s: 15, c: "var(--color-fg-neutral-subtle)" }), "審查",
           pendingCount > 0 && React.createElement(Badge, { tone: "warning", variant: "solid" }, String(pendingCount))
         ),
-        caps.canImport && React.createElement("button", { onClick: onImport, title: "從 CSV 匯入站點名單", style: btnCss },
-          React.createElement(Icon, { n: "Upload", s: 15, c: "var(--color-fg-neutral-subtle)" }), "匯入"),
-        React.createElement("button", { onClick: onExport, title: "匯出離線清單", style: btnCss },
-          React.createElement(Icon, { n: "Download", s: 15, c: "var(--color-fg-neutral-subtle)" }), "匯出"),
+        // 匯出（SBK-7）：選一種類型匯出權限範圍內全部，不吃篩選；介面同任務單（js/shared/wg-bulk.jsx）。
+        //   舊的「匯出離線清單」（CSV／GeoJSON、所有角色）11-01 移除：後端沒有 GeoJSON 也沒有責任區範圍；「離線瀏覽」是另一個功能，之後再做
+        caps.canExport && window.StationExportMenu && React.createElement(window.StationExportMenu, { stations, persona: caps.persona, onToast }),
         caps.isTeam && React.createElement(PendingChip, { info: SD.PENDING.rbacTeam, label: `僅限 ${caps.team} 被指派的站點` }),
         caps.isAuditor && React.createElement(PendingChip, { info: SD.PENDING.rbacAuditor, label: "權限與 Notion 不一致" }),
-        caps.canCreate && onNew && React.createElement(Button, { variant: "primary", startIcon: React.createElement(Icon, { n: "Plus", s: 17 }), onClick: onNew }, "新增站點")
+        // 匯入收在「新增站點 ▾」裡；沒有 BULK-102 權限的人連箭頭都不 render
+        caps.canCreate && onNew && React.createElement(window.WGNewSplitButton, { label: "新增站點", newItem: "新增一個", importItem: "從 CSV／Excel 匯入多個", onNew, onImport: caps.canImport ? onImport : null })
       ),
 
       // —— 可收合篩選面板 ——

@@ -25,11 +25,12 @@
     const [proposals, setProposals] = React.useState(() => SD.PROPOSALS.map((p) => ({ ...p })));
     const [drawer, setDrawer] = React.useState(null);        // {mode, station, addCoords}
     const [review, setReview] = React.useState(null);        // {stationId?}
-    const [exportOpen, setExportOpen] = React.useState(false);
     const [importOpen, setImportOpen] = React.useState(false);
     const [toast, setToast] = React.useState(null);
     const seq = React.useRef(200);
 
+    // 訂閱目前身份：右上角切換身份後，匯入匯出權限（BULK-102）要即時跟著變
+    const [actingIdentity] = window.useWGActingIdentity ? window.useWGActingIdentity((window.TK_PERSONAS || {})[role]) : [null];
     const caps = makeCaps(role);
     const showToast = (msg, tone = "success") => { setToast({ msg, tone }); clearTimeout(showToast._t); showToast._t = setTimeout(() => setToast(null), 3200); };
 
@@ -78,29 +79,58 @@
       showToast(`已即時更新為「${SD.STATUS[status].label}」，未排入審核佇列（AC-10 快速通道）`);
     }
 
-    // CSV 批次匯入。🔄 2026-10-27 Carol：匯入的站點營運狀態用預設（開設中）、而且是官方（後台匯入＝可信來源），
-    //   推翻 2026-08-06「匯入後一律已關閉」與 2026-08-21「匯入 ≠ 官方造冊」
-    function importStations(rows) {
+    // 批次匯入寫入（規則全文見 station-import.jsx 檔頭 SBK-1〜7）
+    // plans：stationImportPreview 算好、沒有錯誤的列；kind＝create／update
+    function applyImport(plans, type) {
       const actor = actorName(role);
       const ts = nowTs();
-      const made = rows.map((r, i) => {
-        const id = `RS-0${seq.current++}`;
-        return {
-          id, name: r.name, type: r.type, area: r.area, address: r.address,
-          lat: r.lat, lng: r.lng, x: 50, y: 50,
-          status: "open",                         // 🔄 2026-10-27：匯入用預設（開設中）
-          supplies: [],
-          contact: r.contact, phone: r.phone, hours: r.hours,
-          parentId: null, photos: [], assignedTeam: null,
-          isOfficial: true, verified: true, verifiedBy: actor,    // 🔄 2026-10-27：匯入的是官方
-          established: ts.slice(0, 10), createdBy: actor,
-          updated: ts, updatedMin: 0, version: 1, deleted: false,
-          history: [{ v: 1, who: actor, when: ts, note: `CSV 匯入（第 ${i + 1} 筆）`, diff: [{ field: "operational_status", old: "—", new: "開設中（匯入預設）" }] }],
-        };
+      const batchId = "B-" + Date.now().toString(36).slice(-5).toUpperCase();
+      const made = [], patches = {};
+      plans.forEach((p) => {
+        const v = p.v;
+        if (p.kind === "create") {
+          const id = `RS-0${seq.current++}`;
+          const addr = [v.county, v.city, v.lane, v.alley, v.no, v.floor, v.room].filter(Boolean).join("");
+          made.push({
+            id, name: v.name, type, area: v.city || "", address: addr || "（未填地址）",
+            county: v.county || "", city: v.city || "", lane: v.lane || "", alley: v.alley || "", no: v.no || "", floor: v.floor || "", room: v.room || "",
+            lat: Number(v.latitude), lng: Number(v.longitude), x: 50, y: 50,
+            status: "open",                         // 🔄 2026-10-27 Carol：匯入用預設（開設中），推翻 08-06「匯入後一律關」
+            supplies: [], description: v.description || "", comment: v.comment || "", level: v.level ? Number(v.level) : null,
+            visibility: v.visibility || "public", source: v.source || "",
+            contact: "—", phone: "—", hours: v.op_hour || "—",    // SBK-2：後端檔案沒有聯絡人、電話
+            parentId: null, photos: [], assignedTeam: null,
+            isOfficial: true, verified: true, verifiedBy: actor,    // 🔄 2026-10-27 Carol：匯入的是官方（後台匯入＝可信來源），推翻 08-21
+            established: ts.slice(0, 10), createdBy: actor,
+            updated: ts, updatedMin: 0, version: 1, deleted: false,
+            history: [{ v: 1, who: actor, when: ts, note: `批次匯入建立（${batchId}，第 ${p.line} 列）`, diff: [{ field: "operational_status", old: "—", new: "開設中（匯入預設）" }] }],
+          });
+        } else {
+          // SBK-4：只改得到說明、開放時間、level、comment、公開範圍、經緯度；空白＝不動
+          const s = p.target, diff = [], patch = {};
+          const put = (field, label, key, val, cur) => { if (val !== "" && val != null && String(val) !== String(cur == null ? "" : cur)) { patch[key] = val; diff.push({ field, old: String(cur == null || cur === "" ? "—" : cur), new: String(val) }); } };
+          put("description", "說明", "description", v.description, s.description);
+          put("op_hour", "開放時間", "hours", v.op_hour, s.hours === "—" ? "" : s.hours);
+          put("level", "level", "level", v.level ? Number(v.level) : "", s.level);
+          put("comment", "comment", "comment", v.comment, s.comment);
+          put("visibility", "公開範圍", "visibility", v.visibility, s.visibility);
+          put("latitude", "緯度", "lat", v.latitude ? Number(v.latitude) : "", s.lat);
+          put("longitude", "經度", "lng", v.longitude ? Number(v.longitude) : "", s.lng);
+          if (diff.length) patches[s.id] = { patch, diff };
+        }
       });
-      setStations((arr) => [...made, ...arr]);
-      setImportOpen(false);
-      showToast(`已匯入 ${made.length} 個站點，狀態皆為「已關閉」，請現場確認後逐一開啟`);
+      // 可能重複 → 重複審核「站點」分頁（原型模擬；正式版每列走一般建站 service，後端判斷）
+      let groups = [];
+      if (made.length && window.stationImportDedupGroups && window.ddLoad && window.ddSave) {
+        const queue = window.ddLoad();
+        const startId = queue.reduce((m, g) => Math.max(m, parseInt(String(g.id).replace(/\D/g, ""), 10) || 0), 0) + 1;
+        groups = window.stationImportDedupGroups(made, stations, { owner: `${actor}（匯入）`, at: ts.slice(5), startId });
+        if (groups.length) window.ddSave(groups.concat(queue));
+      }
+      setStations((arr) => made.concat(arr.map((s) => patches[s.id] ? bump(Object.assign({}, s, patches[s.id].patch), `批次匯入更新（${batchId}）`, patches[s.id].diff) : s)));
+      const updated = plans.filter((p) => p.kind === "update").length;
+      showToast(`已匯入：新增 ${made.length}、更新 ${updated}` + (made.length ? "；新增的站點皆為「已關閉」" : ""));
+      return { created: made.length, updated, batchId, groups: groups.length };
     }
 
     // 指派站點給 Team。⚠️ 無正典依據，見 StationData.PENDING.rbacTeam
@@ -188,8 +218,8 @@
         onAssign: assignStation,
         onNew: () => setDrawer({ mode: "new" }),
         onOpenReview: () => caps.canReview ? setReview({}) : showToast("此角色無審查權限", "warning"),
-        onExport: () => setExportOpen(true),
         onImport: () => setImportOpen(true),
+        onToast: showToast,
         onAddStationAt: (c) => setDrawer({ mode: "new", addCoords: c }),
         onCount,
       }),
@@ -205,10 +235,9 @@
         station: drawerStation, mode: drawer.mode, addCoords: drawer.addCoords, caps, allStations: stations,
         onClose: () => setDrawer(null), onSave: saveStation, onRetire: retire, onReactivate: reactivate, onRollback: rollback,
       }),
-      importOpen && React.createElement(window.StationImportDialog, {
-        existing: stations, onClose: () => setImportOpen(false), onImport: importStations,
+      importOpen && caps.canImport && React.createElement(window.StationImportDialog, {
+        existing: stations, onClose: () => setImportOpen(false), onApply: applyImport,
       }),
-      exportOpen && React.createElement(window.ExportDialog, { caps, count: stations.filter((x) => !x.deleted).length, onClose: () => setExportOpen(false), onExport: (o) => { setExportOpen(false); showToast(`已匯出 ${o.fmt.toUpperCase()}（資料截至 ${o.ts}）`); } }),
 
       // —— toast ——
       toast && React.createElement("div", { style: { position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)", zIndex: 1200, display: "flex", alignItems: "center", gap: 10, padding: "13px 20px", borderRadius: "var(--radius-full)", background: "var(--color-fg-neutral-default)", color: "#fff", boxShadow: "var(--shadow-lg)", font: "var(--font-label-400)", animation: "wgToastIn var(--transition-spring)" } },

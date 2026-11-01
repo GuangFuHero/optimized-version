@@ -139,7 +139,7 @@
     );
   }
 
-  function TicketTable({ onOpen, onNew }) {
+  function TicketTable({ onOpen, onNew, onImport, canExport }) {
     const tk = useTK();
     const view = tk.view;
     const [sel, setSel] = React.useState(null);
@@ -207,8 +207,8 @@
       ? (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingBottom: 48 }}>
           <EmptyState icon="ClipboardList" title="還沒有任何任務單"
-            caption="民眾在前台報案，或後台人員按「新增任務」代為登錄後，任務單會出現在這裡。" />
-          {onNew && <div style={{ marginTop: -40 }}><Button variant="primary" size="sm" startIcon={<Icon n="Plus" s={15} />} onClick={onNew}>新增任務</Button></div>}
+            caption="民眾在前台報案、後台人員按「新增任務」代為登錄，或從「新增任務 ▾」匯入 CSV／Excel 後，任務單會出現在這裡。" />
+          {onNew && <div style={{ marginTop: -40 }}><window.WGNewSplitButton label="新增任務" newItem="新增一張" importItem="從 CSV／Excel 匯入多張" onNew={onNew} onImport={onImport} /></div>}
         </div>
       )
       : <EmptyState icon="SearchX" title="沒有符合條件的任務單" caption="調整篩選或搜尋關鍵字再試；若在「我的單位」範圍，可切到「全部單位」看看。" />;
@@ -303,6 +303,8 @@
               左側事件名稱旁一顆不起眼的 ⓘ。設定頁裡仍然保留那一份（它本來就屬於
               事件層設定），但**入口要在工作的地方**：會用到現場分區的人，正在看的
               是這張任務清單，不是事件設定頁。 */}
+          {/* 匯出（BK-8）：選一種需求種類匯出權限範圍內全部，不吃篩選 —— 所以不放在「N 筆任務」旁邊，免得被讀成「匯出這 N 筆」 */}
+          {canExport && <window.TicketExportMenu />}
           {/* 🔒 2026-10-26 Sucre：按鈕改名「開啟空間」。
               🔒 SP-5（BE-036，Carol 10/14）：只有超管／政府看得到，其他人**不顯示**。
                  正式版看後端 capability `zone.add`（Carol 10-26：跟畫責任區同一個權限），不要看角色名稱。
@@ -311,7 +313,8 @@
             <Button variant="outline" startIcon={<Icon n="Building2" s={17} />} data-open-space
               onClick={() => tk.setModal("buildingNew")}>開啟空間</Button>
           )}
-          {onNew && <Button variant="primary" startIcon={<Icon n="Plus" s={17} />} onClick={onNew}>新增任務</Button>}
+          {/* 匯入收在「新增任務 ▾」裡（js/shared/wg-bulk.jsx）；沒有 BULK-102 權限的人連箭頭都不 render */}
+          {onNew && <window.WGNewSplitButton label="新增任務" newItem="新增一張" importItem="從 CSV／Excel 匯入多張" onNew={onNew} onImport={onImport} />}
         </div>
         {open && (
           <Card>

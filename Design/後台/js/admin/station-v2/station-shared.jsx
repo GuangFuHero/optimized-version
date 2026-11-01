@@ -23,6 +23,7 @@
     const isGov    = role === "gov";
     const isAuditor = role === "auditor";
     const isTeam   = role === "admin" || role === "member";
+    const bulk = !!(window.WGBulk && window.WGBulk.canBulk((window.TK_PERSONAS || {})[role]));
     return {
       role,
       isSuper, isGov, isAuditor, isTeam,
@@ -32,8 +33,10 @@
 
       // 檢視：全角色可看（資源站點為公共資訊，AC-12）
       canView: true,
-      // 匯出：Notion — super/ngo/gov/auditor 皆 ✅
-      canExport: true,
+      // 匯入／匯出：BULK-102（Sucre 2026-11-01）給超級管理員、政府隊成員、團隊管理員，依「目前身份」判斷。
+      //   ❌ 推翻原本「匯出全角色可用（匯出離線清單）」與「匯入給超管＋政府」。
+      //   非政府組織隊的成員、資料檢核員都不行；後端目前給資料檢核員 export，要請後端拿掉。
+      canExport: bulk,
 
       // 審核前台修改建議
       //   super ✅（Notion: Verify + Reject）
@@ -46,16 +49,15 @@
       canMerge: isSuper || isAuditor,
 
       // 寫入站點資料
-      canCreate: isSuper || isTeam,
+      // 2026-10-15 Sucre：政府可以手動新增站點（原本漏了 gov）。⚠️ canEdit 仍不含 gov —— 政府建完的站點自己改不了，待確認
+      canCreate: isSuper || isGov || isTeam,
       canEdit: isSuper || isTeam,
       canQuickStatus: isSuper || isTeam,
       canRetire: isSuper,          // 下架＝軟刪除，AC-05 明訂僅 Super Admin
       canRollback: isSuper,
       // 責任區 polygon（Notion Work Zones：super ✅ / gov ✅ / 其餘 ❌）
       canDrawZone: isSuper || isGov,
-      // 匯入 CSV：Notion 明列 Import CSV/Excel — super ✅ / ngo ✅ / gov ✅ / auditor ❌
-      // ⚠️ Team Admin / Member 在 Notion 無定義，此處不給（匯入建立的是尚未指派的新站點）
-      canImport: isSuper || isGov,
+      canImport: bulk,
       // 指派站點給 Team：比照任務管理頁的 PERMS.assign（super ✅ / gov ✅）。
       // ⚠️ Notion 的 Resources 那組矩陣沒有「Assign resource spot」這一列，
       //    只有 Tickets 有「Assign ticket to NGO」。見 PENDING.rbacTeam。

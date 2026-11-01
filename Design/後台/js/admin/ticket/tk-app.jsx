@@ -11,9 +11,11 @@
 
   // 欄位順序與顯示＝全域設定，唯一維護處是欄位設定頁（TM-FS-101）。
   // 個人釘選已移除 —— TM-FS-101 明定無 user-level override。
+  // 匯入／匯出不在這張表：依「目前身份」判斷（BULK-102，js/shared/wg-bulk.jsx 的 canBulk）。
+  //   ❌ 不要加回 PERMS —— 這張表是以角色視角為鍵，分不出同一個人「在 A 隊是管理員、在 B 隊是成員」。
   const PERMS = {
-    super:   { escalate: true,  delete: true,  assign: true,  assignMember: true,  create: true,  activate: true  },
-    gov:     { escalate: false, delete: false, assign: true,  assignMember: false, create: true, activate: true  },
+    super:   { escalate: true,  delete: true,  assign: true,  assignMember: true,  create: true,  activate: true },
+    gov:     { escalate: false, delete: false, assign: true,  assignMember: false, create: true, activate: true },
     admin:   { escalate: false, delete: false, assign: false, assignMember: true,  create: true, activate: false },
     member:  { escalate: false, delete: false, assign: false, assignMember: false, create: true, activate: false },
     auditor: { escalate: false, delete: false, assign: false, assignMember: false, create: false, activate: false },
@@ -28,6 +30,7 @@
     const tk = window.useTK();
     const [detail, setDetail] = React.useState(null);
     const [form, setForm] = React.useState(null);
+    const [importing, setImporting] = React.useState(false);
     const [space, setSpace] = React.useState(null);     // 點開的空間 id（tk-space.jsx）
     const can = tk.can;
     /* 列表與地圖上的一列可能是任務單，也可能是空間（SP-1）。 */
@@ -52,7 +55,10 @@
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <window.TicketTable onOpen={openRow} onNew={can.create ? () => setForm({ new: true }) : null} />
+        <window.TicketTable onOpen={openRow} onNew={can.create ? () => setForm({ new: true }) : null}
+          onImport={can.import && window.TicketImportDialog ? () => setImporting(true) : null}
+          canExport={can.export && !!window.TicketExportMenu} />
+        {importing && <window.TicketImportDialog onClose={() => setImporting(false)} />}
         {/* 從空間點開一張單時，兩層抽屜都在；Esc 只關最上面那層（任務單），空間留著 */}
         {space && window.SpaceDetail && <window.SpaceDetail id={space} onClose={() => { if (!detail && !form) setSpace(null); }} onOpenTicket={(t) => setDetail(t)} />}
         {detail && !form && <window.TicketDetail ticket={detail} onClose={() => setDetail(null)} onEdit={() => setForm({ ticket: detail })} />}
@@ -91,7 +97,10 @@
     const [fieldOrder] = React.useState(() => load(LS.forder, []));
 
     const persona = window.TK_PERSONAS[role];
-    const can = PERMS[role];
+    // 訂閱目前身份：右上角切換身份後，匯入匯出權限要即時跟著變（BULK-102）
+    const [actingIdentity] = window.useWGActingIdentity ? window.useWGActingIdentity(persona) : [null];
+    const bulk = window.WGBulk ? window.WGBulk.canBulk(persona) : false;
+    const can = Object.assign({}, PERMS[role], { import: bulk, export: bulk });
 
     const toast = (msg, tone) => { const id = Date.now() + Math.random(); setToasts((ts) => [...ts, { id, msg, tone }]); setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), 2800); };
 
@@ -158,6 +167,8 @@
       persona, can, toast, setModal,
       tickets: visibleTickets, allTickets: tickets, scopeRegion: null,
       myTeams, scope: effScope, setScope, canWriteTicket, defaultTeam,
+      // TM-IMP-104：非政府組織匯入 → 目前身份那一隊；超管／政府匯入 → 未指派
+      importTeam: hasMemberships ? (defaultTeam || null) : null,
       actTypes, actHistory, activeTypes, openConfirm: setConfirm,
       bannerSeen, dismissBanner: (tid, type) => setBannerSeen((m) => ({ ...m, [`${tid}:${type}`]: true })),
       view, setView,
@@ -214,6 +225,80 @@
         setActTypes((a) => a.map((x) => x.key === dt ? { key: dt, status: "active" } : x));
         logHistory("restore", dt);
         toast(`已恢復災害類型：${window.TK_DISASTERS[dt].label}`);
+      },
+      // 匯入寫入（規則全文見 tk-import.jsx 檔頭 BK-1〜8、TM-IMP-*）
+      // plans：tkImportPreview 算好、沒有錯誤的列。kind＝create（新單）／attach（掛到同檔案前面建立的那張）／update（既有的單）
+      applyImport: (plans, type) => {
+        const team = hasMemberships ? (defaultTeam || null) : null;          // TM-IMP-104
+        const at = stamp();
+        const batchId = "B-" + Date.now().toString(36).slice(-5).toUpperCase();
+        // 編號接在目前最大號後面。❌ 不要用 saveTicket 那種亂數 —— 一次匯入幾十張，撞號機率不低。
+        let n = tickets.reduce((m, x) => Math.max(m, parseInt(String(x.id).replace(/\D/g, ""), 10) || 0), 0);
+        const split = (x) => String(x || "").split(/[;；,，]/).map((y) => y.trim()).filter(Boolean);
+        const propsOf = (v) => { const o = {}; Object.keys(v).forEach((k) => { if (k.indexOf("prop.") === 0 && v[k]) o[k.slice(5)] = v[k]; }); return o; };
+        const mkTask = (v) => ({ id: "K-" + Math.random().toString(36).slice(2, 8), kind: type, name: v.task_name,
+          quantity: v.task_quantity ? Number(v.task_quantity) : null, desc: v.task_description || "", props: propsOf(v), status: "pending", assignees: [] });
+        const made = [], byKey = {}, changes = {};
+        let created = 0, updated = 0;
+        plans.forEach((p) => {
+          const v = p.v;
+          if (p.kind === "create") {
+            n += 1;
+            const t = { id: "T-" + n, title: v.title, county: "", city: "", street: "", no: "", floor: null,
+              contact_name: v.contact_name, contact_phone: v.contact_phone || null, contact_email: v.contact_email || null,
+              priority: p.priority || "medium", status: "pending", team, region: "光復鄉", intake: "import",
+              visibility: v.visibility || "restricted", verification: null, createdAt: at, updatedMin: 0,
+              desc: v.description || "", fields: {}, photos: [], disasterTypes: split(v.disaster_types),
+              lat: Number(v.latitude), lng: Number(v.longitude), tasks: [mkTask(v)] };
+            // BK-3：位置只有經緯度。登記進地圖的座標表，切到地圖才看得到這張單
+            if (window.TK_COORDS) window.TK_COORDS[t.id] = { c: [t.lat, t.lng] };
+            byKey[p.key] = t; made.push(t); created += 1;
+          } else if (p.kind === "attach") {
+            byKey[p.key].tasks.push(mkTask(v)); created += 1;
+          } else {
+            // BK-4：只改得到說明、狀態、優先級、災害類型、自訂欄位；空白＝不動
+            const t = p.target;
+            const ch = changes[t.id] = changes[t.id] || { patch: {}, log: [], tasks: [], props: {} };
+            if (v.description && v.description !== t.desc) { ch.patch.desc = v.description; ch.log.push(["說明", t.desc || "（空）", v.description]); }
+            if (p.priority && p.priority !== t.priority) { ch.patch.priority = p.priority; ch.log.push(["優先級", window.TK_PRIORITY[t.priority].label, window.TK_PRIORITY[p.priority].label]); }
+            if (p.status && p.status !== t.status) { ch.patch.status = p.status; ch.log.push(["狀態", (window.TK_STATUS[t.status] || {}).label || t.status, window.TK_STATUS[p.status].label]); }
+            if (v.disaster_types) { ch.patch.disasterTypes = split(v.disaster_types); ch.log.push(["災害類型", (t.disasterTypes || []).join("、") || "（空）", ch.patch.disasterTypes.join("、")]); }
+            // 需求用「種類＋名稱」對（ADR-120）：對到就更新自訂欄位，對不到就在這張單底下新增一筆
+            const hit = (t.tasks || []).find((k) => k.kind === type && String(k.name).trim() === v.task_name);
+            if (hit) { const pr = propsOf(v); if (Object.keys(pr).length) { ch.props[hit.id] = pr; ch.log.push([`需求「${hit.name}」自訂欄位`, "—", Object.keys(pr).map((k) => k + "=" + pr[k]).join("、")]); } }
+            else { ch.tasks.push(mkTask(v)); ch.log.push(["新增需求", "（無）", v.task_name]); }
+            updated += 1;
+          }
+        });
+
+        // TM-IMP-102 / BK-7：新建的單跟手動建單一樣走重複判斷（原型模擬，寫進 重複審核的佇列）
+        let groups = [];
+        if (made.length && window.tkImportDedupGroups && window.ddLoad && window.ddSave) {
+          const queue = window.ddLoad();
+          const startId = queue.reduce((m, g) => Math.max(m, parseInt(String(g.id).replace(/\D/g, ""), 10) || 0), 0) + 1;
+          groups = window.tkImportDedupGroups(made, tickets, { owner: `${persona.name}（匯入）`, at, startId });
+          if (groups.length) window.ddSave(groups.concat(queue));
+        }
+
+        // History（ADR-110：跟手動操作一樣留紀錄）
+        const who = { at, actor: persona.name, team: persona.team || "平台", src: "audit" };
+        made.forEach((t) => window.tkPushHistory(t.id, Object.assign({}, who, { action: `批次匯入建立任務單（${batchId}）` })));
+        Object.keys(changes).forEach((id) => changes[id].log.forEach((l) =>
+          window.tkPushHistory(id, Object.assign({}, who, { action: `批次匯入更新（${batchId}）`, field: l[0], from: l[1], to: l[2] }))));
+        groups.forEach((g) => {
+          const ids = [];
+          g.items.forEach((it) => { if (ids.indexOf(it.ticketId) < 0) ids.push(it.ticketId); });
+          ids.forEach((tid) => window.tkPushHistory(tid, Object.assign({}, who, { action: `列入 重複審核（${g.id}，可能重複）` })));
+        });
+
+        setTickets((ts) => made.concat(ts.map((t) => {
+          const ch = changes[t.id];
+          if (!ch) return t;
+          const tasks = (t.tasks || []).map((k) => ch.props[k.id] ? Object.assign({}, k, { props: Object.assign({}, k.props || {}, ch.props[k.id]) }) : k).concat(ch.tasks);
+          return Object.assign({}, t, ch.patch, { tasks, updatedMin: 0 });
+        })));
+        toast(`已匯入：新增 ${created} 列、更新 ${updated} 列` + (groups.length ? `；${groups.length} 組可能重複，已送 重複審核` : ""));
+        return { created, updated, batchId, groups: groups.length };
       },
       saveTicket: ({ editing, id, vals, tasks }) => {
         if (editing) {
