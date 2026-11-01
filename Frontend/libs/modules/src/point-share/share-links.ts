@@ -57,12 +57,15 @@ export function sharesThroughDeviceSheet(
 }
 
 /**
- * Whether the share sheet's refusal is the person closing it (`AbortError`), which needs nothing
- * more. Any other — a browser in an app that has `navigator.share` but refuses it, a sheet already
- * open — is the sheet failing, and a tile that went through it opens its channel's page instead.
+ * Whether the share sheet's refusal needs nothing more: the person closing it (`AbortError`), or a
+ * sheet still open from the press before (`InvalidStateError`), whose own share goes on. Any other —
+ * a browser in an app that has `navigator.share` but refuses it — is the sheet failing, and a tile
+ * that went through it opens its channel's page instead.
  */
 export function isShareSheetDismissal(error: unknown): boolean {
-  return (error as Error | undefined)?.name === 'AbortError';
+  const name = (error as Error | undefined)?.name;
+
+  return name === 'AbortError' || name === 'InvalidStateError';
 }
 
 export async function copyPointShareUrl(url: string) {

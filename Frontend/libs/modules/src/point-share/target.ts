@@ -13,21 +13,29 @@ import {
 import { parseSiteRouteState } from '../route/parse';
 import { createSiteHref } from '../route/serialize';
 import type { SiteModule, SiteRouteState } from '../route/types';
-import { readOpHour } from '../station/availability';
-import { getStationTypeLabel } from '../station/type-options';
 import type { TicketNeed } from '../ticket/needs/need-claim';
-import { describeTicketForShare } from './share-description';
+import {
+  describeStationForShare,
+  describeTicketForShare,
+} from './share-description';
 import type { PointShareTarget } from './types';
 
+/**
+ * What a share is made of. Not a marker's `subtitle`: a ticket says what it needs and a station what
+ * it is (`share-description.ts`), the same on the server and in the browser.
+ */
 type PointShareMarker = {
   id: string;
   title: string;
-  /** What a station says of itself. A ticket's comes from its needs (`describeTicketForShare`). */
-  subtitle: string;
   detailType: 'station' | 'ticket';
   /** A ticket's needs, when they are known: always on the server, on a list marker in the browser. */
   needs?: readonly TicketNeed[];
   ticketMeta?: { taskType?: string | null };
+  stationMeta?: {
+    type?: string | null;
+    description?: string | null;
+    opHour?: string | null;
+  };
 };
 
 const SHARE_QUERY_CONTEXT = {
@@ -49,16 +57,16 @@ function toPointShareMarkerFromStation(
   const station = useFragment(StationFieldsFragmentDoc, stationRef);
   const title =
     station.name?.trim() || station.propertyName?.trim() || station.uuid;
-  const subtitle =
-    station.description?.trim() ||
-    readOpHour(station.opHour) ||
-    getStationTypeLabel(station.type);
 
   return {
     id: station.uuid,
     title,
-    subtitle,
     detailType: 'station',
+    stationMeta: {
+      type: station.type,
+      description: station.description,
+      opHour: station.opHour,
+    },
   };
 }
 
@@ -76,7 +84,6 @@ function toPointShareMarkerFromTicket(
   return {
     id: ticket.uuid,
     title,
-    subtitle: '',
     detailType: 'ticket',
     // Read here rather than through `readTicketNeeds`, whose module is client-only: this runs in
     // the page's `generateMetadata`. Need names and headcounts reach a guest (ADR-281).
@@ -169,7 +176,7 @@ export function createPointShareTarget({
             needs: marker.needs,
             taskType: marker.ticketMeta?.taskType,
           })
-        : marker.subtitle,
+        : describeStationForShare(marker.stationMeta ?? {}),
     url: new URL(href, origin).toString(),
   };
 }
