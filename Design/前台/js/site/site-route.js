@@ -46,7 +46,7 @@
    *    我們不做 full（額滿），因為容量不記、額滿算不出來。需回寫正典。
    * ─────────────────────────────────────────────────────────────────────── */
   const STATION_STATUS_META = {
-    open:   { label: '營運中', tone: 'success', desc: '站點正常營運' },
+    open:   { label: '開設中', tone: 'success', desc: '站點正常營運' },   // 🔒 11-01：名稱跟後台一致（開設中／暫停服務／已關閉）
     paused: { label: '暫停服務', tone: 'warning', desc: '站點還在，但目前暫停服務' },
     closed: { label: '已關閉', tone: 'neutral', desc: '這個站點已經關閉，不再營運' },
   };

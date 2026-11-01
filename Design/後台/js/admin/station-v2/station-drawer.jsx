@@ -154,6 +154,7 @@
         ? React.createElement("span", { className: "wg-data-xs", style: { color: "var(--color-fg-neutral-muted)" } }, "站點群無營運狀態，由群內各站各自表達")
         : React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 8 } },
             React.createElement(StatusBadge, { status: station.status }),
+            station.status === "paused" && station.pauseReason && React.createElement("span", { className: "wg-caption", style: { color: "var(--color-fg-neutral-subtle)" } }, station.pauseReason),
             React.createElement(PendingChip, { info: SD.PENDING.status2, label: "等後端開欄位", size: "sm" })) }),
 
       // 聯絡人電話：僅後台可見，公開 API 不得回傳
@@ -238,6 +239,8 @@
         L({ label: "營運狀態", children: React.createElement("select", { value: form.status, onChange: set("status"), style: selCss }, SD.STATUS_ORDER.map((s) => React.createElement("option", { key: s, value: s }, SD.STATUS[s].label))) }),
         L({ label: "開放時間", children: React.createElement("input", { value: form.hours, onChange: set("hours"), style: inputCss }) })
       ),
+      // I-2：暫停服務要寫一行原因（缺什麼、預計何時恢復），前台也看得到
+      form.status === "paused" && L({ label: "暫停原因（一行）", children: React.createElement("input", { value: form.pauseReason || "", onChange: set("pauseReason"), placeholder: "例：桶裝水送完，明天 9 點補貨", maxLength: 50, style: inputCss }) }),
       React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 } },
       ),
       React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 } },

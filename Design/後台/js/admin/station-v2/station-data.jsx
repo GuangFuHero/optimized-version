@@ -7,20 +7,23 @@
 (function () {
 
   // —— 營運狀態 (operational_status) ——
-  // ⚠️ 二態為 2026-08-06 本地決策；RS-FEAT-001 feature.md 的 Target behavior
-  //    仍寫 open/paused/closed/full 四態。差異以 PendingChip 於畫面標示。
+  // 🔒 三態（2026-09-06 I-1，11-01 回 PR #232／#236 再確認）：開設中／暫停服務／已關閉，跟前台 site-route.js 同一套 key。
+  //    對後端 operational_status：open＝active、paused＝temporarily_closed、closed＝permanently_closed。
+  //    暫停服務＝今日異常、預期會恢復（缺水、物資空、設備壞），要寫一行原因（I-2，pauseReason）；跟「非開放時段」無關 —— 下班時間狀態仍是開設中。
+  //    標籤一律淡底（元件頁標籤表）。full（額滿）不做（不記容量）。
   const STATUS = {
-    open:   { label: "開設中", tone: "success", icon: "CircleCheck" },
-    closed: { label: "已關閉", tone: "neutral", icon: "CircleOff" },
+    open:   { label: "開設中",   tone: "success", icon: "CircleCheck" },
+    paused: { label: "暫停服務", tone: "warning", icon: "CirclePause" },
+    closed: { label: "已關閉",   tone: "neutral", icon: "CircleOff" },
   };
-  const STATUS_ORDER = ["open", "closed"];
+  const STATUS_ORDER = ["open", "paused", "closed"];
 
 
   // ── 「資料待確認」註記（比照任務管理頁 TK_PENDING）───────────────────────
   const PENDING = {
     status2: {
       title: "營運狀態：等後端開欄位",
-      note: "二態「開設中／已關閉」已定案（2026-08-06 決策，2026-09-01 再次確認）。缺的是後端：查證日期 2026-09-01：ERD（docs/prd，仍為 2026-06-27 版）與前端 GraphQL contract（main 分支 Frontend/docs/database-schema.md）皆已重抓確認。stations 表沒有任何營運狀態欄位（只有 op_hour 開放時間），前端 StationFields 也沒有。另外 RS-FEAT-001 feature.md 的 Target behavior 仍寫 open/paused/closed/full 四態，Spec 尚未同步修改。",
+      note: "三態「開設中／暫停服務／已關閉」已定案（2026-09-06，11-01 再確認）。後端 main ERD 已有 operational_status（active／temporarily_closed／permanently_closed），缺的是前端 GraphQL contract 沒暴露。以下是 2026-09-01 舊紀錄（查錯分支，已作廢）：查證日期 2026-09-01：ERD（docs/prd，仍為 2026-06-27 版）與前端 GraphQL contract（main 分支 Frontend/docs/database-schema.md）皆已重抓確認。stations 表沒有任何營運狀態欄位（只有 op_hour 開放時間），前端 StationFields 也沒有。另外 RS-FEAT-001 feature.md 的 Target behavior 仍寫 open/paused/closed/full 四態，Spec 尚未同步修改。",
     },
     parent: {
       title: "站點群：等後端開欄位",

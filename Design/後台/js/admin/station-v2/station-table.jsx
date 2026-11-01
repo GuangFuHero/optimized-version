@@ -195,7 +195,8 @@
     rows = rows.filter((s) => matches(s, q));
     // 排序：開設中在前 → 最後更新新的在前
     const byRank = (a, b) => {
-      const o = (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1); if (o) return o;
+      const rank = (x) => (x.status === "open" ? 0 : x.status === "paused" ? 1 : 2);   // 開設中 → 暫停服務 → 已關閉
+      const o = rank(a) - rank(b); if (o) return o;
       return (a.updatedMin ?? 1e9) - (b.updatedMin ?? 1e9);
     };
     // 依附排序：群內站點緊接在自己的站點群下面，不跟著全域排序跑掉。

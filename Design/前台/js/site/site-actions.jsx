@@ -1235,13 +1235,29 @@
     );
   }
 
+  /** 🔒 SHARE-ST-101（Sucre 11-01，回 PR #211）分享站點的一句話：
+   *    「島嶼守望｜<類型>站點，服務時間 <時間>。位置說明：<說明>」，沒有的段落省略；站名另外當標題（訊息第一行）。
+   *    不是開設中時，類型後面括號寫狀態：「島嶼守望｜加水站點（暫停服務），…」—— 免得大家轉傳一個現在不能去的站。
+   *    已關閉時拿掉服務時間（已經不會開了）。狀態名稱跟頁面上同一套（STATION_STATUS_META）。 */
+  function describeStationForShare(meta) {
+    const m = meta || {};
+    const typeLabel = (R.STATION_TYPE_OPTIONS.find((o) => o.value === m.type) || {}).label;
+    const st = m.status && m.status !== 'open' && R.STATION_STATUS_META && R.STATION_STATUS_META[m.status];
+    const hours = m.status === 'closed' ? '' : String(m.opHour || '').trim();
+    const note = String(m.description || '').trim();
+    return '島嶼守望｜' + (typeLabel ? typeLabel + '站點' : '救災站點') + (st ? '（' + st.label + '）' : '')
+      + (hours ? '，服務時間 ' + hours : '') + (note ? '。位置說明：' + note : '');
+  }
+
   /** 分享目標（對齊 createPointShareTarget：以路由狀態產生可重建的分享網址）。 */
   function createPointShareTarget({ marker, module, state, origin }) {
     const href = R.createSiteHref(module, { ...state, selectedMarkerId: marker.id });
     return {
       id: marker.id,
       title: marker.title + ' · 島嶼守望',
-      description: marker.detailType === 'station' ? '救災站點資訊：' + marker.subtitle : '救災任務：' + marker.subtitle,
+      description: marker.detailType === 'station' ? describeStationForShare(marker.stationMeta) : '救災任務：' + marker.subtitle,
+      // 分享訊息：站點＝站名一行＋SHARE-ST-101 那句；任務單照舊只帶標題
+      shareText: marker.detailType === 'station' ? (marker.title + '\n' + describeStationForShare(marker.stationMeta)) : null,
       url: (origin || '') + href,
       label: marker.label,
       detailType: marker.detailType,
@@ -1310,7 +1326,7 @@
     React.useEffect(() => { if (open) setCopied(false); }, [open, target && target.id]);
 
     const url = (target && target.url) || '';
-    const shareText = (target && target.title) || '';
+    const shareText = (target && (target.shareText || target.title)) || '';
     const qrSvg = useQrSvg(open ? url : null, isMobile ? 200 : 200);
     const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
