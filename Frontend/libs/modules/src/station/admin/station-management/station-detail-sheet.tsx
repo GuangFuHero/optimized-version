@@ -255,7 +255,7 @@ function StationInfo({
   now: Date;
 }) {
   return (
-    <Box sx={{ '& > :first-of-type': { borderTop: 'none', pt: 0 } }}>
+    <Box>
       {/* The prototype's type line opens 基本資料, above the rows. */}
       <Box sx={{ mb: '4px' }}>
         <TypeChip type={station.type} />
