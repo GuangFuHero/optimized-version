@@ -79,6 +79,7 @@ export {
   activeFilterCount,
   ADMIN_MAP_PRIORITIES,
   ADMIN_MAP_STATION_TYPES,
+  ADMIN_MAP_ASSIGNMENTS,
   ADMIN_MAP_STATUSES,
   areaErrorMessage,
   boundaryChange,

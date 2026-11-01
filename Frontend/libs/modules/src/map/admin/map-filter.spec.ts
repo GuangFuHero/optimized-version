@@ -14,6 +14,7 @@ function ticket(
   id: string,
   priority: string,
   status: string,
+  teams?: string[],
 ): RescueMapMarkerItem {
   return {
     id,
@@ -23,7 +24,11 @@ function ticket(
     label: id,
     variant: 'urgent-ticket',
     detailType: 'ticket',
-    ticketMeta: { priority, status },
+    ticketMeta: {
+      priority,
+      status,
+      responsibleTeams: teams?.map((name) => ({ name })),
+    },
   };
 }
 
@@ -41,7 +46,7 @@ function station(id: string, type: string): RescueMapMarkerItem {
 }
 
 const MARKERS = [
-  ticket('t-critical', 'critical', 'pending'),
+  ticket('t-critical', 'critical', 'pending', ['慈濟']),
   ticket('t-low', 'low', 'in_progress'),
   ticket('t-done', 'medium', 'completed'),
   station('s-water', 'water'),
@@ -65,6 +70,21 @@ describe('filterMarkers', () => {
     expect(
       ids({ ...DEFAULT_ADMIN_MAP_FILTERS, statuses: ['completed'] }),
     ).toEqual(['t-done', 's-water', 's-shelter']);
+  });
+
+  it('tells 已指派 from 未指派 by the teams of the ticket, none being 未指派', () => {
+    expect(
+      ids({ ...DEFAULT_ADMIN_MAP_FILTERS, assignments: ['assigned'] }),
+    ).toEqual(['t-critical', 's-water', 's-shelter']);
+    expect(
+      ids({ ...DEFAULT_ADMIN_MAP_FILTERS, assignments: ['unassigned'] }),
+    ).toEqual(['t-low', 't-done', 's-water', 's-shelter']);
+    expect(
+      ids({
+        ...DEFAULT_ADMIN_MAP_FILTERS,
+        assignments: ['assigned', 'unassigned'],
+      }),
+    ).toHaveLength(5);
   });
 
   it('narrows stations to the types picked, however the type is written', () => {
@@ -105,8 +125,9 @@ describe('activeFilterCount and isFiltering', () => {
         ...DEFAULT_ADMIN_MAP_FILTERS,
         priorities: ['low'],
         statuses: ['pending', 'completed'],
+        assignments: ['assigned'],
       }),
-    ).toBe(3);
+    ).toBe(4);
     expect(
       isFiltering({
         ...DEFAULT_ADMIN_MAP_FILTERS,

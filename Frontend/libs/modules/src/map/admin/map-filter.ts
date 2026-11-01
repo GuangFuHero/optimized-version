@@ -17,6 +17,12 @@ export const ADMIN_MAP_PRIORITIES = [
   { value: 'low', label: '低', color: color.fg.neutral.muted },
 ] as const;
 
+/** 已指派: the ticket lies in a 責任區 that has a team. 未指派: it lies in none. */
+export const ADMIN_MAP_ASSIGNMENTS = [
+  { value: 'assigned', label: '已指派' },
+  { value: 'unassigned', label: '未指派' },
+] as const;
+
 export const ADMIN_MAP_STATUSES = [
   { value: 'pending', label: '待處理' },
   { value: 'in_progress', label: '處理中' },
@@ -32,6 +38,7 @@ export interface AdminMapFilters {
   /** Each list narrows what is shown to those picked; none picked shows all. */
   priorities: readonly string[];
   statuses: readonly string[];
+  assignments: readonly string[];
   stationTypes: readonly string[];
 }
 
@@ -39,6 +46,7 @@ export const DEFAULT_ADMIN_MAP_FILTERS: AdminMapFilters = {
   layers: { tickets: true, stations: true, areas: true },
   priorities: [],
   statuses: [],
+  assignments: [],
   stationTypes: [],
 };
 
@@ -67,7 +75,13 @@ export function filterMarkers(
         matchesTicketStatusSelection(
           marker.ticketMeta?.status,
           filters.statuses,
-        )
+        ) &&
+        (filters.assignments.length === 0 ||
+          filters.assignments.includes(
+            (marker.ticketMeta?.responsibleTeams?.length ?? 0) > 0
+              ? 'assigned'
+              : 'unassigned',
+          ))
       );
     }
 
@@ -86,6 +100,7 @@ export function activeFilterCount(filters: AdminMapFilters): number {
   return (
     filters.priorities.length +
     filters.statuses.length +
+    filters.assignments.length +
     filters.stationTypes.length
   );
 }

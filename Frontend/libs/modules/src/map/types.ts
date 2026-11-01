@@ -246,7 +246,10 @@ export interface RescueMapMarkerItem {
       | 'createdAt'
       | 'updatedAt'
     >
-  >;
+  > & {
+    /** The 責任區 teams of the place, where the admin map asked for them; none = 未指派. */
+    responsibleTeams?: readonly { name: string }[];
+  };
   /**
    * The ticket's needs, each with its own claim button. Only the site list fetches them
    * (`GetTicketsWithNeeds`); a map marker has none, as its popup offers no claiming.

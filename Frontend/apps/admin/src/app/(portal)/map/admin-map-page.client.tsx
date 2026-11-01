@@ -86,6 +86,8 @@ function haveSameNonViewportState(
 export function AdminMapPageClient() {
   // The area layer and its list are for those who may see work zones; the rest see the map alone.
   const canViewZones = useCapability('work_zone.view').data ?? false;
+  // Without this the backend gives no 責任區 teams, and every ticket would read as 未指派.
+  const canViewTicketDetail = useCapability('ticket.view_detail').data ?? false;
   const mapBoxRef = useRef<HTMLDivElement>(null);
   const [viewportStore] = useState(() => createSiteMapViewportStore({}));
   const [routeState, setRouteState] = useState<RescueMapRouteState>({});
@@ -783,6 +785,7 @@ export function AdminMapPageClient() {
                     shownTickets={shownTickets}
                     shownStations={shownStations}
                     ticketsMayBeMore={ticketsMayBeMore}
+                    canFilterByAssignment={canViewTicketDetail}
                     isFiltered={isFiltering(filters)}
                     disabled={isBusy}
                   />

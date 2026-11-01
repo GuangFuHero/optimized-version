@@ -14,6 +14,7 @@ import {
   activeFilterCount,
   ADMIN_MAP_PRIORITIES,
   ADMIN_MAP_STATION_TYPES,
+  ADMIN_MAP_ASSIGNMENTS,
   ADMIN_MAP_STATUSES,
   DEFAULT_ADMIN_MAP_FILTERS,
   toggleValue,
@@ -104,6 +105,7 @@ export function AdminMapFilterBar({
   shownTickets,
   shownStations,
   ticketsMayBeMore,
+  canFilterByAssignment,
   isFiltered,
   disabled,
 }: {
@@ -113,6 +115,8 @@ export function AdminMapFilterBar({
   shownStations: number;
   /** The query stops at a limit, and the tickets reached it: the count may be a part of them. */
   ticketsMayBeMore: boolean;
+  /** Whether the viewer is told which teams a ticket is answered by (ticket.view_detail). */
+  canFilterByAssignment: boolean;
   /** Whether the map shows fewer than it has. */
   isFiltered: boolean;
   disabled: boolean;
@@ -125,7 +129,7 @@ export function AdminMapFilterBar({
       layers: { ...filters.layers, [layer]: !filters.layers[layer] },
     });
   const set = (
-    key: 'priorities' | 'statuses' | 'stationTypes',
+    key: 'priorities' | 'statuses' | 'assignments' | 'stationTypes',
     value: string,
   ) => onChange({ ...filters, [key]: toggleValue(filters[key], value) });
 
@@ -279,6 +283,19 @@ export function AdminMapFilterBar({
               </Chip>
             ))}
           </Row>
+          {canFilterByAssignment ? (
+            <Row label="任務單 · 指派">
+              {ADMIN_MAP_ASSIGNMENTS.map((assignment) => (
+                <Chip
+                  key={assignment.value}
+                  on={filters.assignments.includes(assignment.value)}
+                  onClick={() => set('assignments', assignment.value)}
+                >
+                  {assignment.label}
+                </Chip>
+              ))}
+            </Row>
+          ) : null}
           <Row label="資源站點 · 用途">
             {ADMIN_MAP_STATION_TYPES.map((type) => (
               <Chip

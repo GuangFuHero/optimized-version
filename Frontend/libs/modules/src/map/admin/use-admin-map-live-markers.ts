@@ -2,7 +2,7 @@
 
 import {
   GetStationsDocument,
-  GetTicketsDocument,
+  GetAdminMapTicketsDocument,
   createUrqlClient,
 } from '@rescue-frontend/data-access';
 import { useEffect, useMemo, useState } from 'react';
@@ -83,7 +83,7 @@ export function useAdminMapLiveMarkers(
       const [ticketResult, stationResult] = await Promise.all([
         client
           .query(
-            GetTicketsDocument,
+            GetAdminMapTicketsDocument,
             {
               bounds,
               skip: 0,
@@ -112,9 +112,19 @@ export function useAdminMapLiveMarkers(
 
       const markers = dedupeMarkersById(
         [
-          ...(ticketResult.data?.tickets.items ?? []).map((ticket) =>
-            mapTicketToMarker(ticket),
-          ),
+          ...(ticketResult.data?.tickets.items ?? []).map((ticket) => {
+            const marker = mapTicketToMarker(ticket);
+
+            return marker
+              ? {
+                  ...marker,
+                  ticketMeta: {
+                    ...marker.ticketMeta,
+                    responsibleTeams: ticket.responsibleTeams,
+                  },
+                }
+              : null;
+          }),
           ...(stationResult.data?.stations.items ?? []).map((station) =>
             mapStationToMarker(station),
           ),

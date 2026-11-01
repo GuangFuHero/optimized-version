@@ -76,6 +76,30 @@ query GetTickets(
   }
 }
 
+# The admin 互助地圖's tickets: GetTickets with the teams each is answered for, to tell 已指派 from
+# 未指派 (empty = none). Empty also to a caller without ticket.view_detail (ADR-422), who therefore
+# cannot be offered that filter.
+query GetAdminMapTickets(
+  $bounds: BoundsInput
+  $skip: Int = 0
+  $limit: Int = 50
+  $zoom: Float
+) {
+  tickets(bounds: $bounds, skip: $skip, limit: $limit, zoom: $zoom) {
+    items {
+      ...TicketFields
+      responsibleTeams {
+        name
+      }
+    }
+    pageInfo {
+      totalCount
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+
 # The site list's page of tickets, each with the needs its rows claim. The map keeps GetTickets:
 # it has no claim buttons, so it has no use for the needs. `q` is the header's search, 2 to 50
 # characters: the backend reads the tickets' text and their needs, every page of them. `order`
