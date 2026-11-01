@@ -374,7 +374,7 @@ export function MyClaimsList({
       <>
         <Notice
           icon={
-            <Icons.handHeart
+            <Icons.heartHandshake
               sx={{ fontSize: 28, color: color.fg.neutral.muted }}
             />
           }
