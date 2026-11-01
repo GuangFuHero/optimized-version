@@ -88,9 +88,7 @@ class UserRepository(GenericRepository[User]):
         )
         return list(result.scalars().all())
 
-    async def get_direct_grants(
-        self, db: AsyncSession, user_uuid: str
-    ) -> list[tuple[str, str, str | None]]:
+    async def get_direct_grants(self, db: AsyncSession, user_uuid: str) -> list[tuple[str, str, str | None]]:
         """A user's direct (per-user) capability->scope grants, with the team each binds to.
 
         The team is part of the answer now (ADR-073): a grant with no team belongs to the
@@ -103,9 +101,7 @@ class UserRepository(GenericRepository[User]):
         )
         return [(key, scope, str(team) if team else None) for key, scope, team in result.all()]
 
-    async def assign_role(
-        self, db: AsyncSession, user_uuid: str, role_uuid: str, *, role_kind: str = "platform"
-    ) -> bool:
+    async def assign_role(self, db: AsyncSession, user_uuid: str, role_uuid: str) -> bool:
         """將使用者指派特定角色 (role)。
 
         使用 PostgreSQL ON CONFLICT 優化為單一 SQL 語句，確保原子性與效能。
@@ -139,7 +135,6 @@ class UserRepository(GenericRepository[User]):
             user_uuid=user_uuid,
             role_uuid=role_uuid,
             team_uuid=None,
-            role_kind=role_kind,
         )
         # index_where names the partial index's predicate; without it Postgres cannot tell
         # which index the conflict target means and rejects the statement outright.
@@ -251,9 +246,9 @@ class RoleRepository(GenericRepository[Role]):
         self, db: AsyncSession, *, role_uuid: str | None = None
     ) -> list[tuple[str, str, str]]:
         """Return (role_uuid, capability_key, scope) rows; all roles when role_uuid is None."""
-        stmt = select(
-            RolePermissionAssign.role_uuid, Permission.key, RolePermissionAssign.scope
-        ).join(Permission, Permission.uuid == RolePermissionAssign.permission_uuid)
+        stmt = select(RolePermissionAssign.role_uuid, Permission.key, RolePermissionAssign.scope).join(
+            Permission, Permission.uuid == RolePermissionAssign.permission_uuid
+        )
         if role_uuid is not None:
             stmt = stmt.where(RolePermissionAssign.role_uuid == role_uuid)
         rows = (await db.execute(stmt)).all()
@@ -272,9 +267,7 @@ class RoleRepository(GenericRepository[Role]):
         await db.execute(stmt)
         await db.commit()
 
-    async def delete_grant(
-        self, db: AsyncSession, *, role_uuid: str, permission_uuid: str
-    ) -> int:
+    async def delete_grant(self, db: AsyncSession, *, role_uuid: str, permission_uuid: str) -> int:
         """Delete one role→permission grant; returns rows removed (0 when absent)."""
         result = await db.execute(
             delete(RolePermissionAssign).where(
@@ -288,17 +281,13 @@ class RoleRepository(GenericRepository[Role]):
     async def count_assignments(self, db: AsyncSession, role_uuid: str) -> int:
         """Number of users currently assigned this role."""
         rows = (
-            await db.execute(
-                select(UserRoleAssign.uuid).where(UserRoleAssign.role_uuid == role_uuid)
-            )
+            await db.execute(select(UserRoleAssign.uuid).where(UserRoleAssign.role_uuid == role_uuid))
         ).all()
         return len(rows)
 
     async def delete_with_grants(self, db: AsyncSession, role_uuid: str) -> None:
         """Delete a role's permission grants then the role itself, in one transaction."""
-        await db.execute(
-            delete(RolePermissionAssign).where(RolePermissionAssign.role_uuid == role_uuid)
-        )
+        await db.execute(delete(RolePermissionAssign).where(RolePermissionAssign.role_uuid == role_uuid))
         await db.execute(delete(Role).where(Role.uuid == role_uuid))
         await db.commit()
 
@@ -365,23 +354,15 @@ class ContactRepository(GenericRepository[UserContact]):
         self, db: AsyncSession, *, user_uuid: str, type_: str
     ) -> UserContact | None:
         """Return the user's contact row of that type, or None."""
-        q = select(UserContact).where(
-            UserContact.user_uuid == user_uuid, UserContact.type == type_
-        )
+        q = select(UserContact).where(UserContact.user_uuid == user_uuid, UserContact.type == type_)
         return (await db.execute(q)).scalar_one_or_none()
 
     async def list_by_user(self, db: AsyncSession, user_uuid: str) -> list[UserContact]:
         """Every contact the user owns, oldest first."""
-        q = (
-            select(UserContact)
-            .where(UserContact.user_uuid == user_uuid)
-            .order_by(UserContact.created_at)
-        )
+        q = select(UserContact).where(UserContact.user_uuid == user_uuid).order_by(UserContact.created_at)
         return list((await db.execute(q)).scalars().all())
 
-    async def replace_verified(
-        self, db: AsyncSession, *, existing: UserContact, value: str
-    ) -> UserContact:
+    async def replace_verified(self, db: AsyncSession, *, existing: UserContact, value: str) -> UserContact:
         """Swap a contact's value in ONE transaction (ADR-098).
 
         Delete-then-insert rather than an in-place UPDATE so the row identity changes and the
@@ -446,22 +427,14 @@ class IdentityRepository(GenericRepository[UserIdentity]):
         )
         return (await db.execute(q)).scalar_one_or_none()
 
-    async def get_user_identity(
-        self, db: AsyncSession, user_uuid: str, provider: str
-    ) -> UserIdentity | None:
+    async def get_user_identity(self, db: AsyncSession, user_uuid: str, provider: str) -> UserIdentity | None:
         """Return the user's identity for a specific provider, or None."""
-        q = select(UserIdentity).where(
-            UserIdentity.user_uuid == user_uuid, UserIdentity.provider == provider
-        )
+        q = select(UserIdentity).where(UserIdentity.user_uuid == user_uuid, UserIdentity.provider == provider)
         return (await db.execute(q)).scalar_one_or_none()
 
     async def list_by_user(self, db: AsyncSession, user_uuid: str) -> list[UserIdentity]:
         """Every login method the user holds, oldest first."""
-        q = (
-            select(UserIdentity)
-            .where(UserIdentity.user_uuid == user_uuid)
-            .order_by(UserIdentity.created_at)
-        )
+        q = select(UserIdentity).where(UserIdentity.user_uuid == user_uuid).order_by(UserIdentity.created_at)
         return list((await db.execute(q)).scalars().all())
 
     async def delete_identity(self, db: AsyncSession, *, identity: UserIdentity) -> None:

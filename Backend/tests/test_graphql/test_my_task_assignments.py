@@ -117,7 +117,11 @@ async def test_a_canceled_need_stays_listed_with_its_status(client, redis):
     tasks = await _ticket_with_needs(requester_uuid, "需要清淤人力", ["清淤"])
     await _claim(client, volunteer_token, tasks["清淤"])
     async with test_db() as db:
-        await db.execute(update(TicketTask).where(TicketTask.uuid == tasks["清淤"]).values(status="canceled"))
+        await db.execute(
+            update(TicketTask)
+            .where(TicketTask.uuid == tasks["清淤"])
+            .values(status="canceled", canceled_at=datetime.now(UTC))
+        )
 
     rows = (await _my_claims(client, volunteer_token))["data"]["myTaskAssignments"]
 

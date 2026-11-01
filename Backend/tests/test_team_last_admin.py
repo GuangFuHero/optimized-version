@@ -31,11 +31,7 @@ async def _world(db, admins: int = 1, members: int = 1):
             user = User(name=f"{name}{i}")
             db.add(user)
             await db.flush()
-            db.add(
-                UserRoleAssign(
-                    user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid, role_kind="team"
-                )
-            )
+            db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid))
             people[f"{name}{i}"] = acting_as(user, role, team)
     await db.flush()
     return team, people
