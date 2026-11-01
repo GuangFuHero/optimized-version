@@ -5,10 +5,7 @@ export type OperationalStatus =
   | 'temporarily_closed'
   | 'permanently_closed';
 
-/**
- * Labels for the backend's three operational states. Provisional: whether the page shows three
- * states or the prototype's two (開設中／已關閉) is still to be decided, so change them only here.
- */
+/** Labels for the backend's three operational states; the pages show all three. */
 export const OPERATIONAL_STATUS_OPTIONS: readonly {
   value: OperationalStatus;
   label: string;

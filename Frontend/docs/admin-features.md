@@ -88,7 +88,6 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 匯出只能選一種類型，不套用列表篩選
 - 站點照片只能附 URL，沒有上傳端點
 - 站點群（大場地底下掛多個子站，列表縮排、子站標「屬：○○」）：後端已有欄位（`stations.child_station_uuid`，指向母站），但 GraphQL 還沒開放，前端讀不到；開放後再做（糖 2026-10-31）
-- 營運狀態文字（開設中／暫時關閉／永久關閉）待產品確認是否改為兩態，只需改 `station/operational-status.ts`
 
 ### `/tickets`
 
