@@ -47,6 +47,7 @@ import {
   type FoundDoor,
 } from '../address-lookup';
 import { PhotoLinkEditor } from '../photos';
+import { EmergencyCallNotice } from './emergency-call-notice';
 import {
   holdHelpRequestDraft,
   sessionDraftStorage,
@@ -184,27 +185,6 @@ function GuestHelpRequestDrawer({
         <EmergencyCallNotice />
       </Stack>
     </SiteActionDrawer>
-  );
-}
-
-/**
- * Small, in the PM's words (2026-10-10): whoever reaches the site already knows to call 119, so it
- * says what the platform is for instead of leading the form.
- */
-function EmergencyCallNotice() {
-  return (
-    <Alert
-      severity="error"
-      sx={{
-        py: 0.25,
-        fontSize: displayTextSize[12],
-        lineHeight: 1.5,
-        '& .MuiAlert-icon': { py: 0.5, fontSize: 18 },
-      }}
-    >
-      緊急醫療需求請即時撥打 <strong>119</strong>{' '}
-      或當地醫院電話，平台為災害時期透明資訊、尋求志工用。
-    </Alert>
   );
 }
 
