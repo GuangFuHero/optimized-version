@@ -50,7 +50,8 @@
   const KIND_META = {
     claimed:     { icon: 'HandHeart',   tone: 'var(--color-brand-secondary-subtle)' },
     'need-full': { icon: 'CircleCheck', tone: 'var(--color-fg-success)' },
-    closed:      { icon: 'CircleSlash', tone: 'var(--color-fg-danger)' },
+    // ICON-104：跟前端 PR #230 同一個圖（Sucre 11-01）。CircleSlash 留給「已取消」的單（site-map）
+    closed:      { icon: 'CircleMinus', tone: 'var(--color-fg-danger)' },
     /* ③ 角色升級申請的結果（2026-09-11 覆蓋「只有兩條」）。
        通過用 success、未通過用中性灰 —— **不用 danger**。
        被拒不是錯誤，他原本的權限一項都沒有少；用紅色會讓人以為出事了。 */
@@ -170,7 +171,7 @@
   function SiteNotifyEmpty() {
     const reasons = [
       { icon: 'HandHeart',  text: '有人承接了你建立的求助' },
-      { icon: 'CircleSlash', text: '你承接的任務有異動' },
+      { icon: 'CircleMinus', text: '你承接的任務有異動' },
       { icon: 'BadgeCheck', text: '你的申請有審核結果' },
     ];
     return (

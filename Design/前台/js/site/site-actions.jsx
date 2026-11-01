@@ -1260,15 +1260,30 @@
    * QR 用 vendored 的 `js/vendor/qrcode.js`（qrcode-generator v2.0.4），不走 CDN，
    * 理由見該檔檔頭：這張 QR 是要印出來貼在現場的，不該多一個掛掉就印不出來的相依。 */
 
+  /** ICON-105（Sucre 11-01，對齊前端 PR #230）：Facebook、X 用單色品牌標誌，不用 Lucide。
+   *  - Lucide 沒有 X 的標誌：`Twitter` 是舊的鳥，`X` 是關閉鈕，放在分享面板會被讀成「關掉」
+   *  - Lucide 的 `Facebook` 已停用，升版可能消失
+   *  - 一律 fill="currentColor"：跟著文字顏色、大小跟其他圖示一樣，不用品牌色
+   *  路徑與前端 `libs/ui/src/components/Icon/generated/{Facebook,X}BrandIconSvg.tsx` 相同 */
+  const BRAND_PATHS = {
+    facebook: 'M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z',
+    x: 'M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z',
+  };
+  function ShareTargetIcon({ target, s, c }) {
+    const d = BRAND_PATHS[target.key];
+    if (!d) return <WGIcon n={target.icon} s={s} c={c} />;
+    return <svg width={s} height={s} viewBox="0 0 24 24" aria-hidden="true" style={{ color: c, flex: 'none' }}><path fill="currentColor" d={d} /></svg>;
+  }
+
   /** 各社群的分享網址。都是官方 web intent，不需要 SDK、不帶追蹤參數。 */
   const SHARE_TARGETS = [
     { key: 'line', label: 'LINE', icon: 'MessageCircle',
       href: (u, t) => 'https://line.me/R/msg/text/?' + encodeURIComponent(t + '\n' + u) },
-    { key: 'facebook', label: 'Facebook', icon: 'Facebook',
+    { key: 'facebook', label: 'Facebook', icon: null,   // 見 ICON-105
       href: (u) => 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(u) },
     { key: 'threads', label: 'Threads', icon: 'AtSign',
       href: (u, t) => 'https://www.threads.net/intent/post?text=' + encodeURIComponent(t + '\n' + u) },
-    { key: 'x', label: 'X', icon: 'Twitter',
+    { key: 'x', label: 'X', icon: null,   // 見 ICON-105
       href: (u, t) => 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(t) + '&url=' + encodeURIComponent(u) },
   ];
 
@@ -1381,7 +1396,7 @@
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(64px, 1fr))', gap: 'var(--space-2)' }}>
               {SHARE_TARGETS.map((t) => (
                 <a key={t.key} href={t.href(url, shareText)} target="_blank" rel="noopener noreferrer" style={tile}>
-                  <WGIcon n={t.icon} s={20} c="var(--color-fg-neutral-subtle)" />
+                  <ShareTargetIcon target={t} s={20} c="var(--color-fg-neutral-subtle)" />
                   {t.label}
                 </a>
               ))}
