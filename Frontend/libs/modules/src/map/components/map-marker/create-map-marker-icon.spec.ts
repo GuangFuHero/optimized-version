@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { designTokens } from '@rescue-frontend/ui';
 
 import {
-  STATION_TYPE_LUCIDE_ICONS as STATION_TYPE_ICONS,
-  getStationTypeLucideIcon as getStationTypeIcon,
+  getStationTypeLucideIcon,
+  STATION_TYPE_LUCIDE_ICONS,
 } from '../../../station/station-type-icon';
 import { STATION_TYPE_OPTIONS } from '../../../station/type-options';
 import type { RescueMapMarkerItem } from '../../types';
@@ -54,7 +54,7 @@ describe('a station pin', () => {
   it("shows its type's own icon, the one the list row shows", () => {
     for (const { value } of STATION_TYPE_OPTIONS) {
       expect(pinHtml({ stationMeta: { type: value } })).toContain(
-        firstShape(STATION_TYPE_ICONS[value]),
+        firstShape(STATION_TYPE_LUCIDE_ICONS[value]),
       );
     }
   });
@@ -66,7 +66,7 @@ describe('a station pin', () => {
   });
 
   it('draws a pin for a type it does not know, not the supply box', () => {
-    expect(getStationTypeIcon('evacuation')).toBe(MapPin);
+    expect(getStationTypeLucideIcon('evacuation')).toBe(MapPin);
     expect(pinHtml({ stationMeta: { type: 'evacuation' } })).toContain(
       firstShape(MapPin),
     );
@@ -74,24 +74,24 @@ describe('a station pin', () => {
 
   it('reads the type as the list does, and falls back to its icon for one it does not know', () => {
     expect(pinHtml({ stationMeta: { type: ' Water ' } })).toContain(
-      firstShape(STATION_TYPE_ICONS.water),
+      firstShape(STATION_TYPE_LUCIDE_ICONS.water),
     );
     expect(pinHtml({ stationMeta: { type: 'evacuation' } })).toContain(
-      firstShape(getStationTypeIcon('evacuation')),
+      firstShape(getStationTypeLucideIcon('evacuation')),
     );
-    expect(pinHtml({})).toContain(firstShape(getStationTypeIcon(null)));
+    expect(pinHtml({})).toContain(firstShape(getStationTypeLucideIcon(null)));
   });
 
   it('gives a shelter and a temporary station their type icons too, not one shape between them', () => {
     expect(
       pinHtml({ variant: 'pinned-location', stationMeta: { type: 'shelter' } }),
-    ).toContain(firstShape(STATION_TYPE_ICONS.shelter));
+    ).toContain(firstShape(STATION_TYPE_LUCIDE_ICONS.shelter));
     expect(
       pinHtml({
         variant: 'pinned-location',
         stationMeta: { type: 'water', isTemporary: true },
       }),
-    ).toContain(firstShape(STATION_TYPE_ICONS.water));
+    ).toContain(firstShape(STATION_TYPE_LUCIDE_ICONS.water));
   });
 
   it("carries only the icon's shapes, none of MUI's classes or styles", () => {
