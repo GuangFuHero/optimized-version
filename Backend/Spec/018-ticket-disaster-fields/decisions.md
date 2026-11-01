@@ -1,4 +1,4 @@
-# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387、ADR-422、ADR-437、ADR-444、ADR-449）
+# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387、ADR-422、ADR-437、ADR-444、ADR-449、ADR-450）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/016-resource-history/decisions.md`（ADR-243 為目前全 repo 最大值）。
@@ -966,3 +966,48 @@ Dan 2026-10-29 決定用這個做法（A），另開一支 PR 接在 #121 後面
 ➖ 去重（ADR-397）照跑，點是建物的點：同一棟不同樓層的請求會被當成疑似重複。Carol 定了同一棟不同樓層
 不算重複，另開一支修。
 ◾ `geometry` 從必填改成可不帶，GraphQL schema 是相容的改動：已經會帶 `geometry` 的前台不用改。
+
+### ADR-450 每棟的件數和缺額由後端算（`BuildingMapType.ticketCount`／`shortfall`）
+
+**白話**：前台地圖的大樓標記、列表的空間入口寫的「N 件・缺 M」，數字由後端給；訪客拿不到數字。
+
+**Date**: 2026-11-01（糖的「開啟空間：前台入口」請後端考慮回聚合；使用者把它排進這一版，三個行為同日拍板）
+
+**Context**：
+
+- 糖要地圖標記、列表的空間入口、樓層抽屜三處寫同一個「N 件・缺 M」，用同一個算法。原型是前端把每棟的單
+  撈回來自己算，單一多，地圖上每棟都要多讀一次 `buildingMapTickets`。
+- 樓層抽屜每層的缺額，前端已經從 `buildingMapTickets` 算（`Frontend/libs/modules/src/building/summary.ts`）。
+  後端的數字要跟它一樣，三處才對得上。
+
+**Decision**：
+
+- `BuildingMapType.ticketCount: Int`、`BuildingMapType.shortfall: Int`，`buildingMaps` 和 `buildingMap(uuid)`
+  都拿得到。
+- 件數：這棟所有還在（沒刪除）的單，已完成、已取消的也算，不跟地圖的篩選走。就是 `buildingMapTickets` 給這個
+  呼叫者列的那些單，所以等於樓層抽屜的總張數。
+- 缺額：這棟沒結案（不是 completed、cancelled）的單上，類型是 `hr` 或 `supply`、狀態是 `pending`、有填人數
+  （`quantity > 0`）的需求，每筆算 max(0, `quantity` − 承接人數)，再加總。承接人數是 `assignedCount` 數的
+  `task_assignments` 列。
+  - 不算：搜救和醫療需求（09-20 的規則）、沒填人數的需求、刪掉或取消的需求（重複審核併掉的也是取消加刪除）。
+  - 舊的 `in_progress` 需求（ADR-293 之前留下的）不算開著，跟前端只認 `pending` 一樣。
+- 權限：沒有 `ticket.view_detail` 的呼叫者（訪客）兩個都回 null，不是 0。有的照 view_detail 的範圍逐列數，
+  跟 `buildingMapTickets` 一樣，例如範圍是 own 就只數自己的單。說出一棟有幾張單，等於說出那些單在哪，
+  跟 ADR-386 的 `buildingMapUuid` 同一道邊界。
+- 效能：整個 request 的大樓用一個 loader、一句 SQL 算（`ticket_repository.building_counts`）；訪客一句都不多。
+  數什麼跟誰在問有關，所以 loader 在第一次用到時才建，每個 request 只建一次。
+- 使用者拍板的三件事（2026-11-01，都照前後端的建議）：
+  - 件數不跟地圖篩選走：點開的抽屜列的是整棟的單，跟著篩選的話，標記寫 3 件、點開卻有 7 張。
+  - 已結案的單算進件數：抽屜也列已結案的單，件數就等於抽屜的總張數。
+  - 沒填人數的需求不算缺額：「沒填」跟「缺 1」要分開講，整張都沒填時前台寫「未指定人數」。
+- 不用的做法：
+  - `ticketCount(statuses:)` 跟著地圖篩選走：同第一件。
+  - 沒填人數當 1（原型 `getNeedState` 的顯示估值）：同第三件。
+  - 前端自己數：每棟都要把單撈回來。
+
+**Consequences**：
+➕ 三處寫的是同一個數字，地圖一次拿到每棟的數字，不用逐棟撈單。
+➕ 訪客拿不到件數，不比格子透露得多。
+➖ 抽屜每層的缺額還是前端算，規則要改的話兩邊一起改（`summary.ts` 和 `building_counts`）。
+◾ 任務管理統計列的 `gapPeople`（`ticketStats`）另有算法：每種需求都算、`in_progress` 也算開著。它是管理平台的
+總覽，這裡不動。

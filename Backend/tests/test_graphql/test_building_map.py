@@ -1,11 +1,15 @@
 """End-to-end tests for building maps and the tickets filed inside them."""
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import delete, select
 
 from app.core.permissions import Perm
 from app.models.geo import BuildingMapTicketMap
+from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
+from app.models.ticket_task import TaskAssignment, TicketTask
 from tests.test_graphql.conftest import auth_header
 from tests.test_graphql.conftest import test_db as open_db
 from tests.test_graphql.test_area import _make_team_user
@@ -627,3 +631,142 @@ async def test_a_help_request_needs_geometry_or_building(client, login_user_auth
     body = await _gql(client, CREATE_HELP_REQUEST, {"input": request}, token)
 
     assert any("geometry or buildingMapUuid is required" in e["message"] for e in body["errors"]), body
+
+
+# --- how many tickets a building holds, and how many people it is short (ADR-450) ---
+
+BUILDING_COUNTS = "query ($uuid: UUID!) { buildingMap(uuid: $uuid) { ticketCount shortfall } }"
+BUILDINGS_COUNTS = "query { buildingMaps { items { uuid ticketCount shortfall } } }"
+NOW = datetime.now(UTC)
+
+
+async def _need(ticket_uuid, owner, task_type, quantity, *, status="pending", claimed_by=()) -> None:
+    """A need on the ticket, written directly: filing it would run the duplicate check on the building."""
+    stamps = {"fulfilled": {"completed_at": NOW}, "canceled": {"canceled_at": NOW}}.get(status, {})
+    async with open_db() as db:
+        need = TicketTask(
+            ticket_uuid=ticket_uuid,
+            task_type=task_type,
+            task_name=f"{task_type} {quantity}",
+            quantity=quantity,
+            status=status,
+            created_by=owner,
+            **stamps,
+        )
+        db.add(need)
+        await db.flush()
+        db.add_all(TaskAssignment(task_uuid=str(need.uuid), actor_uuid=actor) for actor in claimed_by)
+
+
+async def _set_ticket(ticket_uuid, **values) -> None:
+    async with open_db() as db:
+        ticket = await db.get(Tickets, ticket_uuid)
+        for name, value in values.items():
+            setattr(ticket, name, value)
+
+
+async def test_a_building_counts_its_tickets_and_the_people_its_open_needs_lack(
+    client, coordinator_auth, login_user_auth
+):
+    """Every live ticket counts, closed ones too; only open people and supply needs on open tickets lack.
+
+    A need adds its quantity less the people on it, never below 0. One with no quantity adds nothing,
+    as the site's floor drawer counts it, and so does a rescue or medical need.
+    """
+    admin_uuid, admin_token = coordinator_auth
+    user_uuid, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    open_ticket = await _file_in_building(client, token, building["uuid"], floor="3F")
+    await _need(open_ticket, user_uuid, "hr", 3, claimed_by=[user_uuid, admin_uuid])  # 1
+    await _need(open_ticket, user_uuid, "supply", 2)  # 2
+    await _need(open_ticket, user_uuid, "rescue", 5)
+    await _need(open_ticket, user_uuid, "medical", 4)
+    settled = await _file_in_building(client, token, building["uuid"], floor="2F", room="咖啡廳")
+    await _need(settled, user_uuid, "hr", 4, status="fulfilled")
+    await _need(settled, user_uuid, "supply", 3, status="canceled")
+    await _need(settled, user_uuid, "hr", None)
+    await _need(settled, user_uuid, "hr", 1, claimed_by=[user_uuid, admin_uuid])
+    closed = await _file_in_building(client, token, building["uuid"], floor="1F", room="閱覽室")
+    await _need(closed, user_uuid, "hr", 5)
+    await _set_ticket(closed, status="completed")
+    gone = await _file_in_building(client, token, building["uuid"], floor="RF")
+    await _need(gone, user_uuid, "hr", 6)
+    await _set_ticket(gone, delete_at=NOW)
+
+    body = await _gql(client, BUILDING_COUNTS, {"uuid": building["uuid"]}, token)
+
+    assert body["data"]["buildingMap"] == {"ticketCount": 3, "shortfall": 3}, body
+
+
+async def test_an_empty_building_counts_nothing(client, coordinator_auth, login_user_auth):
+    """Zero, not null, to a caller who may read the tickets: the building just holds none yet."""
+    _, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+
+    body = await _gql(client, BUILDING_COUNTS, {"uuid": building["uuid"]}, token)
+
+    assert body["data"]["buildingMap"] == {"ticketCount": 0, "shortfall": 0}
+
+
+async def test_a_guest_is_told_no_counts(client, coordinator_auth, login_user_auth):
+    """Null, not 0, as the site's guest view says nothing rather than "none" (ADR-281)."""
+    user_uuid, admin_token = coordinator_auth
+    _, token = login_user_auth
+    building = await _create_building(client, admin_token)
+    ticket_uuid = await _file_in_building(client, token, building["uuid"], floor="3F")
+    await _need(ticket_uuid, user_uuid, "hr", 2)
+
+    body = await _gql(client, BUILDING_COUNTS, {"uuid": building["uuid"]})
+
+    assert body["data"]["buildingMap"] == {"ticketCount": None, "shortfall": None}
+
+
+async def test_view_detail_narrowed_to_own_counts_only_the_callers_tickets(
+    client, redis, coordinator_auth, login_user_auth
+):
+    """The count is of the tickets `buildingMapTickets` lists to this caller, so the drawer agrees."""
+    _, admin_token = coordinator_auth
+    their_uuid, their_token = login_user_auth
+    my_uuid, token = await _actor(
+        redis,
+        [
+            (Perm.TICKET_VIEW, "all"),
+            (Perm.TICKET_VIEW_DETAIL, "own"),
+            (Perm.TICKET_VIEW_PII, "own"),
+            (Perm.TICKET_ADD, "all"),
+        ],
+    )
+    building = await _create_building(client, admin_token)
+    mine = await _file_in_building(client, token, building["uuid"], floor="3F")
+    await _need(mine, my_uuid, "hr", 2)
+    theirs = await _file_in_building(client, their_token, building["uuid"], floor="2F", room="咖啡廳")
+    await _need(theirs, their_uuid, "hr", 5)
+
+    body = await _gql(client, BUILDING_COUNTS, {"uuid": building["uuid"]}, token)
+    listed = await _gql(client, BUILDING_TICKETS, {"uuid": building["uuid"]}, token)
+
+    assert body["data"]["buildingMap"] == {"ticketCount": 1, "shortfall": 2}
+    assert [t["uuid"] for t in listed["data"]["buildingMapTickets"]] == [mine]
+
+
+async def test_a_page_of_buildings_is_counted_in_one_query(client, coordinator_auth, login_user_auth):
+    """One batched statement for every building on the page, and none for a guest, who is told nothing."""
+    user_uuid, admin_token = coordinator_auth
+    _, token = login_user_auth
+    buildings = [await _create_building(client, admin_token, name=f"光復國小 {n} 號館") for n in range(3)]
+    for building in buildings:
+        ticket_uuid = await _file_in_building(client, token, building["uuid"], floor="3F")
+        await _need(ticket_uuid, user_uuid, "supply", 2)
+
+    with _SelectCounter("building_map_ticket_map") as signed_in:
+        body = await _gql(client, BUILDINGS_COUNTS, {}, token)
+    with _SelectCounter("building_map_ticket_map") as guest:
+        await _gql(client, BUILDINGS_COUNTS, {})
+
+    counted = {
+        item["uuid"]: (item["ticketCount"], item["shortfall"])
+        for item in body["data"]["buildingMaps"]["items"]
+    }
+    assert [counted[b["uuid"]] for b in buildings] == [(1, 2)] * 3
+    assert (signed_in.count, guest.count) == (1, 0)

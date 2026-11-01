@@ -8,9 +8,10 @@ from typing import Annotated
 from uuid import UUID
 
 import strawberry
+from strawberry.dataloader import DataLoader
 
 from app.core.permissions import Perm
-from app.core.rbac_scopes import Scope, in_scope
+from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.security import resolve_scope
 from app.graphql.area.types import AssignedTeamType
 from app.graphql.masking import mask_email, mask_name, mask_phone
@@ -25,7 +26,9 @@ from app.graphql.shared import (  # noqa: F401 -- the address types and their ma
     secondary_location_to_dict,
 )
 from app.graphql.suggestions.types import StationSuggestionMergeType, SuggestedFieldType
-from app.graphql.tickets.types import PhotoType
+from app.graphql.tickets.types import PhotoType, ticket_detail_scope
+from app.models.request import Tickets
+from app.repositories.tickets_repository import ticket_repository
 from app.services.building_map import OTHER_AREA, floor_labels
 
 
@@ -639,6 +642,42 @@ class HazardousZoneConnection:
 # --- Building Map ---
 
 
+def _building_counts_loader(info: strawberry.types.Info) -> "asyncio.Future[DataLoader | None]":
+    """The request's loader of building counts, or None when the caller may place no ticket in one.
+
+    Counting a building's tickets says where they are, as listing them does, so the count follows
+    the rows `buildingMapTickets` gives this caller (ADR-450). Unlike the other loaders, what it
+    counts depends on who asks, so it is made here, once per request. Every building awaits the
+    one decision and so asks the loader in the same turn of the event loop, and one statement counts
+    them all. The check-then-store runs with no await between, so two fields never make two.
+    """
+    decided = info.context.get("_building_counts_loader")
+    if decided is None:
+        decided = info.context["_building_counts_loader"] = asyncio.ensure_future(_make_counts_loader(info))
+    return decided
+
+
+async def _make_counts_loader(info: strawberry.types.Info) -> DataLoader | None:
+    user = info.context["user"]
+    detail = await ticket_detail_scope(info)
+    if detail == Scope.NONE:
+        return None
+    view = await resolve_scope(user, Perm.TICKET_VIEW, info.context["db"], cache=info.context["_rbac_cache"])
+    if view == Scope.NONE:
+        return None
+    db = info.context["db"]
+    filters = [
+        *scope_filter(view, actor=user, model=Tickets),
+        *scope_filter(detail, actor=user, model=Tickets),
+    ]
+
+    async def load_fn(uuids: list[str]) -> list[tuple[int, int]]:
+        counts = await ticket_repository.building_counts(db, uuids, extra_filters=filters)
+        return [counts.get(uuid, (0, 0)) for uuid in uuids]
+
+    return DataLoader(load_fn=load_fn)
+
+
 @strawberry.type
 class BuildingFloorType:
     """One floor of a building map, and the areas a ticket on it picks from."""
@@ -681,6 +720,36 @@ class BuildingMapType:
     async def secondary_location(self, info: strawberry.types.Info) -> SecondaryLocationType | None:
         """Resolve the building's address row."""
         return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
+
+    @strawberry.field(
+        description=(
+            "How many tickets are filed in this building and not deleted, completed and cancelled ones "
+            "too: every one buildingMapTickets lists, past any page (ADR-450). Null to a caller without "
+            "ticket.view_detail, to whom those tickets are not placed in the building"
+        )
+    )
+    async def ticket_count(self, info: strawberry.types.Info) -> int | None:
+        """The building's tickets, as this caller may count them."""
+        counts = await self._ticket_counts(info)
+        return None if counts is None else counts[0]
+
+    @strawberry.field(
+        description=(
+            "How many people this building is still short (ADR-450): over its tickets not completed or "
+            "cancelled, each pending 'hr' or 'supply' need with a quantity adds that quantity less "
+            "assignedCount, never below 0. Rescue and medical needs, and needs with no quantity, add "
+            "nothing. Null to a caller without ticket.view_detail"
+        )
+    )
+    async def shortfall(self, info: strawberry.types.Info) -> int | None:
+        """The people the building's open needs still lack, as this caller may count them."""
+        counts = await self._ticket_counts(info)
+        return None if counts is None else counts[1]
+
+    async def _ticket_counts(self, info: strawberry.types.Info) -> tuple[int, int] | None:
+        """(tickets, people short), or None to a caller who may place none of its tickets here."""
+        loader = await _building_counts_loader(info)
+        return None if loader is None else await loader.load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "BuildingMapType":

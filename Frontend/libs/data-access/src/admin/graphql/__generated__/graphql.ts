@@ -287,6 +287,10 @@ export type BuildingMapType = {
   name: Scalars['String']['output'];
   /** The building's street address. Public, like a station's */
   secondaryLocation?: Maybe<SecondaryLocationType>;
+  /** How many people this building is still short (ADR-450): over its tickets not completed or cancelled, each pending 'hr' or 'supply' need with a quantity adds that quantity less assignedCount, never below 0. Rescue and medical needs, and needs with no quantity, add nothing. Null to a caller without ticket.view_detail */
+  shortfall?: Maybe<Scalars['Int']['output']>;
+  /** How many tickets are filed in this building and not deleted, completed and cancelled ones too: every one buildingMapTickets lists, past any page (ADR-450). Null to a caller without ticket.view_detail, to whom those tickets are not placed in the building */
+  ticketCount?: Maybe<Scalars['Int']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };
