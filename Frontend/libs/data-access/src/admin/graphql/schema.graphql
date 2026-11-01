@@ -2049,6 +2049,11 @@ type TicketType {
   verificationStatus: TicketVerificationType
 
   """
+  Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them
+  """
+  suspectedDuplicateOf: [TicketDuplicateRefType!]!
+
+  """
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here
   """
   createdBy: String

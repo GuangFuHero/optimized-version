@@ -215,7 +215,7 @@ class TicketVerificationState(enum.Enum):
 
 @strawberry.type(description="Another ticket a disputed ticket may duplicate")
 class TicketDuplicateRefType:
-    """An entry of `TicketVerificationType.duplicateOf`."""
+    """An entry of `TicketVerificationType.duplicateOf` and of `TicketType.suspectedDuplicateOf`."""
 
     uuid: UUID
     title: str
@@ -1005,6 +1005,21 @@ class TicketType:
             state=TicketVerificationState.disputed,
             duplicate_of=[TicketDuplicateRefType(uuid=UUID(ref.uuid), title=ref.title) for ref in refs],
         )
+
+    @strawberry.field(
+        description=(
+            "Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus "
+            "names, each once, oldest card first; empty when there are none. Not whether a verdict "
+            "was given on them"
+        )
+    )
+    async def suspected_duplicate_of(self, info: strawberry.types.Info) -> list[TicketDuplicateRefType]:
+        """Read the same cards as `verification_status`, and give only the tickets on their far side.
+
+        Every one is neither cancelled nor deleted, so whoever reads this ticket can open it too.
+        """
+        refs = await info.context["loaders"]["disputes_by_ticket"].load(str(self.uuid))
+        return [TicketDuplicateRefType(uuid=UUID(ref.uuid), title=ref.title) for ref in refs or []]
 
     @strawberry.field(
         description=(

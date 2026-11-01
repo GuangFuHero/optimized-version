@@ -212,7 +212,8 @@ Dan 同意）
 - **`duplicateOf`**：卡另一邊的單，同一張只列一次，照最早那張卡的建立時間排。算數的卡另一邊一定是還在的另一張單，
   所以 `disputed` 時至少有一張。
 - **誰看得到**：在這張單上持有 `ai_duplicate.view` 的人（超管、資料檢核員，ADR-337），跟重複審核頁同一個權限；
-  其他人（含前台、訪客）拿到 null，也不查。審核頁已經給整張單，標題不會多給。
+  其他人（含前台、訪客）拿到 null，也不查。審核頁已經給整張單，標題不會多給。前台標「疑似重複」另讀公開的
+  `suspectedDuplicateOf`（ADR-454）。
 - **怎麼查**：`disputes_by_ticket` DataLoader（`app/services/ticket_verification.py`），一頁的單一起查：
   卡一句、對方單的標題一句，不隨筆數增加。
 - **不做**：不能用它篩選或排序；不加存資料的欄位、不用 migration；不改 `ticket_audit`／`auditStatus`／通知；
@@ -233,3 +234,44 @@ Dan 同意）
   只能判「是／不是重複」，合併不了。這是重複審核本來的行為，這裡不改。
 - ◾ `auditStatus` 照舊是資料檢核；看板的「疑似重複」改讀 `verificationStatus`。同一次拿掉看板不再用、
   也還沒進 main 的 `viewerCanAudit` 和 `ticketsExtent(auditStatus:)`；`tickets(auditStatus:)` 不動。
+
+---
+
+## ADR-454：任務單加公開的 `suspectedDuplicateOf`，前台標「疑似重複」
+
+**Date**: 2026-11-01　**Status**: Accepted（使用者 2026-11-01 照建議；糖要前台標「疑似重複」，必做；
+介面跟前台對過）
+
+**背景**：管理平台看板讀 `verificationStatus`（ADR-443），標「查核中 · 疑似重複」，但它要 `ai_duplicate.view`，
+訪客和志工拿到 null。前台的列表卡片和詳情也要標「疑似重複」，寫出跟哪張重複、可以點過去看，但不說重複審核
+進行到哪（不寫「查核中」）。
+
+**決定**：
+
+- `TicketType.suspectedDuplicateOf: [TicketDuplicateRefType!]!`，任何人都讀得到（含訪客），不檢查權限：
+  - 跟 `verificationStatus.duplicateOf` 同一份：同一個 `disputes_by_ticket` DataLoader，算數的卡、排序、
+    每張只列一次都照 ADR-443。
+  - 沒有疑似重複回空陣列，不回 null。
+  - 只給另一張單的 `uuid`、`title`。不給 `state`，待審和判了是重複、還沒合併的卡讀起來一樣。
+- `verificationStatus` 不動，還是要 `ai_duplicate.view`，管理平台看板照舊。
+
+**為什麼另開欄位，不放寬 `verificationStatus`**：`verificationStatus` 說的是重複審核還在等這張單
+（`state: disputed`），看板照它標「查核中」；放寬就是把查核中告訴訪客。另開一個只列單的欄位，前台拿不到審核的
+狀態。
+
+**不會多給資料**：列出的單都沒取消、沒刪除（ADR-443 的條件）。`ticket.view` 對所有人都是 `all`，訪客也有
+（`PUBLIC_PERMS`，ADR-027、ADR-273）；`tickets` 只排掉刪除的單，`title` 不遮。所以看得到這張單的人，本來就看得到
+另一張和它的標題，前台用 `ticket(uuid)` 點過去。
+
+**效能**：前台把它放進共用的 fragment，列表（每頁 100 筆）、地圖（每次視野最多 200 筆）、`ticket(uuid)` 都會選。
+一頁的單一起查：卡一句、對方標題一句，不隨筆數增加；沒選就不查。
+
+**不做**：不能用它篩選或排序；不加欄位、不用 migration；不改配對卡、重複審核頁和合併。
+
+**Consequences**：
+
+- ➕ 前台跟管理平台讀同一份，判完下一次讀就對。
+- ➖ 以前只有審核員的頁多兩句 SQL，現在每個選了它的頁都多，訪客的地圖每次平移也是。卡那句從還能處理的卡找起
+  （`ix_duplicate_pairs_status`），數量小。
+- ➖ 哪天 `ticket.view` 對某些人收窄，另一張單可能在他們的範圍外，這裡要跟著照範圍過濾，不然標題會從這裡露出。
+- ◾ 網站的 schema 快照由前台的 PR 更新，這支只重產管理平台的。
