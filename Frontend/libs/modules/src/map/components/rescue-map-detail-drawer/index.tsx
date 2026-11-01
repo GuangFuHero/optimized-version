@@ -22,26 +22,17 @@ import type {
 } from '../../../station/station-detail';
 import { openStationSuggestion } from '../../../station/suggestion/open-station-suggestion';
 import { describeSupplyStatus } from '../../../station/supply-status';
-import { TicketDetailDrawer } from '../../../ticket';
-import { formatTicketTypeLabel } from '../../../ticket/status';
-import type { TicketDetailDrawerProps } from '../../../ticket/ticket-detail';
-import { describeLocationCellSpan } from '../../location-cells';
+import {
+  SiteTicketDetailDrawer,
+  type SiteTicketDetailDrawerProps,
+} from '../../../ticket/site-detail/site-ticket-detail-drawer';
 import type { RescueMapDetailItem, RescueMapMarkerItem } from '../../types';
 import { LocationCellDetail } from '../location-cell-detail';
 
-export type RescueMapTicketDetailOverrides = Partial<
-  Pick<
-    TicketDetailDrawerProps,
-    | 'summaryLine'
-    | 'headerActions'
-    | 'headerBadges'
-    | 'detailsPane'
-    | 'content'
-    | 'footerActions'
-    | 'footerLead'
-    | 'tabs'
-    | 'tabsVariant'
-  >
+/** What the page puts in a ticket's drawer: the drawer itself draws the title and the close button. */
+export type RescueMapTicketDetailOverrides = Pick<
+  SiteTicketDetailDrawerProps,
+  'headerActions' | 'badges' | 'footerLead' | 'onShare'
 > & {
   detailsContent?: ReactNode;
 };
@@ -130,38 +121,6 @@ function createStationResources(marker: RescueMapMarkerItem) {
   ];
 }
 
-function createTicketSummary(marker: RescueMapMarkerItem) {
-  const [latitude, longitude] = marker.position;
-  const contactSummary = [
-    marker.ticketMeta?.contactName?.trim(),
-    marker.ticketMeta?.contactPhone?.trim(),
-  ].filter(Boolean);
-
-  return {
-    title: marker.title,
-    detailsPane: {
-      statusBadge: {
-        eyebrow: '任務狀態',
-        label: marker.label,
-      },
-      locationLabel: '位置資訊',
-      // A cell centre is not a place: printing it to six decimals would pass it off as one.
-      locationLines: marker.locationCell
-        ? [`概略區塊（${describeLocationCellSpan(marker.locationCell)}範圍）`]
-        : [
-            marker.subtitle,
-            `緯度 ${latitude.toFixed(6)} / 經度 ${longitude.toFixed(6)}`,
-          ],
-      taskLabel: '任務類型',
-      taskValue: formatTicketTypeLabel(marker.ticketMeta?.taskType),
-      requesterLabel: '現場聯絡人',
-      requesterValue: contactSummary.join(' / ') || '未提供',
-      notesLabel: '任務說明',
-      notesValue: marker.subtitle,
-    },
-  };
-}
-
 // For a guest too, who is told in the drawer to sign in (PUB-FEAT-001 Q7: the way in always shows).
 function createStationEditAction(
   marker: RescueMapMarkerItem,
@@ -239,11 +198,9 @@ export function RescueMapDetailDrawer({
 }: RescueMapDetailDrawerProps) {
   const [activeStationTab, setActiveStationTab] =
     useState<StationDetailTabId>('info');
-  const [activeTicketTab, setActiveTicketTab] = useState('details');
 
   useEffect(() => {
     setActiveStationTab('info');
-    setActiveTicketTab(ticketDetailOverrides?.tabs?.[0]?.id ?? 'details');
   }, [marker?.id]);
 
   const closeAction = {
@@ -267,25 +224,6 @@ export function RescueMapDetailDrawer({
     );
   }
 
-  const resolvedTicketOverrides = ticketDetailOverrides
-    ? {
-        ...ticketDetailOverrides,
-        tabsVariant: ticketDetailOverrides.tabsVariant ?? 'station',
-        tabs: ticketDetailOverrides.tabs?.map((item) => ({
-          ...item,
-          selected: item.id === activeTicketTab,
-          onClick: () => setActiveTicketTab(item.id),
-        })),
-      }
-    : undefined;
-
-  const ticketContent =
-    activeTicketTab === 'details'
-      ? resolvedTicketOverrides?.detailsContent
-      : activeTicketTab === 'operation-log'
-        ? resolvedTicketOverrides?.content
-        : undefined;
-
   return (
     <Box
       sx={{
@@ -299,16 +237,16 @@ export function RescueMapDetailDrawer({
       }}
     >
       {marker.detailType === 'ticket' ? (
-        <TicketDetailDrawer
-          {...createTicketSummary(marker)}
-          {...resolvedTicketOverrides}
-          content={ticketContent}
-          closeAction={closeAction}
-          width="100%"
-          height="100%"
-          minHeight="100%"
-          tabsVariant={resolvedTicketOverrides?.tabsVariant ?? 'station'}
-        />
+        <SiteTicketDetailDrawer
+          title={marker.title}
+          onClose={onClose}
+          headerActions={ticketDetailOverrides?.headerActions}
+          badges={ticketDetailOverrides?.badges}
+          footerLead={ticketDetailOverrides?.footerLead}
+          onShare={ticketDetailOverrides?.onShare}
+        >
+          {ticketDetailOverrides?.detailsContent}
+        </SiteTicketDetailDrawer>
       ) : null}
 
       {marker.detailType === 'station' && stationLayout === 'site' ? (
