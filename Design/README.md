@@ -30,7 +30,7 @@ git worktree add --detach ../design-latest origin/sucrelindesign     # 要開原
 
 ## 設計師：第一次把 main 合進設計分支
 
-`main` 刪掉了舊的 `Design/前台/`、改寫了這份 `README.md`。直接 merge 會把設計分支上沒改過的檔（`_ds/`、字型、logo）**直接刪掉，不會出現衝突**。第一次一定要這樣合：
+`main` 刪掉了舊的 `Design/前台/`、改寫了這份 `README.md`。直接 merge 會把設計分支上沒改過的檔（`_ds/`、字型、logo）**直接刪掉，不會出現衝突**。第一次一定要這樣合（在設計分支上 `git cat-file -e HEAD:Design/CLAUDE.md` 失敗就是第一次）：
 
 ```sh
 git switch sucrelindesign

@@ -13,7 +13,7 @@ git switch sucrelindesign
 git fetch origin && git merge origin/main
 ```
 
-- **第一次合 `main` 一定要這樣做**（`main` 刪掉了舊的 `Design/前台/`、改寫了 `Design/README.md`）：
+- **第一次合 `main` 一定要這樣做**（`main` 刪掉了舊的 `Design/前台/`、改寫了 `Design/README.md`；`git cat-file -e HEAD:Design/CLAUDE.md` 失敗就是第一次）：
 
   ```sh
   git merge --no-commit origin/main   # 已經在 merge 中（停在衝突、有 MERGE_HEAD）就跳過這行，直接做下一行
