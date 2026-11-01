@@ -269,8 +269,10 @@
     // 🔒 STAT-108（Sucre 11-01 接受 PR #232）：沒有任何單、還在載入時這排照樣出現，不等有資料才長出來（數字沒載到時寫「—」，STAT-105）。
     const TK_STAT_KEYS = [...window.TK_STATUS_EDITABLE, "canceled"];
     const canceledN = stats.by.canceled || 0;
+    // STAT-109 數字讀不到：一行小提示＋重試，資源站點同一個做法（js/shared/wg-stat-tiles.jsx）
+    const statLoad = window.useWGStatLoad ? window.useWGStatLoad() : {};
     const statTiles = window.WGStatTiles && (
-      <window.WGStatTiles value={fStatus} onChange={setFStatus}
+      <window.WGStatTiles value={fStatus} onChange={setFStatus} failed={statLoad.failed} retrying={statLoad.retrying} onRetry={statLoad.onRetry}
         items={[{ key: "all", label: "全部", count: canceledN ? { main: stats.total, sub: `含已取消 ${canceledN}` } : stats.total,
             title: canceledN ? `全部 ${stats.total} 張，其中 ${canceledN} 張已取消（不另列一格）` : undefined },
           ...window.TK_STATUS_EDITABLE.map((k) => ({ key: k, label: window.TK_STATUS[k].label, count: stats.by[k] || 0 }))]}

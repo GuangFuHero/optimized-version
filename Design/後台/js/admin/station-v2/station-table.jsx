@@ -292,8 +292,10 @@
     const live = stations.filter((s) => !s.deleted);
     const noStatus = live.filter((s) => !SD.STATUS[s.status]).length;
     // 🔒 STAT-108：沒有站點時也顯示（Sucre 11-01 接受 PR #232）
+    // STAT-109 數字讀不到：一行小提示＋重試，跟任務管理同一個做法（js/shared/wg-stat-tiles.jsx）
+    const statLoad = window.useWGStatLoad ? window.useWGStatLoad() : {};
     const statTiles = window.WGStatTiles && React.createElement(window.WGStatTiles, {
-      value: fStatus, onChange: setFStatus,
+      value: fStatus, onChange: setFStatus, failed: statLoad.failed, retrying: statLoad.retrying, onRetry: statLoad.onRetry,
       items: [{ key: "all", label: "全部", count: live.length, title: noStatus ? `含 ${noStatus} 個站點群（站點群沒有營運狀態）` : undefined },
         ...SD.STATUS_ORDER.map((k) => ({ key: k, label: SD.STATUS[k].label, count: live.filter((s) => s.status === k).length }))],
     });
