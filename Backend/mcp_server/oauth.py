@@ -147,12 +147,17 @@ class BackendOAuthProvider(OAuthProvider):
     ) -> OAuthToken:
         """Rotate through the backend's own refresh, so its reuse detection and identity checks apply."""
         async with SessionLocal() as db:
-            try:
-                access_token, new_refresh, _ = await auth_session.refresh_session(
-                    db, self.redis, refresh_token.token, mcp_client=client.client_id
-                )
-            except ApiError as err:
-                raise TokenError("invalid_grant", err.detail) from err
+            for attempt in range(2):
+                try:
+                    access_token, new_refresh, _ = await auth_session.refresh_session(
+                        db, self.redis, refresh_token.token, mcp_client=client.client_id
+                    )
+                    break
+                except ApiError as err:
+                    # `identity_reset` has already moved the session to the default identity without
+                    # rotating, so the same token is sent once more.
+                    if attempt or err.code != ErrorCode.IDENTITY_RESET:
+                        raise TokenError("invalid_grant", err.detail) from err
         await self._keep_client(client.client_id)
         return _token(access_token, new_refresh)
 
