@@ -67,7 +67,7 @@ query GetTickets(
   ) {
     items {
       ...TicketFields
-      # The tickets this one may repeat, to anyone (ADR-447): asked for only where it is shown — the
+      # The tickets this one may repeat, to anyone (ADR-454): asked for only where it is shown — the
       # map, the list and a ticket's detail — so that a failed lookup leaves the rest standing.
       suspectedDuplicateOf {
         uuid

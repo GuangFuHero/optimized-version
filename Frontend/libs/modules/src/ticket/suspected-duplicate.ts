@@ -1,6 +1,6 @@
 /**
  * 疑似重複 on the site: another ticket this one may repeat, as the backend says (`suspectedDuplicateOf`,
- * ADR-447) — those 重複審核 has yet to decide, or judged the same and not merged yet. A reminder only: it
+ * ADR-454) — those 重複審核 has yet to decide, or judged the same and not merged yet. A reminder only: it
  * changes nothing on the ticket and keeps no one from claiming, and the merge itself is the back
  * office's.
  */
