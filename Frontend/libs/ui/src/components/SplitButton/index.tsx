@@ -4,7 +4,8 @@
  * SplitButton —— 「新增站點 ▾」「新增任務 ▾」。設計稿：Design/後台/元件 Components.html 第 3 節。
  *
  * BTN-112 左右兩塊中間留 2px；外側膠囊、相接那一側小圓角 radius.sm（6px）。
- *         選單打開時右邊那塊變成整顆圓（Material 3 拆分按鈕的做法）。
+ *         選單打開時右邊那塊變成整顆圓（Material 3 拆分按鈕的做法）、深一階的橘，分隔線不見是預期的。
+ *         選單白色實心，不用 theme 的毛玻璃 Paper；選項 44px、14px 字、padding 0 12px、圖示跟字距 8px。
  *   ⚠️ 外側半徑用「高度的一半」，不要用 radius.full（9999）：同一顆上 9999 和 6 加起來超過寬度時，
  *      瀏覽器會把四個角按比例一起縮，6px 會被縮到幾乎 0，接縫看起來是方的。
  *   ⚠️ 用 class 選，不要用 :first-child／:last-child —— 選單打開後後面會多出節點。
@@ -126,7 +127,15 @@ export function SplitButton({
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         slotProps={{
           paper: {
-            sx: { mt: '6px', minWidth: 220, borderRadius: `${radius.md}px` },
+            // 白色實心（BTN-112），蓋掉 theme Paper 的毛玻璃；框線和陰影 theme 的 MuiMenu 已經給了。
+            sx: {
+              mt: '6px',
+              minWidth: 220,
+              borderRadius: `${radius.md}px`,
+              background: color.bg.neutral.default,
+              backdropFilter: 'none',
+              WebkitBackdropFilter: 'none',
+            },
           },
         }}
       >

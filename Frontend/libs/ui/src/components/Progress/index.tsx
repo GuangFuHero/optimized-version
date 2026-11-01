@@ -9,6 +9,9 @@
  *   ⚠️「人數滿了」≠「做完了」：後台的「在途 3/3」是都有人接、還沒做完 → 傳 complete={false}，不變綠。
  * PRG-103 數字一定要有（3/8 · 還缺 5 人），寫在條的上方右側。進度條只是輔助。
  * PRG-104 沒有總數（數量留空）→ 不畫條，只寫「已有 N 人」。看不出比例的條比沒有條更誤導。
+ * PRG-105 文字三種：還在招人「3/8 · 還缺 5 人」｜人數夠了（含超過）「已滿 8/8」「已滿 10/8」｜
+ *         已結束但沒滿（ended）「已結束 · 3/8」。「已滿」只看人數。
+ *   ❌ 不要用 complete 決定文字 —— complete 只管顏色（綠不綠）。
  */
 
 import { Box } from '@mui/material';
@@ -25,19 +28,23 @@ export interface ProgressProps {
   tone?: 'brand' | 'neutral';
   size?: 'sm' | 'md';
   label?: ReactNode;
-  /** 右側文字；不給就自動寫「3/8」「已滿 4/4」「已有 2 人」 */
+  /** 右側文字；不給就自動寫「3/8 · 還缺 5 人」「已滿 4/4」「已結束 · 3/8」「已有 2 人」（PRG-105） */
   valueText?: ReactNode;
-  /** 不給＝value >= max 視為完成 */
+  /** 變不變綠；不給＝人數到齊（value >= max）就變綠。只管顏色，不管文字（PRG-105）。 */
   complete?: boolean;
+  /** 已經結束、不再招人：人數沒滿時寫「已結束 · 3/8」（PRG-105）。 */
+  ended?: boolean;
 }
 
 /**
- * 完成了沒、條畫多長、右側預設寫什麼（PRG-102、PRG-104）。`complete` 有給就照它：人數滿了不等於做完了。
+ * 完成了沒、條畫多長、右側預設寫什麼（PRG-102、PRG-104、PRG-105）。`complete` 有給就照它：人數滿了不等於
+ * 做完了；文字只看人數和 `ended`。
  */
 export function readProgress(
   value: number,
   max?: number,
   complete?: boolean,
+  ended?: boolean,
 ): { hasMax: boolean; done: boolean; percent: number; text: string } {
   if (typeof max !== 'number' || max <= 0) {
     return {
@@ -48,13 +55,17 @@ export function readProgress(
     };
   }
 
-  const done = complete ?? value >= max;
+  const full = value >= max;
 
   return {
     hasMax: true,
-    done,
+    done: complete ?? full,
     percent: Math.min(100, Math.round((value / max) * 100)),
-    text: done ? `已滿 ${value}/${max}` : `${value}/${max}`,
+    text: full
+      ? `已滿 ${value}/${max}`
+      : ended
+        ? `已結束 · ${value}/${max}`
+        : `${value}/${max} · 還缺 ${max - value} 人`,
   };
 }
 
@@ -66,8 +77,9 @@ export function Progress({
   label,
   valueText,
   complete,
+  ended,
 }: ProgressProps) {
-  const reading = readProgress(value, max, complete);
+  const reading = readProgress(value, max, complete, ended);
   const { hasMax, done } = reading;
   const text = valueText ?? reading.text;
   // 進度條的名字：有 label 用 label，沒有就用右側的數字（同原型 WGProgress 的 aria-label）。

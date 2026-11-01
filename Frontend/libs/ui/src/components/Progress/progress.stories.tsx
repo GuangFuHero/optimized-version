@@ -19,6 +19,10 @@ export const Cases: Story = {
     <Stack sx={{ gap: 2, maxWidth: 320 }}>
       <Progress value={3} max={8} label="清淤人力" />
       <Progress value={4} max={4} label="搬運" />
+      {/* More than asked for is still full (PRG-105). */}
+      <Progress value={10} max={8} label="物資整理" />
+      {/* Ended short (PRG-105). */}
+      <Progress value={3} max={8} label="送餐" ended />
       {/* Every place taken, the work not done: not green (PRG-102). */}
       <Progress
         value={3}

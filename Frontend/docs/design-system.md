@@ -66,7 +66,7 @@ main: Frontend/
 | `SplitButton`                              | 「新增 ▾」：主體新增一筆，箭頭開選單（匯入）；沒有選單項目就是一般按鈕                                | 第 3 節，BTN-112                            |
 | `SearchField`                              | 工具列的搜尋框（膠囊 44px）；規則（例：字數）寫進 placeholder，不另外出提示                           | 第 4 節，INP-103、104                       |
 | `Tag`                                      | 說明用的標籤（不能點，24px）：優先級、任務狀態、站點狀態、官方                                        | 第 6 節，TAG-101〜106                       |
-| `Progress`                                 | 承接進度（已有幾人／需要幾人），數字在條的上方右側                                                    | 第 7 節，PRG-101〜104                       |
+| `Progress`                                 | 承接進度（已有幾人／需要幾人），數字在條的上方右側                                                    | 第 7 節，PRG-101〜105                       |
 | `SettingRow`、`RadioCards`、`NativeSelect` | 設定頁的列與控制項                                                                                    | 第 5 節，SET-101〜104                       |
 | `Callout`                                  | 頁內提示框（info／warning…）                                                                          | —                                           |
 | `AnnouncementBanner`                       | 緊急公告橫幅                                                                                          | `前台/js/admin/announce/an-banner.jsx`      |
@@ -121,7 +121,7 @@ handoff 版已搬進 `libs/ui`（`Button`、`SplitButton`）；標「未實作�
 - **浮層**：有遮罩的一律 45% 遮罩；沒有遮罩的（Menu、Popover）自己畫細框。已在 theme 設好，新的浮層用 MUI 元件就會繼承。
 - **z 軸 base 沒有陰影**；卡片的 `shadow.md` 跟著卡片走。
 - **前台字級**：民眾在戶外用手機看、很多是長輩，所以**手機的字比桌機大**（`textSize`），與設計系統自己的 `typographyMobile`（手機縮小）方向相反，兩者不要混用。
-- **handoff 元件的規則**：Tag（TAG-101〜106，說明用、不能點，24px）、Progress（PRG-101〜104，膠囊、一定有數字）、SearchField（INP-103，工具列的搜尋框是膠囊 44px）、設定元件（SET-101〜104，立即生效用 Switch、要儲存才生效用 Checkbox）已在 `libs/ui`，全文在各元件檔頭。站點圖示（ICON-101〜103；原型畫的是 Lucide，產品裡跟著顯示的那一側：前台 MUI、後台 Lucide，見「圖示」）還沒搬，搬進來之前也照做，全文在 handoff 檔案開頭。
+- **handoff 元件的規則**：Tag（TAG-101〜106，說明用、不能點，24px）、Progress（PRG-101〜105，膠囊、一定有數字，「已滿」只看人數）、SearchField（INP-103，工具列的搜尋框是膠囊 44px）、設定元件（SET-101〜104，立即生效用 Switch、要儲存才生效用 Checkbox）已在 `libs/ui`，全文在各元件檔頭。站點圖示（ICON-101〜103；原型畫的是 Lucide，產品裡跟著顯示的那一側：前台 MUI、後台 Lucide，見「圖示」）還沒搬，搬進來之前也照做，全文在 handoff 檔案開頭。
 
 ## 圖示
 

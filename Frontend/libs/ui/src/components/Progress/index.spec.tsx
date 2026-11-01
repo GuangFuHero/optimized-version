@@ -4,12 +4,12 @@ import { openingTag, render } from '../../testing/markup';
 import { Progress, readProgress } from './index';
 
 describe('readProgress', () => {
-  it('reads the share taken, as a number and a length', () => {
+  it('reads the share taken, and says how many are still needed (PRG-105)', () => {
     expect(readProgress(3, 8)).toEqual({
       hasMax: true,
       done: false,
       percent: 38,
-      text: '3/8',
+      text: '3/8 · 還缺 5 人',
     });
   });
 
@@ -25,8 +25,23 @@ describe('readProgress', () => {
     expect(readProgress(3, 3, false)).toMatchObject({
       done: false,
       percent: 100,
-      text: '3/3',
+      text: '已滿 3/3',
     });
+  });
+
+  it('says full by the count alone: done changes the colour, not the words (PRG-105)', () => {
+    expect(readProgress(3, 8, true)).toMatchObject({
+      done: true,
+      text: '3/8 · 還缺 5 人',
+    });
+  });
+
+  it('says it has ended when it closed short (PRG-105)', () => {
+    expect(readProgress(3, 8, undefined, true)).toMatchObject({
+      done: false,
+      text: '已結束 · 3/8',
+    });
+    expect(readProgress(8, 8, undefined, true).text).toBe('已滿 8/8');
   });
 
   it('draws no bar without a total, and says how many there are (PRG-104)', () => {
@@ -39,8 +54,12 @@ describe('readProgress', () => {
     expect(readProgress(2, 0).hasMax).toBe(false);
   });
 
-  it('keeps the bar to its full length when more have come than asked for', () => {
-    expect(readProgress(5, 4).percent).toBe(100);
+  it('keeps the bar to its full length when more have come than asked for, and says full', () => {
+    expect(readProgress(10, 8)).toMatchObject({
+      done: true,
+      percent: 100,
+      text: '已滿 10/8',
+    });
   });
 });
 
@@ -61,7 +80,7 @@ describe('Progress', () => {
     const { markup } = render(<Progress value={3} max={8} />);
     const id = bar(markup).match(/aria-labelledby="([^"]+)"/)?.[1];
 
-    expect(markup).toMatch(new RegExp(`id="${id}"[^>]*>3/8<`));
+    expect(markup).toMatch(new RegExp(`id="${id}"[^>]*>3/8 · 還缺 5 人<`));
   });
 
   it('says its value within its range, though more have come than asked for', () => {
@@ -73,7 +92,9 @@ describe('Progress', () => {
   });
 
   it('always shows its numbers (PRG-103)', () => {
-    expect(render(<Progress value={3} max={8} />).markup).toContain('>3/8<');
+    expect(render(<Progress value={3} max={8} />).markup).toContain(
+      '>3/8 · 還缺 5 人<',
+    );
   });
 
   it('draws no bar without a total (PRG-104)', () => {
