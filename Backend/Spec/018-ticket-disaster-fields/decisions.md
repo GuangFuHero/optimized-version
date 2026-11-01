@@ -1,4 +1,4 @@
-# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387、ADR-422、ADR-437、ADR-444、ADR-449、ADR-450）
+# 通報單災害動態欄位 — ADR 全集（ADR-244~258、263~272、277~283、310、386、387、422、437、444、449、450）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/016-resource-history/decisions.md`（ADR-243 為目前全 repo 最大值）。
@@ -996,6 +996,9 @@ Dan 2026-10-29 決定用這個做法（A），另開一支 PR 接在 #121 後面
   跟 ADR-386 的 `buildingMapUuid` 同一道邊界。
 - 效能：整個 request 的大樓用一個 loader、一句 SQL 算（`ticket_repository.building_counts`）；訪客一句都不多。
   數什麼跟誰在問有關，所以 loader 在第一次用到時才建，每個 request 只建一次。
+- 順帶：`buildingMaps` 的 `limit` 比照 `tickets`、`buildingMapTickets`，最多 `TICKET_LIST_MAX_LIMIT`（200）；
+  `limit` 或 `skip` 是負數就擋，錯誤訊息跟它們一字不差。網站和管理平台都一次讀 200 棟
+  （`use-building-maps.ts` 的 `BUILDING_MAP_LIMIT`、`AdminBuildingMaps`），每頁的件數那句 SQL 最多帶 200 棟。
 - 使用者拍板的三件事（2026-11-01，都照前後端的建議）：
   - 件數不跟地圖篩選走：點開的抽屜列的是整棟的單，跟著篩選的話，標記寫 3 件、點開卻有 7 張。
   - 已結案的單算進件數：抽屜也列已結案的單，件數就等於抽屜的總張數。

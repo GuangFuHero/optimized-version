@@ -770,3 +770,28 @@ async def test_a_page_of_buildings_is_counted_in_one_query(client, coordinator_a
     }
     assert [counted[b["uuid"]] for b in buildings] == [(1, 2)] * 3
     assert (signed_in.count, guest.count) == (1, 0)
+
+
+# --- how many building maps one page may hold ---
+
+BUILDINGS_PAGE = """
+query ($skip: Int! = 0, $limit: Int! = 50) {
+  buildingMaps(skip: $skip, limit: $limit) { items { uuid } pageInfo { totalCount } }
+}
+"""
+
+
+async def test_building_maps_take_at_most_a_tickets_page(client):
+    """The same ceiling as `tickets` and `buildingMapTickets`; the site's list asks for that many at once."""
+    body = await _gql(client, BUILDINGS_PAGE, {"limit": 201})
+    assert [e["message"] for e in body["errors"]] == ["limit must be at most 200"]
+
+    body = await _gql(client, BUILDINGS_PAGE, {"limit": 200})
+    assert "errors" not in body, body
+
+
+@pytest.mark.parametrize("page", [{"limit": -1}, {"skip": -1}])
+async def test_a_negative_page_of_building_maps_is_refused_by_name(client, page):
+    """Named as such, as for `buildingMapTickets`, not left to Postgres as "Unexpected error."."""
+    body = await _gql(client, BUILDINGS_PAGE, page)
+    assert [e["message"] for e in body["errors"]] == ["limit and skip must not be negative"]
