@@ -49,6 +49,30 @@ export function toEventMapView(
     : null;
 }
 
+/**
+ * Where the event says maps open, once it is known: not until a read made since the map mounted has
+ * answered, or the wait for one has run out. An answer held from earlier in this tab is not taken
+ * alone: it may be from before the event's view was changed, and the map would open where the event
+ * no longer says. A read that fails keeps the answer held before it; with none, `eventView` is
+ * undefined, as for an event that could not be read.
+ */
+export function settleEventMapView(read: {
+  data: { currentDisaster?: CurrentDisasterMapView | null } | undefined;
+  readSinceMount: boolean;
+  waitedOut: boolean;
+}): { ready: boolean; eventView: EventMapView } {
+  if (!read.readSinceMount && !read.waitedOut) {
+    return { ready: false, eventView: undefined };
+  }
+
+  return {
+    ready: true,
+    eventView: read.data
+      ? toEventMapView(read.data.currentDisaster)
+      : undefined,
+  };
+}
+
 /** Two unset views are the same: an event that still sets none has not changed. */
 export function sameMapView(
   a: RescueMapView | null,
@@ -89,6 +113,27 @@ export function resolveMapOpening(
 
 function roundCoordinate(value: number) {
   return Math.round(value * 1e3) / 1e3;
+}
+
+/**
+ * A position in the address that is the view this browser last left the map at, compared as it is
+ * remembered (to about 100 m): the address the site keeps up to date as the map moves, come back to
+ * by a reload, a restored tab or the history. A link someone shared names another view, and opens
+ * where it says.
+ */
+export function isRememberedView(
+  remembered: RememberedMapView | null,
+  position: { center: [number, number]; zoom?: number } | undefined,
+): boolean {
+  if (!remembered || position?.zoom === undefined) {
+    return false;
+  }
+
+  return (
+    position.zoom === remembered.zoom &&
+    roundCoordinate(position.center[0]) === remembered.center[0] &&
+    roundCoordinate(position.center[1]) === remembered.center[1]
+  );
 }
 
 /**

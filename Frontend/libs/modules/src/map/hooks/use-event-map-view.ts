@@ -1,18 +1,20 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
   CURRENT_DISASTER_WAIT_MS,
-  useCurrentDisaster,
+  currentDisasterQuery,
 } from '@rescue-frontend/data-access/admin';
 
 import { MAP_VIEW_TAIWAN } from '../constants';
 import {
   forgetMapView,
   readRememberedMapView,
+  rememberMapView,
   resolveMapOpening,
-  toEventMapView,
+  settleEventMapView,
   type EventMapView,
   type MapOpening,
   type RescueMapMemoryKey,
@@ -30,31 +32,23 @@ export interface EventMapViewState {
   view: RescueMapView;
 }
 
-const READING: EventMapViewState = {
-  ready: false,
-  eventView: undefined,
-  view: MAP_VIEW_TAIWAN,
-};
-
-const UNREAD: EventMapViewState = {
-  ready: true,
-  eventView: undefined,
-  view: MAP_VIEW_TAIWAN,
-};
-
 /**
  * Where the event says maps open (`currentDisaster.mapView`, ADR-395). An event that sets no view,
  * no event configured yet and a failed read all come to all of Taiwan; only the last leaves
- * `eventView` undefined, and so does a read still out after CURRENT_DISASTER_WAIT_MS. An answer that
- * comes later is taken, but a map already open does not move to it.
+ * `eventView` undefined, and so does a read still out after CURRENT_DISASTER_WAIT_MS. It is read
+ * again on every mount and waited on (`settleEventMapView`): the answer this tab holds may be from
+ * before the view was changed in the back office. An answer that comes later is taken, but a map
+ * already open does not move to it.
  */
 export function useEventMapView(): EventMapViewState {
-  const { data, status } = useCurrentDisaster();
-  const settled = Boolean(data) || status === 'error';
+  const { data, isFetchedAfterMount } = useQuery({
+    ...currentDisasterQuery(),
+    refetchOnMount: 'always',
+  });
   const [waitedOut, setWaitedOut] = useState(false);
 
   useEffect(() => {
-    if (settled) {
+    if (isFetchedAfterMount) {
       return;
     }
 
@@ -64,18 +58,17 @@ export function useEventMapView(): EventMapViewState {
     );
 
     return () => window.clearTimeout(timer);
-  }, [settled]);
+  }, [isFetchedAfterMount]);
 
   return useMemo(() => {
-    // A read that fails after one that worked keeps the answer it had.
-    if (data) {
-      const eventView = toEventMapView(data.currentDisaster);
+    const { ready, eventView } = settleEventMapView({
+      data,
+      readSinceMount: isFetchedAfterMount,
+      waitedOut,
+    });
 
-      return { ready: true, eventView, view: eventView ?? MAP_VIEW_TAIWAN };
-    }
-
-    return status === 'error' || waitedOut ? UNREAD : READING;
-  }, [data, status, waitedOut]);
+    return { ready, eventView, view: eventView ?? MAP_VIEW_TAIWAN };
+  }, [data, isFetchedAfterMount, waitedOut]);
 }
 
 interface DecidedOpening {
@@ -87,6 +80,8 @@ interface DecidedOpening {
  * Where a map opens, worked out once (`resolveMapOpening`); null until then. A position in the
  * address is not waited on: the map opens there at once, and this only settles what it falls back
  * to. Otherwise it waits for the event, which says whether the view the map was left at still holds.
+ * An address naming the view this browser left is passed as no position (`addressHasPosition`
+ * false): it is that view, and is waited on like it.
  *
  * `openedUnder` is the event view the opening was worked out under, kept as it was: a view the map
  * is left at is remembered under it. The live one would let an event view changed while the map is
@@ -122,6 +117,13 @@ export function useMapOpening({
 
     if (memoryKey && opening.dropRemembered) {
       forgetMapView(memoryKey);
+    }
+
+    // Opened at the event's view, it is remembered as the view left, as if the map had been moved
+    // there: the address then names it, and a reload after the event's view changes finds it is the
+    // one this browser left (`isRememberedView`) and goes to the new one. Not one from the address.
+    if (memoryKey && !addressHasPosition && !opening.restored) {
+      rememberMapView(memoryKey, opening.view, event.eventView);
     }
 
     setDecided({ opening, openedUnder: event.eventView });

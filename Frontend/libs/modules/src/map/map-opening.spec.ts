@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { MAP_VIEW_TAIWAN } from './constants';
 import {
+  isRememberedView,
   parseRememberedMapView,
   recordMapView,
   resolveMapOpening,
   sameMapView,
+  settleEventMapView,
   toEventMapView,
   type RememberedMapView,
 } from './map-opening';
@@ -152,6 +154,88 @@ describe('recordMapView', () => {
   it('records nothing when the event could not be read and there is no event view to keep', () => {
     expect(recordMapView(LEFT_AT, undefined, null)).toBeNull();
     expect(recordMapView(LEFT_AT, undefined, null, undefined)).toBeNull();
+  });
+});
+
+describe('isRememberedView', () => {
+  // The address names the view to seven places, as the map left it; the record keeps three.
+  const ADDRESS = {
+    center: [23.7001234, 121.4304567] as [number, number],
+    zoom: 16,
+  };
+
+  it('knows the view this browser left in the address, to about 100 m', () => {
+    const remembered = recordMapView(ADDRESS, EVENT, null);
+
+    expect(isRememberedView(stored(remembered), ADDRESS)).toBe(true);
+  });
+
+  it('does not take a view someone shared, elsewhere or at another zoom, for its own', () => {
+    const remembered = stored(recordMapView(LEFT_AT, EVENT, null));
+
+    expect(isRememberedView(remembered, MOVED_EVENT)).toBe(false);
+    expect(isRememberedView(remembered, { ...LEFT_AT, zoom: 15 })).toBe(false);
+  });
+
+  it('knows nothing with no view remembered, an address without a zoom, or no address', () => {
+    const remembered = stored(recordMapView(LEFT_AT, EVENT, null));
+
+    expect(isRememberedView(null, LEFT_AT)).toBe(false);
+    expect(isRememberedView(remembered, { center: LEFT_AT.center })).toBe(
+      false,
+    );
+    expect(isRememberedView(remembered, undefined)).toBe(false);
+  });
+});
+
+describe('settleEventMapView', () => {
+  const HELD = {
+    currentDisaster: { mapView: { lat: 23.67, lng: 121.418, zoom: 14 } },
+  };
+
+  it('waits for a read made since the map mounted, though an answer is held from before', () => {
+    expect(
+      settleEventMapView({
+        data: HELD,
+        readSinceMount: false,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: false, eventView: undefined });
+  });
+
+  it("takes the event's view once that read has answered", () => {
+    expect(
+      settleEventMapView({
+        data: HELD,
+        readSinceMount: true,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: true, eventView: EVENT });
+    expect(
+      settleEventMapView({
+        data: { currentDisaster: { mapView: null } },
+        readSinceMount: true,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: true, eventView: null });
+  });
+
+  it('keeps the answer held before when the read fails or does not come in time', () => {
+    // A failed read leaves the data it had; so does one still out when the wait runs out.
+    expect(
+      settleEventMapView({
+        data: HELD,
+        readSinceMount: false,
+        waitedOut: true,
+      }),
+    ).toEqual({ ready: true, eventView: EVENT });
+    expect(
+      settleEventMapView({
+        data: undefined,
+        readSinceMount: true,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: true, eventView: undefined });
   });
 });
 
