@@ -166,7 +166,7 @@
       pad: t.density === "compact" ? "10px 16px" : "14px 16px",
       fieldOrder,
 
-      immediateRescue: (tkt) => { patch(tkt.id, (x) => ({ ...x, priority: "critical", updatedMin: 0 })); toast(`${tkt.id} 已升為生命危急`, "danger"); },
+      immediateRescue: (tkt) => { patch(tkt.id, (x) => ({ ...x, priority: "critical", updatedMin: 0 })); toast(`「${tkt.title}」已升為生命危急`, "danger"); },
       /* SP-3：刪除空間。🔒 底下的任務單保留，只是不再歸在這個空間（BE-036：deleteBuildingMap 後 household records stay, just unlinked）。 */
       deleteSpace: (id) => {
         const b = window.WGBridge.buildingById(id);
@@ -175,9 +175,9 @@
         setTickets((ts) => ts.map((x) => x.buildingId === id ? { ...x, buildingId: null } : x));
         toast(`已刪除空間「${(b && (b.alias || b.address)) || id}」` + (n ? `，${n} 張任務單保留` : ""), "danger");
       },
-      deleteTicket: (tkt) => setConfirm({ title: `刪除任務 #${tkt.id}`, body: "刪除後不可復原，僅 Super Admin 可執行。", confirmLabel: "確認刪除", danger: true, onConfirm: () => { setTickets((ts) => ts.filter((x) => x.id !== tkt.id)); toast(`已刪除 ${tkt.id}`, "danger"); } }),
+      deleteTicket: (tkt) => setConfirm({ title: `刪除任務「${tkt.title}」`, body: "刪除後不可復原，僅 Super Admin 可執行。", confirmLabel: "確認刪除", danger: true, onConfirm: () => { setTickets((ts) => ts.filter((x) => x.id !== tkt.id)); toast(`已刪除「${tkt.title}」`, "danger"); } }),
       assignOne: (tkt) => setAssignTicket(tkt),
-      setTeam: (id, team) => { patch(id, (x) => ({ ...x, team, updatedMin: 0 })); toast(`${id} 已指派給 ${team}`); },
+      setTeam: (id, team) => { patch(id, (x) => ({ ...x, team, updatedMin: 0 })); toast(`「${(tickets.find((x) => x.id === id) || {}).title || "任務單"}」已指派給 ${team}`); },
       setTaskStatus: (id, taskId, status) => {
         patch(id, (x) => ({ ...x, updatedMin: 0, tasks: x.tasks.map((k) => k.id === taskId ? { ...k, status } : k) }));
         toast(`需求狀態改為「${window.TK_TASK_STATUS[status].label}」`);
@@ -235,7 +235,7 @@
             });
           })();
           patch(id, (x) => ({ ...x, title: vals.title, street: vals.address, county: "", city: "", no: "", floor: vals.floor || null, contact_name: vals.contact_name, contact_phone: vals.contact_phone || null, desc: vals.desc, priority: vals.priority, landmark: vals.landmark || x.landmark || null, photos: vals.photos || x.photos || [], tasks: mkTasks(tasks), updatedMin: 0 }));
-          toast(`已儲存 ${id}`);
+          toast(`已儲存「${vals.title}」`);
         } else {
           // 記住這次選的歸屬單位，下次開單直接帶入（取代全域身份切換器）
           // 建單時選了別隊 → 同步把目前身份切過去（共用 store，跨頁一致）
@@ -245,7 +245,7 @@
           }
           const nid = "T-" + (1100 + Math.floor(Math.random() * 800));
           setTickets((ts) => [{ id: nid, title: vals.title, county: "", city: "", street: vals.address, no: "", floor: vals.floor || null, contact_name: vals.contact_name, contact_phone: vals.contact_phone || null, priority: vals.priority, status: "pending", team: vals.team || defaultTeam || null, region: null, intake: "staff", visibility: "restricted", verification: null, createdAt: stamp(), updatedMin: 0, desc: vals.desc, fields: {}, landmark: vals.landmark || null, photos: vals.photos || [], tasks: mkTasks(tasks) }, ...ts]);
-          toast(`已建立 ${nid}`);
+          toast(`已建立「${vals.title}」`);
         }
       },
     };

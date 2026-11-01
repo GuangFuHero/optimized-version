@@ -98,7 +98,7 @@
 
     return (
       <TKDrawer
-        title={editing ? `任務 #${ticket.id}` : "新增任務"}
+        title={editing ? "編輯任務" : "新增任務"}
         sub={`當前事件「${act.name}」（${act.types.map((t) => window.TK_DISASTERS[t].label).join("＋")}）· 系統已預設，報案無需選災害`}
         onClose={onClose}
         footer={<>

@@ -55,7 +55,7 @@
 
   function tipHtml(s) {
     return `<div style="min-width:170px;text-align:left">
-      <div style="font:var(--font-data-300);color:var(--color-fg-neutral-muted)">${s.id}</div>
+      <div style="font:var(--font-data-300);color:var(--color-fg-neutral-muted)">${SD.TYPE[s.type] ? SD.TYPE[s.type].label : ""}</div>
       <div style="font:var(--font-label-400);color:var(--color-fg-neutral-default);margin-top:1px">${s.name}</div>
       <div style="font:var(--font-body-300);color:var(--color-fg-neutral-subtle);margin-top:2px">${s.address}</div>
     </div>`;
@@ -69,7 +69,8 @@
     },
       React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 8 } },
         React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-          React.createElement("span", { style: { font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" } }, s.id),
+          // 單號拿掉（後端沒有），改寫站點類型
+          React.createElement("span", { style: { font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" } }, SD.TYPE[s.type] ? SD.TYPE[s.type].label : ""),
           React.createElement("span", { style: { display: "block", font: "var(--font-label-500)", fontSize: 15, color: "var(--color-fg-neutral-default)", marginTop: 1 } }, s.name)
         ),
         React.createElement("button", { className: "tk-iconbtn", "aria-label": "關閉", onClick: onClose, style: { width: 24, height: 24, flexShrink: 0, border: "none", background: "transparent", cursor: "pointer" } },

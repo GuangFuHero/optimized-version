@@ -47,7 +47,7 @@
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <Checkbox checked={on} onChange={() => toggle(c.id)} />
                         <Badge tone="neutral">{c.floor}</Badge>
-                        <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)", marginLeft: "auto" }}>#{c.id}</span>
+                        
                       </div>
                       <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>{c.title}</span>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}><PriorityBadge p={c.priority} /><span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>受困 {c.victims}</span></div>
@@ -89,7 +89,6 @@
                 <React.Fragment key={side.id}>
                   {i === 1 && <div style={{ display: "flex", justifyContent: "center" }}><span style={{ width: 36, height: 36, borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-subtle)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Icon n="GitCompare" s={16} c="var(--color-fg-neutral-muted)" /></span></div>}
                   <div style={{ borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)", padding: 14, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>#{side.id}</span>
                     <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>{side.title}</span>
                     <span className="wg-caption" style={{ color: "var(--color-fg-neutral-subtle)" }}>{side.desc}</span>
                     <div style={{ display: "flex", gap: 12, marginTop: 4 }}>

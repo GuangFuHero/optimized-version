@@ -36,8 +36,7 @@
       <div style="font:var(--font-body-300);color:var(--color-fg-neutral-subtle);margin-top:2px">${t.a.members.length} 張任務單${t.a.need ? " · " + t.a.need + " 層還需要幫忙" : ""}</div>
     </div>`;
     return `<div style="min-width:170px;text-align:left">
-      <div style="font:var(--font-data-300);color:var(--color-fg-neutral-muted)">#${t.id}</div>
-      <div style="font:var(--font-label-400);color:var(--color-fg-neutral-default);margin-top:1px">${t.title}</div>
+      <div style="font:var(--font-label-400);color:var(--color-fg-neutral-default)">${t.title}</div>
       <div style="font:var(--font-body-300);color:var(--color-fg-neutral-subtle);margin-top:2px">${window.tkAddress(t)}</div>
     </div>`;
   }
@@ -51,8 +50,7 @@
       <div ref={cardRef} className="tk-rise" style={{ position: "absolute", right: 12, top: 12, width: 268, zIndex: 600, display: "flex", flexDirection: "column", gap: 10, padding: 14, borderRadius: "var(--radius-md)", background: "var(--color-bg-neutral-default)", border: "1px solid var(--color-border-default)", boxShadow: "var(--shadow-lg)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>#{t.id}</span>
-            <span style={{ display: "block", font: "var(--font-label-500)", fontSize: 15, color: "var(--color-fg-neutral-default)", marginTop: 1 }}>{t.title}</span>
+            <span style={{ display: "block", font: "var(--font-label-500)", fontSize: 15, color: "var(--color-fg-neutral-default)" }}>{t.title}</span>
           </div>
           <button className="tk-iconbtn" aria-label="關閉" onClick={onClose} style={{ width: 24, height: 24, flexShrink: 0 }}>
             <Icon n="X" s={14} c="var(--color-fg-neutral-muted)" />

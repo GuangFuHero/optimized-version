@@ -36,9 +36,12 @@
     const d = new Date(); const p = (n) => String(n).padStart(2, "0");
     return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
-  const itemLabel = (g, it) => (g.kind === "station" ? it.stationId : it.ticketId);
+  // 🔒 2026-11-01 Sucre：後端沒有單號（任務單、站點都只有 uuid），畫面不顯示 T-xxxx／RS-xxxx／組號 D-xxx。
+  //    畫面上靠 A／B 圓點＋標題分辨；寫進紀錄、通知的文字用 itemRef（「標題」）。ticketId／g.id 只當內部參照。
+  const itemLabel = () => "";
   const itemTitle = (g, it) => (g.kind === "station" ? it.name : it.ticketTitle);
   const itemShort = (g, it) => (g.kind === "station" ? it.name : it.task.name);
+  const itemRef = (it) => "「" + (it.ticketTitle || it.name || "") + "」";
   // DUP-BE-410：欄位一律從 ddFieldsFor 拿（dd-data.js），不在畫面上寫死
   const fieldsOf = (g) => window.ddFieldsFor(g);
   const fid = (f) => window.ddFieldId(f);
@@ -156,12 +159,11 @@
         <div className="dd-row-main">
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>可能重複</span>
-            <span style={{ font: "var(--font-data-300)", ...muted }}>{g.id}</span>
             {g.status === "pending" && !can && <Chip icon="Lock">只能查看</Chip>}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {g.items.map((it, i) => (
-              <span key={it.key} title={`${itemLabel(g, it)} · 建立 ${it.createdAt}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 10px 2px 3px", borderRadius: "var(--radius-full)",
+              <span key={it.key} title={`建立 ${it.createdAt}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 10px 2px 3px", borderRadius: "var(--radius-full)",
                 border: "1px solid var(--color-border-default)", font: "var(--font-body-300)", color: "var(--color-fg-neutral-default)", maxWidth: 300 }}>
                 <LetterDot i={i} />
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -514,7 +516,7 @@
           <Button variant="outline" onClick={props.onBack} startIcon={<Icon n="ArrowLeft" s={16} />} data-dd-back>回清單</Button>
           <span className="wg-h600" style={{ fontSize: 18, whiteSpace: "nowrap" }}>{ticket ? "兩張任務單可能重複" : "兩個站點可能重複"}</span>
           {g.status === "pending" ? <Badge tone="warning">相似度 {Math.round(g.score * 100)}%</Badge> : null}
-          <span style={{ font: "var(--font-data-300)", ...muted }}>{g.id} · 發現於 {g.detectedAt}</span>
+          <span style={{ font: "var(--font-data-300)", ...muted }}>發現於 {g.detectedAt}</span>
           <span style={{ flex: 1 }}></span>
           {props.pos && (
             <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -543,7 +545,7 @@
             <ReadOnlyNote can={props.can} />
             {props.stale && (
               <Alert tone="warning" title="有一張在你打開後被改過">
-                <span>{g.items.filter((i) => i.staleDemo).map((i) => `${i.ticketId || i.stationId} 已由${i.staleDemo.by}在 ${i.staleDemo.at} 修改`).join("；")}。為了不蓋掉剛改的內容，請先重新載入，看過最新內容再合併。</span>
+                <span>{g.items.filter((i) => i.staleDemo).map((i) => `${itemRef(i)}已由${i.staleDemo.by}在 ${i.staleDemo.at} 修改`).join("；")}。為了不蓋掉剛改的內容，請先重新載入，看過最新內容再合併。</span>
                 <div style={{ marginTop: 8 }}><Button variant="secondary" onClick={props.onReload} startIcon={<Icon n="RefreshCw" s={14} />}>重新載入最新內容</Button></div>
               </Alert>
             )}
@@ -730,7 +732,7 @@
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }} data-dd-confirm-effects>
                 <span style={{ font: "var(--font-label-400)" }}>送出後會發生</span>
-                <span style={{ font: "var(--font-body-300)", ...subtle }}>· {g.items.map((it) => `${itemLabel(g, it)} ${itemShort(g, it)}`).join("、")} 都維持原樣</span>
+                <span style={{ font: "var(--font-body-300)", ...subtle }}>· {g.items.map((it) => [itemLabel(g, it), itemShort(g, it)].filter(Boolean).join(" ")).join("、")} 都維持原樣</span>
                 <span style={{ font: "var(--font-body-300)", ...subtle }}>· 這一對移到「已處理」，記為「{mode === "confirm" ? "確認重複（未合併）" : "不是重複"}」</span>
                 {mode === "separate" && g.source === "create" && <span style={{ font: "var(--font-body-300)", ...subtle }}>· 通知當初選「仍要建立」的人：你建立的單已確認不是重複</span>}
               </div>
@@ -892,21 +894,21 @@
       const o = Object.assign({}, e.other, { canceled: true, updatedAt: at });
       const items = g.items.map((it) => (it.key === k.key ? k : o));
       const history = [], notices = [];
-      history.push(`${k.ticketId}：與 ${o.ticketId} 合併，重複的需求合併成「${k.task.name}」數量 ${plan.qty}（${persona.name}，${at}）`);
+      history.push(`${itemRef(k)}與${itemRef(o)}合併，重複的需求合併成「${k.task.name}」數量 ${plan.qty}（${persona.name}，${at}）`);
       F.ticket.concat(F.task).forEach((f) => {
         if (f.primary) return;
-        if (isEdited(g, curKept, curPicks, curEdits, f)) history.push(`${k.ticketId}：${f.label}改為「${window.ddShow(f, plan.values[fid(f)])}」（審核時修改）`);
-        else if (curPicks[fid(f)] === o.key) history.push(`${k.ticketId}：${f.label}改用 ${o.ticketId} 的「${window.ddShow(f, window.ddRead(o, f))}」`);
+        if (isEdited(g, curKept, curPicks, curEdits, f)) history.push(`${itemRef(k)}：${f.label}改為「${window.ddShow(f, plan.values[fid(f)])}」（審核時修改）`);
+        else if (curPicks[fid(f)] === o.key) history.push(`${itemRef(k)}：${f.label}改用${itemRef(o)}的「${window.ddShow(f, window.ddRead(o, f))}」`);
       });
-      e.included.filter((t) => t.from === o.key).forEach((t) => history.push(`${o.ticketId} 的「${t.name}」移到 ${k.ticketId}`));
+      e.included.filter((t) => t.from === o.key).forEach((t) => history.push(`${itemRef(o)}的「${t.name}」移到${itemRef(k)}`));
       e.dropped.forEach((t) => history.push(`「${t.name}」取消`));
-      history.push(`${o.ticketId}：整張取消，已併入 ${k.ticketId}（${persona.name}，${at}）`);
+      history.push(`${itemRef(o)}：整張取消，已併入${itemRef(k)}（${persona.name}，${at}）`);
       // 通知對齊後端 Spec 028 §6
       notices.push(`給 ${o.owner}：「你的單已併入「${k.ticketTitle}」」，列出搬過去與取消的需求`);
       if (k.owner !== o.owner) notices.push(`給 ${k.owner}：「你的單已因重複審核更新」`);
       if (e.volunteersStay) notices.push(`給已承接的志工：「你承接的需求已合併到「${k.ticketTitle}」」（原本就在這張單上、沒有變動的不通知）`);
       if (e.volunteersCanceled) notices.push(`給 ${e.volunteersCanceled} 位志工：「你承接的需求已取消，改由「${k.ticketTitle}」處理」`);
-      const summary = `${k.ticketId} 與 ${o.ticketId} 合成一張（${k.ticketId}），重複的需求合併成「${k.task.name}」數量 ${plan.qty}` +
+      const summary = `${itemRef(k)}與${itemRef(o)}合成一張（留下${itemRef(k)}），重複的需求合併成「${k.task.name}」數量 ${plan.qty}` +
         (e.included.length ? `，其他需求 ${e.included.map((t) => "「" + t.name + "」").join("、")}` : "") +
         (e.dropped.length ? `；${e.dropped.map((t) => "「" + t.name + "」").join("、")}取消` : "") + "。";
       const next = Object.assign({}, g, { items, status: "merged", result: { at, by: persona.name, keptKey: k.key, summary, history, notices, note } });

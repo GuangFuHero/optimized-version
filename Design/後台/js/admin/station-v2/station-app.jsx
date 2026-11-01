@@ -126,14 +126,14 @@
         const copy = { ...st, supplies: [...st.supplies] };
         fieldRows.forEach((r) => applyChange(copy, r));
         const diff = fieldRows.map((r) => ({ field: r.field, old: r.isConflict ? r.live : r.old, new: r.new }));
-        return bump(copy, `核准前台建議 ${p.id}`, diff);
+        return bump(copy, "核准前台修改建議", diff);
       });
       setProposals((arr) => arr.map((x) => (x.id === p.id ? { ...x, status: "approved" } : x)));
-      showToast(`已核准 ${p.id}，前台資料將於 1 分鐘內反映`);
+      showToast(`已核准「${p.stationName}」的修改建議，前台資料將於 1 分鐘內反映`);
     }
     function rejectProposal(p, reason) {
       setProposals((arr) => arr.map((x) => (x.id === p.id ? { ...x, status: "rejected", reason } : x)));
-      showToast(`已拒絕 ${p.id}`, "warning");
+      showToast(`已拒絕「${p.stationName}」的修改建議`, "warning");
     }
     function saveStation(form, isNew) {
       if (isNew) {

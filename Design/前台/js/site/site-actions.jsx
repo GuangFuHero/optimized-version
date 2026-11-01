@@ -2328,7 +2328,7 @@
                         border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ font: '400 var(--fs-11)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>{t.id} · {t.createdAt}</div>
+                            <div style={{ font: '400 var(--fs-11)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>{t.createdAt}</div>
                             <div style={{ marginTop: 2, font: '700 var(--fs-15)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>{t.title}</div>
                           </div>
                           <Badge tone={doneLabel ? 'neutral' : full ? 'success' : (got > 0 ? 'warning' : 'neutral')} variant="subtle">
@@ -2363,10 +2363,10 @@
                     <div key={row.ticketId + '#' + row.taskId} style={{ padding: 'var(--space-4)', borderRadius: 'var(--radius-md)',
                       border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)' }}>
                       <div style={{ font: '400 var(--fs-11)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>
-                        {row.ticketId}{row.match.claimedAt ? ' · 承接於 ' + row.match.claimedAt : ''}
+                        {row.match.claimedAt ? '承接於 ' + row.match.claimedAt : ''}
                       </div>
                       <div style={{ marginTop: 2, font: '700 var(--fs-15)/1.4 var(--font-display)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>
-                        {row.title || row.ticketId}
+                        {row.title || '（這張單已不存在）'}
                       </div>
                       {/* 你接的是**哪一件事** —— 履約當天要知道的是這個，不是單號。 */}
                       <div style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 6,

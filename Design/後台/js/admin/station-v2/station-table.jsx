@@ -13,7 +13,7 @@
   function matches(s, q) {
     if (!q) return true;
     const k = q.trim().toLowerCase();
-    const bag = [s.id, s.name, s.address, s.area, s.contact,
+    const bag = [s.name, s.address, s.area, s.contact,
       SD.TYPE[s.type] && SD.TYPE[s.type].label,
       SD.STATUS[s.status] && SD.STATUS[s.status].label,
       ...(s.supplies || []).map((x) => x.item)];
@@ -71,7 +71,7 @@
           s.deleted && React.createElement(Badge, { tone: "neutral" }, "已下架")
         ),
         React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" } },
-          React.createElement("span", { className: "wg-data-xs", style: { color: "var(--color-fg-neutral-muted)" } }, s.id),
+          // 🔒 2026-11-01 Sucre：後端完全沒有單號（stations 只有 uuid），畫面上不顯示 RS-0166 這種編號。s.id 只當 React key／內部參照。
           React.createElement(OfficialTag, { official: s.isOfficial }),
           // 站點排在自己的站點群正下方時不必重複寫群名；若因篩選被拆散才標出來
           ctx.parentName && ctx.depth !== 1 && React.createElement("span", {
@@ -133,7 +133,8 @@
       React.createElement("span", { style: { minWidth: 0 } },
         React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 6 } },
           child && React.createElement(Icon, { n: "CornerDownRight", s: 12, c: "var(--color-fg-neutral-muted)" }),
-          React.createElement("span", { style: { font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" } }, s.id),
+          // 單號拿掉（後端沒有），改寫站點類型
+          React.createElement("span", { style: { font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" } }, SD.TYPE[s.type] ? SD.TYPE[s.type].label : ""),
           childCount > 0 && React.createElement(Badge, { tone: "info" }, `站點群 · ${childCount} 站`)
         ),
         React.createElement("span", { style: { display: "block", font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, s.name),
@@ -282,7 +283,20 @@
 
     const btnCss = { display: "inline-flex", alignItems: "center", gap: 6, height: 42, padding: "0 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)", background: "var(--color-bg-neutral-default)", cursor: "pointer", font: "var(--font-label-300)", color: "var(--color-fg-neutral-default)" };
 
+    // 🆕 2026-11-01 統計＋點了篩選營運狀態（STAT-101〜105，js/shared/wg-stat-tiles.jsx）。
+    //    數字算權限範圍內、未下架的全部站點，不吃篩選與搜尋（STAT-102）。
+    //    staging 10-31 照「設計稿沒有」拿掉了這排（station-stats-strip.tsx），現在設計稿有了，要請前端加回來。
+    //    「全部」＝列表上的「N 站」（含站點群）。站點群本身沒有營運狀態，所以各狀態加起來可能少於「全部」，滑過「全部」會講。
+    const live = stations.filter((s) => !s.deleted);
+    const noStatus = live.filter((s) => !SD.STATUS[s.status]).length;
+    const statTiles = window.WGStatTiles && live.length > 0 && React.createElement(window.WGStatTiles, {
+      value: fStatus, onChange: setFStatus,
+      items: [{ key: "all", label: "全部", count: live.length, title: noStatus ? `含 ${noStatus} 個站點群（站點群沒有營運狀態）` : undefined },
+        ...SD.STATUS_ORDER.map((k) => ({ key: k, label: SD.STATUS[k].label, count: live.filter((s) => s.status === k).length }))],
+    });
+
     return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: "var(--spacing-3)" } },
+      statTiles,
       // —— 工具列（單行，比照任務管理頁）——
       React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "var(--spacing-2)", flexWrap: "wrap" } },
         React.createElement("button", { onClick: () => setOpen((o) => !o), style: { ...btnCss, background: open ? "var(--color-bg-neutral-subtle)" : "var(--color-bg-neutral-default)" } },
@@ -292,7 +306,7 @@
         ),
         React.createElement(Input, { value: q, onChange: (e) => setQ(e.target.value),
           leadingIcon: React.createElement(Icon, { n: "Search", s: 16, c: "var(--color-fg-neutral-muted)" }),
-          placeholder: "搜尋編號／站名／地址／物資／聯絡人…", style: { width: 320, height: 42 } }),
+          placeholder: "搜尋站名／地址／物資／聯絡人…", style: { width: 320, height: 42 } }),
         (activeCount > 0 || q) && React.createElement("button", { onClick: () => { reset(); setQ(""); },
           style: { border: "none", background: "none", cursor: "pointer", font: "var(--font-label-300)", color: "var(--color-fg-neutral-subtle)", textDecoration: "underline" } }, "清除"),
         React.createElement("span", { className: "wg-caption", style: { marginLeft: "auto", color: "var(--color-fg-neutral-muted)" } }, `${rows.length} 站`),

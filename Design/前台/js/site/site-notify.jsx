@@ -272,7 +272,7 @@
                             color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>{n.body}</span>
                           {/* 角色升級那兩種沒有單號，不要印出 "null · 09/11"。 */}
                           <span style={{ display: 'block', marginTop: 4, font: '400 var(--fs-11)/1.4 var(--font-data)',
-                            color: 'var(--color-fg-neutral-muted)' }}>{n.ticketId ? n.ticketId + ' · ' : ''}{n.at}</span>
+                            color: 'var(--color-fg-neutral-muted)' }}>{/* 🔒 2026-11-01：後端沒有單號，只寫時間 */}{n.at}</span>
                         </span>
                         {!n.read ? <Badge tone="warning" variant="subtle">新</Badge> : null}
                       </button>

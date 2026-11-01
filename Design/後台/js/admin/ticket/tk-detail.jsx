@@ -120,7 +120,7 @@
     const teams = Object.keys(window.TK_TEAM_MEMBERS);
     const [pick, setPick] = React.useState(ticket.team || teams[0]);
     return (
-      <TKModal title={`指派 Team · #${ticket.id}`} width={480} onClose={onClose}
+      <TKModal title={`指派 Team · ${ticket.title}`} width={480} onClose={onClose}
         icon={<Icon n="Users" s={20} c="var(--color-fg-neutral-subtle)" />}
         footer={<>
           <Button variant="ghost" onClick={onClose}>取消</Button>
@@ -256,7 +256,7 @@
     const f = fillState(t.tasks);
 
     return (
-      <TKDrawer title={`#${t.id} ${t.title}`} width={680} onClose={onClose}
+      <TKDrawer title={t.title} width={680} onClose={onClose}
         sub={`${window.TK_INTAKE[t.intake].label} · 建立於 ${t.createdAt}`}
         footer={<>
           <Button variant="ghost" onClick={onClose}>關閉</Button>
@@ -395,7 +395,7 @@
                 開單後 {window.TK_SETTINGS.archiveDays} 天自動封存（不論是否結案）。
                 <a href={window.TK_SETTINGS.settingsHref} style={{ marginLeft: 8, whiteSpace: "nowrap", color: "var(--color-brand-secondary-default)" }}>前往設定 ↗</a>
               </Row>
-              {showVerification && <Row label="查核狀態">{t.duplicateOf ? `疑似與 ${t.duplicateOf} 重複` : "疑似重複"}（資料檢核員／超級管理員可見）</Row>}
+              {showVerification && <Row label="查核狀態">{t.duplicateOf ? "疑似與另一張單重複" /* 🔒 2026-11-01：後端沒有單號，不印對方的 #T-xxxx */ : "疑似重複"}（資料檢核員／超級管理員可見）</Row>}
             </div>
           </Section>
         </div>

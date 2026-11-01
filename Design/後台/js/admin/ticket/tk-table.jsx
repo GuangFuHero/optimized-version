@@ -7,7 +7,7 @@
   function matches(t, q) {
     if (!q) return true;
     const s = q.trim().toLowerCase();
-    const bag = [t.id, t.title, window.tkAddress(t), t.floor, t.desc, t.contact_name, t.team, t.region,
+    const bag = [t.title, window.tkAddress(t), t.floor, t.desc, t.contact_name, t.team, t.region,
       window.TK_PRIORITY[t.priority] && window.TK_PRIORITY[t.priority].label,
       window.TK_STATUS[window.tkStatus(t)].label,
       ...(t.tasks || []).flatMap((k) => [k.name, window.TK_TASK_KIND[k.kind] && window.TK_TASK_KIND[k.kind].label, ...(k.assignees || []).map((a) => a.name)]),
@@ -51,7 +51,7 @@
     ticket: (t, tk) => (
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>#{t.id}</span>
+          {/* 🔒 2026-11-01 Sucre：後端沒有單號（tickets 只有 uuid），畫面不顯示 #T-1080。t.id 只當內部 key。 */}
           {/* 2026-10-26 SP-1：屬於某個空間的單，標出是哪一棟、幾樓（點那一列空間可看各樓層） */}
           {t.buildingId && window.WGBridge && (() => {
             const b = window.WGBridge.buildingById(t.buildingId);
@@ -125,7 +125,6 @@
           background: selected ? "var(--color-bg-primary-subtle)" : "transparent",
           transition: "background var(--duration-fast) var(--ease-out)" }}>
         <span style={{ minWidth: 0 }}>
-          <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>#{t.id}</span>
           <span style={{ display: "block", font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
           <span className="wg-caption" style={{ display: "block", color: "var(--color-fg-neutral-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{window.tkAddress(t)}</span>
           <button onClick={(e) => { e.stopPropagation(); onOpen(t); }}
@@ -244,6 +243,30 @@
       </div>
     );
 
+    // 🆕 2026-11-01 統計＋點了篩選（STAT-101〜105，js/shared/wg-stat-tiles.jsx）。
+    //    數字算 tk.tickets（＝目前範圍「我的單位／全部」內全部），不吃篩選與搜尋（STAT-102）。
+    //    志工缺口＝還沒結束的單裡，有寫數量的需求還差幾人；沒寫數量的需求算不出缺幾人，不計（08-22 S-7 數量可留空）。
+    const stats = React.useMemo(() => {
+      const by = {}; let gapPeople = 0, gapNeeds = 0;
+      tk.tickets.forEach((t) => {
+        const s = window.tkStatus(t); by[s] = (by[s] || 0) + 1;
+        if (s === "completed" || s === "canceled" || s === "archived") return;
+        (t.tasks || []).forEach((k) => {
+          if (k.status === "fulfilled" || k.status === "canceled" || !k.quantity) return;
+          const miss = k.quantity - (k.assignees || []).length;
+          if (miss > 0) { gapPeople += miss; gapNeeds++; }
+        });
+      });
+      return { total: tk.tickets.length, by, gapPeople, gapNeeds };
+    }, [tk.tickets]);
+    const statTiles = window.WGStatTiles && tk.tickets.length > 0 && (
+      <window.WGStatTiles value={fStatus} onChange={setFStatus}
+        items={[{ key: "all", label: "全部", count: stats.total },
+          ...window.TK_STATUS_EDITABLE.map((k) => ({ key: k, label: window.TK_STATUS[k].label, count: stats.by[k] || 0 }))]}
+        extras={[{ label: "志工缺口", icon: "Users", tone: "warning", count: stats.gapPeople ? { main: `缺 ${stats.gapPeople} 人`, sub: `${stats.gapNeeds} 項需求` } : 0,
+          title: "還沒結束的單裡，有寫數量的需求還差幾人" }]} />
+    );
+
     const TOGGLE = [["list", "列表視圖", "List"], ["map", "地圖視圖", "Map"]];
 
     // 範圍切換（我的單位／全部單位）已移到 header、列表／地圖切換的左邊，見 tk-shell.jsx TKScopeSwitch。
@@ -257,6 +280,7 @@
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-3)" }}>
+        {statTiles}
         <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-2)", flexWrap: "wrap" }}>
           <button onClick={() => setOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 42, padding: "0 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)", background: open ? "var(--color-bg-neutral-subtle)" : "var(--color-bg-neutral-default)", cursor: "pointer", font: "var(--font-label-300)", color: "var(--color-fg-neutral-default)" }}>
             <Icon n="SlidersHorizontal" s={16} c="var(--color-fg-neutral-subtle)" />篩選
@@ -264,7 +288,7 @@
             <Icon n={open ? "ChevronUp" : "ChevronDown"} s={15} c="var(--color-fg-neutral-muted)" />
           </button>
           <Input value={q} onChange={(e) => setQ(e.target.value)} leadingIcon={<Icon n="Search" s={16} c="var(--color-fg-neutral-muted)" />}
-            placeholder="搜尋 ID／標題／地址／需求／聯絡人…" style={{ width: 320, height: 42 }} />
+            placeholder="搜尋標題／地址／需求／聯絡人…" style={{ width: 320, height: 42 }} />
           {(activeCount > 0 || q) && <button onClick={() => { reset(); setQ(""); }} style={{ border: "none", background: "none", cursor: "pointer", font: "var(--font-label-300)", color: "var(--color-fg-neutral-subtle)", textDecoration: "underline" }}>清除</button>}
           {scopeHint}
           <span className="wg-caption" style={{ marginLeft: "auto", color: "var(--color-fg-neutral-muted)" }}>{ticketCount} 筆任務{spacesShown.length ? ` · ${spacesShown.length} 個空間` : ""}</span>

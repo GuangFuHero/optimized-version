@@ -50,7 +50,7 @@
         React.createElement("div", { style: { padding: "20px 24px", borderBottom: "1px solid var(--color-border-default)" } },
           React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 12 } },
             React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-              React.createElement("div", { className: "wg-data-xs", style: { color: "var(--color-fg-neutral-muted)" } }, isNew ? "CRUD · 新增" : station.id),
+              React.createElement("div", { className: "wg-data-xs", style: { color: "var(--color-fg-neutral-muted)" } }, isNew ? "新增站點" : (SD.TYPE[station.type] ? SD.TYPE[station.type].label : "")), // 單號拿掉（後端沒有），改寫站點類型
               React.createElement("h2", { className: "wg-h700", style: { fontSize: 21, marginTop: 3 } }, title)
             ),
             React.createElement("button", { type: "button", onClick: onClose, "aria-label": "關閉", style: { border: "none", background: "var(--color-bg-neutral-subtle)", borderRadius: "var(--radius-full)", width: 36, height: 36, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-fg-neutral-subtle)" } },
@@ -134,11 +134,11 @@
           React.createElement(PendingChip, { info: SD.PENDING.parent, label: "等後端開欄位", size: "sm" })
         ),
         parent && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)" } },
-          React.createElement(Icon, { n: "CornerLeftUp", s: 14, c: "var(--color-fg-neutral-muted)" }), `所屬站點群：${parent.name}（${parent.id}）`),
+          React.createElement(Icon, { n: "CornerLeftUp", s: 14, c: "var(--color-fg-neutral-muted)" }), `所屬站點群：${parent.name}`),
         children.length > 0 && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4, marginTop: parent ? 6 : 0 } },
           React.createElement("span", { className: "wg-data-xs", style: { color: "var(--color-fg-neutral-muted)" } }, `群內站點 ${children.length} 個`),
           children.map((c) => React.createElement("span", { key: c.id, style: { display: "flex", alignItems: "center", gap: 6, font: "var(--font-body-300)", color: "var(--color-fg-neutral-subtle)" } },
-            React.createElement(Icon, { n: "CornerDownRight", s: 14, c: "var(--color-fg-neutral-muted)" }), `${c.name}（${c.id}）`))
+            React.createElement(Icon, { n: "CornerDownRight", s: 14, c: "var(--color-fg-neutral-muted)" }), c.name))
         )
       ),
 

@@ -86,7 +86,7 @@
                     ? React.createElement(Badge, { tone: "danger", variant: "solid" }, "衝突")
                     : p.statusOnly ? React.createElement(Badge, { tone: "info" }, "狀態") : React.createElement(Badge, { tone: "warning" }, `${p.changes.length} 欄`)
                 ),
-                React.createElement("div", { className: "wg-data-xs", style: { color: "var(--color-fg-neutral-muted)", marginTop: 5 } }, `${p.id} · ${p.submittedAt}`),
+                React.createElement("div", { className: "wg-data-xs", style: { color: "var(--color-fg-neutral-muted)", marginTop: 5 } }, p.submittedAt),
                 React.createElement("div", { style: { marginTop: 7 } }, React.createElement(SourceTag, { source: p.source }))
               );
             })

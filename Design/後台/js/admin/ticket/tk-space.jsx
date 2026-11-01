@@ -192,7 +192,7 @@
       <button type="button" onClick={() => onOpenTicket(t)} data-space-ticket={t.id}
         style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "8px 10px", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-md)", background: "var(--color-bg-neutral-default)", cursor: "pointer" }}>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>#{t.id}{t.room ? " · " + t.room : ""}</span>
+          {t.room && <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>{t.room}</span>}
           <span style={{ display: "block", font: "var(--font-label-300)", color: "var(--color-fg-neutral-default)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</span>
         </span>
         <span className="wg-caption" style={{ color: f.open ? "var(--color-fg-danger)" : "var(--color-fg-neutral-muted)", whiteSpace: "nowrap" }}>{f.label}</span>
@@ -281,7 +281,7 @@
               {a.offList.length > 0 && (
                 <div style={{ marginTop: 8 }}>
                   <Alert tone="warning" title={a.offList.length + " 張單的樓層不在這棟的樓層裡"}>
-                    多半是樓層數改少了。單不會不見，樓層照原本寫的留著：{a.offList.map((t) => "#" + t.id + "（" + t.floor + "）").join("、")}
+                    多半是樓層數改少了。單不會不見，樓層照原本寫的留著：{a.offList.map((t) => "「" + t.title + "」（" + t.floor + "）").join("、")}
                   </Alert>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>{a.offList.map((t) => <MiniTicket key={t.id} t={t} onOpenTicket={onOpenTicket} />)}</div>
                 </div>
@@ -336,7 +336,7 @@
         </div>
         {stranded.length > 0 && (
           <Alert tone="warning" title={"有 " + stranded.length + " 張任務單在要拿掉的樓層"}>
-            {stranded.map((t) => "#" + t.id + "（" + t.floor + "）").join("、")}。儲存後它們不會不見，會列在「樓層不在這棟的樓層裡」，樓層照原本寫的留著。
+            {stranded.map((t) => "「" + t.title + "」（" + t.floor + "）").join("、")}。儲存後它們不會不見，會列在「樓層不在這棟的樓層裡」，樓層照原本寫的留著。
           </Alert>
         )}
       </window.TKModal>

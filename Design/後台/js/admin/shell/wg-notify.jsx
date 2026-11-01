@@ -58,7 +58,7 @@
   // 🧹 2026-10-16：示意通知（指向測試任務單 T-10xx／站點 RS-01xx）已全部移除，鈴鐺一開是空的。
   // ⚠️ 後端沒有任何通知表（見 wg-bridge.js 的 KEYS.notices 說明），正式版要開新表。
   //    一筆的形狀：{ id, type: task|review|role, to: [userId], summary, detail, count,
-  //                  ts, seen, read, target: "任務單 #T-…", ref: { kind: ticket|station|role, id } }
+  //                  ts, seen, read, target: "任務單「標題」"（🔒 後端沒有單號，不寫 #T-…）, ref: { kind: ticket|station|role, id } }
   const MIN = 60 * 1000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 
   function refKey(ref) {

@@ -335,7 +335,7 @@
             <WGIcon n="ClipboardList" s={20} />
           </span>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ font: '400 var(--fs-11)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>{tk.propertyName || marker.id}</div>
+            {tk.propertyName ? <div style={{ font: '400 var(--fs-11)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-muted)' }}>{tk.propertyName}</div> : null}
             <div style={{ font: '700 var(--fs-18)/1.35 var(--font-display)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>{marker.title}</div>
           </div>
         </div>

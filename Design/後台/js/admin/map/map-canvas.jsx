@@ -61,7 +61,6 @@ function zc(z) { return window.wgZoneColor ? window.wgZoneColor(z.kind) : z.colo
 
   function tipHtml(t) {
     return `<div style="min-width:150px;text-align:left">
-      <div style="font:var(--font-data-300);color:var(--color-fg-neutral-muted)">#${t.id}</div>
       <div style="font:var(--font-label-400);margin-top:1px">${t.title}</div>
       <div style="font:var(--font-body-300);color:var(--color-fg-neutral-subtle);margin-top:2px">${t.team || "未指派"}</div>
     </div>`;

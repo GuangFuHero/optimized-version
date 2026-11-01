@@ -56,7 +56,7 @@
  *    `?demo=1` 只是給工程師看畫面，正式版不要做。
  */
 (function () {
-  const KEY = "wg.dedup.v6"; // localStorage 只是原型存處理結果用；正式版不存
+  const KEY = "wg.dedup.v7"; // v7：11/01 示範文字拿掉單號； localStorage 只是原型存處理結果用；正式版不存
 
   // 🔒 DUP-BE-411：來源**不顯示、不篩選**，只留在資料上給「不是重複」的通知用（source === "create"）
   window.DD_SOURCE = {
@@ -313,7 +313,7 @@
       {
         id: "D-290", kind: "ticket", source: "create", score: 0.9, detectedAt: "10/09 15:20", status: "merged",
         signals: ["相距 8 公尺", "需求種類相同（搜救）"],
-        result: { at: "10/09 15:41", by: "張育成", keptKey: "a", summary: "保留 T-2011，重複的需求合併成「破拆搜救人力」；T-2016 整張取消。已通知 2 位擁有者。" },
+        result: { at: "10/09 15:41", by: "張育成", keptKey: "a", summary: "保留「中山路88號 受困」，重複的需求合併成「破拆搜救人力」；「中山路88號 二樓有人」整張取消。已通知 2 位擁有者。" },
         items: [
           { key: "a", ticketId: "T-2011", ticketTitle: "中山路88號 受困", team: "壯闊台灣", owner: "鄰居李先生", createdAt: "10/09 14:02", updatedAt: "10/09 15:41",
             address: "光復鄉中山路88號", contact: "李先生", desc: "二樓有人敲牆回應。", priority: "critical", props: {}, others: [], photos: [],
@@ -337,7 +337,7 @@
       {
         id: "D-292", kind: "ticket", source: "create", score: 0.81, detectedAt: "10/09 19:30", status: "removed",
         signals: ["相距 15 公尺", "需求種類相同（物資）"],
-        result: { at: "10/09 20:02", by: "系統", summary: "擁有者把 T-2051 的地址改成「富田村」，與 T-2048 不再相似，已自動移出佇列。" },
+        result: { at: "10/09 20:02", by: "系統", summary: "擁有者把「富田村 尿布」的地址改成「富田村」，與「大全村 尿布」不再相似，已自動移出佇列。" },
         items: [
           { key: "a", ticketId: "T-2048", ticketTitle: "大全村 尿布", team: "慈濟基金會", owner: "許小姐", createdAt: "10/09 18:50", updatedAt: "10/09 18:50",
             address: "光復鄉大全村", contact: "許小姐", desc: "", priority: "low", props: {}, others: [], photos: [], task: { kind: "supply", name: "成人尿布", quantity: 20, claimed: 0 } },
