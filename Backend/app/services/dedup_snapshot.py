@@ -12,9 +12,13 @@ from app.services.ticket import TaskFields, TicketFields
 
 
 def ticket_draft(fields: TicketFields) -> TicketDraft:
-    """What the dedup engine is told about a ticket being submitted."""
+    """What the dedup engine is told about a ticket being submitted.
+
+    Its floor goes over only inside a building, where it is one of the building's labels (ADR-451).
+    """
     lon, lat = fields.point["coordinates"][:2]
     v = fields.values
+    floor = (fields.secondary_location or {}).get("floor") if fields.building_map_uuid else None
     return TicketDraft(
         location=GeoPoint(lon, lat),
         title=v["title"],
@@ -25,6 +29,8 @@ def ticket_draft(fields: TicketFields) -> TicketDraft:
         person_trapped_reported=v.get("person_trapped_reported"),
         immediate_danger_reported=v.get("immediate_danger_reported"),
         contact_phone=e164_or_none(v.get("contact_phone")),
+        building_map_uuid=fields.building_map_uuid,
+        floor=floor or None,
     )
 
 
