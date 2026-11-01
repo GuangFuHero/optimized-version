@@ -171,9 +171,8 @@ function StationDetailContent({
               gap: '8px',
             }}
           >
-            <Tag tone={tagToneOf(status.tone)} fill="solid">
-              {status.label}
-            </Tag>
+            {/* Pale, as in the table: solid is only for what must be seen at once (TAG-103). */}
+            <Tag tone={tagToneOf(status.tone)}>{status.label}</Tag>
             {view.isOfficial ? (
               <Tag tone="info" icon={<ShieldCheck size={13} />}>
                 官方
