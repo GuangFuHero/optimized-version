@@ -60,6 +60,7 @@ export type {
   RescueMapControllerValue,
   RescueMapDataType,
   RescueMapDraftPoint,
+  RescueMapGoneTicket,
   RescueMapMarkerItem,
   RescueMapOverlayLayer,
   RescueMapRouteState,
@@ -67,9 +68,11 @@ export type {
 
 export {
   dedupeMarkersById,
+  readLinkedSelection,
   SiteMapControls,
   SiteMapRouteProvider,
   useCreatedTicketMarker,
+  useLinkedTicketLookup,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   usePaginatedRescueMapMarkers,
