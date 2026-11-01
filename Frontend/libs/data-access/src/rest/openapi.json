@@ -4019,6 +4019,99 @@
         }
       }
     },
+    "/api/v1/admin/duplicate-hint-rates": {
+      "get": {
+        "tags": [
+          "AI 重複審核"
+        ],
+        "summary": "Get Duplicate Hint Rates",
+        "description": "提示率 and the two 誤報率 estimates for tasks and stations (ADR-455).",
+        "operationId": "get_duplicate_hint_rates_api_v1_admin_duplicate_hint_rates_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "開始時間（含），要帶時區；預設是 until 往前 30 天",
+              "title": "Since"
+            },
+            "description": "開始時間（含），要帶時區；預設是 until 往前 30 天"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "結束時間（不含），要帶時區；預設是現在",
+              "title": "Until"
+            },
+            "description": "結束時間（不含），要帶時區；預設是現在"
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateHintRatesPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/duplicate-pairs/{pair_uuid}": {
       "get": {
         "tags": [
@@ -9336,6 +9429,135 @@
         ],
         "title": "DomainFilters",
         "description": "The values a domain's filter params accept, drawn from the rows the caller may chart."
+      },
+      "DuplicateHintRatesPage": {
+        "properties": {
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Since"
+          },
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Until"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateHintRatesResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "since",
+          "until",
+          "items"
+        ],
+        "title": "DuplicateHintRatesPage",
+        "description": "The window the metrics cover, and one entry per kind."
+      },
+      "DuplicateHintRatesResponse": {
+        "properties": {
+          "entity_kind": {
+            "type": "string",
+            "enum": [
+              "ticket_task",
+              "station"
+            ],
+            "title": "Entity Kind"
+          },
+          "submissions": {
+            "type": "integer",
+            "title": "Submissions",
+            "description": "送出次數：民眾送出 task 或 station 的次數，跳不跳提示都算。＝ 跳提示的次數 ＋ 這段時間沒跳提示就建立的 task 或 station 數"
+          },
+          "hinted": {
+            "type": "integer",
+            "title": "Hinted",
+            "description": "跳提示的次數：跳出「可能重複」提示的次數。同一個人、同一天（台灣時間）、被提示同一筆舊資料，只算一次"
+          },
+          "hint_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint Rate",
+            "description": "提示率 ＝ 跳提示的次數 ÷ 送出次數（hinted ÷ submissions）"
+          },
+          "overridden": {
+            "type": "integer",
+            "title": "Overridden",
+            "description": "看到提示還是送出的次數：跳提示之後，民眾確認不是重複、還是送出的次數。每一次都會開一張配對卡"
+          },
+          "reviewed": {
+            "type": "integer",
+            "title": "Reviewed",
+            "description": "已審的配對卡數：看到提示還是送出時開出來的配對卡裡，資料檢核員已經判定「是重複」或「不是重複」的張數"
+          },
+          "judged_not_duplicate": {
+            "type": "integer",
+            "title": "Judged Not Duplicate",
+            "description": "判不是重複的配對卡數：已審的配對卡裡，資料檢核員判定「不是重複」的張數"
+          },
+          "false_alarm_rate_without_auditors": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "False Alarm Rate Without Auditors",
+            "description": "誤報率（不用審核結果）＝ 看到提示還是送出的次數 ÷ 跳提示的次數（overridden ÷ hinted）。只要民眾看到提示還是送出，就當作那次提示錯了"
+          },
+          "false_alarm_rate_with_auditors": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "False Alarm Rate With Auditors",
+            "description": "誤報率（用審核結果）＝ 看到提示還是送出的次數 ×（判不是重複的配對卡數 ÷ 已審的配對卡數）÷ 跳提示的次數（overridden × judged_not_duplicate ÷ reviewed ÷ hinted）。假設還沒審的配對卡裡，「不是重複」的比例跟已審的一樣。還沒有配對卡審過時是 null"
+          },
+          "review_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Coverage",
+            "description": "已審比例 ＝ 已審的配對卡數 ÷ 看到提示還是送出的次數（reviewed ÷ overridden）。太低的話，用審核結果的誤報率不太可靠"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entity_kind",
+          "submissions",
+          "hinted",
+          "hint_rate",
+          "overridden",
+          "reviewed",
+          "judged_not_duplicate",
+          "false_alarm_rate_without_auditors",
+          "false_alarm_rate_with_auditors",
+          "review_coverage"
+        ],
+        "title": "DuplicateHintRatesResponse",
+        "description": "提示率 and the two 誤報率 estimates for one kind (ADR-455). A rate is null when nothing was counted."
       },
       "DuplicatePairDecision": {
         "properties": {
