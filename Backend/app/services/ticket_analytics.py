@@ -54,6 +54,7 @@ from sqlalchemy import (
     literal_column,
     null,
     or_,
+    outerjoin,
     select,
     union_all,
     values,
@@ -124,6 +125,32 @@ def _exited_subquery(bucket: str, extra_filters: list | None):
     )
 
 
+def _need_types():
+    """One row per ticket and distinct type among its live needs: columns ticket_uuid, task_type.
+
+    A deleted ticket's needs all count, deleted or not, so it still lands under its types.
+    """
+    owner = aliased(Tickets)
+    return (
+        select(TicketTask.ticket_uuid, TicketTask.task_type)
+        .join(owner, owner.uuid == TicketTask.ticket_uuid)
+        .where(or_(TicketTask.delete_at.is_(None), owner.delete_at.is_not(None)))
+        .distinct()
+        .subquery("need_types")
+    )
+
+
+def _by_need_type(source, ticket_uuid, extra_filters: list | None):
+    """`source` joined to its tickets' need types, the category column, and `extra_filters` for it.
+
+    A ticket counts once under each type, so categories can sum to more than the total; one with no
+    live needs is uncategorised. A type filter then reads the joined type, so only its bucket shows.
+    """
+    types = _need_types()
+    joined = outerjoin(source, types, types.c.ticket_uuid == ticket_uuid)
+    return joined, category_expr(types.c.task_type), _on_need_type(extra_filters or [], types.c.task_type)
+
+
 async def get_ticket_count(
     db: AsyncSession,
     *,
@@ -138,8 +165,8 @@ async def get_ticket_count(
     """Ticket count for one bucket, optionally grouped by date/week or category.
 
     Backs 5 y-metrics via a fixed `bucket`: `None` counts every ticket ("total_tickets"),
-    the four bucket names narrow to that bucket. `x="category"` groups by `task_type`,
-    labelling NULLs (analytics_common.UNCATEGORIZED_LABEL).
+    the four bucket names narrow to that bucket. `x="category"` groups by the types of the
+    ticket's live needs (see _by_need_type), so categories can sum to more than the total.
 
     `x="date"` groups by whichever date the metric is really about. The two exit buckets
     (completed, canceled) group by the day the ticket left (see _exited_subquery),
@@ -176,12 +203,13 @@ async def get_ticket_count(
         period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
         cols.insert(0, period.label("x"))
         group_cols.append(period)
-    elif x == "category":
-        category = category_expr(Tickets.task_type)
+    source, filters = Tickets, extra_filters or []
+    if x == "category":
+        source, category, filters = _by_need_type(Tickets, Tickets.uuid, extra_filters)
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = select(*cols).select_from(Tickets).where(*live_tickets(extra_filters), *(extra_filters or []))
+    query = select(*cols).select_from(source).where(*live_tickets(extra_filters), *filters)
     if bucket is not None:
         query = query.where(bucket_expr == bucket)
     if lower is not None:
@@ -205,7 +233,7 @@ async def get_completion_rate(
     tz: ZoneInfo,
     extra_filters: list | None = None,
 ) -> list[dict]:
-    """Completed / total ticket ratio, overall, per task_type, or per creation day/week.
+    """Completed / total ticket ratio, overall, per need type (see _by_need_type), or per creation day/week.
 
     Canceled tickets are excluded from both halves: in the denominator they would read as
     work we failed to deliver, when it was called off.
@@ -226,12 +254,13 @@ async def get_completion_rate(
         period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
         cols.insert(0, period.label("x"))
         group_cols.append(period)
-    elif x == "category":
-        category = category_expr(Tickets.task_type)
+    source, filters = Tickets, extra_filters or []
+    if x == "category":
+        source, category, filters = _by_need_type(Tickets, Tickets.uuid, extra_filters)
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = select(*cols).select_from(Tickets).where(*live_tickets(extra_filters), *(extra_filters or []))
+    query = select(*cols).select_from(source).where(*live_tickets(extra_filters), *filters)
     if lower is not None:
         query = query.where(Tickets.created_at >= lower)
     if upper is not None:
@@ -684,7 +713,7 @@ async def get_duplicate_count(
     A ticket counts once, however many cards name it, when at least one card about tickets still
     waits for a reviewer (dedup_review.PENDING_STATUSES) and was not resolved by a merge. A need
     card counts the ticket its need belongs to. The date range filters on the card's `created_at`;
-    `x="date"` groups a ticket by its earliest such card, `x="category"` by `task_type`.
+    `x="date"` groups a ticket by its earliest such card, `x="category"` by its need types.
 
     Both tickets of a card must be live and inside `extra_filters`: scoping only the counted side
     would flag a ticket as a duplicate of one the caller isn't allowed to see.
@@ -727,28 +756,26 @@ async def get_duplicate_count(
         .subquery()
     )
     flagged = (
-        select(
-            sides.c.ticket_uuid,
-            Tickets.task_type.label("category"),
-            func.min(sides.c.created_at).label("flagged_at"),
-        )
-        .join(Tickets, Tickets.uuid == sides.c.ticket_uuid)
-        .group_by(sides.c.ticket_uuid, Tickets.task_type)
+        select(sides.c.ticket_uuid, func.min(sides.c.created_at).label("flagged_at"))
+        .group_by(sides.c.ticket_uuid)
         .subquery()
     )
 
     cols = [func.count(flagged.c.ticket_uuid).label("count")]
     group_cols = []
+    source, filters = flagged, []
     if x == "date":
         period = func.date_trunc(granularity, func.timezone(tz.key, flagged.c.flagged_at))
         cols.insert(0, period.label("x"))
         group_cols.append(period)
     elif x == "category":
-        category = category_expr(flagged.c.category)
+        # The scope already held in `in_scope`; only a type filter narrows the buckets.
+        type_filters = [c for c in extra_filters or [] if NEED_TYPE in c._annotations]
+        source, category, filters = _by_need_type(flagged, flagged.c.ticket_uuid, type_filters)
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = select(*cols).select_from(flagged)
+    query = select(*cols).select_from(source).where(*filters)
     if group_cols:
         query = query.group_by(*group_cols)
 

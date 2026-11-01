@@ -539,17 +539,7 @@ async def test_completion_rate_axis_is_a_percentage(client, db_session, redis):
 async def test_category_axis_shows_display_names(client, db_session, redis):
     """Raw task_type keys become their zh-TW names on the axis; the series name is zh-TW too."""
     user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
-    db_session.add(
-        Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid,
-            title="t",
-            contact_name="c",
-            status="pending",
-            priority="high",
-            task_type="rescue",
-        )
-    )
+    await _filed(db_session, user_uuid, task_type="rescue")
     await db_session.commit()
 
     res = await client.get(
@@ -854,7 +844,9 @@ async def test_data_requires_the_domain_permission(client, db_session, redis):
 async def test_data_matches_what_the_chart_plots(client, db_session, redis):
     """Same query, same numbers: the data endpoint is the figure's series without the figure."""
     user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
-    db_session.add_all([_ticket(user_uuid, "rescue"), _ticket(user_uuid, "hr"), _ticket(user_uuid, None)])
+    await _filed(db_session, user_uuid, task_type="rescue")
+    await _filed(db_session, user_uuid, task_type="hr")
+    db_session.add(_ticket(user_uuid, "rescue"))  # no needs, so uncategorised whatever its own column says
     await db_session.commit()
 
     params = {"tz": "UTC", "y": "total_tickets", "x": "category"}

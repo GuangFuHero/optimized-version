@@ -250,13 +250,12 @@ def test_resolve_still_rejects_invalid_chart_type():
 
 @pytest.mark.asyncio
 async def test_ticket_count_category_labels_null_task_type(db):
-    """A NULL task_type becomes a real label, so a line chart can sort the axis.
-
-    Regression for the PR #32 review's H1a: task_type is nullable and was grouped raw, so
-    `x=category&chart_type=line` mixed None with str in chart_render's sort and 500'd.
-    """
+    """A ticket with no needs gets a real label, so a line chart can sort the axis."""
     user_uuid = await _make_user(db)
-    db.add_all([_make_ticket(user_uuid, task_type="rescue"), _make_ticket(user_uuid, task_type=None)])
+    with_need, without = _make_ticket(user_uuid, task_type=None), _make_ticket(user_uuid, task_type="rescue")
+    db.add_all([with_need, without])
+    await db.flush()
+    db.add(_make_task(str(with_need.uuid), user_uuid))
     await db.flush()
 
     rows = await ticket_analytics.get_ticket_count(
@@ -996,16 +995,24 @@ async def test_duplicate_count_dates_a_ticket_by_its_cards(db):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_count_by_category_follows_the_tickets_task_type(db):
-    """x=category groups a flagged ticket by its task_type."""
+async def test_duplicate_count_by_category_follows_the_need_types(db):
+    """x=category groups a flagged ticket by its needs' types, and a type filter shows only its bucket."""
     user_uuid = await _make_user(db)
-    a, b = await _tickets_with_a_need(db, user_uuid, 2, task_type="supply")
-    c, d = await _tickets_with_a_need(db, user_uuid, 2, task_type="medical")
+    a, b, c, d = await _tickets_with_a_need(db, user_uuid, 4, task_type="hr")
+    for (_, need_uuid), need_type in zip(
+        (a, b, c, d), ("supply", "supply", "medical", "medical"), strict=True
+    ):
+        (await db.get(TicketTask, need_uuid)).task_type = need_type
     db.add_all([_pair("ticket_task", a[1], b[1]), _pair("ticket_task", c[1], d[1])])
     await db.flush()
 
     rows = await _duplicates(db, x="category")
     assert {r["x"]: r["count"] for r in rows} == {"supply": 2, "medical": 2}
+    supply = ticket_filters(
+        task_type=TicketTaskType("supply"), status=None, county=None, town=None, village=None
+    )
+    rows = await _duplicates(db, x="category", extra_filters=supply)
+    assert {r["x"]: r["count"] for r in rows} == {"supply": 2}
 
 
 @pytest.mark.asyncio
@@ -1020,3 +1027,63 @@ async def test_duplicate_count_needs_both_tickets_of_a_card_inside_the_callers_f
     assert await _duplicates(db) == [{"count": 3}]
     assert await _duplicates(db, extra_filters=[Tickets.created_by == mine]) == [{"count": 2}]
     assert await _duplicates(db, extra_filters=[Tickets.created_by == theirs]) == [{"count": 0}]
+
+
+async def _by_category(db, metric=ticket_analytics.get_ticket_count, **kwargs) -> dict:
+    if metric is ticket_analytics.get_ticket_count:
+        kwargs.setdefault("bucket", None)
+    rows = await metric(
+        db, x="category", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ, **kwargs
+    )
+    return {r["x"]: r.get("count", r.get("total")) for r in rows}
+
+
+@pytest.mark.asyncio
+async def test_category_groups_a_ticket_under_each_type_of_its_live_needs(db):
+    """A ticket counts once per live need type, so the categories can sum to more than the total.
+
+    The ticket's own task_type column plays no part; a deleted need's type is dropped, and a
+    ticket with no live needs is uncategorised.
+    """
+    user_uuid = await _make_user(db)
+    both, gone, bare = (_make_ticket(user_uuid, task_type="rescue") for _ in range(3))
+    db.add_all([both, gone, bare])
+    await db.flush()
+    db.add_all(
+        [
+            _make_task(str(both.uuid), user_uuid, task_type="hr"),
+            _make_task(str(both.uuid), user_uuid, task_type="supply"),
+            _make_task(str(both.uuid), user_uuid, task_type="supply"),
+            _need(str(gone.uuid), user_uuid, quantity=None, task_type="medical", delete_at=datetime.now(UTC)),
+            _make_task(str(gone.uuid), user_uuid, task_type="hr"),
+        ]
+    )
+    await db.flush()
+
+    expected = {"hr": 2, "supply": 1, UNCATEGORIZED_LABEL: 1}
+    assert await _by_category(db) == expected
+    assert await _by_category(db, ticket_analytics.get_completion_rate) == expected
+    assert await _count(db, bucket=None) == 3
+
+    hr = ticket_filters(task_type=TicketTaskType("hr"), status=None, county=None, town=None, village=None)
+    assert await _by_category(db, extra_filters=hr) == {"hr": 2}
+    assert await _by_category(db, ticket_analytics.get_completion_rate, extra_filters=hr) == {"hr": 2}
+
+
+@pytest.mark.asyncio
+async def test_category_puts_a_deleted_ticket_under_its_needs_types(db):
+    """With deleted tickets counted, one lands under its needs' types, though they were deleted with it."""
+    user_uuid = await _make_user(db)
+    ticket = _make_ticket(user_uuid)
+    db.add(ticket)
+    await db.flush()
+    now = datetime.now(UTC)
+    db.add(_need(str(ticket.uuid), user_uuid, quantity=None, task_type="supply", delete_at=now))
+    ticket.delete_at = now
+    await db.flush()
+
+    assert await _by_category(db) == {}
+    with_deleted = ticket_filters(
+        task_type=None, status=None, county=None, town=None, village=None, include_deleted=True
+    )
+    assert await _by_category(db, extra_filters=with_deleted) == {"supply": 1}

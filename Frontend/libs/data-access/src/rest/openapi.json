@@ -6058,10 +6058,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -6395,10 +6395,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -6856,10 +6856,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -7181,10 +7181,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",

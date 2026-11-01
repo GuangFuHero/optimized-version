@@ -12,7 +12,7 @@ build dropdowns from that response instead of hardcoding the rules.
 
 Example queries:
 - `?y=total_tickets&x=date&x_granularity=week` — ticket volume trend, weekly buckets
-- `?y=total_tickets&x=category` — ticket volume broken down by task_type
+- `?y=total_tickets&x=category` — ticket volume broken down by need type (once per type)
 - `?y=task_completion_distribution` — no `x` needed, always a fixed 2-slice pie
 - `?y=net_backlog_change` — no `x` needed either; this metric is always date-grouped
 
@@ -118,6 +118,8 @@ _VALUE_Y_DESCRIPTION = (
 )
 _X_DESCRIPTION = (
     "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). "
+    "For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts "
+    "once per type, so the categories can sum to more than the total. "
     "Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; "
     "see GET /analytics/catalog."
 )

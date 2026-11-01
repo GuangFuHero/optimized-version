@@ -12,6 +12,9 @@ against it. `chart_type` is validated strictly (an unsupported chart_type for a 
 y is a 400), and so is an `x` the metric's `allowed_x` lacks (the endpoint layer, a 422). Only
 two cases are reconciled rather than rejected: an omitted `x` on a forced-shape metric, and
 `chart_type=pie` together with `x=date`, which has no pie form.
+
+For a ticket-level metric, `"category"` is the type of each of the ticket's live needs: a ticket
+counts once per type, so the categories can sum to more than the total.
 """
 
 import html
