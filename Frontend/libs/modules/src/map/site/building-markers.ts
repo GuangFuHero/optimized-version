@@ -27,7 +27,11 @@ export function toBuildingMarker(
     label: building.name,
     variant: 'in-progress',
     detailType: 'ticket',
-    building: { uuid: building.uuid },
+    building: {
+      uuid: building.uuid,
+      ticketCount: building.ticketCount,
+      shortfall: building.shortfall,
+    },
   };
 }
 

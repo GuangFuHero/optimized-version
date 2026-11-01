@@ -110,26 +110,47 @@ const BUILDING_GLYPH =
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>';
 
 /**
- * An open building's entry (`item.building`, prototype `createBuildingIcon`): 看各樓層, never 0 件 —
- * it may only have its tickets filtered out, and it is the way in to file the first one, so it says
- * what a tap does. The card stands above the point, clear of the 「N 求助」 a guest's cell shows there.
+ * How many tickets a building's entry shows (ADR-450): 0 for a guest, who is given no counts
+ * (SPACE-FE-104), and for a building with none.
+ */
+export function shownBuildingTickets(item: RescueMapMarkerItem): number {
+  return item.building?.ticketCount ?? 0;
+}
+
+/**
+ * An open building's entry (`item.building`, prototype `createBuildingIcon`): 「N 件」 and, while its
+ * tickets are short of people, 「缺 M」 on red — the one number a volunteer decides on. With no ticket,
+ * or to a guest, 看各樓層, never 0 件: it is the way in to file the first one, so it says what a tap
+ * does. Without a count the card stands above the point, clear of the 「N 求助」 a guest's cell shows
+ * there; with one, it stands on it.
  */
 function createBuildingIcon(
   item: RescueMapMarkerItem,
   leaflet: typeof import('leaflet'),
 ): import('leaflet').DivIcon {
+  const tickets = shownBuildingTickets(item);
+  const short = item.building?.shortfall ?? 0;
+  const counts =
+    tickets > 0
+      ? `<span class="map-building__count">${tickets} 件</span>${
+          short > 0
+            ? `<span class="map-building__short">缺 ${short}</span>`
+            : ''
+        }`
+      : '<span class="map-building__text">看各樓層</span>';
+
   return leaflet.divIcon({
     className: 'map-marker-wrapper',
     html: [
       '<div class="map-marker-stack">',
-      `<div class="map-building">${BUILDING_GLYPH}<span class="map-building__text">看各樓層</span></div>`,
+      `<div class="map-building">${BUILDING_GLYPH}${counts}</div>`,
       '<div class="map-marker__label map-marker__label--ticket">',
       `<span class="map-marker__label-text">${escapeHtml(item.label)}</span>`,
       '</div>',
       '</div>',
     ].join(''),
     iconSize: [140, 64],
-    iconAnchor: [70, 72],
+    iconAnchor: [70, tickets > 0 ? 40 : 72],
     popupAnchor: [0, -34],
   });
 }

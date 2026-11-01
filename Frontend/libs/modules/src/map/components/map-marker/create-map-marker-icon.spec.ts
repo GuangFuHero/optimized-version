@@ -125,3 +125,51 @@ describe('a teardrop pin (`pin`)', () => {
     expect(pinHtml({ pin: { color: '"><b>&' } })).not.toContain('"><b>');
   });
 });
+
+describe("a building's entry (`building`)", () => {
+  function entry(ticketCount: number | null, shortfall: number | null) {
+    const options = createMapMarkerIcon(
+      {
+        id: 'building:b-1',
+        title: '大進國小',
+        subtitle: '',
+        position: [23.67, 121.43],
+        label: '大進國小',
+        variant: 'in-progress',
+        detailType: 'ticket',
+        building: { uuid: 'b-1', ticketCount, shortfall },
+      },
+      leaflet,
+    ) as unknown as { html: string; iconAnchor: [number, number] };
+
+    return { html: options.html, anchor: options.iconAnchor };
+  }
+
+  it('says its tickets, and on red what they are still short', () => {
+    const { html } = entry(7, 3);
+
+    expect(html).toContain('<span class="map-building__count">7 件</span>');
+    expect(html).toContain('<span class="map-building__short">缺 3</span>');
+    expect(html).not.toContain('看各樓層');
+  });
+
+  it('says only the tickets when none is short of people', () => {
+    const { html } = entry(2, 0);
+
+    expect(html).toContain('2 件');
+    expect(html).not.toContain('缺');
+  });
+
+  it('says 看各樓層, never 0 件, for a building with none and to a guest, who is given no counts', () => {
+    for (const html of [entry(0, 0).html, entry(null, null).html]) {
+      expect(html).toContain('看各樓層');
+      expect(html).not.toContain('件');
+    }
+  });
+
+  it("stands above its point without a count, clear of a guest's cell, and on it with one", () => {
+    expect(entry(null, null).anchor).toEqual([70, 72]);
+    expect(entry(0, 0).anchor).toEqual([70, 72]);
+    expect(entry(7, 3).anchor).toEqual([70, 40]);
+  });
+});

@@ -5,9 +5,10 @@ export const BUILDING_ENTRY_LIMIT = 3;
 
 /**
  * The buildings at the top of the list's 任務 (prototype `SpaceEntryList`): those whose name or address
- * holds the search the tickets were searched with (`q`, none under two characters), in name order.
- * The prototype puts those still short of people first, then those with tickets; that waits for the
- * counts, which the list does not show yet.
+ * holds the search the tickets were searched with (`q`, none under two characters). Those still short
+ * of the most people first, then those with the most tickets, then those nobody has asked for help in
+ * yet (SPACE-FE-103); in name order among equals. A guest is given no counts, so a guest's are in name
+ * order alone.
  */
 export function buildingEntries(
   buildings: readonly BuildingMapEntry[],
@@ -23,5 +24,10 @@ export function buildingEntries(
           text?.toLowerCase().includes(term),
         ),
     )
-    .sort((x, y) => x.name.localeCompare(y.name, 'zh-Hant'));
+    .sort(
+      (x, y) =>
+        (y.shortfall ?? 0) - (x.shortfall ?? 0) ||
+        (y.ticketCount ?? 0) - (x.ticketCount ?? 0) ||
+        x.name.localeCompare(y.name, 'zh-Hant'),
+    );
 }
