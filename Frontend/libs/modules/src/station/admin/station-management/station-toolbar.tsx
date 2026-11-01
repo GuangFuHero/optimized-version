@@ -58,11 +58,8 @@ export function StationToolbar({
         filterOpen={filterOpen}
         onToggleFilter={onToggleFilter}
         onClear={onClear}
-        placeholder="搜尋站名／地址…"
+        placeholder="打 2 個字以上搜尋站名／地址…"
         ariaLabel="搜尋站點"
-        hint={(draft) =>
-          draft.trim().length === 1 ? '至少輸入 2 個字' : undefined
-        }
       />
 
       <Typography
