@@ -202,6 +202,14 @@ export function toExtentVariables(
   return toServerVariables(filters);
 }
 
+/**
+ * The filters as one string, as the server takes them: the map frames again when it changes, and
+ * remembers the one it last showed.
+ */
+export function ticketFiltersKey(filters: TicketFilters): string {
+  return JSON.stringify(toExtentVariables(filters));
+}
+
 /** The tickets inside `viewport` that match the filters, up to the map's limit. */
 export function toMapVariables(
   filters: TicketFilters,
