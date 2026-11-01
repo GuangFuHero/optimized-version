@@ -86,20 +86,18 @@ export function boxFitsWhole(
 
 /**
  * 有 N 張單在這個範圍外: after a framing that went home, the matching tickets the view leaves out,
- * which no one browsing the map would see. Null after any other framing, while a count is not in, or
- * with none left out.
+ * which no one browsing the map would see. Null after any other framing, while the count is not in,
+ * or with none left out.
  */
 export function outsideCount(input: {
   wentHome: boolean;
-  /** Matching tickets in view, null until the view's load lands. */
-  inViewTotal: number | null;
-  /** Matching tickets anywhere, null until known. */
-  matchingTotal: number | null;
+  /** Matching tickets outside the view, as the server counts them; null until known. */
+  outsideTotal: number | null;
 }): number | null {
-  const { wentHome, inViewTotal, matchingTotal } = input;
-  if (!wentHome || inViewTotal === null || matchingTotal === null) return null;
-  const outside = matchingTotal - inViewTotal;
-  return outside > 0 ? outside : null;
+  const { wentHome, outsideTotal } = input;
+  return wentHome && outsideTotal !== null && outsideTotal > 0
+    ? outsideTotal
+    : null;
 }
 
 /**

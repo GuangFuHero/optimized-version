@@ -50,6 +50,7 @@ export function sortSpaceRows(rows: readonly SpaceListRow[]): SpaceListRow[] {
 /**
  * The spaces the board lists under `filters`, in order. One whose tickets aren't in (null) stays
  * under a filter, as one of them may pass; the search still applies, by its name and address.
+ * None while the board lists only the tickets outside the map (看是哪幾張).
  */
 export function visibleSpaceRows(
   spaces: readonly {
@@ -58,6 +59,7 @@ export function visibleSpaceRows(
   }[],
   filters: TicketFilters,
 ): SpaceListRow[] {
+  if (filters.outside) return [];
   const hasFilters = countActiveFilters(filters) > 0;
   return sortSpaceRows(
     spaces

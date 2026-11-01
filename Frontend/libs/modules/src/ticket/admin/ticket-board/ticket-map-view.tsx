@@ -4,6 +4,7 @@ import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
 import {
   useTicket,
   useTicketsExtent,
+  useTicketsOutsideCount,
 } from '@rescue-frontend/data-access/admin';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { Building2, ChevronRight, MapPinOff, X } from 'lucide-react';
@@ -42,7 +43,10 @@ import {
   ticketFiltersKey,
   toExtentVariables,
   toMapVariables,
+  toOutsideCountVariables,
+  viewportBox,
   type MapViewport,
+  type TicketBox,
   type TicketFilters,
 } from './model/ticket-filters';
 import {
@@ -92,6 +96,8 @@ interface TicketMapViewProps {
   /** The spaces the filters let through: one square pin each (BE-036). */
   spaces?: readonly SpaceListRow[];
   onOpenSpace?: (uuid: string) => void;
+  /** 看是哪幾張: list the matching tickets outside this box, the view the map counted them by. */
+  onShowOutside?: (box: TicketBox) => void;
 }
 
 const NO_SPACES: readonly SpaceListRow[] = [];
@@ -110,6 +116,7 @@ export function TicketMapView({
   onOpenTicket,
   spaces = NO_SPACES,
   onOpenSpace,
+  onShowOutside,
 }: TicketMapViewProps) {
   const [leafletMap, setLeafletMap] = useState<LeafletMap | null>(null);
   // Whether the map opened where this browser last left it; set with the map, before it is used.
@@ -166,13 +173,20 @@ export function TicketMapView({
     matchingTotal: framing.totalCount,
     wentHome: framing.wentHome,
   });
+  // Counted only after a framing that went home: the box the view loads inside, turned round.
+  const outsideVariables = useMemo(
+    () => (viewport ? toOutsideCountVariables(filters, viewport) : {}),
+    [filters, viewport],
+  );
+  const outsideQuery = useTicketsOutsideCount(outsideVariables, {
+    enabled: framing.wentHome && viewport !== null,
+  });
   const outside =
     notice === 'error'
       ? null
       : outsideCount({
           wentHome: framing.wentHome,
-          inViewTotal,
-          matchingTotal: framing.totalCount,
+          outsideTotal: outsideQuery.data?.tickets.pageInfo.totalCount ?? null,
         });
 
   return (
@@ -205,7 +219,18 @@ export function TicketMapView({
         </Callout>
       ) : null}
       {outside !== null ? (
-        <Callout tone="info">{`有 ${outside} 張單在這個範圍外`}</Callout>
+        <Callout tone="info">
+          {`有 ${outside} 張單在這個範圍外`}
+          {onShowOutside && viewport ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onShowOutside(viewportBox(viewport))}
+            >
+              看是哪幾張
+            </Button>
+          ) : null}
+        </Callout>
       ) : null}
       <Box
         sx={{

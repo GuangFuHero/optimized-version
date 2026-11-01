@@ -1,6 +1,7 @@
 import type {
   AdminTicketMapPinsQueryVariables,
   AdminTicketsExtentQueryVariables,
+  AdminTicketsOutsideCountQueryVariables,
   AdminTicketsQueryVariables,
 } from '@rescue-frontend/data-access/admin';
 
@@ -14,6 +15,14 @@ import {
 import { resolveTicketSearch } from '../../../ticket-search';
 import { TICKET_STATUS_OPTIONS } from '../../../status';
 
+/** A box on the map, in degrees: what `bounds` and `outsideBounds` take. */
+export interface TicketBox {
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
+}
+
 export interface TicketFilters {
   status: TicketStatus | null;
   priority: TicketPriority | null;
@@ -22,6 +31,11 @@ export interface TicketFilters {
   /** A disaster type, sent to the server as `disasterType`. */
   disaster: string | null;
   q: string;
+  /**
+   * Only the tickets outside this box: the map's view when it said 有 N 張單在這個範圍外 and
+   * 看是哪幾張 was pressed. The list's alone: the map frames and loads as it would without it.
+   */
+  outside: TicketBox | null;
 }
 
 /**
@@ -41,6 +55,7 @@ export const EMPTY_TICKET_FILTERS: TicketFilters = {
   taskType: null,
   disaster: null,
   q: '',
+  outside: null,
 };
 
 const KEYS = {
@@ -49,7 +64,31 @@ const KEYS = {
   taskType: 'task',
   disaster: 'disaster',
   q: 'q',
+  outside: 'outside',
 } as const;
+
+/** A box written as west,south,east,north: `minLng,minLat,maxLng,maxLat`. */
+function writeBox(box: TicketBox): string {
+  return [box.minLng, box.minLat, box.maxLng, box.maxLat].join(',');
+}
+
+/** A box read back from the URL; null unless four numbers, west to east and south to north. */
+function parseBox(value: string | null): TicketBox | null {
+  const parts = value?.split(',') ?? [];
+  if (parts.length !== 4 || parts.some((part) => part.trim() === '')) {
+    return null;
+  }
+  const [minLng, minLat, maxLng, maxLat] = parts.map(Number);
+  const onGlobe =
+    [minLng, minLat, maxLng, maxLat].every(Number.isFinite) &&
+    minLat >= -90 &&
+    maxLat <= 90 &&
+    minLng >= -180 &&
+    maxLng <= 180;
+  return onGlobe && minLat <= maxLat && minLng <= maxLng
+    ? { minLat, maxLat, minLng, maxLng }
+    : null;
+}
 
 export function parseTicketFilters(params: URLSearchParams): TicketFilters {
   const pick = <T extends string>(key: string, allowed: readonly T[]) => {
@@ -65,6 +104,7 @@ export function parseTicketFilters(params: URLSearchParams): TicketFilters {
     taskType: params.get(KEYS.taskType) || null,
     disaster: params.get(KEYS.disaster) || null,
     q: params.get(KEYS.q) ?? '',
+    outside: parseBox(params.get(KEYS.outside)),
   };
 }
 
@@ -81,6 +121,7 @@ export function writeTicketFilters(
   set(KEYS.taskType, filters.taskType);
   set(KEYS.disaster, filters.disaster);
   set(KEYS.q, filters.q.trim() || null);
+  set(KEYS.outside, filters.outside ? writeBox(filters.outside) : null);
   next.delete('page');
   return next;
 }
@@ -116,12 +157,14 @@ export function countActiveFilters(filters: TicketFilters): number {
 }
 
 /**
- * The list asks the server for every ticket in the viewer's scope: no filter, and no keyword the
- * server takes (one too short is not sent). An empty list then means there are no tickets at all,
- * not that none match — the two empty states the design tells apart.
+ * The list asks the server for every ticket in the viewer's scope: no filter, no keyword the server
+ * takes (one too short is not sent) and no box to list outside. An empty list then means there are
+ * no tickets at all, not that none match — the two empty states the design tells apart.
  */
 export function listsEveryTicket(filters: TicketFilters): boolean {
-  return Object.keys(toServerVariables(filters)).length === 0;
+  return (
+    Object.keys(toServerVariables(filters)).length === 0 && !filters.outside
+  );
 }
 
 export const TICKET_PAGE_SIZE = 50;
@@ -132,7 +175,10 @@ export function parseTicketPage(params: URLSearchParams): number {
   return Number.isFinite(page) && page >= 1 ? page : 1;
 }
 
-/** One board page: the filters plus that page's window. Pages count from 1. */
+/**
+ * One board page: the filters, and the box to list outside when there is one, plus that page's
+ * window. Pages count from 1.
+ */
 export function toPageVariables(
   filters: TicketFilters,
   page: number,
@@ -140,6 +186,7 @@ export function toPageVariables(
   const index = Math.max(1, Math.trunc(page) || 1) - 1;
   return {
     ...toServerVariables(filters),
+    ...(filters.outside ? { outsideBounds: filters.outside } : {}),
     skip: index * TICKET_PAGE_SIZE,
     limit: TICKET_PAGE_SIZE,
   };
@@ -210,6 +257,16 @@ export function ticketFiltersKey(filters: TicketFilters): string {
   return JSON.stringify(toExtentVariables(filters));
 }
 
+/** The box the map loads its tickets inside: the view, snapped outward and kept on the globe. */
+export function viewportBox(viewport: MapViewport): TicketBox {
+  return {
+    minLat: clamp(down(viewport.south), -90, 90),
+    maxLat: clamp(up(viewport.north), -90, 90),
+    minLng: clamp(down(viewport.west), -180, 180),
+    maxLng: clamp(up(viewport.east), -180, 180),
+  };
+}
+
 /** The tickets inside `viewport` that match the filters, up to the map's limit. */
 export function toMapVariables(
   filters: TicketFilters,
@@ -217,14 +274,23 @@ export function toMapVariables(
 ): AdminTicketMapPinsQueryVariables {
   return {
     ...toServerVariables(filters),
-    bounds: {
-      minLat: clamp(down(viewport.south), -90, 90),
-      maxLat: clamp(up(viewport.north), -90, 90),
-      minLng: clamp(down(viewport.west), -180, 180),
-      maxLng: clamp(up(viewport.east), -180, 180),
-    },
+    bounds: viewportBox(viewport),
     zoom: Math.round(viewport.zoom),
     skip: 0,
     limit: TICKET_MAP_LIMIT,
+  };
+}
+
+/**
+ * How many matching tickets lie outside the box the map loads inside: with the same box and the
+ * same filters, the two split the matches between them (ADR-452), so 看是哪幾張 lists exactly these.
+ */
+export function toOutsideCountVariables(
+  filters: TicketFilters,
+  viewport: MapViewport,
+): AdminTicketsOutsideCountQueryVariables {
+  return {
+    ...toServerVariables(filters),
+    outsideBounds: viewportBox(viewport),
   };
 }

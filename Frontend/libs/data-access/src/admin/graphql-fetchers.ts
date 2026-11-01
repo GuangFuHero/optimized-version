@@ -219,6 +219,31 @@ export function useTicketsExtent(
   });
 }
 
+/** How many matching tickets lie outside a box: the same ones `outsideBounds` lists (ADR-452). */
+export const ticketsOutsideCountQuery = (
+  variables: documents.AdminTicketsOutsideCountQueryVariables,
+) =>
+  queryOptions({
+    queryKey: [...ticketKeys.outsideCounts(), variables],
+    queryFn: ({ signal }) =>
+      adminGraphqlClient
+        .query(documents.AdminTicketsOutsideCountDocument, variables, {
+          fetchOptions: { credentials: 'include', signal },
+        })
+        .toPromise()
+        .then(graphqlResponseData),
+  });
+
+export function useTicketsOutsideCount(
+  variables: documents.AdminTicketsOutsideCountQueryVariables,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...ticketsOutsideCountQuery(variables),
+    enabled: options.enabled,
+  });
+}
+
 /** The board's counts over every ticket the caller may list, whatever the filters. */
 export const ticketStatsQuery = () =>
   queryOptions({

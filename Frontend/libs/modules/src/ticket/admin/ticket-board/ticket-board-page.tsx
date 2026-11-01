@@ -27,6 +27,7 @@ import {
   toExtentVariables,
   toPageVariables,
   writeTicketFilters,
+  type TicketBox,
   type TicketFilters,
 } from './model/ticket-filters';
 import { toTicketStats } from './model/ticket-stats';
@@ -95,6 +96,28 @@ export function TicketBoardPage() {
       replaceParams(next);
     },
     [params, replaceParams],
+  );
+  // 看是哪幾張 lists what the map left out; back on the map, the board is every match again.
+  const setView = useCallback(
+    (next: BoardView) => {
+      const nextParams =
+        next === 'map' && filters.outside
+          ? writeTicketFilters(params, { ...filters, outside: null })
+          : new URLSearchParams(params);
+      if (next === 'map') nextParams.set('view', 'map');
+      else nextParams.delete('view');
+      replaceParams(nextParams);
+    },
+    [filters, params, replaceParams],
+  );
+  // 看是哪幾張: the list, of the matching tickets outside the box the map counted them by.
+  const showOutside = useCallback(
+    (box: TicketBox) => {
+      const next = writeTicketFilters(params, { ...filters, outside: box });
+      next.delete('view');
+      replaceParams(next);
+    },
+    [filters, params, replaceParams],
   );
 
   // One page from the server, for the table only.
@@ -185,7 +208,7 @@ export function TicketBoardPage() {
           count={count}
           view={view}
           help={PAGE_HELP}
-          onChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
+          onChange={setView}
         />
       </AdminHeaderSlot>
       <AdminListPageLayout
@@ -252,6 +275,20 @@ export function TicketBoardPage() {
                 </Callout>
               </Box>
             ) : null}
+            {view === 'table' && filters.outside ? (
+              <Box sx={{ mb: '12px' }}>
+                <Callout tone="info">
+                  只列出地圖範圍外的單
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFilters({ ...filters, outside: null })}
+                  >
+                    顯示全部
+                  </Button>
+                </Callout>
+              </Box>
+            ) : null}
             {view === 'map' ? (
               <TicketMapView
                 filters={filters}
@@ -260,6 +297,7 @@ export function TicketBoardPage() {
                 onOpenTicket={openTicket}
                 spaces={spaceRows}
                 onOpenSpace={openSpace}
+                onShowOutside={showOutside}
               />
             ) : (
               <TicketTable

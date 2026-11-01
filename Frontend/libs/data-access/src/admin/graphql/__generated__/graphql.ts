@@ -2357,6 +2357,7 @@ export type AdminStationFieldsFragment = {
 
 export type AdminTicketsQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
+  outsideBounds?: InputMaybe<BoundsInput>;
   status?: InputMaybe<Scalars['String']['input']>;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
@@ -2448,6 +2449,23 @@ export type AdminTicketsQuery = {
       hasNextPage: boolean;
       hasPreviousPage: boolean;
     };
+  };
+};
+
+export type AdminTicketsOutsideCountQueryVariables = Exact<{
+  outsideBounds?: InputMaybe<BoundsInput>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  priority?: InputMaybe<Scalars['String']['input']>;
+  q?: InputMaybe<Scalars['String']['input']>;
+  needType?: InputMaybe<Scalars['String']['input']>;
+  disasterType?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+export type AdminTicketsOutsideCountQuery = {
+  __typename?: 'Query';
+  tickets: {
+    __typename?: 'TicketConnection';
+    pageInfo: { __typename?: 'PageInfo'; totalCount: number };
   };
 };
 
@@ -4702,6 +4720,17 @@ export const AdminTicketsDocument = {
           kind: 'VariableDefinition',
           variable: {
             kind: 'Variable',
+            name: { kind: 'Name', value: 'outsideBounds' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'BoundsInput' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
             name: { kind: 'Name', value: 'status' },
           },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
@@ -4769,6 +4798,14 @@ export const AdminTicketsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'bounds' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'outsideBounds' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'outsideBounds' },
                 },
               },
               {
@@ -5068,6 +5105,148 @@ export const AdminTicketsDocument = {
     },
   ],
 } as unknown as DocumentNode<AdminTicketsQuery, AdminTicketsQueryVariables>;
+export const AdminTicketsOutsideCountDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminTicketsOutsideCount' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'outsideBounds' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'BoundsInput' },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'status' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'priority' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'needType' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'disasterType' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'tickets' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'outsideBounds' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'outsideBounds' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'status' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'status' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'priority' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'priority' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'q' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'needType' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'needType' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'disasterType' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'disasterType' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'limit' },
+                value: { kind: 'IntValue', value: '0' },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'pageInfo' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'totalCount' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminTicketsOutsideCountQuery,
+  AdminTicketsOutsideCountQueryVariables
+>;
 export const AdminTicketMapPinsDocument = {
   kind: 'Document',
   definitions: [

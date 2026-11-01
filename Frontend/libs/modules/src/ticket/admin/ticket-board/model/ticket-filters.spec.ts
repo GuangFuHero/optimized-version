@@ -15,6 +15,7 @@ import {
   TICKET_PAGE_KEYS,
   toExtentVariables,
   toMapVariables,
+  toOutsideCountVariables,
   toPageVariables,
   toServerVariables,
   writeTicketFilters,
@@ -251,5 +252,79 @@ describe('NEED_FILTER_TYPES', () => {
     expect(ticketFiltersKey({ ...pending, q: '水管' })).not.toBe(
       ticketFiltersKey(pending),
     );
+  });
+});
+
+describe('outside: the tickets outside the map', () => {
+  const box = { minLat: 23.6, maxLat: 23.7, minLng: 121.4, maxLng: 121.5 };
+  const view = {
+    west: 121.512345,
+    south: 23.912341,
+    east: 121.612341,
+    north: 24.012349,
+    zoom: 13.6,
+  };
+
+  it('round-trips through the URL as west,south,east,north', () => {
+    const next = writeTicketFilters(new URLSearchParams('ticket=abc'), {
+      ...EMPTY_TICKET_FILTERS,
+      outside: box,
+    });
+    expect(next.get('outside')).toBe('121.4,23.6,121.5,23.7');
+    expect(next.get('ticket')).toBe('abc');
+    expect(parseTicketFilters(next).outside).toEqual(box);
+    expect(writeTicketFilters(next, EMPTY_TICKET_FILTERS).has('outside')).toBe(
+      false,
+    );
+  });
+
+  it('ignores a box that is not four numbers, west to east and south to north, on the globe', () => {
+    for (const value of [
+      '',
+      '121.4,23.6,121.5',
+      'a,b,c,d',
+      '121.5,23.6,121.4,23.7',
+      '121.4,23.7,121.5,23.6',
+      '121.4,-95,121.5,23.7',
+      '-190,23.6,121.5,23.7',
+    ]) {
+      expect(
+        parseTicketFilters(new URLSearchParams({ outside: value })).outside,
+      ).toBeNull();
+    }
+  });
+
+  it('lists the page outside the box, with the other filters', () => {
+    expect(
+      toPageVariables(
+        { ...EMPTY_TICKET_FILTERS, status: 'pending', outside: box },
+        1,
+      ),
+    ).toEqual({ status: 'pending', outsideBounds: box, skip: 0, limit: 50 });
+  });
+
+  it('leaves the map alone: it frames and loads as it would without the box', () => {
+    const filters = { ...EMPTY_TICKET_FILTERS, outside: box };
+    expect(toExtentVariables(filters)).toEqual({});
+    expect(ticketFiltersKey(filters)).toBe(
+      ticketFiltersKey(EMPTY_TICKET_FILTERS),
+    );
+    expect(toMapVariables(filters, view)).toEqual(
+      toMapVariables(EMPTY_TICKET_FILTERS, view),
+    );
+  });
+
+  it('is no filter-panel filter, though the list no longer lists every ticket', () => {
+    const filters = { ...EMPTY_TICKET_FILTERS, outside: box };
+    expect(countActiveFilters(filters)).toBe(0);
+    expect(listsEveryTicket(filters)).toBe(false);
+  });
+
+  it('counts outside the very box the map loads inside, with the same filters', () => {
+    const filters = { ...EMPTY_TICKET_FILTERS, priority: 'high' as const };
+    expect(toOutsideCountVariables(filters, view)).toEqual({
+      priority: 'high',
+      outsideBounds: toMapVariables(filters, view).bounds,
+    });
   });
 });

@@ -162,4 +162,13 @@ describe('visibleSpaceRows', () => {
       }),
     ).toEqual([]);
   });
+
+  it('lists none while the board lists the tickets outside the map', () => {
+    expect(
+      visibleSpaceRows(spaces, {
+        ...EMPTY_TICKET_FILTERS,
+        outside: { minLat: 23.6, maxLat: 23.7, minLng: 121.4, maxLng: 121.5 },
+      }),
+    ).toEqual([]);
+  });
 });
