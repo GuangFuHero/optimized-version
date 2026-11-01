@@ -23,7 +23,7 @@ export default async function NotFound() {
   }
 
   return (
-    <AdminShell notFound>
+    <AdminShell notFound siteUrl={process.env.SITE_APP_URL}>
       <AdminErrorPage code="404" />
     </AdminShell>
   );

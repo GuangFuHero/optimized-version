@@ -3,24 +3,136 @@
 import { Hexagon } from 'lucide-react';
 
 import { Box, ButtonBase, IconButton, Stack, Typography } from '@mui/material';
+import { type Ref, useCallback, useEffect, useRef, useState } from 'react';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../../../shell/site/site-badge';
 import { TicketPriorityBadge } from '../../../ticket/priority-badge';
 import { getTicketStatusTone } from '../../../ticket/status';
-import { describeLocationCellSpan } from '../../location-cells';
-import type { RescueMapLocationCell } from '../../types';
+import {
+  describeLocationCellSpan,
+  LOCATION_CELL_MEMBERS_PAGE_SIZE,
+} from '../../location-cells';
+import type {
+  LocationCellMembersLoader,
+  RescueMapLocationCell,
+} from '../../types';
 import { LocationPrivacyNotice } from '../location-privacy-notice';
+import {
+  type CellMembersList,
+  EMPTY_CELL_MEMBERS,
+  nextCellMembersSkip,
+  withCellMembersPage,
+} from './cell-members';
 
 const { color, radius, spacing } = designTokens;
 const CloseIcon = Icons.close;
 
+// 再顯示 stays focusable while the next page loads, so a keyboard user's focus does not drop to the
+// page; it only looks and acts disabled.
+const LOOKS_DISABLED = {
+  '&[aria-disabled="true"]': {
+    bgcolor: color.bg.disable,
+    color: color.fg.disable,
+    borderColor: 'transparent',
+    cursor: 'default',
+    '&:hover': { bgcolor: color.bg.disable, transform: 'none' },
+  },
+};
+
 interface LocationCellDetailProps {
   cell: RescueMapLocationCell;
+  /** Reads the tickets of a cell that came counted, without them; not given, its own are listed. */
+  loadMembers?: LocationCellMembersLoader;
   isAuthenticated: boolean;
   onClose: () => void;
   onSelectMember: (markerId: string) => void;
+}
+
+interface CellMembers extends CellMembersList {
+  status: 'loading' | 'idle' | 'error';
+}
+
+/**
+ * The cell's tickets: its own, or with `loadMembers`, read a page at a time from the first. A page
+ * that comes back after the cell or the filter changed, or after the panel closed, is dropped.
+ */
+function useCellMembers(
+  cell: RescueMapLocationCell,
+  loadMembers: LocationCellMembersLoader | undefined,
+): CellMembers & { loadMore: () => void; retry: () => void } {
+  const [state, setState] = useState<CellMembers>(() =>
+    loadMembers
+      ? { ...EMPTY_CELL_MEMBERS, status: 'loading' }
+      : {
+          members: cell.members,
+          read: cell.members.length,
+          hasMore: false,
+          status: 'idle',
+        },
+  );
+  // Moved on by each run of the effect below and as it is cleaned up: a page keeps the run it was
+  // asked in, and is listed only if that run is still the current one.
+  const runRef = useRef(0);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const load = useCallback(
+    async (skip: number) => {
+      if (!loadMembers) {
+        return;
+      }
+
+      const run = runRef.current;
+      // A first page lists the cell afresh: what was listed was for another cell or filter.
+      setState((current) =>
+        skip === 0
+          ? { ...EMPTY_CELL_MEMBERS, status: 'loading' }
+          : { ...current, status: 'loading' },
+      );
+
+      try {
+        const page = await loadMembers(cell.cell, skip);
+
+        if (run === runRef.current) {
+          setState((current) => ({
+            ...withCellMembersPage(current, page, skip),
+            status: 'idle',
+          }));
+        }
+      } catch {
+        if (run === runRef.current) {
+          setState((current) => ({ ...current, status: 'error' }));
+        }
+      }
+    },
+    [cell.cell, loadMembers],
+  );
+
+  useEffect(() => {
+    runRef.current += 1;
+    void load(0);
+
+    return () => {
+      runRef.current += 1;
+    };
+  }, [load]);
+
+  const own: CellMembers = {
+    members: cell.members,
+    read: cell.members.length,
+    hasMore: false,
+    status: 'idle',
+  };
+  const next = () => void load(nextCellMembersSkip(stateRef.current));
+
+  return { ...(loadMembers ? state : own), loadMore: next, retry: next };
 }
 
 /**
@@ -32,10 +144,51 @@ interface LocationCellDetailProps {
  */
 export function LocationCellDetail({
   cell,
+  loadMembers,
   isAuthenticated,
   onClose,
   onSelectMember,
 }: LocationCellDetailProps) {
+  const { members, hasMore, status, loadMore, retry } = useCellMembers(
+    cell,
+    loadMembers,
+  );
+  const listRef = useRef<HTMLDivElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  // Where a page asked for under the list starts. The button pressed for it goes away when the
+  // last page is in or the page fails, and a keyboard user's focus would go with it.
+  const askedFromRef = useRef<number | null>(null);
+  const askFromFoot = (ask: () => void) => () => {
+    askedFromRef.current = members.length;
+    ask();
+  };
+
+  useEffect(() => {
+    const from = askedFromRef.current;
+
+    if (from === null || status === 'loading') {
+      return;
+    }
+
+    askedFromRef.current = null;
+
+    // Moved on only if focus fell back with the pressed button, to the page or to the drawer that
+    // holds the list, and not if it went elsewhere since.
+    if (!document.activeElement?.contains(listRef.current)) {
+      return;
+    }
+
+    // The list holds its tickets in order, then its foot: the first ticket the page added, or 再試一次.
+    const target =
+      status === 'error'
+        ? retryRef.current
+        : listRef.current?.children.item(from);
+
+    if (target instanceof HTMLElement) {
+      target.focus();
+    }
+  }, [status]);
+
   return (
     <Box
       component="aside"
@@ -100,7 +253,7 @@ export function LocationCellDetail({
               color: color.fg.neutral.default,
             }}
           >
-            這個區塊有 {cell.members.length} 筆求助
+            這個區塊有 {cell.count} 筆求助
           </Typography>
           <Typography
             sx={{
@@ -122,6 +275,7 @@ export function LocationCellDetail({
       </Box>
 
       <Stack
+        ref={listRef}
         sx={{
           flex: 1,
           minHeight: 0,
@@ -132,7 +286,7 @@ export function LocationCellDetail({
           pb: `${spacing[6]}px`,
         }}
       >
-        {cell.members.map((member) => (
+        {members.map((member) => (
           <ButtonBase
             key={member.id}
             onClick={() => onSelectMember(member.id)}
@@ -180,7 +334,94 @@ export function LocationCellDetail({
             </Typography>
           </ButtonBase>
         ))}
+        <CellMembersFooter
+          status={status}
+          hasMore={hasMore}
+          listed={members.length > 0}
+          retryRef={retryRef}
+          onLoadMore={askFromFoot(loadMore)}
+          onRetry={askFromFoot(retry)}
+        />
       </Stack>
     </Box>
+  );
+}
+
+/** Under the list: still reading, failed, or more to show. Nothing once every ticket is listed. */
+function CellMembersFooter({
+  status,
+  hasMore,
+  listed,
+  retryRef,
+  onLoadMore,
+  onRetry,
+}: {
+  status: CellMembers['status'];
+  hasMore: boolean;
+  /** Some tickets are listed already: a load is then for the next page, under the button. */
+  listed: boolean;
+  retryRef: Ref<HTMLButtonElement>;
+  onLoadMore: () => void;
+  onRetry: () => void;
+}) {
+  const loadingText = (
+    <Typography
+      role="status"
+      sx={{
+        py: 1,
+        textAlign: 'center',
+        fontSize: displayTextSize[13],
+        color: color.fg.neutral.muted,
+      }}
+    >
+      載入中...
+    </Typography>
+  );
+
+  if (status === 'loading' && !(listed && hasMore)) {
+    return loadingText;
+  }
+
+  if (status === 'error') {
+    return (
+      <Stack sx={{ alignItems: 'center', gap: 1, py: 1 }}>
+        <Typography
+          role="alert"
+          sx={{ fontSize: displayTextSize[13], color: color.fg.neutral.subtle }}
+        >
+          讀不到這個區塊的求助，請再試一次。
+        </Typography>
+        <Button ref={retryRef} variant="outline" size="sm" onClick={onRetry}>
+          再試一次
+        </Button>
+      </Stack>
+    );
+  }
+
+  if (!hasMore) {
+    return null;
+  }
+
+  const loading = status === 'loading';
+
+  return (
+    <Stack
+      direction="row"
+      sx={{ alignSelf: 'center', alignItems: 'center', gap: 1 }}
+    >
+      <Button
+        variant="outline"
+        size="sm"
+        aria-disabled={loading}
+        aria-busy={loading}
+        onClick={() => {
+          if (!loading) onLoadMore();
+        }}
+        sx={LOOKS_DISABLED}
+      >
+        再顯示 {LOCATION_CELL_MEMBERS_PAGE_SIZE} 筆
+      </Button>
+      {loading ? loadingText : null}
+    </Stack>
   );
 }
