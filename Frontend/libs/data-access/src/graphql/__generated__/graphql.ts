@@ -1228,6 +1228,8 @@ export type RoleRequestType = {
   /** Spec 019 only; no longer sent (ADR-355) */
   contact?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['DateTime']['output'];
+  /** The team approval handed out: the one joined, or the one a new-team application founded */
+  grantedTeam?: Maybe<RoleRequestTeam>;
   /** The team a new-team application founds */
   newTeamName?: Maybe<Scalars['String']['output']>;
   reason: Scalars['String']['output'];
