@@ -14,7 +14,7 @@ import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 
-import { BuildingDrawer } from '../building';
+import { BuildingDrawer, BuildingEntryList } from '../building';
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from '../map/constants';
 import { countDetailOpenings } from '../map/detail-openings';
@@ -455,6 +455,9 @@ export function SiteListView() {
           sx={{
             minHeight: 0,
             overflowY: 'auto',
+            // A column, so that 沒有符合條件的資料 centres in what the buildings above it leave.
+            display: 'flex',
+            flexDirection: 'column',
             px: { mobile: 2, tablet: 3 },
             pt: 2,
             // On a phone the last card scrolls clear of the floating 請求協助 (52px, 16px up).
@@ -474,6 +477,13 @@ export function SiteListView() {
               搜尋請輸入至少 2 個字
             </Typography>
           ) : null}
+          {/* The buildings one can open floor by floor, those with no ticket too. Outside the
+              no-match branch below: a street searched that has no ticket may still have a building. */}
+          {dataType === 'ticket' ? (
+            <Box sx={{ mb: 1.5 }}>
+              <BuildingEntryList q={ticketQuery} onOpen={setBuildingUuid} />
+            </Box>
+          ) : null}
           {/* Not while a page is on its way: every search reloads the list, and it would read
               as empty between keystrokes. Nor while a later page may still list something: the
               rows so far may all have folded away (含已滿額), and only the sentinel below can ask
@@ -481,7 +491,7 @@ export function SiteListView() {
           {loadFailed ? (
             <Stack
               sx={{
-                height: '100%',
+                flex: 1,
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: color.fg.neutral.muted,
@@ -497,7 +507,7 @@ export function SiteListView() {
             !canLoadMore ? (
             <Stack
               sx={{
-                height: '100%',
+                flex: 1,
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: color.fg.neutral.muted,
