@@ -13,6 +13,7 @@ import {
   ChevronUp,
   ClipboardList,
   Package,
+  TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -34,7 +35,11 @@ import {
   type DashboardChart,
 } from './charts';
 import { FieldTag } from './field-tag';
-import { DashboardFilterBar, type DashboardFilters } from './filters';
+import {
+  DashboardFilterBar,
+  MiniSelect,
+  type DashboardFilters,
+} from './filters';
 import {
   applyFilterChange,
   DASHBOARD_KPIS,
@@ -43,17 +48,29 @@ import {
   DEFAULT_LOOKBACK_DAYS,
   formatKpiValue,
   kpiAvailability,
+  kpiQueryRange,
   localDateString,
   lookbackRange,
+  rangeAsOfCaption,
   rangeCreatedCaption,
   rangeLengthDays,
+  volunteerGapLine,
   type AnalyticsCatalog,
   type DashboardDateRange,
   type DashboardKpi,
-  type DashboardKpiAccent,
   type KpiAvailability,
   type MetricSpec,
 } from './kpis';
+import {
+  areaChoices,
+  domainHasArea,
+  filterQuery,
+  type DashboardArea,
+  type DashboardDomain,
+  type SectionFilter,
+} from './filter-query';
+import { ACCENT_COLORS } from './tones';
+import { VolunteerTypesPanel } from './volunteer-types-panel';
 
 const { color, typography, radius, shadow } = designTokens;
 
@@ -61,18 +78,12 @@ const sameFilters = (a: DashboardFilters, b: DashboardFilters) =>
   a.range.start_date === b.range.start_date &&
   a.range.end_date === b.range.end_date &&
   a.granularity === b.granularity &&
-  a.timeZone === b.timeZone;
+  a.timeZone === b.timeZone &&
+  a.area.county === b.area.county &&
+  a.area.town === b.area.town &&
+  a.area.village === b.area.village;
 
 type ValueQuery = UseQueryResult<{ value: number }, Error>;
-
-/** The KPI card's left bar, by token role — `kpis.ts` names the role, this file resolves it. */
-const ACCENT_COLORS: Record<DashboardKpiAccent, string> = {
-  primary: color.bg.primary.default,
-  secondary: color.bg.secondary.default,
-  success: color.bg.success.default,
-  warning: color.bg.warning.default,
-  muted: color.fg.neutral.muted,
-};
 
 /** The design's `wg-caption`: 14px muted, the muted tone carrying the contrast. */
 const caption = { ...typography.body[300], color: color.fg.neutral.muted };
@@ -88,8 +99,9 @@ function kpiValueQuery(
   kpi: DashboardKpi,
   range: DashboardDateRange,
   timeZone: string,
+  filters: Record<string, string>,
 ) {
-  const query = { ...range, tz: timeZone };
+  const query = { ...kpiQueryRange(kpi, range), tz: timeZone, ...filters };
   return kpi.domain === 'tickets'
     ? ticketAnalyticsValueQuery({ query: { ...query, y: kpi.metric } })
     : stationAnalyticsValueQuery({ query: { ...query, y: kpi.metric } });
@@ -104,10 +116,13 @@ function KpiValue({
   spec,
   availability,
   query,
+  warn,
 }: {
   spec: MetricSpec | undefined;
   availability: KpiAvailability;
   query: ValueQuery;
+  /** The unit takes the warning colour with the number, as on the gap card while anyone is missing. */
+  warn: boolean;
 }) {
   if (isForbidden(query)) {
     return <Typography sx={caption}>沒有權限</Typography>;
@@ -148,7 +163,7 @@ function KpiValue({
         sx={{
           fontSize: 15,
           marginLeft: '2px',
-          color: color.fg.neutral.muted,
+          color: warn ? color.fg.warning : color.fg.neutral.muted,
         }}
       >
         {formatted.unit}
@@ -163,21 +178,28 @@ function KpiCard({
   availability,
   query,
   devMode,
-  rangeCaption,
+  scope,
 }: {
   kpi: DashboardKpi;
   spec: MetricSpec | undefined;
   availability: KpiAvailability;
   query: ValueQuery;
   devMode: boolean;
-  /** Which tickets the number counts, from `rangeCreatedCaption`, e.g. 今日建立. */
-  rangeCaption: string;
+  /**
+   * What the number counts, on the line under the title: `rangeCreatedCaption` (今日建立) for a
+   * count over the range, `rangeAsOfCaption` (截至今日) for a running total.
+   */
+  scope: string;
 }) {
-  const title = spec ? `${spec.label}（${rangeCaption}）` : undefined;
+  const value = query.data?.value;
+  const isGap = kpi.metric === 'volunteer_gap';
+  // The design turns the whole gap card to the warning colours while anyone is missing.
+  const warn = isGap && value !== undefined && value > 0;
+  const footer = (isGap && volunteerGapLine(value)) || spec?.description;
   return (
     <Box
       component="article"
-      aria-label={title ?? kpi.metric}
+      aria-label={spec ? `${spec.label}，${scope}` : kpi.metric}
       title={spec?.description}
       sx={{
         display: 'flex',
@@ -190,9 +212,14 @@ function KpiCard({
         overflow: 'hidden',
         borderRadius: `${radius.md}px`,
         border: `1px solid ${color.border.default}`,
-        // The one card the design wants read first carries the accent outline instead.
-        borderColor: kpi.emphasis ? color.border.accent : color.border.default,
-        bgcolor: color.bg.neutral.default,
+        // The one card the design wants read first carries the accent outline instead, and the gap
+        // card the warning one while anyone is missing.
+        borderColor: warn
+          ? color.bg.warning.hover
+          : kpi.emphasis
+            ? color.border.accent
+            : color.border.default,
+        bgcolor: warn ? color.bg.warning.subtle : color.bg.neutral.default,
         boxShadow: shadow.sm,
       }}
     >
@@ -207,11 +234,22 @@ function KpiCard({
           bgcolor: ACCENT_COLORS[kpi.accent],
         }}
       />
-      <Typography
-        sx={{ ...typography.label[400], color: color.fg.neutral.default }}
-      >
-        {title}
-      </Typography>
+      <Stack direction="row" sx={{ alignItems: 'center', gap: '6px' }}>
+        {warn ? (
+          <TriangleAlert size={16} color={color.fg.warning} aria-hidden />
+        ) : null}
+        <Typography
+          sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+        >
+          {spec?.label}
+        </Typography>
+      </Stack>
+      {spec ? (
+        // A running total's day is bold, as the design sets 截至今日 apart from 近 30 天建立.
+        <Typography sx={{ ...caption, fontWeight: kpi.asOf ? 700 : undefined }}>
+          {scope}
+        </Typography>
+      ) : null}
       <Typography
         component="div"
         sx={{
@@ -219,17 +257,20 @@ function KpiCard({
           fontSize: 30,
           lineHeight: 1.15,
           letterSpacing: '-.02em',
-          color: color.fg.neutral.default,
+          color: warn ? color.fg.warning : color.fg.neutral.default,
           // The digits keep one width as the values change.
           fontVariantNumeric: 'tabular-nums',
         }}
       >
-        <KpiValue spec={spec} availability={availability} query={query} />
+        <KpiValue
+          spec={spec}
+          availability={availability}
+          query={query}
+          warn={warn}
+        />
       </Typography>
-      {spec?.description ? (
-        <Typography sx={{ ...caption, lineHeight: 1.4 }}>
-          {spec.description}
-        </Typography>
+      {footer ? (
+        <Typography sx={{ ...caption, lineHeight: 1.4 }}>{footer}</Typography>
       ) : null}
       {devMode ? <FieldTag title="API 參數：y">y={kpi.metric}</FieldTag> : null}
     </Box>
@@ -275,6 +316,9 @@ function ChartGrid({
   timeZone,
   devMode,
   emptyPreview,
+  area,
+  section,
+  leading,
 }: {
   charts: readonly DashboardChart[];
   catalog: AnalyticsCatalog | undefined;
@@ -283,6 +327,11 @@ function ChartGrid({
   timeZone: string;
   devMode: boolean;
   emptyPreview: boolean;
+  area: DashboardArea;
+  /** The 類型 and 狀態 of the section the charts are in. */
+  section: SectionFilter;
+  /** A panel drawn before the charts, in the same grid. */
+  leading?: React.ReactNode;
 }) {
   return (
     <Box
@@ -292,6 +341,7 @@ function ChartGrid({
         gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
       }}
     >
+      {leading}
       {charts.map((chart) => (
         <ChartPanel
           key={`${chart.domain}.${chart.metric}`}
@@ -301,6 +351,7 @@ function ChartGrid({
           range={range}
           granularity={granularity}
           timeZone={timeZone}
+          filters={filterQuery(chart.domain, area, section, chart.metric)}
           devMode={devMode}
           emptyPreview={emptyPreview}
         />
@@ -318,18 +369,26 @@ function DomainSection({
   icon: Icon,
   title,
   description,
+  controls,
   children,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
+  /** The section's own filters, right of the rule; they wrap under the title on a phone. */
+  controls?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <Stack component="section" aria-label={title} sx={{ gap: '14px' }}>
       <Stack
         direction="row"
-        sx={{ alignItems: 'center', gap: '10px', paddingTop: '6px' }}
+        sx={{
+          alignItems: 'center',
+          gap: '10px',
+          paddingTop: '6px',
+          flexWrap: 'wrap',
+        }}
       >
         <Box
           sx={{
@@ -364,14 +423,65 @@ function DomainSection({
           aria-hidden
           sx={{
             flex: 1,
+            minWidth: 24,
             height: '1px',
             bgcolor: color.border.default,
             marginLeft: '6px',
           }}
         />
+        {controls ? (
+          <Stack
+            direction="row"
+            sx={{ alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}
+          >
+            {controls}
+          </Stack>
+        ) : null}
       </Stack>
       {children}
     </Stack>
+  );
+}
+
+/**
+ * The 類型 and 狀態 beside a section's heading, from that domain's catalog filters. They apply to
+ * that section only: the two domains' types and statuses are different lists.
+ */
+function SectionControls({
+  domain,
+  typeLabel,
+  statusLabel,
+  catalog,
+  value,
+  onChange,
+}: {
+  domain: DashboardDomain;
+  typeLabel: string;
+  statusLabel: string;
+  catalog: AnalyticsCatalog | undefined;
+  value: SectionFilter;
+  onChange: (next: SectionFilter) => void;
+}) {
+  const options = catalog?.filters?.[domain];
+  return (
+    <>
+      <MiniSelect
+        id={`dashboard-${domain}-type`}
+        label={typeLabel}
+        allLabel="全部"
+        value={value.type}
+        options={options?.types ?? []}
+        onChange={(type) => onChange({ ...value, type })}
+      />
+      <MiniSelect
+        id={`dashboard-${domain}-status`}
+        label={statusLabel}
+        allLabel="全部"
+        value={value.status}
+        options={options?.statuses ?? []}
+        onChange={(status) => onChange({ ...value, status })}
+      />
+    </>
   );
 }
 
@@ -387,8 +497,15 @@ export function DashboardPage() {
     ),
     granularity: 'day',
     timeZone: DASHBOARD_TIME_ZONE,
+    area: {},
   }));
   const [applied, setApplied] = useState(filters);
+  // Not in the filter card: each section sets its own, beside its heading.
+  const [sections, setSections] = useState<
+    Record<DashboardDomain, SectionFilter>
+  >({ tickets: {}, stations: {} });
+  const setSection = (domain: DashboardDomain) => (next: SectionFilter) =>
+    setSections((current) => ({ ...current, [domain]: next }));
   const [devMode, setDevMode] = useState(false);
   const previewEnabled =
     process.env.NODE_ENV !== 'production' &&
@@ -404,14 +521,13 @@ export function DashboardPage() {
     setSyncedAt(stamp());
   }, []);
 
-  const { range, timeZone } = applied;
+  const { range, timeZone, area } = applied;
   // A single day has one bucket; the filter card disables 週 for it, and the queries follow.
   const granularity: ChartGranularity =
     rangeLengthDays(range) === 1 ? 'day' : applied.granularity;
-  const rangeCaption = rangeCreatedCaption(
-    range,
-    localDateString(new Date(), timeZone),
-  );
+  const today = localDateString(new Date(), timeZone);
+  const rangeCaption = rangeCreatedCaption(range, today);
+  const asOfCaption = rangeAsOfCaption(range, today);
 
   const changeFilters = (next: DashboardFilters) => {
     setFilters(next);
@@ -430,6 +546,9 @@ export function DashboardPage() {
 
   const catalogQuery = useAnalyticsCatalog();
   const catalog = catalogQuery.data;
+  // A section whose own catalog lacks the area has no rows there, and asking it would be a 422.
+  const inArea = (domain: DashboardDomain) =>
+    domainHasArea(catalog?.filters?.[domain]?.areas, area);
 
   const cards = DASHBOARD_KPIS.map((kpi) => {
     const spec = catalog?.[kpi.domain][kpi.metric];
@@ -438,7 +557,12 @@ export function DashboardPage() {
 
   const valueQueries = useQueries({
     queries: cards.map(({ kpi, availability }) => ({
-      ...kpiValueQuery(kpi, range, timeZone),
+      ...kpiValueQuery(
+        kpi,
+        range,
+        timeZone,
+        filterQuery(kpi.domain, area, sections[kpi.domain], kpi.metric),
+      ),
       ...(emptyPreview
         ? {
             queryKey: [
@@ -452,7 +576,10 @@ export function DashboardPage() {
             queryFn: async () => ({ value: 0 }),
           }
         : {}),
-      enabled: catalog !== undefined && availability.kind === 'ready',
+      enabled:
+        catalog !== undefined &&
+        availability.kind === 'ready' &&
+        inArea(kpi.domain),
       // Each card handles its own failure — a role without ticket.view would
       // otherwise get one toast per ticket card.
       meta: { [SILENT_ERROR_META]: true },
@@ -481,7 +608,7 @@ export function DashboardPage() {
           key={`${card.kpi.domain}.${card.kpi.metric}`}
           {...card}
           devMode={devMode}
-          rangeCaption={rangeCaption}
+          scope={card.kpi.asOf ? asOfCaption : rangeCaption}
         />
       ))}
     </KpiGrid>
@@ -503,6 +630,7 @@ export function DashboardPage() {
     >
       <DashboardFilterBar
         value={filters}
+        areaOptions={areaChoices(catalog?.filters, filters.area)}
         dateProblem={dateRangeProblem(filters.range, applied.range)}
         onChange={changeFilters}
         syncedAt={syncedAt}
@@ -537,14 +665,41 @@ export function DashboardPage() {
             icon={ClipboardList}
             title="任務單"
             description="民眾與各單位回報的求助案件。這一區全部只講任務單，不含資源站點。"
+            controls={
+              <SectionControls
+                domain="tickets"
+                typeLabel="需求類型"
+                statusLabel="狀態"
+                catalog={catalog}
+                value={sections.tickets}
+                onChange={setSection('tickets')}
+              />
+            }
           >
-            {tickets.forbidden ? (
+            {!inArea('tickets') ? (
+              <Typography role="status" sx={caption}>
+                這個地區沒有任務單。
+              </Typography>
+            ) : tickets.forbidden ? (
               <Typography role="status" sx={caption}>
                 你沒有檢視任務單的權限。
               </Typography>
             ) : (
               <>
-                {renderKpis(tickets.visible, 6)}
+                {renderKpis(
+                  tickets.visible.filter((card) => !card.kpi.asOf),
+                  6,
+                )}
+                <Stack sx={{ gap: '8px' }}>
+                  {renderKpis(
+                    tickets.visible.filter((card) => card.kpi.asOf),
+                    3,
+                  )}
+                  <Typography sx={caption}>
+                    {`這三個是「${asOfCaption}」的總數，不是這段期間建立的。`}
+                    跟著地區、需求類型篩選；不受狀態篩選影響。
+                  </Typography>
+                </Stack>
                 <ChartGrid
                   charts={TICKET_CHARTS}
                   catalog={catalog}
@@ -553,6 +708,8 @@ export function DashboardPage() {
                   timeZone={timeZone}
                   devMode={devMode}
                   emptyPreview={emptyPreview}
+                  area={area}
+                  section={sections.tickets}
                 />
                 <Box>
                   <ButtonBase
@@ -581,7 +738,7 @@ export function DashboardPage() {
                     )}
                     {showDetails
                       ? '收起細部分析'
-                      : '展開細部分析（完成率、等待時間、處理耗時、重複單）'}
+                      : '展開細部分析（各需求類型志工、完成率、等待時間、處理耗時、重複單）'}
                   </ButtonBase>
                 </Box>
                 {showDetails ? (
@@ -593,6 +750,20 @@ export function DashboardPage() {
                     timeZone={timeZone}
                     devMode={devMode}
                     emptyPreview={emptyPreview}
+                    area={area}
+                    section={sections.tickets}
+                    leading={
+                      <VolunteerTypesPanel
+                        catalog={catalog}
+                        range={range}
+                        timeZone={timeZone}
+                        area={area}
+                        section={sections.tickets}
+                        asOfCaption={asOfCaption}
+                        devMode={devMode}
+                        emptyPreview={emptyPreview}
+                      />
+                    }
                   />
                 ) : null}
               </>
@@ -602,8 +773,22 @@ export function DashboardPage() {
             icon={Package}
             title="資源站點"
             description="物資站、醫療站等實體據點。與上方任務單是兩回事，數字不要互相比較。"
+            controls={
+              <SectionControls
+                domain="stations"
+                typeLabel="類型"
+                statusLabel="營運狀態"
+                catalog={catalog}
+                value={sections.stations}
+                onChange={setSection('stations')}
+              />
+            }
           >
-            {stations.forbidden ? (
+            {!inArea('stations') ? (
+              <Typography role="status" sx={caption}>
+                這個地區沒有資源站點。
+              </Typography>
+            ) : stations.forbidden ? (
               <Typography role="status" sx={caption}>
                 你沒有檢視資源站點的權限。
               </Typography>
@@ -620,6 +805,8 @@ export function DashboardPage() {
                   timeZone={timeZone}
                   devMode={devMode}
                   emptyPreview={emptyPreview}
+                  area={area}
+                  section={sections.stations}
                 />
               </>
             )}

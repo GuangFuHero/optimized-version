@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   addDays,
   applyFilterChange,
+  chartAvailability,
   dateRangeProblem,
+  kpiQueryRange,
+  rangeAsOfCaption,
+  VOLUNTEER_KPIS,
+  volunteerGapLine,
   isValidDateRange,
   DASHBOARD_QUICK_RANGES,
   DASHBOARD_TIME_ZONES,
@@ -292,5 +297,62 @@ describe('dateRangeProblem', () => {
         applied,
       ),
     ).toMatch(/^日期無效/);
+  });
+});
+
+describe('the volunteer cards', () => {
+  const today = '2026-11-01';
+  const range = { start_date: '2026-10-03', end_date: today };
+
+  it('are the three running totals, in the design order, each asked for at the end date only', () => {
+    expect(VOLUNTEER_KPIS.map((kpi) => kpi.metric)).toEqual([
+      'volunteers_needed',
+      'volunteers_matched',
+      'volunteer_gap',
+    ]);
+    for (const kpi of VOLUNTEER_KPIS) {
+      expect(kpiQueryRange(kpi, range)).toEqual({ end_date: today });
+    }
+    expect(kpiQueryRange({}, range)).toEqual(range);
+  });
+
+  it('say which day they stand at: today, or the end date of a past range', () => {
+    expect(rangeAsOfCaption(range, today)).toBe('截至今日');
+    expect(rangeAsOfCaption({ end_date: '2026-10-31' }, today)).toBe(
+      '截至 10/31',
+    );
+  });
+
+  it('say nothing is missing only when the gap is exactly zero', () => {
+    expect(volunteerGapLine(0)).toBe('目前沒有缺人的需求');
+    expect(volunteerGapLine(3)).toBeNull();
+    expect(volunteerGapLine(undefined)).toBeNull();
+  });
+});
+
+describe('chartAvailability', () => {
+  const trend = { requires_date_range: false, max_range_days: 366 };
+
+  it("caps a daily trend at the catalog's days, and lets an open range through", () => {
+    expect(
+      chartAvailability(
+        trend,
+        { start_date: '2025-01-01', end_date: '2026-11-01' },
+        'date',
+      ),
+    ).toEqual({ kind: 'needs-range', maxDays: 366 });
+    expect(
+      chartAvailability(trend, { end_date: '2026-11-01' }, 'date'),
+    ).toEqual({ kind: 'ready' });
+  });
+
+  it('leaves the other groupings to kpiAvailability: they read one instant', () => {
+    expect(
+      chartAvailability(
+        trend,
+        { start_date: '2025-01-01', end_date: '2026-11-01' },
+        'category',
+      ),
+    ).toEqual({ kind: 'ready' });
   });
 });

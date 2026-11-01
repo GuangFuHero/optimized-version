@@ -17,9 +17,11 @@ import { designTokens } from '@rescue-frontend/ui';
 import { AnalyticsChart } from './analytics-chart';
 import {
   CHART_TYPE_LABELS,
+  chartGranularity,
   chartQueryParams,
   knownOptions,
   hasChartData,
+  toneFigure,
   X_LABELS,
   type ChartGranularity,
   type ChartType,
@@ -28,11 +30,12 @@ import {
 } from './charts';
 import { FieldTag } from './field-tag';
 import {
-  kpiAvailability,
+  chartAvailability,
   type DashboardDateRange,
   type MetricSpec,
 } from './kpis';
 import { SegmentedControl } from './segmented-control';
+import { ACCENT_COLORS } from './tones';
 
 const { color, typography, radius } = designTokens;
 
@@ -48,109 +51,47 @@ function chartQuery(
   range: DashboardDateRange,
   granularity: ChartGranularity,
   timeZone: string,
+  filters: Record<string, string>,
 ) {
-  const query = chartQueryParams(view, range, granularity, timeZone);
+  const query = {
+    ...chartQueryParams(view, range, granularity, timeZone),
+    ...filters,
+  };
   return chart.domain === 'tickets'
     ? ticketAnalyticsChartQuery({ query: { ...query, y: chart.metric } })
     : stationAnalyticsChartQuery({ query: { ...query, y: chart.metric } });
 }
 
 /**
- * One chart card: title and plain-language description, the grouping and chart-type switches the
- * catalog allows for this metric, and the plot. Failures stay inside their own card.
+ * The frame every chart is drawn in: title, plain-language description, any switches, and the plot.
+ * The plot keeps its slot while anything is pending, so the card never changes height: a state is
+ * drawn over it instead of in place of it.
  */
-export function ChartPanel({
-  chart,
-  spec,
-  catalogLoaded,
-  range,
-  granularity,
-  timeZone,
-  devMode,
-  emptyPreview = false,
+export function ChartCard({
+  title,
+  description,
+  controls,
+  span,
+  figure,
+  overlay,
+  overlayIsError = false,
 }: {
-  chart: DashboardChart;
-  spec: MetricSpec | undefined;
-  catalogLoaded: boolean;
-  range: DashboardDateRange;
-  granularity: ChartGranularity;
-  timeZone: string;
-  devMode: boolean;
-  emptyPreview?: boolean;
+  title: string | undefined;
+  description: React.ReactNode;
+  controls?: React.ReactNode;
+  /** Columns out of 12 on desktop. */
+  span: DashboardChart['span'];
+  figure: AnalyticsChartFigure | null;
+  overlay: React.ReactNode;
+  overlayIsError?: boolean;
 }) {
-  const [x, setX] = useState<ChartXOption>(chart.x);
-  const [chartType, setChartType] = useState<ChartType>(chart.chartType);
-  const availability = kpiAvailability(spec, range);
-
-  // useQueries for the same reason as the KPI cards: the ticket and station options differ in
-  // their key type, so the union does not fit useQuery's overloads.
-  const [query] = useQueries({
-    queries: [
-      {
-        ...chartQuery(chart, { x, chartType }, range, granularity, timeZone),
-        ...(emptyPreview
-          ? {
-              queryKey: [
-                'admin',
-                'analytics',
-                'empty-preview',
-                chart.domain,
-                chart.metric,
-              ],
-              queryFn: async (): Promise<AnalyticsChartFigure> => ({
-                data: [],
-                layout: {},
-                config: {},
-              }),
-            }
-          : {}),
-        enabled: catalogLoaded && availability.kind === 'ready',
-        meta: { [SILENT_ERROR_META]: true },
-      },
-    ],
-  }) as [UseQueryResult<AnalyticsChartFigure, Error>];
-
-  const forbidden =
-    query.error instanceof ApiError && query.error.status === 403;
-  const title = spec?.label;
-  const xOptions = knownOptions(spec?.allowed_x, X_LABELS);
-  const chartTypeOptions = knownOptions(
-    spec?.allowed_chart_types,
-    CHART_TYPE_LABELS,
-    spec?.default_chart_type,
-  );
-
-  // The plot keeps its slot while anything is pending, so the card never changes height: the state
-  // is drawn over it instead of in place of it. A range the metric cannot be asked over reads as an
-  // error here, the way the design draws it — there is a plot missing either way.
-  let overlay: React.ReactNode = null;
-  let figure: AnalyticsChartFigure | null = null;
-  let overlayIsError = false;
-  if (forbidden) {
-    overlay = '沒有權限';
-  } else if (availability.kind === 'needs-range') {
-    overlay = availability.maxDays
-      ? `請選擇 ${availability.maxDays} 天內的期間`
-      : '請選擇統計期間';
-    overlayIsError = true;
-  } else if (query.isError) {
-    overlay = '圖表載入失敗';
-    overlayIsError = true;
-  } else if (!query.data) {
-    overlay = '載入中…';
-  } else if (!hasChartData(query.data)) {
-    overlay = '這段期間沒有資料';
-  } else {
-    figure = query.data;
-  }
-
   return (
     <Box
       component="article"
       aria-label={title}
       sx={{
         // Below desktop the content column is too narrow to share: one chart per row.
-        gridColumn: { mobile: '1 / -1', desktop: `span ${chart.span}` },
+        gridColumn: { mobile: '1 / -1', desktop: `span ${span}` },
         minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -184,31 +125,7 @@ export function ChartPanel({
           >
             {title}
           </Typography>
-          {/* Both switches in one cluster so a card too narrow for them moves the pair down
-              together, rather than leaving the first on the title's line and the second below it. */}
-          <Stack
-            direction="row"
-            sx={{ alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
-          >
-            {xOptions.length > 1 ? (
-              <SegmentedControl
-                size="sm"
-                label={`${title ?? ''}分組方式`}
-                options={xOptions}
-                value={x}
-                onChange={setX}
-              />
-            ) : null}
-            {chartTypeOptions.length > 1 ? (
-              <SegmentedControl
-                size="sm"
-                label={`${title ?? ''}圖表類型`}
-                options={chartTypeOptions}
-                value={chartType}
-                onChange={setChartType}
-              />
-            ) : null}
-          </Stack>
+          {controls}
         </Stack>
         <Typography
           sx={{
@@ -217,21 +134,7 @@ export function ChartPanel({
             lineHeight: 1.5,
           }}
         >
-          {spec?.description}
-          {spec?.requires_date_range && spec.max_range_days ? (
-            <>
-              {'　'}
-              <Box component="b" sx={{ color: color.fg.warning }}>
-                一次最多查 {spec.max_range_days} 天
-              </Box>
-            </>
-          ) : null}
-          {devMode ? (
-            <>
-              {'　'}
-              <FieldTag title="API 參數：y">y={chart.metric}</FieldTag>
-            </>
-          ) : null}
+          {description}
         </Typography>
       </Stack>
       <Box
@@ -269,5 +172,164 @@ export function ChartPanel({
         ) : null}
       </Box>
     </Box>
+  );
+}
+
+/**
+ * One chart card: title and plain-language description, the grouping and chart-type switches the
+ * catalog allows for this metric, and the plot. Failures stay inside their own card.
+ */
+export function ChartPanel({
+  chart,
+  spec,
+  catalogLoaded,
+  range,
+  granularity,
+  timeZone,
+  filters = {},
+  devMode,
+  emptyPreview = false,
+}: {
+  chart: DashboardChart;
+  spec: MetricSpec | undefined;
+  catalogLoaded: boolean;
+  range: DashboardDateRange;
+  granularity: ChartGranularity;
+  timeZone: string;
+  /** The area, type and status params this chart is asked within (`filterQuery`). */
+  filters?: Record<string, string>;
+  devMode: boolean;
+  emptyPreview?: boolean;
+}) {
+  const [x, setX] = useState<ChartXOption>(chart.x);
+  const [chartType, setChartType] = useState<ChartType>(chart.chartType);
+  const availability = chartAvailability(spec, range, x);
+
+  // useQueries for the same reason as the KPI cards: the ticket and station options differ in
+  // their key type, so the union does not fit useQuery's overloads.
+  const [query] = useQueries({
+    queries: [
+      {
+        ...chartQuery(
+          chart,
+          { x, chartType },
+          range,
+          chartGranularity(spec, granularity),
+          timeZone,
+          filters,
+        ),
+        ...(emptyPreview
+          ? {
+              queryKey: [
+                'admin',
+                'analytics',
+                'empty-preview',
+                chart.domain,
+                chart.metric,
+              ],
+              queryFn: async (): Promise<AnalyticsChartFigure> => ({
+                data: [],
+                layout: {},
+                config: {},
+              }),
+            }
+          : {}),
+        enabled: catalogLoaded && availability.kind === 'ready',
+        meta: { [SILENT_ERROR_META]: true },
+      },
+    ],
+  }) as [UseQueryResult<AnalyticsChartFigure, Error>];
+
+  const forbidden =
+    query.error instanceof ApiError && query.error.status === 403;
+  const title = chart.fixed?.title ?? spec?.label;
+  const xOptions = chart.fixed ? [] : knownOptions(spec?.allowed_x, X_LABELS);
+  const chartTypeOptions = chart.fixed
+    ? []
+    : knownOptions(
+        spec?.allowed_chart_types,
+        CHART_TYPE_LABELS,
+        spec?.default_chart_type,
+      );
+
+  // A range the metric cannot be asked over reads as an error here, the way the design draws it —
+  // there is a plot missing either way.
+  let overlay: React.ReactNode = null;
+  let figure: AnalyticsChartFigure | null = null;
+  let overlayIsError = false;
+  if (forbidden) {
+    overlay = '沒有權限';
+  } else if (availability.kind === 'needs-range') {
+    overlay = availability.maxDays
+      ? `請選擇 ${availability.maxDays} 天內的期間`
+      : '請選擇統計期間';
+    overlayIsError = true;
+  } else if (query.isError) {
+    overlay = '圖表載入失敗';
+    overlayIsError = true;
+  } else if (!query.data) {
+    overlay = '載入中…';
+  } else if (!hasChartData(query.data)) {
+    overlay = '這段期間沒有資料';
+  } else {
+    figure = chart.fixed
+      ? toneFigure(query.data, ACCENT_COLORS[chart.fixed.tone])
+      : query.data;
+  }
+
+  return (
+    <ChartCard
+      title={title}
+      span={chart.span}
+      figure={figure}
+      overlay={overlay}
+      overlayIsError={overlayIsError}
+      controls={
+        // Both switches in one cluster so a card too narrow for them moves the pair down together,
+        // rather than leaving the first on the title's line and the second below it.
+        <Stack
+          direction="row"
+          sx={{ alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
+        >
+          {xOptions.length > 1 ? (
+            <SegmentedControl
+              size="sm"
+              label={`${title ?? ''}分組方式`}
+              options={xOptions}
+              value={x}
+              onChange={setX}
+            />
+          ) : null}
+          {chartTypeOptions.length > 1 ? (
+            <SegmentedControl
+              size="sm"
+              label={`${title ?? ''}圖表類型`}
+              options={chartTypeOptions}
+              value={chartType}
+              onChange={setChartType}
+            />
+          ) : null}
+        </Stack>
+      }
+      description={
+        <>
+          {chart.fixed?.description ?? spec?.description}
+          {spec?.requires_date_range && spec.max_range_days ? (
+            <>
+              {'　'}
+              <Box component="b" sx={{ color: color.fg.warning }}>
+                一次最多查 {spec.max_range_days} 天
+              </Box>
+            </>
+          ) : null}
+          {devMode ? (
+            <>
+              {'　'}
+              <FieldTag title="API 參數：y">y={chart.metric}</FieldTag>
+            </>
+          ) : null}
+        </>
+      }
+    />
   );
 }

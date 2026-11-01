@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   forbidden: '' as string,
   failed: '' as string,
   empty: false,
+  value: 12,
   requests: [] as {
     domain: string;
     kind: string;
@@ -36,6 +37,9 @@ vi.mock('@rescue-frontend/data-access/admin', () => {
       'time_to_completion',
       'task_completion_distribution',
       'duplicate_count',
+      'volunteers_needed',
+      'volunteers_matched',
+      'volunteer_gap',
     ],
     stations: [
       'station_count',
@@ -43,25 +47,52 @@ vi.mock('@rescue-frontend/data-access/admin', () => {
       'station_freshness_trend',
     ],
   };
-  const catalog = Object.fromEntries(
-    Object.entries(metrics).map(([domain, names]) => [
-      domain,
-      Object.fromEntries(
-        names.map((name) => [
-          name,
+  const catalog = {
+    ...Object.fromEntries(
+      Object.entries(metrics).map(([domain, names]) => [
+        domain,
+        Object.fromEntries(
+          names.map((name) => [
+            name,
+            {
+              label: `後端-${name}`,
+              description: `說明-${name}`,
+              unit: '件',
+              allowed_x: ['none', 'date', 'category'],
+              allowed_chart_types: ['bar', 'line', 'pie'],
+              default_chart_type: 'bar',
+              requires_date_range: false,
+              // As the real catalog: the gap's trend comes by day only, at most 366 days.
+              ...(name === 'volunteer_gap'
+                ? { allowed_x_granularities: ['day'], max_range_days: 366 }
+                : {}),
+            },
+          ]),
+        ),
+      ]),
+    ),
+    // 宜蘭縣 only has stations: picking it leaves the tickets section nothing to ask.
+    filters: {
+      tickets: {
+        types: [{ value: 'rescue', label: '搜救' }],
+        statuses: [{ value: 'pending', label: '未指派' }],
+        areas: [
           {
-            label: `後端-${name}`,
-            description: `說明-${name}`,
-            unit: '件',
-            allowed_x: ['none', 'date', 'category'],
-            allowed_chart_types: ['bar', 'line', 'pie'],
-            default_chart_type: 'bar',
-            requires_date_range: false,
+            county: '花蓮縣',
+            towns: [{ town: '光復鄉', villages: ['大安村'] }],
           },
-        ]),
-      ),
-    ]),
-  );
+        ],
+      },
+      stations: {
+        types: [{ value: 'supply', label: '物資' }],
+        statuses: [{ value: 'open', label: '營運中' }],
+        areas: [
+          { county: '花蓮縣', towns: [{ town: '光復鄉', villages: [] }] },
+          { county: '宜蘭縣', towns: [] },
+        ],
+      },
+    },
+  };
   const queryOptions = (
     domain: string,
     kind: string,
@@ -78,7 +109,7 @@ vi.mock('@rescue-frontend/data-access/admin', () => {
         throw new ApiError(403, 'Forbidden');
       if (state.failed === query.y) throw new Error('Failed');
       return kind === 'value'
-        ? { value: 12 }
+        ? { value: state.value }
         : {
             data: [
               {
@@ -120,6 +151,7 @@ beforeEach(() => {
   state.forbidden = '';
   state.failed = '';
   state.empty = false;
+  state.value = 12;
   state.requests = [];
   container = document.createElement('div');
   document.body.append(container);
@@ -166,8 +198,10 @@ describe('dashboard states and filters', () => {
     await act(async () => preview?.click());
     await settle();
     expect(container.textContent).not.toContain('還沒有任何資料');
-    expect(container.textContent?.match(/這段期間沒有資料/g)).toHaveLength(6);
+    expect(container.textContent?.match(/這段期間沒有資料/g)).toHaveLength(7);
     expect(container.textContent).toContain('目前為無資料預覽');
+    // Every value is 0 in the preview, the gap's too: nothing is missing.
+    expect(container.textContent).toContain('目前沒有缺人的需求');
     expect(container.querySelectorAll('[role="img"]')).toHaveLength(0);
     expect(state.requests).toHaveLength(0);
     expect(preview?.getAttribute('aria-pressed')).toBe('true');
@@ -175,7 +209,7 @@ describe('dashboard states and filters', () => {
     await settle();
     expect(container.textContent).not.toContain('目前為無資料預覽');
     expect(container.textContent).not.toContain('還沒有任何資料');
-    expect(container.querySelectorAll('[role="img"]')).toHaveLength(6);
+    expect(container.querySelectorAll('[role="img"]')).toHaveLength(7);
   });
   it('shows both section permission states when neither domain is allowed', async () => {
     state.forbidden = '*';
@@ -201,7 +235,9 @@ describe('dashboard states and filters', () => {
       start?.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await settle();
-    expect(state.requests).toHaveLength(13);
+    // The seven counts and the seven charts; the three volunteer cards stand at the end date,
+    // which did not move, so they are not asked again.
+    expect(state.requests).toHaveLength(14);
     expect(
       state.requests.every(({ query }) => query.start_date === '2026-01-01'),
     ).toBe(true);
@@ -283,14 +319,14 @@ describe('dashboard states and filters', () => {
     state.forbidden = 'total_tickets';
     await mount();
     expect(container.textContent).toContain('沒有權限');
-    expect(container.querySelectorAll('[role="img"]').length).toBe(5);
+    expect(container.querySelectorAll('[role="img"]').length).toBe(6);
     expect(container.textContent).toContain('後端-total_tickets');
     expect(container.textContent).not.toContain('每天新增多少單');
   });
   it('shows empty plots independently of KPI values', async () => {
     state.empty = true;
     await mount();
-    expect(container.textContent?.match(/這段期間沒有資料/g)).toHaveLength(6);
+    expect(container.textContent?.match(/這段期間沒有資料/g)).toHaveLength(7);
     expect(container.textContent).toContain('12');
   });
   it('isolates one failing metric from other cards', async () => {
@@ -298,7 +334,7 @@ describe('dashboard states and filters', () => {
     await mount();
     expect(container.textContent).toContain('圖表載入失敗');
     expect(container.textContent).toContain('讀取失敗');
-    expect(container.querySelectorAll('[role="img"]').length).toBe(5);
+    expect(container.querySelectorAll('[role="img"]').length).toBe(6);
   });
   it('updates every active card on quick range and granularity changes without refresh', async () => {
     await mount();
@@ -309,7 +345,7 @@ describe('dashboard states and filters', () => {
     expect(button).toBeDefined();
     await act(async () => button?.click());
     await settle();
-    expect(state.requests).toHaveLength(13);
+    expect(state.requests).toHaveLength(14);
     const ranges = new Set(
       state.requests.map(
         ({ query }) => `${query.start_date}/${query.end_date}`,
@@ -379,9 +415,161 @@ describe('dashboard states and filters', () => {
     expect(
       state.requests.every(({ query }) => query.start_date === undefined),
     ).toBe(true);
-    expect(charts.every(({ query }) => query.x_granularity === 'week')).toBe(
+    const isGapTrend = ({ query }: { query: Record<string, unknown> }) =>
+      query.y === 'volunteer_gap';
+    expect(
+      charts
+        .filter((chart) => !isGapTrend(chart))
+        .every(({ query }) => query.x_granularity === 'week'),
+    ).toBe(true);
+    // The gap's trend comes by day only, so it is asked for by day.
+    expect(
+      charts.filter(isGapTrend).map(({ query }) => query.x_granularity),
+    ).toEqual(['day']);
+    expect(container.textContent).toContain('事件發生至今建立');
+  });
+
+  it('asks for the volunteer cards at the end date only and captions them 截至', async () => {
+    await mount();
+    const volunteer = state.requests.filter(
+      ({ kind, query }) =>
+        kind === 'value' && String(query.y).startsWith('volunteer'),
+    );
+    expect(volunteer.map(({ query }) => query.y)).toEqual([
+      'volunteers_needed',
+      'volunteers_matched',
+      'volunteer_gap',
+    ]);
+    expect(
+      volunteer.every(
+        ({ query }) =>
+          query.start_date === undefined && typeof query.end_date === 'string',
+      ),
+    ).toBe(true);
+    expect(container.textContent).toContain('截至今日');
+    expect(container.textContent).toContain('近 30 天建立');
+    // The range is on its own line now, not in the title.
+    expect(container.textContent).not.toContain('（近 30 天建立）');
+    // A gap above zero keeps the catalog's description; how many needs are short is not in the API.
+    expect(container.textContent).not.toContain('目前沒有缺人的需求');
+    expect(container.textContent).toContain('志工缺口每天的變化');
+  });
+
+  it('says nothing is missing when the gap is zero', async () => {
+    state.value = 0;
+    await mount();
+    expect(container.textContent).toContain('目前沒有缺人的需求');
+  });
+
+  it('draws the three volunteer metrics by need type in the detail charts, at the end date', async () => {
+    await mount();
+    state.requests = [];
+    await act(async () =>
+      Array.from(container.querySelectorAll('button'))
+        .find((el) => el.textContent?.startsWith('展開細部分析'))
+        ?.click(),
+    );
+    await settle();
+    const byType = state.requests.filter(
+      ({ kind, query }) => kind === 'chart' && query.x === 'category',
+    );
+    expect(
+      byType
+        .filter(({ query }) => String(query.y).startsWith('volunteer'))
+        .map(({ query }) => [query.y, query.start_date, query.chart_type]),
+    ).toEqual([
+      ['volunteers_needed', undefined, 'bar'],
+      ['volunteers_matched', undefined, 'bar'],
+      ['volunteer_gap', undefined, 'bar'],
+    ]);
+    expect(
+      container.querySelector(
+        '[aria-label="各需求類型：需求／已媒合／缺口圖表"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  async function pick(id: string, value: string) {
+    await act(async () => {
+      const select = container.querySelector<HTMLSelectElement>(`#${id}`);
+      if (select) select.value = value;
+      select?.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await settle();
+  }
+
+  it('asks every query within the picked area, and a section only for an area it has', async () => {
+    await mount();
+    const select = (id: string) =>
+      container.querySelector<HTMLSelectElement>(`#${id}`);
+    expect(select('dashboard-town')?.disabled).toBe(true);
+
+    state.requests = [];
+    await pick('dashboard-county', '花蓮縣');
+    expect(state.requests.length).toBeGreaterThan(0);
+    expect(state.requests.every(({ query }) => query.county === '花蓮縣')).toBe(
       true,
     );
-    expect(container.textContent).toContain('事件發生至今建立');
+    expect(select('dashboard-town')?.disabled).toBe(false);
+
+    // 村里 opens only under a town that has some.
+    expect(select('dashboard-village')).toBeNull();
+    await pick('dashboard-town', '光復鄉');
+    expect(select('dashboard-village')).not.toBeNull();
+
+    // Only stations have 宜蘭縣: the tickets section says so and is not asked, which would be a 422.
+    state.requests = [];
+    await pick('dashboard-county', '宜蘭縣');
+    expect(container.textContent).toContain('這個地區沒有任務單');
+    expect(state.requests.some(({ domain }) => domain === 'tickets')).toBe(
+      false,
+    );
+    const stations = state.requests.filter(
+      ({ domain }) => domain === 'stations',
+    );
+    expect(stations.length).toBeGreaterThan(0);
+    // A new county drops the town picked under the old one.
+    expect(
+      stations.every(
+        ({ query }) => query.county === '宜蘭縣' && query.town === undefined,
+      ),
+    ).toBe(true);
+
+    const clear = Array.from(container.querySelectorAll('button')).find(
+      (el) => el.textContent === '清除地區',
+    );
+    await act(async () => clear?.click());
+    await settle();
+    expect(container.textContent).not.toContain('這個地區沒有任務單');
+    expect(select('dashboard-county')?.value).toBe('');
+  });
+
+  it("applies a section's status to its own counts and charts, not to the volunteer numbers", async () => {
+    await mount();
+    state.requests = [];
+    await pick('dashboard-tickets-status', 'pending');
+    const tickets = state.requests.filter(({ domain }) => domain === 'tickets');
+    expect(tickets.length).toBeGreaterThan(0);
+    expect(tickets.every(({ query }) => query.status === 'pending')).toBe(true);
+    // The volunteer numbers do not take the status, so they are not asked again.
+    expect(
+      tickets.some(({ query }) => String(query.y).startsWith('volunteer')),
+    ).toBe(false);
+    expect(state.requests.some(({ domain }) => domain === 'stations')).toBe(
+      false,
+    );
+  });
+
+  it('applies the need type to the volunteer numbers too', async () => {
+    await mount();
+    state.requests = [];
+    await pick('dashboard-tickets-type', 'rescue');
+    const volunteer = state.requests.filter(({ query }) =>
+      String(query.y).startsWith('volunteer'),
+    );
+    expect(volunteer.length).toBeGreaterThan(0);
+    expect(volunteer.every(({ query }) => query.task_type === 'rescue')).toBe(
+      true,
+    );
   });
 });
