@@ -33,7 +33,7 @@ export function TicketStatsStrip({
   const { items, gap } = ticketStatTiles(stats);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
       {failed ? <StatTilesRetry retrying={retrying} onRetry={onRetry} /> : null}
       <StatTiles
         items={items}

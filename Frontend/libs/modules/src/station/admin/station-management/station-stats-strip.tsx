@@ -27,7 +27,7 @@ export function StationStatsStrip({
   const failed = statCountsFailed(facets);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
       {failed ? (
         <StatTilesRetry
           retrying={facets.isFetching}

@@ -1,7 +1,8 @@
 'use client';
 
 import { Box, ButtonBase, Typography } from '@mui/material';
-import { Button, Callout, designTokens } from '@rescue-frontend/ui';
+import { designTokens } from '@rescue-frontend/ui';
+import { CircleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import {
@@ -242,7 +243,11 @@ function TileContent({
   );
 }
 
-/** The counts did not load: the row's own 重試, as the list may have loaded fine. */
+/**
+ * The counts did not load: one line above the row with its own 重試, as the list may have loaded
+ * fine. The counts are only the list's aside, so a line of small text rather than a Callout; the
+ * tiles stay, reading — and still filtering (STAT-109).
+ */
 export function StatTilesRetry({
   retrying,
   onRetry,
@@ -251,11 +256,38 @@ export function StatTilesRetry({
   onRetry: () => void;
 }) {
   return (
-    <Callout tone="danger">
-      無法載入統計，請稍後再試
-      <Button variant="ghost" size="sm" disabled={retrying} onClick={onRetry}>
-        重試
-      </Button>
-    </Callout>
+    <Box
+      role="alert"
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        minHeight: 24,
+        ...typography.body[300],
+        color: color.fg.danger,
+      }}
+    >
+      <Box
+        component={CircleAlert}
+        aria-hidden
+        sx={{ width: 14, height: 14, flexShrink: 0 }}
+      />
+      無法載入統計
+      <ButtonBase
+        disabled={retrying}
+        onClick={onRetry}
+        sx={{
+          px: '4px',
+          minHeight: 24,
+          font: 'inherit',
+          fontWeight: primitives.fontWeight.bold,
+          color: 'inherit',
+          textDecoration: 'underline',
+          '&.Mui-disabled': { color: color.fg.neutral.muted },
+        }}
+      >
+        {retrying ? '重試中…' : '重試'}
+      </ButtonBase>
+    </Box>
   );
 }
