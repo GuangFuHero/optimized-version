@@ -726,6 +726,8 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
 2026-10-29 Carol 在 #uiux 回覆，改第 2、4 點：欄位有改動都要列，包括聯絡方式；協調人員只寫「協調人員」，
 責任區的負責團隊在單的詳情上看得到就好，紀錄裡不寫。
 2026-10-29 PR #161 code review 後，使用者在協調者分頁定：標題、需求名稱也只說改了，事件裡的需求名稱一律用現在的（第 4 點）。
+2026-11-01 PR #161 第二輪 code review 後改第 4、5 點、加第 6 點：細項刪除、湊齊或重新開放時同一次存檔的其他改動、
+建單時需求的順序、重複審核合併。
 
 **Context**：
 
@@ -752,7 +754,9 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
      - 工單：標題（`title`）、說明、地點（地址、座標，合成一個 `location`）、聯絡方式（姓名／電話／email 合成一個
        `contact`）、受困與危險兩題（`person_trapped`、`immediate_danger`）。
      - 需求：名稱（`name`）、說明、進度備註（`progress_note`）、細項（`task_properties` 的增、改、刪，合成一個
-       `properties`）。同一次存檔改到需求本身和它的細項，是同一筆 `need_updated`。
+       `properties`；刪是軟刪除，填了 `delete_at`）。同一次存檔改到需求本身和它的細項，是同一筆 `need_updated`。
+       那次存檔讓需求湊齊或重新開放（例如改了人數），改動附在那筆 `need_filled`、`need_reopened` 上；
+       停止招募那筆不附，人數降到已承接的人數，停止招募已經說了。
    - **標題和需求名稱是自由填寫的字**：舊的標題、名稱裡可能有後來刪掉的姓名、電話，給了改前的值，刪掉也還看得到。
      所以只說改了；每筆事件附的需求名稱也一律用現在的名稱，人數照舊用當時的。現在的標題、名稱本來就在單上看得到。
    - 不列：資料檢核（`audit_status`、`audit_note`：檢核員標「有問題」，原因只給工作人員看；Carol 2026-10-29 同意，
@@ -765,14 +769,24 @@ ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要�
      所以聯絡方式改了，對誰都只說改了。`test_history_public.py` 的
      `test_a_signed_in_account_never_reads_the_contact_details` 守著這條：訪客和一般帳號都看得到「改了」，
      看不到改前改後的值。
-5. **事件由後端分類，前端組句**（ADR-145）：`ticket_created`、`ticket_updated`、`need_added`、`need_updated`、
-   `need_filled`、`need_stopped`、`need_reopened`、`need_removed`、`volunteer_joined`、`volunteer_left`。
+5. **事件由後端分類，前端組句**（ADR-145）：`ticket_created`、`ticket_updated`、`ticket_merged`、`need_added`、
+   `need_updated`、`need_filled`、`need_stopped`、`need_reopened`、`need_removed`、`volunteer_joined`、
+   `volunteer_left`。
    - 停止招募和湊齊人在稽核紀錄裡都是 `status` 變 `fulfilled`，看 `recruiting_stopped_at` 有沒有被填來分
      （這欄在員工的時間軸裡排除，ADR-143）。
    - 同一筆交易是同一件事（ADR-134）：建單連同它的需求是一筆 `ticket_created`；一次存檔改到工單的幾張表，是一筆
-     `ticket_updated`。`ticket_created` 的需求照 uuid 排：站上列需求是依 `created_at`、`uuid`，同時建的需求
-     `created_at` 相同。
+     `ticket_updated`。`ticket_created` 的需求照 `created_at`、`uuid` 排，跟站上列需求一樣：送出求助單時，
+     需求照填寫的順序、各差一微秒寫入，照 uuid 排會打亂。
    - 刪除、還原工單不列：刪掉的單本來就查不到。
+6. **重複審核合併**（Spec 028，ADR-365）：另一張單併進這張單時，被搬過來的需求、被併進來的承接和細項，改掛到這張單
+   的需求下，所以這張單讀得到它們在另一張單上的整段紀錄。那段是另一張單的事，這裡不列：
+   - 只列寫入當時屬於這張單的紀錄。需求看那一列的 `ticket_uuid`；承接、細項看它掛的需求當時在哪張單；
+     哪一列都沒說的需求，看它現在是不是這張單的。人數照樣全部重播，搬過來的需求帶著它原本的承接人數。
+   - 合併本身是一筆 `ticket_merged`，從重複審核的 `merged` 事件（ADR-375）讀：`needs` 列出整件搬過來的需求，
+     和收下另一張單同類需求的需求，附合併後的人數，順序跟建單時一樣；前台寫成「與另一張單合併」。
+     不分搬過來還是併進來，也不說另一張單是哪張（它已刪除，查不到）。
+   - 合併同一筆交易改到這張單和它的需求的（人數、細項、湊齊或重新開放），照一般存檔列，排在 `ticket_merged` 上面。
+   - 被併掉的那張單本身已刪除，它的時間軸查不到。
 
 **Consequences**：
 ➕ 訪客和志工看得到一張單的進展，沒有人能從這裡知道誰去了哪裡。

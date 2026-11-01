@@ -3557,7 +3557,7 @@ export interface components {
     PublicHistoryEventResponse: {
       /**
        * Kind
-       * @description ticket_created / ticket_updated / need_added / need_updated / need_filled / need_stopped / need_reopened / need_removed / volunteer_joined / volunteer_left
+       * @description ticket_created / ticket_updated / ticket_merged / need_added / need_updated / need_filled / need_stopped / need_reopened / need_removed / volunteer_joined / volunteer_left
        */
       kind: string;
       /**
@@ -3574,7 +3574,7 @@ export interface components {
       need?: components['schemas']['PublicNeedResponse'] | null;
       /**
        * Needs
-       * @description 建單時的需求（ticket_created）
+       * @description 建單時的需求（ticket_created）；重複審核合併帶進來的需求（ticket_merged）：整件搬過來的，和收下另一張單同類需求的，人數是合併後的
        */
       needs?: components['schemas']['PublicNeedResponse'][] | null;
       /**

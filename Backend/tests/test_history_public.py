@@ -11,14 +11,17 @@ from datetime import UTC, datetime
 os.environ["ENV"] = "testing"
 
 import pytest
+from sqlalchemy import text, update
 
 from app.core.permissions import Perm
+from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, AUDITED_TABLES, get_audit_trigger_sql
 from app.models.audit import AuditLog
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
-from app.models.ticket_task import TaskProperty, TicketTask
+from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.services import history_public
 from app.services.history_fields import FIELD_TIERS, Tier
+from tests import test_dedup_resolve as resolving
 from tests.test_history_endpoints import _auth, _user_with
 
 URL = "/api/v1/history/tickets/{}/public"
@@ -45,9 +48,9 @@ async def _ticket(db, owner: str) -> str:
     return str(ticket.uuid)
 
 
-async def _need(db, ticket: str, owner: str, name="清淤泥") -> str:
+async def _need(db, ticket: str, owner: str, name="清淤泥", uuid=None) -> str:
     task = TicketTask(
-        uuid=uuidlib.uuid4(),
+        uuid=uuid or uuidlib.uuid4(),
         ticket_uuid=ticket,
         task_type="cleanup",
         task_name=name,
@@ -353,20 +356,40 @@ async def test_a_renamed_need_is_named_as_it_is_now_in_every_event(client, db_se
 
 @pytest.mark.asyncio
 async def test_the_needs_a_ticket_is_filed_with_come_in_the_site_s_order(client, db_session, redis):
-    """By uuid, as the site lists needs filed together (`created_at`, then `uuid`), not as fetched."""
+    """By `created_at`, then uuid, as the site lists them, not as fetched.
+
+    Filing a help request stamps its needs a microsecond apart in the order the requester listed them; here
+    their uuids sort the other way round.
+    """
     owner = await _user_with(db_session, redis, "建單者")
     ticket = await _ticket(db_session, owner)
-    needs = {await _need(db_session, ticket, owner, name=name): name for name in ("搬家具", "清淤泥", "送水")}
+    listed = ("搬家具", "清淤泥", "送水")
+    needs = [
+        await _need(db_session, ticket, owner, name=name, uuid=uuidlib.UUID(int=len(listed) - i))
+        for i, name in enumerate(listed)
+    ]
     filed = [
-        _row(uuid, "ticket_tasks", "INSERT", by=owner, new={"uuid": uuid, "task_name": name, "quantity": 1})
-        for uuid, name in needs.items()
+        _row(
+            uuid,
+            "ticket_tasks",
+            "INSERT",
+            by=owner,
+            new={
+                "uuid": uuid,
+                "task_name": name,
+                "quantity": 1,
+                "created_at": f"2026-10-28T09:00:00.00000{i + 1}+00:00",
+            },
+        )
+        for i, (uuid, name) in enumerate(zip(needs, listed, strict=True))
     ]
     db_session.add_all([_row(ticket, "tickets", "INSERT", by=owner, new={"uuid": ticket}), *filed])
     await db_session.commit()
 
     [created] = (await client.get(URL.format(ticket))).json()["data"]
 
-    assert [need["name"] for need in created["needs"]] == [needs[uuid] for uuid in sorted(needs)]
+    assert [need["name"] for need in created["needs"]] == list(listed)
+    assert sorted(needs) == needs[::-1]
 
 
 def test_every_column_the_staff_timeline_classifies_is_told_or_left_out_on_purpose():
@@ -502,6 +525,136 @@ async def test_a_need_s_progress_note_and_details_are_told_as_changed_without_th
     assert all(c["changed"] and c["after"] is None for e in events for c in e["changes"])
     for value in ("已聯絡", "八點", "鏟子", "水桶", "10 雙"):
         assert value not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_a_detail_taken_off_and_what_a_fill_or_reopen_also_changed_are_told(client, db_session, redis):
+    """A detail taken off is a soft delete; a save that fills or reopens a need tells what else it changed."""
+    owner = await _user_with(db_session, redis, "建單者")
+    coordinator = await _user_with(db_session, redis, "協調員")
+    volunteer = await _user_with(db_session, redis, "志工")
+    ticket = await _ticket(db_session, owner)
+    need = await _need(db_session, ticket, owner)
+    tools = TaskProperty(uuid=uuidlib.uuid4(), task_uuid=need, property_name="工具", property_value="水桶")
+    gloves = TaskProperty(uuid=uuidlib.uuid4(), task_uuid=need, property_name="手套", property_value="10 雙")
+    db_session.add_all([tools, gloves])
+    await db_session.flush()
+
+    def detail(prop, minute, old, new):
+        base = {"task_uuid": need, "property_name": prop.property_name, "property_value": prop.property_value}
+        return _row(
+            prop.uuid,
+            "task_properties",
+            "UPDATE",
+            by=coordinator,
+            minute=minute,
+            old={**base, **old},
+            new={**base, **new},
+        )
+
+    db_session.add_all(
+        [
+            *_filed(ticket, need, owner),
+            _claim(need, volunteer, minute=1),
+            detail(tools, 2, {"delete_at": None}, {"delete_at": "2026-10-28T09:02:00+00:00"}),
+            # Lowered to whoever is coming and renamed, with a detail rewritten: full in the same save.
+            _row(
+                need,
+                "ticket_tasks",
+                "UPDATE",
+                by=coordinator,
+                minute=3,
+                old={
+                    "task_name": "清淤泥",
+                    "quantity": 5,
+                    "status": "pending",
+                    "recruiting_stopped_at": None,
+                },
+                new={
+                    "task_name": "一樓清淤",
+                    "quantity": 1,
+                    "status": "fulfilled",
+                    "recruiting_stopped_at": None,
+                },
+            ),
+            detail(gloves, 3, {}, {"property_value": "20 雙"}),
+            _row(
+                need,
+                "ticket_tasks",
+                "UPDATE",
+                by=coordinator,
+                minute=4,
+                old={"quantity": 1, "status": "fulfilled"},
+                new={"quantity": 3, "status": "pending"},
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    resp = await client.get(URL.format(ticket))
+
+    events = resp.json()["data"]
+    assert [(e["kind"], e["actor_role"], [c["field"] for c in e["changes"]]) for e in events] == [
+        ("need_reopened", "staff", ["quantity"]),
+        ("need_filled", "staff", ["quantity", "name", "properties"]),
+        ("need_updated", "staff", ["properties"]),
+        ("volunteer_joined", "volunteer", []),
+        ("ticket_created", "requester", []),
+    ]
+    reopened, filled = events[0], events[1]
+    assert (reopened["changes"][0]["before"], reopened["changes"][0]["after"]) == (1, 3)
+    assert filled["need"] == {"name": "一樓清淤", "matched": 1, "required": 1}
+    for value in ("水桶", "10 雙", "20 雙"):
+        assert value not in resp.text
+
+
+async def _as(db, user_uuid: str) -> None:
+    """Who the audit trigger writes down for the rest of this transaction, as the app sets it per request."""
+    await db.execute(text("SELECT set_config('app.current_user_id', :user, true)"), {"user": user_uuid})
+
+
+@pytest.mark.asyncio
+async def test_a_merge_tells_this_ticket_s_part_and_the_merge_itself(db):
+    """A duplicate-review merge, resolved for real under the audit triggers, read on the ticket kept.
+
+    The ticket folded in is test_dedup_resolve's B, into A: its 清淤 and 飲用水 fold into A's, its 便當
+    moves over. What B's needs and claims went through on B stays B's: B's requester raising the 便當, a
+    fifth volunteer joining B's 清淤, and the 便當 being filed with B. The merge is one event on A, listing
+    the needs it brought, with the headcounts after it; what it changed on A's needs is told as any save's.
+    """
+    await db.execute(text(AUDIT_TRIGGER_FUNC_SQL))
+    for table in AUDITED_TABLES:
+        await db.execute(text(get_audit_trigger_sql(table)))
+    reviewer, ids = await resolving._world(db)
+    reviewer_uuid = str(reviewer.uuid)
+    await db.commit()
+    await _as(db, ids["owner_b"])
+    await db.execute(update(TicketTask).where(TicketTask.uuid == ids["b3"]).values(quantity=4))
+    await db.commit()
+    v5 = str((await resolving._user(db, "志工 5")).uuid)
+    await _as(db, v5)
+    db.add(TaskAssignment(task_uuid=ids["b1"], actor_uuid=v5))
+    await db.commit()
+
+    await _as(db, reviewer_uuid)
+    await resolving._resolve(db, reviewer, ids)
+    timeline = await history_public.load_public_timeline(db, uuid=ids["a"], limit=50, offset=0)
+
+    *updated, merged, created = timeline.events
+    assert sorted((e["kind"], e["need"]["name"], [c["field"] for c in e["changes"]]) for e in updated) == [
+        ("need_updated", "清淤", ["quantity", "properties"]),
+        ("need_updated", "飲用水", ["quantity"]),
+    ]
+    assert (merged["kind"], merged["actor_role"]) == ("ticket_merged", "staff")
+    # Filed together, so by uuid; 清淤 counts v1, v2 once, v3 and v5.
+    after = {
+        ids["a1"]: {"name": "清淤", "matched": 4, "required": 7},
+        ids["a2"]: {"name": "飲用水", "matched": 0, "required": 6},
+        ids["b3"]: {"name": "便當", "matched": 1, "required": 4},
+    }
+    assert merged["needs"] == [after[uuid] for uuid in sorted(after)]
+    assert created["kind"] == "ticket_created"
+    assert sorted(need["name"] for need in created["needs"]) == ["清淤", "飲用水"]
 
 
 @pytest.mark.asyncio
