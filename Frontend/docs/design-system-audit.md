@@ -5,6 +5,8 @@
 
 ## 第 0 項（先做，其他模組才有元件可換）
 
+**目前卡住**：`main` 上還沒有 `Design/handoff/`，要等設計師下一次合併把元件放進來。不要從設計師的分支複製。
+
 | 項目                                                                                                                                         | 負責人 | PR  | 狀態 |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --- | ---- |
 | 把設計師的 handoff `Button` 搬進 `libs/ui`（加 neutral、tone、loading、iconOnly、selected、count），照 `design-system.md`「搬 handoff 元件」 |        |     |      |
@@ -13,6 +15,8 @@
 
 數字是 `pnpm lint` 的 design-system warning 數（顏色＝hex／rgb／rgba；圓角、字級＝寫死的數字；Button＝從 MUI import）。
 依序處理；路徑在 `libs/modules/src/` 底下，`apps/*` 除外。
+
+⚠️ 數字**不含**模組專屬調色盤：`libs/ui/src/theme/tokens.ts` 的 `moduleColorSchemes`（auth、adminShell、adminPanels、stationList、stationDetail、ticket、mapOverlay）有大量寫死的 hex，模組透過 `getRescueColorScheme(theme)` 讀取。`libs/ui` 不在 lint 範圍內，所以例如 `admin/user` 只顯示 4 個顏色 warning，真正的偏差在調色盤裡。
 
 | #   | 模組                           | 顏色 | 圓角 | 字級 | Button | 合計 | 負責人 | PR  | 狀態 |
 | --- | ------------------------------ | ---- | ---- | ---- | ------ | ---- | ------ | --- | ---- |
@@ -53,14 +57,15 @@
 3. **不改行為**：只動樣式，不改資料流、文案、互動。
 4. PR 附修改前後的截圖（桌機與手機寬度各一張）。
 5. 找不到對應 token 的顏色（例：任務管理頁的 `#564337`、`#151C22`、`#954900`、`#17212B`、`#E7EFF7`、`#667085`）是**設計師要回答的問題**：在 #uiux 問，不要自己新增 token，也不要挑一個「差不多」的。等答案時先留著，PR 說明列出來。
-6. 圖示的 `fontSize` 改用 `designTokens.iconSize`；文字改用 `typography` 或（前台）`textSize`。
-7. 同一個 PR 把這個模組的 lint 升成 error，之後不會再退回去。在 `../eslint.config.mjs` 的最後加一行（`apps/*` 則加在該 app 的 eslint 設定，路徑相對於 app）：
+6. 模組有用到 `moduleColorSchemes` 的調色盤時，把那份調色盤也一起改成語意 token（或改成直接用 `designTokens`），算在同一個 PR；不再用的項目刪掉。
+7. 圖示的 `fontSize` 改用 `designTokens.iconSize`；文字改用 `typography` 或（前台）`textSize`。
+8. 同一個 PR 把這個模組的 lint 升成 error，之後不會再退回去。在 `../eslint.config.mjs` 的最後加一行（`apps/*` 則加在該 app 的 eslint 設定，路徑相對於 app）：
 
    ```js
    designSystemGuardrail(['libs/modules/src/ticket/admin/**/*.ts', 'libs/modules/src/ticket/admin/**/*.tsx'], 'error'),
    ```
 
-8. `pnpm lint` 通過、該模組 0 個 design-system warning，才算完成。
+9. `pnpm lint` 通過、該模組 0 個 design-system warning，才算完成。
 
 ## lint 抓不到的（review 時要看）
 
@@ -68,5 +73,8 @@
 - JSX 屬性：`<Typography fontSize={14}>`、`<Box borderRadius={2}>`。
 - 變數或常數裡的數字：`const R = 12; … borderRadius: R`。
 - CSS 字串（template literal）裡的圓角與字級；顏色會抓到。
+- 單一角的圓角：`borderTopLeftRadius: 8` 等。
+- 加了引號的 key：`'fontSize': 14`。
+- `libs/ui` 裡的值，包括上面說的 `moduleColorSchemes`。
 
 可能誤報的：字串裡剛好像 hex 的片段（例：「#123」這種編號）。遇到就在那一行加 `// eslint-disable-next-line no-restricted-syntax` 並註明原因。

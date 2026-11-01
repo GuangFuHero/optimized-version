@@ -10,6 +10,7 @@
 1. 讀 `docs/design-system.md`（tokens、`libs/ui` 元件、按鈕規則、手機規則）。
 2. 打開對應的原型畫面：民眾網站在 `../Design/前台/`，管理平台在 `../Design/後台/`（`*.html`，瀏覽器直接開），
    並讀那一側 `docs/` 裡相關的裁示。
+   目前 `main` 上只有 `前台/`；後台畫面與 `docs/` 要等設計師下一次合併。找不到對應畫面就在 #uiux 問設計師。
 3. 看 `../Design/CHANGELOG.md` 有沒有還沒做的「Frontend 待辦」碰到這個畫面；有就一起做或在 PR 說明。
 
 ## 硬規則
@@ -19,6 +20,7 @@
   需要半透明就用 `withAlpha(token, alpha)`。
 - 先用 `libs/ui` 的元件。缺某個 variant 就去 `libs/ui` 擴充，不要在頁面裡把 MUI 元件重新上色、改圓角。
 - 按鈕一律用 `libs/ui` 的 `Button`，照 `docs/design-system.md` 的 BTN 規則；不要 import MUI 的 `Button`。
+  標「未實作」的 BTN 規則：先用最接近的現有 variant，在 PR 說明註明；不要自己做，handoff `Button` 搬進來時會一起補上。
 - `design-tokens.ts` 比設計系統的 CSS 匯出新（設計師的裁示先寫進來了）。**不要為了跟 `semantic.css` 一致把它改回去。**
 - 不要改 `../Design/` 底下的檔案；那是設計師的。唯一例外：做完待辦後在 `../Design/CHANGELOG.md` 打勾。
   她給的元件在 `../Design/handoff/`，搬法見 `docs/design-system.md`。

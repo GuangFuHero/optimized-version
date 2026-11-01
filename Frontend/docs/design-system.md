@@ -18,7 +18,7 @@
                          libs/ui 元件 ──▶ libs/modules、apps 的頁面
 ```
 
-- `main` 上的 `Design/` 是設計的真實來源。設計師不改 `Frontend/`；工程師不改 `Design/`。
+- `main` 上的 `Design/` 是設計的真實來源。設計師不改 `Frontend/`；工程師不改 `Design/`（在 `CHANGELOG.md` 打勾除外）。
 - 設計系統重新匯出時，設計師在 `CHANGELOG.md` 列出每個 token 的「舊值 → 新值」，工程師照著改 `design-tokens.ts`，**只改這一支**，MUI theme 由 `bridge.ts` 推導。
 - `design-tokens.ts` 目前**比 `semantic.css` 新**：設計師的幾個裁示（`fg.onSecondary`、`fg.muted`、`border.subtle` 等）已先寫進來、CSS 匯出還沒重做。不要把它改回去對齊 CSS；差異在檔案各處註解標明。
 
@@ -43,7 +43,7 @@
 | 半透明               | `withAlpha(token, 0.2)`，不要寫 `rgba(...)`                                                                                   |
 | 圓角                 | `radius.{sm 6, md 12, lg 20, xl 32, full}`                                                                                    |
 | 間距                 | `spacing[1,2,3,4,6,8,12,…]`（4px 格；MUI 的 `theme.spacing()` 是 8px，表達不了 4／12／20）                                    |
-| 後台與元件的字       | `typography.{heading,body,label,data}[300–900]`，整組展開進 `sx`                                                              |
+| 後台與元件的字       | `typography.heading[600–900]`、`typography.{body,label,data}[300–500]`，整組展開進 `sx`                                       |
 | 前台（民眾網站）的字 | `textSize[13]` 等，key 是原型 `site.css` 的 `--fs-13`；已是手機／桌機的響應式值                                               |
 | 圖示大小             | `iconSize.{sm 14, md 18, lg 20}`；圖示不走 `textSize`                                                                         |
 | 陰影、層級           | `shadow.{sm,md,lg}`、`elevation`、`elevationShadow`                                                                           |
@@ -116,14 +116,14 @@
 
 ## 手機
 
-| 規則                                                                                        | 在哪裡實作                                                                               |
-| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 手機上輸入框至少 16px，iOS 才不會整頁放大                                                   | `IOS_NO_ZOOM_INPUT_PX`，`theme.ts` 的 `MuiInputBase`（`down('tablet')`）                 |
-| 貼著螢幕底部的東西（底部抽屜最後一列、浮動按鈕、地圖下方列）要讓出 iPhone 的 home indicator | `safeAreaBottom(space)`（`theme/safe-area.ts`），`Sheet` 與各頁的 `pb`／`bottom`         |
-| 可點範圍至少 44px                                                                           | `Button` md 44、`SelectionCard`、`Markdown` 的目錄按鈕；sm 按鈕補到 44 的 BTN-104 未實作 |
-| 前台字級手機放大                                                                            | `textSize`（`displayTextSize`），切換點 767px（`DISPLAY_SCALE_MOBILE_MEDIA`）            |
-| 設計系統元件字級手機縮小                                                                    | `typographyMobile`，切換點 600px（`MOBILE_BREAKPOINT_PX`）                               |
-| 斷點                                                                                        | `theme.ts`：`mobile` 0、`tablet` 768、`desktop` 1200（另有 MUI 預設 `sm` 600、`md` 900） |
+| 規則                                                                                        | 在哪裡實作                                                                                        |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 手機上輸入框至少 16px，iOS 才不會整頁放大                                                   | `IOS_NO_ZOOM_INPUT_PX`，`theme.ts` 的 `MuiInputBase`（`down('tablet')`）                          |
+| 貼著螢幕底部的東西（底部抽屜最後一列、浮動按鈕、地圖下方列）要讓出 iPhone 的 home indicator | `safeAreaBottom(space)`（`theme/safe-area.ts`），`Sheet` 與各頁的 `pb`／`bottom`                  |
+| 可點範圍至少 44px                                                                           | `Button` md 44、`SelectionCard`、`Markdown` 的目錄按鈕；sm 按鈕補到 44 的 BTN-104 未實作          |
+| 前台字級手機放大                                                                            | `textSize`（`displayTextSize`），切換點 767px（`DISPLAY_SCALE_MOBILE_MEDIA`）                     |
+| 設計系統元件字級手機縮小                                                                    | `typographyMobile`（切換點 600px，`MOBILE_BREAKPOINT_PX`）只是鏡像，目前沒有任何元件或 theme 套用 |
+| 斷點                                                                                        | `theme.ts`：`mobile` 0、`tablet` 768、`desktop` 1200（另有 MUI 預設 `sm` 600、`md` 900）          |
 
 **待設計師決定的問題**（不要自己選，答案請設計師寫進 `Design/` 的 `docs/`）：
 
