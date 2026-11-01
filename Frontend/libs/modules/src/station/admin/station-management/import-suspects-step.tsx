@@ -179,8 +179,8 @@ export function ImportSuspectsStep({
           </Typography>
           <Button
             size="sm"
-            variant={isFiled ? 'outline' : 'primary'}
-            aria-pressed={!isFiled}
+            variant="outline"
+            selected={!isFiled}
             aria-label={`第 ${current.line} 列：不建立`}
             disabled={disabled}
             onClick={() => choose(false)}
@@ -189,8 +189,8 @@ export function ImportSuspectsStep({
           </Button>
           <Button
             size="sm"
-            variant={isFiled ? 'primary' : 'outline'}
-            aria-pressed={isFiled}
+            variant="outline"
+            selected={isFiled}
             aria-label={`第 ${current.line} 列：仍要建立`}
             disabled={disabled}
             onClick={() => choose(true)}
