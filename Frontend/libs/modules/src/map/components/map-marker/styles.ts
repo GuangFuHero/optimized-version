@@ -92,6 +92,32 @@ export const rescueMapMarkerStyles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
+  // ── An open building's entry on the site's map (`RescueMapMarkerItem.building`): square-cornered,
+  // the outline of a building, apart from the round pin of a ticket and a guest's hexagon. ──
+  '.map-building': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '6px 10px',
+    borderRadius: `${radius.sm}px`,
+    background: color.bg.neutral.default,
+    border: `2px solid ${color.bg.primary.default}`,
+    boxShadow: shadow.md,
+    color: color.fg.neutral.default,
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
+    transition: `transform ${motion.transition.spring}`,
+  },
+  // A sentence, not a count: a size down from a number, in the body face.
+  '.map-building__text': {
+    fontFamily: typography.body[300].fontFamily,
+    ...displayTextSizeCss(12),
+    lineHeight: 1,
+    fontWeight: 600,
+  },
+  '.map-marker-wrapper:hover .map-building': {
+    transform: 'scale(1.04)',
+  },
   // ── Opt-in teardrop pin (`RescueMapMarkerItem.pin`) — admin station map only. ──
   '.map-pin-wrapper': {
     background: 'none',

@@ -67,12 +67,15 @@ export type {
 
 export {
   dedupeMarkersById,
+  pinnedBesideBuildings,
+  requestHelpOnBuildingFloor,
   SiteMapControls,
   SiteMapRouteProvider,
   useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   usePaginatedRescueMapMarkers,
+  useSiteMapBuildings,
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,

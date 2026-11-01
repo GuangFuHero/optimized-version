@@ -276,6 +276,8 @@ interface MapProps {
    * remembers nothing and opens at the event's view.
    */
   viewMemoryKey?: RescueMapMemoryKey;
+  /** A tap on an open building's entry (`marker.building`), which selects nothing: its floors. */
+  onOpenBuilding?: (buildingUuid: string) => void;
 }
 
 export const Map = memo(function Map({
@@ -303,6 +305,7 @@ export const Map = memo(function Map({
   clusterMaxZoom,
   onMapReady,
   viewMemoryKey,
+  onOpenBuilding,
 }: MapProps = {}) {
   // Read once, as the canvas reads it: a position in the address (a shared link, a reload) is where
   // the map opens, at once. Without one, the map waits to know where to open (MAP-VIEW-101–104);
@@ -442,6 +445,12 @@ export const Map = memo(function Map({
 
   const handleMarkerClick = (marker: RescueMapMarkerItem) => {
     controller.closeLayerPanel();
+
+    if (marker.building) {
+      onOpenBuilding?.(marker.building.uuid);
+      return;
+    }
+
     controller.setSelectedMarkerId(marker.id);
   };
 

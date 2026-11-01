@@ -44,7 +44,11 @@ import {
   readHelpReturn,
   stripHelpReturn,
 } from './help-return';
-import { onOpenHelpRequest, type HelpRequestSeed } from './open-help-request';
+import {
+  onOpenHelpRequest,
+  type HelpRequestPlace,
+  type HelpRequestSeed,
+} from './open-help-request';
 import { submitErrorMessage } from './submit-error';
 
 /** Near enough to see the street the new ticket is on. */
@@ -58,6 +62,8 @@ interface Opening {
   /** Keys the drawer, so each opening starts from an empty form. */
   id: number;
   seed: PickedPoint | null;
+  /** A building's floor it was opened on, whose address and floor the form starts with. */
+  place: HelpRequestPlace | null;
   /** Whether it starts from the draft kept in this tab (`holdHelpRequestDraft`). */
   bringsBackDraft: boolean;
 }
@@ -151,7 +157,8 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   const openDrawer = useCallback((seed: Seed, bringsBackDraft = !seed) => {
     setOpening((current) => ({
       id: (current?.id ?? 0) + 1,
-      seed: seed ? { ...seed, source: 'seed' } : null,
+      seed: seed ? { lat: seed.lat, lng: seed.lng, source: 'seed' } : null,
+      place: seed?.place ?? null,
       bringsBackDraft,
     }));
     setSubmitError(null);
@@ -300,6 +307,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
           key={opening.id}
           open={open}
           seed={opening.seed}
+          place={opening.place}
           bringsBackDraft={opening.bringsBackDraft}
           isAuthenticated={isAuthenticated}
           userId={userId}

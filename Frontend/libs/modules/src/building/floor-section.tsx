@@ -1,8 +1,9 @@
 'use client';
 
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
-import { Box, ButtonBase, Stack, Typography } from '@mui/material';
+import { Box, Button, ButtonBase, Stack, Typography } from '@mui/material';
 import { useId, useMemo } from 'react';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
@@ -296,6 +297,8 @@ interface FloorSectionProps {
   /** A line under the header, for 未定位. */
   note?: string;
   onOpenTicket: (marker: RescueMapMarkerItem) => void;
+  /** 在這一層請求協助, at the foot of the open floor; left out when not given. */
+  onRequestHelp?: () => void;
 }
 
 /**
@@ -315,6 +318,7 @@ export function FloorSection({
   isAuthenticated,
   note,
   onOpenTicket,
+  onRequestHelp,
 }: FloorSectionProps) {
   const bodyId = useId();
   const summary = summarizeTickets(tickets);
@@ -462,6 +466,17 @@ export function FloorSection({
               ))}
             </Stack>
           )}
+          {onRequestHelp ? (
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<AddRoundedIcon />}
+              onClick={onRequestHelp}
+              sx={{ mt: 1, minHeight: 44 }}
+            >
+              在這一層請求協助
+            </Button>
+          ) : null}
         </Box>
       ) : null}
     </Box>

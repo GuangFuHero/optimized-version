@@ -10,6 +10,7 @@ import type {
 
 import type { PickedPoint } from '../../map/components/location-picker/types';
 import { toAddressInput, type FilledAddress } from '../address-lookup';
+import type { HelpRequestPlace } from './open-help-request';
 
 export type { PickedPoint };
 
@@ -141,14 +142,16 @@ export interface HelpRequestForm {
   photoUrls: string[];
 }
 
+/** At `place`, a building's floor, the form starts with its address and that floor filled in. */
 export function emptyHelpRequestForm(
   landmark: PickedPoint | null = null,
+  place: HelpRequestPlace | null = null,
 ): HelpRequestForm {
   return {
     title: '',
     landmark,
-    address: '',
-    floor: '',
+    address: place?.address ?? '',
+    floor: place?.floor ?? '',
     room: '',
     addressFilled: null,
     addressKept: null,

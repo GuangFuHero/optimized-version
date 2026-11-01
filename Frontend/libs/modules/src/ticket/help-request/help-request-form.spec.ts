@@ -183,6 +183,25 @@ describe('toHelpRequestInput', () => {
     expect(emptyHelpRequestForm().addressFilled).toBeNull();
   });
 
+  it("starts on a building's floor with its address and that floor, the lookup's to keep", () => {
+    const point = { lat: 23.67, lng: 121.43, source: 'seed' as const };
+    const form = emptyHelpRequestForm(point, {
+      address: '花蓮縣光復鄉大進路12號',
+      floor: '3F',
+    });
+
+    expect(form).toMatchObject({
+      landmark: point,
+      address: '花蓮縣光復鄉大進路12號',
+      floor: '3F',
+      room: '',
+      addressFilled: null,
+    });
+    expect(
+      emptyHelpRequestForm(point, { address: null, floor: 'B1' }),
+    ).toMatchObject({ address: '', floor: 'B1' });
+  });
+
   it('sends the point as GeoJSON, longitude first', () => {
     expect(toHelpRequestInput(filledForm()).geometry).toEqual({
       type: 'Point',

@@ -61,6 +61,7 @@ import {
   type HelpRequestForm,
   type PickedPoint,
 } from './help-request-form';
+import type { HelpRequestPlace } from './open-help-request';
 import { NeedDraftRow } from './need-draft-row';
 import {
   usePinAddressLookup,
@@ -86,6 +87,8 @@ interface HelpRequestDrawerProps {
   open: boolean;
   /** A point picked on the main map to start from; without one the drawer asks the device. */
   seed: PickedPoint | null;
+  /** A building's floor it was opened on, whose address and floor the form starts with. */
+  place?: HelpRequestPlace | null;
   /** Whether it starts from the draft kept in this tab: not at a point picked on the map. */
   bringsBackDraft: boolean;
   isAuthenticated: boolean;
@@ -109,6 +112,7 @@ interface HelpRequestDrawerProps {
 export function HelpRequestDrawer({
   open,
   seed,
+  place = null,
   bringsBackDraft,
   isAuthenticated,
   userId,
@@ -132,6 +136,7 @@ export function HelpRequestDrawer({
     <HelpRequestFormDrawer
       open={open}
       seed={seed}
+      place={place}
       bringsBackDraft={bringsBackDraft}
       userId={userId}
       submitting={submitting}
@@ -404,6 +409,7 @@ function AddressLookupNote({
 function HelpRequestFormDrawer({
   open,
   seed,
+  place = null,
   bringsBackDraft,
   userId,
   submitting,
@@ -418,7 +424,7 @@ function HelpRequestFormDrawer({
     userId ? draftHold.read(sessionDraftStorage(), userId) : null,
   );
   const [form, setForm] = useState<HelpRequestForm>(
-    () => draft ?? emptyHelpRequestForm(seed),
+    () => draft ?? emptyHelpRequestForm(seed, place),
   );
   const notesLabelId = useId();
   const addressId = useId();
@@ -592,9 +598,9 @@ function HelpRequestFormDrawer({
     onClose();
   };
 
-  /** As a fresh opening would be — at the map's point, if it was opened at one. */
+  /** As a fresh opening would be — at the map's point, or the building's floor, if it was opened at one. */
   const startOver = () => {
-    setForm(emptyHelpRequestForm(seed));
+    setForm(emptyHelpRequestForm(seed, place));
     setCheck(null);
     setRestored(false);
     setTouched(false);

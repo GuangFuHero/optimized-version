@@ -2458,6 +2458,7 @@ export type TicketFieldsFragment = {
   propertyName: string;
   geometry?: Geometry | null;
   locationCell?: string | null;
+  buildingMapUuid?: string | null;
   title: string;
   description?: string | null;
   contactName?: string | null;
@@ -2963,6 +2964,7 @@ export const TicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -3280,6 +3282,7 @@ export const GetBuildingMapWithTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -4998,6 +5001,7 @@ export const GetTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -5226,6 +5230,7 @@ export const GetTicketsWithNeedsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -5430,6 +5435,7 @@ export const GetTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -5800,6 +5806,7 @@ export const CreateHelpRequestDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -5931,6 +5938,7 @@ export const UpdateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'buildingMapUuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
