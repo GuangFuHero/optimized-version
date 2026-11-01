@@ -177,7 +177,7 @@ class _Draft:
 
     def _keep(self, entry, task, sources, people: int, *, absorbed: tuple, moved: bool = False) -> None:
         changes = _task_changes(entry, task)
-        _check_size(task, changes, people)
+        _check_size(task, changes, people, absorbing=bool(absorbed))
         self.items.plan(entry, task.uuid, sources)
         self.kept.append(
             KeptTask(
@@ -240,19 +240,20 @@ def _task_changes(entry, task) -> dict:
     return {name: getattr(values, name) for name in TASK_FIELDS if name in values.model_fields_set}
 
 
-def _check_size(task, changes: dict, people: int) -> None:
+def _check_size(task, changes: dict, people: int, *, absorbing: bool) -> None:
     """The need's name and quantity after the changes, against its kind and its people (ADR-370).
 
     The kind's rules are create's own (`ticket._validate_need_size`); only the headcount is new. A
-    need filed without a quantity, before every need had to give one, keeps having none while the
-    merge leaves it alone (ADR-448): the review page has nowhere to give it one.
+    need filed without a quantity, before every need had to give one, keeps having none when it is
+    kept or moved on its own and the merge leaves its quantity alone (ADR-448). One that absorbs
+    another must give one: it takes in that need's people, and without a cap it would never fill.
     """
     task_name = changes.get("task_name", task.task_name)
     quantity = changes.get("quantity", task.quantity)
     if not task_name or not task_name.strip():
         raise ResolveRefused(f"Need {task.uuid}: task_name is required")
     try:
-        if quantity is None and "quantity" not in changes:
+        if quantity is None and "quantity" not in changes and not absorbing:
             _validate_need_name(task_name)
         else:
             _validate_need_size(task.task_type, task_name, quantity)
