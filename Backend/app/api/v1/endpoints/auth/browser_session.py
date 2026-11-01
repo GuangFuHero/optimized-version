@@ -168,7 +168,7 @@ async def sign_out(
     response: Response,
     redis=Depends(get_redis),
 ):
-    """Sign this browser out: end its session, the account's MCP sessions, and clear both cookies.
+    """Sign this browser out: end its session and clear both cookies.
 
     Always 204, like `/auth/logout` (ADR-190): a browser with no session, or one already ended, is
     already where it asked to be. The one exception is a session store that cannot be reached: then
@@ -180,6 +180,7 @@ async def sign_out(
         session = await repo.get_session(sid) if sid else None
         if sid:
             await repo.revoke_session(sid)
+        # Signing out of the site also ends every MCP client the account allowed.
         if session:
             await repo.revoke_mcp_sessions(session["user_uuid"])
     except RedisError as err:
