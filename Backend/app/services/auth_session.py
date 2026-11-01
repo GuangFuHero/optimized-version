@@ -69,22 +69,24 @@ async def record_login(db: AsyncSession, user: User) -> None:
 
 
 async def open_session(
-    redis, user_uuid: str, identity: ActiveIdentity | None, device: str
+    redis, user_uuid: str, identity: ActiveIdentity | None, device: str, mcp_client: str | None = None
 ) -> tuple[str, str]:
     """Create a session acting as `identity` and return its (access token, refresh token).
 
-    `identity` is None only for an account holding no grants.
+    `identity` is None only for an account holding no grants. `mcp_client` marks a session for an MCP client.
     """
     act = identity.to_claim() if identity else None
     # The session records the identity too (ADR-188), so a later refresh that does not name
     # one can carry it forward rather than resetting to the platform default.
-    sid, refresh_token = await SessionRepository(redis).create_session(user_uuid, device, act=act)
+    sid, refresh_token = await SessionRepository(redis).create_session(
+        user_uuid, device, act=act, mcp_client=mcp_client
+    )
     access_token = security.create_access_token(data={"sub": user_uuid}, sid=sid, act=act)
     return access_token, refresh_token
 
 
 async def open_default_session(
-    db: AsyncSession, redis, user: User, device: str
+    db: AsyncSession, redis, user: User, device: str, mcp_client: str | None = None
 ) -> tuple[str, str, ActiveIdentity | None]:
     """Open a session on the account's default identity; return (access token, refresh token, identity).
 
@@ -92,7 +94,7 @@ async def open_default_session(
     and the token rather than left for every request to work out again.
     """
     identity = await active_identity_repository.default_for_user(db, str(user.uuid))
-    access_token, refresh_token = await open_session(redis, str(user.uuid), identity, device)
+    access_token, refresh_token = await open_session(redis, str(user.uuid), identity, device, mcp_client)
     return access_token, refresh_token, identity
 
 

@@ -65,7 +65,7 @@ class SessionRepository:
         return json.loads(raw) if raw else None
 
     async def create_session(
-        self, user_uuid: str, device: str, *, act: str | None = None
+        self, user_uuid: str, device: str, *, act: str | None = None, mcp_client: str | None = None
     ) -> tuple[str, str]:
         """Create a new session; return (sid, raw_refresh_token).
 
@@ -78,10 +78,15 @@ class SessionRepository:
         rt_hash = self._hash(raw)
         now = datetime.now(UTC).isoformat()
         session = {
-            "user_uuid": user_uuid, "current_rt_hash": rt_hash, "device": device,
+            "user_uuid": user_uuid,
+            "current_rt_hash": rt_hash,
+            "device": device,
             "act": act,
-            "created_at": now, "last_used_at": now,
+            "created_at": now,
+            "last_used_at": now,
         }
+        if mcp_client:
+            session["mcp_client"] = mcp_client
         await self.redis.set(self.SESSION + sid, json.dumps(session), ex=self.ttl)
         await self.redis.set(
             self.REFRESH + rt_hash,
@@ -128,9 +133,7 @@ class SessionRepository:
             return
         session["act"] = act
         ttl = await self.redis.ttl(self.SESSION + sid)
-        await self.redis.set(
-            self.SESSION + sid, json.dumps(session), ex=ttl if ttl and ttl > 0 else self.ttl
-        )
+        await self.redis.set(self.SESSION + sid, json.dumps(session), ex=ttl if ttl and ttl > 0 else self.ttl)
 
     async def get_refresh(self, rt_hash: str) -> dict | None:
         """Fetch a refresh-token record by hash."""
@@ -268,6 +271,13 @@ class SessionRepository:
             await self.redis.delete(self.REFRESH + session["current_rt_hash"])
             await self.redis.srem(self.USER_SESSIONS + session["user_uuid"], sid)
         await self.redis.delete(self.SESSION + sid)
+
+    async def revoke_mcp_sessions(self, user_uuid: str) -> None:
+        """Delete every session the user opened for an MCP client, leaving their other devices alone."""
+        for m in await self.redis.smembers(self.USER_SESSIONS + user_uuid):
+            sid = m.decode() if isinstance(m, bytes) else m
+            if (await self.get_session(sid) or {}).get("mcp_client"):
+                await self.revoke_session(sid)
 
     async def revoke_all_for_user(self, user_uuid: str) -> int:
         """Delete every session belonging to the user (global logout); return how many.
