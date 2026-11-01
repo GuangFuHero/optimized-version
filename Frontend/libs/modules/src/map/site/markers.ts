@@ -2,6 +2,7 @@ import {
   StationFieldsFragmentDoc,
   TicketFieldsFragmentDoc,
   useFragment,
+  type FragmentType,
   type GetMapAreasQuery,
   type GetStationsQuery,
   type GetTicketsQuery,
@@ -183,8 +184,17 @@ export function mapStationToMarker(
   };
 }
 
+/**
+ * A ticket as any query reads it. `suspectedDuplicateOf` is asked for by the map, the list and a
+ * ticket's detail only, so a ticket filed through 請求協助 or read in a building comes without it.
+ */
+type TicketMarkerRef = FragmentType<typeof TicketFieldsFragmentDoc> &
+  Partial<
+    Pick<GetTicketsQuery['tickets']['items'][number], 'suspectedDuplicateOf'>
+  >;
+
 export function mapTicketToMarker(
-  ticketRef: GetTicketsQuery['tickets']['items'][number],
+  ticketRef: TicketMarkerRef,
 ): RescueMapMarkerItem | null {
   const ticket = useFragment(TicketFieldsFragmentDoc, ticketRef);
   const position = readPointPosition(ticket.geometry as never);
@@ -220,6 +230,7 @@ export function mapTicketToMarker(
       contactPhone: ticket.contactPhone,
       createdBy: ticket.createdBy,
       auditStatus: ticket.auditStatus,
+      suspectedDuplicateOf: ticketRef.suspectedDuplicateOf,
       createdAt: ticket.createdAt?.toString() ?? null,
       updatedAt: ticket.updatedAt?.toString() ?? null,
     },

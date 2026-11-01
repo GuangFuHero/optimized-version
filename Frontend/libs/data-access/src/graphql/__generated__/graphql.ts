@@ -1735,6 +1735,13 @@ export type TicketDisasterDetailType = {
   value: Scalars['String']['output'];
 };
 
+/** Another ticket a disputed ticket may duplicate */
+export type TicketDuplicateRefType = {
+  __typename?: 'TicketDuplicateRefType';
+  title: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+};
+
 export const TicketListOrder = {
   NeedsFirst: 'NEEDS_FIRST',
   Newest: 'NEWEST',
@@ -1865,6 +1872,8 @@ export type TicketType = {
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
   status: Scalars['String']['output'];
+  /** Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them */
+  suspectedDuplicateOf: Array<TicketDuplicateRefType>;
   /** Type of help needed: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: Maybe<Scalars['String']['output']>;
   tasks: Array<TicketTaskType>;
@@ -2541,9 +2550,14 @@ export type GetTicketsQuery = {
   tickets: {
     __typename?: 'TicketConnection';
     items: Array<
-      { __typename?: 'TicketType' } & {
-        ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
-      }
+      {
+        __typename?: 'TicketType';
+        suspectedDuplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
+      } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } }
     >;
     pageInfo: {
       __typename?: 'PageInfo';
@@ -2608,6 +2622,11 @@ export type GetTicketsWithNeedsQuery = {
     items: Array<
       {
         __typename?: 'TicketType';
+        suspectedDuplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
         tasks: Array<
           { __typename?: 'TicketTaskType' } & {
             ' $fragmentRefs'?: {
@@ -2636,6 +2655,11 @@ export type GetTicketQuery = {
     | ({
         __typename?: 'TicketType';
         buildingMapUuid?: string | null;
+        suspectedDuplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
         secondaryLocation?: {
           __typename?: 'SecondaryLocationType';
           fullAddress?: string | null;
@@ -4953,6 +4977,23 @@ export const GetTicketsDocument = {
                         kind: 'FragmentSpread',
                         name: { kind: 'Name', value: 'TicketFields' },
                       },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspectedDuplicateOf' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'title' },
+                            },
+                          ],
+                        },
+                      },
                     ],
                   },
                 },
@@ -5422,6 +5463,23 @@ export const GetTicketsWithNeedsDocument = {
                       },
                       {
                         kind: 'Field',
+                        name: { kind: 'Name', value: 'suspectedDuplicateOf' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'title' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
                         name: { kind: 'Name', value: 'tasks' },
                         selectionSet: {
                           kind: 'SelectionSet',
@@ -5565,6 +5623,17 @@ export const GetTicketDocument = {
                 {
                   kind: 'FragmentSpread',
                   name: { kind: 'Name', value: 'TicketFields' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'suspectedDuplicateOf' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                    ],
+                  },
                 },
                 {
                   kind: 'Field',

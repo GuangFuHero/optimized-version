@@ -24,6 +24,7 @@ import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
 import { NeedRow, readTicketNeeds, useNeedClaim } from '../needs';
 import { PhotoThumb } from '../photos';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
+import { SuspectedDuplicateNotice } from '../suspected-duplicate-tag';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
@@ -135,6 +136,7 @@ export function TaskMatchTicketDetailsPanel({
   isAuthenticated = false,
   onOpenBuilding,
   onSelectTicket,
+  onOpenTicket,
 }: {
   marker: RescueMapMarkerItem;
   isAuthenticated?: boolean;
@@ -142,6 +144,8 @@ export function TaskMatchTicketDetailsPanel({
   onOpenBuilding?: (buildingUuid: string) => void;
   /** Open another ticket of the same building, from 上一張／下一張. */
   onSelectTicket?: (marker: RescueMapMarkerItem) => void;
+  /** Open a ticket by its uuid alone: one this ticket may repeat, from 看那張. */
+  onOpenTicket?: (ticketUuid: string) => void;
 }) {
   // The backend withheld this ticket's detail (ADR-281): the point is a cell centre, and the
   // free text, notes and photos came back empty. Rows for them are left out rather than shown as
@@ -215,6 +219,15 @@ export function TaskMatchTicketDetailsPanel({
     <Stack spacing={2}>
       {/* At the very top, as the design has it: orange, not red, as the ticket stands. */}
       {auditNotice ? <Alert severity="warning">{auditNotice}</Alert> : null}
+
+      {/* Then 疑似重複, before the needs a volunteer would claim: a reminder, which holds no claim back. */}
+      <SuspectedDuplicateNotice
+        duplicates={
+          ticket?.suspectedDuplicateOf ??
+          marker.ticketMeta?.suspectedDuplicateOf
+        }
+        onOpenTicket={onOpenTicket}
+      />
 
       {ticketError ? (
         <Alert severity="error">

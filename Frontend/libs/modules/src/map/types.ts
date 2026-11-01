@@ -214,6 +214,7 @@ export interface RescueMapMarkerItem {
       | 'contactPhone'
       | 'createdBy'
       | 'auditStatus'
+      | 'suspectedDuplicateOf'
       | 'createdAt'
       | 'updatedAt'
     >
