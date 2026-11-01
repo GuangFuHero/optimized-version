@@ -142,7 +142,7 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
           </Typography>
         </MenuItem>
         <MenuItem onClick={handleSignOut} sx={{ gap: 1 }}>
-          <PersonIcon sx={{ fontSize: 18 }} />
+          <Icons.logOut sx={{ fontSize: 18 }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>登出</Typography>
         </MenuItem>
       </Menu>

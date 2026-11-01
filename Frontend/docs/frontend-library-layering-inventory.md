@@ -74,7 +74,6 @@
 - `shell/admin/*`
 - `layout.ts`
 - `sidebar.ts`
-- `menu-glyph.ts`
 
 ### `station/`
 

@@ -164,6 +164,7 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
       taskValue: formatTicketTypeLabel(marker.ticketMeta?.taskType),
       requesterLabel: '現場聯絡人',
       requesterValue: contactSummary.join(' / ') || '未提供',
+      requesterIcon: <Icons.user />,
       notesLabel: '任務說明',
       notesValue: marker.subtitle,
     },
