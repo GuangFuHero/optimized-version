@@ -672,8 +672,20 @@ class CreateHelpRequestInput:
 
     title: str = strawberry.field(description="At most 200 characters")
     description: str | None = None
-    geometry: GeoJSON = strawberry.field(
-        description="GeoJSON Point for the location where help is needed — [longitude, latitude]"
+    geometry: GeoJSON | None = strawberry.field(
+        default=None,
+        description=(
+            "GeoJSON Point for the location where help is needed — [longitude, latitude]. "
+            "Required unless buildingMapUuid is given, in which case it must be omitted"
+        ),
+    )
+    building_map_uuid: UUID | None = strawberry.field(
+        default=None,
+        description=(
+            "File the request inside this building map, as createTicket does: its point and address "
+            "are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with "
+            "areas) must match the building's floors. Omit floor when the reporter doesn't know it"
+        ),
     )
     contact_name: str = strawberry.field(description="Who to ask for at the place")
     contact_phone: str | None = strawberry.field(
