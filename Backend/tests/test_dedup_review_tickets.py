@@ -297,7 +297,7 @@ async def _change(db, ids, change: str) -> None:
     elif change == "new_item":
         db.add(TaskProperty(task_uuid=ids["a1"], property_name="新品項", property_value="1"))
     elif change == "location":
-        db.add(SecondaryLocation(geometry_uuid=ids["a"], location_type="address", full_address="中正路45號"))
+        db.add(SecondaryLocation(geometry_uuid=ids["a"], location_type="address", remainder="中正路45號"))
     await db.flush()
 
 
@@ -447,7 +447,7 @@ async def test_the_detail_carries_where_each_ticket_is(db):
     await _location(
         db,
         s["a"],
-        full_address="花蓮縣光復鄉中正路45號",
+        remainder="花蓮縣光復鄉中正路45號",
         building_section="A棟",
         floor="2F",
         room="201",
@@ -485,7 +485,7 @@ async def test_a_ticket_without_a_location_has_none(db):
 async def test_free_text_about_the_place_does_not_move_the_version(db):
     """Only what the detail shows goes into the version: a landmark note is not compared."""
     s = await _versioned(db)
-    location = await _location(db, await db.get(Tickets, s["ids"]["a"]), full_address="光復鄉中正路45號")
+    location = await _location(db, await db.get(Tickets, s["ids"]["a"]), remainder="光復鄉中正路45號")
     before = await _versions(db, s)
 
     await db.execute(
@@ -507,8 +507,8 @@ async def test_the_location_costs_one_query_however_many_tickets(db):
         return dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid)
 
     bare = await _count_queries(db, read)
-    await _location(db, s["a"], full_address="光復鄉中正路45號")
-    await _location(db, s["b"], full_address="光復鄉中正路47號")
+    await _location(db, s["a"], remainder="光復鄉中正路45號")
+    await _location(db, s["b"], remainder="光復鄉中正路47號")
     located = await _count_queries(db, read)
 
     assert located == bare

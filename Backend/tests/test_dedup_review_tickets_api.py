@@ -51,7 +51,7 @@ async def test_the_detail_says_where_each_ticket_is(client, db_session, redis):
         SecondaryLocation(
             geometry_uuid=ticket_uuid,
             location_type="address",
-            full_address="花蓮縣光復鄉中正路45號",
+            remainder="花蓮縣光復鄉中正路45號",
             floor="2F",
             landmark_note="紅色鐵門",
         )
