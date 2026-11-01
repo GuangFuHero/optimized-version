@@ -398,3 +398,69 @@ async def test_ticket_cards_carry_both_sides(db):
     assert (side.title, side.status, side.ticket_uuid) == ("一樓淹水", "pending", None)
     assert (side.longitude, side.latitude) == pytest.approx((121.45, 23.65))
     assert side.created_by == str(actor.uuid)
+
+
+# --- who did it, by nickname (ADR-441) ----------------------------------------------------
+
+
+async def test_each_event_names_who_did_it(db):
+    """An event with an actor carries that account's nickname; one without (the engine's) carries none."""
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+    submitter = User(name="小明")
+    db.add(submitter)
+    await db.flush()
+    a, b = await _two_tasks(db, actor)
+    pair = await _pair(db, a, b)
+    for minutes, kind, who in ((0, "hint_shown", None), (5, "ignored_by_submitter", submitter.uuid)):
+        db.add(
+            DedupAuditEvent(
+                entity_kind="ticket_task",
+                event_type=kind,
+                pair_uuid=pair.uuid,
+                actor_uuid=who,
+                source_layer="fast",
+                created_at=T0 + timedelta(minutes=minutes),
+            )
+        )
+    await db.flush()
+
+    detail = await dedup_review.get_pair(db, actor=actor, pair_uuid=pair.uuid)
+
+    assert [detail.actor_names.get(str(e.actor_uuid)) for e in detail.events] == [None, "小明"]
+
+
+async def _decided(db, reviewer, a, b) -> DuplicatePair:
+    """A card `reviewer` confirmed. Written directly: `confirm` commits, which expires `reviewer`."""
+    pair = await _pair(db, a, b, status="confirmed_duplicate")
+    pair.reviewed_by, pair.reviewed_at = reviewer.uuid, T0
+    await db.flush()
+    return pair
+
+
+async def test_a_decided_card_names_its_reviewer(db):
+    """The listing says who decided each card by nickname, and nothing for a pending one."""
+    reviewer = await _actor(db, Perm.AI_DUP_VIEW)
+    decided = await _decided(db, reviewer, *await _two_tasks(db, reviewer))
+    pending = await _pair(db, *await _two_tasks(db, reviewer))
+
+    page = await dedup_review.list_pairs(db, actor=reviewer, statuses=dedup_review.PAIR_STATUSES)
+
+    names = {item.pair.uuid: item.reviewed_by_name for item in page.items}
+    assert names == {decided.uuid: reviewer.name, pending.uuid: None}
+
+
+async def test_the_reviewers_names_cost_one_query_per_page(db):
+    """However many cards a page has, their reviewers' names come in one query."""
+    reviewer = await _actor(db, Perm.AI_DUP_VIEW)
+    other = User(name="另一位審核員")
+    db.add(other)
+    await db.flush()
+    statuses = dedup_review.PAIR_STATUSES
+
+    await _decided(db, reviewer, *await _two_tasks(db, reviewer))
+    one = await _count_queries(db, lambda: dedup_review.list_pairs(db, actor=reviewer, statuses=statuses))
+    for who in (reviewer, other, other):
+        await _decided(db, who, *await _two_tasks(db, reviewer))
+    four = await _count_queries(db, lambda: dedup_review.list_pairs(db, actor=reviewer, statuses=statuses))
+
+    assert four == one

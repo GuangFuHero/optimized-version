@@ -40,8 +40,8 @@ api_router.include_router(rbac_admin.router, prefix="/admin", tags=["RBAC 管理
 # 註冊後台人員申請審核 API（列表 / 通過 / 不通過，Spec/019）
 api_router.include_router(role_requests.router, prefix="/admin", tags=["後台人員申請審核"])
 
-# 註冊 AI 重複審核 API（列表 / 單張配對卡，Spec 025）
-api_router.include_router(duplicate_pairs.router, prefix="/admin", tags=["AI 重複審核"])
+# 註冊重複審核 API（列表 / 單張配對卡，Spec 025）
+api_router.include_router(duplicate_pairs.router, prefix="/admin", tags=["重複審核"])
 
 # 註冊稽核紀錄讀取 API（全平台 / 自己團隊，Spec/026 ADR-358）
 api_router.include_router(audit_logs.router, prefix="/admin", tags=["稽核紀錄"])

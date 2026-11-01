@@ -418,3 +418,95 @@ ADR-388～390（386、387 已被 `018-ticket-disaster-fields` 用掉）。review
 - 不動 `app/dedup_engine/` 與 `tools/dedup_eval/`：評估工具的 `confirmed` 是它自己資料集的標籤，不是配對卡狀態。
 
 **為什麼不用 `is_duplicate`**：`is_duplicate` 已經是 `ticket_tasks`、`stations` 上的欄位名（慢層用），同名容易混。
+
+---
+
+## ADR-440：詳情的兩張單附上地點（地址到樓、室，或電線桿）
+
+**Date**: 2026-10-29　**Status**: Accepted（使用者拍板：欄位範圍、權限跟聯絡人一樣、要算進 `version`）
+
+**背景**：DEDUP-008 的 mock 規定「審核員選了哪一邊的地址，那一張就是主要單」（DUP-BE-431），因為處理時不能改地址（ADR-367）。
+但 `TicketForReview` 只有座標，沒有地址。地址存在 `secondary_locations`（以 `geometry_uuid` 對到單），
+審核頁讀不到，就沒辦法照 mock 選主要單。
+
+**決定**：
+- `tickets.low`／`tickets.high` 多一個 `location`：
+  `location_type`（`address`／`pole`）、`full_address`、`building_section`、`floor`、`room`、`pole_id`。單沒有地點時為 `null`。
+- **不給**地標補充、空間描述、求救者所在空間、可否進入、電線桿備註和照片。這些是自由文字，不是分辨兩張單是否同一處的依據。
+- 一張單照慣例只有一筆地點（沒有 constraint）。有多筆時取 uuid 最小的一筆，和 `secondary_location_repository.get_by_geometry` 一樣。
+- **權限跟聯絡人一樣**：有 `ai_duplicate.view` 就給，不另外檢查 `ticket.view_detail`／`ticket.view_pii`。
+  選主要單一定要看地址，和聯絡人不遮的理由相同（ADR-373）。目前持有 `ai_duplicate.view` 的兩個角色本來就都看得到工單地址。
+- **算進 `version`**（ADR-374）：審核員讀完之後有人改了地址，送出處理會收到 409，要重新讀、重新比對。
+  沒給的自由文字欄位不算進去，改了不會 409。
+- 處理時仍然不能改地址（ADR-367 不變）。`merged` 事件的 `before_state` 會一併記下兩張單的地點，被取消那張的地址也有紀錄。
+
+---
+
+## ADR-445：每項需求附上這張配對卡專用的承接人代號
+
+**Date**: 2026-11-01　**Status**: Accepted（使用者拍板：用代號，不用兩兩共同人數，也不加試算 API）
+
+**背景**：Jarvis 做 DEDUP-008 時發現，詳情的每項需求只有 `claim_count`。後端在處理時會把要合在一起的需求上的人去重後才比名額（ADR-369、`dedup_resolve_plan._headcount`），前端只能把人數相加。同一個人在兩邊都有承接時，前端會多算，把後端其實會接受的合併擋下。
+
+合併後的人數取決於審核員把哪幾項需求合在一起，詳情沒辦法事先給一個固定數字。
+
+**決定**：
+- `tickets.low/high.tasks[]` 多一個 `claimant_keys`：每位承接人一個代號，排序後給。代號是 `sha256("{配對卡 uuid}:{承接人 uuid}")` 的前 16 碼。
+- 同一張卡裡，同一個人在兩張單上的代號相同。前端把要合在一起的需求代號取聯集，數量就是合併後的人數；不管怎麼合都準。
+- 換一張卡代號就不同，從代號看不出是誰，也串不起跨卡的同一人。
+
+> **補充（2026-11-01，HC 在 #179 的 review）**：代號是不加密鑰的雜湊。手上已經有這張卡、又知道某人 uuid 的人，可以自己算出代號，測試那個人有沒有在某項需求上。代號本身不含 uuid，跨卡也串不起來，上面這兩點不變。現在看得到詳情的兩個角色（超管、資料檢核員）本來就看得到承接人，所以不加密鑰（使用者拍板），API 欄位說明改成照實寫。
+- 權限同詳情（`ai_duplicate.view`）。
+- **不算進 `version`**：跟 `claim_count` 一樣會隨承接變動。處理時仍以鎖住後的實際承接人檢查名額（ADR-374 不變）。
+- `claim_count` 改成由同一批承接紀錄算出，等於代號數量。
+- 處理（resolve）讀單時不帶卡號，代號為空；只有詳情會給。`merged` 事件的 `before_state` 因此會有空的 `claimant_keys`，真實承接人照舊記在 `people`。
+
+**不採用**：
+- 兩兩需求的共同人數：三項以上合在一起會算錯。
+- 試算 API：前端每次調整都要多打一次，而名額檢查本來就會在處理時再做一次。
+
+## ADR-446：細項附上顯示名稱
+
+**Date**: 2026-11-01　**Status**: Accepted（使用者拍板：詳情直接帶，不改權限）
+
+**背景**：細項的顯示名稱在 `task_property_config.label`，前端要用 `taskPropertyConfigs` 讀。那支要 `dynamic_field.view`，資料稽核員沒有，請求會讓整頁 403，所以稽核員只看得到細項的 key（Jarvis 回報，2026-11-01 實測稽核員呼叫回 `403: Permission Denied`）。
+
+**決定**：
+- `tasks[].properties[]` 多一個 `display_label`：該需求類型（`task_type`）的設定 `label`；沒有設定或 `label` 是空的就用 `property_name`。跟 `taskPropertyConfigs.displayLabel` 的回退規則一樣（ADR-095）。
+- 用需求的 `task_type` 加細項 key 對設定，同一個 key 在別的需求類型的名稱不採用。
+- 一個 query 讀完所有細項的名稱，查詢數不隨細項數增加；沒有細項就不查。
+- **不算進 `version`**：名稱是顯示用的，不是審核員比對的內容。後台改名稱不會讓審核員收到 409。
+- 權限不動：稽核員一樣沒有 `dynamic_field.view`。
+- `merged` 事件的 `before_state`／`after_state` 會一併記下處理當下的名稱。
+
+**不採用**：
+- 給稽核員 `dynamic_field.view`：連所有動態欄位設定都看得到，範圍比需要的大。
+- 讓 `taskPropertyConfigs` 也接受 `ai_duplicate.view`：一支 API 混用兩種權限。
+
+## ADR-447：細項附上顯示與編輯用的欄位設定
+
+**Date**: 2026-11-01　**Status**: Accepted（使用者拍板：合併人數只留 `claimant_keys`（ADR-445 不變），#207 只取 `sort_order`，再補齊頁面用到的其他設定）
+
+**背景**：審核頁顯示與編輯細項時，除了名稱（ADR-446），還用到欄位設定的五項（#205 `compare-view.tsx:115-124`、`model.ts:241-256, 437`）：
+- `sortOrder`：細項排序。
+- `dataType`、`enumOptions`：最終值用哪種輸入框、下拉有哪些選項。
+- `unit`：數值後面的單位。
+- `isActive`：標示「已停用」。
+
+這些都在 `taskPropertyConfigs`，要 `dynamic_field.view`。稽核員沒有（`scripts/seed_rbac.py` 的 `data_auditor` 不含 `FIELD_VIEW`），所以稽核員看到的細項沒有排序、沒有單位，最終值只能用文字框。
+
+`sort_order` 的做法來自 HC 的 #207（已關閉）。#207 另外的 `label` 跟 `display_label` 重複，`/resolve/preview` 跟 ADR-445 的決定不同，都不採用。
+
+**決定**：
+- `tasks[].properties[]` 多 `sort_order`、`data_type`、`enum_options`、`unit`、`is_active`，取自和 `display_label` 同一筆設定（需求的 `task_type`＋細項 key），停用的設定也算。
+- 沒有設定時五欄都是 `null`。`is_active` 用 `null` 而不是 `true`，前端分得出「沒有設定」和「啟用中」。
+- 和 `display_label` 同一個 query 讀出，查詢數不變；`(task_type, property_name)` 在表上是 unique，一個 key 最多一筆。
+- **不算進 `version`**：都是設定，不是單的內容。後台改設定不會讓審核員收到 409。
+- 權限不動：有 `ai_duplicate.view` 就給。
+- **這是 ADR-226 的例外**：`taskPropertyConfigs` 的停用設定只給有 `dynamic_field.edit` 的人（ADR-226），這裡持有 `ai_duplicate.view` 就拿得到，資料檢核員也包含在內。範圍只到卡上兩張單已經有的細項，不是整份欄位定義；審核員要知道停用欄位在畫面上怎麼顯示、怎麼編輯才比對得了。`taskPropertyConfigs` 本身的規則不變。這個例外也記在 `RBAC_RESOURCE_ROLE_MATRIX.md` 的重複審核一節（HC 在 #179 review 要求，2026-11-01）。
+
+**不採用**：
+- 給稽核員 `dynamic_field.view`：理由同 ADR-446。
+- #207 的 `label`：和 `display_label` 重複。
+- #207 的 `/resolve/preview`：ADR-445 已決定不加試算 API，維持。
+
