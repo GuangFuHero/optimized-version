@@ -11,14 +11,18 @@ const notoSansTC = Noto_Sans_TC({
   preload: false,
   variable: '--font-noto-sans-tc',
 });
+// Not preloaded, as Noto Sans TC is not: preloaded, these two were fetched alongside the page's code
+// and slowed it on a slow connection, for text that shows in the fallback face until they come.
 const nunito = Nunito({
   subsets: ['latin'],
   display: 'swap',
+  preload: false,
   variable: '--font-nunito',
 });
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
+  preload: false,
   variable: '--font-inter',
 });
 
