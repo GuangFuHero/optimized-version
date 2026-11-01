@@ -1,4 +1,4 @@
-# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394、419、438、439、440）
+# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394、419、438、439、440、452）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
@@ -1028,3 +1028,37 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
 ➖ 帶 衖／衕 的地址，`alley` 欄的值變長（`3弄` → `3弄2衖`）；API 的各欄不增不減。關鍵字搜尋也跟著變：`search_text` 含 `alley`，所以搜 `2衖` 找得到、搜 `3弄5號` 不再找到 `3弄2衖5號`（那本來就是另一戶）。
 ◾ 測試：`tests/test_identity_model.py`、`tests/test_migration_third_normal_form.py`、`tests/test_ticket_task_stamps.py`、
   `tests/test_address_parse.py`、`tests/test_address_service.py`、`tests/test_address_tools.py`。
+
+### ADR-452 `tickets(outsideBounds:)`：一個框外面的單
+
+**白話**：任務管理地圖縮回預設範圍時，要寫「有 N 張單在這個範圍外」，按「看是哪幾張」就列出那幾張。後端多一個
+篩選，只回點位在框外的單。
+
+**Date**：2026-11-01。糖定了任務管理地圖範圍外的提示和「看是哪幾張」；前端提議加這個篩選，使用者排進這一版。
+
+**Context**：
+
+- `tickets` 只有 `bounds`（框裡的單）。前端想列框外的單只能拆成四條帶狀 `bounds`（沒辦法一起分頁），或不帶 `bounds`
+  抓 200 張再自己篩（超過 200 張就漏）。
+- 框外的張數也不能用 `ticketsExtent.count` 減 `tickets(bounds:).totalCount`：`ticketsExtent` 沒有 `auditStatus`，
+  管理平台篩審核狀態時兩邊數的不是同一群單。
+
+**Decision**：
+
+1. `tickets` 加 `outsideBounds: BoundsInput`。totalCount 和列表一起套用（`_active_conditions` 是兩邊唯一的條件來源）。
+2. 就是 `bounds` 反過來，逐列用同一個判斷：看得到點位的列用點位，看不到的列用它被顯示的格子中心（ADR-282）。
+   所以訪客或 `own` 範圍的呼叫者，從框外的單也推不出比格子更細的位置。
+3. 框線上的點算框內（`ST_Intersects`）；沒有點位的列算框外。同一組篩選下，`bounds` 和 `outsideBounds` 對同一個框
+   剛好把所有單分成兩半，不重複也不遺漏。
+4. 跟 `bounds` 一起帶的話兩個都套用；其他篩選、分頁、排序照舊。
+5. 框外通常是大部分的單，放大的框也縮不小範圍，所以 `outsideBounds` 不像 `bounds` 先用 index 預篩，整個查詢照舊在
+   `search_timeout` 底下。有看不到點位的列時跟 `bounds` 一樣用 generic plan（ADR-437）。
+6. 前端拿框外的張數用 `tickets(outsideBounds: …, limit: 0) { pageInfo { totalCount } }`，跟按下去列出來的單一定一致。
+7. `bounds` 的判斷抽成 `_in_box`，兩個篩選共用。`bounds` 的 SQL 不變。
+
+➕ 「看是哪幾張」可以照常分頁，張數跟列表一定對得上。
+➕ 前台訪客不會用到，用了也不會多透露位置。
+➖ 框外的查詢沒有 index 可用，單量大時比 `bounds` 慢；目前單量小，又有 `search_timeout` 擋著。
+◾ 測試：`tests/test_graphql/test_tickets_outside_bounds.py`（簽入的人用點位：框外只列框外的單；框內、框外對同一個框
+  不重複也不遺漏、框線上算框內、其他篩選照套；`limit: 0` 只回張數；訪客用格子中心；`own` 範圍自己的單用點位、
+  別人的用格子中心）。

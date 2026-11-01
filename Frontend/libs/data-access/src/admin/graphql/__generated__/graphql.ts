@@ -1247,6 +1247,7 @@ export type QueryTicketsArgs = {
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
   order?: TicketListOrder;
+  outsideBounds?: InputMaybe<BoundsInput>;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];

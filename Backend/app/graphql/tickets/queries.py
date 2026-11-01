@@ -210,6 +210,16 @@ class RequestQuery:
                 description="Only tickets filed under this disaster type (a disaster_types key)"
             ),
         ] = None,
+        outside_bounds: Annotated[
+            BoundsInput | None,
+            strawberry.argument(
+                description=(
+                    "Only tickets outside this box: those `bounds` leaves out for it, each matched as "
+                    "`bounds` matches it, so the two split the matches between them. A point on its edge "
+                    "is inside"
+                )
+            ),
+        ] = None,
     ) -> TicketConnection:
         """List tickets with optional bbox, status, priority, need-type, audit, disaster and keyword filters.
 
@@ -239,6 +249,7 @@ class RequestQuery:
         Without ticket.view_detail, `bounds` matches a row by the cell centre the caller is
         shown and `q` by its title and task names only (ADR-281/282) — each row on what
         this caller can read of it, so neither filter recovers what the fields withhold.
+        `outsideBounds` is `bounds` turned round, row by row the same way (ADR-452).
 
         At most TICKET_LIST_MAX_LIMIT rows a page. A row reads whom to call as `ticket` does —
         to the requester, the coordinators and whoever claimed one of its needs (ADR-286 point 1)
@@ -273,11 +284,12 @@ class RequestQuery:
         # own set_config/RESET, so this costs two round-trips where it used to cost six.
         # A box the caller sees cells in tests cell centres, as `ticketCells` does, so it is planned
         # generically from a connection's first run too (ADR-437).
-        cells_in_box = bounds is not None and bool(detail_filters)
+        cells_in_box = (bounds is not None or outside_bounds is not None) and bool(detail_filters)
         async with generic_plan(db, needed=cells_in_box), search_timeout(db, normalize_query(q)):
             total = await ticket_repository.count_active(
                 db,
                 bounds=bounds,
+                outside_bounds=outside_bounds,
                 status=status,
                 statuses=status_values,
                 priority=priority,
@@ -291,6 +303,7 @@ class RequestQuery:
             items = await ticket_repository.list_active(
                 db,
                 bounds=bounds,
+                outside_bounds=outside_bounds,
                 status=status,
                 statuses=status_values,
                 priority=priority,

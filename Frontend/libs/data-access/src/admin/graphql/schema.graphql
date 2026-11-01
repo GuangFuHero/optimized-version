@@ -958,6 +958,11 @@ type Query {
 
     """Only tickets filed under this disaster type (a disaster_types key)"""
     disasterType: String = null
+
+    """
+    Only tickets outside this box: those `bounds` leaves out for it, each matched as `bounds` matches it, so the two split the matches between them. A point on its edge is inside
+    """
+    outsideBounds: BoundsInput = null
   ): TicketConnection!
   ticketCells(
     bounds: BoundsInput!
