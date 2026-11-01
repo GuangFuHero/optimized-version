@@ -176,7 +176,7 @@ function createStationEditAction(
 ): StationDetailActionProps {
   return {
     label: '修改建議',
-    icon: <Icons.pencil />,
+    icon: <Icons.pencilLine />,
     onClick: () => openStationSuggestion(marker.id),
   };
 }

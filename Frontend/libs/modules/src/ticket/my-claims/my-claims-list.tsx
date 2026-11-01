@@ -216,7 +216,7 @@ function MyClaimRow({
         <DetailLine icon={<Icons.pin />}>{claim.address}</DetailLine>
       ) : null}
       {claim.contact ? (
-        <DetailLine icon={<Icons.person />}>{claim.contact}</DetailLine>
+        <DetailLine icon={<Icons.user />}>{claim.contact}</DetailLine>
       ) : null}
       <Stack
         direction="row"

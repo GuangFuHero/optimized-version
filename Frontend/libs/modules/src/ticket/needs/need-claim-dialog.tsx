@@ -141,7 +141,7 @@ export function NeedClaimDialog({
                   prototype's own 2026-09-10 fix (site-detail.jsx:368-373). */}
               <DetailLine icon={<Icons.pin />}>{address ?? '未填地址'}</DetailLine>
               {/* As the API returns it: masked where this viewer may not see it. */}
-              {contact ? <DetailLine icon={<Icons.person />}>{contact}</DetailLine> : null}
+              {contact ? <DetailLine icon={<Icons.user />}>{contact}</DetailLine> : null}
               <DetailLine icon={<Icons.users />}>
                 {formatNeedHeadcount(need, claim.kind)}
               </DetailLine>

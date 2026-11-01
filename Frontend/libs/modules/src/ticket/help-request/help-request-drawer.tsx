@@ -282,7 +282,7 @@ function noteLook(kind: AddressNote['kind'], error: boolean) {
     case 'edited':
       return {
         color: color.fg.neutral.muted,
-        icon: <Icons.pencil sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.penLine sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     default:
       return {
