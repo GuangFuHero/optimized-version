@@ -28,4 +28,18 @@ git worktree add --detach ../design-latest origin/sucrelindesign     # 要開原
 - 原型裡的示範資料、示範帳號、localStorage 狀態只是為了演出流程，不是規格；欄位與 API 以 `Backend/Spec/Docs/er-diagram.md` 與 GraphQL schema 為準。
 - 程式註解與 spec 裡寫的 `Design/前台/…`、`Design/後台/…` 路徑，指的都是設計分支上的檔案。
 
+## 設計師：第一次把 main 合進設計分支
+
+`main` 刪掉了舊的 `Design/前台/`、改寫了這份 `README.md`。直接 merge 會把設計分支上沒改過的檔（`_ds/`、字型、logo）**直接刪掉，不會出現衝突**。第一次一定要這樣合：
+
+```sh
+git switch sucrelindesign
+git fetch origin && git merge --no-commit origin/main
+git checkout HEAD -- "Design/前台" Design/README.md   # 拿回設計分支的版本
+git diff --stat HEAD -- Design/                        # 只能剩 Design/CLAUDE.md、Design/AGENTS.md
+git commit
+```
+
+之後照 [`CLAUDE.md`](CLAUDE.md)。
+
 前端工程師的 agent 照 [`../Frontend/CLAUDE.md`](../Frontend/CLAUDE.md)；設計系統說明在 [`../Frontend/docs/design-system.md`](../Frontend/docs/design-system.md)。

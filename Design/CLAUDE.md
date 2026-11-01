@@ -13,7 +13,17 @@ git switch sucrelindesign
 git fetch origin && git merge origin/main
 ```
 
-- 衝突在 `Design/` 底下：在設計分支上解決。
+- **第一次合 `main` 一定要這樣做**（`main` 刪掉了舊的 `Design/前台/`、改寫了 `Design/README.md`）：
+
+  ```sh
+  git merge --no-commit origin/main
+  git checkout HEAD -- "Design/前台" Design/README.md   # 拿回設計分支的版本
+  git diff --stat HEAD -- Design/                        # 只能剩 Design/CLAUDE.md、Design/AGENTS.md
+  git commit
+  ```
+
+  沒有衝突也要做：設計分支沒改過的檔（`_ds/`、字型、logo）會被直接刪掉，不會出現衝突。
+- 其他衝突在 `Design/` 底下：在設計分支上解決，保留設計分支的設計檔。
 - 衝突在 `Design/` 以外的檔案：先停下，在 #uiux 請工程師處理，不要自己改。
 
 ## 檔案放哪裡（設計分支上）
