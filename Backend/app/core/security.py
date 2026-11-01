@@ -195,8 +195,12 @@ def create_access_token(
     expires_delta: timedelta | None = None,
     sid: str | None = None,
     act: str | None = None,
+    mcp: bool = False,
 ) -> str:
-    """Create a signed JWT access token, tagging it with type/jti and optional session id."""
+    """Create a signed JWT access token, tagging it with type/jti and optional session id.
+
+    `mcp` marks a token of a session opened for an MCP client, which `accept_access_token` keeps to reads.
+    """
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update(
@@ -211,6 +215,8 @@ def create_access_token(
             "act": act,
         }
     )
+    if mcp:
+        to_encode["mcp"] = True
     return jwt.encode(to_encode, settings.JWT_SIGNING_KEY, algorithm=settings.ALGORITHM)
 
 

@@ -1,5 +1,6 @@
 """Application configuration loaded from environment variables and .env file."""
 
+import ipaddress
 import os
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -92,6 +93,22 @@ class Settings(BaseSettings):
     # The host each provider is registered to call back, the site's: one redirect URI per provider, for
     # both apps (ADR-331).
     OAUTH_REDIRECT_BASE_URL: str = os.getenv("OAUTH_REDIRECT_BASE_URL", "http://localhost:3000")
+    # The peers whose `X-Forwarded-For` is believed: comma-separated addresses or CIDRs. The default is
+    # loopback and the private ranges, where the site's proxy reaches the backend over the docker network.
+    TRUSTED_PROXIES: str = os.getenv(
+        "TRUSTED_PROXIES", "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+    )
+    # The public URL MCP clients reach this backend at; the MCP endpoint is `{MCP_BASE_URL}/mcp`.
+    MCP_BASE_URL: str = os.getenv("MCP_BASE_URL", "http://localhost:8000")
+
+    @property
+    def trusted_proxy_networks(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+        """`TRUSTED_PROXIES` parsed into networks."""
+        return tuple(
+            ipaddress.ip_network(entry.strip(), strict=False)
+            for entry in self.TRUSTED_PROXIES.split(",")
+            if entry.strip()
+        )
 
     @property
     def allowed_origins(self) -> frozenset[str]:

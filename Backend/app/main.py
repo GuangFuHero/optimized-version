@@ -19,6 +19,7 @@ from app.core.context import AuditContextMiddleware
 from app.core.redis import create_redis_client, get_redis
 from app.core.request_auth import authenticated_by_cookie
 from app.graphql.router import graphql_router
+from mcp_server import mount as mount_mcp
 
 # Route the app's loggers (e.g. the app.email / app.sms console senders) to stdout at INFO so dev
 # verification codes are visible in `docker compose logs backend`. uvicorn configures only its own
@@ -43,7 +44,8 @@ async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
     # --- startup (previously @app.on_event("startup")) ---
     app.state.redis = create_redis_client(settings.REDIS_URL)
-    yield
+    async with mcp_app.router.lifespan_context(mcp_app):
+        yield
     # --- shutdown (previously @app.on_event("shutdown")) ---
     if hasattr(app.state, "redis"):
         await app.state.redis.aclose()
@@ -95,10 +97,14 @@ app.add_middleware(
 
 # The 401 codes that mean the user is signed out, as opposed to needing a refresh (ADR-328).
 # `refresh_token_invalid` only comes from a refresh that failed, which leaves nothing to try next (ADR-325).
-_SIGNED_OUT = frozenset({
-    ErrorCode.SESSION_EXPIRED, ErrorCode.CREDENTIALS_INVALID,
-    ErrorCode.REFRESH_TOKEN_INVALID, ErrorCode.IDENTITY_REVOKED,
-})
+_SIGNED_OUT = frozenset(
+    {
+        ErrorCode.SESSION_EXPIRED,
+        ErrorCode.CREDENTIALS_INVALID,
+        ErrorCode.REFRESH_TOKEN_INVALID,
+        ErrorCode.IDENTITY_REVOKED,
+    }
+)
 
 
 @app.exception_handler(ApiError)
@@ -123,6 +129,7 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
 
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(graphql_router, prefix="/graphql", tags=["圖資"])
+mcp_app = mount_mcp(app)
 
 
 @app.get("/")
@@ -139,8 +146,8 @@ async def health_check():
 
 @app.get("/readyz")
 async def readiness_check(
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
 ):
     """Readiness probe: 200 only when DB and Redis are reachable. Used as the deploy gate."""
     try:

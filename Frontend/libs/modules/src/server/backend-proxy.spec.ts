@@ -259,6 +259,28 @@ describe('site REST proxy', () => {
     }).toEqual({ status: 302, location: google });
   });
 
+  it('keeps the frame headers of a page the backend serves', async () => {
+    fakeBackend(
+      () =>
+        new Response('<!doctype html>', {
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'x-frame-options': 'DENY',
+            'content-security-policy': "frame-ancestors 'none'",
+          },
+        }),
+    );
+
+    const response = await callSiteRest('mcp/consent?txn=t1', {
+      cookie: 'wgdev_at=access-19',
+    });
+
+    expect({
+      frame: response.headers.get('x-frame-options'),
+      csp: response.headers.get('content-security-policy'),
+    }).toEqual({ frame: 'DENY', csp: "frame-ancestors 'none'" });
+  });
+
   it('fetches public map tiles without the browser cookies, one cached copy for everyone', async () => {
     const calls = fakeBackend(
       () => new Response('png', { headers: { 'content-type': 'image/png' } }),

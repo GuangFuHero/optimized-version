@@ -177,8 +177,12 @@ async def sign_out(
     repo = SessionRepository(redis)
     try:
         sid = await _session_of_cookies(request, repo)
+        session = await repo.get_session(sid) if sid else None
         if sid:
             await repo.revoke_session(sid)
+        # Signing out of the site also ends every MCP client the account allowed.
+        if session:
+            await repo.revoke_mcp_sessions(session["user_uuid"])
     except RedisError as err:
         logger.exception("signing out could not reach Redis (the session store)")
         raise ApiError(

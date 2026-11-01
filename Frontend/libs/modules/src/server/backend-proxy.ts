@@ -111,12 +111,15 @@ async function forwardRequest(
     );
     const responseHeaders = new Headers();
     // `location`: the backend's OAuth start and callback answer with a redirect for the browser
-    // to follow (`redirect: 'manual'` above keeps it from being followed here).
+    // to follow (`redirect: 'manual'` above keeps it from being followed here). The frame headers keep
+    // a page the backend serves itself, such as the MCP consent page, from being framed.
     for (const name of [
       'content-type',
       'content-disposition',
       'retry-after',
       'location',
+      'x-frame-options',
+      'content-security-policy',
     ]) {
       const value = upstream.headers.get(name);
       if (value) responseHeaders.set(name, value);
