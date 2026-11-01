@@ -36,7 +36,7 @@ async def _insert_station(db, uuid: str, name: str, description: str) -> None:
     await db.execute(
         text(
             "INSERT INTO stations (uuid, name, description, level, is_duplicate, "
-            "is_temporary, is_official) VALUES (:u, :n, :d, 0, false, false, false)"
+            "is_temporary) VALUES (:u, :n, :d, 0, false, false)"
         ),
         {"u": uuid, "n": name, "d": description},
     )
@@ -231,8 +231,8 @@ async def _bulk_insert_stations(db, count: int, name_expr: str) -> None:
     await db.execute(
         text(
             "INSERT INTO stations (uuid, name, description, level, is_duplicate, "
-            "is_temporary, is_official) "
-            f"SELECT bg.uuid, {name_expr}, '', 0, false, false, false "
+            "is_temporary) "
+            f"SELECT bg.uuid, {name_expr}, '', 0, false, false "
             "FROM (SELECT uuid, row_number() OVER (ORDER BY uuid) AS g "
             "      FROM base_geometries WHERE property_name = 'station') bg"
         )
@@ -286,8 +286,8 @@ async def test_two_character_query_gets_no_selectivity_from_the_trigram_index(db
     await db.execute(
         text(
             "INSERT INTO stations (uuid, name, description, level, is_duplicate, "
-            "is_temporary, is_official) VALUES (:u, '台北市信義路四段站', '', 0, "
-            "false, false, false)"
+            "is_temporary) VALUES (:u, '台北市信義路四段站', '', 0, "
+            "false, false)"
         ),
         {"u": _STATION_UUID},
     )

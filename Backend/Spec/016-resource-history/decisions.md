@@ -265,6 +265,9 @@ actor: { uuid, name, is_removed, kind }
 
 ### ADR-137 `crawler` 只從 INSERT 事件的 `source` 推導
 
+> **2026-10-30（011/ADR-394）**：`official` 也算系統來源。seed 寫進去的官方站點 `source` 是 `official`，建立事件
+> 的 `kind` 是 `official`。
+
 **白話**：爬蟲建的站點被人改過之後，那次修改是人做的，不能因為欄位還寫著 crawler 就算在爬蟲頭上。
 
 **Context**：Notion 的待確認項問「『AI 爬取來源』是否需要特別標示，或 `source=crawler` 已足夠」。查證結果：**全 repo 沒有任何爬蟲**——`crawler` 只出現在四個文件檔（`Spec/Docs/mapping-tasks.csv:15`、`er-diagram.md:230,370`、`mapping-stations.csv:8`），零行程式碼。使用者裁定仍先納入設計，因為後續會有這功能。

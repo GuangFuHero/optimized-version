@@ -322,7 +322,11 @@ async def test_a_claim_does_not_move_the_version(db):
     db.add(volunteer)
     await db.flush()
     db.add(TaskAssignment(task_uuid=s["ids"]["a1"], actor_uuid=volunteer.uuid))
-    await db.execute(update(TicketTask).where(TicketTask.uuid == s["ids"]["a1"]).values(status="fulfilled"))
+    await db.execute(
+        update(TicketTask)
+        .where(TicketTask.uuid == s["ids"]["a1"])
+        .values(status="fulfilled", completed_at=datetime.now(UTC))
+    )
     await db.execute(update(Tickets).where(Tickets.uuid == s["ids"]["a"]).values(status="in_progress"))
     await db.flush()
 

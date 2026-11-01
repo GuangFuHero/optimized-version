@@ -11,7 +11,6 @@ import {
 import { Box, Divider, IconButton, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import { Fragment } from 'react';
-import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import {
   useCapability,
@@ -30,6 +29,7 @@ import {
   signOutHereAsync,
 } from '../../auth/session/sign-out';
 import { GuangFuBrandIcon } from '../../brand';
+import { eventDayNumber } from './event-day';
 import { useAdminNavSections, type AdminNavItem } from './nav';
 
 const { color, radius, typography, motion } = designTokens;
@@ -72,6 +72,7 @@ export function AdminSidebar({
         bgcolor: color.bg.neutral.subtle,
         borderRight: `1px solid ${color.border.default}`,
         transition: `width ${motion.transition.base}`,
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
       <EventHeader collapsed={collapsed} onToggle={onToggle} />
@@ -169,11 +170,7 @@ function EventHeader({
         : isError
           ? '無法載入專案'
           : '尚未設定專案');
-  const elapsedDays = settings?.started_at
-    ? differenceInCalendarDays(new Date(), parseISO(settings.started_at))
-    : -1;
-  const day =
-    Number.isFinite(elapsedDays) && elapsedDays >= 0 ? elapsedDays + 1 : null;
+  const day = eventDayNumber(settings?.started_at, new Date());
   const status = day == null ? null : `進行中 · 第 ${day} 天`;
   const statusDot = (
     <Box
@@ -191,7 +188,12 @@ function EventHeader({
     <IconButton
       aria-label={collapsed ? '展開選單' : '收合選單'}
       onClick={onToggle}
-      sx={{ color: color.fg.neutral.default, borderRadius: `${radius.sm}px` }}
+      sx={{
+        width: 44,
+        height: 44,
+        color: color.fg.neutral.default,
+        borderRadius: `${radius.sm}px`,
+      }}
     >
       {collapsed ? <ChevronsRight /> : <ChevronsLeft />}
     </IconButton>

@@ -54,11 +54,22 @@ TICKET_FIELDS = (
     "person_trapped_reported",
     "immediate_danger_reported",
 )
-# Every address column but the keys and bookkeeping, so a column added later counts by default.
+# Every address column but the keys and bookkeeping, so a column added later counts by default. The
+# line as typed and the unplaced remainder are left out: `full_address` already says both.
 ADDRESS_FIELDS = tuple(
     column.name
     for column in SecondaryLocation.__table__.columns
-    if column.name not in {"uuid", "geometry_uuid", "created_at", "updated_at", "delete_at", "search_text"}
+    if column.name
+    not in {
+        "uuid",
+        "geometry_uuid",
+        "created_at",
+        "updated_at",
+        "delete_at",
+        "search_text",
+        "user_input_address",
+        "remainder",
+    }
 )
 NEED_FIELDS = ("task_type", "task_name", "task_description")
 PROPERTY_FIELDS = ("property_name", "property_value")

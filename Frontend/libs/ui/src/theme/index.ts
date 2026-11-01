@@ -24,6 +24,7 @@ export {
   withAlpha,
 } from './design-tokens';
 export type { DesignTokens, DisplayTextStep, TypeStyle } from './design-tokens';
+export { safeAreaBottom } from './safe-area';
 export {
   colorSchemes,
   moduleColorSchemeInventory,

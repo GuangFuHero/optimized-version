@@ -14,7 +14,7 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { createContext, useContext, type ReactNode } from 'react';
 
-import { designTokens } from '../../theme';
+import { designTokens, safeAreaBottom } from '../../theme';
 
 const { color, radius, shadow, typography } = designTokens;
 
@@ -230,9 +230,7 @@ export function SheetLayout({
             alignItems: 'center',
             justifyContent: 'flex-end',
             gap: '10px',
-            p: bottom
-              ? '12px 16px calc(12px + env(safe-area-inset-bottom))'
-              : '16px 24px',
+            p: bottom ? `12px 16px ${safeAreaBottom(12)}` : '16px 24px',
             borderTop: `1px solid ${color.border.default}`,
           }}
         >

@@ -26,6 +26,7 @@ import {
   mapTicketToMarker,
   withTicketStatus,
 } from './markers';
+import { nextTicketPageSkip, ticketPageVariables } from './ticket-pages';
 
 const IMPERATIVE_QUERY_CONTEXT = {
   requestPolicy: 'network-only' as const,
@@ -60,6 +61,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   const [error, setError] = useState<CombinedError | null>(null);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [loadedCount, setLoadedCount] = useState(0);
+  const [pageIds, setPageIds] = useState<readonly string[]>([]);
   const activeDataType = state?.dataType ?? 'station';
   const ticketStatus = resolveTicketStatusQueryValue(state?.subDataTypes);
   const ticketSearch = resolveTicketSearch(state?.search);
@@ -114,17 +116,21 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
         );
         setHasNextPage(pageInfo?.hasNextPage ?? false);
         setLoadedCount(skip + nextItems.length);
+        setPageIds(nextItems.map(({ id }) => id));
         return;
       }
 
       const result = await client
-        .query(GetTicketsWithNeedsDocument, {
-          bounds: undefined,
-          status: ticketStatus,
-          q: ticketQuery,
-          skip,
-          limit: LIST_PAGE_SIZE,
-        }, IMPERATIVE_QUERY_CONTEXT)
+        .query(
+          GetTicketsWithNeedsDocument,
+          ticketPageVariables({
+            status: ticketStatus,
+            q: ticketQuery,
+            skip,
+            limit: LIST_PAGE_SIZE,
+          }),
+          IMPERATIVE_QUERY_CONTEXT,
+        )
         .toPromise();
 
       if (requestId !== requestIdRef.current) {
@@ -141,8 +147,9 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
 
       setError(null);
 
+      const items = result.data?.tickets.items ?? [];
       const nextItems = dedupeMarkersById(
-        (result.data?.tickets.items ?? [])
+        items
           .map((ticket): RescueMapMarkerItem | null => {
             const marker = mapTicketToMarker(ticket);
 
@@ -160,7 +167,9 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
         append ? dedupeMarkersById([...current, ...nextItems]) : nextItems,
       );
       setHasNextPage(result.data?.tickets.pageInfo.hasNextPage ?? false);
-      setLoadedCount(skip + nextItems.length);
+      // As the backend counts them, placed or not: the next page goes back from where this one ended.
+      setLoadedCount(skip + items.length);
+      setPageIds(nextItems.map(({ id }) => id));
     },
     [activeDataType, client, ticketQuery, ticketStatus],
   );
@@ -170,13 +179,14 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     setError(null);
     setHasNextPage(false);
     setLoadedCount(0);
+    setPageIds([]);
     setDismissedMarkerIds([]);
     void loadPage(0, false);
   }, [loadPage]);
 
-  // A ticket filed through 請求協助 is the newest there is, so it goes first, where the first page
-  // would put it. Not into stations, nor past a status filter or a search: changing any of them
-  // reloads the list.
+  // A ticket filed through 請求協助 is the newest there is, so it goes first; the list's sort then
+  // puts it at the top of its tier, where the first page would. Not into stations, nor past a status
+  // filter or a search: changing any of them reloads the list.
   useEffect(() => {
     if (activeDataType !== 'ticket' || ticketStatus || ticketQuery) {
       return;
@@ -216,8 +226,14 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
       return;
     }
 
-    void loadPage(loadedCount, true);
-  }, [hasNextPage, isFetching, loadPage, loadedCount]);
+    // Tickets move in the list's order between two pages; the next goes back over a few of them.
+    void loadPage(
+      activeDataType === 'ticket'
+        ? nextTicketPageSkip(loadedCount)
+        : loadedCount,
+      true,
+    );
+  }, [activeDataType, hasNextPage, isFetching, loadPage, loadedCount]);
 
   /**
    * Swap in one ticket as it stands after a claim, a release or a stop — its needs and its status,
@@ -276,6 +292,8 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     dismissMarker,
     hasNextPage,
     loadNextPage,
+    /** The ids the newest page brought, so the list can tell whether any of them is listed. */
+    pageIds,
     loadTicketMarker,
     replaceTicket,
   };

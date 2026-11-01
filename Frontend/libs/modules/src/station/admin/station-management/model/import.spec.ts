@@ -4,37 +4,12 @@ import {
   countExportableByType,
   exportFilename,
   importFieldLabel,
-  importSummary,
   mergeMapping,
+  offersImport,
   STATION_IMPORT_FIELDS,
   stationImportTemplate,
 } from './import';
 import type { StationRow } from './station-row';
-
-describe('importSummary', () => {
-  it('counts distinct failed lines and blocks commit when nothing is importable', () => {
-    expect(
-      importSummary({
-        to_create: 0,
-        to_update: 0,
-        errors: [
-          { line: 3, column: 'name', message: 'x' },
-          { line: 3, column: 'latitude', message: 'y' },
-        ],
-      }),
-    ).toEqual({ create: 0, update: 0, failedLines: 1, canCommit: false });
-  });
-
-  it('allows commit when some rows are importable despite errors', () => {
-    expect(
-      importSummary({
-        to_create: 2,
-        to_update: 1,
-        errors: [{ line: 5, column: 'latitude', message: 'bad' }],
-      }),
-    ).toEqual({ create: 2, update: 1, failedLines: 1, canCommit: true });
-  });
-});
 
 describe('mergeMapping', () => {
   it('applies overrides and drops nulls', () => {
@@ -126,5 +101,16 @@ describe('countExportableByType', () => {
     const counts = countExportableByType(rows);
     expect(counts.get('shelter')).toBe(2);
     expect(counts.get('water')).toBeUndefined();
+  });
+});
+
+describe('offersImport', () => {
+  it('offers 匯入 to whoever may both add and import stations', () => {
+    expect(offersImport({ canAdd: true, canImport: true })).toBe(true);
+  });
+
+  it('hides it without 新增, whose dropdown is the only way in', () => {
+    expect(offersImport({ canAdd: false, canImport: true })).toBe(false);
+    expect(offersImport({ canAdd: true, canImport: false })).toBe(false);
   });
 });

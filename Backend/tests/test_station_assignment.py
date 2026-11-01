@@ -150,7 +150,6 @@ async def _create(db, actor: User) -> Station:
         op_hour=None,
         level=0,
         comment=None,
-        source="manual",
         visibility="public",
     )
     # The service commits and the test session expires on commit (tests/conftest.py).

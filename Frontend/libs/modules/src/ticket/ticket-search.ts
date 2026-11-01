@@ -24,6 +24,7 @@ export function resolveTicketSearch(search: string | undefined): TicketSearch {
     return { kind: 'too-short' };
   }
 
-  // A longer term is searched on its first 50 characters, which still finds whatever it would.
+  // A longer term is searched on its first 50 characters. The backend matches a substring, so
+  // every ticket the whole term would find is still found; the shorter term may find more.
   return { kind: 'query', q: characters.slice(0, SEARCH_MAX_LENGTH).join('') };
 }

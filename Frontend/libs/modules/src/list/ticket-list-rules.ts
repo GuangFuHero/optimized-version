@@ -10,6 +10,12 @@ function isClosedTicket(status: string | null | undefined): boolean {
   );
 }
 
+function isCancelledTicket(status: string | null | undefined): boolean {
+  return normalizeTicketStatusSelection(status ? [status] : []).includes(
+    'cancelled',
+  );
+}
+
 /**
  * Whether the status filter asks for finished or cancelled tickets. Someone who picks those wants to
  * see them, full needs and all, as 含已滿額 shows them (prototype `site-data.js:661-668`).
@@ -48,10 +54,17 @@ function needStanding(
 /**
  * The order the prototype gives tickets (`site-data.js:613-650`): those still short of people
  * first, and among them one with an open rescue need. The viewer's own claim counts as open here,
- * so taking the last place does not send the card they just used down the list. Past that the
- * server's order stands — newest first, or best match when searching — as the sort is stable.
+ * so taking the last place does not send the card they just used down the list. The backend sends
+ * every page in this order already (`order: NEEDS_FIRST`, its ADR-419); sorting again keeps it once
+ * a ticket filed or claimed here changes in place. Past that the server's order stands — newest
+ * first, or best match when searching — as the sort is stable. A ticket cancelled by hand stays
+ * last whatever the viewer claimed on it: nobody works it any more, and the backend ranks it so.
  */
 function ticketRank(marker: RescueMapMarkerItem): number {
+  if (isCancelledTicket(marker.ticketMeta?.status)) {
+    return 2;
+  }
+
   const live = (marker.needs ?? []).filter(
     (need) => needStanding(need, marker.ticketMeta?.status) !== 'full',
   );
@@ -131,4 +144,80 @@ export function listTickets(
   }
 
   return { tickets, fullNeedCount, needCount };
+}
+
+/**
+ * Whether none of the newest page's tickets is listed. The backend sends tickets still taking
+ * people first (`order: NEEDS_FIRST`), so once a whole page folds away every later page would too —
+ * finished tickets, whose needs are all full — and the list stops asking for them: asking fetched
+ * every finished ticket to show none. 含已滿額 lists them, and the asking resumes.
+ */
+export function pageFoldedAway(
+  pageIds: readonly string[],
+  listed: readonly ListedTicket[],
+): boolean {
+  const page = new Set(pageIds);
+
+  return page.size > 0 && !listed.some(({ marker }) => page.has(marker.id));
+}
+
+/**
+ * A count over the loaded pages. While more pages wait to load it is only a floor, so it reads N+
+ * (user, 2026-10-30): scrolling down used to raise a count that looked like a total.
+ */
+export function countFloor(count: number, more: boolean): string {
+  return more ? `${count}+` : `${count}`;
+}
+
+/**
+ * The list's count: 共 N 筆需求 once everything is loaded, N+ 筆需求 while more pages wait; stations
+ * name nothing (共 N 筆, N+ 筆).
+ */
+export function listCountLabel(
+  count: number,
+  { more, what = '' }: { more: boolean; what?: string },
+): string {
+  return more ? `${count}+ 筆${what}` : `共 ${count} 筆${what}`;
+}
+
+export interface ListPaging {
+  /** The list asks for the next page as it scrolls to the end. */
+  canLoadMore: boolean;
+  /** The count (共 N 筆需求) is only a floor: N+. */
+  countMore: boolean;
+  /** 含已滿額's N is only a floor. */
+  fullMore: boolean;
+}
+
+/**
+ * Whether the list pages on, and which of its counts are floors. The backend sends tickets still
+ * taking people first, so once a whole page folds away the pages left hold finished tickets: the
+ * list stops there, its needs are all in, and only 含已滿額's full needs are not.
+ *
+ * That stop holds only while needs fold. With 含已滿額 on, or a status filter asking for finished or
+ * cancelled tickets, a page can come out empty for another reason — two statuses or more are
+ * filtered on the page, not by the backend — and stopping would hide the tickets asked for behind a
+ * 共 0 (HC on #178). A page on its way, the first included, keeps the count a floor too.
+ */
+export function listPaging({
+  hasNextPage,
+  pageFolded,
+  foldsFullNeeds,
+  loading,
+}: {
+  hasNextPage: boolean;
+  /** Every ticket of the newest page folded away (`pageFoldedAway`). */
+  pageFolded: boolean;
+  /** 含已滿額 is off, and no status filter asks for finished or cancelled tickets. */
+  foldsFullNeeds: boolean;
+  /** A page is on its way, or the first one is not in yet. */
+  loading: boolean;
+}): ListPaging {
+  const canLoadMore = hasNextPage && !(foldsFullNeeds && pageFolded);
+
+  return {
+    canLoadMore,
+    countMore: canLoadMore || loading,
+    fullMore: hasNextPage,
+  };
 }

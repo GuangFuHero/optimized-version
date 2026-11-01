@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Computed,
     DateTime,
     ForeignKey,
@@ -48,7 +49,8 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     # Set when `status` becomes 'fulfilled'/'canceled', cleared if it leaves again — by the
     # actions that move it (services/ticket.py: the claim that fills the task, the release that
     # reopens it, stop_recruiting; deleting a task sets canceled_at). Analytics needs the moment
-    # a task left the queue; `updated_at` can't say, since it moves on every edit.
+    # a task left the queue; `updated_at` can't say, since it moves on every edit. A CHECK keeps
+    # each one set exactly when the status says so.
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Set when the requester stops recruiting (services/ticket.py::stop_recruiting). The task is
@@ -68,7 +70,15 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     )
 
     # The name on its own: what a caller without ticket.view_detail searches (ADR-281).
-    __table_args__ = (search_text_index("ticket_tasks"), trigram_index("ticket_tasks", "task_name"))
+    __table_args__ = (
+        search_text_index("ticket_tasks"),
+        trigram_index("ticket_tasks", "task_name"),
+        CheckConstraint(
+            "(completed_at IS NOT NULL) = (status = 'fulfilled')"
+            " AND (canceled_at IS NOT NULL) = (status = 'canceled')",
+            name="ck_ticket_tasks_stamps_match_status",
+        ),
+    )
 
 
 class TaskProperty(Base, UUIDPKMixin, TimestampMixin):

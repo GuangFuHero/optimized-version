@@ -478,8 +478,6 @@ export type CreateTicketTaskDraft = {
   /** Number of people or units needed */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
-  /** Origin: 'user' (default) or 'official' */
-  source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   taskName: Scalars['String']['input'];
   /** Category: 'rescue', 'supply', 'medical', or 'hr' */
@@ -492,8 +490,6 @@ export type CreateTicketTaskInput = {
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
-  /** Origin: 'user' (default) or 'official' */
-  source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   taskName: Scalars['String']['input'];
   /** Category: 'rescue', 'supply', 'medical', or 'hr' */
@@ -1176,6 +1172,7 @@ export type QueryTicketsArgs = {
   limit?: Scalars['Int']['input'];
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
+  order?: TicketListOrder;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
@@ -1694,6 +1691,13 @@ export type TicketDisasterDetailType = {
   value: Scalars['String']['output'];
 };
 
+export const TicketListOrder = {
+  NeedsFirst: 'NEEDS_FIRST',
+  Newest: 'NEWEST',
+} as const;
+
+export type TicketListOrder =
+  (typeof TicketListOrder)[keyof typeof TicketListOrder];
 export type TicketPropertyConfigType = {
   __typename?: 'TicketPropertyConfigType';
   /** Which control the form renders for this field */
@@ -1771,6 +1775,8 @@ export type TicketType = {
   auditedAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of who gave the last verdict. Null if never audited, or without ticket.audit here */
   auditedBy?: Maybe<Scalars['String']['output']>;
+  /** The building map this ticket was filed under (createTicket's buildingMapUuid). Null when it was not filed under one, when that building map is deleted, and to a caller without ticket.view_detail here */
+  buildingMapUuid?: Maybe<Scalars['UUID']['output']>;
   /** What differs from the content the last verdict was given on, field by field. Null if never audited, or to a caller without ticket.audit here. A need taken off since does not appear: it does not void a verdict. A value the caller could not read on the ticket itself (address, free text, triage answers) comes back null, the change still listed. Read it on one ticket at a time */
   changesSinceAudit?: Maybe<Array<TicketAuditChangeType>>;
   /** Follow-up email — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
@@ -1801,6 +1807,8 @@ export type TicketType = {
   priority: Scalars['String']['output'];
   /** Internal polymorphic discriminator — always 'request' */
   propertyName: Scalars['String']['output'];
+  /** The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it lies in none, and to a caller without ticket.view_detail here */
+  responsibleTeams: Array<AssignedTeamType>;
   /** Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address */
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
@@ -2025,6 +2033,47 @@ export type CurrentBriefingQuery = {
     content: string;
     publishedAt?: any | null;
   }>;
+};
+
+export type GetBuildingMapWithTicketsQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+  limit?: Scalars['Int']['input'];
+}>;
+
+export type GetBuildingMapWithTicketsQuery = {
+  __typename?: 'Query';
+  buildingMap?: {
+    __typename?: 'BuildingMapType';
+    uuid: string;
+    name: string;
+    floors: Array<{
+      __typename?: 'BuildingFloorType';
+      label: string;
+      areas: Array<string>;
+    }>;
+    secondaryLocation?: {
+      __typename?: 'SecondaryLocationType';
+      fullAddress?: string | null;
+      landmarkNote?: string | null;
+    } | null;
+  } | null;
+  buildingMapTickets: Array<
+    {
+      __typename?: 'TicketType';
+      secondaryLocation?: {
+        __typename?: 'SecondaryLocationType';
+        floor?: string | null;
+        room?: string | null;
+      } | null;
+      tasks: Array<
+        { __typename?: 'TicketTaskType' } & {
+          ' $fragmentRefs'?: {
+            TicketNeedFieldsFragment: TicketNeedFieldsFragment;
+          };
+        }
+      >;
+    } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } }
+  >;
 };
 
 export type PageInfoFieldsFragment = {
@@ -2460,6 +2509,7 @@ export type GetTicketsWithNeedsQueryVariables = Exact<{
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
+  order?: InputMaybe<TicketListOrder>;
 }>;
 
 export type GetTicketsWithNeedsQuery = {
@@ -2496,6 +2546,7 @@ export type GetTicketQuery = {
   ticket?:
     | ({
         __typename?: 'TicketType';
+        buildingMapUuid?: string | null;
         secondaryLocation?: {
           __typename?: 'SecondaryLocationType';
           fullAddress?: string | null;
@@ -2514,6 +2565,11 @@ export type GetTicketQuery = {
           room?: string | null;
           landmarkNote?: string | null;
         } | null;
+        responsibleTeams: Array<{
+          __typename?: 'AssignedTeamType';
+          uuid: string;
+          name: string;
+        }>;
         photos: Array<{
           __typename?: 'PhotoType';
           uuid: string;
@@ -3046,6 +3102,208 @@ export const CurrentBriefingDocument = {
 } as unknown as DocumentNode<
   CurrentBriefingQuery,
   CurrentBriefingQueryVariables
+>;
+export const GetBuildingMapWithTicketsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetBuildingMapWithTickets' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'limit' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          },
+          defaultValue: { kind: 'IntValue', value: '200' },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'buildingMap' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'floors' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'label' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'areas' } },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'secondaryLocation' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'fullAddress' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'landmarkNote' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'buildingMapTickets' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'buildingMapUuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'limit' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'limit' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'TicketFields' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'secondaryLocation' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'room' } },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'tasks' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'FragmentSpread',
+                        name: { kind: 'Name', value: 'TicketNeedFields' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketNeedFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketTaskType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'myAssignment' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  GetBuildingMapWithTicketsQuery,
+  GetBuildingMapWithTicketsQueryVariables
 >;
 export const GetStationsDocument = {
   kind: 'Document',
@@ -4684,6 +4942,17 @@ export const GetTicketsWithNeedsDocument = {
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'zoom' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'order' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'TicketListOrder' },
+          },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -4743,6 +5012,14 @@ export const GetTicketsWithNeedsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'zoom' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'order' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'order' },
                 },
               },
             ],
@@ -4907,6 +5184,10 @@ export const GetTicketDocument = {
                 },
                 {
                   kind: 'Field',
+                  name: { kind: 'Name', value: 'buildingMapUuid' },
+                },
+                {
+                  kind: 'Field',
                   name: { kind: 'Name', value: 'secondaryLocation' },
                   selectionSet: {
                     kind: 'SelectionSet',
@@ -4950,6 +5231,17 @@ export const GetTicketDocument = {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'landmarkNote' },
                       },
+                    ],
+                  },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'responsibleTeams' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
                     ],
                   },
                 },

@@ -52,7 +52,7 @@ async def test_resolve_team_admin_real_db(db: AsyncSession):
     bob_id = bob_member.uuid
 
     # Membership is the grant, not a column on users (ADR-072/073): the team lives on the
-    # UserRoleAssign row. `role_kind` is derived by the before_flush hook in models/rbac.py.
+    # UserRoleAssign row.
     db.add_all(
         [
             UserRoleAssign(user_uuid=alice_id, role_uuid=admin_role.uuid, team_uuid=team_id),
@@ -107,11 +107,15 @@ async def test_station_notices_go_to_gov_and_the_team_the_station_is_assigned_to
     gov_uid, running_admin_uid, zone_admin_uid = gov_user.uuid, running_admin.uuid, zone_admin.uuid
 
     # Membership is the grant (ADR-072/073): a user with no grant belongs to no team.
-    db.add_all([
-        UserRoleAssign(user_uuid=gov_uid, role_uuid=member_role.uuid, team_uuid=gov_team.uuid),
-        UserRoleAssign(user_uuid=running_admin_uid, role_uuid=admin_role.uuid, team_uuid=running_team.uuid),
-        UserRoleAssign(user_uuid=zone_admin_uid, role_uuid=admin_role.uuid, team_uuid=zone_team.uuid),
-    ])
+    db.add_all(
+        [
+            UserRoleAssign(user_uuid=gov_uid, role_uuid=member_role.uuid, team_uuid=gov_team.uuid),
+            UserRoleAssign(
+                user_uuid=running_admin_uid, role_uuid=admin_role.uuid, team_uuid=running_team.uuid
+            ),
+            UserRoleAssign(user_uuid=zone_admin_uid, role_uuid=admin_role.uuid, team_uuid=zone_team.uuid),
+        ]
+    )
     polygon_wkt = "SRID=4326;POLYGON((121.5 23.9, 121.7 23.9, 121.7 24.1, 121.5 24.1, 121.5 23.9))"
     team_zone = TeamZone(name="第一搜救責任區", geometry=WKTElement(polygon_wkt, srid=4326))
     db.add(team_zone)
@@ -146,10 +150,12 @@ async def test_an_unassigned_station_notifies_gov_only(db: AsyncSession):
     db.add_all([gov_team, zone_team, admin_role, gov_user, zone_admin])
     await db.flush()
     gov_uid = gov_user.uuid
-    db.add_all([
-        UserRoleAssign(user_uuid=gov_uid, role_uuid=admin_role.uuid, team_uuid=gov_team.uuid),
-        UserRoleAssign(user_uuid=zone_admin.uuid, role_uuid=admin_role.uuid, team_uuid=zone_team.uuid),
-    ])
+    db.add_all(
+        [
+            UserRoleAssign(user_uuid=gov_uid, role_uuid=admin_role.uuid, team_uuid=gov_team.uuid),
+            UserRoleAssign(user_uuid=zone_admin.uuid, role_uuid=admin_role.uuid, team_uuid=zone_team.uuid),
+        ]
+    )
     polygon_wkt = "SRID=4326;POLYGON((121.5 23.9, 121.7 23.9, 121.7 24.1, 121.5 24.1, 121.5 23.9))"
     team_zone = TeamZone(name="第一搜救責任區", geometry=WKTElement(polygon_wkt, srid=4326))
     db.add(team_zone)
@@ -228,25 +234,33 @@ async def test_new_suggestion_notifies_only_reviewers_who_can_act(db: AsyncSessi
     gov = Team(name="政府", type="gov")
     db.add_all([review, platform_reviewer_role, team_reviewer_role, own, other, gov])
     await db.flush()
-    db.add_all([
-        RolePermissionAssign(role_uuid=platform_reviewer_role.uuid, permission_uuid=review.uuid, scope="all"),
-        RolePermissionAssign(role_uuid=team_reviewer_role.uuid, permission_uuid=review.uuid, scope="team"),
-    ])
+    db.add_all(
+        [
+            RolePermissionAssign(
+                role_uuid=platform_reviewer_role.uuid, permission_uuid=review.uuid, scope="all"
+            ),
+            RolePermissionAssign(
+                role_uuid=team_reviewer_role.uuid, permission_uuid=review.uuid, scope="team"
+            ),
+        ]
+    )
 
     users = [User(name=n) for n in ("稽核", "本隊", "他隊", "政府", "直授", "投稿")]
     db.add_all(users)
     await db.flush()
     ids = {u.name: u.uuid for u in users}
-    db.add_all([
-        UserRoleAssign(user_uuid=ids["稽核"], role_uuid=platform_reviewer_role.uuid),
-        UserRoleAssign(user_uuid=ids["投稿"], role_uuid=platform_reviewer_role.uuid),
-        UserRoleAssign(user_uuid=ids["本隊"], role_uuid=team_reviewer_role.uuid, team_uuid=own.uuid),
-        UserRoleAssign(user_uuid=ids["他隊"], role_uuid=team_reviewer_role.uuid, team_uuid=other.uuid),
-        UserRoleAssign(user_uuid=ids["政府"], role_uuid=team_reviewer_role.uuid, team_uuid=gov.uuid),
-        UserPermissionAssign(
-            user_uuid=ids["直授"], permission_uuid=review.uuid, scope="team", team_uuid=own.uuid
-        ),
-    ])
+    db.add_all(
+        [
+            UserRoleAssign(user_uuid=ids["稽核"], role_uuid=platform_reviewer_role.uuid),
+            UserRoleAssign(user_uuid=ids["投稿"], role_uuid=platform_reviewer_role.uuid),
+            UserRoleAssign(user_uuid=ids["本隊"], role_uuid=team_reviewer_role.uuid, team_uuid=own.uuid),
+            UserRoleAssign(user_uuid=ids["他隊"], role_uuid=team_reviewer_role.uuid, team_uuid=other.uuid),
+            UserRoleAssign(user_uuid=ids["政府"], role_uuid=team_reviewer_role.uuid, team_uuid=gov.uuid),
+            UserPermissionAssign(
+                user_uuid=ids["直授"], permission_uuid=review.uuid, scope="team", team_uuid=own.uuid
+            ),
+        ]
+    )
     station = Station(
         name="站", geometry=WKTElement("SRID=4326;POINT(121.42 23.66)", srid=4326), team_uuid=own.uuid
     )
@@ -261,15 +275,24 @@ async def test_new_suggestion_notifies_only_reviewers_who_can_act(db: AsyncSessi
             # Reload each time: the previous submit's commit expired the user.
             submitter_obj = await db.get(User, ids["投稿"], populate_existing=True)
             await suggestion_service.create_station_suggestion(
-                db, actor=submitter_obj, target_type="station", target_uuid=str(station_id),
-                field_name="name", new_value=new_value, comment=None,
+                db,
+                actor=submitter_obj,
+                target_type="station",
+                target_uuid=str(station_id),
+                field_name="name",
+                new_value=new_value,
+                comment=None,
             )
 
     notified = (
-        await db.execute(
-            select(Notification.recipient_uuid).where(Notification.type == "station_suggestion_created")
+        (
+            await db.execute(
+                select(Notification.recipient_uuid).where(Notification.type == "station_suggestion_created")
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert sorted(notified) == sorted([ids["稽核"], ids["本隊"], ids["政府"], ids["直授"]])
 
 
@@ -374,7 +397,7 @@ async def test_add_team_member_returns_usable_object_after_dispatch(db: AsyncSes
             )
         )
     ).scalar_one()
-    assert membership.role_kind == "team"
+    assert membership.team_uuid == team_id
 
     # And the notification itself landed.
     rows = (
@@ -595,7 +618,9 @@ async def test_approved_suggestion_on_boolean_property_notifies_gov(db: AsyncSes
     reviewer_obj = await db.get(User, reviewer_id)
     with patch("app.services.suggestion.require_scope", new_callable=AsyncMock):
         merge = await suggestion_service.merge_station_suggestions(
-            db, actor=reviewer_obj, station_uuid=str(station_id),
+            db,
+            actor=reviewer_obj,
+            station_uuid=str(station_id),
             decisions=[suggestion_service.SuggestionDecision(str(prop_id), "comment", True, "false")],
         )
 
@@ -664,7 +689,9 @@ async def test_rejected_suggestion_does_not_notify(db: AsyncSession):
     reviewer_obj = await db.get(User, reviewer_id)
     with patch("app.services.suggestion.require_scope", new_callable=AsyncMock):
         await suggestion_service.merge_station_suggestions(
-            db, actor=reviewer_obj, station_uuid=str(station_id),
+            db,
+            actor=reviewer_obj,
+            station_uuid=str(station_id),
             decisions=[suggestion_service.SuggestionDecision(str(prop_id), "comment", False)],
             review_note="無法查證",
         )
