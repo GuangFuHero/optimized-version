@@ -18,7 +18,7 @@ ever receives an `x` value that's actually valid for it (see that module's CATAL
 app.core.rbac_scopes.scope_filter against `Tickets`, empty for `all` scope — plus the
 endpoint's own filters. Every function must apply it; an aggregate that skips it leaks
 numbers, if not rows. The ticket-level counts leave deleted tickets out unless it holds
-analytics_filters.INCLUDE_DELETED; a deleted ticket is cancelled, so it then counts as canceled.
+analytics_filters.INCLUDE_DELETED; a deleted ticket then counts as canceled, whatever its status.
 
 Grouped rows use a uniform `"x"` output column regardless of what's being grouped by
 (day/week bucket, task_type, ...) so chart_render.py never needs per-metric field
@@ -93,8 +93,14 @@ _BUCKET_OF_STATUS = {
 
 
 def _bucket_expr():
-    """CASE naming the module docstring's bucket for the ticket's status."""
-    return case(_BUCKET_OF_STATUS, value=Tickets.status)
+    """CASE naming the module docstring's bucket for the ticket's status; a deleted ticket is always canceled.
+
+    Tickets deleted before deleting set the status were left at theirs, so the status alone is not enough.
+    """
+    return case(
+        (Tickets.delete_at.is_not(None), "canceled"),
+        else_=case(_BUCKET_OF_STATUS, value=Tickets.status),
+    )
 
 
 def _exited_subquery(bucket: str, extra_filters: list | None):
@@ -334,8 +340,11 @@ async def get_time_to_completion(
         # Rooted at TicketTask, but the filters are written against Tickets, so reach the
         # parent row. Repointing them at TicketTask would be wrong, not just awkward: its
         # `created_by` is the task's author rather than the ticket's owner, and it has no
-        # geometry — so `own` would answer a different question and `zone` would match none.
-        query = query.join(Tickets, Tickets.uuid == TicketTask.ticket_uuid).where(*extra_filters)
+        # geometry — so `own` would answer a different question and `zone` would match none. A type
+        # filter is the exception: it reads the need's own type, as the volunteer metrics do.
+        query = query.join(Tickets, Tickets.uuid == TicketTask.ticket_uuid).where(
+            *_on_need_type(extra_filters, TicketTask.task_type)
+        )
     if lower is not None:
         query = query.where(TicketTask.completed_at >= lower)
     if upper is not None:
@@ -443,8 +452,11 @@ async def get_task_completion_distribution(
         func.count(TicketTask.uuid).filter(TicketTask.status != "canceled").label("total"),
     ).where(TicketTask.delete_at.is_(None))
     if extra_filters:
-        # Reach the parent row, same reasoning as get_time_to_completion above.
-        query = query.join(Tickets, Tickets.uuid == TicketTask.ticket_uuid).where(*extra_filters)
+        # Reach the parent row, same reasoning as get_time_to_completion above; a type filter reads
+        # the need's own type.
+        query = query.join(Tickets, Tickets.uuid == TicketTask.ticket_uuid).where(
+            *_on_need_type(extra_filters, TicketTask.task_type)
+        )
     if lower is not None:
         query = query.where(TicketTask.created_at >= lower)
     if upper is not None:

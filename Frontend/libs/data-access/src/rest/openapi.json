@@ -6228,10 +6228,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type."
           },
           {
             "name": "status",
@@ -6473,10 +6473,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type."
           },
           {
             "name": "status",
@@ -6689,10 +6689,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type."
           },
           {
             "name": "status",

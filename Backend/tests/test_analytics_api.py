@@ -1178,16 +1178,49 @@ async def test_include_deleted_counts_deleted_tickets_as_canceled_within_scope(c
     db_session.add(stranger)
     await db_session.flush()
     await _filed(db_session, user_uuid)
-    for owner in (user_uuid, str(stranger.uuid)):
-        ticket = await _filed(db_session, owner, status="cancelled")
+    # The last one was deleted before deleting set the status, so it is still pending.
+    deleted = ((user_uuid, "cancelled"), (str(stranger.uuid), "cancelled"), (user_uuid, "pending"))
+    for owner, status in deleted:
+        ticket = await _filed(db_session, owner, status=status)
         ticket.delete_at = datetime.now(UTC)
     await db_session.commit()
 
     assert await _total(client, headers) == 1
     assert await _total(client, headers, y="canceled_tickets") == 0
-    assert await _total(client, headers, include_deleted="true") == 2
-    assert await _total(client, headers, y="canceled_tickets", include_deleted="true") == 1
+    assert await _total(client, headers, include_deleted="true") == 3
+    assert await _total(client, headers, y="canceled_tickets", include_deleted="true") == 2
     assert await _total(client, headers, y="unassigned_tickets", include_deleted="true") == 1
+
+    async def series(y, include_deleted):
+        params = {"tz": "UTC", "y": y, "include_deleted": include_deleted}
+        if y != "age_distribution":
+            params["x"] = "date"
+        res = await client.get(TICKETS_DATA_URL, params=params, headers=headers)
+        assert res.status_code == 200, res.text
+        return {s["name"]: sum(s["values"]) for s in res.json()["series"]}
+
+    assert await series("canceled_tickets", "false") == {"已取消": 0}
+    assert await series("canceled_tickets", "true") == {"已取消": 2}
+    assert (await series("net_backlog_change", "false"))["取消"] == 0
+    assert (await series("net_backlog_change", "true"))["取消"] == 2
+    assert await series("age_distribution", "true") == {"任務單": 1}
+
+
+@pytest.mark.asyncio
+async def test_need_level_metrics_read_the_needs_own_type(client, db_session, redis):
+    """Filtered to a type, the need metrics leave out the other needs of a matching ticket."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    ticket = await _filed(db_session, user_uuid, task_type="supply")
+    db_session.add(_need(ticket.uuid, user_uuid, "hr"))
+    await db_session.commit()
+
+    res = await client.get(
+        TICKETS_DATA_URL,
+        params={"tz": "UTC", "y": "task_completion_distribution", "task_type": "supply"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert sum(res.json()["series"][0]["values"]) == 1
 
 
 @pytest.mark.asyncio

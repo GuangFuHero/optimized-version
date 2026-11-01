@@ -8019,7 +8019,7 @@ export interface operations {
         height?: number | null;
         /** @description JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{"title": {"text": "Custom title"}}'. */
         layout_overrides?: string | null;
-        /** @description Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type. */
+        /** @description Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type. */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
@@ -8075,7 +8075,7 @@ export interface operations {
         end_date?: string | null;
         /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
         tz: string;
-        /** @description Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type. */
+        /** @description Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type. */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
@@ -8127,7 +8127,7 @@ export interface operations {
         end_date?: string | null;
         /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
         tz: string;
-        /** @description Only tickets with a need of this type, as the public tickets list matches it; the volunteer metrics read each need's own type. */
+        /** @description Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type. */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;

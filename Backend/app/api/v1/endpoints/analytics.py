@@ -197,7 +197,7 @@ async def _ticket_filters(
     task_type: TicketTaskType | None = Query(
         None,
         description="Only tickets with a need of this type, as the public tickets list matches it; "
-        "the volunteer metrics read each need's own type.",
+        "the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
     ),
     ticket_status: TicketStatus | None = Query(
         None, alias="status", description="Only tickets with this status."
