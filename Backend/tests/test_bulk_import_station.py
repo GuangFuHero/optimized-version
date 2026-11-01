@@ -91,7 +91,6 @@ async def _grant(db, user: User, *perms_and_scopes, team: Team | None = None) ->
             user_uuid=user.uuid,
             role_uuid=role.uuid,
             team_uuid=team.uuid if team is not None else None,
-            role_kind=kind,
         )
     )
     # Before the commit: `expire_on_commit` is True on this fixture, so reading `role.uuid`
@@ -234,7 +233,7 @@ async def test_a_file_over_the_row_cap_is_refused_before_anything_runs(db):
 
 @pytest.mark.asyncio
 async def test_a_row_that_matches_nothing_is_created(db):
-    """An unmatched row becomes a new station, owned by the importer and marked as imported."""
+    """An unmatched row becomes a new station, owned by the importer and marked official."""
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([_row("光復國小", capacity="120")])
@@ -244,7 +243,22 @@ async def test_a_row_that_matches_nothing_is_created(db):
     assert (outcome.created, outcome.updated, outcome.failed) == (1, 0, 0)
     station = await _station_named(db, "光復國小")
     assert str(station.created_by) == str(actor.uuid)
-    assert station.source == "import"
+    assert station.source == "official"
+    # The default status, as for any new station.
+    assert station.operational_status == "active"
+
+
+@pytest.mark.asyncio
+async def test_a_created_row_is_official_whatever_its_source_column_says(db):
+    """Bulk import is admin-only, and an admin-created station is official (ADMIN-026)."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw = write_csv((*HEADERS, "source"), [{**_row("光復國小"), "source": "user"}])
+
+    await commit_stations(db, actor=actor, raw=raw, filename="stations.csv", station_type="shelter")
+
+    station = await _station_named(db, "光復國小")
+    assert station.source == "official"
 
 
 @pytest.mark.asyncio
@@ -315,6 +329,25 @@ async def test_a_row_that_matches_updates_in_place(db):
 
 
 @pytest.mark.asyncio
+async def test_an_update_leaves_the_status_alone(db):
+    """Re-importing a station must not reopen one someone closed."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("光復國小", comment="第一版")])
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+    station = await _station_named(db, "光復國小")
+    station.operational_status = "temporarily_closed"
+    await db.commit()
+
+    raw, filename = _file([_row("光復國小", comment="第二版")])
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+
+    updated = await _station_named(db, "光復國小")
+    assert updated.comment == "第二版"
+    assert updated.operational_status == "temporarily_closed"
+
+
+@pytest.mark.asyncio
 async def test_a_blank_cell_leaves_the_existing_value_alone(db):
     """Blank means "leave it alone"; there is no way to clear a field (ADR-121)."""
     await _configs(db)
@@ -341,6 +374,20 @@ async def test_importing_the_same_file_twice_changes_nothing_the_second_time(db)
     assert (first.created, first.updated) == (2, 0)
     assert (second.created, second.updated) == (0, 2)
     assert await _count_stations(db) == 2
+
+
+@pytest.mark.asyncio
+async def test_importing_the_same_file_again_leaves_the_last_update_alone(db):
+    """Nothing in the file changed, its point and dynamic value included, so 「最後更新」 stays put."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("光復國小", capacity="5")])
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+    stamp = (await _station_named(db, "光復國小")).updated_at
+
+    await commit_stations(db, actor=actor, raw=raw, filename=filename, station_type="shelter")
+
+    assert (await _station_named(db, "光復國小")).updated_at == stamp
 
 
 @pytest.mark.asyncio

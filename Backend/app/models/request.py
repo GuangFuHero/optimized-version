@@ -2,11 +2,11 @@
 
 from datetime import datetime
 
-from sqlalchemy import ARRAY, CheckConstraint, Computed, DateTime, ForeignKey, String, text
+from sqlalchemy import ARRAY, CheckConstraint, Computed, DateTime, ForeignKey, String, event, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.geo import BaseGeometry
+from app.models.geo import BaseGeometry, stamp_updated_at
 from app.models.search import (
     plain,
     search_text_expression,
@@ -69,8 +69,9 @@ class Tickets(BaseGeometry):
     immediate_danger_reported: Mapped[str | None] = mapped_column(
         String(20), nullable=True, comment="立即生命危險：yes/no/unknown"
     )
-    # Set when a dedup resolve cancels this ticket into another (Spec 028, ADR-372). A record
-    # only: nobody is redirected through it, the notices point at the kept ticket.
+    # Set when a dedup resolve cancels this ticket into another (Spec 028, ADR-372). TicketType
+    # does not show it, the notices point at the kept ticket; only ticketAvailability follows it,
+    # to send a share link on to the kept ticket (ADR-444).
     replaced_by_uuid: Mapped[str | None] = mapped_column(
         ForeignKey("tickets.uuid"), nullable=True, comment="重複審核合併後取代此單的單"
     )
@@ -89,6 +90,9 @@ class Tickets(BaseGeometry):
         "polymorphic_identity": "request",
     }
 
+    # A review verdict, given or voided, is not a change to the ticket, so it never moves updated_at.
+    not_an_update = frozenset({"audit_status", "audit_note", "audited_at", "audited_by", "audited_content"})
+
     # The title on its own: what a caller without ticket.view_detail searches (ADR-281).
     __table_args__ = (
         search_text_index("tickets"),
@@ -103,3 +107,6 @@ class Tickets(BaseGeometry):
             name="ck_tickets_audit_issue_note",
         ),
     )
+
+
+event.listen(Tickets, "before_update", stamp_updated_at)

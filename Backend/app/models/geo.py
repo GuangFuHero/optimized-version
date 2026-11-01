@@ -3,7 +3,20 @@
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, Index, String, false, func, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Computed,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    event,
+    false,
+    func,
+    inspect,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -111,6 +124,7 @@ class Station(BaseGeometry):
     op_hour: Mapped[str | None] = mapped_column(String(100))
     level: Mapped[int] = mapped_column(default=0)
     comment: Mapped[str | None] = mapped_column(String)
+    # Who made it: `official` in the back office, `user` on the site; NULL is not known.
     source: Mapped[str | None] = mapped_column(String(50))
     visibility: Mapped[str | None] = mapped_column(String(50))
     verification_status: Mapped[str | None] = mapped_column(String(50))
@@ -118,7 +132,10 @@ class Station(BaseGeometry):
     dedup_group_id: Mapped[str | None] = mapped_column(String)
     is_temporary: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    is_official: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Worked out by the database from `source`, so the two cannot disagree.
+    is_official: Mapped[bool] = mapped_column(
+        Boolean, Computed("COALESCE(source = 'official', false)", persisted=True)
+    )
     updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)
     # The one team that runs this station, assigned by hand; null = unassigned (ADR-285). This is
     # what `team` scope compares against for stations, instead of the TeamZone geometry tickets use.
@@ -149,6 +166,55 @@ class Station(BaseGeometry):
         "polymorphic_identity": "station",
     }
 
-    __table_args__ = (search_text_index("stations"),)
+    __table_args__ = (
+        search_text_index("stations"),
+        CheckConstraint("source IN ('user', 'official')", name="ck_stations_source"),
+    )
 
     properties: Mapped[list["StationProperty"]] = relationship(back_populates="station")  # noqa: F821
+
+
+def touch(record: BaseGeometry, at: datetime | None = None) -> None:
+    """Move a station's or ticket's 「最後更新」 (`updated_at`) to `at`, or to the time of the write.
+
+    For a change `stamp_updated_at` cannot see, to a related row, or one that must carry a set time. The
+    database fills a default time in, so `updated_at` reads back only after a refresh.
+    """
+    # clock_timestamp(), not now(): now() is when the transaction began, which a write that waited on
+    # a lock would stamp after a later one.
+    record.updated_at = func.clock_timestamp() if at is None else at
+
+
+def _blank(value) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def edited(record, ignored: frozenset[str] = frozenset()) -> bool:
+    """Whether a column of `record`, other than those in `ignored`, now holds a different value.
+
+    A blank string and NULL read the same, so turning one into the other is not an edit.
+    """
+    state = inspect(record)
+    for attr in state.mapper.column_attrs:
+        history = state.attrs[attr.key].history
+        if attr.key in ignored or not history.has_changes():
+            continue
+        # `deleted` is empty when the old value was never loaded, which counts as a change.
+        if not (history.deleted and all(_blank(value) for value in (*history.deleted, *history.added))):
+            return True
+    return False
+
+
+def stamp_updated_at(_mapper, _connection, target) -> None:
+    """Move `updated_at` when a record's own columns change, unless it was set already in this flush.
+
+    A change to only the subclass's table never writes `base_geometries`, so the column's onupdate
+    alone misses it. Columns named in the model's `not_an_update` do not count.
+    """
+    if inspect(target).attrs.updated_at.history.has_changes():
+        return
+    if edited(target, getattr(target, "not_an_update", frozenset())):
+        target.updated_at = func.clock_timestamp()
+
+
+event.listen(Station, "before_update", stamp_updated_at)

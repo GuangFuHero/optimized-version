@@ -38,6 +38,12 @@ export interface RescueMapViewportState {
   zoom?: number;
 }
 
+/** A view a map opens at: a centre and a zoom. */
+export interface RescueMapView {
+  center: [number, number];
+  zoom: number;
+}
+
 export interface RescueMapRouteState {
   baseLayer?: RescueMapBaseLayer;
   dataType?: RescueMapDataType;
@@ -138,6 +144,30 @@ export interface RescueMapLayerPreferences {
   knownOverlayLayers?: RescueMapOverlayLayer[];
 }
 
+/**
+ * Opt-in look for a marker: a small teardrop pin in a colour of the caller's choosing, with no
+ * label. Markers without it keep the default round pin and label pill.
+ */
+export interface RescueMapPinAppearance {
+  /** Any CSS colour. */
+  color: string;
+  /** Faded, e.g. for a closed station. */
+  dimmed?: boolean;
+  /** Outlined, enlarged and lifted above the other pins. */
+  selected?: boolean;
+  /** A teardrop unless set; square marks a 開啟空間 space on the admin ticket map. */
+  shape?: 'drop' | 'square';
+}
+
+/** Opt-in hover tooltip for a marker. Plain text; it is escaped. */
+export interface RescueMapMarkerTooltip {
+  title: string;
+  subtitle?: string;
+}
+
+/** Opt-in cluster look: `solid` is a flat primary disc in a white ring (admin station map). */
+export type RescueMapClusterAppearance = 'default' | 'solid';
+
 export interface RescueMapMarkerItem {
   id: string;
   title: string;
@@ -197,6 +227,10 @@ export interface RescueMapMarkerItem {
   requiredVolunteers?: number;
   /** 初始已媒合志工數；使用者操作後以前臺本地狀態為準。 */
   matchedVolunteers?: number;
+  /** Draws a teardrop pin instead of the default marker. Absent: the default marker. */
+  pin?: RescueMapPinAppearance;
+  /** Shown on hover. Absent: no tooltip. */
+  tooltip?: RescueMapMarkerTooltip;
 }
 
 /**

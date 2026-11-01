@@ -79,14 +79,17 @@
 ### `station/`
 
 - `admin/station-create/*`
-- `admin/station-detail/*`
-- `admin/station-list/*`
+- `admin/station-detail/*`：地圖的站點詳情抽屜（`/stations` 用自己的 `station-management/station-detail-sheet.tsx`）
+- `admin/station-drawer/*`：`/stations` 自己的抽屜框架與表單版面（`AdminStationDrawer`、`AdminStationFormDrawer`、`StationEditPanel`）
+- `admin/station-management/*`：admin `/stations` 頁（列表／地圖、審查、匯入匯出）
+- `form/*`：新增／編輯站點表單（`StationForm` 不帶外框，由呼叫端決定；`StationFormDrawer` 是共用 `Sheet` 版），`/map`、前台地圖與 `/stations` 共用
 - `report/*`
+- `operational-status.ts`
+- `station-point.ts`：站點 GeoJSON 點轉 Leaflet `[lat, lng]`
 - `type-options.ts`
 
 ### `ticket/`
 
-- `admin/ticket-create/*`
 - `admin/ticket-detail/*`
 - `admin/ticket-list/*`
 - `admin/ticket-report/*`

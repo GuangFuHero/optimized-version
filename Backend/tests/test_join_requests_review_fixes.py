@@ -85,9 +85,7 @@ async def test_the_rbac_revoke_keeps_a_teams_last_admin(db):
     captain = User(name="隊長")
     db.add(captain)
     await db.flush()
-    db.add(
-        UserRoleAssign(user_uuid=captain.uuid, role_uuid=admin.uuid, team_uuid=team.uuid, role_kind="team")
-    )
+    db.add(UserRoleAssign(user_uuid=captain.uuid, role_uuid=admin.uuid, team_uuid=team.uuid))
     await db.flush()
 
     with pytest.raises(rbac_admin.RbacConflictError, match="^Cannot remove the team's only admin$"):
@@ -102,9 +100,7 @@ async def test_a_suspended_teams_member_still_cannot_become_a_data_auditor(db):
     team = await _team(db, status="suspended")
     citizen = await _citizen(db)
     member = await _role(db, "member", {}, kind="team")
-    db.add(
-        UserRoleAssign(user_uuid=citizen.uuid, role_uuid=member.uuid, team_uuid=team.uuid, role_kind="team")
-    )
+    db.add(UserRoleAssign(user_uuid=citizen.uuid, role_uuid=member.uuid, team_uuid=team.uuid))
     await db.flush()
     await refresh_actor(db, citizen)
 
@@ -176,7 +172,10 @@ async def test_approving_while_the_team_is_suspended_settles_one_way(db):
 
 def test_data_auditors_read_applicant_details_masked():
     """ADR-359 point 5: what only reviewers read is replaced, everything else kept."""
-    from app.services.audit_log import REDACTED, redact_applicant_details
+    from app.services.audit_log import REDACTED, mask_values
+
+    def redact_applicant_details(table_name, values):
+        return mask_values(table_name, values, reads_applicant_details=False)
 
     values = {"status": "pending", "applicant_phone": "+886912345678", "reason": "我是…", "contact": None}
 

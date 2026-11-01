@@ -546,9 +546,6 @@ input CreateTicketTaskDraft {
 
   """Number of people or units needed"""
   quantity: Int = null
-
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
   visibility: Visibility! = public
   routeUuid: UUID = null
 
@@ -571,9 +568,6 @@ input CreateTicketTaskInput {
   People or units needed, at least 1; required except for a 'rescue' task, which may omit it
   """
   quantity: Int = null
-
-  """Origin: 'user' (default) or 'official'"""
-  source: String! = "user"
 
   """Optional UUID of an associated route"""
   routeUuid: UUID = null
@@ -604,6 +598,22 @@ type CrowdSourcingType {
   """
   distanceFromGeometry: Float
   createdAt: DateTime
+}
+
+"""The disaster this deployment responds to, as the public site names it"""
+type CurrentDisasterType {
+  """Full name, e.g. 花蓮馬太鞍溪堰塞湖專案"""
+  name: String!
+
+  """
+  Short name for tight spots such as the site's top bar, e.g. 花蓮馬太鞍溪; null when unset, so use name
+  """
+  shortName: String
+
+  """
+  Where the site's map opens for this disaster; null when unset, so keep the site's own default
+  """
+  mapView: MapViewType
 }
 
 """Date with time (isoformat)"""
@@ -725,6 +735,18 @@ input HelpRequestTaskInput {
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf).
 """
 scalar JSON @specifiedBy(url: "https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf")
+
+"""Where the site's map opens: a centre and a zoom"""
+type MapViewType {
+  """Latitude of the centre, e.g. 23.67"""
+  lat: Float!
+
+  """Longitude of the centre, e.g. 121.418"""
+  lng: Float!
+
+  """Zoom level, 7 to 18 as the site's map allows, e.g. 14"""
+  zoom: Int!
+}
 
 type Mutation {
   createStation(input: CreateStationInput!, acknowledgedDuplicateOf: String = null): CreateStationResult!
@@ -884,6 +906,11 @@ type Query {
 
     """Only tickets at this audit status"""
     auditStatus: AuditStatus = null
+
+    """
+    NEWEST (default): newest first, best match first when searching. NEEDS_FIRST: tickets still taking people first, one with an open rescue need ahead, then as NEWEST; a need the signed-in caller claimed counts as open
+    """
+    order: TicketListOrder! = NEWEST
   ): TicketConnection!
   ticket(
     uuid: UUID!
@@ -902,6 +929,11 @@ type Query {
   taskPropertyConfigs(taskType: String!, includeInactive: Boolean! = false): [TaskPropertyConfigType!]!
   ticketPropertyConfigs(disasterTypes: [String!]!, includeInactive: Boolean! = false): [TicketPropertyConfigType!]!
   disasterTypes(includeInactive: Boolean! = false): [DisasterTypeType!]!
+
+  """
+  The deployment's disaster, readable without signing in; null until first configured
+  """
+  currentDisaster: CurrentDisasterType
   announcements(filter: AnnouncementFilter! = ACTIVE, placement: AnnouncementPlacement! = public_page): [AnnouncementType!]!
   announcement(uuid: UUID!): AnnouncementType
   briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!
@@ -1198,7 +1230,11 @@ type StationSuggestionMergeType {
   """'applied' or 'revoked'"""
   status: String!
   reviewNote: String
-  reviewedBy: String!
+
+  """
+  UUID of the reviewer; null once their account is gone, as a mock one is after a SEED_MOCK run (ADR-393)
+  """
+  reviewedBy: String
   revokedBy: String
   revokedAt: DateTime
   createdAt: DateTime
@@ -1580,6 +1616,11 @@ type TicketDisasterDetailType {
   value: String!
 }
 
+enum TicketListOrder {
+  NEWEST
+  NEEDS_FIRST
+}
+
 type TicketPropertyConfigType {
   uuid: UUID!
 
@@ -1792,7 +1833,17 @@ type TicketType {
   Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address
   """
   secondaryLocation: SecondaryLocationType
+
+  """
+  The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it lies in none, and to a caller without ticket.view_detail here
+  """
+  responsibleTeams: [AssignedTeamType!]!
   disasterDetails: [TicketDisasterDetailType!]!
+
+  """
+  The building map this ticket was filed under (createTicket's buildingMapUuid). Null when it was not filed under one, when that building map is deleted, and to a caller without ticket.view_detail here
+  """
+  buildingMapUuid: UUID
 }
 
 enum TriState {

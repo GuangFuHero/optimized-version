@@ -72,16 +72,10 @@ class World:
         )
         db.add_all([person, boss, applicant, captain])
         await db.flush()
-        db.add(
-            UserRoleAssign(
-                user_uuid=captain.uuid, role_uuid=admin.uuid, team_uuid=team.uuid, role_kind="team"
-            )
-        )
+        db.add(UserRoleAssign(user_uuid=captain.uuid, role_uuid=admin.uuid, team_uuid=team.uuid))
         db.add_all(
             [
-                UserRoleAssign(
-                    user_uuid=person.uuid, role_uuid=member.uuid, team_uuid=team.uuid, role_kind="team"
-                ),
+                UserRoleAssign(user_uuid=person.uuid, role_uuid=member.uuid, team_uuid=team.uuid),
                 UserRoleAssign(user_uuid=person.uuid, role_uuid=plain.uuid),
                 UserRoleAssign(user_uuid=boss.uuid, role_uuid=super_admin.uuid),
             ]

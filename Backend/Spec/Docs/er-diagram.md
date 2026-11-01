@@ -50,6 +50,10 @@
 > `base_geometries` for candidate lookup.
 > Drafts (migration `209c4375c3e1`, Spec 007, 2026-10-18): `published_at`, `published_by` and
 > `updated_by` on `announcements` and `briefings`.
+> 3NF fixes (migration `197c174410bd`, ADR-440, 2026-10-30): `user_role_assign.role_kind` and its
+> CHECK, composite FK and `roles` unique key replaced by two triggers; `ticket_tasks` gained
+> `ck_ticket_tasks_stamps_match_status`; `secondary_locations` gained `user_input_address` and
+> `remainder`, and `full_address` became a generated column.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -134,8 +138,8 @@ roles {
     string name "UNIQUE, String(50)"
     string kind "platform/team, String(10)"
 }
-%% UNIQUE(uuid, kind) -- uq_roles_uuid_kind: exists only as the target of the composite FK
-%% from the grant tables, which keeps their redundant role_kind honest (ADR-073).
+%% TRIGGER roles_kind_in_use_trigger -- BEFORE UPDATE OF kind: refuses a change of kind while any
+%% user_role_assign row holds the role (check_violation, constraint ck_roles_kind_in_use).
 
 %% Capability catalog — one row per capability key (e.g. ticket.view, work_zone.assign).
 permissions {
@@ -162,15 +166,16 @@ user_role_assign {
     uuid user_uuid FK "FK to users, indexed"
     uuid role_uuid FK "FK to roles, indexed"
     uuid team_uuid FK "nullable, FK to teams, indexed — NULL for platform grants (ADR-073)"
-    string role_kind "platform/team, String(10) — copied from roles.kind so CHECK can see it"
 }
 %% UNIQUE(user_uuid, role_uuid, team_uuid) -- uq_user_role. Includes team: holding the same
 %% role in two teams is two identities, which the old (user, role) key would have rejected.
 %% UNIQUE(user_uuid, role_uuid) WHERE team_uuid IS NULL -- uq_user_role_platform. Postgres
 %% does not compare NULLs in a UNIQUE, so this partial index is what stops duplicate
 %% platform grants.
-%% FOREIGN KEY(role_uuid, role_kind) → roles(uuid, kind) -- fk_ura_role_kind
-%% CHECK -- ck_ura_role_team_kind: platform grants carry no team, team grants must carry one.
+%% TRIGGER user_role_assign_check_kind_trigger -- BEFORE INSERT OR UPDATE OF role_uuid, team_uuid:
+%% reads the role's kind (SELECT … FOR SHARE) and raises check_violation, constraint name
+%% ck_ura_role_team_kind, when a platform grant carries a team or a team grant carries none.
+%% A CHECK cannot read roles.kind, and copying it onto the grant was a second copy of the fact.
 users ||--o{ user_role_assign : "holds identity"
 roles ||--o{ user_role_assign : "assigned to"
 teams ||--o{ user_role_assign : "scopes the identity"
@@ -361,7 +366,7 @@ notifications {
     uuid ref_uuid "nullable, uuid of the ref_type row — no DB FK, same polymorphic pattern as photos"
     string title "String(200)"
     text body
-    boolean read "default false"
+    boolean read "default false; CHECK read = (read_at IS NOT NULL) (ADR-439)"
     timestamp read_at "nullable"
     timestamp created_at
     timestamp updated_at
@@ -502,7 +507,9 @@ secondary_locations {
     uuid uuid PK
     uuid geometry_uuid FK "FK to base_geometries"
     string location_type "address/pole"
-    string full_address "nullable, String(255) — the whole line without 樓/室; official when TGOS confirmed it"
+    string user_input_address "nullable, String(500) — the line as received with its outer whitespace trimmed, written only when an edit changes some other column of the row, so an edit that changes nothing visible keeps it; rows from before this column hold the parsed line, and a row left with parts and no line keeps NULL until a real edit"
+    string remainder "nullable, String(255) — what the parser could not place: the text after the 號 that is not a unit, or the whole line when nothing was recognized"
+    string full_address "nullable, String(255), GENERATED ALWAYS AS NULLIF(county+town+village+neighborhood+road+section+lane+alley+no+remainder, ''), STORED — the whole line without 樓/室"
     string county "nullable, 縣市"
     string town "nullable, 鄉鎮市區"
     string village "nullable, 村里"
@@ -510,7 +517,7 @@ secondary_locations {
     string road "nullable, String(100), 路／街／大道"
     string section "nullable, String(10), 段 e.g. 一段"
     string lane "nullable, 巷 e.g. 469巷"
-    string alley "nullable, 弄 e.g. 1弄"
+    string alley "nullable, 弄 e.g. 1弄; a 衖/衕 after it stays inside, e.g. 3弄2衖"
     string no "nullable, 號 e.g. 19號 / 19之1號"
     string normalization_status "nullable, verified/pin_mismatch/unverified — set from the address token on every write"
     string building_section "nullable, 樓棟／區域 e.g. A棟／東翼 (feature 018)"
@@ -531,8 +538,12 @@ secondary_locations {
 %% access_status/landmark_note) are deliberately NOT in search_text (ADR-250). Only stations
 %% are searchable through this table at all (ADR-146), and which room a trapped person is
 %% hiding in is not something to make findable by substring.
-%% NOTE: the address parts come from parsing full_address on every write; village and neighborhood
-%% stay out of search_text so a search like 光復鄉糖廠街 still matches.
+%% NOTE: the address parts and remainder come from parsing user_input_address on every address write
+%% (parse_tw_address in app/core/address.py); full_address is built from them by the database, so
+%% nothing writes it. The parts cannot be a generated column of the input (the parser is Python):
+%% scripts/resplit_addresses.py re-parses every row, scripts/check_address_drift.py lists rows whose
+%% parts differ from a re-parse. village and neighborhood stay out of search_text so a search like
+%% 光復鄉糖廠街 still matches.
 %% NOTE: who may READ a row depends on the parent. A station's address is public (it is on the
 %% map already); a ticket's needs ticket.view_detail, and TicketType.secondaryLocation resolves to
 %% null without it.
@@ -589,14 +600,14 @@ stations {
     string op_hour
     int level
     string comment
-    string source "user/gov/crawler"
+    string source "user/official (CHECK), NULL = not known; set from the creating identity (ADR-438)"
     string visibility "public/restricted/internal"
     string verification_status "unverified/ai_verified/human_verified"
     boolean is_duplicate
     string dedup_group_id "nullable"
     boolean is_temporary
     timestamp expires_at "nullable"
-    boolean is_official
+    boolean is_official "GENERATED from source = 'official' (ADR-438)"
     uuid updated_by FK "nullable, FK to users"
     string contact_name "nullable, String(100), independent of tickets.contact_name"
     string contact_email "nullable, String(100)"
@@ -846,14 +857,14 @@ ticket_tasks {
     string task_description "nullable"
     int quantity "nullable = no cap; at least 1, and required for every type but rescue (ADR-291)"
     string status "pending/fulfilled/canceled; in_progress only on rows from before ADR-293"
-    string source "user/gov/crawler/ngo/admin"
+    string source "user/official for new tasks, from the creating identity (ADR-438); older rows gov/import"
     string progress_note "nullable"
     boolean is_duplicate
     string dedup_group_id "nullable"
     uuid merged_into_uuid FK "nullable FK to ticket_tasks: the need a dedup resolve folded this one into (Spec 028, ADR-372)"
     uuid created_by FK
-    timestamp completed_at "nullable, set when status enters 'fulfilled' and cleared when it leaves"
-    timestamp canceled_at "nullable, set when status enters 'canceled' and cleared when it leaves"
+    timestamp completed_at "nullable, set exactly when status is 'fulfilled' (CHECK ck_ticket_tasks_stamps_match_status)"
+    timestamp canceled_at "nullable, set exactly when status is 'canceled' (same CHECK)"
     timestamp recruiting_stopped_at "nullable, set when the requester stopped recruiting by hand (ADR-292)"
     timestamp created_at
     timestamp updated_at
@@ -867,6 +878,9 @@ ticket_tasks {
 %% read as finished. `updated_at` can't stand in — it moves on every edit — though rows predating
 %% the columns were backfilled from it. recruiting_stopped_at tells a stopped need from one that
 %% filled by itself: only the latter reopens when a place is given back (ADR-291/292).
+%% CHECK -- ck_ticket_tasks_stamps_match_status: (completed_at IS NOT NULL) = (status = 'fulfilled')
+%% AND (canceled_at IS NOT NULL) = (status = 'canceled'). The actions above keep it true; the
+%% database now refuses a row where they disagree.
 %% INDEX: ix_ticket_tasks_search_text_trgm USING gin (search_text gin_trgm_ops)
 %% NOTE: `progress_note` is deliberately NOT in search_text (free-text note, ADR-079)
 tickets ||--o{ ticket_tasks : "contains sub-tasks"

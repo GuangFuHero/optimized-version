@@ -10,7 +10,8 @@ import {
   Map,
   readRescueMapMarkers,
   StationCreateDrawer,
-  TicketCreateDrawer,
+  TicketCreateSheet,
+  toCreatedTicketMarker,
   type RescueMapMarkerItem,
 } from '@rescue-frontend/modules';
 
@@ -210,6 +211,7 @@ export function AdminMapPageClient() {
         <Map
           markers={markers}
           showScale
+          viewMemoryKey="mutual-aid"
           onMapClick={handleMapClick}
           renderControls={() =>
             canCreateStation || canCreateTicket ? (
@@ -228,6 +230,7 @@ export function AdminMapPageClient() {
 
       <StationCreateDrawer
         open={stationDrawerOpen}
+        official
         onClose={() => {
           setStationDrawerOpen(false);
           resetCreateFlow();
@@ -238,15 +241,20 @@ export function AdminMapPageClient() {
         }}
       />
 
-      <TicketCreateDrawer
+      <TicketCreateSheet
         open={ticketDrawerOpen}
         onClose={() => {
           setTicketDrawerOpen(false);
           resetCreateFlow();
         }}
-        initialPosition={currentInitialPosition}
-        onCreatedMarker={(marker) => {
-          setMarkers((current) => [marker, ...current]);
+        initialPoint={
+          currentInitialPosition
+            ? { lat: currentInitialPosition[0], lng: currentInitialPosition[1] }
+            : null
+        }
+        onCreated={(ticket) => {
+          const marker = toCreatedTicketMarker(ticket);
+          if (marker) setMarkers((current) => [marker, ...current]);
         }}
       />
     </>

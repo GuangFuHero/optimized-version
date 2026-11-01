@@ -22,7 +22,11 @@ import {
   normalizeIdentityValue,
   validateIdentityValue,
 } from '../../auth/login';
-import { identityLabel, ROLE_DISPLAY_NAMES } from '../../constants/roles';
+import {
+  backOfficeIdentities,
+  identityLabel,
+  ROLE_DISPLAY_NAMES,
+} from '../../constants/roles';
 import {
   ContactVerifyDialog,
   type ContactVerifyDialogProps,
@@ -149,13 +153,14 @@ export function ProfileSheet({
   const trimmedName = name.trim();
   const nameDirty = trimmedName !== user.name;
   const active = user.active_identity;
-  const identities = user.identities ?? [];
+  const identities = backOfficeIdentities(user.identities ?? []);
   const teamIdentities = identities.filter((identity) => identity.team);
 
   return (
     <Sheet
       open
       onClose={onClose}
+      variant="admin"
       eyebrow="個人設定"
       title={user.name}
       width={520}

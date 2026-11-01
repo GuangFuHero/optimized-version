@@ -4,7 +4,9 @@ import {
   bellLabel,
   countUnreadSiteNotices,
   notMarkedRead,
+  PAGES_READ_UNASKED,
   readSiteNotices,
+  readsNextPageUnasked,
   ticketOfNeed,
   withReadState,
   type NotificationRow,
@@ -56,6 +58,7 @@ describe('readSiteNotices', () => {
       dedup_ticket_contact_changed: 'merged',
       dedup_ticket_merged: 'merged',
       dedup_ticket_updated: 'merged',
+      ticket_audit_issue: 'audit-issue',
       role_request_approved: 'role-approved',
       role_request_rejected: 'role-rejected',
     };
@@ -77,7 +80,6 @@ describe('readSiteNotices', () => {
       'station_assigned',
       'station_suggestion_created',
       'dedup_flag_ticket',
-      'ticket_audit_issue',
       'role_request_submitted',
     ].map((type) => row({ uuid: type, type }));
 
@@ -145,6 +147,24 @@ describe('readSiteNotices', () => {
 
     expect(deleted.ticketUuid).toBeNull();
   });
+
+  it('opens the ticket a data check found something wrong with, for the requester to put right', () => {
+    const [issue] = readSiteNotices([
+      row({
+        type: 'ticket_audit_issue',
+        ref_type: 'ticket',
+        ref_uuid: 'checked-ticket',
+        title: '求助單內容待確認：大進村獨居長者物資配送',
+      }),
+    ]);
+
+    expect(issue).toMatchObject({
+      kind: 'audit-issue',
+      title: '求助單內容待確認：大進村獨居長者物資配送',
+      ticketUuid: 'checked-ticket',
+      needUuid: null,
+    });
+  });
 });
 
 describe('ticketOfNeed', () => {
@@ -168,6 +188,38 @@ describe('ticketOfNeed', () => {
 
   it('finds nothing for a need on neither list, given back or deleted since', () => {
     expect(ticketOfNeed('gone-need', lists)).toBeNull();
+  });
+});
+
+describe('readsNextPageUnasked', () => {
+  const nothingShown = {
+    shown: 0,
+    pagesRead: 1,
+    hasNextPage: true,
+    nextPageFailed: false,
+  };
+
+  it('reads on while the pages read show nothing and another follows', () => {
+    expect(readsNextPageUnasked(nothingShown)).toBe(true);
+  });
+
+  it('stops once something shows, at the last page, or after a read that failed', () => {
+    expect(readsNextPageUnasked({ ...nothingShown, shown: 1 })).toBe(false);
+    expect(readsNextPageUnasked({ ...nothingShown, hasNextPage: false })).toBe(
+      false,
+    );
+    expect(
+      readsNextPageUnasked({ ...nothingShown, nextPageFailed: true }),
+    ).toBe(false);
+  });
+
+  it('waits for a tap after each round of pages, then reads another round', () => {
+    const after = (pagesRead: number) =>
+      readsNextPageUnasked({ ...nothingShown, pagesRead });
+
+    expect(after(PAGES_READ_UNASKED - 1)).toBe(true);
+    expect(after(PAGES_READ_UNASKED)).toBe(false);
+    expect(after(PAGES_READ_UNASKED + 1)).toBe(true);
   });
 });
 

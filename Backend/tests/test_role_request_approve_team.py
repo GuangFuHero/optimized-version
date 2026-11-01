@@ -35,7 +35,7 @@ async def _team_admin(db, team: Team) -> User:
     db.add(user)
     await db.flush()
     admin = await _role(db, "admin", {Perm.TEAM_MEMBER_MANAGE: "team"}, kind="team")
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=admin.uuid, team_uuid=team.uuid, role_kind="team"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=admin.uuid, team_uuid=team.uuid))
     await db.flush()
     return acting_as(user, admin, team)
 
@@ -132,11 +132,7 @@ async def test_a_member_request_that_cannot_be_granted_any_more_is_a_conflict(db
         (await db.get(Team, team_uuid)).status = "suspended"
     else:
         member = await _role(db, "member", {}, kind="team")
-        db.add(
-            UserRoleAssign(
-                user_uuid=citizen_uuid, role_uuid=member.uuid, team_uuid=team_uuid, role_kind="team"
-            )
-        )
+        db.add(UserRoleAssign(user_uuid=citizen_uuid, role_uuid=member.uuid, team_uuid=team_uuid))
     await db.commit()
 
     with pytest.raises(role_request.RoleRequestConflictError):

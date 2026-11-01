@@ -5,6 +5,8 @@ tests/test_my_tickets.py; these only prove the query is wired to them and carrie
 counts its progress from: each need's quantity, status and headcount.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
@@ -44,6 +46,7 @@ async def _filed(requester_uuid: str, volunteer_uuid: str) -> None:
                 status=status,
                 source="user",
                 created_by=requester_uuid,
+                completed_at=datetime.now(UTC) if status == "fulfilled" else None,
             )
             db.add(task)
             await db.flush()

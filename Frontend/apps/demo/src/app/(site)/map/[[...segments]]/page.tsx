@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
 
-import { resolvePointShareTargetFromRoute } from '@rescue-frontend/modules';
+import {
+  resolvePointShareTargetFromRoute,
+  SITE_OPEN_GRAPH,
+} from '@rescue-frontend/modules';
+import { requestOriginAsync } from '@rescue-frontend/modules/server';
 import { SiteMapPageClient } from './site-map-page.client';
 
 interface SiteMapPageProps {
@@ -15,15 +18,6 @@ async function resolveMaybe<T>(value: T | Promise<T> | undefined, fallback: T) {
   return value ? await value : fallback;
 }
 
-async function resolveRequestOrigin() {
-  const headerStore = await headers();
-  const host = headerStore.get('x-forwarded-host') ?? headerStore.get('host');
-  const protocol = headerStore.get('x-forwarded-proto') ?? 'http';
-
-  // A browser's request always names its host; the fallback is for one that does not.
-  return host ? `${protocol}://${host}` : 'http://localhost:3000';
-}
-
 export async function generateMetadata({
   params,
   searchParams,
@@ -34,7 +28,7 @@ export async function generateMetadata({
     module: 'map',
     segments: resolvedParams.segments ?? [],
     searchParams: resolvedSearchParams,
-    origin: await resolveRequestOrigin(),
+    origin: await requestOriginAsync(),
   });
 
   if (!target) {
@@ -48,11 +42,10 @@ export async function generateMetadata({
     title: target.title,
     description: target.description,
     openGraph: {
+      ...SITE_OPEN_GRAPH,
       title: target.title,
       description: target.description,
       url: target.url,
-      type: 'website',
-      images: ['/wan-guard.svg'],
     },
   };
 }

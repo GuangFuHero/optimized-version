@@ -1,10 +1,10 @@
 /**
  * The site's inbox (prototype `site-notify.jsx`): only what is about the viewer — someone coming to
  * a need they filed, a change to a need they said they would go to, a duplicate review folding their
- * ticket or need into another, and the answer to their own application. The prototype has no notice
- * for the duplicate review. A site-wide announcement is sent to every account too, but it has the
- * banner, and the back office's notices wait for its own bell (C-2: an inbox mixed with broadcasts
- * dulls both).
+ * ticket or need into another, a data check questioning a ticket they filed or are going to, and the
+ * answer to their own application. The prototype has no notice for the duplicate review or the data
+ * check. A site-wide announcement is sent to every account too, but it has the banner, and the back
+ * office's notices wait for its own bell (C-2: an inbox mixed with broadcasts dulls both).
  */
 
 import type {
@@ -25,6 +25,7 @@ export type SiteNoticeKind =
   | 'need-full'
   | 'called-off'
   | 'merged'
+  | 'audit-issue'
   | 'role-approved'
   | 'role-rejected';
 
@@ -65,6 +66,10 @@ const SITE_NOTICE_TYPES: Partial<
   // To the requester whose ticket was folded in, and to the one whose ticket took it in.
   dedup_ticket_merged: { kind: 'merged', opens: 'ticket' },
   dedup_ticket_updated: { kind: 'merged', opens: 'ticket' },
+  // A data check found something wrong with a ticket (backend `ticket_audit.py`), and the notice
+  // names it. To the requester, that staff are looking into it, and to those on its needs, who may
+  // be on their way. Neither says what was wrong: the auditor's note is for staff.
+  ticket_audit_issue: { kind: 'audit-issue', opens: 'ticket' },
   // To the applicant, a team application's answer included.
   role_request_approved: { kind: 'role-approved' },
   role_request_rejected: { kind: 'role-rejected' },
@@ -111,6 +116,36 @@ export function readSiteNotices(
       },
     ];
   });
+}
+
+/**
+ * How many pages the drawer reads without a tap while none of them holds a notice it shows. The newest
+ * of a gov or team account can all be the back office's, one for each station an import adds, so it
+ * stops after a round of these and waits for 載入更多, which reads another round.
+ */
+export const PAGES_READ_UNASKED = 5;
+
+/**
+ * Whether the drawer reads the next page by itself: the pages it has show nothing, another follows,
+ * the last read did not fail, and a round of `PAGES_READ_UNASKED` is not over.
+ */
+export function readsNextPageUnasked({
+  shown,
+  pagesRead,
+  hasNextPage,
+  nextPageFailed,
+}: {
+  shown: number;
+  pagesRead: number;
+  hasNextPage: boolean;
+  nextPageFailed: boolean;
+}): boolean {
+  return (
+    shown === 0 &&
+    hasNextPage &&
+    !nextPageFailed &&
+    pagesRead % PAGES_READ_UNASKED !== 0
+  );
 }
 
 type FiledTicket = MyTicketsQuery['myTickets'][number];

@@ -105,10 +105,61 @@ function createMapMarkerIconHtml(item: RescueMapMarkerItem): string {
   ].join('');
 }
 
+/**
+ * The opt-in teardrop pin (`item.pin`), from the admin station map prototype
+ * (`Design/後台/js/admin/station-v2/station-map.jsx` pinHtml). The look lives in `styles.ts`;
+ * only the caller's colour is inline.
+ */
+function createPinIcon(
+  pin: NonNullable<RescueMapMarkerItem['pin']>,
+  leaflet: typeof import('leaflet'),
+): import('leaflet').DivIcon {
+  const modifiers = [
+    pin.shape === 'square' ? ' map-pin--square' : '',
+    pin.selected ? ' map-pin--selected' : '',
+    pin.dimmed ? ' map-pin--dimmed' : '',
+  ].join('');
+
+  // A space's square carries a building, as the prototype's pinHtml draws it (lucide Building).
+  const glyph =
+    pin.shape === 'square'
+      ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>'
+      : '';
+
+  return leaflet.divIcon({
+    className: 'map-pin-wrapper',
+    html: `<span class="map-pin${modifiers}"><span class="map-pin__drop" style="background:${escapeHtml(pin.color)}">${glyph}</span></span>`,
+    iconSize: [42, 42],
+    iconAnchor: [21, 36],
+  });
+}
+
+/** Tooltip content for `item.tooltip`; null when the marker has none. */
+export function createMapMarkerTooltipHtml(
+  item: RescueMapMarkerItem,
+): string | null {
+  if (!item.tooltip) {
+    return null;
+  }
+
+  const { title, subtitle } = item.tooltip;
+
+  return [
+    `<span class="map-marker-tooltip__title">${escapeHtml(title)}</span>`,
+    subtitle
+      ? `<span class="map-marker-tooltip__subtitle">${escapeHtml(subtitle)}</span>`
+      : '',
+  ].join('');
+}
+
 export function createMapMarkerIcon(
   item: RescueMapMarkerItem,
   leaflet: typeof import('leaflet'),
 ): import('leaflet').DivIcon {
+  if (item.pin) {
+    return createPinIcon(item.pin, leaflet);
+  }
+
   const { iconSize, iconAnchor } = getMapMarkerDimensions(item.variant);
 
   return leaflet.divIcon({

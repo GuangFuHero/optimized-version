@@ -178,6 +178,9 @@ ALTER TABLE user_permission_assign ADD COLUMN team_uuid UUID NULL REFERENCES tea
 ```
 
 - platform-kind 授予恆 `NULL`、team-kind 授予恆 `NOT NULL`，以 DB CHECK 強制（需 join `roles.kind`，實作上以 trigger 或冗餘 `role_kind` 欄位達成，落地時決定）。
+  > **更新（`Spec/011-resource-search/decisions.md` 的 ADR-440）**：落地時選了冗餘 `role_kind` 欄位加複合 FK，現在**反轉**，
+  > 改回 trigger。白話：那一欄是 `roles.kind` 的第二份抄本，3NF 不收，FK 只能讓抄本不漂掉、不能讓它不存在；
+  > 所以欄位、CHECK、複合 FK 都拿掉，由兩個 trigger 擋同樣的資料，錯誤名稱 `ck_ura_role_team_kind` 不變。
 - **唯一鍵必須一併修正**（初版漏了這點）：
   - `uq_user_role`：`(user_uuid, role_uuid)` → **`(user_uuid, role_uuid, team_uuid)`**。同時是 `member@慈濟` 與 `member@紅十字會` 是**同一個 `role_uuid` 用兩次**，現有約束會直接擋下。
   - `uq_user_perm`：`(user_uuid, permission_uuid)` → **`(user_uuid, permission_uuid, team_uuid)`**。

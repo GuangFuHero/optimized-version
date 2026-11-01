@@ -11,9 +11,10 @@ import strawberry
 from strawberry.scalars import JSON
 
 from app.core.permissions import Perm
-from app.core.rbac_scopes import Scope, in_scope
+from app.core.rbac_scopes import Scope, active_team, in_scope
 from app.core.security import resolve_scope
 from app.db.h3 import COARSE_MAX_H3_RESOLUTION
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import (
@@ -38,8 +39,9 @@ def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resourc
     Returns the cached asyncio Task (await it). `resource` — anything with `created_by` and
     `geometry` — spares the loader round-trip when the caller already holds the ticket; the
     tasks, which carry neither, pass nothing and the ticket is loaded only if the scope is
-    `own` or `zone`. Same no-double-scheduling argument as TicketType._pii_in_scope: the
-    check-then-store below runs synchronously on the event loop.
+    `own` (`zone` goes to ticket_in_team_zones, keyed by uuid alone). Same no-double-scheduling
+    argument as TicketType._pii_in_scope: the check-then-store below runs synchronously on the
+    event loop.
     """
     decided = info.context["_ticket_detail_visible"]
     key = str(ticket_uuid)
@@ -85,6 +87,19 @@ def ticket_audit_visible(info: strawberry.types.Info, ticket_uuid: str, resource
     return decided[key]
 
 
+def ticket_perm_held(info: strawberry.types.Info, perm: Perm, ticket_uuid: str, resource=None):
+    """Whether the caller holds `perm` on this ticket, decided once per request and perm.
+
+    For the viewerCan* flags of perms that gate only a mutation. `resource` as in
+    ticket_detail_visible.
+    """
+    decided = info.context.setdefault("_ticket_perm_held", {})
+    key = (perm, str(ticket_uuid))
+    if key not in decided:
+        decided[key] = asyncio.ensure_future(_decide_ticket_scope(info, perm, str(ticket_uuid), resource))
+    return decided[key]
+
+
 async def _decide_ticket_scope(info: strawberry.types.Info, perm: Perm, ticket_uuid: str, resource) -> bool:
     """resolve_scope + in_scope, like _compute_pii_in_scope. Never raises: denial is withholding."""
     user = info.context["user"]
@@ -96,11 +111,27 @@ async def _decide_ticket_scope(info: strawberry.types.Info, perm: Perm, ticket_u
         return False
     if scope == Scope.ALL:
         return True
+    if scope == Scope.ZONE:
+        return await ticket_in_team_zones(info, ticket_uuid)
     if resource is None:
         resource = await info.context["loaders"]["ticket_by_uuid"].load(ticket_uuid)
         if resource is None:
             return False
     return await in_scope(scope, actor=user, resource=resource, db=db)
+
+
+async def ticket_in_team_zones(info: strawberry.types.Info, ticket_uuid: str) -> bool:
+    """`zone` scope on a ticket: whether it lies in the caller's team zones, once per ticket.
+
+    What `in_scope` decides for `zone`, but through the `ticket_in_team_zones` loader: whether a
+    ticket is in my zones does not depend on the perm, so every viewerCan* flag, the detail and
+    the contact checks share one answer, and a page shares one statement. Read from the ticket's
+    row, as the resource passed in carries the same point. No team, no zone.
+    """
+    team = active_team(info.context["user"])
+    if team is None:
+        return False
+    return await info.context["loaders"]["ticket_in_team_zones"].load((str(team), str(ticket_uuid)))
 
 
 @strawberry.enum
@@ -151,6 +182,87 @@ class AuditStatus(enum.Enum):
     need_audit = "need_audit"
     audited = "audited"
     audit_issue = "audit_issue"
+
+
+@strawberry.enum
+class TicketListOrder(enum.Enum):
+    """How the `tickets` list is ordered: `TICKET_ORDERS` in app/repositories/tickets_repository.py.
+
+    NEEDS_FIRST is the site list's (ADR-419): tickets still taking people first, one with an open
+    rescue need ahead of the rest, then newest first within each.
+    """
+
+    NEWEST = "newest"
+    NEEDS_FIRST = "needs_first"
+
+
+@strawberry.enum
+class TicketStatus(enum.Enum):
+    """A ticket's status, to filter on: worked out from its needs in app/services/ticket_status.py."""
+
+    pending = "pending"
+    in_progress = "in_progress"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
+@strawberry.enum
+class TicketVerificationState(enum.Enum):
+    """Why 重複審核 waits on a ticket: app/services/ticket_verification.py (ADR-443)."""
+
+    disputed = "disputed"
+
+
+@strawberry.type(description="Another ticket a disputed ticket may duplicate")
+class TicketDuplicateRefType:
+    """An entry of `TicketVerificationType.duplicateOf`."""
+
+    uuid: UUID
+    title: str
+
+
+@strawberry.type(description="Where a ticket stands in 重複審核 (ADR-443)")
+class TicketVerificationType:
+    """`TicketType.verificationStatus`, worked out from the duplicate pair cards on every read."""
+
+    state: TicketVerificationState = strawberry.field(
+        description=(
+            "'disputed': a card on this ticket or one of its needs waits for a verdict, or was judged a "
+            "duplicate and not merged yet, and 重複審核 can still merge it: its far side is another "
+            "ticket, neither cancelled nor deleted"
+        )
+    )
+    duplicate_of: list[TicketDuplicateRefType] = strawberry.field(
+        description="The tickets on the far side of those cards, each once, oldest card first; never empty"
+    )
+
+
+@strawberry.enum
+class TicketAvailability(enum.Enum):
+    """Whether `ticket(uuid)` gives a ticket, and if not, what became of it (ADR-444).
+
+    merged: 重複審核 merged it into another ticket, which is still there: `replacedByUuid` names it.
+    deleted: its owner deleted it, or the ticket it was merged into is deleted since.
+    not_found: there never was, or the caller cannot see it, which `ticket` cannot tell apart either.
+    """
+
+    available = "available"
+    merged = "merged"
+    deleted = "deleted"
+    not_found = "not_found"
+
+
+@strawberry.type(description="What a share link finds at a ticket's uuid: the state, nothing of the ticket")
+class TicketAvailabilityType:
+    """The answer of `ticketAvailability` (ADR-444)."""
+
+    status: TicketAvailability
+    replaced_by_uuid: UUID | None = strawberry.field(
+        default=None,
+        description=(
+            "Set only when status is merged: the ticket the request now lives in, which ticket(uuid) gives"
+        ),
+    )
 
 
 @strawberry.type(description="One move of a ticket's audit status")
@@ -308,6 +420,25 @@ class TaskAssignmentType:
                 return None
         return await info.context["loaders"]["user_name_by_uuid"].load(self.actor_uuid)
 
+    @strawberry.field(
+        description=(
+            "Whether unassignTaskActor would remove this person for the caller, so a page offers it "
+            "only there: the caller holds ticket.assign over the assignment (`own` is the assignee "
+            "themselves, `zone` the need's ticket in the caller's team zones), and recruiting on the "
+            "need was not stopped by hand, after which nobody may give a place back"
+        )
+    )
+    async def viewer_can_unassign(self, info: strawberry.types.Info) -> bool:
+        """The checks unassign_task_actor makes (scope, then a stop by hand), without raising."""
+        if await info.context["loaders"]["recruiting_stopped_by_task"].load(str(self.task_uuid)):
+            return False
+        ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
+        if ticket_uuid is None:
+            return False
+        return await _decide_ticket_scope(
+            info, Perm.TICKET_ASSIGN, str(ticket_uuid), SimpleNamespace(created_by=str(self.actor_uuid))
+        )
+
     @classmethod
     def from_model(cls, m) -> "TaskAssignmentType":
         """Build from a SQLAlchemy model instance."""
@@ -345,7 +476,13 @@ class TicketTaskType:
             "only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description=(
+            "Origin of this task: 'user' when the site's identity made it, 'official' when a back-office "
+            "one did. Tasks made before that rule keep what they had, 'gov' or 'import'"
+        ),
+    )
     recruiting_stopped_at: datetime | None = strawberry.field(
         default=None,
         description=(
@@ -397,6 +534,20 @@ class TicketTaskType:
     async def created_by(self, info: strawberry.types.Info) -> str | None:
         """Return the author's uuid, or null when the caller is out of detail scope."""
         return self._created_by_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Whether the caller holds ticket.assign over this need as assigning someone else to "
+            "it is checked, so a page offers 指派承接 only where it would be allowed: `own` is "
+            "the need's creator, `zone` its ticket in the caller's team zones. Room on the need "
+            "is not part of it"
+        )
+    )
+    async def viewer_can_assign(self, info: strawberry.types.Info) -> bool:
+        """The check assign_task_actor makes for someone else (_task_scope_target), without raising."""
+        return await _decide_ticket_scope(
+            info, Perm.TICKET_ASSIGN, str(self.ticket_uuid), SimpleNamespace(created_by=self._created_by_raw)
+        )
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list[TaskPropertyType]:
@@ -483,7 +634,11 @@ class CreateTicketTaskInput:
             "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
         ),
     )
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the task decides it",
+        deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
+    )
     route_uuid: UUID | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
     )
@@ -633,7 +788,12 @@ class TicketType:
         ),
     )
     created_at: datetime | None = None
-    updated_at: datetime | None = None
+    updated_at: datetime | None = strawberry.field(
+        default=None,
+        description="When anything visible about this ticket last changed: a field, its address, disaster "
+        "details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only "
+        "when it changes the status; a review verdict never does",
+    )
 
     # Private storage backing the contact_* PII resolvers below (ADR-049) — never exposed
     # directly in the schema, only readable (raw or masked) through the gated resolvers.
@@ -824,12 +984,60 @@ class TicketType:
 
     @strawberry.field(
         description=(
+            "Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when "
+            "it does not, and to a caller without ai_duplicate.view here. Not the data check: that is "
+            "`auditStatus`"
+        )
+    )
+    async def verification_status(self, info: strawberry.types.Info) -> TicketVerificationType | None:
+        """Read the ticket's duplicate pair cards, or nothing when the caller cannot see them.
+
+        The 重複審核 page's own capability: its reviewers already read both tickets in full there, so
+        the far tickets' titles tell them nothing new. Decided before the lookup, so a page anyone
+        else reads costs no query here.
+        """
+        if not await ticket_perm_held(info, Perm.AI_DUP_VIEW, str(self.uuid), self._scope_resource()):
+            return None
+        refs = await info.context["loaders"]["disputes_by_ticket"].load(str(self.uuid))
+        if refs is None:
+            return None
+        return TicketVerificationType(
+            state=TicketVerificationState.disputed,
+            duplicate_of=[TicketDuplicateRefType(uuid=UUID(ref.uuid), title=ref.title) for ref in refs],
+        )
+
+    @strawberry.field(
+        description=(
             "UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here"
         )
     )
     async def created_by(self, info: strawberry.types.Info) -> str | None:
         """Return the reporter's uuid, or null when the caller is out of detail scope."""
         return self._created_by_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description="Whether the caller holds ticket.edit over this ticket, so a page offers "
+        "edit controls only where the edit would be allowed"
+    )
+    async def viewer_can_edit(self, info: strawberry.types.Info) -> bool:
+        """Resolve ticket.edit against this ticket's scope, as the edit itself would."""
+        return await ticket_perm_held(info, Perm.TICKET_EDIT, str(self.uuid), self._scope_resource())
+
+    @strawberry.field(
+        description="Whether the caller holds ticket.delete over this ticket, so a page offers "
+        "a delete control only where the delete would be allowed"
+    )
+    async def viewer_can_delete(self, info: strawberry.types.Info) -> bool:
+        """Resolve ticket.delete against this ticket's scope, as the delete itself would."""
+        return await ticket_perm_held(info, Perm.TICKET_DELETE, str(self.uuid), self._scope_resource())
+
+    @strawberry.field(
+        description="Whether the caller holds ticket.view_history over this ticket, so a page "
+        "offers the timeline only where reading it would be allowed"
+    )
+    async def viewer_can_view_history(self, info: strawberry.types.Info) -> bool:
+        """The same memoized check the timeline and the claimant list are withheld by."""
+        return await ticket_history_visible(info, str(self.uuid), self._scope_resource())
 
     def _scope_resource(self) -> SimpleNamespace:
         """What `own` and `zone` are decided on: who filed the ticket, and where it is."""
@@ -839,10 +1047,10 @@ class TicketType:
         """Memoized ticket.view_pii check shared by the contact_* and triage-flag resolvers.
 
         Cached as a single asyncio Task on this instance so that when GraphQL resolves
-        contact_name/email/phone concurrently on the SAME TicketType, the underlying zone
-        check (in_scope → ST_Contains, see app/core/rbac_scopes.py) runs at most once per
-        ticket instead of three times. The check-then-create below is synchronous, so it is
-        atomic under the event loop — no double-scheduling. Lifetime = this instance = one
+        contact_name/email/phone concurrently on the SAME TicketType, resolve_scope and the
+        check behind it (for `zone`, ticket_in_team_zones) run once per ticket instead of
+        three times. The check-then-create below is synchronous, so it is atomic under the
+        event loop — no double-scheduling. Lifetime = this instance = one
         request; there is no cross-request cache, so the staleness window is identical to
         the per-request _rbac_cache it sits alongside.
         """
@@ -867,6 +1075,8 @@ class TicketType:
             return False
         if scope == Scope.ALL:
             return True
+        if scope == Scope.ZONE:
+            return await ticket_in_team_zones(info, str(self.uuid))
         return await in_scope(scope, actor=user, resource=self._scope_resource(), db=info.context["db"])
 
     async def _triage_visible(self, info: strawberry.types.Info) -> bool:
@@ -1002,6 +1212,41 @@ class TicketType:
             return None
         return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
 
+    @strawberry.field(
+        description=(
+            "The building map this ticket was filed under (createTicket's buildingMapUuid). Null when "
+            "it was not filed under one, when that building map is deleted, and to a caller without "
+            "ticket.view_detail here"
+        )
+    )
+    async def building_map_uuid(self, info: strawberry.types.Info) -> UUID | None:
+        """Return the ticket's building, or null when out of detail scope: naming it names the place.
+
+        The ticket was given the building's point (place_ticket), so knowing the building is
+        knowing the exact point `geometry` withholds. Decided before the lookup, as the address
+        is, so a page of tickets a guest reads costs no query here.
+        """
+        if not await self._detail_visible(info):
+            return None
+        return await info.context["loaders"]["building_map_by_ticket"].load(str(self.uuid))
+
+    @strawberry.field(
+        description=(
+            "The teams of the 責任區 this ticket lies in, by name, each once (ADR-422). Empty when it "
+            "lies in none, and to a caller without ticket.view_detail here"
+        )
+    )
+    async def responsible_teams(self, info: strawberry.types.Info) -> list[AssignedTeamType]:
+        """Return who answers for the place this ticket is at, or none when out of detail scope.
+
+        Worked out from the exact point, so where a zone's edge crosses the cell a guest is shown,
+        it tells which side the ticket is on: more than the cell (ADR-281). Decided before the
+        lookup, as the address is, so a page of tickets a guest reads costs no query here.
+        """
+        if not await self._detail_visible(info):
+            return []
+        return await info.context["loaders"]["responsible_teams_by_ticket"].load(str(self.uuid))
+
     @strawberry.field
     async def disaster_details(self, info: strawberry.types.Info) -> list["TicketDisasterDetailType"]:
         """Resolve this ticket's disaster-specific field values.
@@ -1081,11 +1326,56 @@ CreateTicketTaskResult = Annotated[
 
 
 @strawberry.type
+class TicketStatsType:
+    """Counts over the tickets the caller may list, for the board's stats strip."""
+
+    total: int
+    pending: int
+    in_progress: int
+    completed: int
+    cancelled: int
+    gap_people: int = strawberry.field(
+        description="People still short across open needs with a quantity: quantity less the "
+        "people linked, never below 0. Needs on completed or cancelled tickets add nothing"
+    )
+    gap_needs: int = strawberry.field(description="How many open needs are short of people (gapPeople > 0)")
+
+
+@strawberry.type(description="How many tickets match a `tickets` filter, and the box their map points span")
+class TicketsExtentType:
+    """`ticketsExtent`: what a map needs to frame every matching ticket without loading them."""
+
+    count: int = strawberry.field(description="The `tickets` totalCount for the same filters")
+    min_lat: float | None = strawberry.field(
+        description="Southern edge of the box around the points shown; null when none match"
+    )
+    max_lat: float | None = strawberry.field(description="Northern edge; null when none match")
+    min_lng: float | None = strawberry.field(description="Western edge; null when none match")
+    max_lng: float | None = strawberry.field(description="Eastern edge; null when none match")
+
+
+@strawberry.type
 class TicketConnection:
     """Paginated list of tickets with page metadata."""
 
     items: list[TicketType]
     page_info: PageInfo
+
+
+@strawberry.type(description="How many tickets one H3 cell holds, of those its caller is shown as the cell")
+class TicketCellType:
+    """A row of `ticketCells`: one cell on the guest map and the number to write in it (ADR-387)."""
+
+    cell: str = strawberry.field(
+        description="H3 index (hex), the same value TicketType.locationCell carries for these tickets"
+    )
+    ticket_count: int
+    urgent_count: int = strawberry.field(
+        description=(
+            "Of those, how many are urgent: a priority other than 'low' or 'medium' (trimmed, any case), "
+            "and not 'in_progress' — the rule the site colours a ticket urgent by"
+        )
+    )
 
 
 @strawberry.input
@@ -1096,7 +1386,11 @@ class CreateTicketTaskDraft:
     task_name: str
     task_description: str | None = None
     quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
-    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the task decides it",
+        deprecation_reason="The backend sets `source` from the identity making the task; leave it out",
+    )
     route_uuid: UUID | None = None
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,
@@ -1160,6 +1454,13 @@ class CreateTicketInput:
             "Street address and space detail for where help is needed. New in feature 018 — "
             "before it, only stations could carry one, so the record that most needs a door "
             "number had nothing but a map pin"
+        ),
+    )
+    photo_urls: list[str] | None = strawberry.field(
+        default=None,
+        description=(
+            "Scene photos as https links to images kept elsewhere, at most 10, stored in the "
+            "order given. Any bad link refuses the whole ticket"
         ),
     )
     tasks: list[CreateTicketTaskDraft] = strawberry.field(

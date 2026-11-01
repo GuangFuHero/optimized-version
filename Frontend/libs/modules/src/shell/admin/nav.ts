@@ -118,6 +118,7 @@ export const ADMIN_NAV_SECTIONS: readonly {
         href: '/settings',
         Icon: Settings,
         description: '平台設定',
+        capability: 'project.view',
       },
     ],
   },

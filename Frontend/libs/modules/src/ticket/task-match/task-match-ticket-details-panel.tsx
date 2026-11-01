@@ -13,12 +13,15 @@ import {
   useFragment,
 } from '@rescue-frontend/data-access';
 
+import { BuildingTicketNavigation } from '../../building/building-navigation';
+import { responsibleTeamsText } from '../../map/areas';
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
 import { formatTicketStreet, formatTicketUnit } from '../address';
+import { requesterAuditNotice } from '../audit-issue';
 import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
-import { NeedRow, readTicketNeeds } from '../needs';
+import { NeedRow, readTicketNeeds, useNeedClaim } from '../needs';
 import { PhotoThumb } from '../photos';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
@@ -130,9 +133,15 @@ function DetailRow({
 export function TaskMatchTicketDetailsPanel({
   marker,
   isAuthenticated = false,
+  onOpenBuilding,
+  onSelectTicket,
 }: {
   marker: RescueMapMarkerItem;
   isAuthenticated?: boolean;
+  /** For a ticket filed inside a building: open the building's drawer (現場分區). */
+  onOpenBuilding?: (buildingUuid: string) => void;
+  /** Open another ticket of the same building, from 上一張／下一張. */
+  onSelectTicket?: (marker: RescueMapMarkerItem) => void;
 }) {
   // The backend withheld this ticket's detail (ADR-281): the point is a cell centre, and the
   // free text, notes and photos came back empty. Rows for them are left out rather than shown as
@@ -179,6 +188,13 @@ export function TaskMatchTicketDetailsPanel({
   const ticketCreatedBy = ticket?.createdBy ?? marker.ticketMeta?.createdBy;
   // Its requester can add one more need, even to a ticket left with none.
   const canAddNeed = useCanAddNeed({ ticketStatus, ticketCreatedBy });
+  const { viewerId } = useNeedClaim();
+  const auditNotice = requesterAuditNotice({
+    auditStatus: ticket?.auditStatus ?? marker.ticketMeta?.auditStatus,
+    createdBy: ticketCreatedBy,
+    viewerId,
+    title: ticket?.title || marker.title,
+  });
   const contact =
     [
       ticket?.contactName?.trim() || marker.ticketMeta?.contactName?.trim(),
@@ -188,9 +204,18 @@ export function TaskMatchTicketDetailsPanel({
       .join(' / ') || '未提供';
   const street = formatTicketStreet(ticketData?.ticket?.secondaryLocation);
   const unit = formatTicketUnit(ticketData?.ticket?.secondaryLocation);
+  // Null to a guest, as the exact location is.
+  const buildingUuid = ticketData?.ticket?.buildingMapUuid;
+  // Empty when the ticket lies in no 責任區, and to a guest, who sees the coarse branch anyway (ADR-422).
+  const responsible = responsibleTeamsText(
+    ticketData?.ticket?.responsibleTeams.map((team) => team.name) ?? [],
+  );
 
   return (
     <Stack spacing={2}>
+      {/* At the very top, as the design has it: orange, not red, as the ticket stands. */}
+      {auditNotice ? <Alert severity="warning">{auditNotice}</Alert> : null}
+
       {ticketError ? (
         <Alert severity="error">
           {ticketError.message ?? '載入任務詳情失敗。'}
@@ -339,6 +364,18 @@ export function TaskMatchTicketDetailsPanel({
                       {unit}
                     </Typography>
                   ) : null}
+                  {/* Who answers for this place, as the map's 責任區 label writes it (ADR-422). */}
+                  {responsible ? (
+                    <Typography
+                      sx={{
+                        color: detailPalette.text,
+                        fontSize: displayTextSize[13],
+                        lineHeight: '20px',
+                      }}
+                    >
+                      {responsible}
+                    </Typography>
+                  ) : null}
                   <Typography
                     sx={{
                       color: detailPalette.muted,
@@ -349,6 +386,14 @@ export function TaskMatchTicketDetailsPanel({
                     緯度 {marker.position[0].toFixed(6)} / 經度{' '}
                     {marker.position[1].toFixed(6)}
                   </Typography>
+                  {buildingUuid && onOpenBuilding && onSelectTicket ? (
+                    <BuildingTicketNavigation
+                      buildingUuid={buildingUuid}
+                      ticketUuid={marker.id}
+                      onOpenBuilding={onOpenBuilding}
+                      onSelectTicket={onSelectTicket}
+                    />
+                  ) : null}
                 </Stack>
               }
             />

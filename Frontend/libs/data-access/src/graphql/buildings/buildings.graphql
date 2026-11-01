@@ -1,0 +1,31 @@
+# 現場分區 (modules/building): a building map and the tickets filed inside it, for its drawer — one
+# box per floor — and for 上一張／下一張 in a ticket's detail. The building itself is public; its
+# tickets come back only to a caller who may see their detail, and empty to a guest: naming the
+# building names where the ticket is. Every ticket the building holds, finished ones included and
+# deleted ones not, newest first. 200 at once, with no pages: a building holding more would need them.
+query GetBuildingMapWithTickets($uuid: UUID!, $limit: Int! = 200) {
+  buildingMap(uuid: $uuid) {
+    uuid
+    name
+    # The roof (RF) first, then down: the drawer puts them in its own order.
+    floors {
+      label
+      areas
+    }
+    secondaryLocation {
+      fullAddress
+      landmarkNote
+    }
+  }
+  buildingMapTickets(buildingMapUuid: $uuid, limit: $limit) {
+    ...TicketFields
+    # The floor is one of the building's labels or empty; the room, an area on a floor with areas.
+    secondaryLocation {
+      floor
+      room
+    }
+    tasks {
+      ...TicketNeedFields
+    }
+  }
+}

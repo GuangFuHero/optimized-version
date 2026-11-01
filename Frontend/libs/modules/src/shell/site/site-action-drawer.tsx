@@ -8,10 +8,14 @@ import {
   Typography,
   useMediaQuery,
 } from '@mui/material';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { useId } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  safeAreaBottom,
+} from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
 
@@ -39,6 +43,8 @@ export interface SiteActionDrawerProps {
   footer?: ReactNode;
   /** The content fills the drawer itself instead of scrolling — the share panel's QR code. */
   fullHeight?: boolean;
+  /** The box the content scrolls in, for a drawer that comes back to where it was (現場分區). */
+  contentRef?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -57,6 +63,7 @@ export function SiteActionDrawer({
   children,
   footer,
   fullHeight = false,
+  contentRef,
 }: SiteActionDrawerProps) {
   const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
   const titleId = useId();
@@ -170,6 +177,7 @@ export function SiteActionDrawer({
       </Box>
 
       <Box
+        ref={contentRef}
         sx={{
           flex: 1,
           minHeight: 0,
@@ -194,7 +202,7 @@ export function SiteActionDrawer({
               ? {
                   px: 2,
                   pt: 1.5,
-                  pb: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+                  pb: safeAreaBottom(12),
                 }
               : { px: 3, py: 2 }),
           }}

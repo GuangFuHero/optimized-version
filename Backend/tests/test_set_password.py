@@ -6,11 +6,13 @@ credential that would outlive it.
 """
 import pytest
 
+from app.models.auth import UserContact
 from app.services.auth_account import create_account
 from tests.conftest import auth_headers_for
 
 SALT = "abc"
 SET_PASSWORD_URL = "/api/v1/auth/set-password"
+FIRST_PASSWORD = {"password": "hashedpw", "salt_frontend": SALT}
 
 
 async def _google_user(db_session, redis):
@@ -65,6 +67,41 @@ async def test_set_password_twice_409(client, db_session, redis, capture_email):
     res = await client.post(SET_PASSWORD_URL, headers=headers,
                             json={"password": "otherpw", "salt_frontend": SALT})  # >=6 chars (min_length)
     assert res.status_code == 409, res.text
+
+
+@pytest.mark.asyncio
+async def test_an_account_with_no_email_or_phone_cannot_set_a_password(
+    client, db_session, redis, capture_email, capture_sms
+):
+    """A password signs in with an email or phone number, so without either it could never be used (ADR-401).
+
+    Refused before any proof is asked for: nothing is sent, and no password is written.
+    """
+    user = await create_account(db_session, name="只用 LINE", provider="line", provider_subject="line-sp-1")
+    headers = await auth_headers_for(redis, user.uuid)
+
+    res = await client.post(SET_PASSWORD_URL, headers=headers, json=FIRST_PASSWORD)
+
+    assert res.status_code == 409, res.text
+    assert res.json()["code"] == "password_needs_contact"
+    assert (capture_email.messages, capture_sms.messages) == ([], [])
+    me = (await client.get("/api/v1/users/me", headers=headers)).json()
+    assert [method["provider"] for method in me["login_methods"]] == ["line"]
+
+
+@pytest.mark.asyncio
+async def test_an_unverified_contact_does_not_count(client, db_session, redis, capture_email):
+    """Signing in finds an account by a verified contact only, so an unverified one is no way in."""
+    user = await create_account(db_session, name="只用 LINE", provider="line", provider_subject="line-sp-2")
+    user_uuid = user.uuid  # before the commit expires it
+    db_session.add(UserContact(user_uuid=user_uuid, type="email", value="pending@x.com", verified=False))
+    await db_session.commit()
+    headers = await auth_headers_for(redis, user_uuid)
+
+    res = await client.post(SET_PASSWORD_URL, headers=headers, json=FIRST_PASSWORD)
+
+    assert (res.status_code, res.json()["code"]) == (409, "password_needs_contact")
+    assert capture_email.messages == []
 
 
 @pytest.mark.asyncio
