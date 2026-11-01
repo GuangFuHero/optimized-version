@@ -38,9 +38,23 @@ Design/
 ## 每次合併到 main 的 PR
 
 1. 只含 `Design/` 底下的路徑。
-2. 先把 `main` 合進來再改 `CHANGELOG.md`，保留工程師打的勾。
+2. 保留工程師在 `CHANGELOG.md` 打的勾（以 `main` 上的版本為準）。
 3. `CHANGELOG.md` 最上面加一筆（格式見該檔），結尾一定有「Frontend 待辦」清單；沒有待辦就寫「無」。
 4. PR 說明列出受影響的畫面（原型檔名）。
+
+設計分支上也有 `Frontend/` 的 commit，所以不要直接從它開 PR。照這樣切一個只有 `Design/` 的分支：
+
+```sh
+git fetch origin
+git switch -c design/<這次的主題> origin/main        # 從最新的 main 開新分支
+git checkout sucrelindesign -- Design/                # 只帶過來 Design/
+git status                                            # 只能看到 Design/ 底下的路徑
+git diff origin/main -- Design/CHANGELOG.md           # 工程師打的 [x] 不可以變回 [ ]；有就改回 [x]
+git commit -m "design: <這次的主題>" && git push -u origin HEAD   # 再開 PR 到 main
+```
+
+- 設計分支上刪掉的檔案不會跟著過來；要刪的話在新分支上 `git rm`。
+- 設計分支裡 `Frontend/` 的改動**不放進這個 PR**：要給工程師的程式碼放 `handoff/`，或在 #uiux 告訴工程師。
 
 ## 不要做
 
