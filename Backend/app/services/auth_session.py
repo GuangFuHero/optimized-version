@@ -81,7 +81,9 @@ async def open_session(
     sid, refresh_token = await SessionRepository(redis).create_session(
         user_uuid, device, act=act, mcp_client=mcp_client
     )
-    access_token = security.create_access_token(data={"sub": user_uuid}, sid=sid, act=act)
+    access_token = security.create_access_token(
+        data={"sub": user_uuid}, sid=sid, act=act, mcp=mcp_client is not None
+    )
     return access_token, refresh_token
 
 
@@ -133,7 +135,7 @@ def _refresh_token_invalid() -> ApiError:
 
 
 async def refresh_session(
-    db: AsyncSession, redis, raw_refresh: str | None, wanted: str | None = None
+    db: AsyncSession, redis, raw_refresh: str | None, wanted: str | None = None, mcp_client: str | None = None
 ) -> tuple[str, str, ActiveIdentity | None]:
     """Rotate a refresh token; return (access token, new refresh token, the identity it acts as).
 
@@ -173,6 +175,14 @@ async def refresh_session(
     repo = SessionRepository(redis)
     record = await repo.get_refresh_for_token(raw_refresh)
     session = await repo.get_session(record["sid"]) if record else None
+    # An MCP session refreshes only through the MCP's `/token`, which names its client; refused before
+    # rotating, so the client's token survives a stray attempt elsewhere.
+    if session and session.get("mcp_client") and session["mcp_client"] != mcp_client:
+        raise ApiError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code=ErrorCode.MCP_READ_ONLY,
+            detail="An MCP client refreshes through its own token endpoint",
+        )
     # What the caller asked for, else what this session was already acting as. None means a
     # session predating ADR-188, which falls back to the platform default as it used to.
     wanted = wanted or (session or {}).get("act")
@@ -206,7 +216,10 @@ async def refresh_session(
         await repo.set_identity(sid, identity.to_claim())
     await _record_activity(db, user_uuid)
     access_token = security.create_access_token(
-        data={"sub": user_uuid}, sid=sid, act=identity.to_claim() if identity else None
+        data={"sub": user_uuid},
+        sid=sid,
+        act=identity.to_claim() if identity else None,
+        mcp=bool((session or {}).get("mcp_client")),
     )
     return access_token, new_refresh, identity
 
@@ -242,7 +255,8 @@ async def switch_identity(
             detail="You do not hold that identity",
         )
     repo = SessionRepository(redis)
-    if sid is None or await repo.get_session(sid) is None:
+    session = await repo.get_session(sid) if sid is not None else None
+    if session is None:
         raise ApiError(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code=ErrorCode.SESSION_EXPIRED,
@@ -254,7 +268,7 @@ async def switch_identity(
     # name one would undo the switch.
     await repo.set_identity(sid, identity.to_claim())
     access_token = security.create_access_token(
-        data={"sub": str(user.uuid)}, sid=sid, act=identity.to_claim()
+        data={"sub": str(user.uuid)}, sid=sid, act=identity.to_claim(), mcp=bool(session.get("mcp_client"))
     )
     return access_token, identity
 

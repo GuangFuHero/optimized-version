@@ -31,9 +31,34 @@ client ──POST /token (code + PKCE verifier)──▶ backend access token + 
 The tokens are the backend's own: allowing the client opens an ordinary backend session marked with
 `mcp_client`, and refreshing goes through the backend's refresh rotation.
 
-Settings: `MCP_BASE_URL` is the public URL clients reach the backend at. The consent page lives on
-`SITE_APP_URL`. In production the backend sits behind the site, so `/mcp`, `/authorize`, `/token`,
-`/register`, `/revoke` and `/.well-known/oauth-*` must be routed to it.
+Settings: `MCP_BASE_URL` is the public URL clients reach the backend at; the consent page lives on
+`SITE_APP_URL`.
+
+## Deployment
+
+The backend today is reachable only through the site. To serve MCP clients, expose **only** these
+paths of it, through an edge (reverse proxy or tunnel):
+
+```
+/mcp   /authorize   /token   /register   /revoke
+/.well-known/oauth-protected-resource/mcp   /.well-known/oauth-authorization-server
+```
+
+Never the rest of the backend: `/api/v1` and `/graphql` stay behind the site. The consent page
+(`/api/v1/mcp/consent`) is reached through the site's own proxy, not this edge.
+
+Every per-IP rate limit (sign-in included) keys on the address `resolve_client_ip` works out. It
+believes `X-Forwarded-For` only from peers in `TRUSTED_PROXIES` (default: loopback and the private
+ranges, where the site's proxy sits today) and uses the socket address otherwise. So:
+
+- the edge must **overwrite** `X-Forwarded-For` with the real client IP, never append to what the
+  client sent, and it must reach the backend from an address in `TRUSTED_PROXIES`;
+- if the edge reaches the backend from somewhere else, add its address to `TRUSTED_PROXIES`; if
+  untrusted callers could reach the backend from a private address (e.g. Docker Desktop's port
+  publishing, which makes every outside caller look private), narrow `TRUSTED_PROXIES` to the
+  proxies' own addresses.
+
+The MCP tools pass the resolved caller IP on to their in-process calls, from loopback.
 
 ## Tools
 
@@ -54,13 +79,34 @@ shapes are the endpoint's.
 
 Read only is enforced, not listed:
 
-- `graphql_query` parses the document and refuses anything that is not a `query`, any root field in
-  `DENIED_ROOT_FIELDS`, documents over 20 000 characters and selections nested deeper than 12.
+- `graphql_query` refuses documents over 20 000 characters before parsing, then anything that is
+  not a `query` and any root field in `DENIED_ROOT_FIELDS`. `/graphql` itself then applies its own
+  limits: depth 10, 10 aliases, 1 000 tokens.
 - `rest_get` only reaches GET routes under `/api/v1` outside `EXCLUDED_REST_PREFIXES` (auth, admin,
   bulk, map, rbac-test, invites, mcp).
-- Every call times out after 30 seconds.
+- Every backend call times out after 30 seconds. CodeMode's sandbox (FastMCP defaults) allows 30 s and
+  100 MB per `execute`, and at most 50 tool calls in it.
+- `/register` allows 10 registrations per IP per hour and `/authorize` 30 per IP per 10 minutes; a
+  client that never finishes a sign-in is forgotten after an hour.
 
 `DENIED_ROOT_FIELDS` and `EXCLUDED_REST_PREFIXES` in `tools.py` are the only lists to maintain.
+
+## MCP tokens only read, everywhere
+
+An MCP client's access token carries an `mcp` claim (set from the session's `mcp_client` marker every
+time a token is signed: on sign-in, refresh and identity switch). `accept_access_token`, which every
+REST endpoint and the GraphQL context go through, refuses any non-GET request with such a token with
+403 `mcp_read_only`, and the GraphQL schema runs nothing but queries for it (mutations answer 403 with
+the same code). What an MCP token may still do outside the MCP:
+
+- read (GET, HEAD, OPTIONS, and GraphQL queries);
+- end its own session (`POST /api/v1/auth/logout`);
+- be refreshed, through the MCP's `/token` only: `/api/v1/auth/refresh` and the browser's refresh
+  refuse an MCP session's refresh token with 403 `mcp_read_only`, so nothing outside can mint a token
+  that writes. The refreshed token is read-only too.
+
+The MCP's own identity switch is the one in-process write: its calls go through an ASGI wrapper that
+sets a scope-state flag, which no outside request can carry.
 
 ## Identity
 

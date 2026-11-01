@@ -73,6 +73,8 @@ class ErrorCode(StrEnum):
     # failure: the session is fine and the site still works, so the back office says "no access"
     # and signs nobody out.
     BACK_OFFICE_IDENTITY_REQUIRED = "back_office_identity_required"
+    # A token issued to an MCP client tried to write. Those tokens only read, outside the MCP as in it.
+    MCP_READ_ONLY = "mcp_read_only"
 
     # Social login
     SSO_TOKEN_INVALID = "sso_token_invalid"
