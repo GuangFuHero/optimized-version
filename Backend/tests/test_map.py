@@ -1,6 +1,7 @@
 """Unit tests for map tile proxy service: cache key generation and attribution lookup."""
 
 import os
+import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,6 +15,8 @@ from app.main import app  # noqa: E402
 from app.schemas.map import AttributionResponse  # noqa: E402
 from app.services.tile_proxy import (  # noqa: E402
     BLANK_TILE,
+    NON_STRICT_SSL,
+    USER_AGENT,
     build_cache_key,
     fetch_tile,
     get_attribution,
@@ -490,3 +493,57 @@ async def test_attribution_endpoint_invalid(map_client):
     ac, _ = map_client
     resp = await ac.get("/api/v1/map/attribution/road/nasa_gibs")
     assert resp.status_code == 400
+
+
+def _client_returning(response):
+    """Mock httpx client whose GET always returns response."""
+    client = AsyncMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    client.get = AsyncMock(return_value=response)
+    return client
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("type_", "source"), [("road", "osm"), ("satellite", "nlsc")])
+async def test_fetch_tile_sends_platform_user_agent_only(fake_redis, type_, source):
+    """Tile requests identify the platform and send no Referer or browser User-Agent."""
+    response = MagicMock(status_code=200, content=b"TILE", headers={"content-type": "image/png"})
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(response)) as cls:
+        await fetch_tile(fake_redis, source, type_, 14, 13721, 7031, {})
+
+    assert cls.call_args.kwargs["headers"] == {"User-Agent": USER_AGENT}
+    assert "headers" not in cls.return_value.get.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_resolve_tile_date_sends_platform_user_agent(fake_redis):
+    """The GIBS dates lookup identifies the platform too."""
+    domains = MagicMock(text="<Domain>2026-10-20/2026-10-22/P1D</Domain>")
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(domains)) as cls:
+        await resolve_tile_date(fake_redis, "nasa_gibs", "https://example.test/all.xml")
+
+    assert cls.call_args.kwargs["headers"] == {"User-Agent": USER_AGENT}
+
+
+@pytest.mark.asyncio
+async def test_fetch_tile_nlsc_verifies_without_strict_x509_and_falls_back_to_jpeg(fake_redis):
+    """NLSC is verified without only the strict X.509 check, and a missing content type means JPEG."""
+    response = MagicMock(status_code=200, content=b"JPEG", headers={})
+    with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(response)) as cls:
+        data, ct = await fetch_tile(fake_redis, "nlsc", "satellite", 14, 13721, 7031, {})
+
+    assert (data, ct) == (b"JPEG", "image/jpeg")
+    assert cls.call_args.kwargs["verify"] is NON_STRICT_SSL
+    assert NON_STRICT_SSL.verify_mode == ssl.CERT_REQUIRED and NON_STRICT_SSL.check_hostname
+    assert not NON_STRICT_SSL.verify_flags & ssl.VERIFY_X509_STRICT
+
+
+def test_nlsc_attribution_names_service_terms():
+    """NLSC attribution points at the service terms and keeps the source credit."""
+    attr = get_attribution("satellite", "nlsc")
+    assert attr.license == "國土測繪圖資服務雲服務使用條款"
+    assert attr.attribution_url == "https://maps.nlsc.gov.tw/pro/use_clause.jsp"
+    assert attr.attribution_text == "© 內政部國土測繪中心"
+    assert attr.image_format == "image/jpeg"
+    assert "bulk downloading" in attr.notes
