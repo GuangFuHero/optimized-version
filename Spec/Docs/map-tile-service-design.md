@@ -69,7 +69,7 @@ Static config mapping `(type, source)` to upstream URL template:
 | `carto` | `https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png` | `image/png` | none |
 
 > Note: every upstream request (tiles and the GIBS dates lookup) sends the platform User-Agent `GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)` and no other special headers.  
-> Note: `nlsc` is verified against the operating system's trust store, because Python's strict check rejects its TWCA root CA.  
+> Note: `nlsc` is verified with Python's strict X.509 check turned off, because its TWCA root CA has no Subject Key Identifier; the chain and hostname are still verified (same approach as the address lookup).  
 > Note: `sinica` ToS is unconfirmed — confirm before production use.  
 > Note: `nasa_gibs` is HLS Sentinel-2 (30 m, native max z12). `{date}` is the second-newest date listed in GIBS's `.../GoogleMapsCompatible_Level12/all/all.xml` (the newest is often still empty, and the list has gaps that GIBS answers with 404), cached in Redis (`tile:nasa_gibs:date`) for an hour and included in the tile cache key. Each day is one satellite pass, so it can be cloudy and is blank outside the swath. Its tiles are cached for 1 day instead of 7, since the date moves daily and older copies are never read again, and requests past z12 return the blank tile without asking GIBS.  
 > Note: `carto` now needs an API key (`?key=`); without one every tile is an "API KEY REQUIRED" image, so the frontend marks it unavailable.  

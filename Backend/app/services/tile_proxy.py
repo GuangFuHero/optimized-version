@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 import httpx
-import truststore
 
 from app.schemas.map import AttributionResponse
 
@@ -21,8 +20,10 @@ BLANK_TILE = base64.b64decode(
 USER_AGENT = "GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)"
 HEADERS = {"User-Agent": USER_AGENT}
 
-# Verifies against the operating system's trust store instead of certifi.
-SYSTEM_TRUST = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+# Python's strict mode rejects CA certificates without a Subject Key Identifier, such as the TWCA root
+# NLSC chains to; the chain and hostname are still verified.
+NON_STRICT_SSL = ssl.create_default_context()
+NON_STRICT_SSL.verify_flags &= ~ssl.VERIFY_X509_STRICT
 
 
 @dataclass
@@ -31,8 +32,8 @@ class SourceConfig:
 
     url_template: str
     image_format: str
-    # Python's own strict check rejects some CA roots that the operating system accepts, such as TWCA's.
-    system_trust: bool = False
+    # False verifies with NON_STRICT_SSL instead of httpx's default context.
+    strict_x509: bool = True
     # GIBS DescribeDomains URL; when set, `{date}` in url_template is the second-newest date it lists.
     dates_url: str | None = None
     # Seconds a fetched tile stays in Redis.
@@ -67,7 +68,7 @@ SOURCE_REGISTRY: dict[tuple[str, str], SourceConfig] = {
     ("satellite", "nlsc"): SourceConfig(
         url_template="https://wmts.nlsc.gov.tw/wmts/PHOTO_MIX/default/EPSG:3857/{z}/{y}/{x}",
         image_format="image/jpeg",
-        system_trust=True,
+        strict_x509=False,
     ),
     ("satellite", "sinica"): SourceConfig(
         url_template=("https://gis.sinica.edu.tw/tileserver/file-exists.php?img={layer}/{z}/{x}/{y}"),
@@ -275,7 +276,7 @@ async def fetch_tile(
     )
 
     try:
-        verify = SYSTEM_TRUST if config.system_trust else True
+        verify = True if config.strict_x509 else NON_STRICT_SSL
         async with httpx.AsyncClient(timeout=10.0, verify=verify, headers=HEADERS) as client:
             response = await client.get(url)
 

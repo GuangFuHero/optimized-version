@@ -1,6 +1,7 @@
 """Unit tests for map tile proxy service: cache key generation and attribution lookup."""
 
 import os
+import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,7 +15,7 @@ from app.main import app  # noqa: E402
 from app.schemas.map import AttributionResponse  # noqa: E402
 from app.services.tile_proxy import (  # noqa: E402
     BLANK_TILE,
-    SYSTEM_TRUST,
+    NON_STRICT_SSL,
     USER_AGENT,
     build_cache_key,
     fetch_tile,
@@ -526,14 +527,16 @@ async def test_resolve_tile_date_sends_platform_user_agent(fake_redis):
 
 
 @pytest.mark.asyncio
-async def test_fetch_tile_nlsc_verifies_with_system_trust_and_falls_back_to_jpeg(fake_redis):
-    """NLSC is verified against the system trust store, and a missing content type means JPEG."""
+async def test_fetch_tile_nlsc_verifies_without_strict_x509_and_falls_back_to_jpeg(fake_redis):
+    """NLSC is verified without only the strict X.509 check, and a missing content type means JPEG."""
     response = MagicMock(status_code=200, content=b"JPEG", headers={})
     with patch("app.services.tile_proxy.httpx.AsyncClient", return_value=_client_returning(response)) as cls:
         data, ct = await fetch_tile(fake_redis, "nlsc", "satellite", 14, 13721, 7031, {})
 
     assert (data, ct) == (b"JPEG", "image/jpeg")
-    assert cls.call_args.kwargs["verify"] is SYSTEM_TRUST
+    assert cls.call_args.kwargs["verify"] is NON_STRICT_SSL
+    assert NON_STRICT_SSL.verify_mode == ssl.CERT_REQUIRED and NON_STRICT_SSL.check_hostname
+    assert not NON_STRICT_SSL.verify_flags & ssl.VERIFY_X509_STRICT
 
 
 def test_nlsc_attribution_names_service_terms():
