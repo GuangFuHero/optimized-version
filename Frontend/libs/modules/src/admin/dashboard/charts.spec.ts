@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CHART_TYPE_LABELS,
+  chartGranularity,
   chartQueryParams,
+  groupedBarFigure,
   knownOptions,
   hasChartData,
+  toneFigure,
   STATION_CHARTS,
   TICKET_CHARTS,
   TICKET_DETAIL_CHARTS,
@@ -136,5 +139,52 @@ describe('hasChartData', () => {
     ]) {
       expect(hasChartData(figure(data))).toBe(true);
     }
+  });
+});
+
+describe('chartGranularity', () => {
+  it('asks a trend that comes in one size for that size, whatever the page is set to', () => {
+    expect(chartGranularity({ allowed_x_granularities: ['day'] }, 'week')).toBe(
+      'day',
+    );
+    expect(
+      chartGranularity({ allowed_x_granularities: ['day', 'week'] }, 'week'),
+    ).toBe('week');
+    expect(chartGranularity(undefined, 'week')).toBe('week');
+  });
+});
+
+describe('the volunteer charts', () => {
+  const bar = (x: string[], y: number[]) => ({
+    data: [{ type: 'bar', x, y, name: 'backend' }],
+    layout: { showlegend: false },
+    config: { displayModeBar: false },
+  });
+
+  it('puts the three by-type figures side by side, named and coloured, legend shown', () => {
+    const figure = groupedBarFigure([
+      { figure: bar(['搜救', '物資'], [4, 2]), name: '需求', color: 'blue' },
+      { figure: bar(['搜救', '物資'], [3, 2]), name: '已媒合', color: 'green' },
+      { figure: bar(['搜救'], [1]), name: '缺口', color: 'orange' },
+    ]);
+    expect(
+      figure.data.map((trace) => [
+        trace.name,
+        (trace.marker as { color: string }).color,
+      ]),
+    ).toEqual([
+      ['需求', 'blue'],
+      ['已媒合', 'green'],
+      ['缺口', 'orange'],
+    ]);
+    expect(figure.layout).toMatchObject({ barmode: 'group', showlegend: true });
+    expect(figure.config).toEqual({ displayModeBar: false });
+  });
+
+  it('draws the gap trend in the colour of its card', () => {
+    expect(toneFigure(bar(['A'], [1]), 'orange').layout).toMatchObject({
+      colorway: ['orange'],
+      showlegend: false,
+    });
   });
 });

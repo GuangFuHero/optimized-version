@@ -13,6 +13,7 @@ import {
   ChevronUp,
   ClipboardList,
   Package,
+  TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -43,17 +44,21 @@ import {
   DEFAULT_LOOKBACK_DAYS,
   formatKpiValue,
   kpiAvailability,
+  kpiQueryRange,
   localDateString,
   lookbackRange,
+  rangeAsOfCaption,
   rangeCreatedCaption,
   rangeLengthDays,
+  volunteerGapLine,
   type AnalyticsCatalog,
   type DashboardDateRange,
   type DashboardKpi,
-  type DashboardKpiAccent,
   type KpiAvailability,
   type MetricSpec,
 } from './kpis';
+import { ACCENT_COLORS } from './tones';
+import { VolunteerTypesPanel } from './volunteer-types-panel';
 
 const { color, typography, radius, shadow } = designTokens;
 
@@ -64,15 +69,6 @@ const sameFilters = (a: DashboardFilters, b: DashboardFilters) =>
   a.timeZone === b.timeZone;
 
 type ValueQuery = UseQueryResult<{ value: number }, Error>;
-
-/** The KPI card's left bar, by token role — `kpis.ts` names the role, this file resolves it. */
-const ACCENT_COLORS: Record<DashboardKpiAccent, string> = {
-  primary: color.bg.primary.default,
-  secondary: color.bg.secondary.default,
-  success: color.bg.success.default,
-  warning: color.bg.warning.default,
-  muted: color.fg.neutral.muted,
-};
 
 /** The design's `wg-caption`: 14px muted, the muted tone carrying the contrast. */
 const caption = { ...typography.body[300], color: color.fg.neutral.muted };
@@ -89,7 +85,7 @@ function kpiValueQuery(
   range: DashboardDateRange,
   timeZone: string,
 ) {
-  const query = { ...range, tz: timeZone };
+  const query = { ...kpiQueryRange(kpi, range), tz: timeZone };
   return kpi.domain === 'tickets'
     ? ticketAnalyticsValueQuery({ query: { ...query, y: kpi.metric } })
     : stationAnalyticsValueQuery({ query: { ...query, y: kpi.metric } });
@@ -104,10 +100,13 @@ function KpiValue({
   spec,
   availability,
   query,
+  warn,
 }: {
   spec: MetricSpec | undefined;
   availability: KpiAvailability;
   query: ValueQuery;
+  /** The unit takes the warning colour with the number, as on the gap card while anyone is missing. */
+  warn: boolean;
 }) {
   if (isForbidden(query)) {
     return <Typography sx={caption}>沒有權限</Typography>;
@@ -148,7 +147,7 @@ function KpiValue({
         sx={{
           fontSize: 15,
           marginLeft: '2px',
-          color: color.fg.neutral.muted,
+          color: warn ? color.fg.warning : color.fg.neutral.muted,
         }}
       >
         {formatted.unit}
@@ -163,21 +162,28 @@ function KpiCard({
   availability,
   query,
   devMode,
-  rangeCaption,
+  scope,
 }: {
   kpi: DashboardKpi;
   spec: MetricSpec | undefined;
   availability: KpiAvailability;
   query: ValueQuery;
   devMode: boolean;
-  /** Which tickets the number counts, from `rangeCreatedCaption`, e.g. 今日建立. */
-  rangeCaption: string;
+  /**
+   * What the number counts, on the line under the title: `rangeCreatedCaption` (今日建立) for a
+   * count over the range, `rangeAsOfCaption` (截至今日) for a running total.
+   */
+  scope: string;
 }) {
-  const title = spec ? `${spec.label}（${rangeCaption}）` : undefined;
+  const value = query.data?.value;
+  const isGap = kpi.metric === 'volunteer_gap';
+  // The design turns the whole gap card to the warning colours while anyone is missing.
+  const warn = isGap && value !== undefined && value > 0;
+  const footer = (isGap && volunteerGapLine(value)) || spec?.description;
   return (
     <Box
       component="article"
-      aria-label={title ?? kpi.metric}
+      aria-label={spec ? `${spec.label}，${scope}` : kpi.metric}
       title={spec?.description}
       sx={{
         display: 'flex',
@@ -190,9 +196,14 @@ function KpiCard({
         overflow: 'hidden',
         borderRadius: `${radius.md}px`,
         border: `1px solid ${color.border.default}`,
-        // The one card the design wants read first carries the accent outline instead.
-        borderColor: kpi.emphasis ? color.border.accent : color.border.default,
-        bgcolor: color.bg.neutral.default,
+        // The one card the design wants read first carries the accent outline instead, and the gap
+        // card the warning one while anyone is missing.
+        borderColor: warn
+          ? color.bg.warning.hover
+          : kpi.emphasis
+            ? color.border.accent
+            : color.border.default,
+        bgcolor: warn ? color.bg.warning.subtle : color.bg.neutral.default,
         boxShadow: shadow.sm,
       }}
     >
@@ -207,11 +218,22 @@ function KpiCard({
           bgcolor: ACCENT_COLORS[kpi.accent],
         }}
       />
-      <Typography
-        sx={{ ...typography.label[400], color: color.fg.neutral.default }}
-      >
-        {title}
-      </Typography>
+      <Stack direction="row" sx={{ alignItems: 'center', gap: '6px' }}>
+        {warn ? (
+          <TriangleAlert size={16} color={color.fg.warning} aria-hidden />
+        ) : null}
+        <Typography
+          sx={{ ...typography.label[400], color: color.fg.neutral.default }}
+        >
+          {spec?.label}
+        </Typography>
+      </Stack>
+      {spec ? (
+        // A running total's day is bold, as the design sets 截至今日 apart from 近 30 天建立.
+        <Typography sx={{ ...caption, fontWeight: kpi.asOf ? 700 : undefined }}>
+          {scope}
+        </Typography>
+      ) : null}
       <Typography
         component="div"
         sx={{
@@ -219,17 +241,20 @@ function KpiCard({
           fontSize: 30,
           lineHeight: 1.15,
           letterSpacing: '-.02em',
-          color: color.fg.neutral.default,
+          color: warn ? color.fg.warning : color.fg.neutral.default,
           // The digits keep one width as the values change.
           fontVariantNumeric: 'tabular-nums',
         }}
       >
-        <KpiValue spec={spec} availability={availability} query={query} />
+        <KpiValue
+          spec={spec}
+          availability={availability}
+          query={query}
+          warn={warn}
+        />
       </Typography>
-      {spec?.description ? (
-        <Typography sx={{ ...caption, lineHeight: 1.4 }}>
-          {spec.description}
-        </Typography>
+      {footer ? (
+        <Typography sx={{ ...caption, lineHeight: 1.4 }}>{footer}</Typography>
       ) : null}
       {devMode ? <FieldTag title="API 參數：y">y={kpi.metric}</FieldTag> : null}
     </Box>
@@ -275,6 +300,7 @@ function ChartGrid({
   timeZone,
   devMode,
   emptyPreview,
+  leading,
 }: {
   charts: readonly DashboardChart[];
   catalog: AnalyticsCatalog | undefined;
@@ -283,6 +309,8 @@ function ChartGrid({
   timeZone: string;
   devMode: boolean;
   emptyPreview: boolean;
+  /** A panel drawn before the charts, in the same grid. */
+  leading?: React.ReactNode;
 }) {
   return (
     <Box
@@ -292,6 +320,7 @@ function ChartGrid({
         gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
       }}
     >
+      {leading}
       {charts.map((chart) => (
         <ChartPanel
           key={`${chart.domain}.${chart.metric}`}
@@ -408,10 +437,9 @@ export function DashboardPage() {
   // A single day has one bucket; the filter card disables 週 for it, and the queries follow.
   const granularity: ChartGranularity =
     rangeLengthDays(range) === 1 ? 'day' : applied.granularity;
-  const rangeCaption = rangeCreatedCaption(
-    range,
-    localDateString(new Date(), timeZone),
-  );
+  const today = localDateString(new Date(), timeZone);
+  const rangeCaption = rangeCreatedCaption(range, today);
+  const asOfCaption = rangeAsOfCaption(range, today);
 
   const changeFilters = (next: DashboardFilters) => {
     setFilters(next);
@@ -481,7 +509,7 @@ export function DashboardPage() {
           key={`${card.kpi.domain}.${card.kpi.metric}`}
           {...card}
           devMode={devMode}
-          rangeCaption={rangeCaption}
+          scope={card.kpi.asOf ? asOfCaption : rangeCaption}
         />
       ))}
     </KpiGrid>
@@ -544,7 +572,19 @@ export function DashboardPage() {
               </Typography>
             ) : (
               <>
-                {renderKpis(tickets.visible, 6)}
+                {renderKpis(
+                  tickets.visible.filter((card) => !card.kpi.asOf),
+                  6,
+                )}
+                <Stack sx={{ gap: '8px' }}>
+                  {renderKpis(
+                    tickets.visible.filter((card) => card.kpi.asOf),
+                    3,
+                  )}
+                  <Typography sx={caption}>
+                    這三個是「{asOfCaption}」的總數，不是這段期間建立的。
+                  </Typography>
+                </Stack>
                 <ChartGrid
                   charts={TICKET_CHARTS}
                   catalog={catalog}
@@ -581,7 +621,7 @@ export function DashboardPage() {
                     )}
                     {showDetails
                       ? '收起細部分析'
-                      : '展開細部分析（完成率、等待時間、處理耗時、重複單）'}
+                      : '展開細部分析（各需求類型志工、完成率、等待時間、處理耗時、重複單）'}
                   </ButtonBase>
                 </Box>
                 {showDetails ? (
@@ -593,6 +633,16 @@ export function DashboardPage() {
                     timeZone={timeZone}
                     devMode={devMode}
                     emptyPreview={emptyPreview}
+                    leading={
+                      <VolunteerTypesPanel
+                        catalog={catalog}
+                        range={range}
+                        timeZone={timeZone}
+                        asOfCaption={asOfCaption}
+                        devMode={devMode}
+                        emptyPreview={emptyPreview}
+                      />
+                    }
                   />
                 ) : null}
               </>
