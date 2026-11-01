@@ -479,11 +479,10 @@ async def _plan_tickets(
         if match.kind == AMBIGUOUS:
             errors.append(_ambiguous_error(line, match.candidates, "title"))
 
-        # Every need must say how many (ADR-291 point 7). A row whose ticket is not in the
-        # database yet adds a need for certain, so it fails here, before its ticket is written;
-        # one attaching to a ticket that is may match a need it has, and is left to
-        # validate_imported_task.
-        if match.kind != MATCHED and not (row.get("task_quantity") or "").strip():
+        # Every need must say how many (ADR-291 point 7). A row adding a need fails here, before
+        # anything is written, whether its ticket is new or one already in the database; one
+        # naming a need its ticket has updates that need and keeps its quantity.
+        if not (row.get("task_quantity") or "").strip() and await _adds_a_need(db, match, row, task_type):
             errors.append(_error(line, "task_quantity", "每個需求都要填人數"))
 
         # A ticket key repeated inside one file is one ticket on several lines, one per task
@@ -507,6 +506,21 @@ async def _plan_tickets(
             )
         )
     return plans, index
+
+
+async def _adds_a_need(db: AsyncSession, match, row: dict[str, str], task_type: str) -> bool:
+    """Whether the row adds a need: its ticket is not in the database, or has no need it names.
+
+    The same `match_task` the commit writes by (`_write_task`), so the preview refuses what the
+    commit would have to.
+    """
+    if match.kind != MATCHED:
+        return True
+    task_name = (row.get("task_name") or "").strip()
+    if not task_name:
+        return False
+    found = await match_task(db, ticket_uuid=match.uuid, task_type=task_type, task_name=task_name)
+    return found.kind != MATCHED
 
 
 async def _write_task_properties(db: AsyncSession, *, actor: User, task_uuid: str, dynamic: dict) -> None:

@@ -477,7 +477,7 @@ export type CreateTicketResult = DuplicatesSuspected | TicketCreated;
 export type CreateTicketTaskDraft = {
   /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
   acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
-  /** Number of people or units needed */
+  /** People or units needed, at least 1; required, for a 'rescue' task too */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
   /**
@@ -1939,7 +1939,7 @@ export type TicketTaskType = {
   /** Current progress update written by the assignee. Null to a caller without ticket.view_detail on the parent ticket */
   progressNote?: Maybe<Scalars['String']['output']>;
   properties: Array<TaskPropertyType>;
-  /** Number of people or units needed. Null means unspecified and uncapped: a rescue need may leave it out, and needs filed before every other kind had to give one */
+  /** Number of people or units needed. Null only on a need filed before every need had to give one: unspecified and uncapped */
   quantity?: Maybe<Scalars['Int']['output']>;
   /** When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back */
   recruitingStoppedAt?: Maybe<Scalars['DateTime']['output']>;

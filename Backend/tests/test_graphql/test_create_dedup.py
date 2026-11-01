@@ -269,6 +269,17 @@ async def test_a_ticket_without_tasks_is_created_directly(client, login_user_aut
     assert body["data"]["createTicket"]["tasks"] == []
 
 
+async def test_a_rescue_need_without_a_quantity_holds_back_the_whole_ticket(client, login_user_auth):
+    """新增任務 asks how many for a rescue too (ADR-448): refused, with no ticket or need written."""
+    _, token = login_user_auth
+    blank = {key: value for key, value in PUMP.items() if key != "quantity"}
+
+    body = await _post(client, token, CREATE_TICKET, {"input": _ticket_input([WATER, blank])})
+
+    assert [error["message"] for error in body["errors"]] == ["quantity is required for a rescue task"]
+    assert (await _count(Tickets), await _count(TicketTask)) == (0, 0)
+
+
 async def test_an_unrelated_task_elsewhere_is_created_directly(client, login_user_auth):
     """A different need a few hundred metres away: created, no dedup rows."""
     user_uuid, token = login_user_auth
