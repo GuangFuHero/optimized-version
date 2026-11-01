@@ -5,12 +5,12 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Box, Tab } from '@mui/material';
 import { useCurrentUser, useStation } from '@rescue-frontend/data-access/admin';
 import {
-  Badge,
   Button,
   designTokens,
   SheetFrame,
   SheetLayout,
   Tabs,
+  Tag,
 } from '@rescue-frontend/ui';
 import { EyeOff, PencilLine, ShieldCheck, Trash2 } from 'lucide-react';
 
@@ -35,6 +35,7 @@ import {
   StationHistoryPanel,
   useLoadedStationVersion,
 } from './station-history-panel';
+import { tagToneOf } from '../../../admin/shared/tag-tone';
 
 const { color, radius, typography } = designTokens;
 
@@ -170,21 +171,21 @@ function StationDetailContent({
               gap: '8px',
             }}
           >
-            <Badge tone={status.tone} variant="solid">
+            <Tag tone={tagToneOf(status.tone)} fill="solid">
               {status.label}
-            </Badge>
+            </Tag>
             {view.isOfficial ? (
-              <Badge tone="info" icon={<ShieldCheck size={13} />}>
+              <Tag tone="info" icon={<ShieldCheck size={13} />}>
                 官方
-              </Badge>
+              </Tag>
             ) : null}
             {view.verification.verified ? (
-              <Badge tone="success">已驗證</Badge>
+              <Tag tone="success">已驗證</Tag>
             ) : (
-              <Badge tone="warning">未驗證</Badge>
+              <Tag tone="warning">未驗證</Tag>
             )}
             {view.pendingFieldCount > 0 ? (
-              <Badge tone="warning">{view.pendingFieldCount} 欄待審</Badge>
+              <Tag tone="warning">{view.pendingFieldCount} 欄待審</Tag>
             ) : null}
           </Box>
           {station.viewerCanViewHistory ? (
@@ -312,9 +313,9 @@ function StationInfo({
         {view.resources.length ? (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {view.resources.map((resource) => (
-              <Badge key={resource.id}>
+              <Tag key={resource.id}>
                 {`${resource.label}・${resource.value}`}
-              </Badge>
+              </Tag>
             ))}
           </Box>
         ) : (
@@ -369,9 +370,9 @@ function PrivateLabel({ children }: { children: ReactNode }) {
       sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
     >
       {children}
-      <Badge tone="primary" size="sm" icon={<EyeOff size={11} />}>
+      <Tag tone="brand" size="sm" icon={<EyeOff size={11} />}>
         不公開
-      </Badge>
+      </Tag>
     </Box>
   );
 }

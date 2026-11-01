@@ -1,8 +1,9 @@
 'use client';
 
 import { Box, Typography } from '@mui/material';
-import { Badge, designTokens } from '@rescue-frontend/ui';
+import { designTokens, Tag } from '@rescue-frontend/ui';
 
+import { tagToneOf } from '../../../admin/shared/tag-tone';
 import { getOperationalStatusMeta } from '../../operational-status';
 import { getStationTypeIcon, getStationTypeLabel } from '../../type-options';
 
@@ -10,7 +11,7 @@ const { color, typography } = designTokens;
 
 export function StatusBadge({ status }: { status: string | null | undefined }) {
   const meta = getOperationalStatusMeta(status);
-  return <Badge tone={meta.tone}>{meta.label}</Badge>;
+  return <Tag tone={tagToneOf(meta.tone)}>{meta.label}</Tag>;
 }
 
 /** The prototype's `TypeChip` (station-shared.jsx): a muted icon before the type in subtle grey. */
