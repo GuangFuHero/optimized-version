@@ -120,9 +120,10 @@ export function resolveStationAvailability(
         tone: 'neutral',
         detail: `服務時間 ${hours}，此時段沒有服務`,
       };
+    // Hours that cannot be read leave only the status, named as the back office names it.
     default:
       return {
-        headline: '營運中',
+        headline: '開設中',
         tone: 'success',
         detail: hours ? `服務時間 ${hours}` : '服務時間未提供',
       };

@@ -50,10 +50,11 @@ export interface StationSuggestionField {
   read: (station: StationSuggestionSnapshot) => string;
 }
 
-// The site's words for the three, not the prototype form's 開放中: the detail says 營運中. The values
-// are the schema's: one renamed there follows at codegen, one taken out fails typecheck.
+// 開設中／暫停服務／已關閉, the names the design gives the site and the back office alike, not the
+// prototype form's 開放中. The values are the schema's: one renamed there follows at codegen, one taken
+// out fails typecheck.
 const OPERATIONAL_STATUS_CHOICES: readonly StationSuggestionChoice[] = [
-  { value: StationOperationalStatus.Active, label: '營運中' },
+  { value: StationOperationalStatus.Active, label: '開設中' },
   { value: StationOperationalStatus.TemporarilyClosed, label: '暫停服務' },
   { value: StationOperationalStatus.PermanentlyClosed, label: '已關閉' },
 ];
