@@ -10,6 +10,7 @@ import {
   fontStack,
   fontVariables,
   IOS_NO_ZOOM_INPUT_PX,
+  LABEL_400_SIZE_VAR,
   TOUCH_FIELD_MEDIA,
   type DisplayTextStep,
 } from './design-tokens';
@@ -355,5 +356,11 @@ describe('display text scale', () => {
     expect(TOUCH_FIELD_MEDIA).toBe(
       '@media (max-width:767.95px), (pointer: coarse)',
     );
+  });
+
+  /** A page raises it by setting the variable on `:root`, as the site does on a phone. */
+  it("gives label 400 the variable's size, the design system's 14px when it is unset", () => {
+    expect(LABEL_400_SIZE_VAR).toBe('--wg-label-400-size');
+    expect(designTokens.typography.label[400].fontSize).toBe('var(--wg-label-400-size, 14px)');
   });
 });

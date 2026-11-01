@@ -110,7 +110,8 @@ function createDraftPointIcon(): L.DivIcon {
 
 /** moveend／zoomend 後延遲寫回路由狀態，把連續手勢合併成一次提交。 */
 const VIEWPORT_SYNC_DEBOUNCE_MS = 250;
-const MARKER_CLUSTER_MODULE_ID = 'react-leaflet-cluster';
+/** Adds `L.markerClusterGroup` to the global `L` that `leaflet` set, which is why it loads after it. */
+const MARKER_CLUSTER_MODULE_ID = 'leaflet.markercluster';
 const EMPTY_VIEWPORT_STATE: RescueMapViewportStoreSnapshot = {};
 
 interface MarkerHandle {

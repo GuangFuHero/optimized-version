@@ -38,7 +38,7 @@ export interface StationFormFieldsProps {
 }
 
 /** The prototype's filled input: 46px, neutral subtle fill, a hairline that thickens on focus. */
-const filledInputSx = {
+export const filledInputSx = {
   '& .MuiInputBase-root': {
     // What autofill is painted over with (the theme's `MuiInputBase`).
     '--wg-field-bg': color.bg.neutral.subtle,
@@ -328,7 +328,7 @@ function AddressFields({
 }
 
 /** A label above its control, the prototype's `L`; `hint` sits under the control. */
-function Labeled({
+export function Labeled({
   label,
   required = false,
   hint,
@@ -369,7 +369,7 @@ function Labeled({
   );
 }
 
-function Columns({
+export function Columns({
   count = 2,
   gap = '14px',
   children,

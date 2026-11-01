@@ -155,6 +155,8 @@ export interface RescueMapPinAppearance {
   dimmed?: boolean;
   /** Outlined, enlarged and lifted above the other pins. */
   selected?: boolean;
+  /** A teardrop unless set; square marks a 開啟空間 space on the admin ticket map. */
+  shape?: 'drop' | 'square';
 }
 
 /** Opt-in hover tooltip for a marker. Plain text; it is escaped. */
@@ -248,8 +250,21 @@ export interface RescueMapLocationCell {
   members: readonly RescueMapMarkerItem[];
 }
 
-/** What the detail drawer can show: a ticket, a station, or a guest's location cell. */
-export type RescueMapDetailItem = RescueMapMarkerItem | RescueMapLocationCell;
+/**
+ * A ticket a link names that is not there: deleted, or never was (ADR-444). It holds the link's uuid
+ * and the backend's word on it, and nothing of the ticket, so its drawer cannot show any.
+ */
+export interface RescueMapGoneTicket {
+  id: string;
+  detailType: 'gone-ticket';
+  availability: 'deleted' | 'not_found';
+}
+
+/** What the detail drawer can show: a ticket, a station, a guest's location cell, or a gone ticket. */
+export type RescueMapDetailItem =
+  | RescueMapMarkerItem
+  | RescueMapLocationCell
+  | RescueMapGoneTicket;
 
 export interface RescueMapControllerValue {
   baseLayer: RescueMapBaseLayer;

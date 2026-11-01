@@ -9,7 +9,11 @@ import {
 import type { components, paths } from '../rest/openapi';
 import { adminRestClient } from './client';
 import { responseData } from '../rest/openapi-client';
-import type { AdminQueryOptions } from './graphql-fetchers';
+import {
+  invalidateTicketWrite,
+  type AdminQueryOptions,
+} from './graphql-fetchers';
+import { ticketKeys } from './ticket-query-keys';
 
 export const currentUserQuery = () =>
   queryOptions({
@@ -61,6 +65,34 @@ export const teamsQuery = () =>
 
 export function useTeams(options: AdminQueryOptions = {}) {
   return useQuery({ ...teamsQuery(), enabled: options.enabled });
+}
+
+export type TeamMember = components['schemas']['TeamMemberItem'];
+
+/**
+ * One team's members and their role in it (`team.member.view` covering the team); another team
+ * answers 404. The first 500, the backend's cap for one page.
+ */
+export const teamMembersQuery = (teamUuid: string) =>
+  queryOptions({
+    queryKey: ['admin', 'teams', 'TeamMembers', { teamUuid }],
+    queryFn: ({ signal }): Promise<TeamMember[]> =>
+      adminRestClient
+        .GET('/api/v1/admin/teams/{team_uuid}/members', {
+          params: { path: { team_uuid: teamUuid }, query: { limit: 500 } },
+          signal,
+        })
+        .then(responseData),
+  });
+
+export function useTeamMembers(
+  teamUuid: string | null | undefined,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...teamMembersQuery(teamUuid ?? ''),
+    enabled: Boolean(teamUuid) && options.enabled !== false,
+  });
 }
 
 export type ProjectSettings = components['schemas']['ProjectSettingsResponse'];
@@ -202,7 +234,7 @@ export interface TicketHistoryParams {
 
 export const ticketHistoryQuery = (params: TicketHistoryParams) =>
   queryOptions({
-    queryKey: ['admin', 'tickets', 'TicketHistory', params],
+    queryKey: [...ticketKeys.histories(), params],
     queryFn: ({ signal }) =>
       adminRestClient
         .GET('/api/v1/history/tickets/{uuid}', { params, signal })
@@ -310,32 +342,46 @@ export function useStationAnalyticsValue(
   });
 }
 
-export type StationAnalyticsDataQuery = NonNullable<
-  paths['/api/v1/analytics/stations/data']['get']['parameters']['query']
+/**
+ * The chart endpoints return the Plotly figure itself (`data`/`layout`/`config`), which the browser
+ * draws with `Plotly.react`. The backend's `html` form is unusable here: its inline `<script>` never
+ * runs once React has inserted the markup.
+ */
+export type AnalyticsChartFigure = components['schemas']['ChartResponse'];
+
+export type TicketAnalyticsChartQuery = NonNullable<
+  paths['/api/v1/analytics/tickets/chart']['get']['parameters']['query']
 >;
-export interface StationAnalyticsDataParams {
-  query: StationAnalyticsDataQuery;
+export interface TicketAnalyticsChartParams {
+  query: TicketAnalyticsChartQuery;
 }
 
-export const stationAnalyticsDataQuery = (params: StationAnalyticsDataParams) =>
+export const ticketAnalyticsChartQuery = (params: TicketAnalyticsChartParams) =>
   queryOptions({
-    // Under ['admin', 'stations'] so every station mutation refreshes the counts.
-    queryKey: ['admin', 'stations', 'StationAnalyticsData', params],
+    queryKey: ['admin', 'analytics', 'TicketAnalyticsChart', params],
     queryFn: ({ signal }) =>
       adminRestClient
-        .GET('/api/v1/analytics/stations/data', { params, signal })
+        .GET('/api/v1/analytics/tickets/chart', { params, signal })
         .then(responseData),
   });
 
-export function useStationAnalyticsData(
-  params: StationAnalyticsDataParams,
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({
-    ...stationAnalyticsDataQuery(params),
-    enabled: options.enabled,
-  });
+export type StationAnalyticsChartQuery = NonNullable<
+  paths['/api/v1/analytics/stations/chart']['get']['parameters']['query']
+>;
+export interface StationAnalyticsChartParams {
+  query: StationAnalyticsChartQuery;
 }
+
+export const stationAnalyticsChartQuery = (
+  params: StationAnalyticsChartParams,
+) =>
+  queryOptions({
+    queryKey: ['admin', 'analytics', 'StationAnalyticsChart', params],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/analytics/stations/chart', { params, signal })
+        .then(responseData),
+  });
 
 export interface UpdateCurrentUserInput {
   body: paths['/api/v1/users/me']['patch']['requestBody']['content']['application/json'];
@@ -663,6 +709,23 @@ export function useExportStations() {
   });
 }
 
+/**
+ * Rows each need type's export would hold (`counts`, keyed by type; a type with none is absent), and
+ * `max_rows`, past which that type's export is refused.
+ */
+export const ticketExportCountsQuery = () =>
+  queryOptions({
+    queryKey: ticketKeys.exportCounts(),
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/bulk/tickets/export/counts', { signal })
+        .then(responseData),
+  });
+
+export function useTicketExportCounts(options: { enabled?: boolean } = {}) {
+  return useQuery({ ...ticketExportCountsQuery(), enabled: options.enabled });
+}
+
 export interface ExportTicketsInput {
   params: paths['/api/v1/bulk/tickets/export']['get']['parameters'];
 }
@@ -769,7 +832,6 @@ export function useCommitTicketImport() {
           },
         })
         .then(responseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'tickets'] }),
+    onSuccess: () => invalidateTicketWrite(queryClient),
   });
 }

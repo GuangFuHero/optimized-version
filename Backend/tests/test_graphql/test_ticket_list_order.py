@@ -67,6 +67,7 @@ async def _file(lng: float, lat: float, author_uuid: str, tickets: list[dict]) -
                     quantity=2,
                     status=status,
                     created_by=author_uuid,
+                    completed_at=datetime.now(UTC) if status == "fulfilled" else None,
                 )
                 db.add(need)
                 await db.flush()

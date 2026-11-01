@@ -1,7 +1,7 @@
 """Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
 from geoalchemy2 import Geography
-from sqlalchemy import and_, case, cast, delete, exists, false, func, not_, or_, select
+from sqlalchemy import ARRAY, Row, String, and_, case, cast, delete, exists, false, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
@@ -90,6 +90,7 @@ class TicketRepository(GenericRepository[Tickets]):
         statuses: list[str] | None = None,
         priority: str | None = None,
         q: str | None = None,
+        disaster_type: str | None = None,
         extra_filters=(),
         detail_filters,
         coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
@@ -118,9 +119,7 @@ class TicketRepository(GenericRepository[Tickets]):
         list keeps none, so unticking every status shows nothing. With `status` too, both apply.
         """
         conditions = [self.model.delete_at.is_(None), *extra_filters]
-        # NULL-safe: `created_by = :me` is NULL on a row with no author, and NOT NULL is
-        # still NULL — such a row would match neither branch below and silently vanish.
-        seen = func.coalesce(and_(*detail_filters), false()) if detail_filters else None
+        seen = self._seen(detail_filters)
         if coarse_only or location_cell is not None:
             conditions.append(false() if seen is None else not_(seen))
         if location_cell is not None:
@@ -156,12 +155,9 @@ class TicketRepository(GenericRepository[Tickets]):
                 conditions.append(func.ST_Intersects(self.model.geometry, func.ST_Expand(envelope, dx, dy)))
                 coarse = func.ST_Intersects(h3_centroid(self.model.geometry, coarse_resolution), envelope)
                 conditions.append(or_(and_(seen, exact), and_(not_(seen), coarse)))
-        if status:
-            conditions.append(self.model.status == status)
-        if statuses is not None:
-            conditions.append(self.model.status.in_(statuses) if statuses else false())
-        if priority:
-            conditions.append(self.model.priority == priority)
+        conditions += self._column_conditions(
+            status=status, statuses=statuses, priority=priority, disaster_type=disaster_type
+        )
         term = normalize_query(q)
         if term is not None:
             if seen is None:
@@ -175,6 +171,35 @@ class TicketRepository(GenericRepository[Tickets]):
                         and_(seen, self._search_condition(term)),
                     )
                 )
+        return conditions
+
+    @staticmethod
+    def _seen(detail_filters):
+        """Whether the caller sees a row's exact point, as an expression; None when every row is seen.
+
+        NULL-safe: `created_by = :me` is NULL on a row with no author, and NOT NULL is still NULL —
+        such a row would match neither branch of a seen/not-seen pair and silently vanish.
+        """
+        return func.coalesce(and_(*detail_filters), false()) if detail_filters else None
+
+    def _column_conditions(
+        self,
+        *,
+        status: str | None,
+        statuses: list[str] | None,
+        priority: str | None,
+        disaster_type: str | None,
+    ) -> list:
+        """The plain column filters of _active_conditions: what every caller sees of every row."""
+        conditions = []
+        if status:
+            conditions.append(self.model.status == status)
+        if statuses is not None:
+            conditions.append(self.model.status.in_(statuses) if statuses else false())
+        if priority:
+            conditions.append(self.model.priority == priority)
+        if disaster_type:
+            conditions.append(self.model.disaster_types.op("&&")(cast([disaster_type], ARRAY(String))))
         return conditions
 
     def _order_by(self, term: str | None, *, public_only: bool = False) -> list:
@@ -251,6 +276,19 @@ class TicketRepository(GenericRepository[Tickets]):
             whens.append((open_ticket, 1))
         return case(*whens, else_=2)
 
+    async def deletion(self, db: AsyncSession, uuid) -> Row | None:
+        """Whether the ticket `uuid` was deleted, and the ticket a merge replaced it with (ADR-444).
+
+        A row of `deleted` and `replaced_by_uuid`; None when no ticket has that uuid. Reads those two
+        columns and nothing else, so a caller asking whether a ticket is gone never holds what was in it.
+        """
+        result = await db.execute(
+            select(self.model.delete_at.is_not(None).label("deleted"), self.model.replaced_by_uuid)
+            .select_from(self.model)
+            .where(self.model.uuid == uuid)
+        )
+        return result.one_or_none()
+
     async def list_active(
         self,
         db: AsyncSession,
@@ -260,6 +298,7 @@ class TicketRepository(GenericRepository[Tickets]):
         statuses: list[str] | None = None,
         priority: str | None = None,
         q: str | None = None,
+        disaster_type: str | None = None,
         skip: int = 0,
         limit: int = 50,
         extra_filters=(),
@@ -287,6 +326,7 @@ class TicketRepository(GenericRepository[Tickets]):
             statuses=statuses,
             priority=priority,
             q=q,
+            disaster_type=disaster_type,
             extra_filters=extra_filters,
             detail_filters=detail_filters,
             coarse_resolution=coarse_resolution,
@@ -316,6 +356,7 @@ class TicketRepository(GenericRepository[Tickets]):
         statuses: list[str] | None = None,
         priority: str | None = None,
         q: str | None = None,
+        disaster_type: str | None = None,
         extra_filters=(),
         detail_filters,
         coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
@@ -328,6 +369,7 @@ class TicketRepository(GenericRepository[Tickets]):
             statuses=statuses,
             priority=priority,
             q=q,
+            disaster_type=disaster_type,
             extra_filters=extra_filters,
             detail_filters=detail_filters,
             coarse_resolution=coarse_resolution,
@@ -377,6 +419,103 @@ class TicketRepository(GenericRepository[Tickets]):
             .order_by(cell)
         )
         return [(cell, count, urgent_count) for cell, count, urgent_count in rows]
+
+    async def extent_active(
+        self,
+        db: AsyncSession,
+        *,
+        status: str | None = None,
+        statuses: list[str] | None = None,
+        priority: str | None = None,
+        q: str | None = None,
+        disaster_type: str | None = None,
+        extra_filters=(),
+        detail_filters,
+        coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
+        location_cell: str | None = None,
+    ) -> tuple[int, float | None, float | None, float | None, float | None]:
+        """Count the active tickets count_active() counts, and the box around the points shown of them.
+
+        Returns `(count, min_lat, max_lat, min_lng, max_lng)`, the four None when nothing matches. One
+        statement over `_active_conditions`, so the count is count_active()'s for the same arguments.
+        A row the caller is shown as a cell gives its cell centre at `coarse_resolution`, as
+        list_active() shows it — never its point, so the box says no more than the rows do.
+        """
+        conditions = self._active_conditions(
+            status=status,
+            statuses=statuses,
+            priority=priority,
+            q=q,
+            disaster_type=disaster_type,
+            extra_filters=extra_filters,
+            detail_filters=detail_filters,
+            coarse_resolution=coarse_resolution,
+            location_cell=location_cell,
+        )
+        seen = self._seen(detail_filters)
+        coarse = h3_centroid(self.model.geometry, coarse_resolution)
+        shown = self.model.geometry if seen is None else case((seen, self.model.geometry), else_=coarse)
+        points = select(shown.label("point")).where(*conditions).subquery()
+        lat, lng = func.ST_Y(points.c.point), func.ST_X(points.c.point)
+        row = (
+            await db.execute(
+                select(func.count(), func.min(lat), func.max(lat), func.min(lng), func.max(lng)).select_from(
+                    points
+                )
+            )
+        ).one()
+        return int(row[0]), row[1], row[2], row[3], row[4]
+
+    async def stats(self, db: AsyncSession, *, extra_filters=()) -> dict[str, int]:
+        """Counts by status and the volunteer gap over the active tickets `extra_filters` leaves.
+
+        Two statements, no per-ticket work. The gap counts a need the way the board's cards do:
+        an open need (OPEN_NEED_STATUSES) with a quantity, on a ticket not completed or
+        cancelled, short of `quantity` by the people linked to it. Linked people are every
+        task_assignments row, as the `assignedCount` loader reads them.
+        """
+        base = [self.model.delete_at.is_(None), *extra_filters]
+        by_status = dict(
+            (
+                await db.execute(
+                    select(self.model.status, func.count()).where(*base).group_by(self.model.status)
+                )
+            ).all()
+        )
+        assigned = (
+            select(TaskAssignment.task_uuid, func.count().label("n"))
+            .group_by(TaskAssignment.task_uuid)
+            .subquery()
+        )
+        gap = TicketTask.quantity - func.coalesce(assigned.c.n, 0)
+        row = (
+            await db.execute(
+                select(
+                    func.coalesce(func.sum(gap), 0),
+                    func.count(),
+                )
+                .select_from(TicketTask)
+                .join(self.model, self.model.uuid == TicketTask.ticket_uuid)
+                .outerjoin(assigned, assigned.c.task_uuid == TicketTask.uuid)
+                .where(
+                    *base,
+                    self.model.status.notin_(("completed", "cancelled")),
+                    TicketTask.delete_at.is_(None),
+                    TicketTask.status.in_(OPEN_NEED_STATUSES),
+                    TicketTask.quantity.is_not(None),
+                    gap > 0,
+                )
+            )
+        ).one()
+        return {
+            "total": sum(by_status.values()),
+            "pending": by_status.get("pending", 0),
+            "in_progress": by_status.get("in_progress", 0),
+            "completed": by_status.get("completed", 0),
+            "cancelled": by_status.get("cancelled", 0),
+            "gap_people": int(row[0]),
+            "gap_needs": int(row[1]),
+        }
 
 
 class TicketTaskRepository(GenericRepository[TicketTask]):

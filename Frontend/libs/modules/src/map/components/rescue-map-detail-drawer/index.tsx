@@ -27,6 +27,7 @@ import { formatTicketTypeLabel } from '../../../ticket/status';
 import type { TicketDetailDrawerProps } from '../../../ticket/ticket-detail';
 import { describeLocationCellSpan } from '../../location-cells';
 import type { RescueMapDetailItem, RescueMapMarkerItem } from '../../types';
+import { GoneTicketDetail } from '../gone-ticket-detail';
 import { LocationCellDetail } from '../location-cell-detail';
 
 export type RescueMapTicketDetailOverrides = Partial<
@@ -62,6 +63,8 @@ interface RescueMapDetailDrawerProps {
   ticketDetailOverrides?: RescueMapTicketDetailOverrides;
   stationSecondaryAction?: StationDetailActionProps;
   stationLayout?: RescueMapStationLayout;
+  /** What a gone ticket's button says, after the page it opened on. Default: 回到地圖. */
+  goneTicketReturnLabel?: string;
 }
 
 const DetailsIcon = Icons.details;
@@ -236,6 +239,7 @@ export function RescueMapDetailDrawer({
   ticketDetailOverrides,
   stationSecondaryAction,
   stationLayout = 'admin',
+  goneTicketReturnLabel = '回到地圖',
 }: RescueMapDetailDrawerProps) {
   const [activeStationTab, setActiveStationTab] =
     useState<StationDetailTabId>('info');
@@ -263,6 +267,16 @@ export function RescueMapDetailDrawer({
         isAuthenticated={isAuthenticated}
         onClose={onClose}
         onSelectMember={(markerId) => onSelectMarker?.(markerId)}
+      />
+    );
+  }
+
+  if (marker.detailType === 'gone-ticket') {
+    return (
+      <GoneTicketDetail
+        ticket={marker}
+        returnLabel={goneTicketReturnLabel}
+        onClose={onClose}
       />
     );
   }

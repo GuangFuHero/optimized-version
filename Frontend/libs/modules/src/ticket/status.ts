@@ -169,6 +169,19 @@ export interface TicketPriorityLook {
   variant: BadgeVariant;
 }
 
+const TICKET_PRIORITY_LABELS: Record<string, string> = {
+  critical: '最高優先',
+  high: '高優先',
+  medium: '中優先',
+  low: '低優先',
+};
+
+/** A priority as words, for all four values; null for anything else. The badge below reads the same words. */
+export function getTicketPriorityLabel(value?: string | null): string | null {
+  const key = normalizeStatusKey(value);
+  return (key && TICKET_PRIORITY_LABELS[key]) || null;
+}
+
 /**
  * The badge a ticket's priority earns, as the 2026-09-21 prototype draws it (`site-list.jsx`,
  * `site-detail.jsx`): `tickets.priority` has four values, and only the top two get one —
@@ -182,9 +195,17 @@ export function getTicketPriorityBadge(
 ): TicketPriorityLook | null {
   switch (normalizeStatusKey(value)) {
     case 'critical':
-      return { label: '最高優先', tone: 'danger', variant: 'solid' };
+      return {
+        label: TICKET_PRIORITY_LABELS.critical,
+        tone: 'danger',
+        variant: 'solid',
+      };
     case 'high':
-      return { label: '高優先', tone: 'warning', variant: high };
+      return {
+        label: TICKET_PRIORITY_LABELS.high,
+        tone: 'warning',
+        variant: high,
+      };
     default:
       return null;
   }

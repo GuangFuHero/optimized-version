@@ -82,6 +82,8 @@ async def _need(db, *, quantity: int | None, status: str = "pending") -> TicketT
         quantity=quantity,
         status=status,
         created_by=str(requester.uuid),
+        completed_at=datetime.now(UTC) if status == "fulfilled" else None,
+        canceled_at=datetime.now(UTC) if status == "canceled" else None,
     )
     db.add(task)
     await db.flush()
@@ -529,6 +531,8 @@ async def _second_need(db, first: TicketTask, name: str, status: str = "pending"
         quantity=5,
         status=status,
         created_by=first.created_by,
+        completed_at=datetime.now(UTC) if status == "fulfilled" else None,
+        canceled_at=datetime.now(UTC) if status == "canceled" else None,
     )
     db.add(task)
     await db.flush()
@@ -723,6 +727,7 @@ async def test_a_place_on_a_deleted_need_can_still_be_given_back(db):
     assignment_uuid = str((await _claim(db, volunteer, task_uuid)).uuid)
     deleted = await db.get(TicketTask, task_uuid)
     deleted.status, deleted.delete_at = "canceled", datetime.now(UTC)
+    deleted.canceled_at = deleted.delete_at
     await db.flush()
     await refresh_actor(db, volunteer)
 
@@ -774,6 +779,7 @@ async def test_someone_removed_from_a_deleted_need_is_not_told_twice(db):
     assignment_uuid = str((await _claim(db, volunteer, task_uuid)).uuid)
     deleted = await db.get(TicketTask, task_uuid)
     deleted.status, deleted.delete_at = "canceled", datetime.now(UTC)
+    deleted.canceled_at = deleted.delete_at
     await db.flush()
     await refresh_actor(db, coordinator)
 

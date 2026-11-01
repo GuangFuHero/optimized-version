@@ -1,10 +1,5 @@
-import type { components } from '@rescue-frontend/data-access/openapi';
-
 import type { StationRow } from './station-row';
 import { taiwanDateParts } from '../../../../time';
-
-type BulkPreview = components['schemas']['BulkPreviewResponse'];
-type ErrorReport = components['schemas']['ErrorReportResponse'];
 
 type StationImportField =
   | 'name'
@@ -44,6 +39,17 @@ export const STATION_IMPORT_FIELDS: readonly {
 ];
 
 /**
+ * Whether 匯入 is offered: it is one of 新增站點's ways in, in its dropdown and beside it on the
+ * empty list, so whoever may not add a station never sees it.
+ */
+export function offersImport(caps: {
+  canAdd: boolean;
+  canImport: boolean;
+}): boolean {
+  return caps.canAdd && caps.canImport;
+}
+
+/**
  * A starter file for a station import. The headers are the system field names, so the preview maps
  * them without help.
  */
@@ -65,30 +71,6 @@ function csvCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-/**
- * What a preview adds up to. Suspected rows count neither as new nor as updates (ADR-398): only those
- * the importer files anyway (`filed`) will be written, so only they add to what the commit imports.
- */
-export function importSummary(
-  preview: Pick<
-    BulkPreview,
-    'to_create' | 'to_update' | 'errors' | 'suspected'
-  >,
-  filed: number,
-) {
-  const failedLines = new Set(preview.errors.map((e) => e.line)).size;
-  const importable = preview.to_create + preview.to_update + filed;
-  return {
-    create: preview.to_create,
-    update: preview.to_update,
-    suspected: preview.suspected,
-    filed,
-    failedLines,
-    importable,
-    canCommit: importable > 0,
-  };
-}
-
 /** A row error's column as the mapping names it: a field label, or the file's own header. */
 export function importFieldLabel(column: string): string {
   if (!column) return '整列';
@@ -106,22 +88,6 @@ export function mergeMapping(
     else delete merged[header];
   }
   return JSON.stringify(merged);
-}
-
-export function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-export function downloadBase64(report: ErrorReport) {
-  const bytes = Uint8Array.from(atob(report.content_base64), (c) =>
-    c.charCodeAt(0),
-  );
-  downloadBlob(new Blob([bytes], { type: report.media_type }), report.filename);
 }
 
 /**

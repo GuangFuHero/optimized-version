@@ -1,6 +1,7 @@
 """Taiwanese address parsing: one address line split into its 縣市 … 號 parts.
 
-Pure functions that never raise on content: whatever is not recognized stays in `full_address`.
+Pure functions that never raise on content: whatever is not recognized stays in `remainder`, so that
+`join_address` of the parts gives back the whole line.
 """
 
 import re
@@ -48,13 +49,13 @@ _NEIGHBORHOOD_RE = re.compile(r"^((?:\d+|[一二三四五六七八九十]+)鄰)"
 # A hyphen inside a door number reads as 之, the way TGOS writes it: 1-1號 → 1之1號, 1-2巷 → 1之2巷.
 _DOOR_HYPHEN_RE = re.compile(r"(?<=\d)-(?=\d+[巷弄號])|(?<=號)-(?=\d)")
 
-# The door: 段 巷 弄 (衖 衕, kept only in the line) 號, each optional. 巷 and 弄 need leading digits, so a
+# The door: 段 巷 弄 (衖 衕, kept in `alley`) 號, each optional. 巷 and 弄 need leading digits, so a
 # road named like 松羅南巷 stays the road.
 _DOOR_RE = re.compile(
     r"(?P<section>(?:\d+|[一二三四五六七八九十]+)段)?"
     r"(?P<lane>\d+(?:之\d+)?巷)?"
     r"(?P<alley>\d+(?:之\d+)?弄)?"
-    r"(?:\d+衖)?(?:\d+衕)?"
+    r"(?P<alley_xie>\d+衖)?(?P<alley_tong>\d+衕)?"
     r"(?P<no>\d+(?:[-之]\d+)?號(?:[-之]\d+)?)?"
 )
 # What may follow the door: 棟/座, 樓/層 and 室, each optional and optionally bracketed.
@@ -67,6 +68,7 @@ _UNIT_RE = re.compile(
 )
 _TAIL_RE = re.compile(_DOOR_RE.pattern + "(?P<unit>" + _UNIT_RE.pattern + ")")
 _DOOR_PARTS = ("section", "lane", "alley", "no")
+_DOOR_PARTS_ORDERED = ("county", "town", "village", "neighborhood", "road", "section", "lane", "alley", "no")
 _UNIT_PARTS = ("building_section", "floor", "room")
 
 
@@ -75,6 +77,7 @@ class AddressParts:
     """One parsed address. Every numbered part keeps its unit: 3鄰, 一段, 469巷, 1弄, 19號."""
 
     full_address: str | None = None
+    remainder: str | None = None
     county: str | None = None
     town: str | None = None
     village: str | None = None
@@ -89,8 +92,16 @@ class AddressParts:
     room: str | None = None
 
     def as_dict(self) -> dict[str, str | None]:
-        """The parts as a dict whose keys are `secondary_locations` columns."""
-        return asdict(self)
+        """The parts the API shows, as a dict whose keys are `secondary_locations` columns."""
+        return {k: v for k, v in asdict(self).items() if k != "remainder"}
+
+
+def join_address(**parts: str | None) -> str | None:
+    """The address line the database builds from the parts and the remainder; None when all are blank.
+
+    Same order as the `secondary_locations.full_address` generated column.
+    """
+    return "".join(parts.get(name) or "" for name in (*_DOOR_PARTS_ORDERED, "remainder")) or None
 
 
 def fold(value: str | None) -> str | None:
@@ -105,6 +116,12 @@ def _take(pattern: re.Pattern, text: str) -> tuple[str | None, str]:
     """Match `pattern` at the start of `text`; return (match, rest) or (None, text)."""
     m = pattern.match(text)
     return (m.group(1), text[m.end() :]) if m else (None, text)
+
+
+def _with_sub_alleys(parts: dict[str, str | None], m: re.Match) -> dict[str, str | None]:
+    """`parts` with a 衖 and 衕 written after the 弄 kept inside `alley`, as in 3弄2衖."""
+    alley = "".join(m.group(k) or "" for k in ("alley", "alley_xie", "alley_tong")) or None
+    return parts | {"alley": alley}
 
 
 def _split_tail(rest: str) -> tuple[int, dict[str, str | None], int | None]:
@@ -122,24 +139,25 @@ def _split_tail(rest: str) -> tuple[int, dict[str, str | None], int | None]:
             }
             parts = {k: m.group(k) for k in _DOOR_PARTS} | units
             if any(parts.values()):
-                return i, parts, m.start("unit") if any(units.values()) else None
+                return i, _with_sub_alleys(parts, m), m.start("unit") if any(units.values()) else None
         door = _DOOR_RE.match(rest, i)
         if door.group("no"):
-            return i, {k: door.group(k) for k in _DOOR_PARTS} | dict.fromkeys(_UNIT_PARTS), None
+            parts = {k: door.group(k) for k in _DOOR_PARTS} | dict.fromkeys(_UNIT_PARTS)
+            return i, _with_sub_alleys(parts, door), None
     return len(rest), dict.fromkeys((*_DOOR_PARTS, *_UNIT_PARTS)), None
 
 
 def parse_tw_address(text: str | None) -> AddressParts:
-    """Split an address line into its parts; whatever is not recognized stays in `full_address`.
+    """Split an address line into its parts; whatever is not recognized comes back as `remainder`.
 
-    A 棟/樓/室 tail comes back as `building_section`/`floor`/`room` and is cut from `full_address`, so
-    the line holds the door alone, as TGOS writes it.
+    A 棟/樓/室 tail comes back as `building_section`/`floor`/`room` and is cut from the line, so
+    `full_address` holds the door alone, as TGOS writes it. It is the parts and `remainder` joined.
     """
     line = fold(text)
     if not line:
         return AddressParts()
     if len(line) > MAX_ADDRESS_LENGTH:
-        return AddressParts(full_address=line)
+        return AddressParts(full_address=line, remainder=line)
     line = _DOOR_HYPHEN_RE.sub("之", line)
     postcode = _POSTCODE_RE.match(line)
     # Only a number in front of a county is a postcode; on its own it is the door, as in 100號.
@@ -168,7 +186,9 @@ def parse_tw_address(text: str | None) -> AddressParts:
     }
     if not any(parts.values()):
         # Nothing locating was found, so none of it is a road either: keep the text as typed.
-        return AddressParts(full_address=line)
+        return AddressParts(full_address=line, remainder=line)
     if county:
         line = parts["county"] + line[len(county) :]
-    return AddressParts(full_address=line or None, road=rest[:offset] or None, **parts)
+    road = rest[:offset] or None
+    built = join_address(**parts, road=road) or ""
+    return AddressParts(full_address=line or None, remainder=line[len(built) :] or None, road=road, **parts)
