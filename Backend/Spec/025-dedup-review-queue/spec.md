@@ -119,6 +119,11 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 - 寫事件 `verdict_revoked`（ADR-344）。
 - 回傳更新後的卡。
 
+### 2.5 `GET /admin/duplicate-hint-rates` — `ai_duplicate.view`（ADR-455）
+
+快層的提示率和兩個誤報率估計，task 一列、站點一列，只讀。`since`／`until` 要帶時區，預設最近 30 天；
+`since` 不在 `until` 之前或沒帶時區 → 422。算法和偏差見 ADR-455。
+
 ## 3. 待審提醒（ADR-345）
 
 - `dedup_submission.submit_new_ticket`／`submit_new_task`／`submit_new_station` commit 之後，

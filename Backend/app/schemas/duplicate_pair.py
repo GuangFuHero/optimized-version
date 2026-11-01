@@ -266,3 +266,30 @@ class ResolveRequest(_Strict):
     photos: list[ResolvePhoto] | None = None
     disaster_details: dict[str, list[str]] | None = None
     note: str | None = None
+
+
+class DuplicateHintRatesResponse(BaseModel):
+    """提示率 and the two 誤報率 estimates for one kind (ADR-455). A rate is null when nothing was counted."""
+
+    entity_kind: Literal["ticket_task", "station"]
+    submissions: int = Field(description="送出次數：跳提示的次數＋沒跳提示就建立的")
+    hinted: int = Field(description="跳提示的次數；同一個人、同一天、同一筆舊資料只算一次")
+    hint_rate: float | None = Field(description="提示率 = hinted ÷ submissions")
+    overridden: int = Field(description="看到提示還是送出的次數")
+    reviewed: int = Field(description="其中配對卡已經審過的")
+    judged_not_duplicate: int = Field(description="其中審核判定不是重複的")
+    false_alarm_rate_without_auditors: float | None = Field(
+        description="誤報率，不用審核結果：看到提示還是送出的都算誤報"
+    )
+    false_alarm_rate_with_auditors: float | None = Field(
+        description="誤報率，用審核結果：已審的卡判定不是重複的比例，套到全部看到提示還是送出的"
+    )
+    review_coverage: float | None = Field(description="看到提示還是送出的裡，配對卡已審的比例")
+
+
+class DuplicateHintRatesPage(BaseModel):
+    """The window the metrics cover, and one entry per kind."""
+
+    since: datetime
+    until: datetime
+    items: list[DuplicateHintRatesResponse]
