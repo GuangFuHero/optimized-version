@@ -1,14 +1,12 @@
 'use client';
 
-import { Box, ButtonBase, Typography } from '@mui/material';
-import { Button, designTokens, SearchField } from '@rescue-frontend/ui';
+import { Box } from '@mui/material';
+import { Button, SearchField } from '@rescue-frontend/ui';
 import { ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
 
 import { followUrl, initialSearchBox } from './model/search-box';
-
-const { color, typography } = designTokens;
 
 interface ToolbarSearchProps {
   /** The URL's `?q=`. */
@@ -21,7 +19,7 @@ interface ToolbarSearchProps {
   onClear: () => void;
   placeholder: string;
   ariaLabel: string;
-  /** The note under the box for what is typed, if any (a query too short to send, say). */
+  /** The note in the box for what is typed, if any (a query too short to send, say). */
   hint: (draft: string) => string | undefined;
 }
 
@@ -101,15 +99,19 @@ export function ToolbarSearch({
         篩選
       </Button>
 
-      {/* The first to shrink when the toolbar runs short, before 新增 is pushed to a second line (INP-103). */}
+      {/* 180–320px (INP-103): the box gives up its extra width first, but once the row is short of
+          180px for it, the row wraps and the last items (新增) go to a second line. Narrow widths wait
+          on the designer. */}
       <Box sx={{ flex: '1 1 180px', minWidth: 180, maxWidth: 320 }}>
+        {/* The hint sits inside the box, so typing never makes the row taller. */}
         <SearchField
           fullWidth
           value={followed.draft}
           onChange={(event) => changeDraft(event.target.value)}
           placeholder={placeholder}
+          aria-label={ariaLabel}
+          hint={hintText}
           inputProps={{
-            'aria-label': ariaLabel,
             onCompositionStart: () => {
               composing.current = true;
             },
@@ -119,31 +121,12 @@ export function ToolbarSearch({
             },
           }}
         />
-        {hintText ? (
-          <Typography
-            sx={{
-              ...typography.data[300],
-              color: color.fg.neutral.muted,
-              mt: '4px',
-              px: '16px',
-            }}
-          >
-            {hintText}
-          </Typography>
-        ) : null}
       </Box>
 
       {showClear ? (
-        <ButtonBase
-          onClick={clear}
-          sx={{
-            ...typography.label[300],
-            color: color.fg.neutral.subtle,
-            textDecoration: 'underline',
-          }}
-        >
+        <Button variant="ghost" size="sm" onClick={clear}>
           清除
-        </ButtonBase>
+        </Button>
       ) : null}
     </>
   );

@@ -403,9 +403,7 @@ function SelectedStationCard({
           gap: '6px',
         }}
       >
-        <Tag icon={<TypeDot color={getStationTypePinColor(row.type)} />}>
-          {row.typeLabel}
-        </Tag>
+        <Tag dot={getStationTypePinColor(row.type)}>{row.typeLabel}</Tag>
         <StatusBadge status={row.operationalStatus} />
       </Box>
       <Typography
@@ -438,20 +436,6 @@ function SelectedStationCard({
         開啟站點細節
       </Button>
     </Box>
-  );
-}
-
-function TypeDot({ color: fill }: { color: string }) {
-  return (
-    <Box
-      component="span"
-      sx={{
-        width: 8,
-        height: 8,
-        borderRadius: `${radius.full}px`,
-        bgcolor: fill,
-      }}
-    />
   );
 }
 
