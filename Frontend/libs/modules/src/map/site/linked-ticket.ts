@@ -40,6 +40,19 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const TRAILING_PUNCTUATION_OR_SPACE = /[\s\p{P}]+$/u;
 
+/**
+ * The ticket uuid a link's `?id=` names, as the backend writes one: punctuation or spaces after it
+ * taken off and in lower case. Null for a link cut short, which names no ticket. The page's metadata
+ * reads a link by the same rule (point-share's target.ts), so the tab names what the drawer opens.
+ */
+export function linkedTicketUuid(selectedId: string): string | null {
+  const uuid = selectedId
+    .replace(TRAILING_PUNCTUATION_OR_SPACE, '')
+    .toLowerCase();
+
+  return UUID_PATTERN.test(uuid) ? uuid : null;
+}
+
 export function readLinkedSelection({
   selectedId,
   dataType,
@@ -53,11 +66,9 @@ export function readLinkedSelection({
     return { kind: 'let-go' };
   }
 
-  const uuid = selectedId
-    .replace(TRAILING_PUNCTUATION_OR_SPACE, '')
-    .toLowerCase();
+  const uuid = linkedTicketUuid(selectedId);
 
-  if (UUID_PATTERN.test(uuid)) {
+  if (uuid) {
     return uuid === selectedId
       ? { kind: 'look-up' }
       : { kind: 'replace', uuid };

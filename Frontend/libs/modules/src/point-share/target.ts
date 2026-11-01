@@ -1,4 +1,7 @@
+import type { Client } from 'urql';
+
 import {
+  GetLinkedTicketDocument,
   GetStationDocument,
   GetTicketDocument,
   StationFieldsFragmentDoc,
@@ -10,6 +13,10 @@ import {
   type GetTicketQuery,
 } from '@rescue-frontend/data-access';
 
+import {
+  linkedTicketUuid,
+  resolveLinkedTicket,
+} from '../map/site/linked-ticket';
 import { parseSiteRouteState } from '../route/parse';
 import { createSiteHref } from '../route/serialize';
 import type { SiteModule, SiteRouteState } from '../route/types';
@@ -106,6 +113,48 @@ function buildRouteStateFromRoute({
   return { baseLayer, dataType, selectedMarkerId, subDataTypes: [] };
 }
 
+/**
+ * The ticket a link names, read as the drawer reads it (map/site/linked-ticket): one 重複審核 merged
+ * into another is named by that one. The page sets the tab's title itself once the drawer opens, but
+ * the metadata from here streams in after it; naming the list instead, it put the tab back to
+ * 「救災列表」 on a link to a merged ticket.
+ */
+export async function fetchTicketShareMarker(
+  client: Pick<Client, 'query'>,
+  uuid: string,
+): Promise<PointShareMarker | null> {
+  const result = await client
+    .query(GetTicketDocument, { uuid }, SHARE_QUERY_CONTEXT)
+    .toPromise();
+
+  if (result.error) {
+    return null;
+  }
+
+  if (result.data?.ticket) {
+    return toPointShareMarkerFromTicket(result.data.ticket);
+  }
+
+  const linked = resolveLinkedTicket(
+    uuid,
+    await client
+      .query(GetLinkedTicketDocument, { uuid }, SHARE_QUERY_CONTEXT)
+      .toPromise(),
+  );
+
+  if (linked.kind !== 'replace') {
+    return null;
+  }
+
+  const merged = await client
+    .query(GetTicketDocument, { uuid: linked.uuid }, SHARE_QUERY_CONTEXT)
+    .toPromise();
+
+  return merged.error
+    ? null
+    : toPointShareMarkerFromTicket(merged.data?.ticket ?? null);
+}
+
 async function fetchPointShareMarker({
   dataType,
   markerId,
@@ -120,15 +169,9 @@ async function fetchPointShareMarker({
   });
 
   if (dataType === 'ticket') {
-    const result = await client
-      .query(GetTicketDocument, { uuid: markerId }, SHARE_QUERY_CONTEXT)
-      .toPromise();
+    const uuid = linkedTicketUuid(markerId);
 
-    if (result.error) {
-      return null;
-    }
-
-    return toPointShareMarkerFromTicket(result.data?.ticket ?? null);
+    return uuid ? fetchTicketShareMarker(client, uuid) : null;
   }
 
   const result = await client
