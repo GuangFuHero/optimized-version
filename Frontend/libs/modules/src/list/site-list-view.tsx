@@ -14,7 +14,11 @@ import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 
-import { BuildingDrawer, BuildingEntryList } from '../building';
+import {
+  BuildingDrawer,
+  BuildingEntryList,
+  useBuildingMaps,
+} from '../building';
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from '../map/constants';
 import { countDetailOpenings } from '../map/detail-openings';
@@ -38,7 +42,10 @@ import { useAuthSession } from '../session/auth-session';
 import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { resolveTicketSearch } from '../ticket/ticket-search';
-import { usePaginatedRescueMapMarkers } from '../map/site';
+import {
+  requestHelpOnBuildingFloor,
+  usePaginatedRescueMapMarkers,
+} from '../map/site';
 import { SiteListRow } from './site-list-row';
 import {
   countFloor,
@@ -317,6 +324,17 @@ export function SiteListView() {
 
   // 現場分區: the building a ticket's 看各樓層 opened, shut again on opening one of its tickets.
   const [buildingUuid, setBuildingUuid] = useState<string | null>(null);
+  // The open buildings, for 這些大樓可以看各樓層 and for 在這一層請求協助 in their drawer: on 任務 only.
+  const { buildings } = useBuildingMaps({ enabled: dataType === 'ticket' });
+  const openedBuilding = buildings.find(
+    (building) => building.uuid === buildingUuid && building.point,
+  );
+  const requestHelpOnFloor = openedBuilding
+    ? (floor: string) => {
+        setBuildingUuid(null);
+        requestHelpOnBuildingFloor(openedBuilding, floor);
+      }
+    : undefined;
 
   // One of a building's tickets, from its drawer or 上一張／下一張. One the list holds opens as any
   // card does; one it does not — past the loaded pages, or left out by a filter — as a linked one does.
@@ -481,7 +499,11 @@ export function SiteListView() {
               no-match branch below: a street searched that has no ticket may still have a building. */}
           {dataType === 'ticket' ? (
             <Box sx={{ mb: 1.5 }}>
-              <BuildingEntryList q={ticketQuery} onOpen={setBuildingUuid} />
+              <BuildingEntryList
+                buildings={buildings}
+                q={ticketQuery}
+                onOpen={setBuildingUuid}
+              />
             </Box>
           ) : null}
           {/* Not while a page is on its way: every search reloads the list, and it would read
@@ -656,6 +678,7 @@ export function SiteListView() {
           setBuildingUuid(null);
           openBuildingTicket(marker);
         }}
+        onRequestHelpOnFloor={requestHelpOnFloor}
       />
     </Box>
   );

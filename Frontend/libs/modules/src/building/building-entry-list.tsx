@@ -9,7 +9,7 @@ import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { BUILDING_ENTRY_LIMIT, buildingEntries } from './building-entry';
-import { useBuildingMaps } from './use-building-maps';
+import type { BuildingMapEntry } from './use-building-maps';
 
 const { color, radius, spacing } = designTokens;
 
@@ -20,6 +20,8 @@ const ellipsis = {
 } as const;
 
 interface BuildingEntryListProps {
+  /** Every open building (`useBuildingMaps`), read once by the page for this list and its drawer. */
+  buildings: readonly BuildingMapEntry[];
   /** The search the tickets were searched with: none under two characters. */
   q: string | undefined;
   /** Open the building's drawer, the one a ticket's 看各樓層 opens. */
@@ -32,8 +34,11 @@ interface BuildingEntryListProps {
  * 「沒有符合條件的資料」外面，搜尋某條街沒有單時那棟樓仍找得到。超過 3 棟先收起。件數和缺額等後端的
  * 聚合，現在一律寫「看各樓層」，訪客也一樣（SPACE-FE-104）。
  */
-export function BuildingEntryList({ q, onOpen }: BuildingEntryListProps) {
-  const { buildings } = useBuildingMaps();
+export function BuildingEntryList({
+  buildings,
+  q,
+  onOpen,
+}: BuildingEntryListProps) {
   const [expanded, setExpanded] = useState(false);
   const rows = useMemo(() => buildingEntries(buildings, q), [buildings, q]);
 
