@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketNeed } from '../ticket/needs/need-claim';
-import { describeTicketForShare } from './share-description';
+import {
+  describeStationForShare,
+  describeTicketForShare,
+} from './share-description';
 
 const need = (overrides: Partial<TicketNeed>): TicketNeed => ({
   uuid: 'need',
@@ -70,5 +73,40 @@ describe('describeTicketForShare', () => {
     );
     expect(describeTicketForShare({ taskType: 'hr' })).toBe('島嶼守望｜人力');
     expect(describeTicketForShare({})).toBe('島嶼守望｜救災任務');
+  });
+});
+
+describe('describeStationForShare', () => {
+  it("says the station's own words when it has them", () => {
+    expect(
+      describeStationForShare({
+        type: 'supply',
+        description: '  提供飲水與乾糧 ',
+        opHour: '08:00-20:00',
+      }),
+    ).toBe('提供飲水與乾糧');
+  });
+
+  it('names the platform, the kind of station and its hours when it has no words of its own', () => {
+    expect(
+      describeStationForShare({ type: 'supply', opHour: '08:00-20:00' }),
+    ).toBe('島嶼守望｜物資站點，服務時間 08:00-20:00');
+    expect(
+      describeStationForShare({
+        type: 'water',
+        description: ' ',
+        opHour: 'unknown',
+      }),
+    ).toBe('島嶼守望｜加水站點');
+  });
+
+  it('never says its level, and calls a station of no known kind a 救災站點', () => {
+    for (const station of [
+      { level: 0 },
+      { type: 'warehouse', level: 0 },
+      { type: null, opHour: '-' },
+    ]) {
+      expect(describeStationForShare(station)).toBe('島嶼守望｜救災站點');
+    }
   });
 });
