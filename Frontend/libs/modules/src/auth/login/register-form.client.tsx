@@ -20,6 +20,7 @@ import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
 import { continueSignedIn } from './continue-signed-in';
 import { createHashedCredentialAsync } from './credentials';
+import { takeHandedOffIdentity } from './utils/identity-hand-off';
 import { safeReturnPath } from './utils/return-path';
 
 const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
@@ -51,8 +52,11 @@ export function RegisterFormClient({
   // What the last register sent, but the password, which the form clears once sent: 返回上一頁
   // opens the form filled in with it, as a person going back is most often fixing a mistyped
   // address. Sending the same address again is fine: no account exists until a code is used, and
-  // the new code replaces the one waiting.
-  const [sentValues, setSentValues] = useState<AuthFormInitialValues>();
+  // the new code replaces the one waiting. Before that, the tab and the address the login page
+  // held when 註冊帳號 was pressed, if it came from there.
+  const [sentValues, setSentValues] = useState<
+    AuthFormInitialValues | undefined
+  >(() => takeHandedOffIdentity() ?? undefined);
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationError, setVerificationError] = useState<string>();
   const [verificationSuccess, setVerificationSuccess] = useState<string>();
