@@ -2,7 +2,7 @@
 
 import { Box, ButtonBase, Typography } from '@mui/material';
 import type { components } from '@rescue-frontend/data-access/openapi';
-import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
+import { Button, Callout, designTokens, Tag } from '@rescue-frontend/ui';
 import type { ReactNode } from 'react';
 
 import { downloadBase64, importFailures } from './model/bulk-import';
@@ -114,17 +114,15 @@ export function ImportResult({
         }}
       >
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          <Badge tone="success">
+          <Tag tone="success">
             新增 {result.created} {createdUnit}
-          </Badge>
-          {showUpdated ? (
-            <Badge tone="info">更新 {result.updated} 列</Badge>
-          ) : null}
+          </Tag>
+          {showUpdated ? <Tag tone="info">更新 {result.updated} 列</Tag> : null}
           {badges}
-          <Badge tone={result.failed ? 'danger' : 'neutral'}>
+          <Tag tone={result.failed ? 'danger' : 'neutral'}>
             失敗 {result.failed} 列
-          </Badge>
-          <Badge tone="neutral">批次 {result.batch_id}</Badge>
+          </Tag>
+          <Tag tone="neutral">批次 {result.batch_id}</Tag>
         </Box>
         {note && result.created > 0 ? <Muted>{note}</Muted> : null}
         {children}

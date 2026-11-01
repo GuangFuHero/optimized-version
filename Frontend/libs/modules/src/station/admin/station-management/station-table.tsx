@@ -2,11 +2,11 @@
 
 import { Box, Typography } from '@mui/material';
 import {
-  Badge,
   Button,
   Callout,
   DataTable,
   designTokens,
+  Tag,
   type BadgeTone,
   type DataTableProps,
 } from '@rescue-frontend/ui';
@@ -324,23 +324,14 @@ function StationNameCell({ row }: { row: StationRow }) {
             }}
           >
             {row.isOfficial ? (
-              <Badge
-                tone="info"
-                icon={<ShieldCheck size={13} />}
-                sx={{
-                  height: 'auto',
-                  p: '2px 9px',
-                  fontWeight: typography.label[300].fontWeight,
-                  letterSpacing: 0,
-                }}
-              >
+              <Tag tone="info" icon={<ShieldCheck size={13} />}>
                 官方
-              </Badge>
+              </Tag>
             ) : null}
             {row.pendingFieldCount > 0 ? (
-              <Badge tone="warning" size="sm">
+              <Tag tone="warning" size="sm">
                 {row.pendingFieldCount} 欄待審
-              </Badge>
+              </Tag>
             ) : null}
           </Box>
         ) : null}

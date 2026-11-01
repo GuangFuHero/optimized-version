@@ -1,4 +1,4 @@
-import type { BadgeTone, BadgeVariant } from '@rescue-frontend/ui';
+import type { TagFill, TagTone } from '@rescue-frontend/ui';
 
 import type { TicketPriority } from './ticket-row';
 
@@ -24,33 +24,27 @@ export function adminTicketPriorityLabel(
     : null;
 }
 
-export interface AdminPriorityBadge {
+export interface AdminPriorityTag {
   label: string;
-  tone: BadgeTone;
-  variant: BadgeVariant;
+  tone: TagTone;
+  fill: TagFill;
 }
 
 /**
- * The badge a priority gets on the board (prototype `PriorityBadge`): only 生命危急 is solid red,
- * 緊急 is a subtle warning; 一般 and 低 get no badge and show as plain muted words.
+ * The tag a priority gets on the board (TAG-103, TAG-105): only 生命危急 is solid red, 緊急 is a
+ * pale warning, and 一般 and 低 are quiet grey words; null for a value the backend does not store.
  */
-export function adminTicketPriorityBadge(
+export function adminTicketPriorityTag(
   value: string | null | undefined,
-): AdminPriorityBadge | null {
+): AdminPriorityTag | null {
+  const label = adminTicketPriorityLabel(value);
+  if (!label) return null;
   switch (value?.trim().toLowerCase()) {
     case 'critical':
-      return {
-        label: ADMIN_TICKET_PRIORITY_LABELS.critical,
-        tone: 'danger',
-        variant: 'solid',
-      };
+      return { label, tone: 'danger', fill: 'solid' };
     case 'high':
-      return {
-        label: ADMIN_TICKET_PRIORITY_LABELS.high,
-        tone: 'warning',
-        variant: 'subtle',
-      };
+      return { label, tone: 'warning', fill: 'subtle' };
     default:
-      return null;
+      return { label, tone: 'neutral', fill: 'quiet' };
   }
 }

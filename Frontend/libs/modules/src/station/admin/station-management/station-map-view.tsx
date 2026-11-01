@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
-import { Badge, Button, designTokens } from '@rescue-frontend/ui';
+import { Button, designTokens, Tag } from '@rescue-frontend/ui';
 import type { Map as LeafletMap } from 'leaflet';
 import {
   ChevronRight,
@@ -403,9 +403,9 @@ function SelectedStationCard({
           gap: '6px',
         }}
       >
-        <Badge icon={<TypeDot color={getStationTypePinColor(row.type)} />}>
+        <Tag icon={<TypeDot color={getStationTypePinColor(row.type)} />}>
           {row.typeLabel}
-        </Badge>
+        </Tag>
         <StatusBadge status={row.operationalStatus} />
       </Box>
       <Typography

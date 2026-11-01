@@ -1,18 +1,12 @@
 'use client';
 
-import { Box, ButtonBase } from '@mui/material';
-import { CountBadge, designTokens, TextInput } from '@rescue-frontend/ui';
-import {
-  ChevronDown,
-  ChevronUp,
-  Search,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { Box, ButtonBase, Typography } from '@mui/material';
+import { Button, designTokens, SearchField } from '@rescue-frontend/ui';
+import { ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
 
 import { followUrl, initialSearchBox } from './model/search-box';
-import { ToolbarButton } from './toolbar-button';
 
 const { color, typography } = designTokens;
 
@@ -89,38 +83,31 @@ export function ToolbarSearch({
   };
 
   const showClear = activeFilterCount > 0 || followed.draft.trim().length > 0;
+  const hintText = hint(followed.draft);
 
   return (
     <>
-      <ToolbarButton
+      {/* The count of filters applied sits in the button (BTN-110); open, the button shows it (BTN-111). */}
+      <Button
+        variant="neutral"
         onClick={onToggleFilter}
         aria-expanded={filterOpen}
-        sx={filterOpen ? { bgcolor: color.bg.neutral.subtle } : undefined}
+        startIcon={<SlidersHorizontal size={16} />}
+        endIcon={
+          filterOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />
+        }
+        count={activeFilterCount}
       >
-        <SlidersHorizontal size={16} color={color.fg.neutral.subtle} />
         篩選
-        {activeFilterCount > 0 ? (
-          <CountBadge count={activeFilterCount} />
-        ) : null}
-        {filterOpen ? (
-          <ChevronUp size={15} color={color.fg.neutral.muted} />
-        ) : (
-          <ChevronDown size={15} color={color.fg.neutral.muted} />
-        )}
-      </ToolbarButton>
+      </Button>
 
-      <Box
-        sx={{
-          width: 320,
-          '& .MuiInputBase-root': { minHeight: 42, height: 42 },
-        }}
-      >
-        <TextInput
+      {/* The first to shrink when the toolbar runs short, before 新增 is pushed to a second line (INP-103). */}
+      <Box sx={{ flex: '1 1 180px', minWidth: 180, maxWidth: 320 }}>
+        <SearchField
+          fullWidth
           value={followed.draft}
           onChange={(event) => changeDraft(event.target.value)}
           placeholder={placeholder}
-          leadingIcon={<Search size={16} />}
-          helperText={hint(followed.draft)}
           inputProps={{
             'aria-label': ariaLabel,
             onCompositionStart: () => {
@@ -132,6 +119,18 @@ export function ToolbarSearch({
             },
           }}
         />
+        {hintText ? (
+          <Typography
+            sx={{
+              ...typography.data[300],
+              color: color.fg.neutral.muted,
+              mt: '4px',
+              px: '16px',
+            }}
+          >
+            {hintText}
+          </Typography>
+        ) : null}
       </Box>
 
       {showClear ? (
