@@ -397,7 +397,11 @@ def tell(
         by_transaction.setdefault(at, [])
     replay = _Replay(requester_uuid, ticket_uuid, ticket_needs)
     for at in sorted(by_transaction):
-        ordered = sorted(by_transaction[at], key=lambda r: _TABLE_ORDER.get(r.table_name, len(_TABLE_ORDER)))
+        # Rows of one table by the row they wrote, not as fetched, so that a save always reads the same.
+        ordered = sorted(
+            by_transaction[at],
+            key=lambda r: (_TABLE_ORDER.get(r.table_name, len(_TABLE_ORDER)), str(r.row_id)),
+        )
         replay.transaction(at, ordered, merged.get(at))
     return list(reversed(replay.named()))
 

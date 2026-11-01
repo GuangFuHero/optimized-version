@@ -392,6 +392,49 @@ async def test_the_needs_a_ticket_is_filed_with_come_in_the_site_s_order(client,
     assert sorted(needs) == needs[::-1]
 
 
+def test_one_save_s_events_of_a_kind_read_the_same_however_the_rows_were_fetched():
+    """Three needs taken off in one save are told in the same order, however the rows came back.
+
+    Rows written in one transaction share `created_at`, and nothing orders the fetch.
+    """
+    owner, ticket = str(uuidlib.uuid4()), str(uuidlib.uuid4())
+    needs = [str(uuidlib.UUID(int=i)) for i in (3, 1, 2)]
+    filed = [
+        _row(ticket, "tickets", "INSERT", by=owner, new={"uuid": ticket}),
+        *(
+            _row(
+                need,
+                "ticket_tasks",
+                "INSERT",
+                by=owner,
+                new={"uuid": need, "task_name": need, "status": "pending"},
+            )
+            for need in needs
+        ),
+    ]
+    removed = [
+        _row(
+            need,
+            "ticket_tasks",
+            "UPDATE",
+            by=owner,
+            old={"status": "pending"},
+            new={"status": "canceled"},
+            minute=5,
+        )
+        for need in needs
+    ]
+
+    def told(rows):
+        events = history_public.tell(
+            rows, requester_uuid=owner, ticket_uuid=ticket, ticket_needs=frozenset(needs)
+        )
+        return [(event["kind"], event["need"]["name"]) for event in events if event["kind"] == "need_removed"]
+
+    assert told([*filed, *removed]) == told([*filed, *removed[::-1]])
+    assert len(told([*filed, *removed])) == 3
+
+
 def test_every_column_the_staff_timeline_classifies_is_told_or_left_out_on_purpose():
     """A column history_fields.py adds or demotes forces a decision here, rather than going public or silent.
 
