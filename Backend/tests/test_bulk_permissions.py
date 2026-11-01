@@ -38,7 +38,8 @@ EXPECTED_GRANTS = {
         Perm.TICKET_EXPORT: "zone",
         Perm.TICKET_IMPORT: "all",
     },
-    "member": {},
+    # ADR-453: a field worker exports its zone's tickets too, as the admin does; nothing else.
+    "member": {Perm.TICKET_EXPORT: "zone"},
 }
 
 
@@ -164,14 +165,28 @@ async def test_data_auditor_exports_everything_but_cannot_import(db):
         assert exc.value.status_code == 403
 
 
-@pytest.mark.parametrize("role_name", ["member", "user"])
 @pytest.mark.asyncio
-async def test_field_workers_and_citizens_hold_no_bulk_capability(db, role_name):
-    """Batch operations have a far larger blast radius than single rows — not for them."""
-    actor = User(name=role_name)
+async def test_a_team_member_exports_its_zones_tickets_and_nothing_else(db):
+    """A field worker exports what it works, its zone's tickets (ADR-453); no import, no stations."""
+    actor = User(name="member")
     db.add(actor)
     await db.flush()
-    await _assign_seed_role(db, actor, role_name)
+    await _assign_seed_role(db, actor, "member")
+
+    assert await resolve_scope(actor, Perm.TICKET_EXPORT, db) == Scope.ZONE
+    for perm in (Perm.STATION_EXPORT, Perm.STATION_IMPORT, Perm.TICKET_IMPORT):
+        with pytest.raises(HTTPException) as exc:
+            await require_scope(actor, perm, db)
+        assert exc.value.status_code == 403, perm
+
+
+@pytest.mark.asyncio
+async def test_citizens_hold_no_bulk_capability(db):
+    """Batch operations have a far larger blast radius than single rows — not for them."""
+    actor = User(name="user")
+    db.add(actor)
+    await db.flush()
+    await _assign_seed_role(db, actor, "user")
 
     for perm in BULK_PERMS:
         with pytest.raises(HTTPException) as exc:

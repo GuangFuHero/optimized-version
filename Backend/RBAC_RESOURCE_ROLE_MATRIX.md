@@ -105,10 +105,10 @@
 | ticket.delete | — | own | — | all | zone | own |
 | ticket.assign | — | own | — | all | zone | own |
 | **ticket.audit** | — | — | all | all | zone | zone |
-| ticket.export | — | — | all | all | zone | — |
+| ticket.export | — | — | all | all | zone | zone |
 | ticket.import | — | — | — | all | all | — |
 
-> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，除了審核之外全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
+> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，除了審核之外全範圍無寫權）；team member 只有 `ticket.export: zone`（ADR-453：匯出自己責任區的單，跟 admin 一樣），沒有站點匯出、沒有匯入；platform user 全無——批量寫入的爆炸半徑遠大於單筆。
 
 > **檢核**：`ticket.audit` 管「單的資料檢核」——`auditTicket` 給出結論（`audited` 已檢核、`audit_issue` 有疑慮，後者必填 `note`），並解鎖 `auditNote`、`auditedAt`、`auditedBy`、`auditHistory`、`changesSinceAudit`。`auditStatus` 本身公開，前台可據此排除有疑慮的單；前台一律以 `user` 身分運作，沒有 `ticket.audit`，所以其餘欄位只在後台看得到。檢核只在單的層級，需求沒有各自的檢核。結論只對當時的內容成立：之後內容一變（文字、地址、災害欄位、需求內容、新增需求）就回到 `no_audit`；承接、人數、刪除需求、優先度、進度備註不算。`need_audit` 只由掃描系統設定，內容變動時維持不變。`audit_issue` 會通知建單者與已承接的志工（不含說明）。
 

@@ -35,6 +35,7 @@ from app.services.bulk_export import (
     export_stations,
     export_tickets,
 )
+from scripts.seed_rbac import ROLES_DATA
 from tests.conftest import acting_as
 
 IN_ZONE = Point(121.50, 25.00)
@@ -243,6 +244,26 @@ async def test_zone_scoped_ticket_export_only_reaches_the_team_s_own_area(db):
     db.add_all([actor, author])
     await db.flush()
     await _grant(db, actor, Perm.TICKET_EXPORT, "zone", "zoned-exporter", team=team)
+    await _ticket_with_task(db, title="區內", point=IN_ZONE, creator=author)
+    await _ticket_with_task(db, title="區外", point=OUT_OF_ZONE, creator=author)
+
+    table = _parse(await export_tickets(db, actor=actor, task_type="rescue"))
+
+    assert [row["title"] for row in table.rows] == ["區內"]
+
+
+@pytest.mark.asyncio
+async def test_a_team_member_exports_its_zones_tickets_only(db):
+    """With the seeded `member` grants: the file holds the team's zone alone (ADR-453)."""
+    await _configs(db)
+    team = await _zoned_team(db)
+    actor = User(name="FieldWorker")
+    author = User(name="Someone")
+    db.add_all([actor, author])
+    await db.flush()
+    member = next(r for r in ROLES_DATA if r["name"] == "member")
+    for perm, scope in member["permissions"].items():
+        await _grant(db, actor, perm, scope, "member", team=team)
     await _ticket_with_task(db, title="區內", point=IN_ZONE, creator=author)
     await _ticket_with_task(db, title="區外", point=OUT_OF_ZONE, creator=author)
 
