@@ -4,7 +4,8 @@ import { useState } from 'react';
 
 import { Building2 } from 'lucide-react';
 
-import { ToolbarButton } from '../../../admin/shared/toolbar-button';
+import { Button } from '@rescue-frontend/ui';
+
 import { SpaceFormDrawer } from './space-form-drawer';
 import { useSpaceCapabilities } from './use-space-data';
 
@@ -24,10 +25,13 @@ export function OpenSpaceButton({
 
   return (
     <>
-      <ToolbarButton onClick={() => setOpen(true)}>
-        <Building2 size={17} />
+      <Button
+        variant="neutral"
+        startIcon={<Building2 size={17} />}
+        onClick={() => setOpen(true)}
+      >
         開啟空間
-      </ToolbarButton>
+      </Button>
       <SpaceFormDrawer
         mode="create"
         open={open}

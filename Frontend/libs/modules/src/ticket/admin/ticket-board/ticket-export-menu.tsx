@@ -33,7 +33,7 @@ import {
 } from './model/ticket-export';
 import { needTypeLabel, type NeedType } from './model/ticket-row';
 
-const { color, focusRing, radius, typography } = designTokens;
+const { color, typography } = designTokens;
 
 /** The prototype's three kinds, in its order; 醫療 (not in the prototype) joins only once it has rows. */
 const LISTED_TYPES: NeedType[] = ['rescue', 'hr', 'supply'];
@@ -77,24 +77,13 @@ export function TicketExportMenu() {
 
   return (
     <>
-      {/* The station toolbar's brand outline, as tall as the toolbar's search box. */}
       <Button
-        variant="outline"
+        variant="neutral"
         title="匯出任務單（不套用列表上的篩選）"
         aria-haspopup="dialog"
         aria-expanded={Boolean(anchor)}
         startIcon={<Download size={17} />}
         onClick={(event) => setAnchor(event.currentTarget)}
-        sx={{
-          height: 42,
-          minHeight: 42,
-          px: '18px',
-          borderRadius: `${radius.md}px`,
-          ...(anchor && {
-            outline: `${focusRing.width}px solid ${focusRing.color}`,
-            outlineOffset: `${focusRing.offset}px`,
-          }),
-        }}
       >
         匯出
       </Button>

@@ -12,7 +12,6 @@ import {
   useTicketPropertyConfigs,
 } from '@rescue-frontend/data-access/admin';
 import {
-  Badge,
   Button,
   CountBadge,
   designTokens,
@@ -20,6 +19,7 @@ import {
   SheetFrame,
   SheetLayout,
   Tabs,
+  Tag,
 } from '@rescue-frontend/ui';
 import { ChevronDown, ChevronRight, Flag, PencilLine } from 'lucide-react';
 
@@ -607,21 +607,28 @@ function SummaryCard({
             <StatusCell status={ticket.status} />
           </Box>
           {view.suspectedDuplicateOf ? (
-            <Badge variant="outline" icon={<Flag size={11} />}>
-              查核中 · 疑似重複
-            </Badge>
+            <Tag icon={<Flag size={11} />}>查核中 · 疑似重複</Tag>
           ) : null}
         </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <Typography component="span" sx={caption}>
-            承接進度
-          </Typography>
-          {progress.label ? (
-            <NeedProgressBar progress={progress} />
-          ) : (
+        {/* The name and the numbers on one line over the bar (PRG-103). */}
+        {progress.label ? (
+          <NeedProgressBar
+            progress={progress}
+            size="md"
+            label={
+              <Typography component="span" sx={caption}>
+                承接進度
+              </Typography>
+            }
+          />
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <Typography component="span" sx={caption}>
+              承接進度
+            </Typography>
             <Muted inline>尚無需求 · 待補列</Muted>
-          )}
-        </Box>
+          </Box>
+        )}
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <Box

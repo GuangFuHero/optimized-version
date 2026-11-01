@@ -12,7 +12,7 @@ import {
   usePreviewStationImport,
 } from '@rescue-frontend/data-access/admin';
 import type { components } from '@rescue-frontend/data-access/openapi';
-import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
+import { Button, Callout, designTokens, Tag } from '@rescue-frontend/ui';
 import { CircleCheck, Download, FolderOpen, Upload, X } from 'lucide-react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -443,13 +443,13 @@ export function StationImportDialog({ onClose }: { onClose: () => void }) {
                 aside={
                   <>
                     <Muted>還沒寫入</Muted>
-                    <Badge tone="success">新增 {summary.create}</Badge>
-                    <Badge tone="info">更新 {summary.update}</Badge>
+                    <Tag tone="success">新增 {summary.create}</Tag>
+                    <Tag tone="info">更新 {summary.update}</Tag>
                     {summary.suspected > 0 ? (
-                      <Badge tone="warning">疑似重複 {summary.suspected}</Badge>
+                      <Tag tone="warning">疑似重複 {summary.suspected}</Tag>
                     ) : null}
                     {summary.failedLines > 0 ? (
-                      <Badge tone="danger">失敗 {summary.failedLines}</Badge>
+                      <Tag tone="danger">失敗 {summary.failedLines}</Tag>
                     ) : null}
                   </>
                 }
@@ -559,10 +559,10 @@ function SuspectBadges({ result }: { result: Result }) {
   return (
     <>
       {result.declined > 0 ? (
-        <Badge tone="neutral">選了不建立 {result.declined} 列</Badge>
+        <Tag tone="neutral">選了不建立 {result.declined} 列</Tag>
       ) : null}
       {result.suspected > 0 ? (
-        <Badge tone="warning">疑似重複未建立 {result.suspected} 列</Badge>
+        <Tag tone="warning">疑似重複未建立 {result.suspected} 列</Tag>
       ) : null}
     </>
   );

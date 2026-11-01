@@ -34,7 +34,7 @@ import { useStationRows } from './hooks/use-station-rows';
 import { countExportableByType, exportFilename } from './model/import';
 import { EMPTY_FILTERS } from './model/station-filters';
 
-const { color, focusRing, radius, typography } = designTokens;
+const { color, typography } = designTokens;
 
 export function StationExportMenu() {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -71,22 +71,12 @@ export function StationExportMenu() {
   return (
     <>
       <Button
-        variant="outline"
+        variant="neutral"
         title="匯出離線清單"
         aria-haspopup="dialog"
         aria-expanded={Boolean(anchor)}
         startIcon={<Download size={17} />}
         onClick={(event) => setAnchor(event.currentTarget)}
-        sx={{
-          height: 42,
-          minHeight: 42,
-          px: '18px',
-          borderRadius: `${radius.md}px`,
-          ...(anchor && {
-            outline: `${focusRing.width}px solid ${focusRing.color}`,
-            outlineOffset: `${focusRing.offset}px`,
-          }),
-        }}
       >
         匯出
       </Button>

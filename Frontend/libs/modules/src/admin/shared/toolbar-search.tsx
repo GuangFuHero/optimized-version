@@ -1,20 +1,12 @@
 'use client';
 
-import { Box, ButtonBase } from '@mui/material';
-import { CountBadge, designTokens, TextInput } from '@rescue-frontend/ui';
-import {
-  ChevronDown,
-  ChevronUp,
-  Search,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { Box } from '@mui/material';
+import { Button, SearchField } from '@rescue-frontend/ui';
+import { ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
 
 import { followUrl, initialSearchBox } from './model/search-box';
-import { ToolbarButton } from './toolbar-button';
-
-const { color, typography } = designTokens;
 
 interface ToolbarSearchProps {
   /** The URL's `?q=`. */
@@ -25,10 +17,9 @@ interface ToolbarSearchProps {
   onToggleFilter: () => void;
   /** 清除: empties the filters and the query. */
   onClear: () => void;
+  /** Says the rule too, such as the 2 characters a search needs (INP-104): there is no other note. */
   placeholder: string;
   ariaLabel: string;
-  /** The note under the box for what is typed, if any (a query too short to send, say). */
-  hint: (draft: string) => string | undefined;
 }
 
 /**
@@ -45,7 +36,6 @@ export function ToolbarSearch({
   onClear,
   placeholder,
   ariaLabel,
-  hint,
 }: ToolbarSearchProps) {
   const [box, setBox] = useState(() => initialSearchBox(query));
   // An IME (注音, 倉頡) is mid-word: its keystrokes are not a query yet.
@@ -92,37 +82,30 @@ export function ToolbarSearch({
 
   return (
     <>
-      <ToolbarButton
+      {/* The count of filters applied sits in the button (BTN-110); open, the button shows it (BTN-111). */}
+      <Button
+        variant="neutral"
         onClick={onToggleFilter}
         aria-expanded={filterOpen}
-        sx={filterOpen ? { bgcolor: color.bg.neutral.subtle } : undefined}
+        startIcon={<SlidersHorizontal size={16} />}
+        endIcon={
+          filterOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />
+        }
+        count={activeFilterCount}
       >
-        <SlidersHorizontal size={16} color={color.fg.neutral.subtle} />
         篩選
-        {activeFilterCount > 0 ? (
-          <CountBadge count={activeFilterCount} />
-        ) : null}
-        {filterOpen ? (
-          <ChevronUp size={15} color={color.fg.neutral.muted} />
-        ) : (
-          <ChevronDown size={15} color={color.fg.neutral.muted} />
-        )}
-      </ToolbarButton>
+      </Button>
 
-      <Box
-        sx={{
-          width: 320,
-          '& .MuiInputBase-root': { minHeight: 42, height: 42 },
-        }}
-      >
-        <TextInput
+      {/* 140–320px (INP-103): the box shrinks first, down to 140px, before the row wraps, so 新增
+          stays on the first line at 1024px with the sidebar open. */}
+      <Box sx={{ flex: '1 1 140px', minWidth: 140, maxWidth: 320 }}>
+        <SearchField
+          fullWidth
           value={followed.draft}
           onChange={(event) => changeDraft(event.target.value)}
           placeholder={placeholder}
-          leadingIcon={<Search size={16} />}
-          helperText={hint(followed.draft)}
+          aria-label={ariaLabel}
           inputProps={{
-            'aria-label': ariaLabel,
             onCompositionStart: () => {
               composing.current = true;
             },
@@ -135,16 +118,9 @@ export function ToolbarSearch({
       </Box>
 
       {showClear ? (
-        <ButtonBase
-          onClick={clear}
-          sx={{
-            ...typography.label[300],
-            color: color.fg.neutral.subtle,
-            textDecoration: 'underline',
-          }}
-        >
+        <Button variant="ghost" size="sm" onClick={clear}>
           清除
-        </ButtonBase>
+        </Button>
       ) : null}
     </>
   );

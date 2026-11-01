@@ -12,11 +12,11 @@ import {
   useUnassignTaskActor,
 } from '@rescue-frontend/data-access/admin';
 import {
-  Badge,
   Button,
   designTokens,
   Dialog,
   displayTextSize,
+  Tag,
 } from '@rescue-frontend/ui';
 import { ChevronDown, Circle, User, UserPlus, X } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
@@ -564,9 +564,9 @@ function TaskCard({
           {needTakenLine(task)}
         </Typography>
         {task.recruitingStoppedAt ? (
-          <Badge tone="warning" size="sm">
+          <Tag tone="warning" size="sm">
             已停止招募
-          </Badge>
+          </Tag>
         ) : null}
         {assignmentsHidden && task.assignedCount > 0 ? (
           <Typography component="span" sx={caption}>
