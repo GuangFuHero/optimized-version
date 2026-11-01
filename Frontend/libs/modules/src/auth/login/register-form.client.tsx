@@ -2,7 +2,7 @@
 
 import { Alert, Button, TextField } from '@mui/material';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { startTransition, useState } from 'react';
+import { startTransition, useEffect, useState } from 'react';
 
 import { type AuthIdentityType } from '@rescue-frontend/data-access';
 import {
@@ -20,6 +20,10 @@ import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
 import { continueSignedIn } from './continue-signed-in';
 import { createHashedCredentialAsync } from './credentials';
+import {
+  clearHandedOffIdentity,
+  peekHandedOffIdentity,
+} from './utils/identity-hand-off';
 import { safeReturnPath } from './utils/return-path';
 
 const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
@@ -51,8 +55,15 @@ export function RegisterFormClient({
   // What the last register sent, but the password, which the form clears once sent: 返回上一頁
   // opens the form filled in with it, as a person going back is most often fixing a mistyped
   // address. Sending the same address again is fine: no account exists until a code is used, and
-  // the new code replaces the one waiting.
-  const [sentValues, setSentValues] = useState<AuthFormInitialValues>();
+  // the new code replaces the one waiting. Before that, the tab and the address the login page
+  // held when 註冊帳號 was pressed, if it came from there.
+  const [sentValues, setSentValues] = useState<
+    AuthFormInitialValues | undefined
+  >(() => peekHandedOffIdentity() ?? undefined);
+  // Cleared once the page is up, not while rendering: a render React discards would take it along.
+  useEffect(() => {
+    clearHandedOffIdentity();
+  }, []);
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationError, setVerificationError] = useState<string>();
   const [verificationSuccess, setVerificationSuccess] = useState<string>();
