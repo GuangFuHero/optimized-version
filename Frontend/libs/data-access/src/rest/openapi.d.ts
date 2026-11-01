@@ -2817,6 +2817,11 @@ export interface components {
       /** Actor Uuid */
       actor_uuid: string | null;
       /**
+       * Actor Name
+       * @description The nickname of `actor_uuid` (ADR-441)
+       */
+      actor_name?: string | null;
+      /**
        * Source Layer
        * @enum {string}
        */
@@ -2944,6 +2949,11 @@ export interface components {
       created_at: string;
       /** Reviewed By */
       reviewed_by: string | null;
+      /**
+       * Reviewed By Name
+       * @description The nickname of `reviewed_by` (ADR-441)
+       */
+      reviewed_by_name: string | null;
       /** Reviewed At */
       reviewed_at: string | null;
       low: components['schemas']['EntitySummaryResponse'];
@@ -3012,6 +3022,11 @@ export interface components {
       created_at: string;
       /** Reviewed By */
       reviewed_by: string | null;
+      /**
+       * Reviewed By Name
+       * @description The nickname of `reviewed_by` (ADR-441)
+       */
+      reviewed_by_name: string | null;
       /** Reviewed At */
       reviewed_at: string | null;
       low: components['schemas']['EntitySummaryResponse'];
@@ -3364,6 +3379,27 @@ export interface components {
       step_up?: components['schemas']['StepUp'] | null;
     };
     /**
+     * LocationForReviewResponse
+     * @description Where a ticket is: the address down to the room, or the pole (ADR-440). Read-only here.
+     */
+    LocationForReviewResponse: {
+      /**
+       * Location Type
+       * @description 'address' or 'pole'
+       */
+      location_type: string;
+      /** Full Address */
+      full_address: string | null;
+      /** Building Section */
+      building_section: string | null;
+      /** Floor */
+      floor: string | null;
+      /** Room */
+      room: string | null;
+      /** Pole Id */
+      pole_id: string | null;
+    };
+    /**
      * LoginMethodOut
      * @description One of the caller's login methods.
      *
@@ -3673,6 +3709,36 @@ export interface components {
       status: string | null;
       /** Comment */
       comment: string | null;
+      /**
+       * Display Label
+       * @description How the item reads: the label set for its need type, else property_name (ADR-446)
+       */
+      display_label: string;
+      /**
+       * Sort Order
+       * @description The item's order among its need type's items, from the same field setting, inactive ones included; null when there is none (ADR-447)
+       */
+      sort_order?: number | null;
+      /**
+       * Data Type
+       * @description The control the item's field setting asks for (number, text, single_select, ...); null when there is none (ADR-447)
+       */
+      data_type?: string | null;
+      /**
+       * Enum Options
+       * @description The choices of a select field; null otherwise (ADR-447)
+       */
+      enum_options?: string[] | null;
+      /**
+       * Unit
+       * @description A number field's unit, e.g. 箱; null otherwise (ADR-447)
+       */
+      unit?: string | null;
+      /**
+       * Is Active
+       * @description Whether the item's field setting is still in use; null when there is none (ADR-447)
+       */
+      is_active?: boolean | null;
     };
     /**
      * RefreshRequest
@@ -3984,6 +4050,8 @@ export interface components {
       team_uuid?: string | null;
       /** New Team Name */
       new_team_name?: string | null;
+      /** Granted Team Uuid */
+      granted_team_uuid?: string | null;
       /**
        * Via Invite
        * @default false
@@ -4030,6 +4098,8 @@ export interface components {
       team_uuid?: string | null;
       /** New Team Name */
       new_team_name?: string | null;
+      /** Granted Team Uuid */
+      granted_team_uuid?: string | null;
       /**
        * Via Invite
        * @default false
@@ -4285,6 +4355,11 @@ export interface components {
       recruiting_stopped: boolean;
       /** Properties */
       properties: components['schemas']['PropertyForReviewResponse'][];
+      /**
+       * Claimant Keys
+       * @description One opaque key per person on the need (ADR-445). A person on needs of both tickets has the same key on each, so the people after a fold are the distinct keys of the needs folded together. Keys differ on every other card and do not contain the person's uuid; they are a plain hash, so someone who already holds the card and a person's uuid can test for that person
+       */
+      claimant_keys: string[];
     };
     /**
      * TeamMemberItem
@@ -4442,6 +4517,8 @@ export interface components {
       disaster_details: {
         [key: string]: string[];
       };
+      /** @description Where the ticket is; null when it has no address or pole. A resolve cannot change it */
+      location: components['schemas']['LocationForReviewResponse'] | null;
     };
     /**
      * TicketStatus

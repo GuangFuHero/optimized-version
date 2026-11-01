@@ -10,10 +10,13 @@ import {
   SIGN_OUT_FAILED_MESSAGE,
   signOutHereAsync,
 } from '../../auth/session/sign-out';
+import { siteMapUrl } from './site-map-url';
 
 const { color, typography } = designTokens;
 
 export function NoBackOfficeAccess({ siteUrl }: { siteUrl?: string }) {
+  const siteMap = siteMapUrl(siteUrl);
+
   return (
     <Stack
       sx={{
@@ -42,8 +45,8 @@ export function NoBackOfficeAccess({ siteUrl }: { siteUrl?: string }) {
         如果你在政府單位或社福團體負責救災工作，可以回到公開地圖，按「申請管理權限」送出申請。
       </Typography>
       <Stack direction="row" sx={{ gap: '8px', mt: 1 }}>
-        {siteUrl && (
-          <Button variant="outline" href={new URL('/map', siteUrl).href}>
+        {siteMap && (
+          <Button variant="outline" href={siteMap}>
             回到公開地圖
           </Button>
         )}

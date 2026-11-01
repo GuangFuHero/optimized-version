@@ -13,7 +13,11 @@ import type { CssVarsTheme } from '@mui/material/styles';
 import { extendTheme } from '@mui/material/styles';
 
 import { designExtensions } from './bridge';
-import { designTokens, IOS_NO_ZOOM_INPUT_PX } from './design-tokens';
+import {
+  designTokens,
+  IOS_NO_ZOOM_INPUT_PX,
+  TOUCH_FIELD_MEDIA,
+} from './design-tokens';
 import {
   colorSchemes as cs,
   moduleColorSchemes,
@@ -42,7 +46,12 @@ declare module '@mui/material/styles' {
   }
 }
 
-const { focusRing } = designTokens;
+const { color, focusRing } = designTokens;
+
+// An autofilled input, hovered, focused or pressed too, its class doubled (see `MuiInputBase` below).
+const AUTOFILLED = ['', ':hover', ':focus', ':active']
+  .map((state) => `&&:-webkit-autofill${state}`)
+  .join(', ');
 
 export const theme = extendTheme({
   breakpoints: {
@@ -154,11 +163,65 @@ export const theme = extendTheme({
     // 🔒 A focused input smaller than 16px makes iOS Safari zoom the whole page in, and the user has
     // to pinch back out — worse than small text. `site.css` pins inputs to 16px below its 767px
     // cutoff for exactly this reason; `down('tablet')` is that same cutoff.
+    //
+    // Autofill paints the input in the browser's own yellow or blue, a square inside the field's
+    // rounded edge, and changes the text colour. It is painted over with the field's own background
+    // and text colour: white and the default text unless the field says otherwise through
+    // `--wg-field-bg` / `--wg-field-fg`, as one on a tinted fill does. The doubled `&&` outranks
+    // OutlinedInput's and FilledInput's own autofill rule, blue with white text, which comes after this
+    // and is meant for dark mode only: with no `colorSchemeSelector`, MUI's dark selector is `&`, so in
+    // this light-only theme it always applies.
     MuiInputBase: {
       styleOverrides: {
         input: ({ theme: t }) => ({
           [t.breakpoints.down('tablet')]: { fontSize: IOS_NO_ZOOM_INPUT_PX },
+          [AUTOFILLED]: {
+            WebkitTextFillColor: `var(--wg-field-fg, ${color.fg.neutral.default})`,
+            caretColor: `var(--wg-field-fg, ${color.fg.neutral.default})`,
+            WebkitBoxShadow: `0 0 0 100px var(--wg-field-bg, ${color.bg.neutral.default}) inset`,
+            boxShadow: `0 0 0 100px var(--wg-field-bg, ${color.bg.neutral.default}) inset`,
+            borderRadius: 'inherit',
+            transition: 'background-color 9999s ease-out 0s',
+          },
         }),
+      },
+    },
+    // A small outlined field is 40px tall, under the 44px a fingertip needs. On a phone's width, or a
+    // touch screen of any width (a phone held sideways is as wide as a tablet), it grows to 44px, 10.5px
+    // above and below its 23px line, and its label waits 2px lower to stay centred. A multiline one is
+    // taller already; a field that sets its own padding or height keeps it.
+    MuiOutlinedInput: {
+      styleOverrides: {
+        input: {
+          variants: [
+            {
+              props: ({ ownerState }) =>
+                ownerState.size === 'small' && !ownerState.multiline,
+              style: {
+                [TOUCH_FIELD_MEDIA]: { paddingTop: 10.5, paddingBottom: 10.5 },
+              },
+            },
+          ],
+        },
+      },
+    },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: {
+          variants: [
+            {
+              props: ({ ownerState }) =>
+                ownerState.variant === 'outlined' &&
+                ownerState.size === 'small' &&
+                !ownerState.shrink,
+              style: {
+                [TOUCH_FIELD_MEDIA]: {
+                  transform: 'translate(14px, 11px) scale(1)',
+                },
+              },
+            },
+          ],
+        },
       },
     },
     MuiButton: {

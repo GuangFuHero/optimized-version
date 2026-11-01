@@ -297,6 +297,11 @@ _ADDRESS_EXCLUSIONS = {
     "geometry_uuid": _FK,
     "pole_photo_uuid": _FK,
     "search_text": _GENERATED,
+    "user_input_address": (
+        "the line as received, which `full_address` shows after the parser has cleaned it; "
+        "reporting both would put every address edit on the timeline twice"
+    ),
+    "remainder": "the text the parser could not place; it is part of `full_address`, which reports it",
 }
 
 EXCLUDED: dict[tuple[str, str], dict[str, str]] = {

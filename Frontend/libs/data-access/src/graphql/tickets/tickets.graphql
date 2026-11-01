@@ -52,6 +52,7 @@ fragment TicketNeedFields on TicketTaskType {
 query GetTickets(
   $bounds: BoundsInput
   $status: String
+  $statuses: [TicketStatus!]
   $priority: String
   $skip: Int = 0
   $limit: Int = 50
@@ -60,6 +61,7 @@ query GetTickets(
   tickets(
     bounds: $bounds
     status: $status
+    statuses: $statuses
     priority: $priority
     skip: $skip
     limit: $limit
@@ -78,6 +80,42 @@ query GetTickets(
       totalCount
       hasNextPage
       hasPreviousPage
+    }
+  }
+}
+
+# How many tickets each cell on the map holds, for a viewer shown tickets as cells (ADR-387). All of
+# them, where a page of GetTickets holds 200.
+query GetTicketCells(
+  $bounds: BoundsInput!
+  $zoom: Float
+  $statuses: [TicketStatus!]
+) {
+  ticketCells(bounds: $bounds, zoom: $zoom, statuses: $statuses) {
+    cell
+    ticketCount
+    urgentCount
+  }
+}
+
+# The tickets one cell on the map stands for, a page at a time, as the cell's count counted them.
+query GetCellTickets(
+  $locationCell: String!
+  $statuses: [TicketStatus!]
+  $skip: Int = 0
+  $limit: Int = 200
+) {
+  tickets(
+    locationCell: $locationCell
+    statuses: $statuses
+    skip: $skip
+    limit: $limit
+  ) {
+    items {
+      ...TicketFields
+    }
+    pageInfo {
+      hasNextPage
     }
   }
 }
@@ -169,6 +207,19 @@ query GetTicket($uuid: UUID!) {
       ...TicketTaskFields
       ...TicketNeedFields
     }
+  }
+}
+
+# A ticket a link names that no loaded page holds (modules/map/site/linked-ticket): the ticket as a
+# list row has it, and, when it is null, whether it was merged into another (and which), deleted, or
+# never was (ADR-444). No needs: the drawer loads its own.
+query GetLinkedTicket($uuid: UUID!) {
+  ticket(uuid: $uuid) {
+    ...TicketFields
+  }
+  ticketAvailability(uuid: $uuid) {
+    status
+    replacedByUuid
   }
 }
 

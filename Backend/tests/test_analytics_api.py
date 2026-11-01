@@ -334,7 +334,9 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
     # The new labels and what the descriptions promise: the dashboard's default range, running
     # totals up to today, and where the duplicate count comes from.
     assert body["tickets"]["duplicate_count"]["label"] == "疑似重複的單"
-    assert "AI 重複審核" in body["tickets"]["duplicate_count"]["description"]
+    # The page is 重複審核, without "AI" (ADR-442).
+    assert "重複審核" in body["tickets"]["duplicate_count"]["description"]
+    assert "AI" not in body["tickets"]["duplicate_count"]["description"]
     assert "近 30 天" in body["tickets"]["total_tickets"]["description"]
     assert "近 30 天" in body["stations"]["station_count"]["description"]
     for y, label in (
@@ -681,6 +683,7 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
         source="user",
         created_by=user_uuid,
         status="fulfilled",
+        completed_at=datetime.fromisoformat("2026-08-02T12:00:00+00:00"),
     )
     db_session.add(task)
     await db_session.flush()
@@ -916,6 +919,7 @@ async def test_data_completion_rate_is_a_percentage(client, db_session, redis):
         source="user",
         created_by=user_uuid,
         status="fulfilled",
+        completed_at=datetime.fromisoformat("2026-08-02T12:00:00+00:00"),
     )
     db_session.add(task)
     await db_session.flush()

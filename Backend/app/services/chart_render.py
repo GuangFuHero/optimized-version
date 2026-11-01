@@ -120,7 +120,7 @@ _TICKET_CATALOG = {
     "duplicate_count": {
         "label": "疑似重複的單",
         "unit": "件",
-        "description": "AI 重複審核標出、還沒審完的任務單，一張只算一次；預設近 30 天",
+        "description": "重複審核標出、還沒審完的任務單，一張只算一次；預設近 30 天",
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),

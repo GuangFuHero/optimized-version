@@ -8,6 +8,7 @@ import { useState, type ReactNode } from 'react';
 import { ToolbarButton } from '../../../admin/shared/toolbar-button';
 import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
 import type { StationCapabilities } from './hooks/use-station-capabilities';
+import { offersImport } from './model/import';
 
 const { color, radius, shadow, typography } = designTokens;
 
@@ -92,14 +93,8 @@ export function StationToolbar({
       {caps.canAdd ? (
         <NewStationButton
           onNew={onNew}
-          onImport={caps.canImport ? onImport : undefined}
+          onImport={offersImport(caps) ? onImport : undefined}
         />
-      ) : caps.canImport ? (
-        // Without 新增 there is no split button to hang 匯入 on, so it stands alone.
-        <ToolbarButton onClick={onImport} title="從 CSV／Excel 匯入站點名單">
-          <Upload size={15} color={color.fg.neutral.subtle} />
-          匯入
-        </ToolbarButton>
       ) : null}
     </Box>
   );

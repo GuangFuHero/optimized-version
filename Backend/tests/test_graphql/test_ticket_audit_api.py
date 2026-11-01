@@ -5,6 +5,8 @@ verdict and when, the audit history and the changes since the audit take ticket.
 service-level rules are in tests/test_ticket_audit.py.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
@@ -71,6 +73,7 @@ async def _ticket_with_needs(created_by: str, needs: list[tuple[str, str]], **fi
                     status=status,
                     source="user",
                     created_by=created_by,
+                    completed_at=datetime.now(UTC) if status == "fulfilled" else None,
                 )
             )
         await db.flush()

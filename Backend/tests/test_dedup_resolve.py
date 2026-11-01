@@ -66,6 +66,7 @@ async def _need(db, owner, ticket, task_type: str, name: str, quantity: int, sta
         quantity=quantity,
         status=status,
         created_by=owner.uuid,
+        completed_at=datetime.now(UTC) if status == "fulfilled" else None,
     )
     db.add(task)
     await db.flush()
@@ -481,6 +482,34 @@ async def test_more_people_than_the_quantity_is_refused(db):
 
     with pytest.raises(ResolveRefused, match="more than the quantity"):
         await _resolve(db, reviewer, ids, request)
+
+
+async def _key_union(db, reviewer, ids, *needs) -> int:
+    """The headcount the page works out for a fold: the distinct claimant keys of the needs (ADR-445)."""
+    await db.refresh(reviewer)
+    detail = await dedup_review.get_pair(db, actor=reviewer, pair_uuid=uuid_mod.UUID(ids["pair"]))
+    keys = {t.uuid: t.claimant_keys for ticket in detail.tickets for t in ticket.tasks}
+    return len({key for need in needs for key in keys[ids[need]]})
+
+
+@pytest.mark.parametrize("short", [0, 1])
+async def test_the_resolve_agrees_with_the_claimant_key_union(db, short):
+    """The page's fold headcount is the resolve's: the key union is accepted, one less is refused.
+
+    a1 has v1 and v2, b1 has v2 and v3, so the union is 3 where adding claim_count gives 4.
+    """
+    reviewer, ids = await _world(db)
+    union = await _key_union(db, reviewer, ids, "a1", "b1")
+    request = _example_one(ids, await _versions(db, reviewer, ids))
+    request.primary_tasks[0].values.quantity = union - short
+
+    if short:
+        with pytest.raises(ResolveRefused, match="more than the quantity"):
+            await _resolve(db, reviewer, ids, request)
+    else:
+        await _resolve(db, reviewer, ids, request)
+        assert len(await _people(db, ids["a1"])) == union
+    assert union == 3
 
 
 async def test_review_alone_is_enough(db):

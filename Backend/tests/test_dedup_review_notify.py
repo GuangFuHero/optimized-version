@@ -183,7 +183,7 @@ async def _holder(db, name, *perms) -> str:
             db.add(permission)
             await db.flush()
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, role_kind="platform"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     uid = str(user.uuid)
     await db.commit()
     return uid
@@ -207,3 +207,14 @@ async def test_the_notice_reaches_review_holders_only(db):
     assert reviewer in recipients
     assert viewer not in recipients
     assert actor_uuid not in recipients
+
+
+async def test_the_notice_names_the_page_without_ai(db, sent):
+    """The page is 重複審核: the checks use no AI (DEDUP-008 decision 1, ADR-442)."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+
+    await submit_new_ticket(db, actor=actor, tasks=[_task(ack=RELATED)], **TICKET)
+
+    (notice,) = _pending(sent)
+    assert "「重複審核」" in notice["body"]
+    assert "AI" not in notice["title"] + notice["body"]

@@ -1,9 +1,9 @@
-"""The two whole tickets behind a duplicate pair card, for the AI 重複審核 page (Spec 028 §2, ADR-373/374).
+"""The two whole tickets behind a duplicate pair card, for the 重複審核 page (Spec 028 §2, ADR-373/374).
 
 A fast-layer card compares one need with another (`ticket_task`), but a resolve acts on whole
 tickets, so the reviewer has to see both tickets in full first: their fields, contacts, every live
-need with its headcount and items. `version` lets a resolve tell whether either ticket changed
-since the reviewer read it.
+need with its headcount and items, and where the ticket is. `version` lets a resolve tell whether
+either ticket changed since the reviewer read it.
 
 Read with `ai_duplicate.view` (checked by the caller, `dedup_review.get_pair`). A fixed number of
 queries, however many needs and items the tickets have.
@@ -15,12 +15,14 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dedup import DuplicatePair
 from app.models.photo import Photo
+from app.models.property_config import TaskPropertyConfig
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 
@@ -35,6 +37,19 @@ class PropertyForReview:
     quantity: int | None
     status: str | None
     comment: str | None
+    # How the item reads: its need type's configured label, else its key (ADR-095, ADR-446).
+    # Read for the reviewer, not compared: it stays out of the version.
+    display_label: str = ""
+    # Where the item sits among its need type's items: the configured order, inactive configs
+    # included; None without a config (ADR-447). Configuration, so it stays out of the version.
+    sort_order: int | None = None
+    # How the page shows and edits the item, from the same setting (ADR-447): the control, the
+    # choices of a select, a number's unit, and whether the setting is still in use. All None
+    # without a setting. Configuration, so they stay out of the version.
+    data_type: str | None = None
+    enum_options: tuple[str, ...] | None = None
+    unit: str | None = None
+    is_active: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -44,6 +59,22 @@ class PhotoForReview:
     uuid: str
     url: str
     created_at: datetime | None
+
+
+@dataclass(frozen=True)
+class LocationForReview:
+    """Where the ticket is, as far as the reviewer compares it (ADR-440).
+
+    The address down to the room, or the pole. The free text about the place (landmark, space,
+    access) is left out: it is not what tells two tickets apart, and it stays out of the version.
+    """
+
+    location_type: str
+    full_address: str | None
+    building_section: str | None
+    floor: str | None
+    room: str | None
+    pole_id: str | None
 
 
 @dataclass(frozen=True)
@@ -59,6 +90,10 @@ class TaskForReview:
     claim_count: int
     recruiting_stopped: bool
     properties: tuple[PropertyForReview, ...]
+    # One key per person on the need, the same for a person across this card's two tickets and
+    # different on any other card (ADR-445): the page counts a fold by the keys it unites. Empty
+    # when read without a card, as a resolve reads. Moves with claims, so it stays out of the version.
+    claimant_keys: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -90,12 +125,16 @@ class TicketForReview:
     tasks: tuple[TaskForReview, ...]
     photos: tuple[PhotoForReview, ...] = ()
     disaster_details: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    location: LocationForReview | None = None
 
 
 # What a claim moves, which must not move the version (ADR-374): a need's headcount and the status
 # a claim fills, and the ticket status (and audit status) worked out from them.
 _TICKET_SKIPPED = {"version", "status", "audit_status", "tasks", "photos"}
-_TASK_SKIPPED = {"claim_count", "status", "properties"}
+_TASK_SKIPPED = {"claim_count", "status", "properties", "claimant_keys"}
+# An item's field setting (label, order, type, options, unit, in use) is configuration, not the
+# ticket: changing it must not send the reviewer back (ADR-446, ADR-447).
+_PROPERTY_SKIPPED = {"display_label", "sort_order", "data_type", "enum_options", "unit", "is_active"}
 
 
 def ticket_version(ticket: TicketForReview) -> str:
@@ -104,7 +143,8 @@ def ticket_version(ticket: TicketForReview) -> str:
     Made from the content itself, not from `updated_at`, which also moves for what the reviewer
     does not compare, such as a status worked out again after a claim. Every field the
     reviewer can compare or edit goes in — the ticket's, each live need's and item's, its photos
-    and disaster-field answers (ADR-384, 385) — with needs, items and photos sorted by uuid.
+    and disaster-field answers (ADR-384, 385) and where it is (ADR-440) — with needs, items and
+    photos sorted by uuid.
     What a claim moves stays out: the headcount is checked under the locks when resolving, and a
     claim need not send the reviewer back.
     """
@@ -113,7 +153,13 @@ def ticket_version(ticket: TicketForReview) -> str:
         (
             {
                 **{k: v for k, v in asdict(task).items() if k not in _TASK_SKIPPED},
-                "properties": sorted((asdict(p) for p in task.properties), key=lambda p: p["uuid"]),
+                "properties": sorted(
+                    (
+                        {k: v for k, v in asdict(p).items() if k not in _PROPERTY_SKIPPED}
+                        for p in task.properties
+                    ),
+                    key=lambda p: p["uuid"],
+                ),
             }
             for task in ticket.tasks
         ),
@@ -140,8 +186,13 @@ async def ticket_uuids_for_pair(db: AsyncSession, pair: DuplicatePair) -> tuple[
     return owner.get(sides[0]), owner.get(sides[1])
 
 
-async def tickets_for_review(db: AsyncSession, ticket_uuids: Iterable[str]) -> dict[str, TicketForReview]:
-    """The live tickets among `ticket_uuids`, keyed by uuid string; a cancelled or deleted one is absent."""
+async def tickets_for_review(
+    db: AsyncSession, ticket_uuids: Iterable[str], *, card_uuid: str | None = None
+) -> dict[str, TicketForReview]:
+    """The live tickets among `ticket_uuids`, keyed by uuid string; a cancelled or deleted one is absent.
+
+    With `card_uuid`, each need lists its claimant keys for that card (ADR-445).
+    """
     wanted = [uuid for uuid in ticket_uuids if uuid]
     if not wanted:
         return {}
@@ -157,7 +208,12 @@ async def tickets_for_review(db: AsyncSession, ticket_uuids: Iterable[str]) -> d
         return {}
     live = [str(ticket.uuid) for ticket, _, _ in ticket_rows]
     parts = await _parts(db, live)
-    return {str(ticket.uuid): _ticket(ticket, lon, lat, parts) for ticket, lon, lat in ticket_rows}
+    return {str(ticket.uuid): _ticket(ticket, lon, lat, parts, card_uuid) for ticket, lon, lat in ticket_rows}
+
+
+def claimant_key(card_uuid: str, actor_uuid) -> str:
+    """A person's key on one card (ADR-445): stable within the card, unrelated across cards."""
+    return hashlib.sha256(f"{card_uuid}:{actor_uuid}".encode()).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -166,9 +222,11 @@ class _Parts:
 
     tasks: list
     properties: list
-    claims: dict
+    claims: dict  # need uuid -> the people on it
+    configs: dict  # (need type, item key) -> its field setting
     photos: list
     details: list
+    locations: dict
 
 
 async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
@@ -180,7 +238,7 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
         )
     ).all()
     task_ids = [task.uuid for task in tasks]
-    properties, claims = [], {}
+    properties, claims, configs = [], {}, {}
     if task_ids:
         properties = (
             await db.scalars(
@@ -189,15 +247,16 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
                 .order_by(TaskProperty.created_at, TaskProperty.uuid)
             )
         ).all()
-        claims = dict(
-            (
-                await db.execute(
-                    select(TaskAssignment.task_uuid, func.count())
-                    .where(TaskAssignment.task_uuid.in_(task_ids))
-                    .group_by(TaskAssignment.task_uuid)
+        for task_uuid, person in (
+            await db.execute(
+                select(TaskAssignment.task_uuid, TaskAssignment.actor_uuid).where(
+                    TaskAssignment.task_uuid.in_(task_ids)
                 )
-            ).all()
-        )
+            )
+        ).all():
+            claims.setdefault(task_uuid, []).append(person)
+        kind = {task.uuid: task.task_type for task in tasks}
+        configs = await _item_configs(db, {(kind[prop.task_uuid], prop.property_name) for prop in properties})
     photos = (
         await db.scalars(
             select(Photo)
@@ -215,10 +274,45 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
             .order_by(TicketDisasterDetail.property_name, TicketDisasterDetail.value)
         )
     ).all()
-    return _Parts(tasks=tasks, properties=properties, claims=claims, photos=photos, details=details)
+    # One row per geometry by convention, not by constraint: take the first by uuid, as
+    # `secondary_location_repository.get_by_geometry` does.
+    locations: dict[str, SecondaryLocation] = {}
+    for location in await db.scalars(
+        select(SecondaryLocation)
+        .where(SecondaryLocation.geometry_uuid.in_(live))
+        .order_by(SecondaryLocation.uuid)
+    ):
+        locations.setdefault(str(location.geometry_uuid), location)
+    return _Parts(
+        tasks=tasks,
+        properties=properties,
+        claims=claims,
+        configs=configs,
+        photos=photos,
+        details=details,
+        locations=locations,
+    )
 
 
-def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
+async def _item_configs(
+    db: AsyncSession, keys: set[tuple[str, str]]
+) -> dict[tuple[str, str], TaskPropertyConfig]:
+    """Each item's field setting by (need type, key), inactive ones included, in one query.
+
+    No keys, no query. (task_type, property_name) is unique on the table, so each key has at
+    most one setting.
+    """
+    if not keys:
+        return {}
+    rows = await db.scalars(
+        select(TaskPropertyConfig).where(
+            tuple_(TaskPropertyConfig.task_type, TaskPropertyConfig.property_name).in_(sorted(keys))
+        )
+    )
+    return {(config.task_type, config.property_name): config for config in rows}
+
+
+def _ticket(ticket: Tickets, lon, lat, parts: _Parts, card_uuid: str | None) -> TicketForReview:
     own_tasks = [task for task in parts.tasks if str(task.ticket_uuid) == str(ticket.uuid)]
     answers: dict[str, list[str]] = {}
     for detail in parts.details:
@@ -251,7 +345,8 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
                 task_description=task.task_description,
                 quantity=task.quantity,
                 status=task.status,
-                claim_count=parts.claims.get(task.uuid, 0),
+                claim_count=len(parts.claims.get(task.uuid, ())),
+                claimant_keys=_claimant_keys(card_uuid, parts.claims.get(task.uuid, ())),
                 recruiting_stopped=task.recruiting_stopped_at is not None,
                 properties=tuple(
                     PropertyForReview(
@@ -261,6 +356,9 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
                         quantity=prop.quantity,
                         status=prop.status,
                         comment=prop.comment,
+                        **_config_fields(
+                            parts.configs.get((task.task_type, prop.property_name)), prop.property_name
+                        ),
                     )
                     for prop in parts.properties
                     if prop.task_uuid == task.uuid
@@ -274,8 +372,45 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts) -> TicketForReview:
             if str(photo.ref_uuid) == str(ticket.uuid)
         ),
         disaster_details={name: tuple(values) for name, values in answers.items()},
+        location=_location(parts.locations.get(str(ticket.uuid))),
     )
     return replace(review, version=ticket_version(review))
+
+
+def _claimant_keys(card_uuid: str | None, people) -> tuple[str, ...]:
+    if not card_uuid:
+        return ()
+    return tuple(sorted(claimant_key(card_uuid, person) for person in people))
+
+
+def _config_fields(config: TaskPropertyConfig | None, property_name: str) -> dict:
+    """What an item takes from its field setting.
+
+    The label, else the key (ADR-446); the order and how it is shown and edited (ADR-447).
+    """
+    if config is None:
+        return {"display_label": property_name}
+    return {
+        "display_label": config.label or property_name,
+        "sort_order": config.sort_order,
+        "data_type": config.data_type,
+        "enum_options": tuple(config.enum_options) if config.enum_options is not None else None,
+        "unit": config.unit,
+        "is_active": config.is_active,
+    }
+
+
+def _location(row: SecondaryLocation | None) -> LocationForReview | None:
+    if row is None:
+        return None
+    return LocationForReview(
+        location_type=row.location_type,
+        full_address=row.full_address,
+        building_section=row.building_section,
+        floor=row.floor,
+        room=row.room,
+        pole_id=row.pole_id,
+    )
 
 
 async def tickets_for_pair(
@@ -285,5 +420,5 @@ async def tickets_for_pair(
     if pair.entity_kind not in ("ticket", "ticket_task"):
         return None
     low, high = await ticket_uuids_for_pair(db, pair)
-    found = await tickets_for_review(db, (low, high))
+    found = await tickets_for_review(db, (low, high), card_uuid=str(pair.uuid))
     return found.get(low) if low else None, found.get(high) if high else None

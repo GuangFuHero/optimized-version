@@ -1,6 +1,8 @@
+import { latLngToCell } from 'h3-js';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { RescueMapMarkerItem } from '../types';
+import { toLocationCells } from './ticket-cells';
 import { createSiteMapLiveDataStore } from './use-site-map-live-data';
 
 function ticketMarker(id: string, status: string): RescueMapMarkerItem {
@@ -19,6 +21,8 @@ function ticketMarker(id: string, status: string): RescueMapMarkerItem {
 function storeWith(markers: RescueMapMarkerItem[]) {
   return createSiteMapLiveDataStore({
     markers,
+    cells: [],
+    cellsNotice: null,
     closureAreas: [],
     publicZones: [],
     isFetching: false,
@@ -81,6 +85,8 @@ describe('replaceData', () => {
   it('tells the map when a zone changes what it says, and not when it is fetched again as it was', () => {
     const store = createSiteMapLiveDataStore({
       markers: [],
+      cells: [],
+      cellsNotice: null,
       closureAreas: [],
       publicZones: [zone],
       isFetching: false,
@@ -99,5 +105,42 @@ describe('replaceData', () => {
     });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(store.getSnapshot().publicZones[0]?.teams).toHaveLength(2);
+  });
+});
+
+describe('replaceData: counted cells', () => {
+  const CELL = latLngToCell(23.6654321, 121.4312345, 8);
+  const counted = (count: number) =>
+    toLocationCells([{ cell: CELL, ticketCount: count, urgentCount: 0 }]);
+
+  it('tells the map when a count changes, and keeps the same cells when they are read again as they were', () => {
+    const store = storeWith([]);
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.replaceData({ ...store.getSnapshot(), cells: counted(245) });
+    const drawn = store.getSnapshot().cells;
+    store.replaceData({ ...store.getSnapshot(), cells: counted(245) });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(store.getSnapshot().cells).toBe(drawn);
+
+    store.replaceData({ ...store.getSnapshot(), cells: counted(246) });
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(store.getSnapshot().cells[0]?.count).toBe(246);
+  });
+
+  it('tells the map when the reason the counts could not be read comes and goes', () => {
+    const store = storeWith([]);
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.replaceData({
+      ...store.getSnapshot(),
+      cellsNotice: { text: '請放大地圖再試', zoomIn: true },
+    });
+    store.replaceData({ ...store.getSnapshot(), cellsNotice: null });
+
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 });
