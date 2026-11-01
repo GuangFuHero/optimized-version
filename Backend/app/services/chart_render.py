@@ -14,7 +14,8 @@ two cases are reconciled rather than rejected: an omitted `x` on a forced-shape 
 `chart_type=pie` together with `x=date`, which has no pie form.
 
 For a ticket-level metric, `"category"` is the type of each of the ticket's live needs: a ticket
-counts once per type, so the categories can sum to more than the total.
+counts once per type, so the categories can sum to more than the total. A deleted ticket, counted only
+when asked, uses all its needs, since they were deleted with it.
 """
 
 import html

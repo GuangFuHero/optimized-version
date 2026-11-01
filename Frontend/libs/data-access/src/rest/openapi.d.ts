@@ -7999,7 +7999,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
@@ -8029,7 +8029,7 @@ export interface operations {
         town?: string | null;
         /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
-        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. */
+        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it. */
         include_deleted?: boolean;
       };
       header?: {
@@ -8065,7 +8065,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
@@ -8085,7 +8085,7 @@ export interface operations {
         town?: string | null;
         /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
-        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. */
+        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it. */
         include_deleted?: boolean;
       };
       header?: {
@@ -8137,7 +8137,7 @@ export interface operations {
         town?: string | null;
         /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
-        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. */
+        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it. */
         include_deleted?: boolean;
       };
       header?: {
@@ -8173,7 +8173,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
@@ -8237,7 +8237,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];

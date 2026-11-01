@@ -119,7 +119,8 @@ _VALUE_Y_DESCRIPTION = (
 _X_DESCRIPTION = (
     "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). "
     "For the ticket counts, completion rate and duplicate count, 'category' is the types of the "
-    "ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. "
+    "ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total "
+    "(a deleted ticket counted through `include_deleted` uses all its needs). "
     "Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; "
     "see GET /analytics/catalog."
 )
@@ -210,7 +211,8 @@ async def _ticket_filters(
     include_deleted: bool = Query(
         False,
         description="Also count deleted tickets, as 已取消 and in the total; only the ticket counts, "
-        "completion rate, open-ticket age and backlog change read it.",
+        "completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` "
+        "and groups by category through any of its needs, since they were deleted with it.",
     ),
     scope: Scope = security.has_permission(Perm.TICKET_VIEW),
     current_user: User = Depends(security.get_current_user),
