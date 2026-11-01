@@ -24,6 +24,8 @@ export function MapCellsNotice({ notice }: { notice: TicketCellsNotice }) {
         bottom: 24,
         transform: 'translateX(-50%)',
         zIndex: 1200,
+        // As wide as its words: from the middle, it would otherwise wrap at half the map's width.
+        width: 'max-content',
         maxWidth: 'calc(100% - 32px)',
         display: 'inline-flex',
         alignItems: 'center',
