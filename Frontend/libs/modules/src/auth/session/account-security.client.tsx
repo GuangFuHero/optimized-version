@@ -839,6 +839,11 @@ export function AccountSecurityClient({
               onChange={(event) =>
                 contact.change({ value: event.target.value })
               }
+              slotProps={{
+                htmlInput: {
+                  autoComplete: contactKind === 'email' ? 'email' : 'tel',
+                },
+              }}
             />
             {/* 更換 only, over its button (design ⑩); 新增 replaces nothing. */}
             {replacing ? (

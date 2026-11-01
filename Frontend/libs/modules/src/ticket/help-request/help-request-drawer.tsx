@@ -720,7 +720,9 @@ function HelpRequestFormDrawer({
               alignItems: 'start',
             }}
           >
-            {/* Filled in from the pin, or typed: the line goes as it stands, checked once left. */}
+            {/* Filled in from the pin, or typed: the line goes as it stands, checked once left. This
+                and the floor and unit are where help is needed, not the reporter's home, so a phone
+                filling in the contact below is told to leave all three alone. */}
             <TextField
               id={addressId}
               inputRef={addressRef}
@@ -737,6 +739,7 @@ function HelpRequestFormDrawer({
                 htmlInput: {
                   maxLength: MAX_LENGTH.address,
                   'aria-describedby': addressDescribedBy,
+                  autoComplete: 'off',
                 },
               }}
               sx={{ gridArea: 'address' }}
@@ -757,7 +760,9 @@ function HelpRequestFormDrawer({
               value={form.floor}
               onChange={(event) => set('floor')(event.target.value)}
               placeholder="3樓"
-              slotProps={{ htmlInput: { maxLength: MAX_LENGTH.floor } }}
+              slotProps={{
+                htmlInput: { maxLength: MAX_LENGTH.floor, autoComplete: 'off' },
+              }}
               sx={{ gridArea: 'floor', mt: 1.5 }}
             />
             <TextField
@@ -766,7 +771,9 @@ function HelpRequestFormDrawer({
               value={form.room}
               onChange={(event) => set('room')(event.target.value)}
               placeholder="302室"
-              slotProps={{ htmlInput: { maxLength: MAX_LENGTH.room } }}
+              slotProps={{
+                htmlInput: { maxLength: MAX_LENGTH.room, autoComplete: 'off' },
+              }}
               sx={{ gridArea: 'room', mt: 1.5 }}
             />
           </Box>
@@ -790,7 +797,12 @@ function HelpRequestFormDrawer({
               placeholder="姓名 / 稱謂"
               error={isMissing('contact')}
               helperText={isMissing('contact') ? '必填' : undefined}
-              slotProps={{ htmlInput: { maxLength: MAX_LENGTH.contactName } }}
+              slotProps={{
+                htmlInput: {
+                  maxLength: MAX_LENGTH.contactName,
+                  autoComplete: 'name',
+                },
+              }}
             />
             {/* Not only a phone: some will not give one, and then send nothing at all. */}
             <TextField
@@ -799,7 +811,13 @@ function HelpRequestFormDrawer({
               value={form.contactPhone}
               onChange={(event) => set('contactPhone')(event.target.value)}
               placeholder="手機或 LINE ID"
-              slotProps={{ htmlInput: { maxLength: MAX_LENGTH.contactPhone } }}
+              // Offers the phone; a LINE ID can still be typed.
+              slotProps={{
+                htmlInput: {
+                  maxLength: MAX_LENGTH.contactPhone,
+                  autoComplete: 'tel',
+                },
+              }}
             />
           </Box>
         </Stack>
