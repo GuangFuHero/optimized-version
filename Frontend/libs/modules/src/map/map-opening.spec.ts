@@ -5,17 +5,17 @@ import {
   parseRememberedMapView,
   recordMapView,
   resolveMapOpening,
-  sameMapView,
+  settleEventMapView,
   toEventMapView,
-  type RememberedMapView,
 } from './map-opening';
+import type { RescueMapView } from './types';
 
 const EVENT = { center: [23.67, 121.418] as [number, number], zoom: 14 };
 const MOVED_EVENT = { center: [24.1, 121.6] as [number, number], zoom: 13 };
 const LEFT_AT = { center: [23.7, 121.43] as [number, number], zoom: 16 };
 
 /** Stored as `localStorage` would: what the next visit reads is what went through JSON. */
-function stored(record: RememberedMapView | null) {
+function stored(record: RescueMapView) {
   return parseRememberedMapView(JSON.parse(JSON.stringify(record)));
 }
 
@@ -32,28 +32,11 @@ describe('toEventMapView', () => {
   });
 });
 
-describe('sameMapView', () => {
-  it('compares the centre and the zoom', () => {
-    expect(sameMapView(EVENT, { ...EVENT, center: [...EVENT.center] })).toBe(
-      true,
-    );
-    expect(sameMapView(EVENT, { ...EVENT, zoom: 15 })).toBe(false);
-    expect(sameMapView(EVENT, MOVED_EVENT)).toBe(false);
-  });
-
-  it('takes two unset views as the same, and an unset one as unlike a set one', () => {
-    expect(sameMapView(null, null)).toBe(true);
-    expect(sameMapView(null, EVENT)).toBe(false);
-    expect(sameMapView(EVENT, null)).toBe(false);
-  });
-});
-
 describe('resolveMapOpening', () => {
   it("opens a first visit at the event's view", () => {
     expect(resolveMapOpening(null, EVENT)).toEqual({
       view: EVENT,
       restored: false,
-      dropRemembered: false,
     });
   });
 
@@ -62,125 +45,106 @@ describe('resolveMapOpening', () => {
     expect(resolveMapOpening(null, undefined).view).toEqual(MAP_VIEW_TAIWAN);
   });
 
-  it('opens where the map was left while the event view is the one it was left under', () => {
-    expect(resolveMapOpening({ ...LEFT_AT, eventView: EVENT }, EVENT)).toEqual({
+  it('opens where the map was left', () => {
+    expect(resolveMapOpening(LEFT_AT, EVENT)).toEqual({
       view: LEFT_AT,
       restored: true,
-      dropRemembered: false,
-    });
-    expect(
-      resolveMapOpening({ ...LEFT_AT, eventView: null }, null),
-    ).toMatchObject({ view: LEFT_AT, restored: true });
-  });
-
-  it('drops the view the map was left at once the event view has changed', () => {
-    expect(
-      resolveMapOpening({ ...LEFT_AT, eventView: EVENT }, MOVED_EVENT),
-    ).toEqual({ view: MOVED_EVENT, restored: false, dropRemembered: true });
-  });
-
-  it('drops it when an event view was set after, or cleared since', () => {
-    // Left on staging before anyone set the event's view, the map opens at it once it is set.
-    expect(resolveMapOpening({ ...LEFT_AT, eventView: null }, EVENT)).toEqual({
-      view: EVENT,
-      restored: false,
-      dropRemembered: true,
-    });
-    expect(resolveMapOpening({ ...LEFT_AT, eventView: EVENT }, null)).toEqual({
-      view: MAP_VIEW_TAIWAN,
-      restored: false,
-      dropRemembered: true,
     });
   });
 
-  it('keeps the view the map was left at when the event could not be read', () => {
-    expect(
-      resolveMapOpening({ ...LEFT_AT, eventView: EVENT }, undefined),
-    ).toEqual({ view: LEFT_AT, restored: true, dropRemembered: false });
+  it("opens where the map was left though the event's view has changed, been set or cleared", () => {
+    expect(resolveMapOpening(LEFT_AT, MOVED_EVENT)).toEqual({
+      view: LEFT_AT,
+      restored: true,
+    });
+    expect(resolveMapOpening(LEFT_AT, null).view).toEqual(LEFT_AT);
+    expect(resolveMapOpening(LEFT_AT, undefined).view).toEqual(LEFT_AT);
   });
 });
 
 describe('recordMapView', () => {
-  it('records the view with the event view it was left under', () => {
-    expect(stored(recordMapView(LEFT_AT, EVENT, null))).toEqual({
-      ...LEFT_AT,
-      eventView: EVENT,
-    });
-    expect(stored(recordMapView(LEFT_AT, null, null))).toEqual({
-      ...LEFT_AT,
-      eventView: null,
-    });
+  it('records the centre and the zoom', () => {
+    expect(stored(recordMapView(LEFT_AT))).toEqual(LEFT_AT);
   });
 
   it('rounds the centre to three places, about 100 m', () => {
     expect(
-      recordMapView(
-        { center: [23.6704049, 121.4185051], zoom: 14 },
-        EVENT,
-        null,
-      ),
-    ).toMatchObject({ center: [23.67, 121.419] });
+      recordMapView({ center: [23.6704049, 121.4185051], zoom: 14 }),
+    ).toEqual({ center: [23.67, 121.419], zoom: 14 });
   });
+});
 
-  it('keeps the event view already recorded when the event could not be read', () => {
+describe('settleEventMapView', () => {
+  const HELD = {
+    currentDisaster: { mapView: { lat: 23.67, lng: 121.418, zoom: 14 } },
+  };
+
+  it('waits for a read made since the map mounted, though an answer is held from before', () => {
     expect(
-      recordMapView(LEFT_AT, undefined, { ...MOVED_EVENT, eventView: EVENT }),
-    ).toEqual({ ...LEFT_AT, eventView: EVENT });
-    // Even once the event has been read since: a changed event still drops what was left.
+      settleEventMapView({
+        data: HELD,
+        readSinceMount: false,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: false, eventView: undefined });
+  });
+
+  it("takes the event's view once that read has answered", () => {
     expect(
-      recordMapView(
-        LEFT_AT,
-        undefined,
-        { ...MOVED_EVENT, eventView: EVENT },
-        MOVED_EVENT,
-      ),
-    ).toEqual({ ...LEFT_AT, eventView: EVENT });
+      settleEventMapView({
+        data: HELD,
+        readSinceMount: true,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: true, eventView: EVENT });
+    expect(
+      settleEventMapView({
+        data: { currentDisaster: { mapView: null } },
+        readSinceMount: true,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: true, eventView: null });
   });
 
-  it('records a first visit under the event view read after it opened', () => {
-    // Opened while the event was still unread on a slow connection; the event arrived meanwhile.
-    expect(stored(recordMapView(LEFT_AT, undefined, null, EVENT))).toEqual({
-      ...LEFT_AT,
-      eventView: EVENT,
-    });
-    expect(stored(recordMapView(LEFT_AT, undefined, null, null))).toEqual({
-      ...LEFT_AT,
-      eventView: null,
-    });
-  });
-
-  it('records nothing when the event could not be read and there is no event view to keep', () => {
-    expect(recordMapView(LEFT_AT, undefined, null)).toBeNull();
-    expect(recordMapView(LEFT_AT, undefined, null, undefined)).toBeNull();
+  it('keeps the answer held before when the read fails or does not come in time', () => {
+    // A failed read leaves the data it had; so does one still out when the wait runs out.
+    expect(
+      settleEventMapView({
+        data: HELD,
+        readSinceMount: false,
+        waitedOut: true,
+      }),
+    ).toEqual({ ready: true, eventView: EVENT });
+    expect(
+      settleEventMapView({
+        data: undefined,
+        readSinceMount: true,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: true, eventView: undefined });
   });
 });
 
 describe('parseRememberedMapView', () => {
   it('reads back what was recorded', () => {
-    const record = { ...LEFT_AT, eventView: EVENT };
+    expect(stored(LEFT_AT)).toEqual(LEFT_AT);
+  });
 
-    expect(stored(record)).toEqual(record);
+  it('reads the view out of one recorded with the event view of the time', () => {
+    expect(parseRememberedMapView({ ...LEFT_AT, eventView: EVENT })).toEqual(
+      LEFT_AT,
+    );
+    expect(parseRememberedMapView({ ...LEFT_AT, eventView: null })).toEqual(
+      LEFT_AT,
+    );
   });
 
   it('reads nothing back from what is not a recorded view', () => {
     expect(parseRememberedMapView(null)).toBeNull();
     expect(parseRememberedMapView('23.7,121.43')).toBeNull();
+    expect(parseRememberedMapView({ center: [23.7], zoom: 16 })).toBeNull();
     expect(
-      parseRememberedMapView({ center: [23.7], zoom: 16, eventView: null }),
+      parseRememberedMapView({ center: [23.7, 'x'], zoom: 16 }),
     ).toBeNull();
-    expect(
-      parseRememberedMapView({
-        center: [23.7, 'x'],
-        zoom: 16,
-        eventView: null,
-      }),
-    ).toBeNull();
-    expect(
-      parseRememberedMapView({ ...LEFT_AT, eventView: { center: [1, 2] } }),
-    ).toBeNull();
-  });
-
-  it('reads nothing back from a view recorded without its event view', () => {
-    expect(parseRememberedMapView({ ...LEFT_AT })).toBeNull();
   });
 });

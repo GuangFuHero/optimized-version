@@ -1,18 +1,19 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
   CURRENT_DISASTER_WAIT_MS,
-  useCurrentDisaster,
+  currentDisasterQuery,
 } from '@rescue-frontend/data-access/admin';
 
 import { MAP_VIEW_TAIWAN } from '../constants';
 import {
-  forgetMapView,
   readRememberedMapView,
+  rememberMapView,
   resolveMapOpening,
-  toEventMapView,
+  settleEventMapView,
   type EventMapView,
   type MapOpening,
   type RescueMapMemoryKey,
@@ -30,31 +31,23 @@ export interface EventMapViewState {
   view: RescueMapView;
 }
 
-const READING: EventMapViewState = {
-  ready: false,
-  eventView: undefined,
-  view: MAP_VIEW_TAIWAN,
-};
-
-const UNREAD: EventMapViewState = {
-  ready: true,
-  eventView: undefined,
-  view: MAP_VIEW_TAIWAN,
-};
-
 /**
  * Where the event says maps open (`currentDisaster.mapView`, ADR-395). An event that sets no view,
  * no event configured yet and a failed read all come to all of Taiwan; only the last leaves
- * `eventView` undefined, and so does a read still out after CURRENT_DISASTER_WAIT_MS. An answer that
- * comes later is taken, but a map already open does not move to it.
+ * `eventView` undefined, and so does a read still out after CURRENT_DISASTER_WAIT_MS. It is read
+ * again on every mount and waited on (`settleEventMapView`): the answer this tab holds may be from
+ * before the view was changed in the back office. An answer that comes later is taken, but a map
+ * already open does not move to it.
  */
 export function useEventMapView(): EventMapViewState {
-  const { data, status } = useCurrentDisaster();
-  const settled = Boolean(data) || status === 'error';
+  const { data, isFetchedAfterMount } = useQuery({
+    ...currentDisasterQuery(),
+    refetchOnMount: 'always',
+  });
   const [waitedOut, setWaitedOut] = useState(false);
 
   useEffect(() => {
-    if (settled) {
+    if (isFetchedAfterMount) {
       return;
     }
 
@@ -64,72 +57,71 @@ export function useEventMapView(): EventMapViewState {
     );
 
     return () => window.clearTimeout(timer);
-  }, [settled]);
+  }, [isFetchedAfterMount]);
 
   return useMemo(() => {
-    // A read that fails after one that worked keeps the answer it had.
-    if (data) {
-      const eventView = toEventMapView(data.currentDisaster);
+    const { ready, eventView } = settleEventMapView({
+      data,
+      readSinceMount: isFetchedAfterMount,
+      waitedOut,
+    });
 
-      return { ready: true, eventView, view: eventView ?? MAP_VIEW_TAIWAN };
-    }
-
-    return status === 'error' || waitedOut ? UNREAD : READING;
-  }, [data, status, waitedOut]);
-}
-
-interface DecidedOpening {
-  opening: MapOpening;
-  openedUnder: EventMapView;
+    return { ready, eventView, view: eventView ?? MAP_VIEW_TAIWAN };
+  }, [data, isFetchedAfterMount, waitedOut]);
 }
 
 /**
  * Where a map opens, worked out once (`resolveMapOpening`); null until then. A position in the
  * address is not waited on: the map opens there at once, and this only settles what it falls back
- * to. Otherwise it waits for the event, which says whether the view the map was left at still holds.
+ * to. Nor is a view this browser left the map at, which is where it opens whatever the event says.
+ * Otherwise it waits for the event's view.
  *
- * `openedUnder` is the event view the opening was worked out under, kept as it was: a view the map
- * is left at is remembered under it. The live one would let an event view changed while the map is
- * open pass for the one it was left under, and the next visit would come back to the old view
- * instead of going to the new event view. Undefined until the opening is worked out.
- *
- * `eventView` is the live one, for a map opened under an event that could not be read: with nothing
- * remembered, a view it is left at is remembered under the event view once that arrives.
+ * Opened at the event's view, a map that keeps its position in the address (`remembersOpening`, the
+ * site's) remembers it as the view left, as if it had been moved there: from then on this browser
+ * comes back to it, though the event's view changes. A back-office map frames its data on a first
+ * visit instead, and one that framed nothing would come back unframed. Nothing is remembered when the
+ * event could not be read either: all of Taiwan would then stay.
  */
 export function useMapOpening({
   memoryKey,
   addressHasPosition,
+  remembersOpening = false,
 }: {
   memoryKey?: RescueMapMemoryKey;
   addressHasPosition: boolean;
-}): {
-  opening: MapOpening | null;
-  openedUnder: EventMapView;
-  eventView: EventMapView;
-} {
+  remembersOpening?: boolean;
+}): MapOpening | null {
   const event = useEventMapView();
-  const [decided, setDecided] = useState<DecidedOpening | null>(null);
+  const [opening, setOpening] = useState<MapOpening | null>(null);
 
   useEffect(() => {
-    if (decided || !event.ready) {
+    if (opening) {
       return;
     }
 
-    const opening =
+    const remembered =
       memoryKey && !addressHasPosition
-        ? resolveMapOpening(readRememberedMapView(memoryKey), event.eventView)
-        : resolveMapOpening(null, event.eventView);
+        ? readRememberedMapView(memoryKey)
+        : null;
 
-    if (memoryKey && opening.dropRemembered) {
-      forgetMapView(memoryKey);
+    if (!remembered && !event.ready) {
+      return;
     }
 
-    setDecided({ opening, openedUnder: event.eventView });
-  }, [addressHasPosition, decided, event, memoryKey]);
+    const decided = resolveMapOpening(remembered, event.eventView);
 
-  return {
-    opening: decided?.opening ?? null,
-    openedUnder: decided?.openedUnder,
-    eventView: event.eventView,
-  };
+    if (
+      memoryKey &&
+      remembersOpening &&
+      !addressHasPosition &&
+      !decided.restored &&
+      event.eventView !== undefined
+    ) {
+      rememberMapView(memoryKey, decided.view);
+    }
+
+    setOpening(decided);
+  }, [addressHasPosition, event, memoryKey, opening, remembersOpening]);
+
+  return opening;
 }

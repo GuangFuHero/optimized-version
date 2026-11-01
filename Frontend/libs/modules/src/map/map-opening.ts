@@ -6,9 +6,8 @@ import type { RescueMapView } from './types';
  * all of Taiwan; and, for a map people browse, at the view this browser last left it at. The
  * location picker remembers nothing (prototype `tk-locpicker.jsx`, 49a668bd).
  *
- * Unlike the prototype, the remembered view carries the event view it was left under, and a changed
- * event view drops it: someone who moved the map before the event's view was set opens at it once it
- * is (user's decision, 2026-10-26).
+ * As in the prototype, a view remembered stays when the event's view changes: only a browser that
+ * has not opened the map yet opens at the event's view (the designer's rule, 2026-11-01).
  */
 
 /** Each browsing map remembers a view of its own (prototype `wg.mapLast.<map>`). */
@@ -20,17 +19,10 @@ export type RescueMapMemoryKey = 'site' | 'mutual-aid' | 'station';
  */
 export type EventMapView = RescueMapView | null | undefined;
 
-/** The view a map was left at, and the event view at the time. */
-export interface RememberedMapView extends RescueMapView {
-  eventView: RescueMapView | null;
-}
-
 export interface MapOpening {
   view: RescueMapView;
   /** Opened where the map was left: a map that frames its data leaves the first framing out. */
   restored: boolean;
-  /** The remembered view was left under an event view since changed, and goes. */
-  dropRemembered: boolean;
 }
 
 interface CurrentDisasterMapView {
@@ -49,81 +41,56 @@ export function toEventMapView(
     : null;
 }
 
-/** Two unset views are the same: an event that still sets none has not changed. */
-export function sameMapView(
-  a: RescueMapView | null,
-  b: RescueMapView | null,
-): boolean {
-  if (!a || !b) {
-    return a === b;
+/**
+ * Where the event says maps open, once it is known: not until a read made since the map mounted has
+ * answered, or the wait for one has run out. An answer held from earlier in this tab is not taken
+ * alone: it may be from before the event's view was changed, and the map would open where the event
+ * no longer says. A read that fails keeps the answer held before it; with none, `eventView` is
+ * undefined, as for an event that could not be read.
+ */
+export function settleEventMapView(read: {
+  data: { currentDisaster?: CurrentDisasterMapView | null } | undefined;
+  readSinceMount: boolean;
+  waitedOut: boolean;
+}): { ready: boolean; eventView: EventMapView } {
+  if (!read.readSinceMount && !read.waitedOut) {
+    return { ready: false, eventView: undefined };
   }
 
-  return (
-    a.zoom === b.zoom &&
-    a.center[0] === b.center[0] &&
-    a.center[1] === b.center[1]
-  );
+  return {
+    ready: true,
+    eventView: read.data
+      ? toEventMapView(read.data.currentDisaster)
+      : undefined,
+  };
 }
 
+/** The view this browser left the map at, when there is one, whatever the event says now. */
 export function resolveMapOpening(
-  remembered: RememberedMapView | null,
+  remembered: RescueMapView | null,
   eventView: EventMapView,
 ): MapOpening {
-  const eventOpening = eventView ?? MAP_VIEW_TAIWAN;
-
-  if (!remembered) {
-    return { view: eventOpening, restored: false, dropRemembered: false };
-  }
-
-  // An event that could not be read has not changed for all anyone knows.
-  if (eventView === undefined || sameMapView(remembered.eventView, eventView)) {
-    return {
-      view: { center: remembered.center, zoom: remembered.zoom },
-      restored: true,
-      dropRemembered: false,
-    };
-  }
-
-  return { view: eventOpening, restored: false, dropRemembered: true };
+  return remembered
+    ? { view: remembered, restored: true }
+    : { view: eventView ?? MAP_VIEW_TAIWAN, restored: false };
 }
 
 function roundCoordinate(value: number) {
   return Math.round(value * 1e3) / 1e3;
 }
 
-/**
- * What to remember of a view the map was left at. A map opened under an event that could not be read
- * keeps the event view already remembered, or a failed read would pass for a changed event next time.
- * With none to keep, the event view read since then stands in (`eventViewSince`), so a first visit on
- * a slow connection is remembered once the event arrives; with neither, nothing is remembered.
- */
-export function recordMapView(
-  view: RescueMapView,
-  eventView: EventMapView,
-  remembered: RememberedMapView | null,
-  eventViewSince: EventMapView = undefined,
-): RememberedMapView | null {
-  const leftUnder =
-    eventView !== undefined
-      ? eventView
-      : remembered
-        ? remembered.eventView
-        : eventViewSince;
-
-  if (leftUnder === undefined) {
-    return null;
-  }
-
+/** What to remember of a view the map was left at. */
+export function recordMapView(view: RescueMapView): RescueMapView {
   return {
     // About 100 m: enough to come back to the same view, not enough to show the next person on a
     // shared computer the very door the last one looked at. The prototype keeps about a metre.
     center: [roundCoordinate(view.center[0]), roundCoordinate(view.center[1])],
     zoom: view.zoom,
-    eventView: leftUnder,
   };
 }
 
-function parseMapView(value: unknown): RescueMapView | null {
+/** A view remembered. One left before also holds the event view of the time, which no longer counts. */
+export function parseRememberedMapView(value: unknown): RescueMapView | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
@@ -142,31 +109,12 @@ function parseMapView(value: unknown): RescueMapView | null {
   return { center: [center[0], center[1]], zoom: zoom as number };
 }
 
-export function parseRememberedMapView(
-  value: unknown,
-): RememberedMapView | null {
-  const view = parseMapView(value);
-
-  if (!view) {
-    return null;
-  }
-
-  const { eventView } = value as { eventView?: unknown };
-  const leftUnder = eventView === null ? null : parseMapView(eventView);
-
-  if (eventView !== null && !leftUnder) {
-    return null;
-  }
-
-  return { ...view, eventView: leftUnder };
-}
-
 // Reads and writes below fail quietly: a private window or blocked site data throws, and the map
 // then just opens as on a first visit.
 
 export function readRememberedMapView(
   key: RescueMapMemoryKey,
-): RememberedMapView | null {
+): RescueMapView | null {
   try {
     const stored = window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${key}`);
 
@@ -176,35 +124,13 @@ export function readRememberedMapView(
   }
 }
 
-export function rememberMapView(
-  key: RescueMapMemoryKey,
-  view: RescueMapView,
-  eventView: EventMapView,
-  eventViewSince?: EventMapView,
-) {
+export function rememberMapView(key: RescueMapMemoryKey, view: RescueMapView) {
   try {
-    const record = recordMapView(
-      view,
-      eventView,
-      readRememberedMapView(key),
-      eventViewSince,
+    window.localStorage.setItem(
+      `${STORAGE_KEY_PREFIX}${key}`,
+      JSON.stringify(recordMapView(view)),
     );
-
-    if (record) {
-      window.localStorage.setItem(
-        `${STORAGE_KEY_PREFIX}${key}`,
-        JSON.stringify(record),
-      );
-    }
   } catch {
     // Nothing remembered; see above.
-  }
-}
-
-export function forgetMapView(key: RescueMapMemoryKey) {
-  try {
-    window.localStorage.removeItem(`${STORAGE_KEY_PREFIX}${key}`);
-  } catch {
-    // Nothing to forget, as nothing could be remembered; see above.
   }
 }
