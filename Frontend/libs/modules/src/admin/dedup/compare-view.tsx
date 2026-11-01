@@ -18,12 +18,10 @@ import { toast } from 'sonner';
 
 import { ApiError } from '@rescue-frontend/data-access';
 import {
-  useCurrentUser,
   useDecideDuplicatePair,
   useDisasterTypes,
   useDuplicatePair,
   useResolveDuplicatePair,
-  useTaskPropertyConfigs,
   useTicketPropertyConfigs,
   type DuplicatePairDetail,
 } from '@rescue-frontend/data-access/admin';
@@ -38,6 +36,7 @@ import {
 import {
   defaultPlan,
   duplicateTasks,
+  headcount,
   gapText,
   isEdited,
   isPending,
@@ -70,14 +69,12 @@ const COL_W = 300;
 type ConfirmMode = 'merge' | 'separate' | 'confirm';
 
 function useFieldLabels(pair: DuplicatePairDetail | undefined): FieldLabels {
-  const { data: user } = useCurrentUser();
   const types = [
     ...new Set([
       ...(pair?.tickets?.low?.disaster_types ?? []),
       ...(pair?.tickets?.high?.disaster_types ?? []),
     ]),
   ];
-  const tasks = pair ? duplicateTasks(pair) : null;
   // Inactive settings need the edit permissions (ADR-226): an inactive answer shows its key.
   const ticketConfigs = useTicketPropertyConfigs(
     { disasterTypes: types, includeInactive: false },
@@ -87,17 +84,8 @@ function useFieldLabels(pair: DuplicatePairDetail | undefined): FieldLabels {
     { includeInactive: false },
     { enabled: Boolean(pair?.tickets) },
   );
-  // Need-item settings need dynamic_field.view, which a data auditor lacks: asking anyway would
-  // turn the whole page into the shell's 403. Without it, items show their keys.
-  const canReadItems =
-    user?.capabilities.includes('dynamic_field.view') ?? false;
-  const taskConfigs = useTaskPropertyConfigs(
-    { taskType: tasks?.low.task_type ?? '', includeInactive: false },
-    { enabled: Boolean(tasks) && canReadItems },
-  );
   return useMemo<FieldLabels>(() => {
     const ticketList = ticketConfigs.data?.ticketPropertyConfigs ?? [];
-    const taskList = taskConfigs.data?.taskPropertyConfigs ?? [];
     const typeList = disasterTypes.data?.disasterTypes ?? [];
     return {
       disaster: (name) => {
@@ -112,21 +100,10 @@ function useFieldLabels(pair: DuplicatePairDetail | undefined): FieldLabels {
           unit: config?.unit,
         };
       },
-      taskItem: (_type, name) => {
-        const config = taskList.find((c) => c.propertyName === name);
-        return {
-          label: config?.displayLabel || config?.label || name,
-          order: config ? config.sortOrder : 9999,
-          inactive: config ? !config.isActive : false,
-          dataType: config?.dataType,
-          options: config?.enumOptions,
-          unit: config?.unit,
-        };
-      },
       disasterType: (key) => typeList.find((t) => t.key === key)?.label || key,
       taskType: (key) => formatTicketTypeLabel(key),
     };
-  }, [ticketConfigs.data, taskConfigs.data, disasterTypes.data]);
+  }, [ticketConfigs.data, disasterTypes.data]);
 }
 
 export function CompareView({
@@ -1143,7 +1120,7 @@ function CompareTable({
 
 const claimedOf = (pair: DuplicatePairDetail) => {
   const tasks = duplicateTasks(pair);
-  return tasks ? tasks.low.claim_count + tasks.high.claim_count : 0;
+  return tasks ? headcount([tasks.low, tasks.high]) : 0;
 };
 
 function ResultField({
@@ -1505,9 +1482,11 @@ function mergeEffects(
       `沒勾的需求取消：${dropped.map((n) => `「${n.task.task_name}」`).join('、')}`,
     );
   }
-  const staying =
-    claimedOf(pair) + kept.reduce((n, row) => n + row.task.claim_count, 0);
-  const cancelled = dropped.reduce((n, row) => n + row.task.claim_count, 0);
+  const staying = headcount([
+    ...(tasks ? [tasks.low, tasks.high] : []),
+    ...kept.map((row) => row.task),
+  ]);
+  const cancelled = headcount(dropped.map((row) => row.task));
   if (staying) lines.push(`${staying} 位已承接的志工繼續承接，會收到通知`);
   if (cancelled) lines.push(`${cancelled} 位志工承接的需求取消了，會收到通知`);
   const photos = photoRows(pair, plan);

@@ -194,8 +194,6 @@ export interface FieldConfig {
 export interface FieldLabels {
   /** A disaster answer's name → its settings, ordered as the settings order them. */
   disaster: (name: string) => FieldConfig;
-  /** A need item's name for a need kind → its settings. */
-  taskItem: (taskType: string, name: string) => FieldConfig;
   disasterType: (key: string) => string;
   taskType: (key: string) => string;
 }
@@ -267,6 +265,30 @@ export function duplicateTasks(
   const low = find('low');
   const high = find('high');
   return low && high ? { low, high } : null;
+}
+
+/**
+ * How many people the needs hold together. A person on two of them has the same key on each
+ * (ADR-445), so they count once, as the resolve counts them.
+ */
+export function headcount(tasks: readonly TaskForReview[]): number {
+  return new Set(tasks.flatMap((task) => task.claimant_keys)).size;
+}
+
+/**
+ * A need item's settings, as the pair detail carries them on each item (ADR-446, ADR-447): read
+ * with ai_duplicate.view alone, so a data auditor gets the same rows as an admin.
+ */
+function itemConfig(items: TaskForReview['properties']): FieldConfig {
+  const item = items.find((i) => i.data_type != null) ?? items[0];
+  return {
+    label: item?.display_label ?? '',
+    order: item?.sort_order ?? 9999,
+    inactive: item?.is_active === false,
+    dataType: item?.data_type ?? undefined,
+    options: item?.enum_options,
+    unit: item?.unit,
+  };
 }
 
 /** Items grouped by name: one row per name, as a reviewer reads them. */
@@ -432,7 +454,10 @@ export function ticketFields(
       ...itemNames
         .map((name) => ({
           name,
-          ...labels.taskItem(tk('low').task_type, name),
+          ...itemConfig([
+            ...(groups.low.get(name) ?? []),
+            ...(groups.high.get(name) ?? []),
+          ]),
         }))
         .sort((a, b) => a.order - b.order)
         .map(({ name, ...config }) => {
@@ -591,9 +616,8 @@ export interface MergeProblem {
 }
 
 /**
- * What stops a merge before it is sent. The floor is both sides' headcounts added up, as the design
- * has it (`ddMergeEffects`). The backend counts a person on both needs once (ADR-370), so it would
- * accept a little less when someone signed up on both.
+ * What stops a merge before it is sent. The floor is the people on the two needs, each counted once,
+ * as the resolve counts them (ADR-370, ADR-445).
  */
 export function mergeProblems(
   pair: DuplicatePairDetail,
@@ -607,7 +631,7 @@ export function mergeProblems(
     const value = quantity
       ? resultValue(quantity, plan)
       : tasks[plan.primary].quantity;
-    const floor = tasks.low.claim_count + tasks.high.claim_count;
+    const floor = headcount([tasks.low, tasks.high]);
     const rescue = tasks.low.task_type === 'rescue';
     if (value == null || value === '') {
       if (!rescue)

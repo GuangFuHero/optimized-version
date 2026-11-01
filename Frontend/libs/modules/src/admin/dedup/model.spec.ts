@@ -11,6 +11,7 @@ import {
   byLatestCreated,
   defaultPlan,
   defaultPrimary,
+  headcount,
   gapText,
   mergeProblems,
   orderedSides,
@@ -32,11 +33,6 @@ const labels: FieldLabels = {
     order: name === 'water_depth' ? 1 : 2,
     inactive: false,
   }),
-  taskItem: (_type, name) => ({
-    label: `細項:${name}`,
-    order: 0,
-    inactive: false,
-  }),
   disasterType: (key) => key,
   taskType: (key) =>
     ({ hr: '人力', supply: '物資', rescue: '救援' })[key] ?? key,
@@ -50,6 +46,7 @@ function task(over: Partial<TaskForReview> & { uuid: string }): TaskForReview {
     quantity: 4,
     status: 'pending',
     claim_count: 0,
+    claimant_keys: [],
     recruiting_stopped: false,
     properties: [],
     ...over,
@@ -162,10 +159,12 @@ function fixture() {
         task_name: '清泥人力',
         quantity: 4,
         claim_count: 1,
+        claimant_keys: ['k-both'],
         properties: [
           {
             uuid: 'L-p1',
             property_name: 'tools',
+            display_label: '工具',
             property_value: '鏟子',
             quantity: null,
             status: null,
@@ -194,10 +193,12 @@ function fixture() {
         task_name: '清淤人力',
         quantity: 6,
         claim_count: 3,
+        claimant_keys: ['k-both', 'k-h1', 'k-h2'],
         properties: [
           {
             uuid: 'H-p1',
             property_name: 'tools',
+            display_label: '工具',
             property_value: '推車',
             quantity: null,
             status: null,
@@ -271,6 +272,36 @@ describe('pairSignals', () => {
 });
 
 describe('fields', () => {
+  it("reads a need item's name, order, type and unit from the detail, not the settings", () => {
+    const pair = fixture();
+    for (const t of Object.values(both(pair))) {
+      t.tasks[0].properties.push({
+        uuid: `${t.uuid}-n`,
+        property_name: 'people',
+        property_value: '3',
+        quantity: null,
+        status: null,
+        comment: null,
+        display_label: '人數',
+        sort_order: 0,
+        data_type: 'number',
+        enum_options: null,
+        unit: '人',
+        is_active: false,
+      });
+    }
+    const fields = ticketFields(pair, labels);
+    const items = fields.task.filter((f) => f.id.startsWith('item:'));
+    // sort_order 0 comes before tools, which has no setting (9999).
+    expect(items.map((f) => [f.id, f.label])).toEqual([
+      ['item:people', '人數'],
+      ['item:tools', '工具'],
+    ]);
+    expect(items[0].input).toBe('number');
+    expect(items[0].inactive).toBe(true);
+    expect(items[0].show('3')).toBe('3 人');
+  });
+
   it('lists only rows one side filled, and names the empty ones', () => {
     const fields = ticketFields(fixture(), labels);
     const ids = fields.ticket.map((f) => f.id);
@@ -507,14 +538,10 @@ describe('configured fields', () => {
         dataType: 'number',
         unit: 'cm',
       }),
-      taskItem: () => ({
-        label: '工具',
-        order: 0,
-        inactive: false,
-        dataType: 'multi_select',
-      }),
     };
     const pair = fixture();
+    for (const t of Object.values(both(pair)))
+      t.tasks[0].properties[0].data_type = 'multi_select';
     const fields = ticketFields(pair, configured);
     const depth = fields.ticket.find((f) => f.id === 'disaster:water_depth');
     expect(depth?.input).toBe('number');
@@ -543,18 +570,31 @@ describe('configured fields', () => {
   });
 });
 
+describe('headcount', () => {
+  it('counts each claimant key once across the needs', () => {
+    expect(headcount([])).toBe(0);
+    expect(
+      headcount([
+        task({ uuid: 'a', claimant_keys: ['k1', 'k2'] }),
+        task({ uuid: 'b', claimant_keys: ['k2', 'k3'] }),
+      ]),
+    ).toBe(3);
+  });
+});
+
 describe('mergeProblems', () => {
-  it('refuses a quantity under the headcounts of both sides added up', () => {
+  it('refuses a quantity under the people on both needs, counting someone on both once', () => {
     const pair = fixture();
     const fields = ticketFields(pair, labels);
     const plan = defaultPlan(pair, fields);
+    plan.edits['task:quantity'] = '2';
+    expect(mergeProblems(pair, fields, plan)).toEqual([
+      { field: 'task:quantity', message: '不能少於承接人數 3' },
+    ]);
+    // 1 + 3 claims, but k-both is on both needs: 3 people, so 3 is enough.
     plan.edits['task:quantity'] = '3';
-    expect(mergeProblems(pair, fields, plan).map((p) => p.field)).toContain(
-      'task:quantity',
-    );
-    plan.edits['task:quantity'] = '4';
     expect(mergeProblems(pair, fields, plan)).toEqual([]);
-    expect(resultValue(fieldOf(fields, 'task:quantity'), plan)).toBe(4);
+    expect(resultValue(fieldOf(fields, 'task:quantity'), plan)).toBe(3);
   });
 
   it('asks for a quantity except on a rescue need', () => {
