@@ -3,13 +3,13 @@
 import base64
 import contextlib
 import re
-import ssl
 from dataclasses import dataclass
 from datetime import date, timedelta
 
 import httpx
 
 from app.schemas.map import AttributionResponse
+from app.services.address import NON_STRICT_SSL
 
 # 1×1 transparent PNG (67 bytes)
 BLANK_TILE = base64.b64decode(
@@ -19,11 +19,6 @@ BLANK_TILE = base64.b64decode(
 # Sent on every upstream request so tile providers can identify and contact the platform.
 USER_AGENT = "GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)"
 HEADERS = {"User-Agent": USER_AGENT}
-
-# Python's strict mode rejects CA certificates without a Subject Key Identifier, such as the TWCA root
-# NLSC chains to; the chain and hostname are still verified.
-NON_STRICT_SSL = ssl.create_default_context()
-NON_STRICT_SSL.verify_flags &= ~ssl.VERIFY_X509_STRICT
 
 
 @dataclass
