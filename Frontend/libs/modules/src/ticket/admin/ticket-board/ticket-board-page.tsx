@@ -202,6 +202,8 @@ export function TicketBoardPage() {
               failed={statsQuery.error != null}
               retrying={statsQuery.isFetching}
               onRetry={() => void statsQuery.refetch()}
+              status={filters.status}
+              onStatusChange={(status) => setFilters({ ...filters, status })}
             />
             <TicketToolbar
               caps={caps}

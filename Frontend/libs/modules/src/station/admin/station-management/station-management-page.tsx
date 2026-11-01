@@ -35,6 +35,7 @@ import { StationImportDialog } from './station-import-dialog';
 import { StationMapView } from './station-map-view';
 import { offersImport } from './model/import';
 import { QuickStatusCell, TeamAssignCell } from './station-row-controls';
+import { StationStatsStrip } from './station-stats-strip';
 import { StationTable } from './station-table';
 import { StationToolbar } from './station-toolbar';
 
@@ -156,6 +157,10 @@ export function StationManagementPage() {
               '& > *': COLUMN_SX,
             }}
           >
+            <StationStatsStrip
+              status={filters.status}
+              onStatusChange={(status) => setFilters({ ...filters, status })}
+            />
             <StationToolbar
               caps={caps}
               query={filters.q}

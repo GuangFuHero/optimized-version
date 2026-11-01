@@ -2679,6 +2679,21 @@ export type AdminTicketTasksQuery = {
   }>;
 };
 
+export type AdminStationFacetsQueryVariables = Exact<{ [key: string]: never }>;
+
+export type AdminStationFacetsQuery = {
+  __typename?: 'Query';
+  stationFacets: {
+    __typename?: 'StationFacetsType';
+    total: number;
+    byStatus: Array<{
+      __typename?: 'StationStatusCountType';
+      status: string;
+      count: number;
+    }>;
+  };
+};
+
 export type AdminStationsQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
   stationType?: InputMaybe<Scalars['String']['input']>;
@@ -5960,6 +5975,48 @@ export const AdminTicketTasksDocument = {
 } as unknown as DocumentNode<
   AdminTicketTasksQuery,
   AdminTicketTasksQueryVariables
+>;
+export const AdminStationFacetsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminStationFacets' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'stationFacets' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'total' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'byStatus' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'status' },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'count' } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminStationFacetsQuery,
+  AdminStationFacetsQueryVariables
 >;
 export const AdminStationsDocument = {
   kind: 'Document',
