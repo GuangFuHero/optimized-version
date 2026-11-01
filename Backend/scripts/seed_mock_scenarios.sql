@@ -2,7 +2,7 @@
 -- Mock data seed v3 — 兩個災害情境,資料符合現在的承接、請求協助、刪除規則
 -- =====================================================================
 -- Scenario A | 花蓮光復土石流 2024-07-24:站 16、帳號 27(志工 20+NGO 4+官方 3)、單 30+avol01 的 7 張、
---              地圖區域 8(責任區 1、危險區 3、標示區 4,其中 1 個不公開)
+--              地圖區域 8(責任區 1、危險區 3、標示區 4,其中 1 個不公開)、現場分區 3 棟(住戶的單 10 張,第 5b 節)
 -- Scenario B | 宜蘭冬山水災   2025-10-03:站 9、帳號 10(志工 4+NGO 5+官方 1)、單 8、責任區 1
 -- 聯絡欄位混用電話與 LINE ID。
 -- 公告:前台、管理平台各一則上線(第 8b 節);那一頁已經有別的公告上線就不放。
@@ -22,6 +22,9 @@
 --                     scripts/set_password.py 設(Backend/DEPLOY.md),密碼跟管 staging 的人拿;
 --                     重跑這支 seed 不會刪掉這兩個帳號和它們的密碼
 --   (不用登入)        行前資訊 /briefing:一份已發布的,裝備可以勾;另有一個土石流範本給後台用
+--   (登入任一帳號)    現場分區:光復一帶點開中正路二段61號的任一張單 › 看各樓層,一層一框;
+--                     上一張/下一張在同一棟裡走。訪客看不到「看各樓層」
+--   (疑似重複)        asuper01、aaudit01 在任務管理看得到 6 張單標「疑似重複」:第 4c 節三張配對卡各一種狀態
 --
 -- 規則(第 11 節會檢查,不符就整個回滾):
 --   需求只用 pending/fulfilled/canceled(ADR-293)。湊滿的是 fulfilled+completed_at;停止招募的是
@@ -30,8 +33,9 @@
 --   app/services/ticket_status.py 由需求推導。承接紀錄 status 一律 accepted,人數不超過 quantity(ADR-291)。
 --
 -- UUID 前綴:users=c…、A 站=a…、B 站=b…、tickets=d…、tasks=e…、assignments=f…、teams=1…、
---   地圖區域(責任區、危險區、標示區)=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、
---   role_requests=6…、briefing_templates=7…、briefings=8…、announcements=9…
+--   地圖區域(責任區、危險區、標示區)、建築地圖(2…101 起)=2…、team_zone_assign=3…、secondary_locations=4…、
+--   photos=5…、role_requests=6…、briefing_templates=7…、briefings=8…、announcements=9…、去重配對卡=0a…、
+--   去重事件=0b…
 -- 清除段照前綴刪,也照「建立者/承接者是 mock 帳號」刪:測試者在 staging 用 mock 帳號留下的單、站點、
 --   地圖區域、建築地圖、照片、申請、邀請連結、站點建議與合併紀錄、去重紀錄會一起清掉,所以可以重跑。
 --   真人留下的資料不刪,只放掉指向 mock 帳號(或要刪的 mock 資料)的欄位:mock 帳號審核過的申請、站點
@@ -316,11 +320,11 @@ WHERE u.uuid::text LIKE 'c0000000-%' AND u.uuid NOT IN (SELECT uuid FROM kept_mo
 -- ADR-026 dropped the Group/Policy model: the old 'Login User' group is now the `user` platform
 -- role that every registered account gets (see scripts/seed_rbac.py). role_uuid is NOT NULL, so
 -- this fails loudly rather than silently if seed_rbac.py has not been run on this database first.
--- role_kind 與 team_uuid 是 ADR-073 之後的必填欄位:平台角色的 kind='platform'、team_uuid 必須為
--- NULL(ck_ura_role_team_kind),而 role_kind 另有複合 FK 指向 roles(uuid, kind),寫錯會被擋下。
-INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid)
+-- 平台角色的 team_uuid 必須為 NULL、團隊角色一定要帶 team_uuid:user_role_assign 上的觸發器依角色的 kind
+-- 檢查(ck_ura_role_team_kind),寫錯會被擋下。
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, team_uuid)
 SELECT gen_random_uuid(), u.uuid,
-       (SELECT uuid FROM roles WHERE name='user' AND kind='platform'), 'platform', NULL
+       (SELECT uuid FROM roles WHERE name='user' AND kind='platform'), NULL
 FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
 
 -- 1c. TEAMS — RBAC v1 組織身分(13 個:官方 4 + NGO 9,每個官方/NGO 帳號一個)
@@ -343,8 +347,8 @@ INSERT INTO teams (uuid, name, type, tax_id, status) VALUES
 -- ADR-068/073:「屬於哪個 team」不再是 users 的欄位(users.team_uuid 已被 90c93167fa66 移除),
 -- 而是 user_role_assign 這一列的性質——一筆 team 角色的授予就是一個身分。
 -- 24 個志工帳號不拿 team 身分,只有 1b 給的 user 平台角色,才會與官方/NGO 形成對比。
-INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid)
-SELECT gen_random_uuid(), m.user_uuid::uuid, r.uuid, 'team', m.team_uuid::uuid
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, team_uuid)
+SELECT gen_random_uuid(), m.user_uuid::uuid, r.uuid, m.team_uuid::uuid
 FROM (VALUES
  ('c0000000-0000-4000-8000-000000000021','10000000-0000-4000-8000-000000000001'),
  ('c0000000-0000-4000-8000-000000000022','10000000-0000-4000-8000-000000000002'),
@@ -365,11 +369,11 @@ CROSS JOIN (SELECT uuid FROM roles WHERE name='admin' AND kind='team') r;
 -- 1e. 2 個平台管理帳號:除了 1b 給的 user,再拿一個平台角色。原本是在 staging 上手動加的,用的也是 c… 前綴,
 -- 所以每次 SEED_MOCK 都被第 0 節刪掉;現在帳號留著(kept_mock_users),角色每次在這裡重新給。
 -- 角色找不到時 role_uuid 是 NULL,會直接報錯。
-INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid) VALUES
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, team_uuid) VALUES
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000038',
-  (SELECT uuid FROM roles WHERE name='super_admin' AND kind='platform'), 'platform', NULL),
+  (SELECT uuid FROM roles WHERE name='super_admin' AND kind='platform'), NULL),
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000039',
-  (SELECT uuid FROM roles WHERE name='data_auditor' AND kind='platform'), 'platform', NULL);
+  (SELECT uuid FROM roles WHERE name='data_auditor' AND kind='platform'), NULL);
 
 -- 2. STATIONS — base_geometries + stations + EAV + 投票
 INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_at, updated_at) VALUES
@@ -432,7 +436,7 @@ INSERT INTO stations (uuid, type, name, description, op_hour, level, comment, so
 UPDATE stations s
 SET team_uuid = ura.team_uuid
 FROM base_geometries bg
-JOIN user_role_assign ura ON ura.user_uuid = bg.created_by AND ura.role_kind = 'team'
+JOIN user_role_assign ura ON ura.user_uuid = bg.created_by AND ura.team_uuid IS NOT NULL
 WHERE bg.uuid = s.uuid
   AND (s.uuid::text LIKE 'a0000000-%' OR s.uuid::text LIKE 'b0000000-%');
 
@@ -628,8 +632,8 @@ INSERT INTO tickets (uuid, title, description, contact_name, contact_email, cont
 UPDATE base_geometries SET delete_at = '2024-07-25 12:00+08', updated_at = '2024-07-25 12:00+08'
  WHERE uuid = 'd0000000-0000-4000-8000-000000000045';
 
--- 3b. 地址 — avol01 的單:整行在 full_address,也拆好各欄;沒經 TGOS 確認,所以是 unverified。
-INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, full_address, county, town, village, road, section, no, normalization_status, floor, room) VALUES
+-- 3b. 地址 — avol01 的單:整行在 user_input_address,也拆好各欄,full_address 由資料庫從各欄串出來;沒經 TGOS 確認,所以是 unverified。
+INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, user_input_address, county, town, village, road, section, no, normalization_status, floor, room) VALUES
  ('40000000-0000-4000-8000-000000000039','d0000000-0000-4000-8000-000000000039','address','花蓮縣光復鄉中山路二段45號','花蓮縣','光復鄉',NULL,'中山路','二段','45號','unverified','1樓',NULL),
  ('40000000-0000-4000-8000-000000000040','d0000000-0000-4000-8000-000000000040','address','花蓮縣光復鄉大安村大安路6號','花蓮縣','光復鄉','大安村','大安路',NULL,'6號','unverified',NULL,NULL),
  ('40000000-0000-4000-8000-000000000041','d0000000-0000-4000-8000-000000000041','address','花蓮縣光復鄉大全街88號','花蓮縣','光復鄉',NULL,'大全街',NULL,'88號','unverified',NULL,NULL),
@@ -833,6 +837,24 @@ INSERT INTO task_properties (uuid, task_uuid, property_name, property_value, qua
  (gen_random_uuid(),'e0000000-0000-4000-8000-000000000056','item_name','圓鍬',NULL,NULL,NULL,'2025-10-03 13:34+08','2025-10-03 13:34+08'),
  (gen_random_uuid(),'e0000000-0000-4000-8000-000000000057','item_name','推車',NULL,NULL,NULL,'2025-10-03 13:34+08','2025-10-03 13:34+08');
 
+-- 4c. 疑似重複(ADR-443)— 重複審核還沒處理完的配對卡,一種狀態一張。卡兩邊的單都標「疑似重複」、寫跟哪張重複,
+--     只有 asuper01、aaudit01 看得到。卡上的單和需求都是上面的 mock 資料,清除段照 low/high_uuid 刪。
+--     (a) 需求對需求,送單的人看到提示仍送出(dup_ignored):d007、d025 的清淤人力。
+--     (b) 單對單,等審核(suggested):d010、d012。快層只比需求,單對單的卡要等慢層,這張先手寫(method manual)。
+--     (c) 需求對需求,aaudit01 判了重複、還沒合併(confirmed_duplicate):d017、d019 的飲用水。
+--         aaudit01 可以撤回判定或合併;撤回、判定、合併過的要重跑這支 seed 才回得來。
+--     快層的卡不寫分數和依據,跟 engine 沒回應時送出的一樣(services/dedup.py 的 unchecked_pairs),不編分數。
+INSERT INTO duplicate_pairs (uuid, entity_kind, low_uuid, high_uuid, similarity, evidence, method, engine_version, source_layer, status, hint_outcome, rescan_needed, reviewed_by, reviewed_at, created_at, updated_at) VALUES
+ ('0a000000-0000-4000-8000-000000000001','ticket_task','e0000000-0000-4000-8000-000000000009','e0000000-0000-4000-8000-000000000038',NULL,NULL,'fast_rule','fast-v4','fast','dup_ignored','ignored_hint',true,NULL,NULL,'2024-07-24 15:56+08','2024-07-24 15:56+08'),
+ ('0a000000-0000-4000-8000-000000000002','ticket','d0000000-0000-4000-8000-000000000010','d0000000-0000-4000-8000-000000000012',NULL,NULL,'manual',NULL,'manual','suggested',NULL,false,NULL,NULL,'2024-07-24 19:00+08','2024-07-24 19:00+08'),
+ ('0a000000-0000-4000-8000-000000000003','ticket_task','e0000000-0000-4000-8000-000000000026','e0000000-0000-4000-8000-000000000030',NULL,NULL,'fast_rule','fast-v4','fast','confirmed_duplicate','ignored_hint',true,'c0000000-0000-4000-8000-000000000039','2024-07-24 17:00+08','2024-07-24 15:41+08','2024-07-24 17:00+08');
+-- 事件照網站寫的(services/dedup.py 的 record_pair_ignored、dedup_review.py 的 _decide):送出時一筆
+-- ignored_by_submitter(primary=提示指的需求、duplicate=仍送出的需求、actor=送出的人),判定時一筆 confirmed。
+INSERT INTO dedup_audit_events (uuid, entity_kind, event_type, pair_uuid, primary_uuid, duplicate_uuid, actor_uuid, source_layer, decision_reason, engine_version, before_state, after_state, created_at) VALUES
+ ('0b000000-0000-4000-8000-000000000001','ticket_task','ignored_by_submitter','0a000000-0000-4000-8000-000000000001','e0000000-0000-4000-8000-000000000009','e0000000-0000-4000-8000-000000000038','c0000000-0000-4000-8000-000000000022','fast','ignored_hint','fast-v4',NULL,NULL,'2024-07-24 15:56+08'),
+ ('0b000000-0000-4000-8000-000000000002','ticket_task','ignored_by_submitter','0a000000-0000-4000-8000-000000000003','e0000000-0000-4000-8000-000000000030','e0000000-0000-4000-8000-000000000026','c0000000-0000-4000-8000-000000000010','fast','ignored_hint','fast-v4',NULL,NULL,'2024-07-24 15:41+08'),
+ ('0b000000-0000-4000-8000-000000000003','ticket_task','confirmed','0a000000-0000-4000-8000-000000000003',NULL,NULL,'c0000000-0000-4000-8000-000000000039','manual',NULL,NULL,'{"status": "dup_ignored"}','{"status": "confirmed_duplicate"}','2024-07-24 17:00+08');
+
 -- 5. TASK ASSIGNMENTS — 承接紀錄:status 一律 accepted,人數不超過 quantity。avol02 是給測試者用的志工;
 --    avol01(建單者)、avol03(剛註冊的人)沒有任何承接。
 INSERT INTO task_assignments (uuid, task_uuid, actor_uuid, role, status, assigned_at) VALUES
@@ -891,6 +913,104 @@ INSERT INTO task_assignments (uuid, task_uuid, actor_uuid, role, status, assigne
  ('f0000000-0000-4000-8000-000000000051','e0000000-0000-4000-8000-000000000067','c0000000-0000-4000-8000-000000000002','volunteer','accepted','2024-07-25 10:25+08'),  -- avol02:(e) 這筆後來被刪除;紀錄保留,我承接的不列
  ('f0000000-0000-4000-8000-000000000052','e0000000-0000-4000-8000-000000000068','c0000000-0000-4000-8000-000000000002','volunteer','accepted','2024-07-25 10:40+08'),  -- avol02:(f) 停止招募,名單已固定,不能釋出
  ('f0000000-0000-4000-8000-000000000053','e0000000-0000-4000-8000-000000000068','c0000000-0000-4000-8000-000000000009','volunteer','accepted','2024-07-25 11:05+08');
+
+-- 5b. 現場分區(BE-036)— 光復鄉公所在情境 A 畫了 3 棟建築地圖,住戶的單建在裡面,前台「看各樓層」一層一框。
+--     照 createTicket 建進大樓的規則寫(services/building_map.py 的 place_ticket):單的點=大樓的點,
+--     地址各欄照抄大樓的,再加樓層、戶別;樓層是大樓的標籤(RF、nF、Bn)或空白,有區的樓層戶別是區名或「其他」。
+--     大樓的地址沒有樓層、戶別(第 11 節檢查)。只有 createTicket 建得進大樓,所以單都是官方/NGO 帳號建的。
+--     A 中正路二段 61 號集合住宅:地上 5 層、地下 1 層,7 張 —— 空的樓層、不知道幾樓、已結案、搜救、
+--       沒填數量、只有一筆需求可以直接接都有;缺額 11 人。
+--     B 光復國小:地上 2 層,1F 有禮堂、健康中心兩區,2F 有圖書室,2 張。
+--     C 大全街 12 號透天厝:地上 3 層,只有 1 張(地圖上不會收成大樓)。
+INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_at, updated_at) VALUES
+ ('20000000-0000-4000-8000-000000000101','building_map',ST_SetSRID(ST_MakePoint(121.4335,23.6703),4326),'c0000000-0000-4000-8000-000000000025','2024-07-24 10:00+08','2024-07-24 10:00+08'),
+ ('20000000-0000-4000-8000-000000000102','building_map',ST_SetSRID(ST_MakePoint(121.4228,23.6602),4326),'c0000000-0000-4000-8000-000000000025','2024-07-24 10:10+08','2024-07-24 10:10+08'),
+ ('20000000-0000-4000-8000-000000000103','building_map',ST_SetSRID(ST_MakePoint(121.4205,23.6790),4326),'c0000000-0000-4000-8000-000000000025','2024-07-24 10:20+08','2024-07-24 10:20+08');
+INSERT INTO building_maps (uuid, name, floors_above_ground, floors_below_ground, floor_areas) VALUES
+ ('20000000-0000-4000-8000-000000000101','中正路二段61號集合住宅',5,1,'{}'),
+ ('20000000-0000-4000-8000-000000000102','光復國小(臨時收容處)',2,0,'{"1F": ["禮堂", "健康中心"], "2F": ["圖書室"]}'),
+ ('20000000-0000-4000-8000-000000000103','大全街12號透天厝',3,0,'{}');
+INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, user_input_address, county, town, village, road, section, no, normalization_status, floor, room) VALUES
+ ('40000000-0000-4000-8000-000000000101','20000000-0000-4000-8000-000000000101','address','花蓮縣光復鄉中正路二段61號','花蓮縣','光復鄉',NULL,'中正路','二段','61號','unverified',NULL,NULL),
+ ('40000000-0000-4000-8000-000000000102','20000000-0000-4000-8000-000000000102','address','花蓮縣光復鄉林森路8號','花蓮縣','光復鄉',NULL,'林森路',NULL,'8號','unverified',NULL,NULL),
+ ('40000000-0000-4000-8000-000000000103','20000000-0000-4000-8000-000000000103','address','花蓮縣光復鄉大全街12號','花蓮縣','光復鄉',NULL,'大全街',NULL,'12號','unverified',NULL,NULL);
+
+INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_at, updated_at) VALUES
+ ('d0000000-0000-4000-8000-000000000046','request',ST_SetSRID(ST_MakePoint(121.4335,23.6703),4326),'c0000000-0000-4000-8000-000000000022','2024-07-24 11:20+08','2024-07-24 11:20+08'),
+ ('d0000000-0000-4000-8000-000000000047','request',ST_SetSRID(ST_MakePoint(121.4335,23.6703),4326),'c0000000-0000-4000-8000-000000000022','2024-07-24 12:05+08','2024-07-24 12:05+08'),
+ ('d0000000-0000-4000-8000-000000000048','request',ST_SetSRID(ST_MakePoint(121.4335,23.6703),4326),'c0000000-0000-4000-8000-000000000025','2024-07-24 12:40+08','2024-07-24 12:40+08'),
+ ('d0000000-0000-4000-8000-000000000049','request',ST_SetSRID(ST_MakePoint(121.4335,23.6703),4326),'c0000000-0000-4000-8000-000000000026','2024-07-24 13:10+08','2024-07-24 13:10+08'),
+ ('d0000000-0000-4000-8000-000000000050','request',ST_SetSRID(ST_MakePoint(121.4335,23.6703),4326),'c0000000-0000-4000-8000-000000000022','2024-07-24 15:30+08','2024-07-24 15:30+08'),
+ ('d0000000-0000-4000-8000-000000000051','request',ST_SetSRID(ST_MakePoint(121.4335,23.6703),4326),'c0000000-0000-4000-8000-000000000025','2024-07-25 8:20+08','2024-07-25 8:20+08'),
+ ('d0000000-0000-4000-8000-000000000052','request',ST_SetSRID(ST_MakePoint(121.4335,23.6703),4326),'c0000000-0000-4000-8000-000000000026','2024-07-25 9:10+08','2024-07-25 9:10+08'),
+ ('d0000000-0000-4000-8000-000000000053','request',ST_SetSRID(ST_MakePoint(121.4228,23.6602),4326),'c0000000-0000-4000-8000-000000000025','2024-07-24 14:00+08','2024-07-24 14:00+08'),
+ ('d0000000-0000-4000-8000-000000000054','request',ST_SetSRID(ST_MakePoint(121.4228,23.6602),4326),'c0000000-0000-4000-8000-000000000025','2024-07-24 16:20+08','2024-07-24 16:20+08'),
+ ('d0000000-0000-4000-8000-000000000055','request',ST_SetSRID(ST_MakePoint(121.4205,23.6790),4326),'c0000000-0000-4000-8000-000000000026','2024-07-25 8:40+08','2024-07-25 8:40+08');
+
+INSERT INTO tickets (uuid, title, description, contact_name, contact_email, contact_phone, status, priority, task_type, audit_status) VALUES
+ ('d0000000-0000-4000-8000-000000000046','中正路二段61號地下室積水，需要抽水','地下室停車場積水約 50 公分，抽水機不夠。','紅十字會-花蓮支會',NULL,'0930-564-103','pending','high','hr','no_audit'),
+ ('d0000000-0000-4000-8000-000000000047','一樓早餐店淤泥清運','店面和廚房都是泥，冰箱搬不動。','早餐店-黃老闆',NULL,'0921-306-552','pending','medium','hr','no_audit'),
+ ('d0000000-0000-4000-8000-000000000048','一樓102室淤泥清除','客廳淤泥大約到腳踝。','住戶-陳太太',NULL,'0937-418-260','pending','medium','hr','no_audit'),
+ ('d0000000-0000-4000-8000-000000000049','三樓302室82歲長者受困，需要協助下樓','樓梯有土石，長者行動不便。','花蓮縣消防局-鳳林大隊',NULL,'0921-749-533','pending','critical','rescue','need_audit'),
+ ('d0000000-0000-4000-8000-000000000050','三樓走廊需要照明和飲用水','停電，走廊很暗，住戶缺水。','紅十字會-花蓮支會',NULL,'LINE: help_2024','pending','medium','supply','no_audit'),
+ ('d0000000-0000-4000-8000-000000000051','五樓501室住戶需要飲用水','一家四口，飲用水剩一天份。','住戶-林先生',NULL,'0952-771-084','pending','medium','supply','no_audit'),
+ ('d0000000-0000-4000-8000-000000000052','鄰居代報：樓上有人沒出來，不確定幾樓','昨晚還聽到聲音，今天敲門沒有回應。','鄰居-張小姐',NULL,'0918-205-347','pending','high','rescue','need_audit'),
+ ('d0000000-0000-4000-8000-000000000053','禮堂收容40人，需要人手整理物資','捐贈物資堆在禮堂後方，需要分類。','光復鄉公所-災防課',NULL,'LINE: help_2024','pending','medium','hr','no_audit'),
+ ('d0000000-0000-4000-8000-000000000054','圖書室泡水的書需要搬運','淹水時搬上來的書還是濕的，要搬到操場曬。','光復鄉公所-災防課',NULL,'0930-112-578','pending','low','hr','no_audit'),
+ ('d0000000-0000-4000-8000-000000000055','二樓獨居長者需要送餐','長者腳受傷下不了樓，一天兩餐。','花蓮縣消防局-鳳林大隊',NULL,'0962-434-512','pending','medium','hr','no_audit');
+
+INSERT INTO building_map_ticket_map (ticket_uuid, building_map_uuid) VALUES
+ ('d0000000-0000-4000-8000-000000000046','20000000-0000-4000-8000-000000000101'),
+ ('d0000000-0000-4000-8000-000000000047','20000000-0000-4000-8000-000000000101'),
+ ('d0000000-0000-4000-8000-000000000048','20000000-0000-4000-8000-000000000101'),
+ ('d0000000-0000-4000-8000-000000000049','20000000-0000-4000-8000-000000000101'),
+ ('d0000000-0000-4000-8000-000000000050','20000000-0000-4000-8000-000000000101'),
+ ('d0000000-0000-4000-8000-000000000051','20000000-0000-4000-8000-000000000101'),
+ ('d0000000-0000-4000-8000-000000000052','20000000-0000-4000-8000-000000000101'),
+ ('d0000000-0000-4000-8000-000000000053','20000000-0000-4000-8000-000000000102'),
+ ('d0000000-0000-4000-8000-000000000054','20000000-0000-4000-8000-000000000102'),
+ ('d0000000-0000-4000-8000-000000000055','20000000-0000-4000-8000-000000000103');
+
+-- 大樓的地址照抄,加上樓層、戶別。052 不知道幾樓(前台的「未定位」)。
+INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, user_input_address, remainder, county, town, village, road, section, no, normalization_status, floor, room)
+SELECT n.uuid, n.ticket_uuid, 'address', b.user_input_address, b.remainder, b.county, b.town, b.village, b.road, b.section, b.no,
+       b.normalization_status, n.floor, n.room
+  FROM (VALUES
+   ('40000000-0000-4000-8000-000000000046'::uuid,'d0000000-0000-4000-8000-000000000046'::uuid,'20000000-0000-4000-8000-000000000101'::uuid,'B1',NULL),
+   ('40000000-0000-4000-8000-000000000047'::uuid,'d0000000-0000-4000-8000-000000000047'::uuid,'20000000-0000-4000-8000-000000000101'::uuid,'1F','早餐店'),
+   ('40000000-0000-4000-8000-000000000048'::uuid,'d0000000-0000-4000-8000-000000000048'::uuid,'20000000-0000-4000-8000-000000000101'::uuid,'1F','102'),
+   ('40000000-0000-4000-8000-000000000049'::uuid,'d0000000-0000-4000-8000-000000000049'::uuid,'20000000-0000-4000-8000-000000000101'::uuid,'3F','302'),
+   ('40000000-0000-4000-8000-000000000050'::uuid,'d0000000-0000-4000-8000-000000000050'::uuid,'20000000-0000-4000-8000-000000000101'::uuid,'3F',NULL),
+   ('40000000-0000-4000-8000-000000000051'::uuid,'d0000000-0000-4000-8000-000000000051'::uuid,'20000000-0000-4000-8000-000000000101'::uuid,'5F','501'),
+   ('40000000-0000-4000-8000-000000000052'::uuid,'d0000000-0000-4000-8000-000000000052'::uuid,'20000000-0000-4000-8000-000000000101'::uuid,NULL,NULL),
+   ('40000000-0000-4000-8000-000000000053'::uuid,'d0000000-0000-4000-8000-000000000053'::uuid,'20000000-0000-4000-8000-000000000102'::uuid,'1F','禮堂'),
+   ('40000000-0000-4000-8000-000000000054'::uuid,'d0000000-0000-4000-8000-000000000054'::uuid,'20000000-0000-4000-8000-000000000102'::uuid,'2F','圖書室'),
+   ('40000000-0000-4000-8000-000000000055'::uuid,'d0000000-0000-4000-8000-000000000055'::uuid,'20000000-0000-4000-8000-000000000103'::uuid,'2F',NULL)
+  ) AS n(uuid, ticket_uuid, building_uuid, floor, room)
+  JOIN secondary_locations b ON b.geometry_uuid = n.building_uuid;
+
+-- 需求:047 兩筆(沒有「接這筆」捷徑);048 會湊滿 → 單已完成;049、050、052 沒填數量。
+INSERT INTO ticket_tasks (uuid, ticket_uuid, route_uuid, task_type, task_name, task_description, quantity, status, source, progress_note, is_duplicate, dedup_group_id, created_by, created_at, updated_at) VALUES
+ ('e0000000-0000-4000-8000-000000000072','d0000000-0000-4000-8000-000000000046',NULL,'hr','抽水人力','地下室停車場',3,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000022','2024-07-24 11:20+08','2024-07-24 11:20+08'),
+ ('e0000000-0000-4000-8000-000000000073','d0000000-0000-4000-8000-000000000047',NULL,'hr','清淤人力',NULL,5,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000022','2024-07-24 12:05:00.000000+08','2024-07-24 12:05+08'),
+ ('e0000000-0000-4000-8000-000000000074','d0000000-0000-4000-8000-000000000047',NULL,'hr','搬運志工','冰箱和桌椅搬到路邊',2,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000022','2024-07-24 12:05:00.000001+08','2024-07-24 12:05+08'),
+ ('e0000000-0000-4000-8000-000000000075','d0000000-0000-4000-8000-000000000048',NULL,'hr','清淤人力',NULL,2,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000025','2024-07-24 12:40+08','2024-07-24 12:40+08'),
+ ('e0000000-0000-4000-8000-000000000076','d0000000-0000-4000-8000-000000000049',NULL,'rescue','長者後送','從三樓背下樓',NULL,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000026','2024-07-24 13:10+08','2024-07-24 13:10+08'),
+ ('e0000000-0000-4000-8000-000000000077','d0000000-0000-4000-8000-000000000050',NULL,'supply','飲用水(箱)',NULL,NULL,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000022','2024-07-24 15:30+08','2024-07-24 15:30+08'),
+ ('e0000000-0000-4000-8000-000000000078','d0000000-0000-4000-8000-000000000051',NULL,'supply','飲用水(箱)',NULL,4,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000025','2024-07-25 8:20+08','2024-07-25 8:20+08'),
+ ('e0000000-0000-4000-8000-000000000079','d0000000-0000-4000-8000-000000000052',NULL,'rescue','受困人員搜尋',NULL,NULL,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000026','2024-07-25 9:10+08','2024-07-25 9:10+08'),
+ ('e0000000-0000-4000-8000-000000000080','d0000000-0000-4000-8000-000000000053',NULL,'hr','物資整理志工',NULL,3,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000025','2024-07-24 14:00+08','2024-07-24 14:00+08'),
+ ('e0000000-0000-4000-8000-000000000081','d0000000-0000-4000-8000-000000000054',NULL,'hr','搬運志工',NULL,4,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000025','2024-07-24 16:20+08','2024-07-24 16:20+08'),
+ ('e0000000-0000-4000-8000-000000000082','d0000000-0000-4000-8000-000000000055',NULL,'hr','送餐志工','中午、晚上各一次',1,'pending','gov',NULL,false,NULL,'c0000000-0000-4000-8000-000000000026','2024-07-25 8:40+08','2024-07-25 8:40+08');
+
+INSERT INTO task_assignments (uuid, task_uuid, actor_uuid, role, status, assigned_at) VALUES
+ ('f0000000-0000-4000-8000-000000000054','e0000000-0000-4000-8000-000000000072','c0000000-0000-4000-8000-000000000006','volunteer','accepted','2024-07-24 11:40+08'),  -- 抽水 1/3
+ ('f0000000-0000-4000-8000-000000000055','e0000000-0000-4000-8000-000000000073','c0000000-0000-4000-8000-000000000007','volunteer','accepted','2024-07-24 12:20+08'),  -- 清淤 2/5
+ ('f0000000-0000-4000-8000-000000000056','e0000000-0000-4000-8000-000000000073','c0000000-0000-4000-8000-000000000008','volunteer','accepted','2024-07-24 12:35+08'),
+ ('f0000000-0000-4000-8000-000000000057','e0000000-0000-4000-8000-000000000075','c0000000-0000-4000-8000-000000000009','volunteer','accepted','2024-07-24 13:00+08'),  -- 2/2 湊滿,單已完成
+ ('f0000000-0000-4000-8000-000000000058','e0000000-0000-4000-8000-000000000075','c0000000-0000-4000-8000-000000000010','volunteer','accepted','2024-07-24 13:25+08'),
+ ('f0000000-0000-4000-8000-000000000059','e0000000-0000-4000-8000-000000000081','c0000000-0000-4000-8000-000000000011','volunteer','accepted','2024-07-24 16:40+08'),  -- 搬運 2/4
+ ('f0000000-0000-4000-8000-000000000060','e0000000-0000-4000-8000-000000000081','c0000000-0000-4000-8000-000000000012','volunteer','accepted','2024-07-24 17:05+08');
 
 -- 6. TEAM ZONES(責任區)— 每個情境一個,官方帳號劃設,涵蓋該情境站點/tickets 座標範圍。
 -- 區域是 base_geometries → area_polygons → team_zones 三層繼承,三張表都要寫。責任區恆公開,前後台都顯示被指派的團隊名稱。
@@ -1261,6 +1381,39 @@ BEGIN
    LIMIT 1;
   IF bad IS NOT NULL THEN
     RAISE EXCEPTION 'mock seed: briefing % is unpublished, has nothing to tick, or comes ticked', bad;
+  END IF;
+
+  -- 現場分區(services/building_map.py 的 place_ticket):建在大樓裡的單,點和地址是大樓的;樓層是這棟的
+  -- 標籤(RF、1F 到 nF、B1 到 Bn)或空白;有區的樓層,戶別是區名或「其他」。
+  SELECT m.ticket_uuid::text INTO bad FROM building_map_ticket_map m
+    JOIN building_maps b ON b.uuid = m.building_map_uuid
+    JOIN base_geometries bg ON bg.uuid = m.building_map_uuid
+    JOIN base_geometries tg ON tg.uuid = m.ticket_uuid
+    LEFT JOIN secondary_locations ba ON ba.geometry_uuid = m.building_map_uuid
+    LEFT JOIN secondary_locations ta ON ta.geometry_uuid = m.ticket_uuid
+   WHERE m.building_map_uuid::text LIKE '20000000-%'
+     AND (NOT ST_Equals(tg.geometry, bg.geometry)
+          OR ta.full_address IS DISTINCT FROM ba.full_address
+          OR (ta.floor IS NOT NULL AND ta.floor <> 'RF'
+              AND NOT (ta.floor ~ '^[1-9][0-9]*F$'
+                       AND left(ta.floor, -1)::int <= b.floors_above_ground)
+              AND NOT (ta.floor ~ '^B[1-9][0-9]*$'
+                       AND substr(ta.floor, 2)::int <= b.floors_below_ground))
+          OR (jsonb_array_length(coalesce(b.floor_areas -> ta.floor, '[]'::jsonb)) > 0
+              AND coalesce(ta.room, '') <> '其他'
+              AND NOT ((b.floor_areas -> ta.floor) ? coalesce(ta.room, ''))))
+   LIMIT 1;
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'mock seed: ticket % is not placed in its building the way createTicket places it', bad;
+  END IF;
+
+  SELECT a.geometry_uuid::text INTO bad FROM secondary_locations a
+    JOIN building_maps b ON b.uuid = a.geometry_uuid
+   WHERE b.uuid::text LIKE '20000000-%'
+     AND (a.floor IS NOT NULL OR a.room IS NOT NULL OR a.building_section IS NOT NULL)
+   LIMIT 1;
+  IF bad IS NOT NULL THEN
+    RAISE EXCEPTION 'mock seed: building map % has a floor, room or building section in its address', bad;
   END IF;
 END $$;
 

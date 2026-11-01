@@ -5156,13 +5156,71 @@
         }
       }
     },
+    "/api/v1/bulk/tickets/export/counts": {
+      "get": {
+        "tags": [
+          "批量匯入匯出"
+        ],
+        "summary": "各任務型別匯出會有幾列",
+        "description": "Count each task type's export rows in the caller's scope, with the most one export may hold.\n\nA type with no rows is left out. A count over `max_rows` is still the real one, so a page can\nsay that type's export will be refused before anyone asks for it.",
+        "operationId": "count_ticket_exports_api_v1_bulk_tickets_export_counts_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketExportCountsResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission Denied"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/bulk/tickets/export": {
       "get": {
         "tags": [
           "批量匯入匯出"
         ],
         "summary": "匯出求助單（CSV / XLSX）",
-        "description": "Export one task type's rows; contact fields are masked per row (ADR-109).",
+        "description": "Export one task type's rows; contact fields are masked per row (ADR-109).\n\nWith `template`, the header row alone, for an importer to fill in.",
         "operationId": "export_tickets_api_v1_bulk_tickets_export_get",
         "security": [
           {
@@ -5192,6 +5250,18 @@
               "title": "Format"
             },
             "description": "檔案格式：csv / xlsx"
+          },
+          {
+            "name": "template",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export",
+              "default": false,
+              "title": "Template"
+            },
+            "description": "只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export"
           },
           {
             "name": "X-WG-Realm",
@@ -5902,7 +5972,7 @@
           "數據分析 API"
         ],
         "summary": "Get Analytics Catalog",
-        "description": "Machine-readable y-metric catalog: valid `x` values and chart types per metric.\n\nThe source of truth behind the \"ignore x when it doesn't apply\" behavior on both\nchart endpoints below — build x/y dropdowns from this response instead of\nhardcoding the rules client-side.\n\nAuthentication only, no capability: the response is a static description of this\nAPI's own shape and contains no records. Gating it on ticket.view (as it originally\nwas) locked a station-only role out of the station catalog it is allowed to chart.",
+        "description": "Machine-readable y-metric catalog: valid `x` values and chart types per metric.\n\nThe source of truth behind the \"ignore x when it doesn't apply\" behavior on both\nchart endpoints below — build x/y dropdowns from this response instead of\nhardcoding the rules client-side.\n\nAuthentication only, no capability: the metric specs are a static description of this\nAPI's own shape. Gating it on ticket.view (as it originally was) locked a station-only\nrole out of the station catalog it is allowed to chart. The filter values that come from\nrows (areas, station types) are narrowed to the caller's own scope per domain, and left\nempty for a domain they cannot chart.",
         "operationId": "get_analytics_catalog_api_v1_analytics_catalog_get",
         "security": [
           {
@@ -5988,10 +6058,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -5999,10 +6069,10 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/ChartXGranularity",
-              "description": "Bucket size when x=date. Ignored for every other x.",
+              "description": "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there).",
               "default": "day"
             },
-            "description": "Bucket size when x=date. Ignored for every other x."
+            "description": "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there)."
           },
           {
             "name": "chart_type",
@@ -6017,10 +6087,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Overrides the y-metric's default chart shape. Unlike `x`, an unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog.",
+              "description": "Overrides the y-metric's default chart shape. An unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog.",
               "title": "Chart Type"
             },
-            "description": "Overrides the y-metric's default chart shape. Unlike `x`, an unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog."
+            "description": "Overrides the y-metric's default chart shape. An unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog."
           },
           {
             "name": "start_date",
@@ -6063,14 +6133,13 @@
           {
             "name": "tz",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
               "type": "string",
-              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
-              "default": "UTC",
+              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
               "title": "Tz"
             },
-            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
           },
           {
             "name": "style",
@@ -6145,6 +6214,96 @@
               "title": "Layout Overrides"
             },
             "description": "JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{\"title\": {\"text\": \"Custom title\"}}'."
+          },
+          {
+            "name": "task_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketTaskType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "title": "Task Type"
+            },
+            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets with this status.",
+              "title": "Status"
+            },
+            "description": "Only tickets with this status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
           },
           {
             "name": "X-WG-Realm",
@@ -6224,10 +6383,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -6235,10 +6394,10 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/ChartXGranularity",
-              "description": "Bucket size when x=date. Ignored for every other x.",
+              "description": "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there).",
               "default": "day"
             },
-            "description": "Bucket size when x=date. Ignored for every other x."
+            "description": "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there)."
           },
           {
             "name": "start_date",
@@ -6281,14 +6440,103 @@
           {
             "name": "tz",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
               "type": "string",
-              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
-              "default": "UTC",
+              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
               "title": "Tz"
             },
-            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "task_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketTaskType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "title": "Task Type"
+            },
+            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets with this status.",
+              "title": "Status"
+            },
+            "description": "Only tickets with this status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
           },
           {
             "name": "X-WG-Realm",
@@ -6351,9 +6599,9 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/TicketYMetric",
-              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
             },
-            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
           },
           {
             "name": "start_date",
@@ -6396,14 +6644,103 @@
           {
             "name": "tz",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
               "type": "string",
-              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
-              "default": "UTC",
+              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
               "title": "Tz"
             },
-            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "task_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketTaskType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "title": "Task Type"
+            },
+            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets with this status.",
+              "title": "Status"
+            },
+            "description": "Only tickets with this status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
           },
           {
             "name": "X-WG-Realm",
@@ -6483,10 +6820,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -6494,10 +6831,10 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/ChartXGranularity",
-              "description": "Bucket size when x=date. Ignored for every other x.",
+              "description": "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there).",
               "default": "day"
             },
-            "description": "Bucket size when x=date. Ignored for every other x."
+            "description": "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there)."
           },
           {
             "name": "chart_type",
@@ -6512,10 +6849,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Overrides the y-metric's default chart shape. Unlike `x`, an unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog.",
+              "description": "Overrides the y-metric's default chart shape. An unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog.",
               "title": "Chart Type"
             },
-            "description": "Overrides the y-metric's default chart shape. Unlike `x`, an unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog."
+            "description": "Overrides the y-metric's default chart shape. An unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog."
           },
           {
             "name": "start_date",
@@ -6558,14 +6895,13 @@
           {
             "name": "tz",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
               "type": "string",
-              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
-              "default": "UTC",
+              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
               "title": "Tz"
             },
-            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
           },
           {
             "name": "style",
@@ -6640,6 +6976,96 @@
               "title": "Layout Overrides"
             },
             "description": "JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{\"title\": {\"text\": \"Custom title\"}}'."
+          },
+          {
+            "name": "station_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations of this type; GET /analytics/catalog lists the values.",
+              "title": "Station Type"
+            },
+            "description": "Only stations of this type; GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations with this operational status.",
+              "title": "Status"
+            },
+            "description": "Only stations with this operational status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
           },
           {
             "name": "X-WG-Realm",
@@ -6719,10 +7145,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -6730,10 +7156,10 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/ChartXGranularity",
-              "description": "Bucket size when x=date. Ignored for every other x.",
+              "description": "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there).",
               "default": "day"
             },
-            "description": "Bucket size when x=date. Ignored for every other x."
+            "description": "Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there)."
           },
           {
             "name": "start_date",
@@ -6776,14 +7202,103 @@
           {
             "name": "tz",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
               "type": "string",
-              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
-              "default": "UTC",
+              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
               "title": "Tz"
             },
-            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "station_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations of this type; GET /analytics/catalog lists the values.",
+              "title": "Station Type"
+            },
+            "description": "Only stations of this type; GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations with this operational status.",
+              "title": "Status"
+            },
+            "description": "Only stations with this operational status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
           },
           {
             "name": "X-WG-Realm",
@@ -6846,9 +7361,9 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/StationYMetric",
-              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+              "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
             },
-            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
+            "description": "Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
           },
           {
             "name": "start_date",
@@ -6891,14 +7406,103 @@
           {
             "name": "tz",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
               "type": "string",
-              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
-              "default": "UTC",
+              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
               "title": "Tz"
             },
-            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "station_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations of this type; GET /analytics/catalog lists the values.",
+              "title": "Station Type"
+            },
+            "description": "Only stations of this type; GET /analytics/catalog lists the values."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stations with this operational status.",
+              "title": "Status"
+            },
+            "description": "Only stations with this operational status."
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "County"
+            },
+            "description": "Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "town",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Town"
+            },
+            "description": "Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "village",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422.",
+              "title": "Village"
+            },
+            "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
           },
           {
             "name": "X-WG-Realm",
@@ -7278,6 +7882,50 @@
         ],
         "title": "ApplicantDetails",
         "description": "What the applicant sent (Spec 026, ADR-355), for the reviewer to call and confirm.\n\nSeparate from `applicant_name`, which is the account's nickname."
+      },
+      "AreaCounty": {
+        "properties": {
+          "county": {
+            "type": "string",
+            "title": "County"
+          },
+          "towns": {
+            "items": {
+              "$ref": "#/components/schemas/AreaTown"
+            },
+            "type": "array",
+            "title": "Towns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "county",
+          "towns"
+        ],
+        "title": "AreaCounty",
+        "description": "A 縣市 and the 鄉鎮市區 in it."
+      },
+      "AreaTown": {
+        "properties": {
+          "town": {
+            "type": "string",
+            "title": "Town"
+          },
+          "villages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Villages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "town",
+          "villages"
+        ],
+        "title": "AreaTown",
+        "description": "A 鄉鎮市區 and the 村里 in it."
       },
       "AssignRoleRequest": {
         "properties": {
@@ -8043,6 +8691,14 @@
             "type": "object",
             "title": "Stations"
           },
+          "filters": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DomainFilters"
+            },
+            "type": "object",
+            "title": "Filters",
+            "description": "Allowed filter values per domain ('tickets', 'stations')."
+          },
           "default_style": {
             "$ref": "#/components/schemas/ChartStyle",
             "description": "What the chart endpoints render with when `style` is omitted."
@@ -8052,6 +8708,7 @@
         "required": [
           "tickets",
           "stations",
+          "filters",
           "default_style"
         ],
         "title": "CatalogResponse",
@@ -8334,7 +8991,7 @@
           "pie"
         ],
         "title": "ChartType",
-        "description": "Plotly chart shape.\n\nSee https://plotly.com/python/bar-charts/, https://plotly.com/python/line-charts/,\nhttps://plotly.com/python/pie-charts/. Unlike `x`, an unsupported chart_type for\nthe chosen y-metric is a 400, not silently ignored — see GET /analytics/catalog\nfor each metric's allowed_chart_types."
+        "description": "Plotly chart shape.\n\nSee https://plotly.com/python/bar-charts/, https://plotly.com/python/line-charts/,\nhttps://plotly.com/python/pie-charts/. An unsupported chart_type for the chosen\ny-metric is a 400 — see GET /analytics/catalog for each metric's allowed_chart_types."
       },
       "ChartX": {
         "type": "string",
@@ -8343,7 +9000,7 @@
           "category"
         ],
         "title": "ChartX",
-        "description": "How to slice the chosen y-metric (the X axis).\n\nOmit this param entirely for a single aggregate value/pie. Whether a given value\nis valid for a given y-metric is enforced by app.services.chart_render.resolve()\n— an inapplicable x is silently ignored (falls back to aggregate, or to the\nmetric's forced grouping if it has one), never rejected. See GET\n/api/v1/analytics/catalog for which x values are valid per y-metric."
+        "description": "How to slice the chosen y-metric (the X axis).\n\nOmit this param entirely for a single aggregate value/pie. A value the chosen y-metric\ndoes not allow is a 422. See GET /api/v1/analytics/catalog for which x values are\nvalid per y-metric."
       },
       "ChartXGranularity": {
         "type": "string",
@@ -8352,7 +9009,7 @@
           "week"
         ],
         "title": "ChartXGranularity",
-        "description": "Bucket size when x=date. Ignored otherwise."
+        "description": "Bucket size when x=date. Ignored otherwise, and by a metric whose catalog entry lacks it."
       },
       "ContactOut": {
         "properties": {
@@ -8457,7 +9114,7 @@
               }
             ],
             "title": "X",
-            "description": "The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' (the two metrics with a built-in grouping), or null for one aggregate. It can differ from the requested `x`, which is ignored where it doesn't apply."
+            "description": "The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' (the two metrics with a built-in grouping), or null for one aggregate. It differs from the request only when `x` is omitted on a metric with a built-in grouping."
           },
           "x_values": {
             "items": {
@@ -8643,6 +9300,42 @@
         ],
         "title": "DirectGrant",
         "description": "One per-user grant and the identity it binds to (NULL team = the platform identity)."
+      },
+      "DomainFilters": {
+        "properties": {
+          "types": {
+            "items": {
+              "$ref": "#/components/schemas/FilterOption"
+            },
+            "type": "array",
+            "title": "Types",
+            "description": "Values for `task_type` (tickets) or `station_type` (stations)."
+          },
+          "statuses": {
+            "items": {
+              "$ref": "#/components/schemas/FilterOption"
+            },
+            "type": "array",
+            "title": "Statuses",
+            "description": "Values for `status`."
+          },
+          "areas": {
+            "items": {
+              "$ref": "#/components/schemas/AreaCounty"
+            },
+            "type": "array",
+            "title": "Areas",
+            "description": "Values for `county`, `town` and `village`. A 村里 name can repeat across towns, so send `town` (and `county`) with it to pin one."
+          }
+        },
+        "type": "object",
+        "required": [
+          "types",
+          "statuses",
+          "areas"
+        ],
+        "title": "DomainFilters",
+        "description": "The values a domain's filter params accept, drawn from the rows the caller may chart."
       },
       "DuplicatePairDecision": {
         "properties": {
@@ -9165,6 +9858,27 @@
         ],
         "title": "ErrorReportResponse",
         "description": "The failed rows rendered back in the uploaded format, base64-encoded.\n\nCarried inline rather than behind a download URL: the endpoints are stateless (ADR-114),\nand the report describes *this* run — after a commit, re-deriving it from the same file\nwould not produce the same answer, because some of those rows now exist."
+      },
+      "FilterOption": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "description": "What to send as the query param."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Display name (zh-TW); the value itself when it has no glossary entry."
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "FilterOption",
+        "description": "One allowed value of a filter, with the zh-TW name to show for it."
       },
       "ForgotPasswordRequest": {
         "properties": {
@@ -11512,12 +12226,23 @@
         "title": "SignedInUser",
         "description": "The account a browser just signed in as."
       },
+      "StationStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "temporarily_closed",
+          "permanently_closed"
+        ],
+        "title": "StationStatus",
+        "description": "A station's operational status, for the station `status` filter."
+      },
       "StationYMetric": {
         "type": "string",
         "enum": [
           "station_count",
           "station_status_count",
-          "station_freshness_trend"
+          "station_freshness_trend",
+          "operating_station_count"
         ],
         "title": "StationYMetric",
         "description": "What to measure (the Y axis) for a station chart — see app/services/station_analytics.py."
@@ -11995,6 +12720,30 @@
         "title": "TeamStatusRequest",
         "description": "Body for suspending or restoring a team (Spec/026, ADR-357)."
       },
+      "TicketExportCountsResponse": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts",
+            "description": "任務型別 → 匯出會有幾列；沒有列的型別不列"
+          },
+          "max_rows": {
+            "type": "integer",
+            "title": "Max Rows",
+            "description": "單次匯出的上限；筆數超過的型別，匯出會被拒絕"
+          }
+        },
+        "type": "object",
+        "required": [
+          "counts",
+          "max_rows"
+        ],
+        "title": "TicketExportCountsResponse",
+        "description": "How many rows each task type's export would hold, and the most one export may hold."
+      },
       "TicketForReviewResponse": {
         "properties": {
           "uuid": {
@@ -12197,6 +12946,28 @@
         "title": "TicketForReviewResponse",
         "description": "A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).\n\nSend `version` back unchanged when resolving: it says what the reviewer saw (ADR-374)."
       },
+      "TicketStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed",
+          "cancelled"
+        ],
+        "title": "TicketStatus",
+        "description": "A ticket's status, for the ticket `status` filter."
+      },
+      "TicketTaskType": {
+        "type": "string",
+        "enum": [
+          "rescue",
+          "supply",
+          "medical",
+          "hr"
+        ],
+        "title": "TicketTaskType",
+        "description": "A ticket's task type, for the `task_type` filter — the kinds in app.services.ticket.TASK_TYPES."
+      },
       "TicketYMetric": {
         "type": "string",
         "enum": [
@@ -12210,7 +12981,10 @@
           "time_to_completion",
           "net_backlog_change",
           "task_completion_distribution",
-          "duplicate_count"
+          "duplicate_count",
+          "volunteers_needed",
+          "volunteers_matched",
+          "volunteer_gap"
         ],
         "title": "TicketYMetric",
         "description": "What to measure (the Y axis) for a ticket/task chart — see app/services/ticket_analytics.py."
@@ -12664,7 +13438,15 @@
             },
             "type": "array",
             "title": "Allowed X",
-            "description": "Valid values for the `x` query param on this y-metric: any of 'date', 'category', 'none' (aggregate/no grouping — omit `x` entirely). An `x` outside this list is silently ignored (falls back to 'none', or to this metric's forced value if 'none' isn't in the list), never rejected with 400."
+            "description": "Valid values for the `x` query param on this y-metric: any of 'date', 'category', 'none' (aggregate/no grouping — omit `x` entirely). An `x` outside this list is rejected with 422; omitting `x` gives 'none', or this metric's forced value if 'none' isn't in the list."
+          },
+          "allowed_x_granularities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed X Granularities",
+            "description": "Bucket sizes `x_granularity` can take for this y-metric's `x=date` trend. A size outside this list is not rejected: the trend is drawn at the first one listed."
           },
           "default_chart_type": {
             "type": "string",
@@ -12677,12 +13459,12 @@
             },
             "type": "array",
             "title": "Allowed Chart Types",
-            "description": "Valid values for `chart_type` on this y-metric — unlike `x`, an unsupported chart_type is rejected with 400."
+            "description": "Valid values for `chart_type` on this y-metric; an unsupported one is rejected with 400."
           },
           "requires_date_range": {
             "type": "boolean",
             "title": "Requires Date Range",
-            "description": "When true, `start_date` and `end_date` are mandatory for this y-metric and omitting either is a 400 — the underlying query is too expensive to run unbounded. Currently only `duplicate_count`."
+            "description": "When true, `start_date` and `end_date` are mandatory for this y-metric and omitting either is a 400. No metric needs it now; the field stays so existing clients keep reading it."
           },
           "max_range_days": {
             "anyOf": [
@@ -12694,7 +13476,7 @@
               }
             ],
             "title": "Max Range Days",
-            "description": "Widest allowed span between `start_date` and `end_date` for this y-metric, in days; a wider range is a 400. Null means no limit. Clamp the date picker to this instead of waiting for the error."
+            "description": "Most days, both ends included, between `start_date` and `end_date` for this y-metric's `x=date` trend; a longer range is a 400. Null means no limit. It applies whether or not `requires_date_range` is set, so read it on its own to clamp the date picker."
           }
         },
         "type": "object",
@@ -12703,6 +13485,7 @@
           "unit",
           "description",
           "allowed_x",
+          "allowed_x_granularities",
           "default_chart_type",
           "allowed_chart_types",
           "requires_date_range"

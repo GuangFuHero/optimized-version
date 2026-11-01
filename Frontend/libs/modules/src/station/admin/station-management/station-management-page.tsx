@@ -7,10 +7,12 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import { designTokens, Dialog } from '@rescue-frontend/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
+import { useNow } from '../../../admin/shared/use-now';
+import { ViewSwitch, type BoardView } from '../../../admin/shared/view-switch';
 import { AdminHeaderSlot } from '../../../shell/admin/header';
 import { StationFormDrawer, type StationFormTarget } from '../../form';
 import { useStationRows } from './hooks/use-station-rows';
@@ -31,14 +33,10 @@ import { StationExportMenu } from './station-export-menu';
 import { StationFilterPanel } from './station-filter-panel';
 import { StationImportDialog } from './station-import-dialog';
 import { StationMapView } from './station-map-view';
+import { offersImport } from './model/import';
 import { QuickStatusCell, TeamAssignCell } from './station-row-controls';
-import { StationStatsStrip } from './station-stats-strip';
 import { StationTable } from './station-table';
-import {
-  StationToolbar,
-  StationViewSwitch,
-  type StationView,
-} from './station-toolbar';
+import { StationToolbar } from './station-toolbar';
 
 const { color } = designTokens;
 
@@ -48,16 +46,10 @@ const FRAME_GAP = '12px';
 const SECTION_SX = { px: '28px' };
 const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
 
-const PENDING_FILTERS: StationFilters = { ...EMPTY_FILTERS, pending: true };
+/** What the header's ? explains: the page in one line. */
+const PAGE_HELP = '維護資源站點並審查民眾送來的修改建議';
 
-function useNow(intervalMs = 60_000) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-  return now;
-}
+const PENDING_FILTERS: StationFilters = { ...EMPTY_FILTERS, pending: true };
 
 export function StationManagementPage() {
   const router = useRouter();
@@ -72,7 +64,7 @@ export function StationManagementPage() {
   const filtersKey = useMemo(() => stationFiltersKey(filters), [filters]);
   // The filters the page opened with, by a link or a reload; changed here, they are the page's own.
   const [openedFiltersKey] = useState(filtersKey);
-  const view: StationView = params.get('view') === 'map' ? 'map' : 'table';
+  const view: BoardView = params.get('view') === 'map' ? 'map' : 'table';
   const caps = useStationCapabilities();
   const now = useNow();
   const [filterOpen, setFilterOpen] = useState(false);
@@ -138,16 +130,17 @@ export function StationManagementPage() {
     setFormTarget({ mode: 'edit', uuid });
   };
   const emptyStateNew = caps.canAdd ? () => openNew() : undefined;
-  const emptyStateImport = caps.canImport
+  const emptyStateImport = offersImport(caps)
     ? () => setImportOpen(true)
     : undefined;
 
   return (
     <>
       <AdminHeaderSlot>
-        <StationViewSwitch
+        <ViewSwitch
           count={rows.length}
           view={view}
+          help={PAGE_HELP}
           onChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
         />
       </AdminHeaderSlot>
@@ -163,10 +156,6 @@ export function StationManagementPage() {
               '& > *': COLUMN_SX,
             }}
           >
-            <StationStatsStrip
-              activeStatus={filters.status}
-              onSelectStatus={(status) => setFilters({ ...filters, status })}
-            />
             <StationToolbar
               caps={caps}
               query={filters.q}

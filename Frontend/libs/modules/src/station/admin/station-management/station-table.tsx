@@ -22,8 +22,10 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { Muted } from '../../../admin/shared/muted';
 import { getStationTypeIcon, type StationTypeValue } from '../../type-options';
-import { FreshnessCell, StatusBadge } from './station-cells';
+import { FreshnessCell } from '../../../admin/shared/freshness-cell';
+import { StatusBadge, TypeChip } from './station-cells';
 import type { StationRow } from './model/station-row';
 
 const { color, radius, typography } = designTokens;
@@ -93,7 +95,7 @@ export function StationTable({
       id: 'type',
       header: '類型',
       meta: { width: '120px' },
-      cell: ({ row }) => <TypeCell row={row.original} />,
+      cell: ({ row }) => <TypeChip type={row.original.type} />,
     },
     {
       id: 'area',
@@ -162,7 +164,7 @@ export function StationTable({
         empty={
           loading ? (
             <Box sx={{ p: 4, textAlign: 'center' }}>
-              <Muted>載入中…</Muted>
+              <Muted cell>載入中…</Muted>
             </Box>
           ) : (
             <StationEmptyState
@@ -347,39 +349,18 @@ function StationNameCell({ row }: { row: StationRow }) {
   );
 }
 
+/** The prototype's `AssignTeamCell` text: a team in subtle grey, 未指派 in muted. */
 export function TeamText({ name }: { name: string | null }) {
   return (
     <Typography
       noWrap
       sx={{
         ...typography.body[300],
-        color: name ? color.fg.neutral.default : color.fg.neutral.muted,
+        color: name ? color.fg.neutral.subtle : color.fg.neutral.muted,
       }}
     >
       {name ?? '未指派'}
     </Typography>
-  );
-}
-
-function TypeCell({ row }: { row: StationRow }) {
-  const TypeIcon = getStationTypeIcon(row.type);
-  return (
-    <Box
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        minWidth: 0,
-      }}
-    >
-      <TypeIcon sx={{ fontSize: 16, color: color.fg.neutral.subtle }} />
-      <Typography
-        noWrap
-        sx={{ ...typography.label[400], color: color.fg.neutral.default }}
-      >
-        {row.typeLabel}
-      </Typography>
-    </Box>
   );
 }
 
@@ -405,16 +386,5 @@ function AreaCell({ area }: { area: string }) {
         {area || '—'}
       </Typography>
     </Box>
-  );
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return (
-    <Typography
-      noWrap
-      sx={{ ...typography.body[300], color: color.fg.neutral.subtle }}
-    >
-      {children}
-    </Typography>
   );
 }

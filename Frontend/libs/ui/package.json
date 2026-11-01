@@ -1,6 +1,7 @@
 {
   "name": "@rescue-frontend/ui",
   "version": "0.0.1",
+  "license": "GPL-3.0-only",
   "private": true,
   "sideEffects": false,
   "exports": {

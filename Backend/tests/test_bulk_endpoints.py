@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.permissions import Perm
-from app.core.tabular import write_csv
+from app.core.tabular import read_table, write_csv
 from app.models.auth import User
 from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
@@ -73,7 +73,7 @@ async def _user_with(db, redis, name: str, *perms) -> dict:
                 db.add(permission)
                 await db.flush()
             db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform"))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None))
     uuid = str(user.uuid)
     headers = await auth_headers_for(redis, uuid, role)
     await db.commit()
@@ -169,6 +169,49 @@ async def test_ticket_export_is_wired_up_too(client, db_session, redis):
 
     assert resp.status_code == 200
     assert 'filename="tickets-rescue.csv"' in resp.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
+async def test_ticket_export_counts_come_with_the_most_one_export_may_hold(client, db_session, redis):
+    """So a page can say a type is over the cap before anyone asks for its file."""
+    headers = await _user_with(db_session, redis, "TicketCounter", Perm.TICKET_EXPORT)
+
+    resp = await client.get(f"{BASE}/tickets/export/counts", headers=headers)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"counts": {}, "max_rows": 10_000}
+
+
+@pytest.mark.asyncio
+async def test_a_ticket_template_is_the_header_row_alone_for_an_importer(client, db_session, redis):
+    """The export's columns, no rows: for someone who may import but not export, of a kind nobody filed."""
+    headers = await _user_with(db_session, redis, "TicketImporter", Perm.TICKET_IMPORT)
+
+    resp = await client.get(f"{BASE}/tickets/export?task_type=medical&template=true", headers=headers)
+
+    assert resp.status_code == 200, resp.text
+    assert 'filename="tickets-medical-template.csv"' in resp.headers["content-disposition"]
+    table = read_table(resp.content, "template.csv")
+    assert table.headers[:3] == ("uuid", "title", "description")
+    assert "task_name" in table.headers
+    assert table.rows == ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("perm", "task_type", "expected"),
+    [(Perm.TICKET_EXPORT, "medical", 403), (Perm.TICKET_IMPORT, "no-such-kind", 400)],
+    ids=["exporter-only", "unknown-kind"],
+)
+async def test_a_ticket_template_needs_the_import_capability_and_a_known_kind(
+    client, db_session, redis, perm, task_type, expected
+):
+    """Exporting is not importing; and the kind goes into the file name, so it is checked first."""
+    headers = await _user_with(db_session, redis, "TemplateAsker", perm)
+
+    resp = await client.get(f"{BASE}/tickets/export?task_type={task_type}&template=true", headers=headers)
+
+    assert resp.status_code == expected, resp.text
 
 
 # --- the type in the file name (ADR-214) ---

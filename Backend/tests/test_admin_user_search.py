@@ -36,11 +36,7 @@ async def _grant(db, user: User, role_name: str, *, team: Team | None = None) ->
         db.add(role)
         await db.flush()
     assert role.kind == kind, f"seeded {role_name} is {role.kind}"
-    db.add(
-        UserRoleAssign(
-            user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid if team else None, role_kind=kind
-        )
-    )
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid if team else None))
 
 
 async def _names(client, db, redis, perms, **params) -> set[str]:

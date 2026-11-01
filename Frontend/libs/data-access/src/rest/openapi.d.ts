@@ -1533,6 +1533,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/bulk/tickets/export/counts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 各任務型別匯出會有幾列
+     * @description Count each task type's export rows in the caller's scope, with the most one export may hold.
+     *
+     *     A type with no rows is left out. A count over `max_rows` is still the real one, so a page can
+     *     say that type's export will be refused before anyone asks for it.
+     */
+    get: operations['count_ticket_exports_api_v1_bulk_tickets_export_counts_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/bulk/tickets/export': {
     parameters: {
       query?: never;
@@ -1543,6 +1566,8 @@ export interface paths {
     /**
      * 匯出求助單（CSV / XLSX）
      * @description Export one task type's rows; contact fields are masked per row (ADR-109).
+     *
+     *     With `template`, the header row alone, for an importer to fill in.
      */
     get: operations['export_tickets_api_v1_bulk_tickets_export_get'];
     put?: never;
@@ -1750,9 +1775,11 @@ export interface paths {
      *     chart endpoints below — build x/y dropdowns from this response instead of
      *     hardcoding the rules client-side.
      *
-     *     Authentication only, no capability: the response is a static description of this
-     *     API's own shape and contains no records. Gating it on ticket.view (as it originally
-     *     was) locked a station-only role out of the station catalog it is allowed to chart.
+     *     Authentication only, no capability: the metric specs are a static description of this
+     *     API's own shape. Gating it on ticket.view (as it originally was) locked a station-only
+     *     role out of the station catalog it is allowed to chart. The filter values that come from
+     *     rows (areas, station types) are narrowed to the caller's own scope per domain, and left
+     *     empty for a domain they cannot chart.
      */
     get: operations['get_analytics_catalog_api_v1_analytics_catalog_get'];
     put?: never;
@@ -2093,6 +2120,26 @@ export interface components {
       phone: string | null;
       /** Email */
       email: string | null;
+    };
+    /**
+     * AreaCounty
+     * @description A 縣市 and the 鄉鎮市區 in it.
+     */
+    AreaCounty: {
+      /** County */
+      county: string;
+      /** Towns */
+      towns: components['schemas']['AreaTown'][];
+    };
+    /**
+     * AreaTown
+     * @description A 鄉鎮市區 and the 村里 in it.
+     */
+    AreaTown: {
+      /** Town */
+      town: string;
+      /** Villages */
+      villages: string[];
     };
     /**
      * AssignRoleRequest
@@ -2467,6 +2514,13 @@ export interface components {
       stations: {
         [key: string]: components['schemas']['YMetricSpec'];
       };
+      /**
+       * Filters
+       * @description Allowed filter values per domain ('tickets', 'stations').
+       */
+      filters: {
+        [key: string]: components['schemas']['DomainFilters'];
+      };
       /** @description What the chart endpoints render with when `style` is omitted. */
       default_style: components['schemas']['ChartStyle'];
     };
@@ -2664,9 +2718,8 @@ export interface components {
      * @description Plotly chart shape.
      *
      *     See https://plotly.com/python/bar-charts/, https://plotly.com/python/line-charts/,
-     *     https://plotly.com/python/pie-charts/. Unlike `x`, an unsupported chart_type for
-     *     the chosen y-metric is a 400, not silently ignored — see GET /analytics/catalog
-     *     for each metric's allowed_chart_types.
+     *     https://plotly.com/python/pie-charts/. An unsupported chart_type for the chosen
+     *     y-metric is a 400 — see GET /analytics/catalog for each metric's allowed_chart_types.
      * @enum {string}
      */
     ChartType: 'bar' | 'line' | 'pie';
@@ -2674,17 +2727,15 @@ export interface components {
      * ChartX
      * @description How to slice the chosen y-metric (the X axis).
      *
-     *     Omit this param entirely for a single aggregate value/pie. Whether a given value
-     *     is valid for a given y-metric is enforced by app.services.chart_render.resolve()
-     *     — an inapplicable x is silently ignored (falls back to aggregate, or to the
-     *     metric's forced grouping if it has one), never rejected. See GET
-     *     /api/v1/analytics/catalog for which x values are valid per y-metric.
+     *     Omit this param entirely for a single aggregate value/pie. A value the chosen y-metric
+     *     does not allow is a 422. See GET /api/v1/analytics/catalog for which x values are
+     *     valid per y-metric.
      * @enum {string}
      */
     ChartX: 'date' | 'category';
     /**
      * ChartXGranularity
-     * @description Bucket size when x=date. Ignored otherwise.
+     * @description Bucket size when x=date. Ignored otherwise, and by a metric whose catalog entry lacks it.
      * @enum {string}
      */
     ChartXGranularity: 'day' | 'week';
@@ -2740,7 +2791,7 @@ export interface components {
     DataResponse: {
       /**
        * X
-       * @description The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' (the two metrics with a built-in grouping), or null for one aggregate. It can differ from the requested `x`, which is ignored where it doesn't apply.
+       * @description The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' (the two metrics with a built-in grouping), or null for one aggregate. It differs from the request only when `x` is omitted on a metric with a built-in grouping.
        */
       x: string | null;
       /**
@@ -2811,6 +2862,27 @@ export interface components {
       scope: string;
       /** Team Uuid */
       team_uuid: string | null;
+    };
+    /**
+     * DomainFilters
+     * @description The values a domain's filter params accept, drawn from the rows the caller may chart.
+     */
+    DomainFilters: {
+      /**
+       * Types
+       * @description Values for `task_type` (tickets) or `station_type` (stations).
+       */
+      types: components['schemas']['FilterOption'][];
+      /**
+       * Statuses
+       * @description Values for `status`.
+       */
+      statuses: components['schemas']['FilterOption'][];
+      /**
+       * Areas
+       * @description Values for `county`, `town` and `village`. A 村里 name can repeat across towns, so send `town` (and `county`) with it to pin one.
+       */
+      areas: components['schemas']['AreaCounty'][];
     };
     /**
      * DuplicatePairDecision
@@ -2991,6 +3063,22 @@ export interface components {
       media_type: string;
       /** Content Base64 */
       content_base64: string;
+    };
+    /**
+     * FilterOption
+     * @description One allowed value of a filter, with the zh-TW name to show for it.
+     */
+    FilterOption: {
+      /**
+       * Value
+       * @description What to send as the query param.
+       */
+      value: string;
+      /**
+       * Label
+       * @description Display name (zh-TW); the value itself when it has no glossary entry.
+       */
+      label: string;
     };
     /**
      * ForgotPasswordRequest
@@ -4058,6 +4146,12 @@ export interface components {
       name: string;
     };
     /**
+     * StationStatus
+     * @description A station's operational status, for the station `status` filter.
+     * @enum {string}
+     */
+    StationStatus: 'active' | 'temporarily_closed' | 'permanently_closed';
+    /**
      * StationYMetric
      * @description What to measure (the Y axis) for a station chart — see app/services/station_analytics.py.
      * @enum {string}
@@ -4065,7 +4159,8 @@ export interface components {
     StationYMetric:
       | 'station_count'
       | 'station_status_count'
-      | 'station_freshness_trend';
+      | 'station_freshness_trend'
+      | 'operating_station_count';
     /**
      * StepUp
      * @description Extra proof required to REPLACE or DELETE a contact (ADR-086/159).
@@ -4280,6 +4375,24 @@ export interface components {
       status: 'active' | 'suspended';
     };
     /**
+     * TicketExportCountsResponse
+     * @description How many rows each task type's export would hold, and the most one export may hold.
+     */
+    TicketExportCountsResponse: {
+      /**
+       * Counts
+       * @description 任務型別 → 匯出會有幾列；沒有列的型別不列
+       */
+      counts: {
+        [key: string]: number;
+      };
+      /**
+       * Max Rows
+       * @description 單次匯出的上限；筆數超過的型別，匯出會被拒絕
+       */
+      max_rows: number;
+    };
+    /**
      * TicketForReviewResponse
      * @description A whole live ticket as the reviewer compares it (Spec 028 §2, ADR-373).
      *
@@ -4335,6 +4448,18 @@ export interface components {
       };
     };
     /**
+     * TicketStatus
+     * @description A ticket's status, for the ticket `status` filter.
+     * @enum {string}
+     */
+    TicketStatus: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+    /**
+     * TicketTaskType
+     * @description A ticket's task type, for the `task_type` filter — the kinds in app.services.ticket.TASK_TYPES.
+     * @enum {string}
+     */
+    TicketTaskType: 'rescue' | 'supply' | 'medical' | 'hr';
+    /**
      * TicketYMetric
      * @description What to measure (the Y axis) for a ticket/task chart — see app/services/ticket_analytics.py.
      * @enum {string}
@@ -4350,7 +4475,10 @@ export interface components {
       | 'time_to_completion'
       | 'net_backlog_change'
       | 'task_completion_distribution'
-      | 'duplicate_count';
+      | 'duplicate_count'
+      | 'volunteers_needed'
+      | 'volunteers_matched'
+      | 'volunteer_gap';
     /**
      * TicketsForReviewResponse
      * @description The ticket on each side of the card; null where that ticket is cancelled or deleted.
@@ -4582,9 +4710,14 @@ export interface components {
       description: string;
       /**
        * Allowed X
-       * @description Valid values for the `x` query param on this y-metric: any of 'date', 'category', 'none' (aggregate/no grouping — omit `x` entirely). An `x` outside this list is silently ignored (falls back to 'none', or to this metric's forced value if 'none' isn't in the list), never rejected with 400.
+       * @description Valid values for the `x` query param on this y-metric: any of 'date', 'category', 'none' (aggregate/no grouping — omit `x` entirely). An `x` outside this list is rejected with 422; omitting `x` gives 'none', or this metric's forced value if 'none' isn't in the list.
        */
       allowed_x: string[];
+      /**
+       * Allowed X Granularities
+       * @description Bucket sizes `x_granularity` can take for this y-metric's `x=date` trend. A size outside this list is not rejected: the trend is drawn at the first one listed.
+       */
+      allowed_x_granularities: string[];
       /**
        * Default Chart Type
        * @description chart_type used when the param is omitted.
@@ -4592,17 +4725,17 @@ export interface components {
       default_chart_type: string;
       /**
        * Allowed Chart Types
-       * @description Valid values for `chart_type` on this y-metric — unlike `x`, an unsupported chart_type is rejected with 400.
+       * @description Valid values for `chart_type` on this y-metric; an unsupported one is rejected with 400.
        */
       allowed_chart_types: string[];
       /**
        * Requires Date Range
-       * @description When true, `start_date` and `end_date` are mandatory for this y-metric and omitting either is a 400 — the underlying query is too expensive to run unbounded. Currently only `duplicate_count`.
+       * @description When true, `start_date` and `end_date` are mandatory for this y-metric and omitting either is a 400. No metric needs it now; the field stays so existing clients keep reading it.
        */
       requires_date_range: boolean;
       /**
        * Max Range Days
-       * @description Widest allowed span between `start_date` and `end_date` for this y-metric, in days; a wider range is a 400. Null means no limit. Clamp the date picker to this instead of waiting for the error.
+       * @description Most days, both ends included, between `start_date` and `end_date` for this y-metric's `x=date` trend; a longer range is a 400. Null means no limit. It applies whether or not `requires_date_range` is set, so read it on its own to clamp the date picker.
        */
       max_range_days?: number | null;
     };
@@ -7370,6 +7503,44 @@ export interface operations {
       };
     };
   };
+  count_ticket_exports_api_v1_bulk_tickets_export_counts_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TicketExportCountsResponse'];
+        };
+      };
+      /** @description Permission Denied */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   export_tickets_api_v1_bulk_tickets_export_get: {
     parameters: {
       query: {
@@ -7377,6 +7548,8 @@ export interface operations {
         task_type: string;
         /** @description 檔案格式：csv / xlsx */
         format?: string;
+        /** @description 只回標題列，給匯入當範本：欄位跟匯出一樣、沒有資料；要 ticket.import，不要 ticket.export */
+        template?: boolean;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -7826,18 +7999,18 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
-        /** @description Bucket size when x=date. Ignored for every other x. */
+        /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
-        /** @description Overrides the y-metric's default chart shape. Unlike `x`, an unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog. */
+        /** @description Overrides the y-metric's default chart shape. An unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog. */
         chart_type?: components['schemas']['ChartType'] | null;
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
         /** @description JSON-encoded ChartStyle: palette, font, legend position, line/pie shape, margin, modebar. Every field is optional; omitted ones take the defaults published as `default_style` on GET /analytics/catalog. Unknown fields are a 400. */
         style?: string | null;
         /** @description Figure width in px, at least 10; omit for Plotly's default. */
@@ -7846,6 +8019,16 @@ export interface operations {
         height?: number | null;
         /** @description JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{"title": {"text": "Custom title"}}'. */
         layout_overrides?: string | null;
+        /** @description Only tickets of this task type; the volunteer metrics read each need's own type. */
+        task_type?: components['schemas']['TicketTaskType'] | null;
+        /** @description Only tickets with this status. */
+        status?: components['schemas']['TicketStatus'] | null;
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        county?: string | null;
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        town?: string | null;
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        village?: string | null;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -7880,16 +8063,26 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
-        /** @description Bucket size when x=date. Ignored for every other x. */
+        /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
+        /** @description Only tickets of this task type; the volunteer metrics read each need's own type. */
+        task_type?: components['schemas']['TicketTaskType'] | null;
+        /** @description Only tickets with this status. */
+        status?: components['schemas']['TicketStatus'] | null;
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        county?: string | null;
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        town?: string | null;
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        village?: string | null;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -7922,14 +8115,24 @@ export interface operations {
   get_ticket_value_api_v1_analytics_tickets_value_get: {
     parameters: {
       query: {
-        /** @description Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction. */
+        /** @description Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction. */
         y: components['schemas']['TicketYMetric'];
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
+        /** @description Only tickets of this task type; the volunteer metrics read each need's own type. */
+        task_type?: components['schemas']['TicketTaskType'] | null;
+        /** @description Only tickets with this status. */
+        status?: components['schemas']['TicketStatus'] | null;
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        county?: string | null;
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        town?: string | null;
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        village?: string | null;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -7964,18 +8167,18 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
-        /** @description Bucket size when x=date. Ignored for every other x. */
+        /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
-        /** @description Overrides the y-metric's default chart shape. Unlike `x`, an unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog. */
+        /** @description Overrides the y-metric's default chart shape. An unsupported chart_type for the chosen `y` is rejected with 400 — see GET /analytics/catalog. */
         chart_type?: components['schemas']['ChartType'] | null;
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
         /** @description JSON-encoded ChartStyle: palette, font, legend position, line/pie shape, margin, modebar. Every field is optional; omitted ones take the defaults published as `default_style` on GET /analytics/catalog. Unknown fields are a 400. */
         style?: string | null;
         /** @description Figure width in px, at least 10; omit for Plotly's default. */
@@ -7984,6 +8187,16 @@ export interface operations {
         height?: number | null;
         /** @description JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{"title": {"text": "Custom title"}}'. */
         layout_overrides?: string | null;
+        /** @description Only stations of this type; GET /analytics/catalog lists the values. */
+        station_type?: string | null;
+        /** @description Only stations with this operational status. */
+        status?: components['schemas']['StationStatus'] | null;
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        county?: string | null;
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        town?: string | null;
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        village?: string | null;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -8018,16 +8231,26 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
-        /** @description Bucket size when x=date. Ignored for every other x. */
+        /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
+        /** @description Only stations of this type; GET /analytics/catalog lists the values. */
+        station_type?: string | null;
+        /** @description Only stations with this operational status. */
+        status?: components['schemas']['StationStatus'] | null;
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        county?: string | null;
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        town?: string | null;
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        village?: string | null;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -8060,14 +8283,24 @@ export interface operations {
   get_station_value_api_v1_analytics_stations_value_get: {
     parameters: {
       query: {
-        /** @description Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction. */
+        /** @description Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction. */
         y: components['schemas']['StationYMetric'];
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
         /** @description Inclusive range end, local to `tz`. */
         end_date?: string | null;
-        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
-        tz?: string;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz: string;
+        /** @description Only stations of this type; GET /analytics/catalog lists the values. */
+        station_type?: string | null;
+        /** @description Only stations with this operational status. */
+        status?: components['schemas']['StationStatus'] | null;
+        /** @description Only rows whose address has this 縣市. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        county?: string | null;
+        /** @description Only rows whose address has this 鄉鎮市區. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        town?: string | null;
+        /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
+        village?: string | null;
       };
       header?: {
         'X-WG-Realm'?: string | null;

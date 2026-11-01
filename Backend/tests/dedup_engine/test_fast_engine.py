@@ -72,13 +72,15 @@ async def _task(db, owner, ticket, *, minutes_ago=10.0, uuid=None, **overrides) 
         "task_name": "一樓淹水需要抽水機",
         "task_description": "水深及膝",
         "status": "pending",
-    }
+    } | overrides
     task = TicketTask(
         uuid=uuid or uuid_mod.uuid4(),
         ticket_uuid=ticket.uuid,
         created_by=owner,
         created_at=NOW - timedelta(minutes=minutes_ago),
-        **(fields | overrides),
+        completed_at=NOW if fields["status"] == "fulfilled" else None,
+        canceled_at=NOW if fields["status"] == "canceled" else None,
+        **fields,
     )
     db.add(task)
     await db.flush()
