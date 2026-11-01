@@ -53,7 +53,8 @@
 - 前台不送 `Authorization`。
 
 帶回瀏覽器的 header：`set-cookie`（一條一條轉）、`location`（OAuth 的導向；proxy 不自己跟著 redirect 走）、
-`content-type`、`content-disposition`、`retry-after`。`cache-control` 一律 `no-store`，只有公開的地圖圖磚例外：
+`content-type`、`content-disposition`、`retry-after`，以及 `x-frame-options`、`content-security-policy`
+（後端自己出的頁面，例如 MCP 授權頁，不能被嵌進別的網頁）。`cache-control` 一律 `no-store`，只有公開的地圖圖磚例外：
 圖磚不帶 cookie，所有人共用同一份快取。
 
 ### 401 的處理（ADR-328）
