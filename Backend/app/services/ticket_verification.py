@@ -6,8 +6,8 @@ two different tickets, neither cancelled nor deleted. That is the card `dedup_re
 resolve, so the condition is taken from there. Nothing is stored on the ticket: the cards are
 written by the dedup layers and the review page, and read here as they stand.
 
-`TicketType.verification_status` reads it with `ai_duplicate.view`, checked there;
-`TicketType.suspected_duplicate_of` gives anyone the far tickets alone (ADR-454).
+Anyone reads it: `TicketType.verification_status` as a state with the far tickets (ADR-455), and
+`TicketType.suspected_duplicate_of` as the far tickets alone (ADR-454).
 """
 
 from collections.abc import Iterable
