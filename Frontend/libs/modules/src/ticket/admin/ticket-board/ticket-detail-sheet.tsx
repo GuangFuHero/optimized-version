@@ -614,6 +614,7 @@ function SummaryCard({
         {progress.label ? (
           <NeedProgressBar
             progress={progress}
+            size="md"
             label={
               <Typography component="span" sx={caption}>
                 承接進度

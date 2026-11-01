@@ -455,16 +455,19 @@ function NeedsCell({ tasks }: { tasks: readonly TaskRow[] }) {
 }
 
 /**
- * 承接進度: the 待承接 line over its thin grey bar (PRG-101, PRG-102); nothing with no need to count.
+ * 承接進度: the 待承接 line over its grey bar (PRG-101, PRG-102); nothing with no need to count.
  * Green only once every need is met: 在途 3／3, everyone taken but not there yet, is not done.
  */
 export function NeedProgressBar({
   progress,
   label,
+  size = 'sm',
 }: {
   progress: NeedProgress;
   /** Words on the left of the numbers, as the detail sheet names the bar. */
   label?: ReactNode;
+  /** PRG-101: sm (4px) in the table, md (6px) in the detail sheet. */
+  size?: 'sm' | 'md';
 }) {
   if (!progress.label) return null;
   return (
@@ -475,7 +478,7 @@ export function NeedProgressBar({
       valueText={progress.label}
       complete={progress.fulfilled === progress.total}
       tone="neutral"
-      size="sm"
+      size={size}
     />
   );
 }
