@@ -38,9 +38,18 @@ type AuthProviderAction = {
   icon?: ReactNode;
 };
 
+/** What the form opens filled in with. The password always opens empty. */
+export interface AuthFormInitialValues {
+  identityType: AuthIdentityType;
+  /** As typed, not normalized: a phone comes back as 0912345678, not +886912345678. */
+  identity: string;
+  name?: string;
+}
+
 interface LoginFormProps {
   mode?: AuthFormMode;
   providerActions?: readonly AuthProviderAction[];
+  initialValues?: AuthFormInitialValues;
   onSubmitAsync?: (values: {
     identityType: AuthIdentityType;
     identity: string;
@@ -105,6 +114,7 @@ function resolveIdentityFieldCopy(identityType: AuthIdentityType) {
 export function LoginForm({
   mode = 'login',
   providerActions = mode === 'login' ? defaultProviderActions : [],
+  initialValues,
   onSubmitAsync,
   onForgotPasswordAsync,
   onSmsLoginAsync,
@@ -117,7 +127,9 @@ export function LoginForm({
   const [submissionSuccess, setSubmissionSuccess] = useState<
     string | undefined
   >();
-  const [identityType, setIdentityType] = useState<AuthIdentityType>('email');
+  const [identityType, setIdentityType] = useState<AuthIdentityType>(
+    initialValues?.identityType ?? 'email',
+  );
 
   const {
     control,
@@ -128,7 +140,13 @@ export function LoginForm({
     name: string;
     identity: string;
     password: string;
-  }>({ defaultValues: { name: '', identity: '', password: '' } });
+  }>({
+    defaultValues: {
+      name: initialValues?.name ?? '',
+      identity: initialValues?.identity ?? '',
+      password: '',
+    },
+  });
 
   const nameValue = useWatch({ control, name: 'name' }) ?? '';
   const identityValue = useWatch({ control, name: 'identity' }) ?? '';
@@ -271,7 +289,8 @@ export function LoginForm({
         disabled={isSubmitting}
         onChange={(value) => {
           setIdentityType(value);
-          resetField('identity');
+          // Emptied, not reset to the one the form opened with: that was the other kind.
+          resetField('identity', { defaultValue: '' });
           setSubmissionError(undefined);
           setSubmissionSuccess(undefined);
         }}
@@ -328,6 +347,9 @@ export function LoginForm({
             autoComplete={
               mode === 'register' ? 'new-password' : 'current-password'
             }
+            // Opened filled in, the one field left to fill. Focus also needs a place to go: the
+            // button pressed to come back is gone.
+            autoFocus={initialValues !== undefined}
             disabled={isSubmitting}
             errorText={fieldState.error?.message}
           />

@@ -8,7 +8,7 @@
 
 - **Monorepo**：Nx 22 + pnpm workspaces，各 app 與 library 使用自己的 `package.json`
 - **App framework**：Next.js 16（App Router）、React 19
-- **UI**：MUI 9 + Emotion、Leaflet / react-leaflet（地圖）
+- **UI**：MUI 9 + Emotion、Leaflet + leaflet.markercluster（地圖）
 - **資料存取**：urql 5、GraphQL Code Generator、openapi-fetch、TanStack Query；前台保留 urql graphcache
 - **驗證**：後端的 `HttpOnly` session cookie + 共用 REST / GraphQL proxy（`/api/v1/*`、`/api/graphql`）
 - **語言/工具**：TypeScript 5.9（strict）、ESLint 9（flat config）、Prettier

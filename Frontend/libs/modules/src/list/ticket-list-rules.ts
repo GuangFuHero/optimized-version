@@ -160,3 +160,64 @@ export function pageFoldedAway(
 
   return page.size > 0 && !listed.some(({ marker }) => page.has(marker.id));
 }
+
+/**
+ * A count over the loaded pages. While more pages wait to load it is only a floor, so it reads N+
+ * (user, 2026-10-30): scrolling down used to raise a count that looked like a total.
+ */
+export function countFloor(count: number, more: boolean): string {
+  return more ? `${count}+` : `${count}`;
+}
+
+/**
+ * The list's count: 共 N 筆需求 once everything is loaded, N+ 筆需求 while more pages wait; stations
+ * name nothing (共 N 筆, N+ 筆).
+ */
+export function listCountLabel(
+  count: number,
+  { more, what = '' }: { more: boolean; what?: string },
+): string {
+  return more ? `${count}+ 筆${what}` : `共 ${count} 筆${what}`;
+}
+
+export interface ListPaging {
+  /** The list asks for the next page as it scrolls to the end. */
+  canLoadMore: boolean;
+  /** The count (共 N 筆需求) is only a floor: N+. */
+  countMore: boolean;
+  /** 含已滿額's N is only a floor. */
+  fullMore: boolean;
+}
+
+/**
+ * Whether the list pages on, and which of its counts are floors. The backend sends tickets still
+ * taking people first, so once a whole page folds away the pages left hold finished tickets: the
+ * list stops there, its needs are all in, and only 含已滿額's full needs are not.
+ *
+ * That stop holds only while needs fold. With 含已滿額 on, or a status filter asking for finished or
+ * cancelled tickets, a page can come out empty for another reason — two statuses or more are
+ * filtered on the page, not by the backend — and stopping would hide the tickets asked for behind a
+ * 共 0 (HC on #178). A page on its way, the first included, keeps the count a floor too.
+ */
+export function listPaging({
+  hasNextPage,
+  pageFolded,
+  foldsFullNeeds,
+  loading,
+}: {
+  hasNextPage: boolean;
+  /** Every ticket of the newest page folded away (`pageFoldedAway`). */
+  pageFolded: boolean;
+  /** 含已滿額 is off, and no status filter asks for finished or cancelled tickets. */
+  foldsFullNeeds: boolean;
+  /** A page is on its way, or the first one is not in yet. */
+  loading: boolean;
+}): ListPaging {
+  const canLoadMore = hasNextPage && !(foldsFullNeeds && pageFolded);
+
+  return {
+    canLoadMore,
+    countMore: canLoadMore || loading,
+    fullMore: hasNextPage,
+  };
+}

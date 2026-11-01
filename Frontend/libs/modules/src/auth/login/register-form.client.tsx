@@ -5,7 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
 import { type AuthIdentityType } from '@rescue-frontend/data-access';
-import { AuthFormError, authHref, RegisterForm } from './index';
+import {
+  AuthFormError,
+  authHref,
+  RegisterForm,
+  type AuthFormInitialValues,
+} from './index';
 import {
   registerAsync,
   resendVerificationAsync,
@@ -43,6 +48,11 @@ export function RegisterFormClient({
   const requestedCallbackUrl = searchParams.get('callbackUrl');
   const [pendingRegistration, setPendingRegistration] =
     useState<PendingRegistration | null>(null);
+  // What the last register sent, but the password, which the form clears once sent: 返回上一頁
+  // opens the form filled in with it, as a person going back is most often fixing a mistyped
+  // address. Sending the same address again is fine: no account exists until a code is used, and
+  // the new code replaces the one waiting.
+  const [sentValues, setSentValues] = useState<AuthFormInitialValues>();
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationError, setVerificationError] = useState<string>();
   const [verificationSuccess, setVerificationSuccess] = useState<string>();
@@ -169,8 +179,10 @@ export function RegisterFormClient({
 
   return (
     <RegisterForm
+      initialValues={sentValues}
       onSubmitAsync={async ({
         identityType,
+        identity,
         normalizedIdentity,
         password,
         name,
@@ -200,6 +212,7 @@ export function RegisterFormClient({
           );
         }
 
+        setSentValues({ identityType, identity, name: trimmedName });
         setPendingRegistration({
           identityType,
           normalizedIdentity,

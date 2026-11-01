@@ -29,6 +29,7 @@ export interface AuthFieldProps {
   inputMode?: HTMLAttributes<HTMLInputElement>['inputMode'];
   helperText?: ReactNode;
   disabled?: boolean;
+  autoFocus?: boolean;
   endAdornment?: ReactNode;
   /**
    * Marks the label with a red asterisk, as the design system's `TextInput` does, and says so to a
@@ -49,6 +50,7 @@ export function AuthField({
   inputMode,
   helperText,
   disabled,
+  autoFocus,
   endAdornment,
   required = false,
 }: AuthFieldProps) {
@@ -87,6 +89,7 @@ export function AuthField({
             'aria-required': required || undefined,
           }}
           disabled={disabled}
+          autoFocus={autoFocus}
           endAdornment={endAdornment}
           notched={false}
           sx={{

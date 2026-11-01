@@ -276,6 +276,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `ticket_tasks` | 新增 `merged_into_uuid`（FK `ticket_tasks.uuid`，nullable） | 被併入時指向併入的那一項 |
 
 這兩個欄位只做紀錄，GraphQL 不回傳（ADR-372）。導向主要單靠通知：每則通知的 `ref_uuid` 都是主要單（§6）。
+例外是分享連結用的 `ticketAvailability`：順著 `replaced_by_uuid` 回還在的那張的 uuid（ADR-444）。
 
 不新增事件類型，`merged` 已經在 CHECK 裡。
 
