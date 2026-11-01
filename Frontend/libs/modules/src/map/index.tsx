@@ -42,12 +42,7 @@ import {
 import { useMapOpening } from './hooks/use-event-map-view';
 import { useRescueMapController } from './hooks/use-rescue-map-controller';
 import { buildLocationCells } from './location-cells';
-import {
-  isRememberedView,
-  readRememberedMapView,
-  rememberMapView,
-  type RescueMapMemoryKey,
-} from './map-opening';
+import { rememberMapView, type RescueMapMemoryKey } from './map-opening';
 import type {
   RescueMapClusterAppearance,
   RescueMapClosureArea,
@@ -315,46 +310,12 @@ export const Map = memo(function Map({
   const [addressPosition] = useState(
     () => viewportStore?.getSnapshot().position ?? routeState?.position,
   );
-  // Unless the address names the view this browser last left the map at, kept in the address as the
-  // map moved and come back to by a reload, a restored tab or the history: that is waited on as the
-  // view remembered, which it is, so a changed event view still takes the map to the new one.
-  const [addressIsLastView] = useState(
-    () =>
-      viewMemoryKey !== undefined &&
-      isRememberedView(readRememberedMapView(viewMemoryKey), addressPosition),
-  );
-  const { opening, openedUnder, eventView } = useMapOpening({
+  const opening = useMapOpening({
     memoryKey: viewMemoryKey,
-    addressHasPosition: Boolean(addressPosition) && !addressIsLastView,
+    addressHasPosition: Boolean(addressPosition),
+    remembersOpening: viewportStore !== undefined,
   });
-  const opensAtOnce = addressPosition?.zoom !== undefined && !addressIsLastView;
-  // Gone to the event's view instead, the address is pointed there before the canvas is built, as
-  // the canvas opens at the address and keeps to it.
-  const replacesAddress =
-    addressIsLastView && opening !== null && !opening.restored;
-  const [addressReplaced, setAddressReplaced] = useState(false);
-
-  useEffect(() => {
-    if (!replacesAddress || addressReplaced || !opening) {
-      return;
-    }
-
-    onRouteStateChange?.({ ...routeState, position: opening.view });
-    setAddressReplaced(true);
-  }, [
-    addressReplaced,
-    onRouteStateChange,
-    opening,
-    replacesAddress,
-    routeState,
-  ]);
-
-  const canvasReady =
-    opensAtOnce || (opening !== null && (!replacesAddress || addressReplaced));
-  const openedUnderRef = useRef(openedUnder);
-  openedUnderRef.current = openedUnder;
-  const eventViewRef = useRef(eventView);
-  eventViewRef.current = eventView;
+  const opensAtOnce = addressPosition?.zoom !== undefined;
   const openingRef = useRef(opening);
   openingRef.current = opening;
   const onMapReadyRef = useRef(onMapReady);
@@ -371,12 +332,7 @@ export const Map = memo(function Map({
   const rememberView = useCallback(
     (view: RescueMapView) => {
       if (viewMemoryKey) {
-        rememberMapView(
-          viewMemoryKey,
-          view,
-          openedUnderRef.current,
-          eventViewRef.current,
-        );
+        rememberMapView(viewMemoryKey, view);
       }
     },
     [viewMemoryKey],
@@ -522,7 +478,7 @@ export const Map = memo(function Map({
             overflow: 'hidden',
           }}
         >
-          {canvasReady ? (
+          {opensAtOnce || opening ? (
             <RescueMapCanvas
               controller={controller}
               onMarkerClick={handleMarkerClick}

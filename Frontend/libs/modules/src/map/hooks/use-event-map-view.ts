@@ -10,7 +10,6 @@ import {
 
 import { MAP_VIEW_TAIWAN } from '../constants';
 import {
-  forgetMapView,
   readRememberedMapView,
   rememberMapView,
   resolveMapOpening,
@@ -71,67 +70,58 @@ export function useEventMapView(): EventMapViewState {
   }, [data, isFetchedAfterMount, waitedOut]);
 }
 
-interface DecidedOpening {
-  opening: MapOpening;
-  openedUnder: EventMapView;
-}
-
 /**
  * Where a map opens, worked out once (`resolveMapOpening`); null until then. A position in the
  * address is not waited on: the map opens there at once, and this only settles what it falls back
- * to. Otherwise it waits for the event, which says whether the view the map was left at still holds.
- * An address naming the view this browser left is passed as no position (`addressHasPosition`
- * false): it is that view, and is waited on like it.
+ * to. Nor is a view this browser left the map at, which is where it opens whatever the event says.
+ * Otherwise it waits for the event's view.
  *
- * `openedUnder` is the event view the opening was worked out under, kept as it was: a view the map
- * is left at is remembered under it. The live one would let an event view changed while the map is
- * open pass for the one it was left under, and the next visit would come back to the old view
- * instead of going to the new event view. Undefined until the opening is worked out.
- *
- * `eventView` is the live one, for a map opened under an event that could not be read: with nothing
- * remembered, a view it is left at is remembered under the event view once that arrives.
+ * Opened at the event's view, a map that keeps its position in the address (`remembersOpening`, the
+ * site's) remembers it as the view left, as if it had been moved there: from then on this browser
+ * comes back to it, though the event's view changes. A back-office map frames its data on a first
+ * visit instead, and one that framed nothing would come back unframed. Nothing is remembered when the
+ * event could not be read either: all of Taiwan would then stay.
  */
 export function useMapOpening({
   memoryKey,
   addressHasPosition,
+  remembersOpening = false,
 }: {
   memoryKey?: RescueMapMemoryKey;
   addressHasPosition: boolean;
-}): {
-  opening: MapOpening | null;
-  openedUnder: EventMapView;
-  eventView: EventMapView;
-} {
+  remembersOpening?: boolean;
+}): MapOpening | null {
   const event = useEventMapView();
-  const [decided, setDecided] = useState<DecidedOpening | null>(null);
+  const [opening, setOpening] = useState<MapOpening | null>(null);
 
   useEffect(() => {
-    if (decided || !event.ready) {
+    if (opening) {
       return;
     }
 
-    const opening =
+    const remembered =
       memoryKey && !addressHasPosition
-        ? resolveMapOpening(readRememberedMapView(memoryKey), event.eventView)
-        : resolveMapOpening(null, event.eventView);
+        ? readRememberedMapView(memoryKey)
+        : null;
 
-    if (memoryKey && opening.dropRemembered) {
-      forgetMapView(memoryKey);
+    if (!remembered && !event.ready) {
+      return;
     }
 
-    // Opened at the event's view, it is remembered as the view left, as if the map had been moved
-    // there: the address then names it, and a reload after the event's view changes finds it is the
-    // one this browser left (`isRememberedView`) and goes to the new one. Not one from the address.
-    if (memoryKey && !addressHasPosition && !opening.restored) {
-      rememberMapView(memoryKey, opening.view, event.eventView);
+    const decided = resolveMapOpening(remembered, event.eventView);
+
+    if (
+      memoryKey &&
+      remembersOpening &&
+      !addressHasPosition &&
+      !decided.restored &&
+      event.eventView !== undefined
+    ) {
+      rememberMapView(memoryKey, decided.view);
     }
 
-    setDecided({ opening, openedUnder: event.eventView });
-  }, [addressHasPosition, decided, event, memoryKey]);
+    setOpening(decided);
+  }, [addressHasPosition, event, memoryKey, opening, remembersOpening]);
 
-  return {
-    opening: decided?.opening ?? null,
-    openedUnder: decided?.openedUnder,
-    eventView: event.eventView,
-  };
+  return opening;
 }
