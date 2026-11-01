@@ -2011,6 +2011,8 @@ export type TicketType = {
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
   status: Scalars['String']['output'];
+  /** Other tickets this one may repeat, to anyone (ADR-447): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them */
+  suspectedDuplicateOf: Array<TicketDuplicateRefType>;
   /** Type of help needed: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: Maybe<Scalars['String']['output']>;
   tasks: Array<TicketTaskType>;
