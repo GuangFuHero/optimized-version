@@ -256,6 +256,8 @@ Team edit, status and the audit-log read API are open questions in the spec.
 
 ### ADR-357 Team edit by super admin and the team's own admin; suspending a team switches its grants off
 
+> **Partly superseded 2026-10-28 (Spec 029, ADR-402, 405).** In point 4, a token acting as a suspended team no longer signs the user out: it answers `identity_reset` and the session moves to the default identity. Suspending also tells every member of the team (`team_suspended`). The rest of point 4 stands.
+
 > **Status: ACCEPTED (2026-10-20), amended 2026-10-21.** Popo, 2026-10-20: team details are edited by the
 > super admin and the team admin; a suspended team's members hold no team permissions; contact fields are not
 > shown to other teams. **2026-10-21, Popo: there is no disbanding.** ADMIN-027 Story 4 (step 3: the only admin
