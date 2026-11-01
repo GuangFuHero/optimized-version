@@ -188,7 +188,7 @@ async def test_suspending_tells_everyone_in_the_team_once(client, db_session, re
     world = await World().build(db_session, redis)
     captain = (await db_session.execute(select(User.uuid).where(User.name == "隊長"))).scalar_one()
     db_session.add(
-        UserRoleAssign(user_uuid=captain, role_uuid=world.member_role, team_uuid=world.team, role_kind="team")
+        UserRoleAssign(user_uuid=captain, role_uuid=world.member_role, team_uuid=world.team)
     )
     await db_session.commit()
 
@@ -210,7 +210,7 @@ async def test_the_super_admin_who_suspends_is_not_told(client, db_session, redi
     world = await World().build(db_session, redis)
     boss = (await db_session.execute(select(User.uuid).where(User.name == "超管"))).scalar_one()
     db_session.add(
-        UserRoleAssign(user_uuid=boss, role_uuid=world.member_role, team_uuid=world.team, role_kind="team")
+        UserRoleAssign(user_uuid=boss, role_uuid=world.member_role, team_uuid=world.team)
     )
     await db_session.commit()
 
