@@ -57,7 +57,7 @@ const NEED_LISTS_QUERY_CONTEXT = { suspense: false } as const;
  */
 const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
   claimed: {
-    icon: <Icons.heartHandshake />,
+    icon: <Icons.handHeart />,
     tone: color.brand.secondary.subtle,
   },
   assigned: {
@@ -127,7 +127,7 @@ function Notice({ children }: { children: ReactNode }) {
 
 // What brings a notice, one short line each: in a phone's drawer a paragraph would not show three.
 const EMPTY_REASONS = [
-  { icon: Icons.heartHandshake, text: '有人承接了你建立的求助' },
+  { icon: Icons.handHeart, text: '有人承接了你建立的求助' },
   { icon: Icons.circleSlash, text: '你承接的任務有異動' },
   { icon: Icons.badgeCheck, text: '你的申請有審核結果' },
 ];
