@@ -7,7 +7,7 @@
 | # | 文件 | 適合情境 |
 | --- | --- | --- |
 | 1 | [`frontend-working-principles.md`](frontend-working-principles.md) | 先理解 `apps/demo`、`libs/ui`、`libs/modules`、`libs/data-access` 的責任邊界 |
-| 2 | [`design-system.md`](design-system.md) | 動任何 UI 前先讀：tokens、`libs/ui` 元件、按鈕規則、手機規則，以及和 `../Design/` 原型的關係 |
+| 2 | [`design-system.md`](design-system.md) | 動任何 UI 前先讀：tokens、`libs/ui` 元件、按鈕規則、手機規則，以及怎麼讀設計分支上的原型 |
 | 3 | [`design-system-audit.md`](design-system-audit.md) | 修既有的設計系統偏差時照這份：各模組的 lint warning 數與修正規則 |
 | 4 | [`frontend-library-layering-inventory.md`](frontend-library-layering-inventory.md) | 對照 `libs/modules/src` 目前實際目錄與 capability 分層 |
 | 5 | [`authentication.md`](authentication.md) | 修改登入、註冊、登出、session cookie、proxy 的 refresh 前先讀 |

@@ -5,24 +5,28 @@
 ## 來源與流向
 
 ```text
-設計師（自己的分支）──PR──▶ main: Design/
-                                ├── 前台/、後台/          原型畫面（*.html）與裁示（docs/）
-                                ├── 前台/_ds/、後台/_ds/  設計系統匯出（tokens/*.css，兩份相同）
-                                ├── handoff/              給 libs/ui 的 TSX
-                                └── CHANGELOG.md          token 異動與「Frontend 待辦」
-                                        │  工程師照 CHANGELOG 手動改
-                                        ▼
+設計分支 sucrelindesign（最新的設計，不會合併進 main）
+  Design/
+  ├── 前台/、後台/          原型畫面（*.html）、裁示（docs/）、詳細說明（更新說明.md）
+  ├── 前台/_ds/、後台/_ds/  設計系統匯出（tokens/*.css，兩份相同）
+  ├── handoff/              給 libs/ui 的 TSX（目前在 components/）
+  └── CHANGELOG.md          token 異動與「Frontend 待辦」
+        │  工程師 fetch 後讀取、手動改（不 merge、不 cherry-pick）
+        ▼
+main: Frontend/
                   libs/ui/src/theme/design-tokens.ts  ──▶  bridge.ts ──▶ theme.ts（MUI theme）
                                         │
                                         ▼
                          libs/ui 元件 ──▶ libs/modules、apps 的頁面
 ```
 
-- `main` 上的 `Design/` 是設計的真實來源。設計師不改 `Frontend/`；工程師不改 `Design/`（在 `CHANGELOG.md` 打勾除外）。
-- 設計系統重新匯出時，設計師在 `CHANGELOG.md` 列出每個 token 的「舊值 → 新值」，工程師照著改 `design-tokens.ts`，**只改這一支**，MUI theme 由 `bridge.ts` 推導。
+- 設計分支就是設計的真實來源，永遠讀它的最新版（不釘在某個 commit）。`main` 會合進設計分支，反過來不會。
+- 讀法：先 `git fetch origin sucrelindesign`；單一檔案用 `git show "origin/sucrelindesign:Design/<路徑>"`；
+  要開原型 HTML 就開唯讀 worktree：`git worktree add --detach <資料夾> origin/sucrelindesign`（更新：fetch 後 `git -C <資料夾> checkout --detach origin/sucrelindesign`）。
+- 設計師不改 `Frontend/`；工程師不改設計分支。進度不在 CHANGELOG 打勾，記在 [`design-system-audit.md`](design-system-audit.md)，PR 說明寫出對應哪一筆待辦。
+- 程式註解與 spec 裡的 `Design/前台/…`、`Design/後台/…` 路徑，指的都是設計分支上的檔案。
+- 設計系統重新匯出時，設計師在設計分支的 `CHANGELOG.md` 列出每個 token 的「舊值 → 新值」，工程師照著改 `design-tokens.ts`，**只改這一支**，MUI theme 由 `bridge.ts` 推導。
 - `design-tokens.ts` 目前**比 `semantic.css` 新**：設計師的幾個裁示（`fg.onSecondary`、`fg.muted`、`border.subtle` 等）已先寫進來、CSS 匯出還沒重做。不要把它改回去對齊 CSS；差異在檔案各處註解標明。
-
-> 目前 `main` 上只有 `Design/前台/`。`後台/`、`元件 Components.html` 與設計師寫的 TSX 還在設計分支（`sucrelindesign`，TSX 在 `Design/components/`），下一次合併進 `main` 後會在 `Design/後台/` 與 `Design/handoff/`。
 
 ## Tokens
 
@@ -77,11 +81,11 @@
 | `Markdown`、`MarkdownEditor`         | 顯示／編輯 Markdown（行前資訊等）                                                            | 後台 `js/admin/brief/`                             |
 | `Icons`                              | 共用圖示集（目前是 Lucide；前台要不要用見「圖示」）                                          | —                                                  |
 
-「第 N 節」指 `Design/後台/元件 Components.html`。缺 variant 時擴充這裡的元件，不要在頁面裡改 MUI 元件的樣子。
+「第 N 節」指設計分支的 `Design/後台/元件 Components.html`；表中其他原型路徑也都在設計分支的 `Design/` 底下。缺 variant 時擴充這裡的元件，不要在頁面裡改 MUI 元件的樣子。
 
 ## 按鈕規則（BTN）
 
-摘自設計師的按鈕（原型 `後台/js/shared/wg-button.css` 與 handoff 的 `Button/index.tsx`，同編號）。
+摘自設計師的按鈕（設計分支的 `Design/後台/js/shared/wg-button.css` 與 handoff 的 `Button/index.tsx`，同編號）。
 標「未實作」的是目前 `libs/ui` 的 `Button` 還沒有、要等 handoff 版搬進來。
 
 | 編號    | 規則                                                                                                | libs/ui                               |
@@ -139,7 +143,7 @@
 | 設計系統元件字級手機縮小                                                                    | `typographyMobile`（切換點 600px，`MOBILE_BREAKPOINT_PX`）只是鏡像，目前沒有任何元件或 theme 套用 |
 | 斷點                                                                                        | `theme.ts`：`mobile` 0、`tablet` 768、`desktop` 1200（另有 MUI 預設 `sm` 600、`md` 900）          |
 
-**待設計師決定的問題**（不要自己選，答案請設計師寫進 `Design/` 的 `docs/`）：
+**待設計師決定的問題**（不要自己選，答案請設計師寫進設計分支那一側的 `docs/`）：
 
 1. 斷點不一致：原型用 `max-width: 600px`（設計系統字級）、`767px`（前台 `site.css`）、`900px`（登入頁主視覺），前端用 tablet 768、desktop 1200。哪幾個是正式斷點？後台的手機版以哪個為準？
 2. 前端登入欄位有瀏覽器自動填入（autofill）的底色與字色，原型沒有定義。要用什麼顏色？
@@ -148,8 +152,10 @@
 
 ## 搬 handoff 元件
 
-1. 把 `Design/handoff/<元件>/index.tsx` 搬到 `libs/ui/src/components/<元件>/`（檔頭的規則註解一起搬），在 `libs/ui/src/index.ts` 匯出。
+1. fetch 設計分支後，把 `Design/handoff/<元件>/index.tsx`（目前在 `Design/components/`）的內容複製到 `libs/ui/src/components/<元件>/index.tsx`，
+   例：`git show "origin/sucrelindesign:Design/components/Button/index.tsx" > libs/ui/src/components/Button/index.tsx`。
+   檔頭的規則註解一起留著，在 `libs/ui/src/index.ts` 匯出。
    檔頭若建議放別處（例：站點圖示放 `libs/modules/src/station/`），照檔頭。
 2. 加 `*.stories.tsx`（`pnpm dev:ui` 看 Storybook）與 `index.spec.ts(x)` 測試，涵蓋檔頭列出的規則。
 3. 本文件的表格把「未實作」改掉。
-4. 在 `Design/CHANGELOG.md` 把對應的「Frontend 待辦」打勾、寫上 PR。這是唯一可以改 `Design/` 的情況。
+4. PR 說明寫出對應設計分支 `CHANGELOG.md` 的哪一筆；進度記在 `design-system-audit.md`。
