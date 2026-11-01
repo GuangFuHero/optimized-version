@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import ApiError from '../rest/api-error';
 import type { components, paths } from '../rest/openapi';
 import { adminRestClient } from './client';
 import { responseData } from '../rest/openapi-client';
@@ -860,5 +861,183 @@ export function useCommitTicketImport() {
         })
         .then(responseData),
     onSuccess: () => invalidateTicketWrite(queryClient),
+  });
+}
+
+// ── 重複審核 (DEDUP-008, Spec 025 / 028) ────────────────────────────────────────────────
+
+export type DuplicatePair = components['schemas']['DuplicatePairResponse'];
+export type DuplicatePairDetail = components['schemas']['DuplicatePairDetail'];
+export type DuplicatePairSide = components['schemas']['EntitySummaryResponse'];
+export type DuplicatePairEvent = components['schemas']['DedupEventResponse'];
+export type TicketForReview = components['schemas']['TicketForReviewResponse'];
+export type TaskForReview = components['schemas']['TaskForReviewResponse'];
+export type ResolveDuplicatePairBody = components['schemas']['ResolveRequest'];
+export type DuplicatePairsQuery = NonNullable<
+  paths['/api/v1/admin/duplicate-pairs']['get']['parameters']['query']
+>;
+
+export const duplicatePairsQuery = (query: DuplicatePairsQuery) =>
+  queryOptions({
+    queryKey: ['admin', 'duplicate-pairs', 'list', query],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/admin/duplicate-pairs', { params: { query }, signal })
+        .then(responseData),
+  });
+
+export function useDuplicatePairs(
+  query: DuplicatePairsQuery,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...duplicatePairsQuery(query),
+    enabled: options.enabled,
+  });
+}
+
+/**
+ * Every card a filter matches, read page by page: for an order only the page can work out, the
+ * time of the later-created side (DUP-BE-412). The API sorts by the card's own fields.
+ */
+export function useAllDuplicatePairs(
+  query: Omit<DuplicatePairsQuery, 'sort' | 'skip' | 'limit'>,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    queryKey: ['admin', 'duplicate-pairs', 'all', query],
+    queryFn: async ({ signal }) => {
+      const limit = 200; // the API's largest page
+      const items: DuplicatePair[] = [];
+      for (;;) {
+        const page = await adminRestClient
+          .GET('/api/v1/admin/duplicate-pairs', {
+            params: { query: { ...query, skip: items.length, limit } },
+            signal,
+          })
+          .then(responseData);
+        items.push(...page.items);
+        if (page.items.length === 0 || items.length >= page.total) return items;
+      }
+    },
+    enabled: options.enabled,
+  });
+}
+
+export const duplicatePairQuery = (pairUuid: string) =>
+  queryOptions({
+    queryKey: ['admin', 'duplicate-pairs', 'detail', pairUuid],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/admin/duplicate-pairs/{pair_uuid}', {
+          params: { path: { pair_uuid: pairUuid } },
+          signal,
+        })
+        .then(responseData),
+  });
+
+/**
+ * Read once and held: the reviewer compares what they read, and a resolve sends its `version`s
+ * back. A refetch in the background would swap the tickets under the reviewer's picks; a change
+ * since is caught by the 409 instead, and the page offers the reload.
+ */
+export function useDuplicatePair(
+  pairUuid: string | null,
+  options: AdminQueryOptions = {},
+) {
+  return useQuery({
+    ...duplicatePairQuery(pairUuid ?? ''),
+    enabled: Boolean(pairUuid) && options.enabled !== false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * A decision's answer: the card, or `conflict` when the backend answered 409 (a ticket changed
+ * since it was read, or someone decided first). The page explains a conflict itself, so it is a
+ * result, not an error the app would also toast.
+ */
+export type DuplicatePairWrite<T> =
+  | { conflict: false; pair: T }
+  | { conflict: true };
+
+async function conflictAsResult<T>(
+  request: Promise<T>,
+): Promise<DuplicatePairWrite<T>> {
+  try {
+    return { conflict: false, pair: await request };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409)
+      return { conflict: true };
+    throw error;
+  }
+}
+
+export interface DuplicatePairDecisionInput {
+  pairUuid: string;
+  note?: string;
+}
+
+/** 不是重複 (reject) or 確認重複 (confirm): both only record the verdict. */
+export function useDecideDuplicatePair(verdict: 'reject' | 'confirm') {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pairUuid, note }: DuplicatePairDecisionInput) => {
+      const params = { path: { pair_uuid: pairUuid } };
+      const body = { note: note || null };
+      const request =
+        verdict === 'reject'
+          ? adminRestClient.POST(
+              '/api/v1/admin/duplicate-pairs/{pair_uuid}/reject',
+              {
+                params,
+                body,
+              },
+            )
+          : adminRestClient.POST(
+              '/api/v1/admin/duplicate-pairs/{pair_uuid}/confirm',
+              {
+                params,
+                body,
+              },
+            );
+      return conflictAsResult(request.then(responseData));
+    },
+    onSuccess: (result) => {
+      if (!result.conflict) {
+        return queryClient.invalidateQueries({
+          queryKey: ['admin', 'duplicate-pairs'],
+        });
+      }
+    },
+  });
+}
+
+export interface ResolveDuplicatePairInput {
+  pairUuid: string;
+  body: ResolveDuplicatePairBody;
+}
+
+/** 留一張: keep one ticket, cancel the other. A 409 means a ticket changed since it was read. */
+export function useResolveDuplicatePair() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pairUuid, body }: ResolveDuplicatePairInput) =>
+      conflictAsResult(
+        adminRestClient
+          .POST('/api/v1/admin/duplicate-pairs/{pair_uuid}/resolve', {
+            params: { path: { pair_uuid: pairUuid } },
+            body,
+          })
+          .then(responseData),
+      ),
+    onSuccess: (result) => {
+      if (!result.conflict) {
+        return queryClient.invalidateQueries({
+          queryKey: ['admin', 'duplicate-pairs'],
+        });
+      }
+    },
   });
 }
