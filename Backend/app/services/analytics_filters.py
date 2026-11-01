@@ -5,7 +5,7 @@ row filter, so the endpoints append it to `extra_filters` and every metric alrea
 Because the two are only ever ANDed, a filter narrows the caller's scope and never widens it.
 """
 
-from sqlalchemy import exists, literal, select
+from sqlalchemy import and_, exists, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -95,7 +95,13 @@ def ticket_filters(
     if task_type is not None:
         clauses.append(_has_need_of_type(task_type.value))
     if status is not None:
-        clauses.append(Tickets.status == status.value)
+        # A deleted ticket is cancelled whatever status it was left at, as the buckets count it.
+        stored = Tickets.status == status.value
+        clauses.append(
+            or_(Tickets.delete_at.is_not(None), stored)
+            if status.value == "cancelled"
+            else and_(Tickets.delete_at.is_(None), stored)
+        )
     return [*clauses, *_in_area(Tickets.uuid, county=county, town=town, village=village)]
 
 

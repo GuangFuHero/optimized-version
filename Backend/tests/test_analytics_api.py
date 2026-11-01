@@ -1211,16 +1211,37 @@ async def test_need_level_metrics_read_the_needs_own_type(client, db_session, re
     """Filtered to a type, the need metrics leave out the other needs of a matching ticket."""
     user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
     ticket = await _filed(db_session, user_uuid, task_type="supply")
+    for kind in ("supply", "hr"):
+        filled = _need(ticket.uuid, user_uuid, kind)
+        filled.status, filled.completed_at = "fulfilled", datetime.now(UTC)
+        db_session.add(filled)
     db_session.add(_need(ticket.uuid, user_uuid, "hr"))
     await db_session.commit()
 
-    res = await client.get(
-        TICKETS_DATA_URL,
-        params={"tz": "UTC", "y": "task_completion_distribution", "task_type": "supply"},
-        headers=headers,
-    )
-    assert res.status_code == 200, res.text
-    assert sum(res.json()["series"][0]["values"]) == 1
+    async def data(**params):
+        res = await client.get(
+            TICKETS_DATA_URL, params={"tz": "UTC", "task_type": "supply", **params}, headers=headers
+        )
+        assert res.status_code == 200, res.text
+        return res.json()
+
+    distribution = await data(y="task_completion_distribution")
+    assert distribution["series"][0]["values"] == [1, 1]  # one supply need filled, one open
+    durations = await data(y="time_to_completion", x="category")
+    assert durations["x_values"] == [chart_render.display_name("supply")]
+
+
+@pytest.mark.asyncio
+async def test_status_filter_counts_a_deleted_ticket_as_cancelled(client, db_session, redis):
+    """With include_deleted, a deleted ticket left at pending matches status=cancelled, not pending."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    await _filed(db_session, user_uuid)
+    ticket = await _filed(db_session, user_uuid)
+    ticket.delete_at = datetime.now(UTC)
+    await db_session.commit()
+
+    assert await _total(client, headers, status="pending", include_deleted="true") == 1
+    assert await _total(client, headers, status="cancelled", include_deleted="true") == 1
 
 
 @pytest.mark.asyncio
