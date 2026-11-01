@@ -135,6 +135,14 @@ class SessionRepository:
         ttl = await self.redis.ttl(self.SESSION + sid)
         await self.redis.set(self.SESSION + sid, json.dumps(session), ex=ttl if ttl and ttl > 0 else self.ttl)
 
+    def is_current(self, session: dict, raw_token: str) -> bool:
+        """Whether `raw_token` is the refresh token `session` last issued, not an older one (ADR-415).
+
+        A rotated token keeps its record until it expires, so finding the record is not enough to
+        let the token change the session outside `rotate()`, which judges replays.
+        """
+        return session.get("current_rt_hash") == self._hash(raw_token)
+
     async def get_refresh(self, rt_hash: str) -> dict | None:
         """Fetch a refresh-token record by hash."""
         return self._load(await self.redis.get(self.REFRESH + rt_hash))

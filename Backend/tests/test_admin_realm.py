@@ -187,10 +187,11 @@ async def test_the_back_office_acts_as_the_identity_switched_to(client, db_sessi
 
 @pytest.mark.parametrize("revoked", ["data_auditor", "user"])
 async def test_the_marker_does_not_stand_in_for_a_revoked_identity(client, db_session, redis, revoked):
-    """The token is checked first, so a revoked identity 401s whatever is left (ADR-096).
+    """The token is checked first, so a revoked identity 401s whatever is left (ADR-096, ADR-402).
 
     Revoking `data_auditor` leaves only `user`, which the marker would refuse with a 403. Revoking `user`
-    leaves `data_auditor`, which the marker would act as. Neither answer is right: the session is over.
+    leaves `data_auditor`, which the marker would act as. Neither answer is right for this request: it
+    is refused with `identity_reset`, and the refresh after it decides where the session lands.
     """
     roles = {"user": await _role(db_session, "user"), "data_auditor": await _role(db_session, "data_auditor")}
     account = await _account(db_session, (roles["data_auditor"], None))
@@ -205,7 +206,7 @@ async def test_the_marker_does_not_stand_in_for_a_revoked_identity(client, db_se
     response = await client.get("/api/v1/users/me", headers=headers)
 
     assert response.status_code == 401, response.text
-    assert response.json()["code"] == "identity_revoked"
+    assert response.json()["code"] == "identity_reset"
 
 
 async def test_what_the_back_office_changes_is_recorded_under_its_identity(client, db_session, redis):

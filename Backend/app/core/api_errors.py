@@ -59,6 +59,11 @@ class ErrorCode(StrEnum):
     # The acting identity was revoked while in use. Unlike SESSION_EXPIRED, signing in again
     # lands the user somewhere different — their default identity, not the one they had.
     IDENTITY_REVOKED = "identity_revoked"
+    # Spec 029 (ADR-402): what the backend answers instead of IDENTITY_REVOKED, which it no longer
+    # sends. The session has already been moved to the default identity and the cookies are kept.
+    # Remedy: forget the remembered identity, refresh without naming one, tell the user which
+    # identity was taken (`revoked_identity`), and do not resend the request on its own.
+    IDENTITY_RESET = "identity_reset"
     # A switch may only move between identities already held; the client's list was stale.
     # Remedy: refresh the identity list, not the sign-in.
     IDENTITY_NOT_HELD = "identity_not_held"

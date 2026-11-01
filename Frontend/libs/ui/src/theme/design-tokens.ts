@@ -302,8 +302,8 @@ export const semanticIconSize = {
 
 export interface TypeStyle {
   fontFamily: string;
-  /** px */
-  fontSize: number;
+  /** px, or a `var()` that falls back to px (see `LABEL_400_SIZE_VAR`) */
+  fontSize: number | string;
   fontWeight: number;
   /** unitless multiplier */
   lineHeight: number;
@@ -315,6 +315,14 @@ const f = fontStack;
 const fs = primitives.fontSize;
 const fw = primitives.fontWeight;
 const lh = primitives.lineHeight;
+
+/**
+ * Where `label[400]` takes its size from, 14px when nothing sets it. A page raises the design
+ * system's nav items, tabs and small buttons by setting it on `:root` rather than restyling each
+ * one: the site does on a phone (`SiteTextScale`).
+ */
+export const LABEL_400_SIZE_VAR = '--wg-label-400-size';
+const label400Size = `var(${LABEL_400_SIZE_VAR}, ${fs.sm}px)`;
 
 /**
  * Four families of text, each with a numeric weight scale borrowed from the Figma naming.
@@ -338,7 +346,7 @@ export const semanticTypography = {
   },
   label: {
     300: { fontFamily: f.latin, fontSize: fs.xs, fontWeight: fw.regular, lineHeight: lh.normal },
-    400: { fontFamily: f.latin, fontSize: fs.sm, fontWeight: fw.bold, lineHeight: lh.tight },
+    400: { fontFamily: f.latin, fontSize: label400Size, fontWeight: fw.bold, lineHeight: lh.tight },
     500: { fontFamily: f.latin, fontSize: fs.base, fontWeight: fw.bold, lineHeight: lh.tight },
   },
   data: {
@@ -473,6 +481,13 @@ export function displayTextSizeCss(step: DisplayTextStep) {
 
 /** Smallest font size iOS Safari will not zoom a focused input to. See `theme.ts` `MuiInputBase`. */
 export const IOS_NO_ZOOM_INPUT_PX = 16;
+
+/**
+ * Where a small outlined field grows from 40px to 44px, enough for a fingertip: a phone's width, or a
+ * touch screen of any width, since a phone held sideways is as wide as a tablet (`theme.ts`
+ * `MuiOutlinedInput`). A control sized to sit beside such a field switches here too.
+ */
+export const TOUCH_FIELD_MEDIA = `${DISPLAY_SCALE_MOBILE_MEDIA}, (pointer: coarse)`;
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Elevation & motion
