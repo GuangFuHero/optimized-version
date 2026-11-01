@@ -1135,8 +1135,10 @@ UPDATE project_settings SET map_center_lat = 23.67, map_center_lng = 121.418, ma
 
 -- 9. 角色申請(功能 019):一筆審核中、一筆未通過附回覆,讓抽屜的兩種卡片一登入就看得到。
 --    兩個帳號都只有 user 身分;一個人同時只能有一筆審核中。審核人是 1e 的 asuper01。
-INSERT INTO role_requests (uuid, requested_role, reason, contact, status, created_by, created_at, updated_at) VALUES
- ('60000000-0000-4000-8000-000000000001','government',
+INSERT INTO role_requests (uuid, requested_role, team_uuid, reason, contact, status, created_by, created_at, updated_at) VALUES
+-- avol04 申請的是光復鄉公所的後台權限(理由和聯絡方式都指向公所災防課),所以把 team 指名上:
+-- 核准是既有流程(把人加進團隊),不再撞「這筆申請沒有指名團隊」(Spec 026 前的舊單才沒有 team)。
+ ('60000000-0000-4000-8000-000000000001','government','10000000-0000-4000-8000-000000000005',
   '我是光復鄉公所約聘的災防人員，負責整理各村回報的災情和物資需求。希望有後台權限，幫忙更新站點資料、合併重複的任務單。',
   '光復鄉公所災防課 03-870-1234 分機 215','pending','c0000000-0000-4000-8000-000000000004',
   now() - interval '1 day', now() - interval '1 day');

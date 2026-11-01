@@ -15,12 +15,14 @@ import asyncio
 import os
 import re
 import sys
+import uuid
 from pathlib import Path
 
 import asyncpg
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.services.ticket_verification import disputes_by_ticket
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
@@ -181,6 +183,49 @@ _BACK_OFFICE_ROLES = (
     " WHERE c.value IN ('asuper01@mock.test', 'aaudit01@mock.test') AND c.verified"
     " ORDER BY c.value"
 )
+
+
+AVOL04_REQUEST = "60000000-0000-4000-8000-000000000001"
+AVOL04_TEAM = "10000000-0000-4000-8000-000000000005"
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_avol04s_pending_government_application_can_be_approved(seeded):
+    """The seed's header says asuper01 approves avol04's pending government request — run it.
+
+    Before Spec 026 a `government` request could name no team; after it, approving a team request
+    that names none raises 'This application names no team; the applicant should apply again', so
+    the row the seed planted (the 角色申請審核中 scenario) could never leave `pending`. The
+    applicant says they work for the township disaster-prevention office, so the row must name
+    that office's team, and the ordinary join-team approval must go through.
+    """
+    from app.models.auth import User
+    from app.repositories.active_identity_repository import active_identity_repository
+    from app.services.role_request import approve
+
+    engine = create_async_engine(f"{_SERVER}/{_CASE_DB}")
+    try:
+        factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with factory() as db:
+            reviewer = await db.get(User, SUPER_ADMIN)
+            # The API layer binds the reviewer's identity before calling approve; without it
+            # resolve_scope sees no identity and fail-closes to 403.
+            reviewer.active_identity = await active_identity_repository.back_office_identity(
+                db, str(reviewer.uuid), None
+            )
+            request = await approve(db, actor=reviewer, request_uuid=uuid.UUID(AVOL04_REQUEST), note=None)
+    finally:
+        await engine.dispose()
+    assert request.status == "approved", request.status
+    assert str(request.granted_team_uuid) == AVOL04_TEAM
+    grant = await _fetch(
+        _CASE_DSN,
+        "SELECT a.role_uuid::text FROM user_role_assign a"
+        " JOIN roles r ON r.uuid = a.role_uuid"
+        f" WHERE a.user_uuid = 'c0000000-0000-4000-8000-000000000004' AND a.team_uuid = '{AVOL04_TEAM}'"
+        " AND r.name = 'member' AND r.kind = 'team'",
+    )
+    assert len(grant) == 1, "the approval must grant the applicant the team's member role"
 
 
 @pytest.mark.asyncio(loop_scope="module")
