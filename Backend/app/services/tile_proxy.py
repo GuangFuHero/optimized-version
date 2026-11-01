@@ -3,10 +3,12 @@
 import base64
 import contextlib
 import re
-from dataclasses import dataclass, field
+import ssl
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 import httpx
+import truststore
 
 from app.schemas.map import AttributionResponse
 
@@ -15,6 +17,13 @@ BLANK_TILE = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIAAQAABjkB6QAAAABJRU5ErkJggg=="
 )
 
+# Sent on every upstream request so tile providers can identify and contact the platform.
+USER_AGENT = "GuangFuHero/1.0 (+https://github.com/GuangFuHero/optimized-version)"
+HEADERS = {"User-Agent": USER_AGENT}
+
+# Verifies against the operating system's trust store instead of certifi.
+SYSTEM_TRUST = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
 
 @dataclass
 class SourceConfig:
@@ -22,8 +31,8 @@ class SourceConfig:
 
     url_template: str
     image_format: str
-    headers: dict = field(default_factory=dict)
-    verify_ssl: bool = True
+    # Python's own strict check rejects some CA roots that the operating system accepts, such as TWCA's.
+    system_trust: bool = False
     # GIBS DescribeDomains URL; when set, `{date}` in url_template is the second-newest date it lists.
     dates_url: str | None = None
     # Seconds a fetched tile stays in Redis.
@@ -57,12 +66,8 @@ SOURCE_REGISTRY: dict[tuple[str, str], SourceConfig] = {
     ),
     ("satellite", "nlsc"): SourceConfig(
         url_template="https://wmts.nlsc.gov.tw/wmts/PHOTO_MIX/default/EPSG:3857/{z}/{y}/{x}",
-        image_format="image/png",
-        headers={
-            "Referer": "https://maps.nlsc.gov.tw/",
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",  # noqa: E501
-        },
-        verify_ssl=False,  # NLSC cert missing Subject Key Identifier — fails Python SSL validation
+        image_format="image/jpeg",
+        system_trust=True,
     ),
     ("satellite", "sinica"): SourceConfig(
         url_template=("https://gis.sinica.edu.tw/tileserver/file-exists.php?img={layer}/{z}/{x}/{y}"),
@@ -117,14 +122,17 @@ ATTRIBUTION_REGISTRY: dict[tuple[str, str], AttributionResponse] = {
         source="nlsc",
         type="satellite",
         name="內政部國土測繪中心",
-        license="Taiwan Gov",
+        license="國土測繪圖資服務雲服務使用條款",
         attribution_text="© 內政部國土測繪中心",
-        attribution_url="https://maps.nlsc.gov.tw",
-        image_format="image/png",
+        attribution_url="https://maps.nlsc.gov.tw/pro/use_clause.jsp",
+        image_format="image/jpeg",
         commercial_use=False,
         requires_logo=False,
         logo_url=None,
-        notes="Non-commercial redistribution restricted.",
+        notes=(
+            "No layer-specific licence found. The service terms allow public display with the source "
+            "credited, and forbid bulk downloading and removing or covering source and copyright notices."
+        ),
     ),
     ("satellite", "sinica"): AttributionResponse(
         source="sinica",
@@ -206,7 +214,7 @@ async def resolve_tile_date(redis, source: str, dates_url: str) -> str | None:
         pass  # Redis down — ask GIBS directly
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, headers=HEADERS) as client:
             response = await client.get(dates_url)
         # The domain is comma-separated dates or ranges such as "2026-03-02/2026-10-22/P1D", newest last,
         # with gaps between them that GIBS answers with 404. Only each item's last two days can matter.
@@ -267,8 +275,9 @@ async def fetch_tile(
     )
 
     try:
-        async with httpx.AsyncClient(timeout=10.0, verify=config.verify_ssl) as client:
-            response = await client.get(url, headers=config.headers)
+        verify = SYSTEM_TRUST if config.system_trust else True
+        async with httpx.AsyncClient(timeout=10.0, verify=verify, headers=HEADERS) as client:
+            response = await client.get(url)
 
         if response.status_code != 200:
             return BLANK_TILE, "image/png"
