@@ -150,8 +150,7 @@ export function AddNeedForm({
       />
       <TextInput
         label="數量"
-        required={draft.taskType !== 'rescue'}
-        hint={draft.taskType === 'rescue' ? '搜救可不填' : undefined}
+        required
         type="number"
         inputProps={{ min: 1, step: 1 }}
         value={draft.quantity}
