@@ -12,7 +12,7 @@ import type { RescueMapView } from './types';
  */
 
 /** Each browsing map remembers a view of its own (prototype `wg.mapLast.<map>`). */
-export type RescueMapMemoryKey = 'site' | 'mutual-aid' | 'station';
+export type RescueMapMemoryKey = 'site' | 'mutual-aid' | 'station' | 'tickets';
 
 /**
  * What the event says about where maps open: its view; `null` when it sets none, or no event is

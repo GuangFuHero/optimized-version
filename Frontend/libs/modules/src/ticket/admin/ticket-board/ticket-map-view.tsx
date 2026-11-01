@@ -8,11 +8,16 @@ import {
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { Building2, ChevronRight, MapPinOff, X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
 
 import { Muted } from '../../../admin/shared/muted';
+import {
+  readShownFilters,
+  rememberShownFilters,
+} from '../../../admin/shared/model/shown-filters';
 import { Map } from '../../../map';
+import { useEventMapView } from '../../../map/hooks/use-event-map-view';
 import type {
   RescueMapControllerValue,
   RescueMapMarkerItem,
@@ -21,15 +26,20 @@ import { stationPoint } from '../../../station/station-point';
 import { adminTicketPriorityBadge } from './model/ticket-priority';
 import { useTicketPins } from './hooks/use-ticket-pins';
 import {
+  boxFitsWhole,
   framingMove,
   framingStep,
+  outsideCount,
   selectedFocusStep,
+  TICKET_MAP_FIT_PADDING,
+  TICKET_MAP_HEIGHT,
   ticketMapNotice,
   type MapPoint,
 } from './model/map-framing';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
 import {
   listsEveryTicket,
+  ticketFiltersKey,
   toExtentVariables,
   toMapVariables,
   type MapViewport,
@@ -56,14 +66,16 @@ import { SpaceMapCard } from '../space/space-map-card';
 
 const { color, radius, shadow, typography } = designTokens;
 
-const MAP_HEIGHT = 560;
 /** The side list's columns: 任務, 優先級, 狀態 (tk-map's list beside the map). */
 const LIST_COLUMNS = 'minmax(0, 1fr) 92px 84px';
 const CLUSTER_MAX_ZOOM = 14;
 const OVERLAY_INSET = 12;
 /** A lone ticket, or the open one, is shown this close. */
 const FOCUS_ZOOM = 16;
-const FIT_PADDING: [number, number] = [48, 48];
+const FIT_PADDING: [number, number] = [
+  TICKET_MAP_FIT_PADDING,
+  TICKET_MAP_FIT_PADDING,
+];
 const latLng = ([lat, lng]: MapPoint): [number, number] => [lat, lng];
 /** A pan or zoom settles this long before the map asks for the tickets in view. */
 const VIEWPORT_DEBOUNCE_MS = 300;
@@ -73,6 +85,8 @@ const LEGEND = ticketPriorityLegend(ticketPriorityLabel);
 interface TicketMapViewProps {
   /** The board's filters: the map loads only matching tickets inside its view. */
   filters: TicketFilters;
+  /** These filters came with the page, by a link or a reload, rather than being changed on it. */
+  filtersFromLink: boolean;
   selectedUuid: string | null;
   onOpenTicket: (uuid: string) => void;
   /** The spaces the filters let through: one square pin each (BE-036). */
@@ -85,18 +99,32 @@ const NO_SPACES: readonly SpaceListRow[] = [];
 /**
  * Browse-only: the loaded tickets, after the spaces in view, listed beside pins by priority; a click
  * on a list item or a pin opens the ticket or the space, a click on the map does nothing. The open ticket is the list's highlighted item.
- * On opening and on each filter change it frames every matching ticket; from there it loads the
+ * It opens where this browser left it, as the station map does. On opening, unless it opened where
+ * it was left, and on each filter change it frames every matching ticket; from there it loads the
  * matching tickets inside the view, again each time the map settles after a move.
  */
 export function TicketMapView({
   filters,
+  filtersFromLink,
   selectedUuid,
   onOpenTicket,
   spaces = NO_SPACES,
   onOpenSpace,
 }: TicketMapViewProps) {
   const [leafletMap, setLeafletMap] = useState<LeafletMap | null>(null);
-  const framing = useFrameMatching(leafletMap, filters, selectedUuid);
+  // Whether the map opened where this browser last left it; set with the map, before it is used.
+  const restoredRef = useRef(false);
+  // A link or a reload bringing other filters than this map last showed frames them even where it
+  // was left, as on the station map. Asked once, as the map is built.
+  const [arrivedWithNewFilters] = useState(
+    () =>
+      filtersFromLink &&
+      readShownFilters('ticket-board') !== ticketFiltersKey(filters),
+  );
+  const framing = useFrameMatching(leafletMap, filters, selectedUuid, {
+    restoredRef,
+    arrivedWithNewFilters,
+  });
   // The first load waits for the first framing, so it is of the framed view and not the default.
   const viewport = useMapViewport(framing.ready ? leafletMap : null);
   const variables = useMemo(
@@ -130,12 +158,22 @@ export function TicketMapView({
     [rowMarkers, selectedUuid],
   );
   useFocusSelected(leafletMap, rowMarkers, selectedUuid);
+  const inViewTotal = tickets.isPlaceholderData ? null : tickets.totalCount;
   const notice = ticketMapNotice({
     failed: tickets.error != null || framing.failed,
-    inViewTotal: tickets.isPlaceholderData ? null : tickets.totalCount,
+    inViewTotal,
     shown: rows.length,
     matchingTotal: framing.totalCount,
+    wentHome: framing.wentHome,
   });
+  const outside =
+    notice === 'error'
+      ? null
+      : outsideCount({
+          wentHome: framing.wentHome,
+          inViewTotal,
+          matchingTotal: framing.totalCount,
+        });
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -166,6 +204,9 @@ export function TicketMapView({
           </Button>
         </Callout>
       ) : null}
+      {outside !== null ? (
+        <Callout tone="info">{`有 ${outside} 張單在這個範圍外`}</Callout>
+      ) : null}
       <Box
         sx={{
           display: 'grid',
@@ -188,7 +229,7 @@ export function TicketMapView({
         <Box
           sx={{
             position: 'relative',
-            height: MAP_HEIGHT,
+            height: TICKET_MAP_HEIGHT,
             overflow: 'hidden',
             border: `1px solid ${color.border.default}`,
             borderRadius: `${radius.lg}px`,
@@ -200,7 +241,11 @@ export function TicketMapView({
             showZoomControl
             clusterAppearance="solid"
             clusterMaxZoom={CLUSTER_MAX_ZOOM}
-            onMapReady={setLeafletMap}
+            viewMemoryKey="tickets"
+            onMapReady={(map, { restored }) => {
+              restoredRef.current = restored;
+              setLeafletMap(map);
+            }}
             renderControls={(controller) => (
               <SelectionSync
                 controller={controller}
@@ -225,23 +270,36 @@ export function TicketMapView({
  * Frames every ticket matching the filters, by the box `ticketsExtent` hands back: once when the
  * map opens and once per filter set, or again on `frameAgain`. Refetches after a write, and the
  * viewport loads that follow each move, leave the view alone. An open ticket keeps the view, as
- * on the station map, unless 顯示全部 asked; no match keeps it too. `ready` turns true once the
- * first framing is decided and the map has settled there (or the extent failed to load).
+ * on the station map, unless 顯示全部 asked; no match keeps it too; so does the first framing of a
+ * map that opened where it was left, unless a link brought other filters. A box too wide to show
+ * whole sends the map to the event's view, where maps open by default (`framingMove`), and
+ * `wentHome` says so until the next framing. `ready` turns true once the first framing is decided
+ * and the map has settled there (or the extent failed to load).
  */
 function useFrameMatching(
   map: LeafletMap | null,
   filters: TicketFilters,
   selectedUuid: string | null,
+  {
+    restoredRef,
+    arrivedWithNewFilters,
+  }: { restoredRef: RefObject<boolean>; arrivedWithNewFilters: boolean },
 ) {
   const variables = useMemo(() => toExtentVariables(filters), [filters]);
   const extent = useTicketsExtent(variables);
   const [ready, setReady] = useState(false);
+  const [wentHome, setWentHome] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const request = `${JSON.stringify(variables)}#${attempt}`;
+  const filtersKey = ticketFiltersKey(filters);
+  const request = `${filtersKey}#${attempt}`;
   const framedRef = useRef<string | null>(null);
   const selectedRef = useRef(selectedUuid);
   selectedRef.current = selectedUuid;
   const askedRef = useRef(false);
+  // The event's view, not where this map opened: that may be where it was left.
+  const home = useEventMapView().view;
+  const homeRef = useRef(home);
+  homeRef.current = home;
 
   const box = extent.data?.ticketsExtent;
   const failed = extent.error != null;
@@ -254,11 +312,16 @@ function useFrameMatching(
       framedRef.current,
       request,
       selectedRef.current !== null && !askedRef.current,
+      restoredRef.current && !arrivedWithNewFilters,
     );
     if (step === 'done') return;
     framedRef.current = request;
     askedRef.current = false;
-    const move = framingMove(step, box);
+    rememberShownFilters('ticket-board', filtersKey);
+    const move = framingMove(step, box, (bounds) =>
+      boxFitsWhole(bounds, map.getSize(), map.getMinZoom()),
+    );
+    setWentHome(move.kind === 'home');
     // Kept, the view is final: the pins load the current view now, not on a moveend.
     if (move.kind === 'stay') {
       setReady(true);
@@ -266,6 +329,10 @@ function useFrameMatching(
     }
     // Leaflet ends every setView and fitBounds, even one that does not move, with moveend.
     map.once('moveend', () => setReady(true));
+    if (move.kind === 'home') {
+      map.setView(homeRef.current.center, homeRef.current.zoom);
+      return;
+    }
     const { framing } = move;
     if (framing.kind === 'point') {
       map.setView(latLng(framing.point), FOCUS_ZOOM);
@@ -274,11 +341,13 @@ function useFrameMatching(
         padding: FIT_PADDING,
       });
     }
-  }, [map, box, request]);
+  }, [map, box, request, filtersKey, restoredRef, arrivedWithNewFilters]);
 
   return {
     /** The map may load the tickets in view. */
     ready,
+    /** The last framing went to the event's view, its box too wide to show. */
+    wentHome,
     /** Matching tickets anywhere, null until known. */
     totalCount: box?.count ?? null,
     failed,
@@ -484,7 +553,7 @@ function TicketMapList({
       role="region"
       aria-label="地圖範圍內的任務單"
       sx={{
-        height: { xs: 360, md: MAP_HEIGHT },
+        height: { xs: 360, md: TICKET_MAP_HEIGHT },
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
