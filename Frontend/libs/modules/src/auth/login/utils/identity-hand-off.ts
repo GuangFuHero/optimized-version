@@ -16,9 +16,15 @@ export function handOffIdentity(identity: HandedOffIdentity) {
   handedOff = identity;
 }
 
-/** Taken once by the register page as it opens: another visit later opens empty. */
-export function takeHandedOffIdentity(): HandedOffIdentity | null {
-  const taken = handedOff;
+/**
+ * Read by the register page as it renders, and left in place: a render React throws away and
+ * starts again reads it again.
+ */
+export function peekHandedOffIdentity(): HandedOffIdentity | null {
+  return handedOff;
+}
+
+/** Cleared by the register page once it is up: another visit later opens empty. */
+export function clearHandedOffIdentity() {
   handedOff = null;
-  return taken;
 }

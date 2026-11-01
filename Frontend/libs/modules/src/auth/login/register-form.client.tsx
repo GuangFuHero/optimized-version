@@ -2,7 +2,7 @@
 
 import { Alert, Button, TextField } from '@mui/material';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { startTransition, useState } from 'react';
+import { startTransition, useEffect, useState } from 'react';
 
 import { type AuthIdentityType } from '@rescue-frontend/data-access';
 import {
@@ -20,7 +20,10 @@ import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
 import { continueSignedIn } from './continue-signed-in';
 import { createHashedCredentialAsync } from './credentials';
-import { takeHandedOffIdentity } from './utils/identity-hand-off';
+import {
+  clearHandedOffIdentity,
+  peekHandedOffIdentity,
+} from './utils/identity-hand-off';
 import { safeReturnPath } from './utils/return-path';
 
 const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
@@ -56,7 +59,11 @@ export function RegisterFormClient({
   // held when 註冊帳號 was pressed, if it came from there.
   const [sentValues, setSentValues] = useState<
     AuthFormInitialValues | undefined
-  >(() => takeHandedOffIdentity() ?? undefined);
+  >(() => peekHandedOffIdentity() ?? undefined);
+  // Cleared once the page is up, not while rendering: a render React discards would take it along.
+  useEffect(() => {
+    clearHandedOffIdentity();
+  }, []);
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationError, setVerificationError] = useState<string>();
   const [verificationSuccess, setVerificationSuccess] = useState<string>();
