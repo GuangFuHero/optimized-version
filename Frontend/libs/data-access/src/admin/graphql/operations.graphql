@@ -301,6 +301,15 @@ query AdminTicketTasks(
     ...AdminTaskFields
   }
 }
+query AdminStationFacets {
+  stationFacets {
+    total
+    byStatus {
+      status
+      count
+    }
+  }
+}
 query AdminStations(
   $bounds: BoundsInput
   $stationType: String
