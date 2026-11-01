@@ -5,7 +5,10 @@ import { designTokens } from '@rescue-frontend/ui';
 
 const { color, radius, typography } = designTokens;
 
-/** One filter as a row of chips: 全部 first, then the options; the chosen one is pressed. */
+/**
+ * One filter as a row of chips: 全部 first, then the options; the chosen one is pressed. Each chip
+ * is the design system's `Chip`, which both the station and ticket prototypes use.
+ */
 export function ChipRow<T extends string>({
   label,
   value,
@@ -53,14 +56,12 @@ export function ChipRow<T extends string>({
                 bgcolor: selected
                   ? color.bg.secondary.subtle
                   : color.bg.neutral.default,
-                boxShadow: `inset 0 0 0 1.5px ${
-                  selected
-                    ? color.brand.secondary.subtle
-                    : color.fg.neutral.subtle
-                }`,
+                boxShadow: selected
+                  ? `inset 0 0 0 1.5px ${color.brand.secondary.default}`
+                  : `inset 0 0 0 1px ${color.border.default}`,
                 color: selected
                   ? color.brand.secondary.subtle
-                  : color.fg.neutral.default,
+                  : color.fg.neutral.subtle,
               }}
             >
               {option.label}
