@@ -557,7 +557,7 @@ async def test_a_need_nobody_is_on_has_no_keys(db):
 
 
 async def test_the_same_person_has_another_key_on_another_card(db):
-    """Keys only line up within one card: they neither name the person nor link cards."""
+    """Keys only line up within one card: they do not contain the person's uuid nor link cards."""
     s = await _setup(db)
     person = await _volunteer(db)
     db.add(TaskAssignment(task_uuid=s["b1"].uuid, actor_uuid=person.uuid))

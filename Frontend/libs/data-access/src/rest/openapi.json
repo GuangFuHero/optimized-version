@@ -12715,7 +12715,7 @@
             },
             "type": "array",
             "title": "Claimant Keys",
-            "description": "One opaque key per person on the need (ADR-445). A person on needs of both tickets has the same key on each, so the people after a fold are the distinct keys of the needs folded together; keys differ on every other card and do not name the person"
+            "description": "One opaque key per person on the need (ADR-445). A person on needs of both tickets has the same key on each, so the people after a fold are the distinct keys of the needs folded together. Keys differ on every other card and do not contain the person's uuid; they are a plain hash, so someone who already holds the card and a person's uuid can test for that person"
           }
         },
         "type": "object",

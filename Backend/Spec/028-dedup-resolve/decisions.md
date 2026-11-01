@@ -454,6 +454,8 @@ ADR-388～390（386、387 已被 `018-ticket-disaster-fields` 用掉）。review
 - `tickets.low/high.tasks[]` 多一個 `claimant_keys`：每位承接人一個代號，排序後給。代號是 `sha256("{配對卡 uuid}:{承接人 uuid}")` 的前 16 碼。
 - 同一張卡裡，同一個人在兩張單上的代號相同。前端把要合在一起的需求代號取聯集，數量就是合併後的人數；不管怎麼合都準。
 - 換一張卡代號就不同，從代號看不出是誰，也串不起跨卡的同一人。
+
+> **補充（2026-11-01，HC 在 #179 的 review）**：代號是不加密鑰的雜湊。手上已經有這張卡、又知道某人 uuid 的人，可以自己算出代號，測試那個人有沒有在某項需求上。代號本身不含 uuid，跨卡也串不起來，上面這兩點不變。現在看得到詳情的兩個角色（超管、資料檢核員）本來就看得到承接人，所以不加密鑰（使用者拍板），API 欄位說明改成照實寫。
 - 權限同詳情（`ai_duplicate.view`）。
 - **不算進 `version`**：跟 `claim_count` 一樣會隨承接變動。處理時仍以鎖住後的實際承接人檢查名額（ADR-374 不變）。
 - `claim_count` 改成由同一批承接紀錄算出，等於代號數量。
@@ -501,6 +503,7 @@ ADR-388～390（386、387 已被 `018-ticket-disaster-fields` 用掉）。review
 - 和 `display_label` 同一個 query 讀出，查詢數不變；`(task_type, property_name)` 在表上是 unique，一個 key 最多一筆。
 - **不算進 `version`**：都是設定，不是單的內容。後台改設定不會讓審核員收到 409。
 - 權限不動：有 `ai_duplicate.view` 就給。
+- **這是 ADR-226 的例外**：`taskPropertyConfigs` 的停用設定只給有 `dynamic_field.edit` 的人（ADR-226），這裡持有 `ai_duplicate.view` 就拿得到，資料檢核員也包含在內。範圍只到卡上兩張單已經有的細項，不是整份欄位定義；審核員要知道停用欄位在畫面上怎麼顯示、怎麼編輯才比對得了。`taskPropertyConfigs` 本身的規則不變。這個例外也記在 `RBAC_RESOURCE_ROLE_MATRIX.md` 的重複審核一節（HC 在 #179 review 要求，2026-11-01）。
 
 **不採用**：
 - 給稽核員 `dynamic_field.view`：理由同 ADR-446。

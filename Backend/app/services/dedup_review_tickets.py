@@ -132,8 +132,8 @@ class TicketForReview:
 # a claim fills, and the ticket status (and audit status) worked out from them.
 _TICKET_SKIPPED = {"version", "status", "audit_status", "tasks", "photos"}
 _TASK_SKIPPED = {"claim_count", "status", "properties", "claimant_keys"}
-# An item's label and order are configuration, not the ticket: changing them must not send the
-# reviewer back (ADR-446, ADR-447).
+# An item's field setting (label, order, type, options, unit, in use) is configuration, not the
+# ticket: changing it must not send the reviewer back (ADR-446, ADR-447).
 _PROPERTY_SKIPPED = {"display_label", "sort_order", "data_type", "enum_options", "unit", "is_active"}
 
 

@@ -218,3 +218,13 @@ async def test_the_notice_names_the_page_without_ai(db, sent):
     (notice,) = _pending(sent)
     assert "「重複審核」" in notice["body"]
     assert "AI" not in notice["title"] + notice["body"]
+
+
+def test_the_dashboard_chart_names_the_page_without_ai():
+    """The dashboard's 疑似重複的單 card describes the same page, so it drops "AI" too (ADR-442)."""
+    from app.services.chart_render import CATALOG
+
+    description = CATALOG["tickets"]["duplicate_count"]["description"]
+
+    assert "重複審核" in description
+    assert "AI" not in description

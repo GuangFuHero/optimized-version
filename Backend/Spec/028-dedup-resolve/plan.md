@@ -242,6 +242,15 @@ Jarvis 2026-11-01 做 DEDUP-008 時回報的兩個缺口。和 Task 11 同一張
 - [x] 測試：取同需求類型的設定、停用的也給、沒有設定全為 `null`、改名稱／順序／型別／單位／啟用 `version` 不動、稽核員從 REST 拿得到；既有「query 數不隨細項增加」照樣通過
 - [x] 合約檔重新產生
 
+## Task 14：HC 在 #179 的 review（2026-11-01）
+
+- [x] 合併最新 main：`secondary_locations.full_address` 改成由地址各欄算出，測試改寫進 `remainder`（程式不動）
+- [x] ADR-447 與 `RBAC_RESOURCE_ROLE_MATRIX.md` 記下例外：詳情給卡上細項的停用設定，只要 `ai_duplicate.view`（`taskPropertyConfigs` 停用的仍要 `dynamic_field.edit`）
+- [x] `_PROPERTY_SKIPPED` 的註解改成涵蓋整筆欄位設定
+- [x] 儀表板「疑似重複的單」說明拿掉「AI」（ADR-442）；測試：說明含「重複審核」、不含「AI」
+- [x] `claimant_keys` 欄位說明照實寫：不含 uuid，但知道 uuid 的人可以測試；ADR-445 加補充，不加密鑰
+- [x] 測試：resolve 接受「數量＝代號聯集」、拒絕「少一個」，把頁面算法和 resolve 綁在一起
+
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
 | 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |
