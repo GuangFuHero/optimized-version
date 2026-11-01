@@ -170,8 +170,13 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
 
   /** To sign in and back here with the drawer to open again, at the same point if it had one. */
   const signIn = () => {
+    // A building's floor goes along, to be filed in it once back.
     const seed = opening?.seed
-      ? { lat: opening.seed.lat, lng: opening.seed.lng }
+      ? {
+          lat: opening.seed.lat,
+          lng: opening.seed.lng,
+          ...(opening.place ? { place: opening.place } : {}),
+        }
       : null;
 
     setOpen(false);

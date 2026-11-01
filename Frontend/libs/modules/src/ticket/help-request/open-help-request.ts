@@ -5,9 +5,10 @@
  * as with `ticket-changes.ts`.
  */
 
-/** A building's floor picked (在這一層請求協助): its address line and the floor, filled in. */
+/** A building's floor picked (在這一層請求協助): the request is filed in that building, on that floor. */
 export interface HelpRequestPlace {
-  /** Null when the building has no address. */
+  buildingUuid: string;
+  /** Null when the building has no address, or it is not known yet (back from signing in). */
   address: string | null;
   /** The building's label for it, as `3F`, `B1` or `RF`. */
   floor: string;

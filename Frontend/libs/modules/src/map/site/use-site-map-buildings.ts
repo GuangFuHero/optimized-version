@@ -50,8 +50,8 @@ export function useSiteMapBuildings(shown: boolean): SiteMapBuildings {
 }
 
 /**
- * 在這一層請求協助: 請求協助 at the building's point, with its address and the floor filled in. The
- * ticket so filed is not yet kept as the building's: that needs `createHelpRequest` to take it.
+ * 在這一層請求協助: 請求協助 filed in the building, on that floor, at its point. The point is for the
+ * map once filed and for a guest's way back from signing in; the backend uses the building's own.
  */
 export function requestHelpOnBuildingFloor(
   building: BuildingMapEntry,
@@ -63,5 +63,9 @@ export function requestHelpOnBuildingFloor(
 
   const [lat, lng] = building.point;
 
-  openHelpRequest({ lat, lng, place: { address: building.address, floor } });
+  openHelpRequest({
+    lat,
+    lng,
+    place: { buildingUuid: building.uuid, address: building.address, floor },
+  });
 }

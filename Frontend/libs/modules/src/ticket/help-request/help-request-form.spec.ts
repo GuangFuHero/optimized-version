@@ -27,9 +27,12 @@ function filledForm(overrides: Partial<HelpRequestForm> = {}): HelpRequestForm {
     needs: [{ need: 'cleanup', name: '', quantity: '2' }],
     description: '',
     photoUrls: [],
+    building: null,
     ...overrides,
   };
 }
+
+const BUILDING = '20000000-0000-4000-8000-000000000101';
 
 describe('SITE_NEED_OPTIONS', () => {
   it('maps each choice to a kind of need the server accepts (backend TASK_TYPES)', () => {
@@ -60,6 +63,14 @@ describe('findMissingFields', () => {
 
   it('finds nothing missing on a form with everything required', () => {
     expect(findMissingFields(filledForm())).toEqual([]);
+  });
+
+  it("asks no landmark or address of one filed in a building: they are the building's", () => {
+    expect(
+      findMissingFields(
+        filledForm({ building: BUILDING, landmark: null, address: '' }),
+      ),
+    ).toEqual([]);
   });
 
   it('takes a field of spaces as empty', () => {
@@ -183,23 +194,52 @@ describe('toHelpRequestInput', () => {
     expect(emptyHelpRequestForm().addressFilled).toBeNull();
   });
 
-  it("starts on a building's floor with its address and that floor, the lookup's to keep", () => {
+  it("starts on a building's floor, filed in that building, its address and the floor filled in", () => {
     const point = { lat: 23.67, lng: 121.43, source: 'seed' as const };
     const form = emptyHelpRequestForm(point, {
+      buildingUuid: BUILDING,
       address: '花蓮縣光復鄉大進路12號',
       floor: '3F',
     });
 
     expect(form).toMatchObject({
       landmark: point,
+      building: BUILDING,
       address: '花蓮縣光復鄉大進路12號',
       floor: '3F',
       room: '',
       addressFilled: null,
     });
     expect(
-      emptyHelpRequestForm(point, { address: null, floor: 'B1' }),
+      emptyHelpRequestForm(point, {
+        buildingUuid: BUILDING,
+        address: null,
+        floor: 'B1',
+      }),
     ).toMatchObject({ address: '', floor: 'B1' });
+    expect(emptyHelpRequestForm(point).building).toBeNull();
+  });
+
+  it('files one in a building there: no point beside it, and only the floor and room of the address', () => {
+    const input = toHelpRequestInput(
+      filledForm({
+        building: BUILDING,
+        address: '花蓮縣光復鄉大進路12號',
+        floor: '3F',
+        room: ' 閱覽室 ',
+      }),
+    );
+
+    expect(input.buildingMapUuid).toBe(BUILDING);
+    expect(input.geometry).toBeUndefined();
+    expect(input.secondaryLocation).toEqual({ floor: '3F', room: '閱覽室' });
+  });
+
+  it("leaves a building's floor unsaid when the requester does not know it", () => {
+    expect(
+      toHelpRequestInput(filledForm({ building: BUILDING, floor: ' ' }))
+        .secondaryLocation,
+    ).toEqual({ floor: null, room: null });
   });
 
   it('sends the point as GeoJSON, longitude first', () => {
