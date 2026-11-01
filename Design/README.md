@@ -34,7 +34,7 @@ git worktree add --detach ../design-latest origin/sucrelindesign     # 要開原
 
 ```sh
 git switch sucrelindesign
-git fetch origin && git merge --no-commit origin/main
+git fetch origin && git merge --no-commit origin/main   # 已經在 merge 中（停在衝突、有 MERGE_HEAD）就跳過這行，直接做下一行
 git checkout HEAD -- "Design/前台" Design/README.md   # 拿回設計分支的版本
 git diff --stat HEAD -- Design/                        # 只能剩 Design/CLAUDE.md、Design/AGENTS.md
 git commit

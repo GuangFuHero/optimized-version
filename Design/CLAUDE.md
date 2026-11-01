@@ -16,7 +16,7 @@ git fetch origin && git merge origin/main
 - **第一次合 `main` 一定要這樣做**（`main` 刪掉了舊的 `Design/前台/`、改寫了 `Design/README.md`）：
 
   ```sh
-  git merge --no-commit origin/main
+  git merge --no-commit origin/main   # 已經在 merge 中（停在衝突、有 MERGE_HEAD）就跳過這行，直接做下一行
   git checkout HEAD -- "Design/前台" Design/README.md   # 拿回設計分支的版本
   git diff --stat HEAD -- Design/                        # 只能剩 Design/CLAUDE.md、Design/AGENTS.md
   git commit

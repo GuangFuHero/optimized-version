@@ -19,7 +19,7 @@ git show "origin/sucrelindesign:$fonts/NotoSansTC-Bold.otf" > "$tmp/NotoSansTC-B
 git show "origin/sucrelindesign:$fonts/NotoSansTC-Regular.otf" > "$tmp/NotoSansTC-Regular.otf"
 ```
 
-Then cut them:
+Then cut them in the same shell, since `$tmp` comes from the block above:
 
 ```sh
 uvx --from fonttools pyftsubset "$tmp/NotoSansTC-Bold.otf" \
