@@ -223,7 +223,7 @@ async def test_check_writes_nothing(db):
 def test_version_and_radius():
     """The radius per kind is the hint boundary (phone bonus included) plus a float-rounding margin."""
     engine = FastEngine()
-    assert engine.version == "fast-v4"
+    assert engine.version == "fast-v5"
     assert engine.radius_m("ticket_task") == pytest.approx(max_hint_distance_m(TICKET_TASK_PARAMETERS) * 1.1)
     assert engine.radius_m("station") == pytest.approx(max_hint_distance_m(STATION_PARAMETERS) * 1.1)
     assert engine.radius_m("ticket_task") == pytest.approx(290.8, abs=0.1)
