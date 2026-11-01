@@ -1537,7 +1537,7 @@ export type StationSuggestionType = {
   reviewNote?: Maybe<Scalars['String']['output']>;
   /** UUID of the admin who decided */
   reviewedBy?: Maybe<Scalars['String']['output']>;
-  /** 'pending', 'approved', 'rejected', or 'revoked' */
+  /** 'pending', 'approved', 'not_adopted', 'rejected', or 'revoked' */
   status: Scalars['String']['output'];
   /** What the suggestion targets: 'station' or 'station_property' */
   targetType: Scalars['String']['output'];

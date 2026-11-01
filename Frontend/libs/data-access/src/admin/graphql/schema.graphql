@@ -1382,7 +1382,7 @@ type StationSuggestionType {
   """Why the user suggests this change"""
   comment: String
 
-  """'pending', 'approved', 'rejected', or 'revoked'"""
+  """'pending', 'approved', 'not_adopted', 'rejected', or 'revoked'"""
   status: String!
 
   """Admin's note recorded when approving/rejecting"""

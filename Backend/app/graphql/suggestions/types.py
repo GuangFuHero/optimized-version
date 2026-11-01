@@ -40,7 +40,7 @@ class StationSuggestionType:
         default=None, description="Why the user suggests this change"
     )
     status: str = strawberry.field(
-        default="pending", description="'pending', 'approved', 'rejected', or 'revoked'"
+        default="pending", description="'pending', 'approved', 'not_adopted', 'rejected', or 'revoked'"
     )
     review_note: str | None = strawberry.field(
         default=None, description="Admin's note recorded when approving/rejecting"

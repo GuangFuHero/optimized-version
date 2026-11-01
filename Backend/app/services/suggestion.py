@@ -142,7 +142,9 @@ async def merge_station_suggestions(
     """Decide the pending suggestions on the given fields of one station (requires station.review).
 
     Only fields with a pending suggestion can be decided; anything else is a station.edit.
-    Every pending row on a decided field shares the decision, and fields left out stay pending.
+    A decided field closes every pending row on it. A rejected field rejects them all; an approved
+    one approves the rows whose own value it wrote and marks the rest not_adopted (WG-125).
+    Fields left out stay pending. Each suggester is told whether their suggestion was adopted.
     """
     _check_length(review_note=review_note)
     for decision in decisions:
@@ -193,17 +195,30 @@ async def merge_station_suggestions(
     )
     db.add(merge)
     await db.flush()
+    written = {(c["target_uuid"], c["field_name"]): c["after"] for c in changes}
     for decision in decisions:
-        for row in rows_by_field[(decision.target_uuid, decision.field_name)]:
-            row.status = "approved" if decision.approve else "rejected"
+        key = (decision.target_uuid, decision.field_name)
+        for row in rows_by_field[key]:
+            if not decision.approve:
+                row.status = "rejected"
+            else:
+                row.status = "approved" if _adopted(row, written[key]) else "not_adopted"
             row.reviewed_by = actor_uid
             row.review_note = review_note
             row.merge_uuid = merge.uuid
+    # Read before the commit expires the rows.
+    outcomes = [
+        (row.created_by, row.uuid, row.field_name, row.status == "approved")
+        for decision in decisions
+        for row in rows_by_field[(decision.target_uuid, decision.field_name)]
+    ]
+    station_name = station.name
 
     operational = _operational_changes(touched, changes)
     await db.commit()
     await _notify_operational(db, operational, actor_uid)
-    # Refresh last: both commits above expire the merge.
+    await _notify_suggesters(db, station_name, outcomes, actor_uid)
+    # Refresh last: the commits above expire the merge.
     await db.refresh(merge)
     return merge
 
@@ -295,9 +310,7 @@ async def _apply_decisions(
             continue
         if decision.value is None:
             raise ValueError(f"'{decision.field_name}' needs a value to approve")
-        value = coerce_and_validate(target_type, decision.field_name, decision.value)
-        if target_type == "station" and decision.field_name == "supply_status":
-            value = normalize_supply_status(value)
+        value = _merge_value(target_type, decision.field_name, decision.value)
         before = getattr(target, decision.field_name)
         change = {
             "target_type": target_type,
@@ -348,6 +361,56 @@ async def _revoke_target(db: AsyncSession, station: Station, change: dict):
         if prop and prop.delete_at is not None and str(prop.station_uuid) == str(station.uuid):
             return None
     return await _station_target(db, station, change["target_type"], change["target_uuid"])
+
+
+# How a notification names a field: the station labels the public suggestion form shows (Frontend
+# station/suggestion/fields.ts), plain words for a property's; anything else keeps its column name.
+_FIELD_LABELS = {
+    "operational_status": "營運狀態",
+    "op_hour": "服務時間",
+    "name": "站點名稱",
+    "description": "地址／位置說明",
+    "type": "站點類型",
+    "supply_status": "目前缺少",
+    "property_name": "項目名稱",
+    "quantity": "數量",
+}
+
+
+async def _notify_suggesters(db: AsyncSession, station_name: str | None, outcomes, actor_uid: str):
+    """Tell each suggester whether the review adopted their suggestion (approved) or not (anything else).
+
+    Two event types, like role_request_approved/rejected, so a client can tell them apart by type.
+    """
+    where = f"「{station_name}」的" if station_name else ""
+    for recipient, suggestion_uuid, field_name, adopted in outcomes:
+        result = "已採用" if adopted else "未採用"
+        await NotificationService.dispatch(
+            db,
+            event_type="station_suggestion_adopted" if adopted else "station_suggestion_not_adopted",
+            title=f"📝 站點修改建議{result}",
+            body=f"你對{where}「{_FIELD_LABELS.get(field_name, field_name)}」的修改建議{result}。",
+            actor_uuid=actor_uid,
+            ref_type="station_suggestion",
+            ref_uuid=suggestion_uuid,
+            explicit_recipients=[recipient],
+        )
+
+
+def _merge_value(target_type: str, field_name: str, raw: str):
+    """A value as a merge writes it: typed for its column, a supply status stripped (ADR-333)."""
+    value = coerce_and_validate(target_type, field_name, raw)
+    if target_type == "station" and field_name == "supply_status":
+        value = normalize_supply_status(value)
+    return value
+
+
+def _adopted(row: StationUpdateSuggestion, written) -> bool:
+    """Whether a merge wrote this suggestion's own value; one its field no longer accepts was not."""
+    try:
+        return _merge_value(row.target_type, row.field_name, row.new_value) == written
+    except ValueError:
+        return False
 
 
 def _check_length(**fields: str | None) -> None:
