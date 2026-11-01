@@ -13,7 +13,7 @@
 
 ## 模組
 
-數字是 `pnpm lint` 的 design-system warning 數（顏色＝hex／rgb／rgba；圓角、字級＝寫死的數字；Button＝從 MUI import）。
+數字是 `pnpm lint` 的 design-system warning 數（顏色＝hex／rgb／rgba；圓角、字級＝寫死的數字；Button＝從 MUI import），在 `main` 的 `dab23743` 上算的。之後 `main` 新加的程式可能會多幾個；接任務時先跑一次 lint 看該模組現在的數字。
 依序處理；路徑在 `libs/modules/src/` 底下，`apps/*` 除外。
 
 ⚠️ 數字**不含**模組專屬調色盤：`libs/ui/src/theme/tokens.ts` 的 `moduleColorSchemes`（auth、adminShell、adminPanels、stationList、stationDetail、ticket、mapOverlay）有大量寫死的 hex，模組透過 `getRescueColorScheme(theme)` 讀取。`libs/ui` 不在 lint 範圍內，所以例如 `admin/user` 只顯示 4 個顏色 warning，真正的偏差在調色盤裡。

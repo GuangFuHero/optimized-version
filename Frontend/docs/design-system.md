@@ -122,6 +122,7 @@
 | 貼著螢幕底部的東西（底部抽屜最後一列、浮動按鈕、地圖下方列）要讓出 iPhone 的 home indicator | `safeAreaBottom(space)`（`theme/safe-area.ts`），`Sheet` 與各頁的 `pb`／`bottom`                  |
 | 可點範圍至少 44px                                                                           | `Button` md 44、`SelectionCard`、`Markdown` 的目錄按鈕；sm 按鈕補到 44 的 BTN-104 未實作          |
 | 前台字級手機放大                                                                            | `textSize`（`displayTextSize`），切換點 767px（`DISPLAY_SCALE_MOBILE_MEDIA`）                     |
+| 前台的 `typography.label[400]`（導覽、分頁、小按鈕）手機 18px                               | `:root` 變數 `LABEL_400_SIZE_VAR`（預設 14px），由前台的 `SiteTextScale` 在 767px 以下設定        |
 | 設計系統元件字級手機縮小                                                                    | `typographyMobile`（切換點 600px，`MOBILE_BREAKPOINT_PX`）只是鏡像，目前沒有任何元件或 theme 套用 |
 | 斷點                                                                                        | `theme.ts`：`mobile` 0、`tablet` 768、`desktop` 1200（另有 MUI 預設 `sm` 600、`md` 900）          |
 

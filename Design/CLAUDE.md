@@ -38,7 +38,7 @@ Design/
 
 ## 每次合併到 main 的 PR
 
-1. **先把 `main` 合進設計分支**，有衝突就在設計分支上解決：
+1. **先把 `main` 合進設計分支**，有衝突就在設計分支上解決。衝突在 `Design/` 以外的檔案：先停下，在 #uiux 請工程師處理，不要自己改。
 
    ```sh
    git switch sucrelindesign
@@ -47,7 +47,7 @@ Design/
 
    這份守則合進 `main` 後先合一次（守則才會進到設計分支），之後每次開 PR 前再合一次。
    工程師在 `CHANGELOG.md` 打的勾、`main` 上較新的 `Design/` 檔案都會跟著進來。
-2. 設計分支上也有 `Frontend/` 的 commit，所以不要直接從它開 PR。合完之後，切一個只有 `Design/` 的分支：
+2. 設計分支上也有 `Design/` 以外的改動（例：根目錄的 `README.md`、`logo/`、`Frontend/`），所以不要直接從它開 PR。合完之後，切一個只有 `Design/` 的分支：
 
    ```sh
    git switch -c design/<這次的主題> origin/main        # 從最新的 main 開新分支
@@ -62,7 +62,7 @@ Design/
 4. PR 說明列出受影響的畫面（原型檔名）。
 
 - 設計分支上刪掉的檔案不會跟著過來；要刪的話在新分支上 `git rm`。
-- 設計分支裡 `Frontend/` 的改動**不放進這個 PR**：要給工程師的程式碼放 `handoff/`，或在 #uiux 告訴工程師。
+- 設計分支裡 `Design/` 以外的改動**不放進這個 PR**：程式碼放 `handoff/`；其他（根目錄 `README.md`、`logo/`…）在 #uiux 告訴工程師，由他們另開 PR。
 
 ## 不要做
 
