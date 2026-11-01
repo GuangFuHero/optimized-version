@@ -19,10 +19,12 @@ cookie-authenticated request on `request.state`, where the error handler looks b
 cookies of a session that is gone (ADR-328).
 """
 
+import ipaddress
 from urllib.parse import urlsplit
 
 from fastapi import Request, status
 from fastapi.security.utils import get_authorization_scheme_param
+from jose import JWTError, jwt
 
 from app.core import auth_cookies
 from app.core.api_errors import ApiError, ErrorCode
@@ -86,7 +88,50 @@ def accept_access_token(request: Request) -> str | None:
         mark_authenticated_by_cookie(request)
         if request.method not in _READ_ONLY_METHODS:
             require_allowed_origin(request)
+    if token and request.method not in _READ_ONLY_METHODS and _is_mcp_token(token):
+        _require_mcp_write_allowed(request)
     return token
+
+
+# What an MCP token may still send besides reads: ending its own session from anywhere, and the identity
+# switch from the MCP's own calls. GraphQL is left to the schema, which refuses anything but a query.
+_MCP_WRITES = frozenset({"/api/v1/auth/logout"})
+_MCP_IN_PROCESS_WRITES = frozenset({"/api/v1/auth/switch-identity"})
+GRAPHQL_PATH = "/graphql"
+# The ASGI scope state key the MCP's in-process transport sets; a request from outside cannot carry it.
+MCP_IN_PROCESS = "mcp_in_process"
+
+
+def _is_mcp_token(token: str) -> bool:
+    """Whether a token we signed was issued to an MCP client; expiry is left to the checks after this."""
+    try:
+        payload = jwt.decode(
+            token, settings.JWT_SIGNING_KEY, algorithms=[settings.ALGORITHM], options={"verify_exp": False}
+        )
+    except JWTError:
+        return False
+    return payload.get("mcp") is True
+
+
+def _require_mcp_write_allowed(request: Request) -> None:
+    """Refuse a write sent with an MCP token (403 mcp_read_only), except the few listed above."""
+    path = request.url.path.rstrip("/")
+    if path == GRAPHQL_PATH:
+        request.state.mcp_read_only = True
+        return
+    in_process = request.scope.get("state", {}).get(MCP_IN_PROCESS, False)
+    if path in _MCP_WRITES or (in_process and path in _MCP_IN_PROCESS_WRITES):
+        return
+    raise ApiError(
+        status.HTTP_403_FORBIDDEN,
+        ErrorCode.MCP_READ_ONLY,
+        detail="A token issued to an MCP client can only read",
+    )
+
+
+def mcp_read_only(request: Request) -> bool:
+    """Whether this GraphQL request carries an MCP token, so it may run queries only."""
+    return getattr(request.state, "mcp_read_only", False)
 
 
 def mark_authenticated_by_cookie(request: Request) -> None:
@@ -100,3 +145,32 @@ def mark_authenticated_by_cookie(request: Request) -> None:
 def authenticated_by_cookie(request: Request) -> bool:
     """Whether this request signed in with a cookie (`mark_authenticated_by_cookie`)."""
     return getattr(request.state, "auth_via_cookie", False)
+
+
+# An IP is well under this; the cap only stops a hostile header from becoming a huge Redis key.
+_MAX_CALLER_KEY_LEN = 64
+
+
+def _is_trusted_proxy(address: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(address.strip())
+    except ValueError:
+        return False
+    return any(ip in network for network in settings.trusted_proxy_networks)
+
+
+def resolve_client_ip(request: Request) -> str:
+    """The caller's IP: the socket peer, or, when that peer is a trusted proxy, who it forwarded for.
+
+    `X-Forwarded-For` is read right to left, skipping hops that are themselves trusted proxies, so a
+    browser that sends its own header cannot choose the address it is keyed by.
+    """
+    peer = request.client.host if request.client else None
+    forwarded = request.headers.get("X-Forwarded-For")
+    if peer is None or not forwarded or not _is_trusted_proxy(peer):
+        return (peer or "unknown")[:_MAX_CALLER_KEY_LEN]
+    hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+    for hop in reversed(hops):
+        if not _is_trusted_proxy(hop):
+            return hop[:_MAX_CALLER_KEY_LEN]
+    return (hops[0] if hops else peer)[:_MAX_CALLER_KEY_LEN]

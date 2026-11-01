@@ -8,7 +8,7 @@ from app.core import auth_cookies, security
 from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.normalize import normalize_email, normalize_phone
-from app.core.request_auth import authenticated_by_cookie
+from app.core.request_auth import authenticated_by_cookie, resolve_client_ip
 from app.repositories.step_up_proof_repository import ProofHolder
 from app.schemas.auth import TokenPair
 from app.services import auth_session
@@ -59,9 +59,7 @@ def device_of(request: Request) -> str:
     return request.headers.get("user-agent", "unknown")
 
 
-async def issue_token_pair(
-    redis, request: Request, user_uuid: str, *, identity=None
-) -> TokenPair:
+async def issue_token_pair(redis, request: Request, user_uuid: str, *, identity=None) -> TokenPair:
     """Create a session + access token for `user_uuid` and return the TokenPair.
 
     `identity` is the resolved `ActiveIdentity` the token acts as (ADR-069), or None for an
@@ -73,7 +71,8 @@ async def issue_token_pair(
         redis, user_uuid, identity, device_of(request)
     )
     return TokenPair(
-        access_token=access_token, refresh_token=refresh_token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         identity=identity.to_view() if identity else None,
     )
@@ -87,25 +86,6 @@ def clear_cookies_if_cookie_authenticated(request: Request, response: Response) 
     """
     if authenticated_by_cookie(request):
         auth_cookies.clear_session_cookies(response)
-
-
-# An IP is well under this; the cap only stops a hostile header from becoming a huge Redis key.
-_MAX_CALLER_KEY_LEN = 64
-
-
-def resolve_client_ip(request: Request) -> str:
-    """Resolve the caller's IP, preferring the proxy-supplied `X-Forwarded-For`.
-
-    The backend is only reachable from the frontend container over the internal docker network, so
-    this header is written by our own BFF — which sets it from `CF-Connecting-IP` only, never from
-    the browser's own `X-Forwarded-For`. If the backend is ever exposed directly, the header becomes
-    caller-controlled and the rate limit becomes bypassable by rotating it; it must then be
-    re-validated at the edge before being used as a key.
-    """
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:_MAX_CALLER_KEY_LEN]
-    return request.client.host if request.client else "unknown"
 
 
 def build_rate_limit_key(times: int, seconds: int, caller: str, path: str) -> str:
@@ -152,11 +132,16 @@ def get_rate_limiter(times: int, seconds: int, bucket: str | None = None):
         if os.getenv("ENV") == "testing":
             return None
         key = build_rate_limit_key(
-            times, seconds, resolve_client_ip(request), bucket or _resolve_route_path(request),
+            times,
+            seconds,
+            resolve_client_ip(request),
+            bucket or _resolve_route_path(request),
         )
         if not await consume_rate_limit(request.app.state.redis, key, times, seconds):
             raise ApiError(
-                status.HTTP_429_TOO_MANY_REQUESTS, ErrorCode.RATE_LIMITED, "Too Many Requests",
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                ErrorCode.RATE_LIMITED,
+                "Too Many Requests",
             )
         return None
 

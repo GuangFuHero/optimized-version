@@ -39,6 +39,9 @@ _CLIENT = "mcp_client:"
 _PENDING = "mcp_authorize:"
 _CODE = "mcp_code:"
 _PENDING_TTL = 600
+# A registered client that never finishes a sign-in is forgotten after this; one that does lives as long
+# as a session.
+_UNUSED_CLIENT_TTL = 3600
 _CODE_TTL = 300
 CONSENT_PATH = "/api/v1/mcp/consent"
 
@@ -74,19 +77,18 @@ class BackendOAuthProvider(OAuthProvider):
         return self._redis_of()
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
-        """A registered client; each lookup keeps it registered for another session lifetime."""
+        """A registered client."""
         raw = await self.redis.get(_CLIENT + client_id)
-        if raw is None:
-            return None
+        return OAuthClientInformationFull.model_validate_json(raw) if raw else None
+
+    async def _keep_client(self, client_id: str) -> None:
+        """Keep a client that holds a session registered for another session lifetime."""
         await self.redis.expire(_CLIENT + client_id, SessionRepository(self.redis).ttl)
-        return OAuthClientInformationFull.model_validate_json(raw)
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         """Store a dynamically registered client."""
         await self.redis.set(
-            _CLIENT + client_info.client_id,
-            client_info.model_dump_json(),
-            ex=SessionRepository(self.redis).ttl,
+            _CLIENT + client_info.client_id, client_info.model_dump_json(), ex=_UNUSED_CLIENT_TTL
         )
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
@@ -118,6 +120,7 @@ class BackendOAuthProvider(OAuthProvider):
             access_token, refresh_token, _ = await auth_session.open_default_session(
                 db, self.redis, user, f"MCP: {_client_name(client)}", mcp_client=client.client_id
             )
+        await self._keep_client(client.client_id)
         return _token(access_token, refresh_token)
 
     async def _mcp_session(self, sid: str | None, client_id: str | None = None) -> dict | None:
@@ -146,10 +149,11 @@ class BackendOAuthProvider(OAuthProvider):
         async with SessionLocal() as db:
             try:
                 access_token, new_refresh, _ = await auth_session.refresh_session(
-                    db, self.redis, refresh_token.token
+                    db, self.redis, refresh_token.token, mcp_client=client.client_id
                 )
             except ApiError as err:
                 raise TokenError("invalid_grant", err.detail) from err
+        await self._keep_client(client.client_id)
         return _token(access_token, new_refresh)
 
     async def load_access_token(self, token: str) -> AccessToken | None:

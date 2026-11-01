@@ -5,7 +5,7 @@ from starlette.requests import Request
 
 from app.core.permissions import PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
-from app.core.request_auth import accept_access_token
+from app.core.request_auth import accept_access_token, mcp_read_only
 from app.core.security import REALM_HEADER, get_current_user, get_db
 from app.graphql.loaders import build_loaders
 from app.models.auth import User
@@ -70,6 +70,7 @@ async def get_context(request: Request):
             "_ticket_audit_visible": {},
             # Task[DataLoader | None], made on first use; see geo/types.py:_building_counts_loader.
             "_building_counts_loader": None,
+            "mcp_read_only": mcp_read_only(request),
         }
     finally:
         await db_gen.aclose()
