@@ -3,6 +3,7 @@
 import { Box } from '@mui/material';
 import { useStationFacets } from '@rescue-frontend/data-access/admin';
 
+import { statCountsFailed } from '../../../admin/shared/model/stat-tiles';
 import { StatTiles, StatTilesRetry } from '../../../admin/shared/stat-tiles';
 import type { OperationalStatus } from '../../operational-status';
 import { stationStatTiles } from './model/station-stats';
@@ -24,7 +25,7 @@ export function StationStatsStrip({
 }: StationStatsStripProps) {
   const facets = useStationFacets();
   const tiles = stationStatTiles(facets.data?.stationFacets ?? null);
-  const failed = facets.error != null;
+  const failed = statCountsFailed(facets);
   if (!failed && !tiles) return null;
 
   return (

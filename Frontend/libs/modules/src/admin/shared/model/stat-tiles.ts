@@ -20,6 +20,17 @@ export interface StatTileParts {
 }
 
 /**
+ * Whether the counts' last answer was a failure. It stays so while 重試 tries again, which clears the
+ * query's error, so the Callout holds its place instead of going and coming back.
+ */
+export function statCountsFailed(query: {
+  errorUpdatedAt: number;
+  dataUpdatedAt: number;
+}): boolean {
+  return query.errorUpdatedAt > query.dataUpdatedAt;
+}
+
+/**
  * The status filter after a tile is picked (STAT-103): that tile's status, or none (null) when the
  * tile already selected, or 全部, is picked — the way back to every row is the tile in hand.
  */

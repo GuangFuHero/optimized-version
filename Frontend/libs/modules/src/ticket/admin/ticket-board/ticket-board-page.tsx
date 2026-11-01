@@ -10,6 +10,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AdminListPageLayout } from '../../../admin/shared/admin-list-page-layout';
+import { statCountsFailed } from '../../../admin/shared/model/stat-tiles';
 import { useNow } from '../../../admin/shared/use-now';
 import { ViewSwitch, type BoardView } from '../../../admin/shared/view-switch';
 import { AdminHeaderSlot } from '../../../shell/admin/header';
@@ -199,7 +200,7 @@ export function TicketBoardPage() {
             {/* A failed count is unknown, not zero: no row, but its own 重試. */}
             <TicketStatsStrip
               stats={stats}
-              failed={statsQuery.error != null}
+              failed={statCountsFailed(statsQuery)}
               retrying={statsQuery.isFetching}
               onRetry={() => void statsQuery.refetch()}
               status={filters.status}
