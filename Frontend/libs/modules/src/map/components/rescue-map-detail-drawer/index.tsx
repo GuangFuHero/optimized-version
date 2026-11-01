@@ -22,10 +22,13 @@ import type {
 } from '../../../station/station-detail';
 import { openStationSuggestion } from '../../../station/suggestion/open-station-suggestion';
 import { describeSupplyStatus } from '../../../station/supply-status';
+import { TicketDetailDrawer } from '../../../ticket';
 import {
   SiteTicketDetailDrawer,
   type SiteTicketDetailDrawerProps,
 } from '../../../ticket/site-detail/site-ticket-detail-drawer';
+import { formatTicketTypeLabel } from '../../../ticket/status';
+import { describeLocationCellSpan } from '../../location-cells';
 import type { RescueMapDetailItem, RescueMapMarkerItem } from '../../types';
 import { LocationCellDetail } from '../location-cell-detail';
 
@@ -50,6 +53,10 @@ interface RescueMapDetailDrawerProps {
   onSelectMarker?: (markerId: string) => void;
   /** 只影響訪客提示文案（「登入後可看」），不決定遮不遮 —— 遮在後端。 */
   isAuthenticated?: boolean;
+  /**
+   * Draws a ticket in the site's drawer with this content. Without it, as on the back office's
+   * 互助地圖, the back office's drawer with the details the marker carries.
+   */
   ticketDetailOverrides?: RescueMapTicketDetailOverrides;
   stationSecondaryAction?: StationDetailActionProps;
   stationLayout?: RescueMapStationLayout;
@@ -119,6 +126,38 @@ function createStationResources(marker: RescueMapMarkerItem) {
     // 對讀者顯示一個我們自己都不確定意思的數字沒有意義；信任制度 v0.1.0 不做，
     // 後端也已移除 `confidence_score`（a889fd4，從未被寫入）。
   ];
+}
+
+function createTicketSummary(marker: RescueMapMarkerItem) {
+  const [latitude, longitude] = marker.position;
+  const contactSummary = [
+    marker.ticketMeta?.contactName?.trim(),
+    marker.ticketMeta?.contactPhone?.trim(),
+  ].filter(Boolean);
+
+  return {
+    title: marker.title,
+    detailsPane: {
+      statusBadge: {
+        eyebrow: '任務狀態',
+        label: marker.label,
+      },
+      locationLabel: '位置資訊',
+      // A cell centre is not a place: printing it to six decimals would pass it off as one.
+      locationLines: marker.locationCell
+        ? [`概略區塊（${describeLocationCellSpan(marker.locationCell)}範圍）`]
+        : [
+            marker.subtitle,
+            `緯度 ${latitude.toFixed(6)} / 經度 ${longitude.toFixed(6)}`,
+          ],
+      taskLabel: '任務類型',
+      taskValue: formatTicketTypeLabel(marker.ticketMeta?.taskType),
+      requesterLabel: '現場聯絡人',
+      requesterValue: contactSummary.join(' / ') || '未提供',
+      notesLabel: '任務說明',
+      notesValue: marker.subtitle,
+    },
+  };
 }
 
 // For a guest too, who is told in the drawer to sign in (PUB-FEAT-001 Q7: the way in always shows).
@@ -236,17 +275,28 @@ export function RescueMapDetailDrawer({
         pointerEvents: 'auto',
       }}
     >
-      {marker.detailType === 'ticket' ? (
+      {marker.detailType === 'ticket' && ticketDetailOverrides ? (
         <SiteTicketDetailDrawer
           title={marker.title}
           onClose={onClose}
-          headerActions={ticketDetailOverrides?.headerActions}
-          badges={ticketDetailOverrides?.badges}
-          footerLead={ticketDetailOverrides?.footerLead}
-          onShare={ticketDetailOverrides?.onShare}
+          headerActions={ticketDetailOverrides.headerActions}
+          badges={ticketDetailOverrides.badges}
+          footerLead={ticketDetailOverrides.footerLead}
+          onShare={ticketDetailOverrides.onShare}
         >
-          {ticketDetailOverrides?.detailsContent}
+          {ticketDetailOverrides.detailsContent}
         </SiteTicketDetailDrawer>
+      ) : null}
+
+      {marker.detailType === 'ticket' && !ticketDetailOverrides ? (
+        <TicketDetailDrawer
+          {...createTicketSummary(marker)}
+          closeAction={closeAction}
+          width="100%"
+          height="100%"
+          minHeight="100%"
+          tabsVariant="station"
+        />
       ) : null}
 
       {marker.detailType === 'station' && stationLayout === 'site' ? (

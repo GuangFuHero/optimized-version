@@ -42,7 +42,19 @@ export function VolunteerProgress({ progress }: { progress: NeedsProgress }) {
           {matched}/{required}
         </Typography>
       </Stack>
-      <NeedProgressBar fraction={matched / required} full={false} height={8} />
+      <Box
+        role="progressbar"
+        aria-label="志工媒合"
+        aria-valuemin={0}
+        aria-valuemax={required}
+        aria-valuenow={matched}
+      >
+        <NeedProgressBar
+          fraction={matched / required}
+          full={false}
+          height={8}
+        />
+      </Box>
     </Box>
   );
 }
