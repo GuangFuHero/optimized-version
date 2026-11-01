@@ -177,10 +177,13 @@ export function ImportSuspectsStep({
           >
             附近可能已有相同的站點。確認不是重複後再建立。
           </Typography>
+          {/* BTN-107b: the one not chosen is a flat neutral button; the chosen one is outline and
+              selected, with a tick, so the two differ in more than colour. */}
           <Button
             size="sm"
-            variant="outline"
+            variant={isFiled ? 'neutral' : 'outline'}
             selected={!isFiled}
+            startIcon={isFiled ? undefined : <Check size={15} />}
             aria-label={`第 ${current.line} 列：不建立`}
             disabled={disabled}
             onClick={() => choose(false)}
@@ -189,8 +192,9 @@ export function ImportSuspectsStep({
           </Button>
           <Button
             size="sm"
-            variant="outline"
+            variant={isFiled ? 'outline' : 'neutral'}
             selected={isFiled}
+            startIcon={isFiled ? <Check size={15} /> : undefined}
             aria-label={`第 ${current.line} 列：仍要建立`}
             disabled={disabled}
             onClick={() => choose(true)}

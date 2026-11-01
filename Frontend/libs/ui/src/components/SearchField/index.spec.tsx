@@ -31,26 +31,4 @@ describe('SearchField', () => {
       ),
     ).toContain('type="search"');
   });
-
-  it('describes the input with its hint', () => {
-    const { markup } = render(
-      <SearchField aria-label="搜尋" hint="至少輸入 2 個字" />,
-    );
-    const id = openingTag(markup, /<input[^>]*>/).match(
-      /aria-describedby="([^"]+)"/,
-    )?.[1];
-
-    expect(id).toBeDefined();
-    expect(markup).toContain(`id="${id}"`);
-    expect(markup).toMatch(new RegExp(`id="${id}"[^>]*>至少輸入 2 個字<`));
-  });
-
-  it('has no description without a hint', () => {
-    expect(
-      openingTag(
-        render(<SearchField aria-label="搜尋" />).markup,
-        /<input[^>]*>/,
-      ),
-    ).not.toContain('aria-describedby');
-  });
 });

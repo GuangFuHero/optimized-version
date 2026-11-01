@@ -6,39 +6,33 @@
  * INP-103 搜尋框是膠囊、44px（sm 36px），跟旁邊的按鈕同形同高。
  *   它住在工具列、旁邊都是按鈕，所以跟按鈕同一家。
  *   ❌ 表單裡的欄位（手機、驗證碼、地址）不要用這個：那些用一般輸入框，radius.md（12px）。
- * 寬度建議 flex: '1 1 180px'，minWidth 180、maxWidth 320：工具列放不下時先縮搜尋框，不要把「新增」擠到第二行。
+ * INP-104 不另外出提示（例：字數不夠）：規則寫進 placeholder，例「打 2 個字以上搜尋站名／地址…」。
+ *   框下方加一行會撐高工具列、浮在下方會壓到下一列、寫在框裡會擠掉輸入的字。
+ * 寬度建議 flex: '1 1 140px'，minWidth 140、maxWidth 320：工具列放不下時先縮搜尋框，不要把「新增」擠到第二行。
  * 字一律 16px（iOS 小於 16px 會整頁放大）。
- * aria-label 給在 SearchField 上就會交給 <input>；hint（例：字太少）寫在框內右側，不改變框的大小。
+ * aria-label 給在 SearchField 上就會交給 <input>。
  */
 
-import { Box, InputBase, type InputBaseProps } from '@mui/material';
+import { InputBase, type InputBaseProps } from '@mui/material';
 import { Search } from 'lucide-react';
-import { type ReactNode, useId } from 'react';
 
 import { designTokens } from '../../theme';
 
 const { color, radius, typography } = designTokens;
 
 export interface SearchFieldProps
-  extends Omit<
-    InputBaseProps,
-    'size' | 'startAdornment' | 'endAdornment' | 'type'
-  > {
+  extends Omit<InputBaseProps, 'size' | 'startAdornment' | 'type'> {
   size?: 'sm' | 'md';
-  /** 框內右側的說明，同時是 input 的 aria-describedby。 */
-  hint?: ReactNode;
 }
 
 export function SearchField({
   size = 'md',
-  hint,
   'aria-label': ariaLabel,
   inputProps,
   sx,
   ...rest
 }: SearchFieldProps) {
   const small = size === 'sm';
-  const hintId = useId();
 
   return (
     <InputBase
@@ -51,28 +45,11 @@ export function SearchField({
           style={{ flexShrink: 0 }}
         />
       }
-      endAdornment={
-        hint ? (
-          <Box
-            component="span"
-            id={hintId}
-            sx={{
-              flexShrink: 0,
-              ...typography.data[300],
-              color: color.fg.neutral.muted,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {hint}
-          </Box>
-        ) : undefined
-      }
       {...rest}
       // 放在 InputBase 上的 aria-label 會落在外層 <div>，input 就只剩 placeholder 當名字。
       inputProps={{
         ...inputProps,
         ...(ariaLabel === undefined ? {} : { 'aria-label': ariaLabel }),
-        ...(hint ? { 'aria-describedby': hintId } : {}),
       }}
       sx={[
         {
