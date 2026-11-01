@@ -54,9 +54,10 @@ export function describeTicketForShare({
 }
 
 /**
- * A station's own words, which the site shows anyone; with none, the platform, what kind of station
- * it is and its hours, in a sentence (WG-137). Never its level: the site does not show it, and a
- * station with nothing else read 「等級 0」.
+ * The platform, what kind of station it is and its hours, in a sentence (WG-137); then its
+ * description, under the name the site gives it, 位置說明 — on its own, a note such as 「操場東側帳篷」
+ * would not say what the station is. Never its level: the site does not show it, and a station with
+ * nothing else read 「等級 0」.
  */
 export function describeStationForShare({
   type,
@@ -67,17 +68,12 @@ export function describeStationForShare({
   description?: string | null;
   opHour?: string | null;
 }): string {
-  const own = description?.trim();
-
-  if (own) {
-    return own;
-  }
-
   const normalizedType = normalizeStationType(type);
   const label = STATION_TYPE_OPTIONS.find(
     (option) => option.value === normalizedType,
   )?.label;
   const hours = readOpHour(opHour);
+  const note = description?.trim();
 
-  return `${PLATFORM}｜${label ? `${label}站點` : '救災站點'}${hours ? `，服務時間 ${hours}` : ''}`;
+  return `${PLATFORM}｜${label ? `${label}站點` : '救災站點'}${hours ? `，服務時間 ${hours}` : ''}${note ? `。位置說明：${note}` : ''}`;
 }

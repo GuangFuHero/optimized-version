@@ -77,17 +77,20 @@ describe('describeTicketForShare', () => {
 });
 
 describe('describeStationForShare', () => {
-  it("says the station's own words when it has them", () => {
+  it('adds its description after what it is, as the 位置說明 the site shows it as', () => {
     expect(
       describeStationForShare({
         type: 'supply',
-        description: '  提供飲水與乾糧 ',
+        description: '  操場東側帳篷 ',
         opHour: '08:00-20:00',
       }),
-    ).toBe('提供飲水與乾糧');
+    ).toBe('島嶼守望｜物資站點，服務時間 08:00-20:00。位置說明：操場東側帳篷');
+    expect(
+      describeStationForShare({ type: null, description: '操場東側帳篷' }),
+    ).toBe('島嶼守望｜救災站點。位置說明：操場東側帳篷');
   });
 
-  it('names the platform, the kind of station and its hours when it has no words of its own', () => {
+  it('names the platform, the kind of station and its hours when it has no description', () => {
     expect(
       describeStationForShare({ type: 'supply', opHour: '08:00-20:00' }),
     ).toBe('島嶼守望｜物資站點，服務時間 08:00-20:00');
