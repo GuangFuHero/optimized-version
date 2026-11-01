@@ -1087,3 +1087,27 @@ async def test_category_puts_a_deleted_ticket_under_its_needs_types(db):
         task_type=None, status=None, county=None, town=None, village=None, include_deleted=True
     )
     assert await _by_category(db, extra_filters=with_deleted) == {"supply": 1}
+    supply = ticket_filters(
+        task_type=TicketTaskType("supply"),
+        status=None,
+        county=None,
+        town=None,
+        village=None,
+        include_deleted=True,
+    )
+    assert await _count_filtered(db, supply) == 1
+    assert await _by_category(db, extra_filters=supply) == {"supply": 1}
+
+
+async def _count_filtered(db, extra_filters) -> int:
+    rows = await ticket_analytics.get_ticket_count(
+        db,
+        bucket=None,
+        x=None,
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
+        extra_filters=extra_filters,
+    )
+    return rows[0]["count"]

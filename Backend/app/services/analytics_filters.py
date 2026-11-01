@@ -72,10 +72,13 @@ def live_tickets(extra_filters: list | None) -> list:
 
 
 def _has_need_of_type(task_type: str):
-    """The ticket has a live need of `task_type`, as the public tickets list matches a type."""
+    """The ticket has a live need of `task_type`, as the public tickets list matches a type.
+
+    A deleted ticket's needs were deleted with it, so any of them counts, as the category grouping reads them.
+    """
     clause = exists().where(
         _TYPED_NEED.ticket_uuid == Tickets.uuid,
-        _TYPED_NEED.delete_at.is_(None),
+        or_(_TYPED_NEED.delete_at.is_(None), Tickets.delete_at.is_not(None)),
         _TYPED_NEED.task_type == task_type,
     )
     return clause._annotate({NEED_TYPE: task_type})

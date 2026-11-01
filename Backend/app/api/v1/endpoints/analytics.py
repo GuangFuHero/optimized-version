@@ -118,8 +118,8 @@ _VALUE_Y_DESCRIPTION = (
 )
 _X_DESCRIPTION = (
     "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). "
-    "For a ticket metric, 'category' is the types of the ticket's live needs: a ticket counts "
-    "once per type, so the categories can sum to more than the total. "
+    "For the ticket counts, completion rate and duplicate count, 'category' is the types of the "
+    "ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total. "
     "Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; "
     "see GET /analytics/catalog."
 )
