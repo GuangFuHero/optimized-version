@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { getOperationalStatusMeta } from '../operational-status';
 import {
   STATION_SUGGESTION_FIELDS,
   describeSuggestedValue,
@@ -45,10 +46,19 @@ describe('STATION_SUGGESTION_FIELDS', () => {
 
   it("names a station's status in the site's words, and takes the backend's values", () => {
     expect(stationSuggestionField('operational_status').choices).toEqual([
-      { value: 'active', label: '營運中' },
+      { value: 'active', label: '開設中' },
       { value: 'temporarily_closed', label: '暫停服務' },
       { value: 'permanently_closed', label: '已關閉' },
     ]);
+  });
+
+  it('calls an open station 開設中, as the back office does', () => {
+    expect(
+      describeSuggestionValue(
+        stationSuggestionField('operational_status'),
+        'active',
+      ),
+    ).toBe(getOperationalStatusMeta('active').label);
   });
 });
 

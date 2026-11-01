@@ -5,6 +5,7 @@ import {
   readOpHour,
   resolveStationAvailability,
 } from './availability';
+import { getOperationalStatusMeta } from './operational-status';
 
 // A moment given in Taiwan's time (UTC+8, no daylight saving), whatever zone the test runs in.
 const at = (hours: number, minutes = 0) =>
@@ -116,7 +117,7 @@ describe('resolveStationAvailability', () => {
         at(10),
       ),
     ).toEqual({
-      headline: '營運中',
+      headline: '開設中',
       tone: 'success',
       detail: '服務時間 星期一 9-15',
     });
@@ -126,13 +127,20 @@ describe('resolveStationAvailability', () => {
         at(10),
       ),
     ).toEqual({
-      headline: '營運中',
+      headline: '開設中',
       tone: 'success',
       detail: '服務時間未提供',
     });
   });
 
   it('takes a station with no status as running, as the backend defaults it', () => {
-    expect(resolveStationAvailability({}, at(10)).headline).toBe('營運中');
+    expect(resolveStationAvailability({}, at(10)).headline).toBe('開設中');
+  });
+
+  it('names a running station whose hours cannot be read as the back office does', () => {
+    expect(
+      resolveStationAvailability({ operationalStatus: 'active' }, at(10))
+        .headline,
+    ).toBe(getOperationalStatusMeta('active').label);
   });
 });
