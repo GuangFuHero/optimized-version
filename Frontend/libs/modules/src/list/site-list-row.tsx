@@ -112,29 +112,43 @@ export function SiteListRow({
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0 }}>
+            {/* On a phone the badges take a line of their own, under the title and the status: they
+                do not shrink, and beside a guest's 概略位置 they squeezed the title to nothing. */}
             <Stack
               direction="row"
               sx={{
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: `${spacing[2]}px`,
+                flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                columnGap: 0.75,
+                rowGap: 0.5,
               }}
             >
+              <Typography
+                sx={{
+                  flex: { xs: '1 1 0', sm: '0 1 auto' },
+                  minWidth: 0,
+                  fontSize: displayTextSize[15],
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                  color: color.fg.neutral.default,
+                }}
+                noWrap
+              >
+                {marker.title}
+              </Typography>
               <Stack
                 direction="row"
-                sx={{ alignItems: 'center', gap: 0.75, minWidth: 0 }}
+                sx={{
+                  order: { xs: 1, sm: 0 },
+                  flexBasis: { xs: '100%', sm: 'auto' },
+                  flexShrink: 0,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  // No empty line under the title for a card with no badge.
+                  '&:empty': { display: 'none' },
+                }}
               >
-                <Typography
-                  sx={{
-                    fontSize: displayTextSize[15],
-                    fontWeight: 700,
-                    lineHeight: 1.4,
-                    color: color.fg.neutral.default,
-                  }}
-                  noWrap
-                >
-                  {marker.title}
-                </Typography>
                 {/* How urgent, beside the title as the prototype has it (2026-09-21). */}
                 <TicketPriorityBadge
                   priority={marker.ticketMeta?.priority}
@@ -165,6 +179,7 @@ export function SiteListRow({
                   getTicketStatusTone(marker.ticketMeta?.status)
                 }
                 variant="solid"
+                sx={{ flexShrink: 0, ml: { sm: 'auto' } }}
               >
                 {availability?.headline ?? marker.label}
               </SiteBadge>

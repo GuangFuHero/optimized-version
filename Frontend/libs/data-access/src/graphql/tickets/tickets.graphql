@@ -13,11 +13,6 @@ fragment TicketFields on TicketType {
   priority
   taskType
   auditStatus
-  # The tickets this one may repeat, to anyone (ADR-447): a tag on the list and a line on the detail.
-  suspectedDuplicateOf {
-    uuid
-    title
-  }
   createdBy
   createdAt
   updatedAt
@@ -72,6 +67,12 @@ query GetTickets(
   ) {
     items {
       ...TicketFields
+      # The tickets this one may repeat, to anyone (ADR-447): asked for only where it is shown — the
+      # map, the list and a ticket's detail — so that a failed lookup leaves the rest standing.
+      suspectedDuplicateOf {
+        uuid
+        title
+      }
     }
     pageInfo {
       totalCount
@@ -107,6 +108,10 @@ query GetTicketsWithNeeds(
   ) {
     items {
       ...TicketFields
+      suspectedDuplicateOf {
+        uuid
+        title
+      }
       tasks {
         ...TicketNeedFields
       }
@@ -122,6 +127,10 @@ query GetTicketsWithNeeds(
 query GetTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...TicketFields
+    suspectedDuplicateOf {
+      uuid
+      title
+    }
     # The building it was filed inside, for 看各樓層 and 上一張／下一張 (modules/building). Null when
     # it was not, and to a caller without ticket.view_detail: the building gives the place away.
     buildingMapUuid

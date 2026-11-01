@@ -92,6 +92,12 @@ describe('mapTicketToMarker', () => {
     ).toEqual(others);
     expect(markerOf().ticketMeta?.suspectedDuplicateOf).toEqual([]);
   });
+
+  it('carries none for a ticket read without them, as one just filed or read in a building', () => {
+    const marker = markerOf({ suspectedDuplicateOf: undefined });
+
+    expect(marker.ticketMeta?.suspectedDuplicateOf).toBeUndefined();
+  });
 });
 
 /** An area as `GetMapAreas` returns it. */

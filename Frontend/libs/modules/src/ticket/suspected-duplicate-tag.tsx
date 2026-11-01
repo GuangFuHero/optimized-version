@@ -121,6 +121,8 @@ export function SuspectedDuplicateNotice({
                   {onOpenTicket ? (
                     <Button
                       variant="text"
+                      // Which ticket, for a screen reader: with two or more, every button reads 看那張.
+                      aria-label={`看那張：${other.title}`}
                       onClick={() => onOpenTicket(other.uuid)}
                       sx={{
                         flexShrink: 0,

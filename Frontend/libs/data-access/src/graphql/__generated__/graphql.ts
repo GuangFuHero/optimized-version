@@ -2455,11 +2455,6 @@ export type TicketFieldsFragment = {
   createdBy?: string | null;
   createdAt?: any | null;
   updatedAt?: any | null;
-  suspectedDuplicateOf: Array<{
-    __typename?: 'TicketDuplicateRefType';
-    uuid: string;
-    title: string;
-  }>;
 } & { ' $fragmentName'?: 'TicketFieldsFragment' };
 
 export type TicketTaskFieldsFragment = {
@@ -2502,9 +2497,14 @@ export type GetTicketsQuery = {
   tickets: {
     __typename?: 'TicketConnection';
     items: Array<
-      { __typename?: 'TicketType' } & {
-        ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
-      }
+      {
+        __typename?: 'TicketType';
+        suspectedDuplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
+      } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } }
     >;
     pageInfo: {
       __typename?: 'PageInfo';
@@ -2533,6 +2533,11 @@ export type GetTicketsWithNeedsQuery = {
     items: Array<
       {
         __typename?: 'TicketType';
+        suspectedDuplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
         tasks: Array<
           { __typename?: 'TicketTaskType' } & {
             ' $fragmentRefs'?: {
@@ -2561,6 +2566,11 @@ export type GetTicketQuery = {
     | ({
         __typename?: 'TicketType';
         buildingMapUuid?: string | null;
+        suspectedDuplicateOf: Array<{
+          __typename?: 'TicketDuplicateRefType';
+          uuid: string;
+          title: string;
+        }>;
         secondaryLocation?: {
           __typename?: 'SecondaryLocationType';
           fullAddress?: string | null;
@@ -2962,17 +2972,6 @@ export const TicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
           { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'suspectedDuplicateOf' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-              ],
-            },
-          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3290,17 +3289,6 @@ export const GetBuildingMapWithTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
           { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'suspectedDuplicateOf' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-              ],
-            },
-          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -4857,6 +4845,23 @@ export const GetTicketsDocument = {
                         kind: 'FragmentSpread',
                         name: { kind: 'Name', value: 'TicketFields' },
                       },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspectedDuplicateOf' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'title' },
+                            },
+                          ],
+                        },
+                      },
                     ],
                   },
                 },
@@ -4910,17 +4915,6 @@ export const GetTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
           { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'suspectedDuplicateOf' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-              ],
-            },
-          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -5085,6 +5079,23 @@ export const GetTicketsWithNeedsDocument = {
                       },
                       {
                         kind: 'Field',
+                        name: { kind: 'Name', value: 'suspectedDuplicateOf' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'uuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'title' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
                         name: { kind: 'Name', value: 'tasks' },
                         selectionSet: {
                           kind: 'SelectionSet',
@@ -5149,17 +5160,6 @@ export const GetTicketsWithNeedsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
           { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'suspectedDuplicateOf' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-              ],
-            },
-          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -5239,6 +5239,17 @@ export const GetTicketDocument = {
                 {
                   kind: 'FragmentSpread',
                   name: { kind: 'Name', value: 'TicketFields' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'suspectedDuplicateOf' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                    ],
+                  },
                 },
                 {
                   kind: 'Field',
@@ -5364,17 +5375,6 @@ export const GetTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
           { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'suspectedDuplicateOf' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-              ],
-            },
-          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -5745,17 +5745,6 @@ export const CreateHelpRequestDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
           { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'suspectedDuplicateOf' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-              ],
-            },
-          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -5887,17 +5876,6 @@ export const UpdateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
           { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'suspectedDuplicateOf' },
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-              ],
-            },
-          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
