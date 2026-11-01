@@ -39,7 +39,11 @@ import type {
   RescueMapViewportStoreSnapshot,
   RescueMapViewportStoreLike,
 } from '../../types';
-import { createMapMarkerIcon, createMapMarkerTooltipHtml } from '../map-marker';
+import {
+  createMapMarkerIcon,
+  createMapMarkerTooltipHtml,
+  shownBuildingTickets,
+} from '../map-marker';
 
 import { designTokens } from '@rescue-frontend/ui';
 
@@ -184,7 +188,9 @@ function getBuildingMarkers(
 
 /** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定 —— 另加選用的 pin／tooltip。 */
 function getMarkerIconSignature(item: RescueMapMarkerItem): string {
-  const base = `${item.detailType}|${item.variant}|${item.label}`;
+  const base = item.building
+    ? `${item.detailType}|${item.variant}|${item.label}|${item.building.ticketCount}|${item.building.shortfall}`
+    : `${item.detailType}|${item.variant}|${item.label}`;
 
   if (!item.pin && !item.tooltip) {
     return base;
@@ -218,12 +224,13 @@ function syncMarkerTooltip(marker: L.Marker, item: RescueMapMarkerItem) {
 }
 
 /**
- * A selected opt-in pin rises above its neighbours. A building's entry lies under the rest, a guest's
- * cell counts included: they are what may be waiting there.
+ * A selected opt-in pin rises above its neighbours. A building's entry with no count lies under the
+ * rest, a guest's cell counts included: they are what may be waiting there. One that counts its
+ * tickets stands among them.
  */
 function getMarkerZIndexOffset(item: RescueMapMarkerItem): number {
   if (item.building) {
-    return -1000;
+    return shownBuildingTickets(item) > 0 ? 0 : -1000;
   }
 
   return item.pin?.selected ? 1000 : 0;
@@ -679,7 +686,7 @@ function syncMarkerLayer({
     if (existing.iconSignature !== iconSignature) {
       existing.marker.setIcon(createMapMarkerIcon(item, leaflet));
 
-      if (item.pin || existing.item.pin) {
+      if (item.pin || existing.item.pin || item.building) {
         existing.marker.setZIndexOffset(getMarkerZIndexOffset(item));
       }
 

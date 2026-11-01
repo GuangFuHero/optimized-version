@@ -11,6 +11,8 @@ function building(overrides: Partial<BuildingMapEntry> = {}): BuildingMapEntry {
     address: '花蓮縣光復鄉中正路二段10號',
     point: [23.6697, 121.4235],
     floors: [{ label: '1F' }, { label: '2F' }, { label: '3F' }],
+    ticketCount: null,
+    shortfall: null,
     ...overrides,
   };
 }

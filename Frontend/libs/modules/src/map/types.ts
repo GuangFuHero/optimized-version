@@ -234,9 +234,14 @@ export interface RescueMapMarkerItem {
   tooltip?: RescueMapMarkerTooltip;
   /**
    * An open building (開啟空間) drawn as its entry: a tap opens its floors (`Map`'s `onOpenBuilding`)
-   * and selects nothing. Absent on every ticket and station.
+   * and selects nothing, with its counts for the entry to show (null to a guest). Absent on every
+   * ticket and station.
    */
-  building?: { uuid: string };
+  building?: {
+    uuid: string;
+    ticketCount: number | null;
+    shortfall: number | null;
+  };
 }
 
 /**

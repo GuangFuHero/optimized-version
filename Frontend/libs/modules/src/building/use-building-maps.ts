@@ -24,6 +24,12 @@ export interface BuildingMapEntry {
   /** Its point as Leaflet's `[lat, lng]`; null when it has none, and then no marker. */
   point: [number, number] | null;
   floors: readonly Pick<BuildingFloor, 'label'>[];
+  /**
+   * Its tickets, closed ones too, and the people they are still short, as its drawer adds them up
+   * (ADR-450). Null to a guest, who is given no counts (SPACE-FE-104); 0 is a building with none.
+   */
+  ticketCount: number | null;
+  shortfall: number | null;
 }
 
 /**
@@ -51,6 +57,8 @@ export function useBuildingMaps({
         address: formatTicketStreet(map.secondaryLocation),
         point: stationPoint(map.geometry),
         floors: map.floors,
+        ticketCount: map.ticketCount ?? null,
+        shortfall: map.shortfall ?? null,
       })),
     [data?.buildingMaps.items],
   );
