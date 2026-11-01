@@ -1,0 +1,96 @@
+/*
+ * 標籤、進度條、設定元件 —— 前後台共用。圓角一律走 token（見 wg-button.css BTN-101 與元件頁圓角表）。
+ *
+ * TAG-101 標籤（WGTag）只是「說明」，不能點；能點、能選的是 Chip（篩選條件）。兩者都是膠囊，但 Chip 有框、Tag 沒有框。
+ * TAG-102 一種高度：24px（表格裡擠時 sm 20px）。字 12px 粗體。
+ * TAG-103 七種語氣：neutral｜info｜secondary｜success｜warning｜danger｜brand（primary＝brand 的別名，給從設計系統 Badge 換過來的地方用）；兩種填法：subtle（淡底深字，預設）｜solid（實心）。
+ *         實心只給「要立刻看到」的那一種（例：優先級「生命危急」）。一個畫面的實心標籤越少越好。
+ * TAG-104 dot：前面一個 7px 圓點，用在「顏色本身就是資訊」的地方（災害類型、待處理）。
+ *         ❌ 不要只靠顏色：一定有字。
+ * TAG-105 quiet：沒有底色，只有灰字（優先級「一般／低」、狀態「處理中／已完成」）。不重要的就不要搶眼。
+ * TAG-106 可移除（onRemove）：右側 ×，點擊範圍至少 24px。
+ *
+ * PRG-101 進度條（WGProgress）一律膠囊圓角、只有兩種粗細：sm 4px（後台表格裡）｜md 6px（卡片、詳情）。
+ *         現況有 4／6／8px 三種、圓角 2px 與膠囊兩種，統一成這兩種。
+ * PRG-102 顏色：tone="brand"（前台，橘）｜"neutral"（後台列表，灰 —— 後台整頁只有優先級與待處理兩處用色）。
+ *         滿了一律綠色（success），兩邊相同。
+ * PRG-103 數字一定要有（3/5、還缺 2 人），進度條只是輔助。數字放條的上方右側或下方，不放在條裡。
+ * PRG-104 沒有總數（數量留空）→ 不畫條，只寫「已有 N 人」。看不出比例的條比沒有條更誤導。
+ *
+ * SET-101 設定列（WGSettingRow）：左邊名稱＋一句說明、右邊控制項；一列一件事。
+ * SET-102 立即生效的用 Switch（開關）；要按「儲存」才生效的用 Checkbox。兩者不要混在同一個表單裡。
+ * SET-103 二到五個互斥選項用單選卡（WGRadioCards）；六個以上或選項很長用下拉（WGSelect）。
+ * SET-104 下拉選單和輸入框同一家：12px 圓角、44px 高、原生 <select>（手機會跳系統滾輪，字 16px 以免 iOS 放大）。
+ */
+
+/* 按鈕外框重設。設計系統的 Chip（篩選條件）沒有清掉瀏覽器預設的 2px outset 外框，看起來像 3D 按鍵
+   （任務管理的篩選面板就是這樣）。元素選擇器、最低優先：有自己寫 border 的按鈕（inline 或 class）不受影響。 */
+button { border-width: 0; border-style: none; }
+
+/* ── Tag ── */
+.wg-tag {
+  --tag-bg: var(--color-bg-neutral-sunken); --tag-fg: var(--color-fg-neutral-subtle); --tag-dot: currentColor;
+  display: inline-flex; align-items: center; gap: 5px; box-sizing: border-box;
+  height: 24px; padding: 0 10px; border-radius: var(--radius-full);
+  background: var(--tag-bg); color: var(--tag-fg);
+  font: var(--font-data-300); font-weight: 700; white-space: nowrap; line-height: 1;
+}
+.wg-tag--sm { height: 20px; padding: 0 8px; }
+.wg-tag__dot { width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--tag-dot); flex-shrink: 0; }
+.wg-tag__x { margin: 0 -6px 0 0; width: 24px; height: 24px; border: 0; background: transparent; color: inherit; border-radius: var(--radius-full); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.wg-tag__x:hover { background: rgba(0,0,0,0.06); }
+.wg-tag--info    { --tag-bg: var(--color-bg-info-subtle);    --tag-fg: var(--color-fg-info); }
+.wg-tag--success { --tag-bg: var(--color-bg-success-subtle); --tag-fg: var(--color-fg-success); }
+.wg-tag--warning { --tag-bg: var(--color-bg-warning-subtle); --tag-fg: var(--color-fg-warning); }
+.wg-tag--danger  { --tag-bg: var(--color-bg-danger-subtle);  --tag-fg: var(--color-fg-danger); }
+.wg-tag--brand   { --tag-bg: var(--color-bg-primary-subtle); --tag-fg: var(--color-brand-primary-subtle); }
+.wg-tag--secondary { --tag-bg: var(--color-bg-secondary-subtle); --tag-fg: var(--color-brand-secondary-subtle); }
+.wg-tag--solid.wg-tag--neutral { --tag-bg: var(--color-fg-neutral-subtle); --tag-fg: #fff; }
+.wg-tag--solid.wg-tag--info    { --tag-bg: var(--color-bg-info, var(--color-fg-info)); --tag-fg: #fff; }
+.wg-tag--solid.wg-tag--success { --tag-bg: var(--color-bg-success); --tag-fg: #fff; }
+.wg-tag--solid.wg-tag--warning { --tag-bg: var(--color-bg-warning); --tag-fg: var(--color-fg-neutral-default); }
+.wg-tag--solid.wg-tag--danger  { --tag-bg: var(--color-bg-danger);  --tag-fg: #fff; }
+.wg-tag--solid.wg-tag--secondary { --tag-bg: var(--color-bg-secondary); --tag-fg: var(--color-fg-on-secondary); }
+.wg-tag--solid.wg-tag--brand   { --tag-bg: var(--color-bg-primary); --tag-fg: var(--color-fg-on-primary); }
+.wg-tag--quiet { --tag-bg: transparent; --tag-fg: var(--color-fg-neutral-muted); padding: 0; font-weight: 400; }
+.wg-tag--quiet.wg-tag--strong { --tag-fg: var(--color-fg-neutral-default); font-weight: 700; }
+
+/* ── Progress ── */
+.wg-progress { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wg-progress__head { display: flex; align-items: baseline; gap: 8px; font: var(--font-data-300); color: var(--color-fg-neutral-subtle); }
+.wg-progress__head b { margin-left: auto; color: var(--color-fg-neutral-default); white-space: nowrap; }
+.wg-progress__track { height: 6px; border-radius: var(--radius-full); background: var(--color-bg-neutral-sunken); overflow: hidden; }
+.wg-progress--sm .wg-progress__track { height: 4px; }
+.wg-progress__fill { height: 100%; border-radius: var(--radius-full); background: var(--color-bg-primary); transition: width var(--transition-base); }
+.wg-progress--neutral .wg-progress__fill { background: var(--color-fg-neutral-subtle); }
+.wg-progress--done .wg-progress__fill { background: var(--color-bg-success); }
+.wg-progress--done .wg-progress__head b { color: var(--color-fg-success); }
+
+/* ── Setting row / Select / Radio cards ── */
+.wg-setrow { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--color-border-default); }
+.wg-setrow:last-child { border-bottom: 0; }
+.wg-setrow__text { flex: 1; min-width: 0; }
+.wg-setrow__title { font: var(--font-label-400); color: var(--color-fg-neutral-default); }
+.wg-setrow__desc { font: var(--font-data-300); color: var(--color-fg-neutral-subtle); margin-top: 2px; }
+.wg-setrow--stack { flex-direction: column; align-items: stretch; gap: 10px; }
+
+.wg-select { position: relative; display: inline-flex; min-width: 180px; }
+.wg-select select {
+  appearance: none; -webkit-appearance: none; width: 100%; height: 44px; padding: 0 40px 0 14px; box-sizing: border-box;
+  border: 0; border-radius: var(--radius-md); background: var(--color-bg-neutral-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-border-default); font: var(--font-body-400); color: var(--color-fg-neutral-default); cursor: pointer;
+}
+.wg-select select:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--color-brand-secondary-default); }
+.wg-select select:disabled { background: var(--color-bg-disable); color: var(--color-fg-disable); cursor: not-allowed; }
+.wg-select__chev { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--color-fg-neutral-muted); display: inline-flex; }
+
+.wg-radios { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.wg-radio {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: var(--radius-md); cursor: pointer;
+  background: var(--color-bg-neutral-default); box-shadow: inset 0 0 0 1px var(--color-border-default);
+}
+.wg-radio:has(input:checked) { background: var(--color-bg-primary-subtle); box-shadow: inset 0 0 0 1.5px var(--color-border-accent); }
+.wg-radio:has(input:focus-visible) { outline: 2px solid var(--color-brand-secondary-default); outline-offset: 2px; }
+.wg-radio input { margin: 2px 0 0; accent-color: var(--color-bg-primary); width: 18px; height: 18px; flex-shrink: 0; }
+.wg-radio__title { font: var(--font-label-400); color: var(--color-fg-neutral-default); }
+.wg-radio__desc { font: var(--font-data-300); color: var(--color-fg-neutral-subtle); margin-top: 2px; }

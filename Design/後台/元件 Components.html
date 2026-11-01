@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>共用元件 Components</title>
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<link rel="stylesheet" href="js/shared/wg-button.css">
+<link rel="stylesheet" href="js/shared/wg-ui.css">
+<style>
+  /* 各頁都有這條重設；漏了的話設計系統的 Chip 會吃到瀏覽器預設的 2px outset 外框，看起來像 3D 按鍵 */
+  button { border: 0; font-family: inherit; }
+  html, body { margin: 0; background: var(--color-bg-neutral-subtle); color: var(--color-fg-neutral-default); font: var(--font-body-400); }
+  .page { max-width: 1080px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font: var(--font-heading-800); margin: 0 0 4px; }
+  h2 { font: var(--font-heading-700); margin: 40px 0 4px; }
+  h3 { font: var(--font-label-500); margin: 24px 0 8px; }
+  .sub { color: var(--color-fg-neutral-subtle); margin: 0 0 16px; }
+  .card { background: var(--color-bg-neutral-default); border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--color-border-default); padding: 20px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .grid { display: grid; grid-template-columns: 92px repeat(6, 1fr); gap: 14px 12px; align-items: center; }
+  .grid .h { font: var(--font-label-300); font-weight: 700; color: var(--color-fg-neutral-subtle); }
+  .cap { font: var(--font-label-300); color: var(--color-fg-neutral-subtle); margin-top: 6px; }
+  table { border-collapse: collapse; width: 100%; font: var(--font-label-400); font-weight: 400; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--color-border-default); vertical-align: middle; }
+  th { font-weight: 700; color: var(--color-fg-neutral-subtle); }
+  code { font-family: var(--font-data); background: var(--color-bg-neutral-sunken); padding: 1px 5px; border-radius: var(--radius-sm); font-size: 0.85em; }
+  .sw { display: inline-block; width: 64px; height: 28px; background: var(--color-bg-primary-subtle); box-shadow: inset 0 0 0 1.5px var(--color-border-accent); vertical-align: middle; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ok, .no { font: var(--font-label-300); font-weight: 700; padding: 2px 8px; border-radius: var(--radius-full); display: inline-block; margin-bottom: 10px; }
+  .ok { background: var(--color-bg-success-subtle, #e3f5e8); color: var(--color-fg-success, #166534); }
+  .no { background: var(--color-bg-danger-subtle); color: var(--color-fg-danger); }
+  .tap { position: relative; display: inline-block; }
+  .tap::before { content: ""; position: absolute; left: -6px; right: -6px; top: 50%; height: 44px; transform: translateY(-50%); background: rgba(37, 99, 235, 0.14); border: 1px dashed #2563eb; border-radius: 6px; pointer-events: none; }
+  .seg { display: inline-flex; gap: 4px; padding: 4px; background: var(--color-bg-neutral-sunken); border-radius: var(--radius-full); }
+  @media (max-width: 760px) {
+    .grid { min-width: 700px; }
+    .two { grid-template-columns: 1fr; }
+    .scroll { overflow-x: auto; }
+  }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/_ds_bundle.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>
+window.WGIcon = function WGIcon({ n, s = 18, c = "currentColor" }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!ref.current || !window.lucide || !lucide[n]) return;
+    const el = lucide.createElement(lucide[n]);
+    el.setAttribute('width', s); el.setAttribute('height', s); el.setAttribute('stroke', c); el.setAttribute('stroke-width', '2');
+    ref.current.innerHTML = ''; ref.current.appendChild(el);
+  }, [n, s, c]);
+  return React.createElement('span', { ref, style: { display: 'inline-flex', lineHeight: 0 } });
+};
+</script>
+<!-- 站點類型與圖示的唯一來源（前台用的同一份） -->
+<script src="../前台/js/site/site-route.js"></script>
+<script type="text/babel" src="js/shared/wg-button.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/shared/wg-ui.jsx" data-presets="react"></script>
+<script type="text/babel" data-presets="react">
+const { Input, Field, Chip, Badge, Button, Switch, Checkbox } = window.WanGuardDesignSystem_9c8f68;
+
+// 現況：照抄各頁的寫法（tk-shared.jsx PriorityBadge／StatusBadge／DisasterTag、station-shared.jsx OfficialTag、Badge）
+const OLD = {
+  critical: { display: "inline-flex", alignItems: "center", height: 24, padding: "0 10px", borderRadius: "var(--radius-full)", background: "var(--color-bg-danger)", color: "#fff", font: "var(--font-data-300)", fontWeight: 700 },
+  high: { display: "inline-flex", alignItems: "center", height: 24, padding: "0 10px", borderRadius: "var(--radius-full)", background: "var(--color-bg-warning-subtle)", color: "var(--color-fg-warning)", font: "var(--font-data-300)", fontWeight: 700 },
+  disaster: { display: "inline-flex", alignItems: "center", gap: 5, height: 26, padding: "0 11px", borderRadius: "var(--radius-full)", background: "var(--color-bg-info-subtle)", border: "1px solid #2592B933" },
+  official: { display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 9px", borderRadius: "var(--radius-full)", font: "var(--font-label-300)", color: "var(--color-fg-info)", background: "var(--color-bg-info-subtle)" },
+};
+function OldBar({ h, r, c, pct }) {
+  return <div style={{ height: h, borderRadius: r, background: "var(--color-bg-neutral-sunken)", overflow: "hidden", width: 220 }}><div style={{ width: pct + "%", height: "100%", borderRadius: r, background: c }} /></div>;
+}
+function SettingsDemo() {
+  const [pub, setPub] = React.useState(true);
+  const [types, setTypes] = React.useState({ flood: true, landslide: true, earthquake: false });
+  const [fmt, setFmt] = React.useState("csv");
+  return (
+    <div className="card" style={{ maxWidth: 720 }}>
+      <WGSettingRow title="公開到前台" desc="打開後民眾在前台地圖看得到這個區域。立即生效。">
+        <Switch checked={pub} onChange={() => setPub(!pub)} />
+      </WGSettingRow>
+      <WGSettingRow title="這次用哪幾種災害" desc="勾選後按下方「儲存」才生效。" stack>
+        <div className="row" style={{ gap: 20 }}>
+          {[["flood", "水災"], ["landslide", "土石流"], ["earthquake", "地震"]].map(([k, l]) => (
+            <Checkbox key={k} label={l} checked={types[k]} onChange={() => setTypes({ ...types, [k]: !types[k] })} />
+          ))}
+          <Checkbox label="海嘯（正在使用的不能取消）" checked disabled />
+        </div>
+      </WGSettingRow>
+      <WGSettingRow title="匯出格式" desc="2〜5 個互斥選項用單選卡。" stack>
+        <WGRadioCards name="fmt" value={fmt} onChange={setFmt} options={[
+          { value: "csv", title: "CSV", desc: "任何試算表都打得開" },
+          { value: "xlsx", title: "Excel", desc: "保留中文欄名與格式" },
+        ]} />
+      </WGSettingRow>
+      <WGSettingRow title="欄位型別" desc="選項多或很長時用下拉。">
+        <WGSelect ariaLabel="欄位型別" defaultValue="number" options={[["text", "文字"], ["number", "數字"], ["choice", "單選"], ["yesno", "是／否"]]} />
+      </WGSettingRow>
+      <WGSettingRow title="所屬團隊" desc="停用時的樣子。">
+        <WGSelect ariaLabel="所屬團隊" disabled defaultValue="a" options={[["a", "花蓮縣政府災防辦"]]} />
+      </WGSettingRow>
+      <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
+        <WGButton variant="ghost">取消</WGButton>
+        <WGButton>儲存</WGButton>
+      </div>
+    </div>
+  );
+}
+const I = (n) => <WGIcon n={n} />;
+
+// 現況：照抄 station-table.jsx 的 btnCss 與 wg-bulk.jsx 的 WGNewSplitButton，給對照用
+const OLD_BTN = { display: "inline-flex", alignItems: "center", gap: 6, height: 42, padding: "0 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)", background: "var(--color-bg-neutral-default)", cursor: "pointer", font: "var(--font-label-300)", color: "var(--color-fg-neutral-default)" };
+function OldToolbar() {
+  return (
+    <div className="row" style={{ flexWrap: "nowrap", minWidth: 940 }}>
+      <button style={OLD_BTN}>{I("SlidersHorizontal")}篩選{I("ChevronDown")}</button>
+      <Input leadingIcon={I("Search")} placeholder="搜尋編號／站名／地址…" style={{ width: 260, height: 42 }} />
+      <span style={{ marginLeft: "auto", font: "var(--font-label-300)", color: "var(--color-fg-neutral-muted)" }}>128 站</span>
+      <button style={OLD_BTN}>{I("GitPullRequestArrow")}審查<Badge tone="warning" variant="solid">3</Badge></button>
+      <Button variant="outline" startIcon={I("Download")}>匯出</Button>
+      <span style={{ display: "inline-flex" }}>
+        <Button variant="primary" startIcon={I("Plus")} style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}>新增站點</Button>
+        <button style={{ width: 38, border: "none", borderLeft: "1px solid rgba(255,255,255,0.35)", borderTopRightRadius: "var(--radius-md)", borderBottomRightRadius: "var(--radius-md)", background: "var(--color-bg-primary)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><WGIcon n="ChevronDown" c="#fff" /></button>
+      </span>
+    </div>
+  );
+}
+function NewToolbar({ review = 0, filterOpen = false, filters = 0, query = "" }) {
+  return (
+    <div className="row" style={{ flexWrap: "nowrap", minWidth: 940 }}>
+      <WGButton variant="neutral" startIcon={I("SlidersHorizontal")} endIcon={I(filterOpen ? "ChevronUp" : "ChevronDown")} aria-expanded={filterOpen}>篩選<WGCount n={filters} /></WGButton>
+      <WGSearch icon={I("Search")} placeholder="搜尋編號／站名／地址…" defaultValue={query} style={{ width: 260 }} />
+      {(filters > 0 || query) && <WGButton variant="ghost" size="sm">清除</WGButton>}
+      <span style={{ marginLeft: "auto", whiteSpace: "nowrap", font: "var(--font-label-300)", color: "var(--color-fg-neutral-muted)" }}>{filters ? "12 站" : "128 站"}</span>
+      <WGButton variant="neutral" startIcon={I("GitPullRequestArrow")}>審查<WGCount n={review} tone="warning" /></WGButton>
+      <WGButton variant="neutral" startIcon={I("Download")}>匯出</WGButton>
+      <WGSplitButton label="新增站點" icon={I("Plus")} items={[{ label: "新增一個" }, { label: "從 CSV／Excel 匯入多個" }]} />
+    </div>
+  );
+}
+function FilterRow({ label, opts, on }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <span style={{ width: 72, font: "var(--font-label-300)", color: "var(--color-fg-neutral-muted)" }}>{label}</span>
+      {opts.map(o => <Chip key={o} active={o === on}>{o}</Chip>)}
+    </div>
+  );
+}
+const VARIANTS = ["primary", "secondary", "outline", "neutral", "ghost", "danger"];
+const VN = { primary: "主要", secondary: "次要（藍）", outline: "外框", neutral: "工具（新增）", ghost: "文字", danger: "危險" };
+
+function Section({ id, title, sub, children }) {
+  return <section id={id}><h2>{title}</h2><p className="sub">{sub}</p>{children}</section>;
+}
+
+
+// 第 9 節：資源站點圖示。直接讀 js/site/site-route.js 的 STATION_TYPE_OPTIONS／STATION_TYPE_ICONS（前台、後台、staging 共用這一份）
+const STAGING_MUI = { water: "WaterDropRounded", shelter: "NightShelterRounded", shower: "ShowerRounded", toilet: "WcRounded", transport: "DirectionsBusRounded", medical: "MonitorHeartRounded", supply: "Inventory2Rounded", gas_station: "LocalGasStationRounded", charge: "BatteryChargingFullRounded", power: "BoltRounded", cellular: "CellTowerRounded" };
+function StationIconList() {
+  const R = window.SiteRoute || {};
+  const opts = R.STATION_TYPE_OPTIONS || [];
+  const icons = R.STATION_TYPE_ICONS || {};
+  return (
+    <div className="card scroll">
+      <table>
+        <thead><tr><th>圖示</th><th>在列表裡</th><th>類型</th><th>value</th><th>lucide 名稱</th><th>staging 目前（MUI，下個版本換掉）</th></tr></thead>
+        <tbody>
+          {opts.map(o => (
+            <tr key={o.value}>
+              <td><WGIcon n={icons[o.value]} s={22} /></td>
+              <td><span style={{ display: "inline-flex", alignItems: "center", gap: 6, font: "var(--font-label-400)", color: "var(--color-fg-neutral-subtle)" }}><WGIcon n={icons[o.value]} s={16} c="var(--color-fg-neutral-muted)" />{o.label}</span></td>
+              <td>{o.label}</td>
+              <td><code>{o.value}</code></td>
+              <td><code>{icons[o.value]}</code></td>
+              <td><code style={{ color: "var(--color-fg-neutral-muted)" }}>{STAGING_MUI[o.value]}</code></td>
+            </tr>
+          ))}
+          <tr><td><WGIcon n="MapPin" s={22} /></td><td></td><td>不在清單裡的類型</td><td><code>（其他）</code></td><td><code>MapPin</code></td><td><code style={{ color: "var(--color-fg-neutral-muted)" }}>Inventory2Rounded</code></td></tr>
+        </tbody>
+      </table>
+      <p className="cap">圖示一律 lucide 線條款（stroke 2），16px 放在文字旁、22px 單獨出現。顏色跟著文字，不另外上色；類型不靠顏色分辨。前台、後台、staging 都照這張表，前端元件是 <code>StationTypeIcon</code>。</p>
+    </div>
+  );
+}
+
+function App() {
+  const [sel, setSel] = React.useState("map");
+  const [busy, setBusy] = React.useState(false);
+  return (
+    <div className="page">
+      <h1>共用元件 Components</h1>
+      <p className="sub">按鈕與輸入框的所有形式、狀態與圓角規則。規則編號（BTN-／INP-）寫在 <code>js/shared/wg-button.css</code> 檔頭。</p>
+
+      <Section id="radius" title="1. 圓角規則" sub="按鈕是膠囊；欄位是方圓。形狀本身是提示：膠囊＝按下去會做事，方圓＝這裡可以打字。">
+        <div className="card scroll">
+          <table>
+            <thead><tr><th>元件</th><th>圓角</th><th>示意</th><th>token</th></tr></thead>
+            <tbody>
+              <tr><td>按鈕、Chip、Badge、Switch、Avatar、搜尋框</td><td>膠囊</td><td><span className="sw" style={{ borderRadius: "var(--radius-full)" }} /></td><td><code>--radius-full</code></td></tr>
+              <tr><td>輸入框、下拉選單、文字區</td><td>12px</td><td><span className="sw" style={{ borderRadius: "var(--radius-md)" }} /></td><td><code>--radius-md</code></td></tr>
+              <tr><td>卡片、對話框、抽屜</td><td>12px（大面積 20px）</td><td><span className="sw" style={{ borderRadius: "var(--radius-lg)" }} /></td><td><code>--radius-md</code> / <code>--radius-lg</code></td></tr>
+              <tr><td>內嵌小標籤、code</td><td>6px</td><td><span className="sw" style={{ borderRadius: "var(--radius-sm)" }} /></td><td><code>--radius-sm</code></td></tr>
+            </tbody>
+          </table>
+          <p className="cap">例外只有一個：搜尋框用膠囊，因為它是「搜尋條」，並排時要和按鈕同形同高。其他程式碼裡寫死的圓角數字（999、8、10…）一律改回 token；呼叫端不准覆寫按鈕圓角。</p>
+        </div>
+      </Section>
+
+      <Section id="button" title="2. 按鈕 WGButton" sub="5 種 variant × 3 種尺寸。每個畫面最多一顆主要按鈕。">
+        <div className="card scroll">
+          <div className="grid">
+            <span />{VARIANTS.map(v => <span key={v} className="h">{VN[v]}</span>)}
+            {["lg", "md", "sm"].map(sz => (
+              <React.Fragment key={sz}>
+                <span className="h">{sz === "lg" ? "lg 52px" : sz === "md" ? "md 44px" : "sm 36px"}</span>
+                {VARIANTS.map(v => <span key={v}><WGButton variant={v} size={sz}>{v === "danger" ? "刪除" : "儲存"}</WGButton></span>)}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        <h3>狀態（以主要按鈕與外框按鈕為例）</h3>
+        <div className="card scroll">
+          <div className="grid" style={{ gridTemplateColumns: "92px repeat(5, 1fr)" }}>
+            <span /> {["預設", "hover", "鍵盤焦點", "載入中", "停用"].map(t => <span key={t} className="h">{t}</span>)}
+            <span className="h">主要</span>
+            <WGButton>送出</WGButton><WGButton className="is-hover">送出</WGButton><WGButton className="is-focus">送出</WGButton>
+            <WGButton loading>送出</WGButton><WGButton disabled>送出</WGButton>
+            <span className="h">外框</span>
+            <WGButton variant="outline">取消</WGButton><WGButton variant="outline" className="is-hover">取消</WGButton><WGButton variant="outline" className="is-focus">取消</WGButton>
+            <WGButton variant="outline" loading>取消</WGButton><WGButton variant="outline" disabled>取消</WGButton>
+            <span className="h">文字</span>
+            <WGButton variant="ghost">返回</WGButton><WGButton variant="ghost" className="is-hover">返回</WGButton><WGButton variant="ghost" className="is-focus">返回</WGButton>
+            <WGButton variant="ghost" loading>返回</WGButton><WGButton variant="ghost" disabled>返回</WGButton>
+          </div>
+          <p className="cap">載入中：保持原寬度（文字隱藏、轉圈疊上去），不可再點。點下面這顆試試。</p>
+          <div className="row" style={{ marginTop: 8 }}>
+            <WGButton loading={busy} onClick={() => { setBusy(true); setTimeout(() => setBusy(false), 1600); }}>發布到前台</WGButton>
+          </div>
+        </div>
+
+        <h3>紅字次要鈕（tone="danger"）— 新增</h3>
+        <div className="card">
+          <div className="row">
+            <WGButton variant="outline" tone="danger" startIcon={I("Trash2")}>丟棄草稿</WGButton>
+            <WGButton variant="ghost" tone="danger">從前台下架</WGButton>
+            <WGButton variant="danger">確認刪除</WGButton>
+          </div>
+          <p className="cap">次要的破壞性動作用紅字（外框或文字）；實心紅只給「確認對話框裡真正執行」的那一顆。目前前端只有實心紅，原型的「丟棄草稿／下架」就是這種。</p>
+        </div>
+
+        <h3>圖示與純圖示（iconOnly）</h3>
+        <div className="card">
+          <div className="row">
+            <WGButton startIcon={I("Plus")}>新增</WGButton>
+            <WGButton variant="outline" endIcon={I("ChevronDown")}>更多動作</WGButton>
+            <WGButton iconOnly aria-label="新增">{I("Plus")}</WGButton>
+            <WGButton iconOnly variant="outline" aria-label="篩選">{I("SlidersHorizontal")}</WGButton>
+            <WGButton iconOnly variant="ghost" aria-label="關閉">{I("X")}</WGButton>
+            <WGButton iconOnly size="sm" variant="ghost" aria-label="說明">{I("CircleHelp")}</WGButton>
+            <WGButton iconOnly variant="ghost" tone="danger" aria-label="刪除">{I("Trash2")}</WGButton>
+          </div>
+          <p className="cap">純圖示按鈕是正方形（寬＝高），一定要有 aria-label。前端目前 22 個檔案各自用 MUI IconButton，樣式不一。</p>
+        </div>
+
+        <h3>切換／分段（selected）— 新增</h3>
+        <div className="card">
+          <div className="seg">
+            {[["map", "地圖"], ["list", "列表"], ["stats", "統計"]].map(([k, t]) => (
+              <WGButton key={k} variant="ghost" size="sm" selected={sel === k} onClick={() => setSel(k)}>{t}</WGButton>
+            ))}
+          </div>
+          <p className="cap">選取狀態用 <code>selected</code>（aria-pressed），不是另一種 variant。前端的 segmented-control、view-switch 目前都是自己寫的。</p>
+        </div>
+
+        <h3>手機點擊範圍</h3>
+        <div className="card">
+          <div className="row" style={{ gap: 28 }}>
+            <span className="tap"><WGButton size="sm">sm 36px</WGButton></span>
+            <WGButton>md 44px</WGButton>
+          </div>
+          <p className="cap">藍色虛線＝實際可點範圍。sm 視覺維持 36px，可點範圍補到 44px（手機戴手套、車上晃動）；md、lg 本來就夠。</p>
+        </div>
+
+        <h3>滿版（block）</h3>
+        <div className="card" style={{ maxWidth: 360 }}>
+          <WGButton block size="lg">請求協助</WGButton>
+          <div style={{ height: 8 }} />
+          <WGButton block variant="outline">取消</WGButton>
+        </div>
+      </Section>
+
+      <Section id="toolbar" title="3. 工具列：篩選、審查、搜尋、新增" sub="任務管理與資源站點的工具列。現況同一列混了 12px 方圓（篩選、審查、搜尋，42px）與膠囊（匯出、開啟空間、新增，44px）。">
+        <h3>現況（資源站點）</h3>
+        <div className="card scroll">
+          <OldToolbar />
+          <p className="cap">篩選、審查、搜尋是方圓 42px；匯出是橘框膠囊 44px；新增站點的箭頭是右側 12px。高度差 2px、三種圓角、兩種框色擠在同一列。</p>
+        </div>
+
+        <h3>建議</h3>
+        <div className="card scroll">
+          <NewToolbar review={3} />
+          <p className="cap">整列都是 44px 膠囊。工具鈕（篩選、審查、匯出）改中性白底灰框，只有「新增站點」是橘色 —— 一眼就看到主要動作。篩選的數字＝目前套用幾個條件；審查的黃色數字＝待處理幾筆。</p>
+        </div>
+
+        <h3>篩選打開</h3>
+        <div className="card scroll">
+          <NewToolbar review={3} filterOpen filters={2} query="大進" />
+          <div style={{ marginTop: 12, padding: 16, borderRadius: "var(--radius-md)", boxShadow: "inset 0 0 0 1px var(--color-border-default)", background: "var(--color-bg-neutral-default)", display: "flex", flexDirection: "column", gap: 10, minWidth: 640 }}>
+            <FilterRow label="類型" opts={["全部", "加水站", "物資站", "醫療站", "避難收容所", "流動廁所"]} on="加水站" />
+            <FilterRow label="營運狀態" opts={["全部", "開設中", "暫停服務", "已關閉"]} on="開設中" />
+            <FilterRow label="行政區" opts={["全部", "光復鄉", "鳳林鎮", "萬榮鄉"]} on="全部" />
+          </div>
+          <p className="cap">打開時「篩選」變淡橘底橘框（＝這個面板是它開的）、箭頭朝上；工具鈕滑過只換底色、不上浮，所以整排是平的；有條件時列尾出現「清除」。條件用 Chip（膠囊），面板本身是容器所以用 12px。</p>
+        </div>
+
+        <h3>審查：沒有待處理／有待處理</h3>
+        <div className="card">
+          <div className="row">
+            <WGButton variant="neutral" startIcon={I("GitPullRequestArrow")}>審查</WGButton>
+            <WGButton variant="neutral" startIcon={I("GitPullRequestArrow")}>審查<WGCount n={3} tone="warning" /></WGButton>
+            <WGButton variant="neutral" startIcon={I("SlidersHorizontal")} endIcon={I("ChevronDown")}>篩選</WGButton>
+            <WGButton variant="neutral" startIcon={I("SlidersHorizontal")} endIcon={I("ChevronDown")}>篩選<WGCount n={2} /></WGButton>
+            <WGButton variant="neutral" startIcon={I("SlidersHorizontal")} endIcon={I("ChevronUp")} aria-expanded="true">篩選<WGCount n={2} /></WGButton>
+          </div>
+        </div>
+
+        <h3>拆分按鈕：新增站點／新增任務</h3>
+        <div className="card" style={{ minHeight: 210 }}>
+          <div className="row" style={{ alignItems: "flex-start", gap: 32 }}>
+            <div><WGSplitButton label="新增站點" icon={I("Plus")} items={[{ icon: I("Plus"), label: "新增一個" }, { icon: I("Upload"), label: "從 CSV／Excel 匯入多個" }]} /><div className="cap">關閉</div></div>
+            <div><WGSplitButton label="新增任務" icon={I("Plus")} defaultOpen items={[{ icon: I("Plus"), label: "新增一張" }, { icon: I("Upload"), label: "從 CSV／Excel 匯入多張" }]} /><div className="cap">選單打開</div></div>
+            <div><WGSplitButton label="新增任務" icon={I("Plus")} /><div className="cap">沒有匯入權限：一般按鈕</div></div>
+          </div>
+          <p className="cap" style={{ marginTop: 120 }}>外側膠囊、相接那一側 6px 小圓角，中間留 2px。打開選單時箭頭那塊變成整顆圓。主體點了直接新增一筆，箭頭才開選單。</p>
+        </div>
+      </Section>
+
+      <Section id="input" title="4. 輸入框 Input／搜尋框 WGSearch" sub="輸入框 12px 方圓；搜尋框膠囊。輸入框沿用設計系統 Input（48px）。">
+        <div className="two">
+          <div className="card"><div className="cap" style={{ marginTop: 0 }}>預設</div><Input placeholder="例：中正路二段 120 號" /></div>
+          <div className="card"><div className="cap" style={{ marginTop: 0 }}>有圖示</div><Input leadingIcon={I("MapPin")} placeholder="地址" /></div>
+          <div className="card"><div className="cap" style={{ marginTop: 0 }}>錯誤</div><Input invalid defaultValue="abc" /></div>
+          <div className="card"><div className="cap" style={{ marginTop: 0 }}>停用</div><Input disabled defaultValue="這個欄位不能改" /></div>
+        </div>
+
+        <h3>搜尋框（膠囊）</h3>
+        <div className="card">
+          <div className="row">
+            <WGSearch icon={I("Search")} placeholder="搜尋標題、需求、地址" style={{ flex: "1 1 260px" }} />
+            <WGSearch size="sm" icon={I("Search")} placeholder="sm" style={{ width: 160 }} />
+          </div>
+          <p className="cap">搜尋框高度 44px（sm 36px），和按鈕同高。</p>
+        </div>
+
+        <h3>搜尋框與驗證碼：為什麼一個圓、一個方</h3>
+        <div className="two">
+          <div className="card">
+            <span className="ok">工具列：搜尋（膠囊）</span>
+            <div className="row" style={{ flexWrap: "nowrap" }}>
+              <WGButton variant="neutral" startIcon={I("SlidersHorizontal")}>篩選</WGButton>
+              <WGSearch icon={I("Search")} placeholder="搜尋站名、地址" style={{ flex: 1 }} />
+            </div>
+            <p className="cap">搜尋框活在工具列，旁邊全是按鈕；它是「查東西的工具」，跟按鈕同一家 → 膠囊、44px。</p>
+          </div>
+          <div className="card">
+            <span className="ok">表單：驗證碼（方圓）</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="手機"><Input defaultValue="0912 345 678" style={{ height: 44 }} /></Field>
+              <Field label="驗證碼">
+                <div className="row" style={{ flexWrap: "nowrap" }}>
+                  <div style={{ flex: 1 }}><Input placeholder="6 位數字" inputMode="numeric" style={{ height: 44 }} /></div>
+                  <WGButton variant="outline">發送驗證碼</WGButton>
+                </div>
+              </Field>
+            </div>
+            <p className="cap">驗證碼活在表單裡，上下都是欄位；它要跟「手機」那一格長得一樣 → 方圓。旁邊的「發送」是動作 → 膠囊。</p>
+          </div>
+        </div>
+        <div className="card" style={{ marginTop: 16 }}>
+          <span className="ok">建議：形狀看「它住在哪一家」，高度看「同一列」</span>
+          <ul style={{ margin: "4px 0 0", paddingLeft: 20, lineHeight: 1.8 }}>
+            <li>工具列（篩選、搜尋、匯出、新增）＝一家：全部膠囊、全部 44px。</li>
+            <li>表單（手機、驗證碼、地址、名稱）＝一家：欄位全部 12px；欄位旁的按鈕（發送驗證碼、用大頭針的地址）是膠囊，<b>高度跟欄位一樣</b>。</li>
+            <li>所以同一個畫面裡不會出現「方的搜尋框」或「圓的驗證碼欄位」—— 圓或方只取決於它在工具列還是表單裡。</li>
+            <li>🔧 要做到這點，輸入框高度從 48 改成 <b>44</b>，跟 md 按鈕一樣（仍符合 44px 點擊範圍）。現在 48 vs 44 是兩個元件並排時看起來「歪」的真正原因，比圓角更明顯。</li>
+          </ul>
+        </div>
+        <h3>寄出驗證碼之後</h3>
+        <div className="card" style={{ maxWidth: 520 }}>
+          <Field label="驗證碼">
+            <div className="row" style={{ flexWrap: "nowrap" }}>
+              <div style={{ flex: 1 }}><Input placeholder="6 位數字" inputMode="numeric" style={{ height: 44 }} /></div>
+              <WGButton variant="outline" disabled>58 秒後可重送</WGButton>
+            </div>
+          </Field>
+          <p className="cap">寄出後按鈕停用並倒數，寬度隨字變；倒數完回到「重新發送」。</p>
+        </div>
+      </Section>
+
+      <Section id="settings" title="5. 設定元件：開關、勾選、單選、下拉" sub="一列一件事：左邊名稱＋一句說明，右邊控制項。立即生效用開關；按儲存才生效用勾選。">
+        <SettingsDemo />
+        <div className="card" style={{ marginTop: 16 }}>
+          <table>
+            <thead><tr><th>要做的事</th><th>用</th><th>圓角</th></tr></thead>
+            <tbody>
+              <tr><td>一按就生效（公開到前台、接收通知）</td><td>開關 Switch</td><td>膠囊</td></tr>
+              <tr><td>可複選、按儲存才生效</td><td>勾選 Checkbox</td><td>6px（小方塊）</td></tr>
+              <tr><td>2〜5 個互斥選項，需要說明</td><td>單選卡 WGRadioCards</td><td>12px（跟輸入框同一家）</td></tr>
+              <tr><td>6 個以上，或選項很長</td><td>下拉 WGSelect（原生，手機跳系統滾輪）</td><td>12px、44px 高</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      <Section id="tags" title="6. 標籤 Tag" sub="標籤只是說明、不能點；能點能選的是 Chip（篩選條件）。一種高度 24px，六種語氣，三種填法。">
+        <h3>現況（各頁各自寫）</h3>
+        <div className="card">
+          <div className="row">
+            <span style={OLD.critical}>生命危急</span>
+            <span style={OLD.high}>緊急</span>
+            <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>一般</span>
+            <span style={OLD.disaster}><span style={{ width: 7, height: 7, borderRadius: 99, background: "#2592B9" }} /><span style={{ font: "var(--font-data-300)", fontWeight: 700, color: "#2592B9" }}>水災</span></span>
+            <span style={OLD.official}>{I("ShieldCheck")}官方</span>
+            <Badge tone="success">開設中</Badge>
+            <Badge tone="warning" variant="solid">3</Badge>
+            <Chip>可點的 Chip</Chip>
+          </div>
+          <p className="cap">高度有 22／24／26，左右內距 8／9／10／11，字有 400 與 700 兩種粗細；災害類型有框、其他沒有；官方標籤的圖示和字比別人大。</p>
+        </div>
+
+        <h3>建議：語氣 × 填法</h3>
+        <div className="card scroll">
+          <div className="grid" style={{ gridTemplateColumns: "92px repeat(6, 1fr)" }}>
+            <span />{["neutral", "info", "success", "warning", "danger", "brand"].map(t => <span key={t} className="h">{t}</span>)}
+            {["subtle", "solid"].map(f => (
+              <React.Fragment key={f}>
+                <span className="h">{f === "subtle" ? "淡底（預設）" : "實心"}</span>
+                {["neutral", "info", "success", "warning", "danger", "brand"].map(t => <span key={t}><WGTag tone={t} fill={f}>{{ neutral: "已關閉", info: "官方", success: "開設中", warning: "暫停服務", danger: "生命危急", brand: "新" }[t]}</WGTag></span>)}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        <h3>建議：實際用法</h3>
+        <div className="card">
+          <table>
+            <thead><tr><th>地方</th><th>樣子</th><th>規則</th></tr></thead>
+            <tbody>
+              <tr><td>優先級</td><td><div className="row" style={{ gap: 8 }}><WGTag tone="danger" fill="solid">生命危急</WGTag><WGTag tone="warning">緊急</WGTag><WGTag fill="quiet">一般</WGTag><WGTag fill="quiet">低</WGTag></div></td><td>只有生命危急是實心；一般／低只有灰字</td></tr>
+              <tr><td>任務單狀態</td><td><div className="row" style={{ gap: 8 }}><WGTag fill="quiet" strong dot="var(--color-bg-primary)">待處理</WGTag><WGTag fill="quiet">處理中</WGTag><WGTag fill="quiet">已完成</WGTag></div></td><td>只有待處理帶橘點</td></tr>
+              <tr><td>站點營運狀態</td><td><div className="row" style={{ gap: 8 }}><WGTag tone="success">開設中</WGTag><WGTag tone="warning">暫停服務</WGTag><WGTag>已關閉</WGTag></div></td><td>淡底</td></tr>
+              <tr><td>災害類型</td><td><div className="row" style={{ gap: 8 }}><WGTag color="#2592B9" dot>水災</WGTag><WGTag color="#92400E" dot>土石流</WGTag><WGTag color="#E3791E" dot onRemove={() => {}} removeLabel="移除 地震">地震</WGTag></div></td><td>顏色就是資訊 → 點＋同色字；設定頁可移除</td></tr>
+              <tr><td>來源／身分</td><td><div className="row" style={{ gap: 8 }}><WGTag tone="info" icon={<WGIcon n="ShieldCheck" s={13} />}>官方</WGTag><WGTag tone="brand">前台回報</WGTag><WGTag>團隊成員</WGTag><WGTag tone="info">超級管理員</WGTag></div></td><td>圖示 13px，跟字同高</td></tr>
+              <tr><td>表格裡（sm 20px）</td><td><div className="row" style={{ gap: 8 }}><WGTag size="sm" tone="danger" fill="solid">生命危急</WGTag><WGTag size="sm" tone="success">開設中</WGTag><WGTag size="sm" color="#2592B9" dot>水災</WGTag></div></td><td>列高緊的地方</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Tag 和 Chip 的差別</h3>
+        <div className="two">
+          <div className="card"><span className="ok">Tag：說明，不能點，沒有框</span><div className="row"><WGTag tone="success">開設中</WGTag><WGTag color="#2592B9" dot>水災</WGTag></div></div>
+          <div className="card"><span className="ok">Chip：篩選條件，能點能選，有框、32px</span><div className="row"><Chip>全部</Chip><Chip active>加水站</Chip><Chip>物資站</Chip></div></div>
+        </div>
+      </Section>
+
+      <Section id="progress" title="7. 進度條" sub="承接進度（已有幾人／需要幾人）。只有兩種粗細、一律膠囊；數字一定要寫出來。">
+        <h3>現況</h3>
+        <div className="card">
+          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: "12px 16px", alignItems: "center" }}>
+            <OldBar h={4} r={2} c="var(--color-fg-neutral-subtle)" pct={40} /><span className="cap" style={{ margin: 0 }}>後台任務管理：4px、圓角 2px、灰</span>
+            <OldBar h={6} r={99} c="var(--color-bg-primary)" pct={60} /><span className="cap" style={{ margin: 0 }}>前台每筆需求：6px、膠囊、橘（滿了變綠）</span>
+            <OldBar h={8} r={99} c="var(--color-bg-primary)" pct={60} /><span className="cap" style={{ margin: 0 }}>前台詳情總進度：8px、膠囊、橘</span>
+          </div>
+        </div>
+
+        <h3>建議</h3>
+        <div className="two">
+          <div className="card">
+            <span className="ok">前台（tone="brand"，md 6px）</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <WGProgress label="清淤人力" value={3} max={8} valueText="3/8 · 還缺 5 人" />
+              <WGProgress label="飲用水" value={4} max={4} />
+              <WGProgress label="陪伴長者" value={2} max={0} />
+              <WGProgress label="尚無人承接" value={0} max={5} valueText="0/5 · 還缺 5 人" />
+            </div>
+          </div>
+          <div className="card">
+            <span className="ok">後台表格（tone="neutral"，sm 4px）</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <WGProgress size="sm" tone="neutral" value={1} max={3} valueText="待承接 2／3" />
+              <WGProgress size="sm" tone="neutral" value={3} max={3} complete={false} valueText="在途 3／3" />
+              <WGProgress size="sm" tone="neutral" value={3} max={3} valueText="3/3 完成" />
+            </div>
+          </div>
+        </div>
+        <p className="cap">滿了一律綠色；數量留空（陪伴長者）不畫條，只寫「已有 N 人」—— 看不出比例的條比沒有條更誤導。後台維持灰色，是因為任務管理那頁只讓優先級和待處理兩處有顏色。</p>
+      </Section>
+
+      <Section id="icons" title="8. 資源站點圖示" sub="11 種站點類型各一個 lucide 圖示。staging 目前用 MUI 實心款，下個版本換成這一套。">
+        <StationIconList />
+      </Section>
+
+      <Section id="gap" title="9. 與前端現況的差異" sub="前端 Frontend/libs/ui/src/components/Button 對照">
+        <div className="card scroll">
+          <table>
+            <thead><tr><th>項目</th><th>前端現況</th><th>這份</th></tr></thead>
+            <tbody>
+              <tr><td>variant</td><td>primary／secondary／danger／outline／ghost</td><td>相同</td></tr>
+              <tr><td>尺寸</td><td>sm 36／md 44／lg 52</td><td>相同；sm 可點範圍補到 44</td></tr>
+              <tr><td>loading</td><td>無</td><td>新增</td></tr>
+              <tr><td>紅字次要鈕</td><td>無（danger 只有實心）</td><td>新增 <code>tone="danger"</code></td></tr>
+              <tr><td>純圖示</td><td>無（各檔自用 MUI IconButton）</td><td>新增 <code>iconOnly</code></td></tr>
+              <tr><td>選取</td><td>無（各檔自己寫）</td><td>新增 <code>selected</code></td></tr>
+              <tr><td>工具鈕（篩選／審查／匯出）</td><td>各頁自寫，12px 方圓 42px</td><td>新增 <code>variant="neutral"</code>＋計數 <code>WGCount</code></td></tr>
+              <tr><td>拆分按鈕（新增 ▾）</td><td>無</td><td>新增 <code>WGSplitButton</code></td></tr>
+              <tr><td>輸入框高度</td><td>48（設計系統）</td><td>建議改 44，與 md 按鈕同高</td></tr>
+              <tr><td>圓角</td><td>主題 100px；呼叫端可覆寫（出現 999、16、12、8…）</td><td>鎖死膠囊，不可覆寫</td></tr>
+              <tr><td>鍵盤焦點</td><td>MUI 預設</td><td>統一兩圈外框</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </Section>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

@@ -32,6 +32,8 @@
 | | `後台找不到頁面 Not Found.html` | 走到不存在的網址時顯示的畫面（2026-10-18 加入；10-20 光復寶寶改成會動） |
 | | `後台沒有權限 Forbidden.html` | 頁面存在、但目前身份沒權限時的畫面（2026-10-20 加入，文件見 `後台/docs/沒有權限此頁.md`） |
 | | `成員管理 Member Management.html` | 側欄的「團隊」與「成員與權限」**是這一頁的兩個分頁**（`#view=teams`／`#view=members`）。邀請 QR 見 `後台/docs/成員邀請QR.md`（2026-10-20） |
+| | `元件 Components.html` | 共用元件設計稿（2026-11-01）：圓角規則、按鈕、工具列（篩選／審查／搜尋／新增 ▾）、輸入框、設定元件、標籤、進度條、資源站點圖示。對應的 TSX 在 `components/` |
+| `components/` | `*/index.tsx` | 給 `Frontend/libs/ui` 用的共用元件（MUI＋designTokens＋lucide-react），搬法寫在 `components/index.ts` 開頭 |
 
 每一頁標題旁的 **？** 是該頁的功能說明。
 

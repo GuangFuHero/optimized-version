@@ -1,0 +1,143 @@
+/*
+ * WGButton / WGSearch 共用樣式 —— 前後台、原型與前端 libs/ui 的 Button 都照這一份。
+ *
+ * 規則（BTN-101〜108，程式碼就是規格）
+ * BTN-101 圓角只在這裡定義：一律 var(--radius-full)（膠囊）。呼叫端不准用 style／sx 覆寫 borderRadius。
+ * BTN-102 五種 variant：primary｜secondary｜outline｜ghost｜danger。每個畫面最多一顆 primary。
+ * BTN-103 tone="danger" 搭配 outline／ghost＝紅字（次要的破壞性動作，如「丟棄草稿」「從前台下架」）。
+ *         實心紅 variant="danger" 只給「確認對話框裡真正執行刪除」的那一顆。
+ * BTN-104 三種尺寸 sm 36｜md 44｜lg 52。手機與觸控：sm 的可點範圍用 ::after 補到 44px 高（視覺不變）。
+ * BTN-105 loading：顯示轉圈、不可再點、保持原寬度（不跳動）；aria-busy。
+ * BTN-106 iconOnly：正方形（寬＝高），一定要有 aria-label。
+ * BTN-107 selected：切換／分段控制用（aria-pressed），不是 variant 的一種。
+ * BTN-108 鍵盤焦點：:focus-visible 兩圈外框（白＋品牌深藍），所有 variant 一致。
+ * BTN-109 工具鈕用 variant="neutral"（白底灰框黑字）：篩選、審查、匯出、開啟空間。
+ *         橘色只留給「新增」這種要做事的主要動作；工具列整排都橘框，眼睛找不到主要動作在哪。
+ * BTN-110 計數（count）：按鈕內右側的小膠囊。篩選＝目前套用幾個條件（灰）；審查＝待處理幾筆（warning 黃）。0 不顯示。
+ * BTN-111 會展開東西的按鈕（篩選、更多動作）帶 aria-expanded；打開時淡橘底＋橘框＋箭頭朝上（主要按鈕則是深一階的橘）。
+ * BTN-112 拆分按鈕 WGSplitButton：左右兩塊中間留 2px，外側膠囊、相接那一側小圓角 var(--radius-sm)。
+ *         這是 BTN-101 唯一的例外，只在這裡定義。選單打開時右邊那塊變成整顆圓（Material 3 拆分按鈕的做法）。
+ *         主體點了照舊做最常用的事（新增一筆），箭頭才開選單（匯入）。
+ * BTN-113 工具列高度一律 44（md）：按鈕、搜尋框、拆分按鈕同高。
+ * BTN-114 分段切換（待處理／已處理、地圖／列表）：.wg-seg 灰底膠囊容器＋裡面 ghost sm 的 WGButton selected。
+ *         選中＝淡橘（同 selected），不要用黑底白字 —— 黑色在這套色裡沒有意思，又比主要按鈕還搶眼。
+ */
+.wg-btn {
+  --btn-h: 44px; --btn-px: 20px; --btn-gap: 8px; --btn-font: var(--font-label-500);
+  --btn-bg: var(--color-bg-primary); --btn-bg-hover: var(--color-bg-primary-hover);
+  --btn-fg: var(--color-fg-on-primary); --btn-border: transparent;
+  position: relative; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--btn-gap);
+  height: var(--btn-h); min-width: 0; padding: 0 var(--btn-px);
+  border: 1.5px solid var(--btn-border); border-radius: var(--radius-full);
+  background: var(--btn-bg); color: var(--btn-fg); font: var(--btn-font);
+  white-space: nowrap; user-select: none; cursor: pointer; text-decoration: none;
+  box-shadow: none;
+  transition: transform var(--transition-spring), background var(--transition-fast), box-shadow var(--transition-base);
+}
+.wg-btn--primary { box-shadow: var(--shadow-sm); }
+.wg-btn:hover:not(:disabled):not([aria-busy="true"]), .wg-btn.is-hover {
+  background: var(--btn-bg-hover); transform: translateY(-2px);
+}
+.wg-btn--primary:hover:not(:disabled):not([aria-busy="true"]), .wg-btn--primary.is-hover { box-shadow: var(--shadow-md); }
+.wg-btn:active:not(:disabled) { transform: scale(0.97); }
+
+/* variants */
+.wg-btn--secondary { --btn-bg: var(--color-bg-secondary); --btn-bg-hover: var(--color-bg-secondary-hover); --btn-fg: var(--color-fg-on-secondary); }
+.wg-btn--danger    { --btn-bg: var(--color-bg-danger); --btn-bg-hover: var(--color-bg-danger-hover); --btn-fg: var(--color-fg-on-danger); }
+.wg-btn--outline   { --btn-bg: transparent; --btn-bg-hover: var(--color-bg-primary-subtle); --btn-fg: var(--color-brand-primary-subtle); --btn-border: var(--color-border-accent); }
+.wg-btn--ghost     { --btn-bg: transparent; --btn-bg-hover: var(--color-bg-neutral-sunken); --btn-fg: var(--color-fg-neutral-default); }
+/* 工具鈕是平的：1px 框、滑過只換底色、不上浮不縮放（上浮留給要做事的按鈕，工具列整排浮動會像 3D 按鍵） */
+.wg-btn--neutral   { --btn-bg: var(--color-bg-neutral-default); --btn-bg-hover: var(--color-bg-neutral-subtle); --btn-fg: var(--color-fg-neutral-default); --btn-border: var(--color-border-default); border-width: 1px; }
+.wg-btn--neutral:hover:not(:disabled), .wg-btn--neutral.is-hover, .wg-btn--neutral:active:not(:disabled) { transform: none; }
+/* 工具鈕的圖示比字淡一階；展開中時圖示跟字一起變橘（不然字橘圖示灰，看起來只亮了一半） */
+.wg-btn--neutral:not([aria-expanded="true"]) .wg-btn__content > span:not(.wg-btn__count) { color: var(--color-fg-neutral-subtle); }
+/* BTN-111 展開中：淡橘底＋橘框（＝「這個面板是它打開的」），不用深灰 —— 深灰底配框線看起來像被按下去的實體鍵 */
+.wg-btn[aria-expanded="true"] { --btn-bg: var(--color-bg-primary-subtle); --btn-bg-hover: var(--color-bg-primary-subtle); --btn-border: var(--color-border-accent); --btn-fg: var(--color-brand-primary-subtle); }
+.wg-btn--primary[aria-expanded="true"] { --btn-bg: var(--color-bg-primary-hover); --btn-bg-hover: var(--color-bg-primary-hover); }
+/* BTN-110 計數 */
+/* 緊貼文字（離字 4px、離後面的箭頭 6px）：它是「篩選」的附註，不是另一個元素；不用 (2) 括號 —— 括號像文字的一部分，一掃而過看不到 */
+.wg-btn__count {
+  min-width: 18px; height: 18px; padding: 0 5px; margin: 0 -2px 0 -4px; box-sizing: border-box; border-radius: var(--radius-full); line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: var(--font-data-300); font-weight: 700;
+  /* 不用深灰底：白按鈕裡一塊深灰會像凹進去的洞。有條件＝淡橘，跟「展開中」同一個意思 */
+  background: var(--color-bg-primary-subtle); color: var(--color-brand-primary-subtle);
+}
+/* 展開中按鈕本身就是淡橘，數字改白底，不然跟按鈕融在一起只剩一個孤單的「2」 */
+.wg-btn[aria-expanded="true"] .wg-btn__count:not(.wg-btn__count--warning) { background: var(--color-bg-neutral-default); }
+.wg-btn__count--warning { background: var(--color-bg-warning); color: var(--color-fg-neutral-default); }
+/* BTN-112 拆分按鈕 */
+.wg-split { display: inline-flex; gap: 2px; position: relative; }
+.wg-split > .wg-btn { transform: none !important; }
+/* ⚠️ 用 class 不用 :first-child／:last-child：選單打開時後面會多出遮罩與選單，箭頭就不是最後一個了。
+   ⚠️ 外側不能用 var(--radius-full)（9999px）：同一顆上 9999＋6 超過寬度時，瀏覽器會把四個角「按比例」一起縮，
+      6px 會被縮到幾乎 0，接縫看起來是方的。外側改用高度的一半，結果一樣是膠囊。 */
+.wg-split > .wg-split__main { border-radius: calc(var(--btn-h) / 2) var(--radius-sm) var(--radius-sm) calc(var(--btn-h) / 2); }
+.wg-split > .wg-split__arrow { border-radius: var(--radius-sm) calc(var(--btn-h) / 2) calc(var(--btn-h) / 2) var(--radius-sm); width: var(--btn-h); padding: 0; }
+.wg-split > .wg-split__arrow[aria-expanded="true"] { border-radius: var(--radius-full); --btn-bg: var(--color-bg-primary-hover); --btn-bg-hover: var(--color-bg-primary-hover); --btn-fg: var(--color-fg-on-primary); --btn-border: transparent; }
+.wg-split__menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 401; min-width: 220px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--color-bg-neutral-default); border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+}
+.wg-split__item {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: none; border-radius: var(--radius-sm);
+  background: transparent; cursor: pointer; font: var(--font-label-400); font-weight: 400; color: var(--color-fg-neutral-default); text-align: left; white-space: nowrap;
+}
+.wg-split__item:hover, .wg-split__item:focus-visible { background: var(--color-bg-neutral-subtle); outline: none; }
+/* BTN-103 紅字次要鈕 */
+.wg-btn--outline.wg-btn--tone-danger { --btn-fg: var(--color-fg-danger); --btn-border: var(--color-fg-danger); --btn-bg-hover: var(--color-bg-danger-subtle); }
+.wg-btn--ghost.wg-btn--tone-danger   { --btn-fg: var(--color-fg-danger); --btn-bg-hover: var(--color-bg-danger-subtle); }
+
+/* sizes */
+.wg-btn--sm { --btn-h: 36px; --btn-px: 14px; --btn-gap: 6px; --btn-font: var(--font-label-400); }
+.wg-btn--lg { --btn-h: 52px; --btn-px: 24px; }
+/* BTN-104 可點範圍補到 44px（只往上下長，不改視覺） */
+.wg-btn--sm::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }
+.wg-btn--icon { width: var(--btn-h); padding: 0; }
+.wg-btn--block { display: flex; width: 100%; }
+
+/* selected（BTN-107） */
+.wg-btn--selected, .wg-btn[aria-pressed="true"] { --btn-bg: var(--color-bg-primary-subtle); --btn-fg: var(--color-brand-primary-subtle); --btn-border: var(--color-border-accent); }
+
+/* disabled */
+.wg-btn:disabled, .wg-btn.is-disabled {
+  --btn-bg: var(--color-bg-disable); --btn-fg: var(--color-fg-disable); --btn-border: transparent;
+  box-shadow: none; cursor: not-allowed; transform: none;
+}
+
+/* loading（BTN-105）：文字用 visibility 藏起來保留寬度，轉圈疊在中間 */
+.wg-btn[aria-busy="true"] { cursor: progress; }
+.wg-btn[aria-busy="true"] > .wg-btn__content { visibility: hidden; }
+.wg-btn__spin {
+  position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+  border: 2.5px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: wg-btn-spin 0.7s linear infinite;
+}
+@keyframes wg-btn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .wg-btn__spin { animation-duration: 2s; } .wg-btn { transition: none; } .wg-btn:hover { transform: none; } }
+.wg-btn__content { display: inline-flex; align-items: center; justify-content: center; gap: var(--btn-gap); }
+
+/* 焦點（BTN-108） */
+.wg-btn:focus-visible, .wg-btn.is-focus { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--color-brand-secondary-default); }
+
+/*
+ * 搜尋框（INP-103）：膠囊，高度對齊旁邊的按鈕。其他輸入框（Input／Select／Textarea）維持 var(--radius-md)。
+ * 搜尋框是「搜尋條」不是欄位；它和同一列的按鈕同高同形，並排才不會一個圓一個方。
+ */
+.wg-search {
+  display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box;
+  height: 44px; padding: 0 16px; min-width: 0;
+  border-radius: var(--radius-full); background: var(--color-bg-neutral-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-border-default);
+  transition: box-shadow var(--transition-fast);
+}
+.wg-search:focus-within, .wg-search.is-focus { box-shadow: inset 0 0 0 1.5px var(--color-brand-secondary-default); }
+.wg-search input { flex: 1; min-width: 0; align-self: stretch; border: none; outline: none; background: transparent; font: var(--font-body-400); color: var(--color-fg-neutral-default); }
+.wg-search--sm { height: 36px; padding: 0 12px; }
+
+/* BTN-114 分段切換 */
+.wg-seg { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--radius-full); background: var(--color-bg-neutral-sunken); }
+.wg-seg > .wg-btn:not([aria-pressed="true"]) { --btn-fg: var(--color-fg-neutral-subtle); }
