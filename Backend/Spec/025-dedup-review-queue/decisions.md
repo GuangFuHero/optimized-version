@@ -243,6 +243,7 @@ Dan 同意）
 - **誰看得到**：在這張單上持有 `ai_duplicate.view` 的人（超管、資料檢核員，ADR-337），跟重複審核頁同一個權限；
   其他人（含前台、訪客）拿到 null，也不查。審核頁已經給整張單，標題不會多給。前台標「疑似重複」另讀公開的
   `suspectedDuplicateOf`（ADR-454）。
+  *2026-11-02 起改照 ADR-455：所有人都讀得到，各角色的看板都標「疑似重複」。*
 - **怎麼查**：`disputes_by_ticket` DataLoader（`app/services/ticket_verification.py`），一頁的單一起查：
   卡一句、對方單的標題一句，不隨筆數增加。
 - **不做**：不能用它篩選或排序；不加存資料的欄位、不用 migration；不改 `ticket_audit`／`auditStatus`／通知；
@@ -283,6 +284,7 @@ Dan 同意）
   - 沒有疑似重複回空陣列，不回 null。
   - 只給另一張單的 `uuid`、`title`。不給 `state`，待審和判了是重複、還沒合併的卡讀起來一樣。
 - `verificationStatus` 不動，還是要 `ai_duplicate.view`，管理平台看板照舊。
+  *2026-11-02 起 `verificationStatus` 也開放給所有人（ADR-455），下面「為什麼另開欄位」的理由不再成立。*
 
 **為什麼另開欄位，不放寬 `verificationStatus`**：`verificationStatus` 說的是重複審核還在等這張單
 （`state: disputed`），看板照它標「查核中」；放寬就是把查核中告訴訪客。另開一個只列單的欄位，前台拿不到審核的
@@ -304,3 +306,38 @@ Dan 同意）
   （`ix_duplicate_pairs_status`），數量小。
 - ➖ 哪天 `ticket.view` 對某些人收窄，另一張單可能在他們的範圍外，這裡要跟著照範圍過濾，不然標題會從這裡露出。
 - ◾ 網站的 schema 快照由前台的 PR 更新，這支只重產管理平台的。
+
+---
+
+## ADR-455：`verificationStatus` 開放給所有人，各角色都看得到「疑似重複」
+
+**Date**: 2026-11-02　**Status**: Accepted（糖 2026-11-01 在 #236 定 DUP-VIS-101（更正）：「疑似重複」前台後台
+所有人都看得到；Carol 2026-11-02 確認所有角色都要看到；使用者照建議）
+
+**背景**：管理平台任務列表的「疑似重複」標籤和詳情的「查核狀態」那一行都讀 `verificationStatus`（ADR-443）。它要
+`ai_duplicate.view`，只有資料檢核員和超管有，團隊管理員和成員拿到 null，兩處都不顯示。DUP-VIS-101 更正成：前台
+後台所有人都看得到疑似重複，列表的標籤和詳情的查核狀態要開給所有後台角色。
+
+**決定**：
+
+- `verificationStatus` 拿掉 `ai_duplicate.view` 的檢查，有 `ticket.view` 就讀得到，也就是所有角色和訪客
+  （`PUBLIC_PERMS`）。欄位、算法、DataLoader 都不變。
+- 不把 `ai_duplicate.view` 發給團隊角色：那會連重複審核清單和配對卡詳情一起打開。
+- 不另外定義「只有後台角色看得到」：同樣的單 `suspectedDuplicateOf` 已經公開（ADR-454），只擋這個欄位擋不住。
+
+**不會多給資料**：`verificationStatus` 跟 `suspectedDuplicateOf` 讀同一批卡、列同一批單（ADR-454）；`state` 只有
+`disputed`，意思就是那份清單不是空的。所以它沒有比 `suspectedDuplicateOf` 多說什麼。ADR-454「放寬就是把查核中告訴
+訪客」的理由不再成立：「查核中」是看板的字樣，前台照舊讀 `suspectedDuplicateOf`，不寫查核中。
+
+**效能**：以前沒有權限的人讀一頁，這個欄位不查；現在每個選了它的頁都會查。跟 `suspectedDuplicateOf` 共用
+`disputes_by_ticket` DataLoader，一頁卡一句、標題一句，同一個 query 兩個都選也只查一次。
+
+**不做**：前端不用改程式，看板本來就無條件選這個欄位；`operations.graphql` 裡「null unless the viewer holds
+ai_duplicate.view」的註解留給前端改。不改重複審核頁、配對卡和合併。
+
+**Consequences**：
+
+- ➕ 所有後台角色在列表和詳情都看得到疑似重複，跟原型一致。
+- ➖ 管理平台看板每頁都多兩句 SQL，以前只有審核員才多。
+- ◾ `verificationStatus` 和 `suspectedDuplicateOf` 現在一樣公開、內容重疊。兩個都留，是因為看板和前台已經各自接好；
+  要不要合成一個另外決定。

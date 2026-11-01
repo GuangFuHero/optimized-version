@@ -2023,7 +2023,7 @@ export type TicketType = {
   /** When anything visible about this ticket last changed: a field, its address, disaster details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only when it changes the status; a review verdict never does */
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
-  /** Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not, and to a caller without ai_duplicate.view here. Not the data check: that is `auditStatus` */
+  /** Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not. Anyone can read it (ADR-455): it names the tickets `suspectedDuplicateOf` does. Not the data check: that is `auditStatus` */
   verificationStatus?: Maybe<TicketVerificationType>;
   /** Whether the caller holds ticket.delete over this ticket, so a page offers a delete control only where the delete would be allowed */
   viewerCanDelete: Scalars['Boolean']['output'];

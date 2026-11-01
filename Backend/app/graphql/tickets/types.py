@@ -985,19 +985,16 @@ class TicketType:
     @strawberry.field(
         description=(
             "Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when "
-            "it does not, and to a caller without ai_duplicate.view here. Not the data check: that is "
-            "`auditStatus`"
+            "it does not. Anyone can read it (ADR-455): it names the tickets `suspectedDuplicateOf` "
+            "does. Not the data check: that is `auditStatus`"
         )
     )
     async def verification_status(self, info: strawberry.types.Info) -> TicketVerificationType | None:
-        """Read the ticket's duplicate pair cards, or nothing when the caller cannot see them.
+        """Read the ticket's duplicate pair cards.
 
-        The 重複審核 page's own capability: its reviewers already read both tickets in full there, so
-        the far tickets' titles tell them nothing new. Decided before the lookup, so a page anyone
-        else reads costs no query here.
+        Every role sees a ticket's 疑似重複 tag (ADR-455), and this says nothing `suspected_duplicate_of`
+        does not: its one state is that list being non-empty, and the tickets are the same ones.
         """
-        if not await ticket_perm_held(info, Perm.AI_DUP_VIEW, str(self.uuid), self._scope_resource()):
-            return None
         refs = await info.context["loaders"]["disputes_by_ticket"].load(str(self.uuid))
         if refs is None:
             return None
