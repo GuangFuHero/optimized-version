@@ -233,6 +233,15 @@ Jarvis 2026-11-01 做 DEDUP-008 時回報的兩個缺口。和 Task 11 同一張
 - [x] 測試：同一人兩邊代號相同、聯集＝合併後人數、沒人承接沒有代號、換一張卡代號不同且不含 uuid、名稱取同需求類型的設定、沒設定或空名稱用 key、改名稱 `version` 不動、稽核員從 REST 拿得到名稱與代號；既有的「承接不動 version」「query 數不隨細項增加」照樣通過
 - [x] 合約檔、全套件 **3469 passed**、Docker 從零驗證 15/15（空 DB 跑 alembic＋seed；真的送兩筆相同求助產生配對卡；avol03 兩邊都接、avol04／05 各接一邊；稽核員讀詳情：各 2 個代號、共同 1 個、聯集 3（相加是 4）、代號不含 uuid、細項「鏟子」；稽核員 `taskPropertyConfigs` 仍 403；超管讀同一張卡代號相同；名額 3 把乙併進甲，後端接受、DB 承接 3 人、`merged` 事件記下名稱與 `people`）
 
+## Task 13：細項附上顯示與編輯用的設定（ADR-447）
+
+稽核員沒有 `dynamic_field.view`，前端讀不到細項的排序、型別、選項、單位、是否停用。`sort_order` 的做法取自 HC 的 #207（已關閉）。和 Task 11、12 同一張 PR（#179）。
+
+- [x] `dedup_review_tickets.py`：設定整列一次讀出（`(task_type, property_name)` tuple IN），`display_label` 與五個新欄位都從它來；都不算進 `version`
+- [x] schema `PropertyForReviewResponse`：`sort_order`、`data_type`、`enum_options`、`unit`、`is_active`，沒有設定時為 `null`
+- [x] 測試：取同需求類型的設定、停用的也給、沒有設定全為 `null`、改名稱／順序／型別／單位／啟用 `version` 不動、稽核員從 REST 拿得到；既有「query 數不隨細項增加」照樣通過
+- [x] 合約檔重新產生
+
 ## 交給前端的 API 變更（DEDUP-008，Ethan）
 
 | 方法 | 路徑（前綴 `/api/v1/admin`） | 權限 | 成功 | 失敗 |
@@ -245,6 +254,7 @@ Jarvis 2026-11-01 做 DEDUP-008 時回報的兩個缺口。和 Task 11 同一張
 - 2026-10-29（Jarvis）：每張單多一個 `location`（ADR-440），主要單依審核員選的地址決定。地址改了 `version` 會變。
 - 2026-11-01（Jarvis）：每項需求多一個 `claimant_keys`（ADR-445）。合併後人數＝要合在一起的需求的代號聯集數量，取代兩邊 `claim_count` 相加。代號只在同一張卡內對得上。
 - 2026-11-01（Jarvis）：每個細項多一個 `display_label`（ADR-446），直接顯示即可，不必再讀 `taskPropertyConfigs`；稽核員也拿得到。
+- 2026-11-01（ADR-447）：每個細項再多 `sort_order`、`data_type`、`enum_options`、`unit`、`is_active`，和 `display_label` 同一筆設定；沒有設定時都是 `null`。稽核員也拿得到。
 - 收到 409（`version` 對不上）→ 重新讀 detail，請審核員再比對一次。
 - request 要列出兩張單**每一項**需求、`keep`／`move` 的每一個細項（spec §3.3）。漏列會 422。
 - 「不是重複」仍用 `/reject`。

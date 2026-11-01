@@ -480,3 +480,30 @@ ADR-388～390（386、387 已被 `018-ticket-disaster-fields` 用掉）。review
 **不採用**：
 - 給稽核員 `dynamic_field.view`：連所有動態欄位設定都看得到，範圍比需要的大。
 - 讓 `taskPropertyConfigs` 也接受 `ai_duplicate.view`：一支 API 混用兩種權限。
+
+## ADR-447：細項附上顯示與編輯用的欄位設定
+
+**Date**: 2026-11-01　**Status**: Accepted（使用者拍板：合併人數只留 `claimant_keys`（ADR-445 不變），#207 只取 `sort_order`，再補齊頁面用到的其他設定）
+
+**背景**：審核頁顯示與編輯細項時，除了名稱（ADR-446），還用到欄位設定的五項（#205 `compare-view.tsx:115-124`、`model.ts:241-256, 437`）：
+- `sortOrder`：細項排序。
+- `dataType`、`enumOptions`：最終值用哪種輸入框、下拉有哪些選項。
+- `unit`：數值後面的單位。
+- `isActive`：標示「已停用」。
+
+這些都在 `taskPropertyConfigs`，要 `dynamic_field.view`。稽核員沒有（`scripts/seed_rbac.py` 的 `data_auditor` 不含 `FIELD_VIEW`），所以稽核員看到的細項沒有排序、沒有單位，最終值只能用文字框。
+
+`sort_order` 的做法來自 HC 的 #207（已關閉）。#207 另外的 `label` 跟 `display_label` 重複，`/resolve/preview` 跟 ADR-445 的決定不同，都不採用。
+
+**決定**：
+- `tasks[].properties[]` 多 `sort_order`、`data_type`、`enum_options`、`unit`、`is_active`，取自和 `display_label` 同一筆設定（需求的 `task_type`＋細項 key），停用的設定也算。
+- 沒有設定時五欄都是 `null`。`is_active` 用 `null` 而不是 `true`，前端分得出「沒有設定」和「啟用中」。
+- 和 `display_label` 同一個 query 讀出，查詢數不變；`(task_type, property_name)` 在表上是 unique，一個 key 最多一筆。
+- **不算進 `version`**：都是設定，不是單的內容。後台改設定不會讓審核員收到 409。
+- 權限不動：有 `ai_duplicate.view` 就給。
+
+**不採用**：
+- 給稽核員 `dynamic_field.view`：理由同 ADR-446。
+- #207 的 `label`：和 `display_label` 重複。
+- #207 的 `/resolve/preview`：ADR-445 已決定不加試算 API，維持。
+

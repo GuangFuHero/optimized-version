@@ -17,6 +17,7 @@ from app.models.auth import User
 from app.models.dedup import DuplicatePair
 from app.models.geo import Station
 from app.models.photo import Photo
+from app.models.property_config import TaskPropertyConfig
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_disaster_detail import TicketDisasterDetail
@@ -351,6 +352,7 @@ async def test_the_query_count_does_not_grow_with_needs_or_items(db):
     for n in range(5):
         need = await _task(db, s["owner"], s["a"], name=f"需求 {n}")
         await _property(db, need, name=f"品項 {n}")
+        await _config(db, "hr", f"品項 {n}", f"品項 {n} 的名稱")
         await _claim(db, need)
     many = await _count_queries(db, lambda: dedup_review.get_pair(db, actor=actor, pair_uuid=s["pair"].uuid))
 
@@ -576,8 +578,6 @@ async def test_the_same_person_has_another_key_on_another_card(db):
 
 async def test_items_carry_their_label(db):
     """The label set for the item's need type, else the key, as taskPropertyConfigs gives it (ADR-095)."""
-    from app.models.property_config import TaskPropertyConfig
-
     s = await _setup(db)
     await _property(db, s["a2"], name="no_config")
     await _property(db, s["a2"], name="blank_label")
@@ -604,19 +604,115 @@ async def test_items_carry_their_label(db):
     }
 
 
-async def test_renaming_an_items_label_does_not_move_the_version(db):
-    """The label is how the item reads, not what the reviewer compares (ADR-446)."""
-    from app.models.property_config import TaskPropertyConfig
-
-    s = await _versioned(db)
+async def _config(db, task_type: str, name: str, label: str | None, *, order=0, active=True):
     config = TaskPropertyConfig(
-        task_type="supply", property_name="瓶裝水", data_type="number", label="瓶裝水"
+        task_type=task_type,
+        property_name=name,
+        data_type="number",
+        label=label,
+        sort_order=order,
+        is_active=active,
     )
     db.add(config)
     await db.flush()
+    return config
+
+
+async def test_each_item_carries_its_configured_label(db):
+    """The label and order for the need's type and the item's key, inactive or not (ADR-446, ADR-447).
+
+    Without a setting the label is the key and the order is null.
+    """
+    s = await _versioned(db)
+    await _property(db, s["a1"], name="鏟子")
+    await _property(db, s["b1"], name="手套")
+    await _config(db, "supply", "瓶裝水", "瓶裝飲用水", order=2)
+    await _config(db, "hr", "鏟子", "鏟子（支）", order=5, active=False)
+    await _config(db, "hr", "瓶裝水", "另一種需求的名稱", order=9)
+
+    detail = await dedup_review.get_pair(db, actor=s["reviewer"], pair_uuid=s["ids"]["pair"])
+
+    labels = {
+        prop.property_name: (prop.display_label, prop.sort_order)
+        for ticket in detail.tickets
+        for task in ticket.tasks
+        for prop in task.properties
+    }
+    assert labels == {"瓶裝水": ("瓶裝飲用水", 2), "鏟子": ("鏟子（支）", 5), "手套": ("手套", None)}
+
+
+async def test_renaming_or_reordering_an_item_does_not_move_the_version(db):
+    """A label and order are configuration, not the ticket (ADR-446, ADR-447).
+
+    Changing them does not send the reviewer back.
+    """
+    s = await _versioned(db)
+    config = await _config(db, "supply", "瓶裝水", "瓶裝飲用水")
     before = await _versions(db, s)
 
-    config.label = "瓶裝水（箱）"
+    await db.execute(
+        update(TaskPropertyConfig)
+        .where(TaskPropertyConfig.uuid == config.uuid)
+        .values(label="水", sort_order=7)
+    )
+    await db.flush()
+
+    assert await _versions(db, s) == before
+
+
+# --- how an item is shown and edited (ADR-447) -----------------------------------------------
+
+
+async def test_each_item_carries_how_it_is_shown_and_edited(db):
+    """Type, options, unit and whether the setting is in use, from the same setting (ADR-447).
+
+    Without a setting all four are null, so the page treats the item as plain text.
+    """
+    s = await _versioned(db)
+    await _property(db, s["a1"], name="鏟子")
+    await _property(db, s["b1"], name="手套")
+    db.add_all(
+        [
+            TaskPropertyConfig(
+                task_type="supply", property_name="瓶裝水", data_type="number", unit="箱", label="水"
+            ),
+            TaskPropertyConfig(
+                task_type="hr",
+                property_name="鏟子",
+                data_type="single_select",
+                enum_options=["平頭", "尖頭"],
+                is_active=False,
+            ),
+        ]
+    )
+    await db.flush()
+
+    detail = await dedup_review.get_pair(db, actor=s["reviewer"], pair_uuid=s["ids"]["pair"])
+
+    items = {
+        prop.property_name: (prop.data_type, prop.enum_options, prop.unit, prop.is_active)
+        for ticket in detail.tickets
+        for task in ticket.tasks
+        for prop in task.properties
+    }
+    assert items == {
+        "瓶裝水": ("number", None, "箱", True),
+        "鏟子": ("single_select", ("平頭", "尖頭"), None, False),
+        "手套": (None, None, None, None),
+    }
+
+
+async def test_changing_how_an_item_is_shown_does_not_move_the_version(db):
+    """Type, options, unit and in-use are configuration, not the ticket (ADR-447)."""
+    s = await _versioned(db)
+    config = await _config(db, "supply", "瓶裝水", "瓶裝飲用水")
+    before = await _versions(db, s)
+
+    await db.execute(
+        update(TaskPropertyConfig)
+        .where(TaskPropertyConfig.uuid == config.uuid)
+        .values(data_type="single_select", enum_options=["1", "2"], unit="箱", is_active=False)
+    )
     await db.flush()
 
     assert await _versions(db, s) == before

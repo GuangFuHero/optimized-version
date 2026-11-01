@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dedup import DuplicatePair
@@ -40,6 +40,16 @@ class PropertyForReview:
     # How the item reads: its need type's configured label, else its key (ADR-095, ADR-446).
     # Read for the reviewer, not compared: it stays out of the version.
     display_label: str = ""
+    # Where the item sits among its need type's items: the configured order, inactive configs
+    # included; None without a config (ADR-447). Configuration, so it stays out of the version.
+    sort_order: int | None = None
+    # How the page shows and edits the item, from the same setting (ADR-447): the control, the
+    # choices of a select, a number's unit, and whether the setting is still in use. All None
+    # without a setting. Configuration, so they stay out of the version.
+    data_type: str | None = None
+    enum_options: tuple[str, ...] | None = None
+    unit: str | None = None
+    is_active: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -122,7 +132,9 @@ class TicketForReview:
 # a claim fills, and the ticket status (and audit status) worked out from them.
 _TICKET_SKIPPED = {"version", "status", "audit_status", "tasks", "photos"}
 _TASK_SKIPPED = {"claim_count", "status", "properties", "claimant_keys"}
-_PROPERTY_SKIPPED = {"display_label"}
+# An item's label and order are configuration, not the ticket: changing them must not send the
+# reviewer back (ADR-446, ADR-447).
+_PROPERTY_SKIPPED = {"display_label", "sort_order", "data_type", "enum_options", "unit", "is_active"}
 
 
 def ticket_version(ticket: TicketForReview) -> str:
@@ -211,7 +223,7 @@ class _Parts:
     tasks: list
     properties: list
     claims: dict  # need uuid -> the people on it
-    labels: dict  # (need type, item key) -> configured label
+    configs: dict  # (need type, item key) -> its field setting
     photos: list
     details: list
     locations: dict
@@ -226,7 +238,7 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
         )
     ).all()
     task_ids = [task.uuid for task in tasks]
-    properties, claims, labels = [], {}, {}
+    properties, claims, configs = [], {}, {}
     if task_ids:
         properties = (
             await db.scalars(
@@ -243,19 +255,8 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
             )
         ).all():
             claims.setdefault(task_uuid, []).append(person)
-        if properties:
-            # One query for every item's label, however many items (ADR-446).
-            keys = {prop.property_name for prop in properties}
-            types = {task.task_type for task in tasks}
-            labels = {
-                (config.task_type, config.property_name): config.label
-                for config in await db.scalars(
-                    select(TaskPropertyConfig).where(
-                        TaskPropertyConfig.task_type.in_(types), TaskPropertyConfig.property_name.in_(keys)
-                    )
-                )
-                if config.label
-            }
+        kind = {task.uuid: task.task_type for task in tasks}
+        configs = await _item_configs(db, {(kind[prop.task_uuid], prop.property_name) for prop in properties})
     photos = (
         await db.scalars(
             select(Photo)
@@ -286,11 +287,29 @@ async def _parts(db: AsyncSession, live: list[str]) -> _Parts:
         tasks=tasks,
         properties=properties,
         claims=claims,
-        labels=labels,
+        configs=configs,
         photos=photos,
         details=details,
         locations=locations,
     )
+
+
+async def _item_configs(
+    db: AsyncSession, keys: set[tuple[str, str]]
+) -> dict[tuple[str, str], TaskPropertyConfig]:
+    """Each item's field setting by (need type, key), inactive ones included, in one query.
+
+    No keys, no query. (task_type, property_name) is unique on the table, so each key has at
+    most one setting.
+    """
+    if not keys:
+        return {}
+    rows = await db.scalars(
+        select(TaskPropertyConfig).where(
+            tuple_(TaskPropertyConfig.task_type, TaskPropertyConfig.property_name).in_(sorted(keys))
+        )
+    )
+    return {(config.task_type, config.property_name): config for config in rows}
 
 
 def _ticket(ticket: Tickets, lon, lat, parts: _Parts, card_uuid: str | None) -> TicketForReview:
@@ -337,7 +356,9 @@ def _ticket(ticket: Tickets, lon, lat, parts: _Parts, card_uuid: str | None) -> 
                         quantity=prop.quantity,
                         status=prop.status,
                         comment=prop.comment,
-                        display_label=_label(parts.labels, task.task_type, prop.property_name),
+                        **_config_fields(
+                            parts.configs.get((task.task_type, prop.property_name)), prop.property_name
+                        ),
                     )
                     for prop in parts.properties
                     if prop.task_uuid == task.uuid
@@ -362,8 +383,21 @@ def _claimant_keys(card_uuid: str | None, people) -> tuple[str, ...]:
     return tuple(sorted(claimant_key(card_uuid, person) for person in people))
 
 
-def _label(labels: dict, task_type: str, property_name: str) -> str:
-    return labels.get((task_type, property_name)) or property_name
+def _config_fields(config: TaskPropertyConfig | None, property_name: str) -> dict:
+    """What an item takes from its field setting.
+
+    The label, else the key (ADR-446); the order and how it is shown and edited (ADR-447).
+    """
+    if config is None:
+        return {"display_label": property_name}
+    return {
+        "display_label": config.label or property_name,
+        "sort_order": config.sort_order,
+        "data_type": config.data_type,
+        "enum_options": tuple(config.enum_options) if config.enum_options is not None else None,
+        "unit": config.unit,
+        "is_active": config.is_active,
+    }
 
 
 def _location(row: SecondaryLocation | None) -> LocationForReview | None:

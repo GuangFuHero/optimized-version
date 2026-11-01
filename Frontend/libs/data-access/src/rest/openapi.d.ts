@@ -3714,6 +3714,31 @@ export interface components {
        * @description How the item reads: the label set for its need type, else property_name (ADR-446)
        */
       display_label: string;
+      /**
+       * Sort Order
+       * @description The item's order among its need type's items, from the same field setting, inactive ones included; null when there is none (ADR-447)
+       */
+      sort_order?: number | null;
+      /**
+       * Data Type
+       * @description The control the item's field setting asks for (number, text, single_select, ...); null when there is none (ADR-447)
+       */
+      data_type?: string | null;
+      /**
+       * Enum Options
+       * @description The choices of a select field; null otherwise (ADR-447)
+       */
+      enum_options?: string[] | null;
+      /**
+       * Unit
+       * @description A number field's unit, e.g. 箱; null otherwise (ADR-447)
+       */
+      unit?: string | null;
+      /**
+       * Is Active
+       * @description Whether the item's field setting is still in use; null when there is none (ADR-447)
+       */
+      is_active?: boolean | null;
     };
     /**
      * RefreshRequest

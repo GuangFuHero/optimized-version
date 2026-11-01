@@ -73,8 +73,8 @@ async def test_the_detail_says_where_each_ticket_is(client, db_session, redis):
     assert tickets["high"]["location"] is None
 
 
-async def test_an_auditor_reads_item_labels_and_claimant_keys(client, db_session, redis):
-    """An auditor gets each item's label (ADR-446) and each need's claimant keys (ADR-445).
+async def test_an_auditor_reads_item_labels_order_and_claimant_keys(client, db_session, redis):
+    """An auditor gets each item's label (ADR-446) and order (ADR-447), and the claimant keys (ADR-445).
 
     The auditor cannot read taskPropertyConfigs (no dynamic_field.view); the detail carries the label.
     """
@@ -86,7 +86,9 @@ async def test_an_auditor_reads_item_labels_and_claimant_keys(client, db_session
     task = await db_session.get(TicketTask, card["low"])
     db_session.add(TaskProperty(task_uuid=task.uuid, property_name="shovel", property_value="2", quantity=2))
     db_session.add(
-        TaskPropertyConfig(task_type=task.task_type, property_name="shovel", data_type="number", label="鏟子")
+        TaskPropertyConfig(
+            task_type=task.task_type, property_name="shovel", data_type="number", label="鏟子", sort_order=3
+        )
     )
     person = User(name="志工")
     db_session.add(person)
@@ -100,6 +102,15 @@ async def test_an_auditor_reads_item_labels_and_claimant_keys(client, db_session
 
     assert response.status_code == 200, response.text
     need = response.json()["tickets"]["low"]["tasks"][0]
-    assert [(p["property_name"], p["display_label"]) for p in need["properties"]] == [("shovel", "鏟子")]
+    assert [(p["property_name"], p["display_label"], p["sort_order"]) for p in need["properties"]] == [
+        ("shovel", "鏟子", 3)
+    ]
+    (item,) = need["properties"]
+    assert (item["data_type"], item["enum_options"], item["unit"], item["is_active"]) == (
+        "number",
+        None,
+        None,
+        True,
+    )
     assert need["claim_count"] == 1 and len(need["claimant_keys"]) == 1
     assert isinstance(need["claimant_keys"][0], str) and person_uuid not in need["claimant_keys"][0]

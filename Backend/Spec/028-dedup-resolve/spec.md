@@ -122,7 +122,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `status`、`audit_status` | 唯讀 |
 | `created_by`、`created_at` | 開單者 |
 | `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`claimant_keys`（ADR-445：這張卡專用的承接人代號，同一人兩邊相同；不算進 `version`）、`recruiting_stopped`、`properties` |
-| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`display_label`（ADR-446：需求類型的設定名稱，沒有就用 key；不算進 `version`）、`property_value`、`quantity`、`status`、`comment` |
+| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`display_label`（ADR-446：需求類型的設定名稱，沒有就用 key；不算進 `version`）、`sort_order`、`data_type`、`enum_options`、`unit`、`is_active`（ADR-447：同一筆設定的順序、型別、選項、單位、是否啟用，停用的也算，沒有設定為 `null`；不算進 `version`）、`property_value`、`quantity`、`status`、`comment` |
 | `photos` | 還在的照片：`uuid`、`url`、`created_at`（ADR-384） |
 | `disaster_details` | 災害欄位答案：`{property_name: [value, …]}`（ADR-385） |
 

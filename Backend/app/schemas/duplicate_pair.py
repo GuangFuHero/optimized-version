@@ -90,6 +90,26 @@ class PropertyForReviewResponse(BaseModel):
     display_label: str = Field(
         description="How the item reads: the label set for its need type, else property_name (ADR-446)"
     )
+    sort_order: int | None = Field(
+        default=None,
+        description="The item's order among its need type's items, from the same field setting, inactive "
+        "ones included; null when there is none (ADR-447)",
+    )
+    data_type: str | None = Field(
+        default=None,
+        description="The control the item's field setting asks for (number, text, single_select, ...); "
+        "null when there is none (ADR-447)",
+    )
+    enum_options: list[str] | None = Field(
+        default=None, description="The choices of a select field; null otherwise (ADR-447)"
+    )
+    unit: str | None = Field(
+        default=None, description="A number field's unit, e.g. 箱; null otherwise (ADR-447)"
+    )
+    is_active: bool | None = Field(
+        default=None,
+        description="Whether the item's field setting is still in use; null when there is none (ADR-447)",
+    )
 
 
 class TaskForReviewResponse(BaseModel):
