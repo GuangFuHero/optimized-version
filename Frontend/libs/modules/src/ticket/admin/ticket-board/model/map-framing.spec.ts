@@ -108,6 +108,33 @@ describe('framingMove', () => {
   it('stays when the box has no edges', () => {
     expect(framingMove('frame', nullEdges)).toEqual({ kind: 'stay' });
   });
+
+  // One ticket in Boston and the rest in Taiwan: a box the map cannot zoom out far enough to show.
+  // Fitted, it would land in the box's middle, in the Mediterranean.
+  const wide = { ...box, minLat: 23.6, maxLat: 42.35, minLng: -71.05 };
+
+  it("goes back to the map's own opening view when the box cannot be shown whole", () => {
+    expect(framingMove('frame', wide, () => false)).toEqual({ kind: 'home' });
+  });
+
+  it('moves to a box that can be shown whole', () => {
+    expect(framingMove('frame', box, () => true)).toEqual({
+      kind: 'move',
+      framing: framingOf(box),
+    });
+  });
+
+  it('goes to a lone point without asking whether it fits', () => {
+    const point = { minLat: 23.5, maxLat: 23.5, minLng: 121.2, maxLng: 121.2 };
+    expect(framingMove('frame', { count: 1, ...point }, () => false)).toEqual({
+      kind: 'move',
+      framing: { kind: 'point', point: [23.5, 121.2] },
+    });
+  });
+
+  it('keeps the view on an open ticket, however wide the box', () => {
+    expect(framingMove('skip', wide, () => false)).toEqual({ kind: 'stay' });
+  });
 });
 
 describe('selectedFocusStep', () => {

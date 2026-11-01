@@ -53,17 +53,23 @@ export function framingStep(
 /**
  * What a decided framing request does: move the map, then load the view once it settles there;
  * or keep the view (an open ticket, no match, no box) and load the current view straight away.
+ *
+ * A box the map cannot show whole even at its widest zoom (`fits`) — one ticket far from the rest,
+ * say — would be fitted at that zoom around the box's middle, which can be the open sea between
+ * them. The map goes back to the view it opened at, the event's, instead.
  */
 export function framingMove(
   step: 'frame' | 'skip',
   extent: TicketExtent,
+  fits: (box: Extract<MapFraming, { kind: 'bounds' }>) => boolean = () => true,
 ):
   | { kind: 'stay' }
+  | { kind: 'home' }
   | { kind: 'move'; framing: Exclude<MapFraming, { kind: 'none' }> } {
   const framing = step === 'frame' ? framingOf(extent) : null;
-  return framing && framing.kind !== 'none'
-    ? { kind: 'move', framing }
-    : { kind: 'stay' };
+  if (!framing || framing.kind === 'none') return { kind: 'stay' };
+  if (framing.kind === 'bounds' && !fits(framing)) return { kind: 'home' };
+  return { kind: 'move', framing };
 }
 
 /**

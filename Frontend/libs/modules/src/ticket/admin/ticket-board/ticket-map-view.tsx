@@ -7,7 +7,7 @@ import {
 } from '@rescue-frontend/data-access/admin';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { Building2, ChevronRight, MapPinOff, X } from 'lucide-react';
-import type { Map as LeafletMap } from 'leaflet';
+import type { LatLng, Map as LeafletMap } from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDebounceCallback } from 'usehooks-ts';
 
@@ -225,8 +225,9 @@ export function TicketMapView({
  * Frames every ticket matching the filters, by the box `ticketsExtent` hands back: once when the
  * map opens and once per filter set, or again on `frameAgain`. Refetches after a write, and the
  * viewport loads that follow each move, leave the view alone. An open ticket keeps the view, as
- * on the station map, unless 顯示全部 asked; no match keeps it too. `ready` turns true once the
- * first framing is decided and the map has settled there (or the extent failed to load).
+ * on the station map, unless 顯示全部 asked; no match keeps it too. A box too wide to show whole
+ * sends the map back to where it opened (`framingMove`). `ready` turns true once the first framing
+ * is decided and the map has settled there (or the extent failed to load).
  */
 function useFrameMatching(
   map: LeafletMap | null,
@@ -245,6 +246,14 @@ function useFrameMatching(
 
   const box = extent.data?.ticketsExtent;
   const failed = extent.error != null;
+  // Where the map opened, the event's view, before any framing moved it: where a box too wide to
+  // show sends it back.
+  const homeRef = useRef<{ center: LatLng; zoom: number } | null>(null);
+  useEffect(() => {
+    if (map && !homeRef.current) {
+      homeRef.current = { center: map.getCenter(), zoom: map.getZoom() };
+    }
+  }, [map]);
   useEffect(() => {
     if (map && failed) setReady(true);
   }, [map, failed]);
@@ -258,7 +267,7 @@ function useFrameMatching(
     if (step === 'done') return;
     framedRef.current = request;
     askedRef.current = false;
-    const move = framingMove(step, box);
+    const move = framingMove(step, box, (bounds) => fitsWhole(map, bounds));
     // Kept, the view is final: the pins load the current view now, not on a moveend.
     if (move.kind === 'stay') {
       setReady(true);
@@ -266,6 +275,14 @@ function useFrameMatching(
     }
     // Leaflet ends every setView and fitBounds, even one that does not move, with moveend.
     map.once('moveend', () => setReady(true));
+    if (move.kind === 'home') {
+      const home = homeRef.current ?? {
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+      };
+      map.setView(home.center, home.zoom);
+      return;
+    }
     const { framing } = move;
     if (framing.kind === 'point') {
       map.setView(latLng(framing.point), FOCUS_ZOOM);
@@ -288,6 +305,21 @@ function useFrameMatching(
       setAttempt((n) => n + 1);
     },
   };
+}
+
+/**
+ * Whether the map can show the whole box at its widest zoom, inside the padding `fitBounds` keeps.
+ * Leaflet fits a wider one at that zoom anyway, around the box's middle.
+ */
+function fitsWhole(
+  map: LeafletMap,
+  { southWest, northEast }: { southWest: MapPoint; northEast: MapPoint },
+): boolean {
+  const zoom = map.getMinZoom();
+  const sw = map.project(latLng(southWest), zoom);
+  const ne = map.project(latLng(northEast), zoom);
+  const room = map.getSize().subtract([FIT_PADDING[0] * 2, FIT_PADDING[1] * 2]);
+  return ne.x - sw.x <= room.x && sw.y - ne.y <= room.y;
 }
 
 /**
