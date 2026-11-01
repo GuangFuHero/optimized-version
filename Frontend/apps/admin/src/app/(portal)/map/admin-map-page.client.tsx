@@ -728,8 +728,11 @@ export function AdminMapPageClient() {
           display: 'flex',
           flexDirection: { mobile: 'column', tablet: 'row' },
           width: '100%',
-          height: '100%',
-          minHeight: '100dvh',
+          // The shell's <main> is the screen less its header: filling it, not the whole screen,
+          // keeps the page from scrolling and the area list's button in view. On a phone the
+          // map and the panel stack and the page scrolls.
+          height: { tablet: '100%' },
+          minHeight: { mobile: '100%', tablet: 0 },
         }}
       >
         <Box
@@ -809,9 +812,8 @@ export function AdminMapPageClient() {
               flexDirection: 'column',
               width: { mobile: '100%', tablet: 360 },
               flexShrink: 0,
-              position: { tablet: 'sticky' },
-              top: 0,
-              height: { tablet: '100dvh' },
+              height: { tablet: '100%' },
+              minHeight: 0,
               borderLeft: { tablet: `1px solid ${color.border.default}` },
               bgcolor: color.bg.neutral.subtle,
             }}

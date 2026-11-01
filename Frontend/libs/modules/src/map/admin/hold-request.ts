@@ -31,7 +31,7 @@ function listen() {
 
 /**
  * Sends nothing while the toast with 復原 is on screen. Pressing it cancels the request and calls
- * `onUndo`; otherwise `send` runs when the toast closes, so 復原 is there exactly as long as the
+ * `onUndo`; otherwise `send` runs when the toast times out, so 復原 is there exactly as long as the
  * request is held (sonner pauses the toast under the pointer or in a hidden tab, and the request
  * waits with it). A request still waiting when the page is left is sent then. Returns a function
  * that sends at once.
@@ -45,6 +45,7 @@ export function holdRequest({
   send: () => Promise<void>;
   onUndo: () => void;
 }): () => void {
+  const startedAt = Date.now();
   let settled = false;
   const run = () => {
     if (settled) {
@@ -61,8 +62,13 @@ export function holdRequest({
 
   toast(message, {
     duration: UNDO_MS,
+    // No × to close it by: it reads as taking the change back, which only 復原 does. A toast closed
+    // some other way (swiped away) still lets the rest of the 5 seconds pass before the send.
+    closeButton: false,
     onAutoClose: run,
-    onDismiss: run,
+    onDismiss: () => {
+      window.setTimeout(run, Math.max(0, UNDO_MS - (Date.now() - startedAt)));
+    },
     action: {
       label: '復原',
       onClick: () => {
