@@ -10,6 +10,7 @@ import {
   createPointShareTarget,
   createTaskMatchTicketDetailOverrides,
   dedupeMarkersById,
+  floorHelpForOpenBuilding,
   hasRescueMapDetailItem,
   Map,
   MapCellsNotice,
@@ -19,7 +20,6 @@ import {
   PlaceHereAction,
   PointShareDrawer,
   readLinkedSelection,
-  requestHelpOnBuildingFloor,
   SITE_FALLBACK_DATA_TYPE,
   SiteMapControls,
   syncDocumentMetadata,
@@ -232,15 +232,11 @@ function SiteMapViewportDataLayer({
   );
 
   // 在這一層請求協助 in the drawer of a building the map knows the point of.
-  const openedBuilding = buildings.entries.find(
-    (building) => building.uuid === buildingUuid && building.point,
+  const requestHelpOnFloor = floorHelpForOpenBuilding(
+    buildings.entries,
+    buildingUuid,
+    () => setBuildingUuid(null),
   );
-  const requestHelpOnFloor = openedBuilding
-    ? (floor: string) => {
-        setBuildingUuid(null);
-        requestHelpOnBuildingFloor(openedBuilding, floor);
-      }
-    : undefined;
 
   // Opened from a building or a link, a ticket opens even when the map's status filter leaves its
   // pin out: the map is handed it as its linked item, and shows it as long as it is selected.

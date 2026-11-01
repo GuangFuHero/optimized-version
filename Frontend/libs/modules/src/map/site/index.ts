@@ -3,6 +3,7 @@ export { readLinkedSelection } from './linked-ticket';
 export { MapCellsNotice } from './map-cells-notice';
 export { dedupeMarkersById } from './markers';
 export {
+  floorHelpForOpenBuilding,
   requestHelpOnBuildingFloor,
   useSiteMapBuildings,
 } from './use-site-map-buildings';

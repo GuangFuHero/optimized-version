@@ -14,7 +14,11 @@ import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 
-import { BuildingDrawer } from '../building';
+import {
+  BuildingDrawer,
+  BuildingEntryList,
+  useBuildingMaps,
+} from '../building';
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from '../map/constants';
 import { countDetailOpenings } from '../map/detail-openings';
@@ -39,6 +43,7 @@ import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { resolveTicketSearch } from '../ticket/ticket-search';
 import {
+  floorHelpForOpenBuilding,
   readLinkedSelection,
   useLinkedTicketLookup,
   usePaginatedRescueMapMarkers,
@@ -97,6 +102,14 @@ export function SiteListView() {
   });
 
   const dataType = controller.dataType ?? SITE_FALLBACK_DATA_TYPE;
+
+  // The open buildings, for 這些大樓可以看各樓層 and for 在這一層請求協助 in their drawer: on 任務 only.
+  const { buildings, loading: buildingsLoading } = useBuildingMaps({
+    enabled: dataType === 'ticket',
+  });
+  // The first page shows with the buildings above it, not before them: come second, the buildings
+  // would push down the cards, and a tap aimed at one would land on a building.
+  const firstPageIn = hasFetchedOnce && !buildingsLoading;
 
   // 含已滿額: full needs, and the tickets left with nothing else, fold away until asked for.
   const [showFullNeeds, setShowFullNeeds] = useState(false);
@@ -310,7 +323,9 @@ export function SiteListView() {
   useEffect(() => {
     const target = loadMoreRef.current;
 
-    if (!target || !canLoadMore) {
+    // Not while the first page waits for the buildings: with no card above it, the sentinel would ask
+    // for the second at once.
+    if (!target || !canLoadMore || !firstPageIn) {
       return;
     }
 
@@ -329,7 +344,7 @@ export function SiteListView() {
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [canLoadMore, loadNextPage]);
+  }, [canLoadMore, firstPageIn, loadNextPage]);
 
   const closeDetail = () => {
     setDetailOpen(false);
@@ -349,6 +364,11 @@ export function SiteListView() {
 
   // 現場分區: the building a ticket's 看各樓層 opened, shut again on opening one of its tickets.
   const [buildingUuid, setBuildingUuid] = useState<string | null>(null);
+  const requestHelpOnFloor = floorHelpForOpenBuilding(
+    buildings,
+    buildingUuid,
+    () => setBuildingUuid(null),
+  );
 
   // One of a building's tickets, from its drawer or 上一張／下一張. One the list holds opens as any
   // card does; one it does not — past the loaded pages, or left out by a filter — as a linked one does.
@@ -487,6 +507,9 @@ export function SiteListView() {
           sx={{
             minHeight: 0,
             overflowY: 'auto',
+            // A column, so that 沒有符合條件的資料 centres in what the buildings above it leave.
+            display: 'flex',
+            flexDirection: 'column',
             px: { mobile: 2, tablet: 3 },
             pt: 2,
             // On a phone the last card scrolls clear of the floating 請求協助 (52px, 16px up).
@@ -506,6 +529,15 @@ export function SiteListView() {
               搜尋請輸入至少 2 個字
             </Typography>
           ) : null}
+          {/* The buildings one can open floor by floor, those with no ticket too. Outside the
+              no-match branch below: a street searched that has no ticket may still have a building. */}
+          {dataType === 'ticket' && firstPageIn ? (
+            <BuildingEntryList
+              buildings={buildings}
+              q={ticketQuery}
+              onOpen={setBuildingUuid}
+            />
+          ) : null}
           {/* Not while a page is on its way: every search reloads the list, and it would read
               as empty between keystrokes. Nor while a later page may still list something: the
               rows so far may all have folded away (含已滿額), and only the sentinel below can ask
@@ -513,7 +545,7 @@ export function SiteListView() {
           {loadFailed ? (
             <Stack
               sx={{
-                height: '100%',
+                flex: 1,
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: color.fg.neutral.muted,
@@ -524,12 +556,12 @@ export function SiteListView() {
               </Typography>
             </Stack>
           ) : listRows.length === 0 &&
-            hasFetchedOnce &&
+            firstPageIn &&
             !isFetching &&
             !canLoadMore ? (
             <Stack
               sx={{
-                height: '100%',
+                flex: 1,
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: color.fg.neutral.muted,
@@ -539,7 +571,7 @@ export function SiteListView() {
             </Stack>
           ) : (
             <Stack spacing={1.5}>
-              {listRows.map(({ marker, needs }) => (
+              {(firstPageIn ? listRows : []).map(({ marker, needs }) => (
                 <SiteListRow
                   key={marker.id}
                   marker={marker}
@@ -551,7 +583,7 @@ export function SiteListView() {
                 />
               ))}
               <Box ref={loadMoreRef} sx={{ height: 1 }} />
-              {isFetching ? (
+              {isFetching || buildingsLoading ? (
                 <Typography
                   sx={{
                     pt: 1,
@@ -680,6 +712,7 @@ export function SiteListView() {
           setBuildingUuid(null);
           openBuildingTicket(marker);
         }}
+        onRequestHelpOnFloor={requestHelpOnFloor}
       />
     </Box>
   );
