@@ -3,8 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import ShieldRoundedIcon from '@mui/icons-material/ShieldRounded';
 import {
   Avatar,
   ButtonBase,
@@ -130,7 +128,7 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
         </MenuItem>
         <Divider />
         <MenuItem onClick={handleOpenMyTasks} sx={{ gap: 1 }}>
-          <AssignmentRoundedIcon sx={{ fontSize: 18 }} />
+          <Icons.clipboardList sx={{ fontSize: 18 }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>
             我的任務
           </Typography>
@@ -138,7 +136,7 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
         {/* Not in the prototype's menu, which has no such page: added after 我的任務, the site's own
             thing, and before 登出. */}
         <MenuItem onClick={handleOpenSecurity} sx={{ gap: 1 }}>
-          <ShieldRoundedIcon sx={{ fontSize: 18 }} />
+          <Icons.shield sx={{ fontSize: 18 }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>
             帳號安全
           </Typography>

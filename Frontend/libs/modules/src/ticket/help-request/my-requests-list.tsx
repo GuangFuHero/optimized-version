@@ -1,7 +1,5 @@
 'use client';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
 import { Box, Button, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
@@ -13,6 +11,7 @@ import {
   designTokens,
   displayTextSize,
   RowAction,
+  Icons,
 } from '@rescue-frontend/ui';
 
 import { useSiteRouteState } from '../../route';
@@ -183,7 +182,7 @@ export function MyRequestsList({
     return (
       <Notice
         icon={
-          <AssignmentRoundedIcon
+          <Icons.clipboardList
             sx={{ fontSize: 28, color: color.fg.neutral.muted }}
           />
         }
@@ -192,7 +191,7 @@ export function MyRequestsList({
         <Button
           variant="contained"
           size="small"
-          startIcon={<HandshakeRoundedIcon sx={{ fontSize: 16 }} />}
+          startIcon={<Icons.handshake sx={{ fontSize: 16 }} />}
           onClick={() => {
             onLeave();
             openHelpRequest();

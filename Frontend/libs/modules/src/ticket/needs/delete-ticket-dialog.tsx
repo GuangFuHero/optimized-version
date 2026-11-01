@@ -1,7 +1,5 @@
 'use client';
 
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Box, Stack, Typography } from '@mui/material';
 import { useCallback, useState } from 'react';
 import { useMutation, useQuery } from 'urql';
@@ -12,7 +10,12 @@ import {
   TicketFieldsFragmentDoc,
   useFragment,
 } from '@rescue-frontend/data-access';
-import { designTokens, Dialog, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  Dialog,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { SiteToast } from '../../shell/site/site-toast';
 import { deleteTicketErrorMessage, isTicketAlreadyGone } from './claim-error';
@@ -165,7 +168,7 @@ export function DeleteTicketDialog({
         onConfirm={() => fields && onConfirm(fields.title)}
         title="刪除整張單？"
         confirmLabel={submitting ? '刪除中...' : '刪除'}
-        confirmIcon={<DeleteOutlineRoundedIcon />}
+        confirmIcon={<Icons.trash />}
         confirmTone="danger"
         confirmDisabled={!fields}
         cancelLabel={gone ? '關閉' : '取消'}
@@ -213,7 +216,7 @@ export function DeleteTicketDialog({
                     '& svg': { fontSize: 14 },
                   }}
                 >
-                  <VolunteerActivismRoundedIcon />
+                  <Icons.handHeart />
                 </Box>
                 <Typography
                   sx={{ fontSize: displayTextSize[13], lineHeight: 1.6 }}

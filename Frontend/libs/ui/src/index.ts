@@ -99,7 +99,13 @@ export type {
   TimelineProps,
   TimelineTone,
 } from './components/Timeline';
-export { getRescueColorScheme, Icons, layoutSizes, theme } from './foundation';
+export {
+  getRescueColorScheme,
+  Icons,
+  layoutSizes,
+  theme,
+  themedIcon,
+} from './foundation';
 export {
   designExtensions,
   designTokens,

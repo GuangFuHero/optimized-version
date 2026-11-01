@@ -1,7 +1,5 @@
 'use client';
 
-import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
-import PrivacyTipOutlinedIcon from '@mui/icons-material/PrivacyTipOutlined';
 import {
   Alert,
   AlertTitle,
@@ -14,7 +12,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../../shell/site/site-badge';
 import {
@@ -114,7 +112,7 @@ export function PhotoLinkEditor({
           border: `1px solid ${color.border.default}`,
         }}
       >
-        <PrivacyTipOutlinedIcon
+        <Icons.shieldAlert
           sx={{
             fontSize: 17,
             mt: '1px',
@@ -228,7 +226,7 @@ export function PhotoLinkEditor({
             fontWeight: 500,
           }}
         >
-          <OpenInNewRoundedIcon sx={{ fontSize: 15 }} />
+          <Icons.externalLink sx={{ fontSize: 15 }} />
           {`還沒有圖片網址？到 ${PHOTO_UPLOAD_HOST.name} 上傳`}
         </Link>
         <Typography

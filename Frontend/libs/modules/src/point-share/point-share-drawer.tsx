@@ -3,15 +3,6 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
-import AlternateEmailRoundedIcon from '@mui/icons-material/AlternateEmailRounded';
-import ChatRoundedIcon from '@mui/icons-material/ChatRounded';
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import FacebookRoundedIcon from '@mui/icons-material/FacebookRounded';
-import FileDownloadRoundedIcon from '@mui/icons-material/FileDownloadRounded';
-import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded';
-import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
-import XIcon from '@mui/icons-material/X';
 import {
   Box,
   Button,
@@ -37,6 +28,7 @@ import {
   designTokens,
   displayTextSize,
   safeAreaBottom,
+  Icons,
 } from '@rescue-frontend/ui';
 
 const { color, radius } = designTokens;
@@ -48,10 +40,10 @@ interface PointShareDrawerProps {
 }
 
 const channelIcons: Record<PointShareChannel, ReactElement> = {
-  line: <ChatRoundedIcon />,
-  facebook: <FacebookRoundedIcon />,
-  threads: <AlternateEmailRoundedIcon />,
-  x: <XIcon />,
+  line: <Icons.messageCircle />,
+  facebook: <Icons.facebookBrand />,
+  threads: <Icons.atSign />,
+  x: <Icons.xBrand />,
 };
 
 // A tile a finger can hit (prototype site-actions.jsx:1318). Five of them fit one row at 390px, each
@@ -198,7 +190,7 @@ export function PointShareDrawer({
             {target?.title ?? '分享'}
           </Typography>
           <IconButton aria-label="關閉分享" onClick={onClose} size="small">
-            <CloseRoundedIcon />
+            <Icons.close />
           </IconButton>
         </Box>
 
@@ -252,7 +244,7 @@ export function PointShareDrawer({
               </Typography>
               <Button
                 size="small"
-                startIcon={<FileDownloadRoundedIcon />}
+                startIcon={<Icons.download />}
                 onClick={() => downloadQrSvg(target.url, `${target.title}.svg`)}
                 sx={{ textTransform: 'none' }}
               >
@@ -263,7 +255,7 @@ export function PointShareDrawer({
             {canShareNatively ? (
               <Button
                 variant="contained"
-                startIcon={<IosShareRoundedIcon />}
+                startIcon={<Icons.iosShare />}
                 onClick={() => handleNativeShare()}
                 sx={{ textTransform: 'none', fontWeight: 700 }}
               >
@@ -307,11 +299,7 @@ export function PointShareDrawer({
                   </ButtonBase>
                 ))}
                 <ButtonBase onClick={handleCopy} sx={tileSx}>
-                  {copyState === 'copied' ? (
-                    <CheckRoundedIcon />
-                  ) : (
-                    <LinkRoundedIcon />
-                  )}
+                  {copyState === 'copied' ? <Icons.check /> : <Icons.link />}
                   {copyState === 'copied' ? '已複製' : '複製連結'}
                 </ButtonBase>
               </Box>

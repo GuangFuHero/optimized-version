@@ -1,6 +1,5 @@
 'use client';
 
-import MoreHorizRoundedIcon from '@mui/icons-material/MoreHorizRounded';
 import {
   ButtonBase,
   Divider,
@@ -12,7 +11,7 @@ import {
 } from '@mui/material';
 import { Fragment, useState } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import type { NeedAction } from './need-actions';
 
@@ -61,7 +60,7 @@ export function NeedActionsMenu({ needName, items, sx }: NeedActionsMenuProps) {
           ...(Array.isArray(sx) ? sx : [sx]),
         ]}
       >
-        <MoreHorizRoundedIcon sx={{ fontSize: 20 }} />
+        <Icons.ellipsis sx={{ fontSize: 20 }} />
       </ButtonBase>
 
       <Menu

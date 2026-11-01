@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box } from '@mui/material';
 
 import {
@@ -38,6 +37,7 @@ import {
   type RescueMapMarkerItem,
   type SiteRouteState,
 } from '@rescue-frontend/modules';
+import { Icons } from '@rescue-frontend/ui';
 
 export function SiteMapView() {
   return <SiteMapViewContent />;
@@ -417,7 +417,7 @@ function SiteMapViewportDataLayer({
   const stationDetailSecondaryAction = useCallback(
     (marker: RescueMapMarkerItem) => ({
       label: '分享',
-      icon: <ShareRoundedIcon />,
+      icon: <Icons.share />,
       onClick: () => onOpenShareTarget(createCurrentPointShareTarget(marker)),
     }),
     [createCurrentPointShareTarget, onOpenShareTarget],

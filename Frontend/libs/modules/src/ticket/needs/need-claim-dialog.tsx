@@ -1,10 +1,5 @@
 'use client';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useQuery } from 'urql';
@@ -14,7 +9,12 @@ import {
   TicketFieldsFragmentDoc,
   useFragment,
 } from '@rescue-frontend/data-access';
-import { designTokens, Dialog, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  Dialog,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { formatTicketAddress } from '../address';
 import { formatNeedHeadcount, resolveNeedClaim } from './need-claim';
@@ -109,7 +109,7 @@ export function NeedClaimDialog({
       onConfirm={onConfirm}
       title="確認承接這一筆？"
       confirmLabel={submitting ? '承接中...' : '確認承接'}
-      confirmIcon={<VolunteerActivismRoundedIcon />}
+      confirmIcon={<Icons.handHeart />}
       confirmDisabled={!claim || settled}
       cancelLabel={settled || dialog.box === 'gone' ? '關閉' : '取消'}
       error={dialog.refusal}
@@ -136,13 +136,13 @@ export function NeedClaimDialog({
               {need.taskName}
             </Typography>
             <Stack spacing={0.5} sx={{ mt: 0.75, color: color.fg.neutral.subtle }}>
-              <DetailLine icon={<AssignmentRoundedIcon />}>{fields.title}</DetailLine>
+              <DetailLine icon={<Icons.clipboardList />}>{fields.title}</DetailLine>
               {/* An address, or plainly none: never the description passed off as one — the
                   prototype's own 2026-09-10 fix (site-detail.jsx:368-373). */}
-              <DetailLine icon={<PlaceRoundedIcon />}>{address ?? '未填地址'}</DetailLine>
+              <DetailLine icon={<Icons.pin />}>{address ?? '未填地址'}</DetailLine>
               {/* As the API returns it: masked where this viewer may not see it. */}
-              {contact ? <DetailLine icon={<PersonRoundedIcon />}>{contact}</DetailLine> : null}
-              <DetailLine icon={<GroupsRoundedIcon />}>
+              {contact ? <DetailLine icon={<Icons.person />}>{contact}</DetailLine> : null}
+              <DetailLine icon={<Icons.users />}>
                 {formatNeedHeadcount(need, claim.kind)}
               </DetailLine>
             </Stack>

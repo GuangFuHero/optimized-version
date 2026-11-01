@@ -23,7 +23,8 @@ import {
 import type { ReactNode } from 'react';
 
 import { Muted } from '../../../admin/shared/muted';
-import { getStationTypeIcon, type StationTypeValue } from '../../type-options';
+import { getStationTypeIcon } from '../../station-type-icon';
+import { type StationTypeValue } from '../../type-options';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
 import { StatusBadge, TypeChip } from './station-cells';
 import type { StationRow } from './model/station-row';

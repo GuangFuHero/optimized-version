@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
@@ -177,7 +176,7 @@ function createStationEditAction(
 ): StationDetailActionProps {
   return {
     label: '修改建議',
-    icon: <EditRoundedIcon />,
+    icon: <Icons.pencil />,
     onClick: () => openStationSuggestion(marker.id),
   };
 }

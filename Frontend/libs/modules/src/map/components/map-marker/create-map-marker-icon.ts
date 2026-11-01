@@ -57,9 +57,10 @@ function buildMarkerGlyphSvg(
 ): string {
   // A station shows its type's icon, at the prototype's 19px in the 36px pin (`site-map.jsx`
   // markerGlyphName): whether it is a shelter or temporary no longer picks one of two drawn shapes.
+  // A Lucide icon is drawn in lines, so the colour is its stroke, at Lucide's own width and joins.
   if (item.detailType === 'station') {
     return [
-      `<svg x="8.5" y="8.5" width="19" height="19" viewBox="0 0 24 24" fill="${glyphFill}">`,
+      `<svg x="8.5" y="8.5" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="${glyphFill}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`,
       stationTypeGlyphShapes(item.stationMeta?.type),
       '</svg>',
     ].join('');

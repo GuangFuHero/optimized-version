@@ -1,12 +1,12 @@
 'use client';
 
-import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
 import { Box, ButtonBase, type SxProps, type Theme } from '@mui/material';
 
 import {
   designTokens,
   displayTextSize,
   safeAreaBottom,
+  Icons,
 } from '@rescue-frontend/ui';
 
 import { openHelpRequest } from './open-help-request';
@@ -48,7 +48,7 @@ function RequestHelpPill({
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      <HandshakeRoundedIcon sx={{ fontSize: iconSize }} />
+      <Icons.handshake sx={{ fontSize: iconSize }} />
       請求協助
     </ButtonBase>
   );

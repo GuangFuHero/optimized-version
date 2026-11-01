@@ -2,8 +2,6 @@
 
 import { useMemo, type ReactNode } from 'react';
 
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Alert, Box, Stack, Typography } from '@mui/material';
 import { useQuery } from 'urql';
 
@@ -25,7 +23,7 @@ import { NeedRow, readTicketNeeds, useNeedClaim } from '../needs';
 import { PhotoThumb } from '../photos';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -226,7 +224,7 @@ export function TaskMatchTicketDetailsPanel({
       {needs.length > 0 || isTicketFetching || canAddNeed ? (
         <SectionCard
           title={needs.length > 0 ? `需求（${needs.length} 筆）` : '需求'}
-          icon={<VolunteerActivismRoundedIcon sx={{ fontSize: 18 }} />}
+          icon={<Icons.handHeart sx={{ fontSize: 18 }} />}
         >
           {/* Under the title, not beside it: on a phone the two squeezed each other onto two lines. */}
           {needs.length > 1 ? (
@@ -270,7 +268,7 @@ export function TaskMatchTicketDetailsPanel({
           prototype does not show. */}
       <SectionCard
         title="任務資訊"
-        icon={<InfoOutlinedIcon sx={{ fontSize: 18 }} />}
+        icon={<Icons.info sx={{ fontSize: 18 }} />}
       >
         <Stack spacing={1.25}>
           <DetailRow

@@ -1,8 +1,5 @@
 'use client';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
-import HowToRegRoundedIcon from '@mui/icons-material/HowToRegRounded';
 import { Box, Stack, Typography } from '@mui/material';
 import { useCallback, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from 'urql';
@@ -13,7 +10,12 @@ import {
   TicketFieldsFragmentDoc,
   useFragment,
 } from '@rescue-frontend/data-access';
-import { designTokens, Dialog, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  Dialog,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { stopRecruitingErrorMessage } from './claim-error';
 import { canStopRecruiting } from './need-actions';
@@ -181,7 +183,7 @@ export function StopRecruitingDialog({
       onConfirm={onConfirm}
       title="停止招募這筆需求？"
       confirmLabel={submitting ? '停止中...' : '停止招募'}
-      confirmIcon={<HowToRegRoundedIcon />}
+      confirmIcon={<Icons.userCheck />}
       confirmDisabled={!need || settled}
       cancelLabel={settled || dialog.box === 'gone' ? '關閉' : '取消'}
       error={dialog.refusal}
@@ -211,10 +213,10 @@ export function StopRecruitingDialog({
               spacing={0.5}
               sx={{ mt: 0.75, color: color.fg.neutral.subtle }}
             >
-              <DetailLine icon={<AssignmentRoundedIcon />}>
+              <DetailLine icon={<Icons.clipboardList />}>
                 {fields.title}
               </DetailLine>
-              <DetailLine icon={<GroupsRoundedIcon />}>{headcount}</DetailLine>
+              <DetailLine icon={<Icons.users />}>{headcount}</DetailLine>
             </Stack>
           </>
         ) : (

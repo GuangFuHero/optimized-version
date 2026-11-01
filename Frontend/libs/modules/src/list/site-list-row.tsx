@@ -1,17 +1,18 @@
 'use client';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
-import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
-import ShieldRoundedIcon from '@mui/icons-material/Shield';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  RowAction,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { SiteBadge } from '../shell/site/site-badge';
 import { resolveStationAvailability } from '../station/availability';
-import { getStationTypeIcon } from '../station/type-options';
+import { getStationTypeIcon } from '../station/station-type-icon';
 import { NeedLine, type TicketNeed } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
 import { getTicketStatusTone } from '../ticket/status';
@@ -50,7 +51,7 @@ export function SiteListRow({
   const isStation = marker.detailType === 'station';
   const TypeIcon = isStation
     ? getStationTypeIcon(marker.stationMeta?.type)
-    : AssignmentRoundedIcon;
+    : Icons.clipboardList;
   const needs =
     marker.detailType === 'ticket' ? (listedNeeds ?? marker.needs ?? []) : [];
   const availability = isStation
@@ -139,7 +140,7 @@ export function SiteListRow({
                 {/* 官方認定：只有官方站點掛 chip，非官方不掛。 */}
                 {isStation && marker.stationMeta?.isOfficial ? (
                   <SiteBadge tone="secondary" variant="subtle">
-                    <ShieldRoundedIcon sx={{ fontSize: 12 }} />
+                    <Icons.shield sx={{ fontSize: 12 }} />
                     官方
                   </SiteBadge>
                 ) : null}
@@ -147,7 +148,7 @@ export function SiteListRow({
                     front that this ticket's place is a region (ADR-281). */}
                 {marker.locationCell ? (
                   <SiteBadge tone="neutral" variant="subtle">
-                    <HexagonOutlinedIcon sx={{ fontSize: 12 }} />
+                    <Icons.hexagon sx={{ fontSize: 12 }} />
                     概略位置
                   </SiteBadge>
                 ) : null}
@@ -207,7 +208,7 @@ export function SiteListRow({
           }}
         >
           <RowAction
-            icon={<ShareRoundedIcon sx={ACTION_ICON} />}
+            icon={<Icons.share sx={ACTION_ICON} />}
             label="分享"
             onClick={onShare}
             aria-label={`分享 ${marker.title}`}

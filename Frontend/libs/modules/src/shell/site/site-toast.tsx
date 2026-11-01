@@ -1,11 +1,13 @@
 'use client';
 
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { Box, ButtonBase, Portal, Snackbar, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  RowAction,
+  Icons,
+} from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
 
@@ -62,7 +64,7 @@ export function SiteToast({
             boxShadow: shadow.lg,
           }}
         >
-          <CheckCircleRoundedIcon
+          <Icons.circleCheck
             sx={{ fontSize: 20, mt: '1px', color: color.fg.success }}
           />
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -96,7 +98,7 @@ export function SiteToast({
                 label={
                   <>
                     {action.label}
-                    <ChevronRightRoundedIcon sx={{ fontSize: 14 }} />
+                    <Icons.chevronRight sx={{ fontSize: 14 }} />
                   </>
                 }
                 sx={{ mt: 1.5, minHeight: 44 }}
@@ -114,7 +116,7 @@ export function SiteToast({
               color: color.fg.neutral.subtle,
             }}
           >
-            <CloseRoundedIcon sx={{ fontSize: 16 }} />
+            <Icons.close sx={{ fontSize: 16 }} />
           </ButtonBase>
         </Box>
       </Snackbar>

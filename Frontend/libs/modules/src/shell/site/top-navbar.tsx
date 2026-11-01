@@ -2,7 +2,6 @@
 
 import { Suspense } from 'react';
 
-import PublicRoundedIcon from '@mui/icons-material/PublicRounded';
 import { Box, Stack } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
@@ -10,6 +9,7 @@ import {
   designTokens,
   displayTextSize,
   getRescueColorScheme,
+  Icons,
 } from '@rescue-frontend/ui';
 
 import { GuangFuBrandIcon } from '../../brand';
@@ -57,7 +57,7 @@ function SiteRealmBadge() {
         whiteSpace: 'nowrap',
       }}
     >
-      <PublicRoundedIcon sx={{ fontSize: 12, color: color.fg.neutral.muted }} />
+      <Icons.globe sx={{ fontSize: 12, color: color.fg.neutral.muted }} />
       公開地圖
     </Box>
   );

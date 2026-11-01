@@ -1,11 +1,8 @@
 'use client';
 
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import LockRoundedIcon from '@mui/icons-material/LockRounded';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { ButtonBase } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import type { NeedClaim, NeedClaimKind } from './need-claim';
 
@@ -37,12 +34,12 @@ const LOOKS = {
 } as const;
 
 /** One per kind, so a kind added without an icon does not compile. */
-const ICONS: Record<NeedClaimKind, typeof CheckRoundedIcon> = {
-  mine: CheckRoundedIcon,
-  guest: LockRoundedIcon,
-  open: VolunteerActivismRoundedIcon,
-  full: VolunteerActivismRoundedIcon,
-  fulfilled: VolunteerActivismRoundedIcon,
+const ICONS: Record<NeedClaimKind, typeof Icons.check> = {
+  mine: Icons.check,
+  guest: Icons.lock,
+  open: Icons.handHeart,
+  full: Icons.handHeart,
+  fulfilled: Icons.handHeart,
 };
 
 const SIZES = {

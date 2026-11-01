@@ -1,14 +1,5 @@
 'use client';
 
-import AssignmentIndRoundedIcon from '@mui/icons-material/AssignmentIndRounded';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import DoNotDisturbOnRoundedIcon from '@mui/icons-material/DoNotDisturbOnRounded';
-import HighlightOffRoundedIcon from '@mui/icons-material/HighlightOffRounded';
-import MergeRoundedIcon from '@mui/icons-material/MergeRounded';
-import NotificationsOffRoundedIcon from '@mui/icons-material/NotificationsOffRounded';
-import ReportProblemRoundedIcon from '@mui/icons-material/ReportProblemRounded';
-import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import {
   useInfiniteQuery,
@@ -30,6 +21,7 @@ import {
   designTokens,
   displayTextSize,
   EmptyState,
+  Icons,
 } from '@rescue-frontend/ui';
 
 import { useSiteRouteState } from '../route';
@@ -65,23 +57,23 @@ const NEED_LISTS_QUERY_CONTEXT = { suspense: false } as const;
  */
 const KIND_LOOKS: Record<SiteNoticeKind, { icon: ReactNode; tone: string }> = {
   claimed: {
-    icon: <VolunteerActivismRoundedIcon />,
+    icon: <Icons.handHeart />,
     tone: color.brand.secondary.subtle,
   },
   assigned: {
-    icon: <AssignmentIndRoundedIcon />,
+    icon: <Icons.squareUser />,
     tone: color.brand.secondary.subtle,
   },
-  'need-full': { icon: <CheckCircleRoundedIcon />, tone: color.fg.success },
-  'called-off': { icon: <DoNotDisturbOnRoundedIcon />, tone: color.fg.danger },
+  'need-full': { icon: <Icons.circleCheck />, tone: color.fg.success },
+  'called-off': { icon: <Icons.circleMinus />, tone: color.fg.danger },
   // Not in the prototype, which has no notice for a duplicate review.
-  merged: { icon: <MergeRoundedIcon />, tone: color.brand.secondary.subtle },
+  merged: { icon: <Icons.merge />, tone: color.brand.secondary.subtle },
   // Not in the prototype either. A warning, not red: the ticket stands, only something in it may be
   // wrong.
-  'audit-issue': { icon: <ReportProblemRoundedIcon />, tone: color.fg.warning },
-  'role-approved': { icon: <VerifiedRoundedIcon />, tone: color.fg.success },
+  'audit-issue': { icon: <Icons.triangleAlert />, tone: color.fg.warning },
+  'role-approved': { icon: <Icons.badgeCheck />, tone: color.fg.success },
   'role-rejected': {
-    icon: <HighlightOffRoundedIcon />,
+    icon: <Icons.circleX />,
     tone: color.fg.neutral.subtle,
   },
 };
@@ -135,9 +127,9 @@ function Notice({ children }: { children: ReactNode }) {
 
 // What brings a notice, one short line each: in a phone's drawer a paragraph would not show three.
 const EMPTY_REASONS = [
-  { icon: VolunteerActivismRoundedIcon, text: '有人承接了你建立的求助' },
-  { icon: DoNotDisturbOnRoundedIcon, text: '你承接的任務有異動' },
-  { icon: VerifiedRoundedIcon, text: '你的申請有審核結果' },
+  { icon: Icons.handHeart, text: '有人承接了你建立的求助' },
+  { icon: Icons.circleMinus, text: '你承接的任務有異動' },
+  { icon: Icons.badgeCheck, text: '你的申請有審核結果' },
 ];
 
 /**
@@ -150,7 +142,7 @@ function SiteNotifyEmpty() {
     <Box role="status">
       <EmptyState
         prominent
-        icon={<NotificationsOffRoundedIcon />}
+        icon={<Icons.bellOff />}
         title="目前沒有通知"
         description="有新動態時會出現在這裡。"
         action={

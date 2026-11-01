@@ -17,11 +17,8 @@ import { Download } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import {
-  getStationTypeIcon,
-  getStationTypeLabel,
-  STATION_TYPE_OPTIONS,
-} from '../../type-options';
+import { getStationTypeIcon } from '../../station-type-icon';
+import { getStationTypeLabel, STATION_TYPE_OPTIONS } from '../../type-options';
 import {
   ExportFormatChoice,
   exportOptionSx,
