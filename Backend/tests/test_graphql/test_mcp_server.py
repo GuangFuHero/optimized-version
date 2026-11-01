@@ -17,7 +17,7 @@ from sqlalchemy import select
 from app.core.auth_cookies import access_cookie_name
 from app.core.identity import encode_act
 from app.core.permissions import Perm
-from app.core.security import create_access_token
+from app.core.security import _decode_access_payload, create_access_token
 from app.graphql.schema import schema as app_schema
 from app.main import app
 from app.models.auth import User
@@ -82,7 +82,7 @@ async def mcp_token(redis, user_uuid, role_uuid, team_uuid=None, client_id="test
     sid, _ = await SessionRepository(redis).create_session(
         str(user_uuid), "mcp", act=act, mcp_client=client_id
     )
-    return create_access_token(data={"sub": str(user_uuid)}, sid=sid, act=act)
+    return create_access_token(data={"sub": str(user_uuid)}, sid=sid, act=act, mcp=True)
 
 
 async def _role_uuid(name: str) -> str:
@@ -142,7 +142,6 @@ async def test_codemode_exposes_only_its_meta_tools(client, redis, login_user_au
             "query { ...F } fragment F on Query { reverseGeocode(lat: 1, lng: 1) { formattedAddress } }",
             "reverseGeocode",
         ),
-        ("{ a " + "{ b " * 13 + "}" * 13 + " }", "deeper"),
         ("{ currentDisaster { name } }" + " " * 20_001, "longer"),
     ],
 )
@@ -153,6 +152,16 @@ async def test_graphql_query_refuses_what_is_not_a_plain_read(client, redis, log
     async with mcp_http() as http:
         _, error = await call(http, token, "graphql_query", {"query": query})
     assert refusal in error
+
+
+async def test_graphql_query_keeps_the_endpoints_own_limits(client, redis, login_user_auth):
+    """The endpoint's own limits (here, at most 10 aliases) apply, and its error reaches the agent."""
+    user_uuid, _ = login_user_auth
+    token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
+    many = "{ " + " ".join(f"a{i}: currentDisaster {{ name }}" for i in range(11)) + " }"
+    async with mcp_http() as http:
+        result, error = await call(http, token, "graphql_query", {"query": many})
+    assert error is None and "alias" in str(result["errors"]).lower()
 
 
 @pytest.mark.parametrize(
@@ -402,6 +411,8 @@ async def test_oauth_code_pkce_token_and_refresh_open_a_backend_mcp_session(clie
         after, error = await call(http, refreshed["access_token"], "rest_get", {"path": "/api/v1/users/me"})
     assert [r.json()["error"] for r in (bad, reused, replay)] == ["invalid_grant"] * 3
     assert me["uuid"] == user_uuid and after["uuid"] == user_uuid and error is None
+    assert _decode_access_payload(tokens["access_token"])["mcp"] is True
+    assert _decode_access_payload(refreshed["access_token"])["mcp"] is True
     sessions = [
         await SessionRepository(redis).get_session(m.decode())
         for m in await redis.smembers(f"user_sessions:{user_uuid}")
@@ -467,3 +478,141 @@ async def test_admin_revoke_sessions_ends_mcp_sessions(client, redis, login_user
     )
     assert revoked.status_code == 204
     assert await _mcp_refused(token)
+
+
+# --- MCP tokens only read, outside the MCP too ------------------------------------------------
+
+
+async def _coordinator_mcp_token(redis, user_uuid) -> str:
+    return await mcp_token(redis, user_uuid, await _role_uuid("Field Coordinator"))
+
+
+def _refused(response) -> bool:
+    return response.status_code == 403 and response.json()["code"] == "mcp_read_only"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("PATCH", "/api/v1/users/me", {"name": "renamed"}),
+        ("PATCH", "/api/v1/notifications/read-all", None),
+        ("POST", "/api/v1/auth/logout-all", None),
+        ("POST", "/api/v1/auth/switch-identity", {"role_uuid": str(uuid_mod.uuid4())}),
+        ("DELETE", "/api/v1/auth/contacts/email", None),
+    ],
+)
+async def test_an_mcp_token_cannot_write_through_rest(client, redis, login_user_auth, method, path, body):
+    """Every non-GET REST call with an MCP token is refused before the endpoint runs."""
+    user_uuid, _ = login_user_auth
+    token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
+    response = await client.request(method, path, json=body, headers=auth_header(token))
+    assert _refused(response), response.text
+
+
+async def test_an_mcp_token_in_the_cookie_cannot_write_either(client, redis, login_user_auth):
+    """Carrying the token in the access cookie, with an allowed origin, changes nothing."""
+    user_uuid, _ = login_user_auth
+    token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
+    response = await client.patch(
+        "/api/v1/users/me",
+        json={"name": "renamed"},
+        cookies={access_cookie_name(): token},
+        headers={"Origin": SITE},
+    )
+    assert _refused(response)
+
+
+async def test_an_mcp_token_still_reads_and_can_end_its_own_session(client, redis, login_user_auth):
+    """GETs and GraphQL queries work from outside; `/auth/logout` ends the session."""
+    user_uuid, _ = login_user_auth
+    token = await mcp_token(redis, user_uuid, await _role_uuid("Login User"))
+    assert (await client.get("/api/v1/users/me", headers=auth_header(token))).status_code == 200
+    query = await client.post(
+        "/graphql", json={"query": "{ currentDisaster { name } }"}, headers=auth_header(token)
+    )
+    assert query.status_code == 200 and "errors" not in query.json()
+    assert (await client.post("/api/v1/auth/logout", headers=auth_header(token))).status_code == 204
+    assert (await client.get("/api/v1/users/me", headers=auth_header(token))).status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("body", "params"),
+    [
+        ({"query": 'mutation { deleteTicket(uuid: "%s") }'}, None),
+        ({"query": 'mutation M { gone: deleteTicket(uuid: "%s") }'}, None),
+        (
+            {
+                "query": 'query Q { currentDisaster { name } } mutation M { deleteTicket(uuid: "%s") }',
+                "operationName": "M",
+            },
+            None,
+        ),
+        (None, {"query": 'mutation { deleteTicket(uuid: "%s") }'}),
+    ],
+)
+async def test_an_mcp_token_cannot_run_a_mutation(
+    client, redis, coordinator_auth, sample_ticket, body, params
+):
+    """Mutations are refused however they are sent: plain, aliased, picked by name, or over GET."""
+    user_uuid, _ = coordinator_auth
+    token = await _coordinator_mcp_token(redis, user_uuid)
+    if body is not None:
+        body = {**body, "query": body["query"] % sample_ticket}
+        response = await client.post("/graphql", json=body, headers=auth_header(token))
+        assert response.status_code == 403
+        assert response.json()["errors"][0]["extensions"]["code"] == "mcp_read_only"
+    else:
+        params = {"query": params["query"] % sample_ticket}
+        response = await client.get("/graphql", params=params, headers=auth_header(token))
+        assert response.status_code >= 400
+    async with gql.test_db() as db:
+        from app.models.request import Tickets
+
+        ticket = await db.get(Tickets, uuid_mod.UUID(sample_ticket))
+        assert ticket is not None and ticket.delete_at is None
+
+
+async def test_a_normal_session_still_writes(client, redis, coordinator_auth, sample_ticket):
+    """The same mutation and REST write with an ordinary session token go through."""
+    _, web_token = coordinator_auth
+    renamed = await client.patch("/api/v1/users/me", json={"name": "renamed"}, headers=auth_header(web_token))
+    assert renamed.status_code == 200
+    mutation = {"query": f'mutation {{ deleteTicket(uuid: "{sample_ticket}") }}'}
+    deleted = await client.post("/graphql", json=mutation, headers=auth_header(web_token))
+    assert deleted.status_code == 200 and deleted.json()["data"] == {"deleteTicket": True}
+
+
+async def test_an_mcp_refresh_token_is_refused_outside_the_token_endpoint(client, redis, login_user_auth):
+    """`/auth/refresh` will not mint for an MCP session; the token still works at `/token`."""
+    user_uuid, _ = login_user_auth
+    role = await _role_uuid("Login User")
+    client_id, code, verifier, redirect, _ = await _authorize_through_consent(client, redis, user_uuid, role)
+    async with mcp_http() as http:
+        grant = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect,
+            "client_id": client_id,
+            "code_verifier": verifier,
+        }
+        tokens = (await http.post("/token", data=grant)).json()
+        refused = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+        refreshed = await http.post(
+            "/token",
+            data={
+                "grant_type": "refresh_token",
+                "client_id": client_id,
+                "refresh_token": tokens["refresh_token"],
+            },
+        )
+    assert _refused(refused)
+    assert refreshed.status_code == 200
+    assert await redis.ttl(f"mcp_client:{client_id}".encode()) > 3600
+
+
+async def test_register_is_rate_limited_and_unused_clients_expire_soon(client, redis):
+    """Registration has a per-IP allowance, and a client that never signs in is kept an hour at most."""
+    body = {"redirect_uris": ["http://127.0.0.1:9/cb"], "token_endpoint_auth_method": "none"}
+    answers = [await client.post("/register", json=body) for _ in range(11)]
+    assert [r.status_code for r in answers] == [201] * 10 + [429]
+    assert 0 < await redis.ttl(f"mcp_client:{answers[0].json()['client_id']}".encode()) <= 3600

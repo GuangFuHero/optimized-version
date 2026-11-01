@@ -7,7 +7,7 @@ from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
-from app.core.request_auth import presented_access_token
+from app.core.request_auth import presented_access_token, resolve_client_ip
 
 # Thread-safe/Async-safe context variables
 request_user_uuid: ContextVar[str | None] = ContextVar("request_user_uuid", default=None)
@@ -25,9 +25,7 @@ class AuditContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         """Intercept the HTTP request, populate context variables, and proceed."""
         # Extract IP address
-        client_ip = request.client.host if request.client else None
-        if "x-forwarded-for" in request.headers:
-            client_ip = request.headers["x-forwarded-for"].split(",")[0].strip()
+        client_ip = resolve_client_ip(request) if request.client else None
 
         # Extract the authenticated user's UUID from the token the request carries — the Bearer
         # token, or, from a browser, the access cookie (ADR-327) — read by the same rule that

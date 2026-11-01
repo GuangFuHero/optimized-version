@@ -31,8 +31,8 @@ from graphql import (
 )
 from starlette.routing import Match
 
-from app.api.v1.endpoints.auth.deps import resolve_client_ip
 from app.core import security
+from app.core.request_auth import MCP_IN_PROCESS, resolve_client_ip
 from app.graphql.schema import schema as app_schema
 from app.repositories.session_repository import SessionRepository
 
@@ -48,8 +48,8 @@ EXCLUDED_REST_PREFIXES = (
     "/api/v1/mcp",
 )
 
+# Refused before parsing; `/graphql` itself then limits depth to 10, aliases to 10 and tokens to 1000.
 MAX_DOCUMENT_CHARS = 20_000
-MAX_SELECTION_DEPTH = 12
 CALL_TIMEOUT_SECONDS = 30
 
 
@@ -62,22 +62,6 @@ def query_side_schema() -> GraphQLSchema:
     query = _live_schema().query_type
     fields = {name: field for name, field in query.fields.items() if name not in DENIED_ROOT_FIELDS}
     return GraphQLSchema(query=GraphQLObjectType(query.name, fields, description=query.description))
-
-
-def _selection_depth(selection_set, fragments: dict, seen: frozenset = frozenset()) -> int:
-    if selection_set is None:
-        return 0
-    depth = 0
-    for node in selection_set.selections:
-        if isinstance(node, FieldNode):
-            depth = max(depth, 1 + _selection_depth(node.selection_set, fragments, seen))
-        elif isinstance(node, InlineFragmentNode):
-            depth = max(depth, _selection_depth(node.selection_set, fragments, seen))
-        elif isinstance(node, FragmentSpreadNode) and node.name.value not in seen:
-            fragment = fragments.get(node.name.value)
-            inner = fragment.selection_set if fragment else None
-            depth = max(depth, _selection_depth(inner, fragments, seen | {node.name.value}))
-    return depth
 
 
 def _root_fields(selection_set, fragments: dict, seen: frozenset = frozenset()) -> set[str]:
@@ -95,7 +79,7 @@ def _root_fields(selection_set, fragments: dict, seen: frozenset = frozenset()) 
 
 
 def check_read_only_query(document: str) -> None:
-    """Refuse a document that is not purely queries, reaches a denied root field, or is too big."""
+    """Refuse a document that is not purely queries, reaches a denied root field, or is too long."""
     if len(document) > MAX_DOCUMENT_CHARS:
         raise ToolError(f"The query is longer than {MAX_DOCUMENT_CHARS} characters.")
     try:
@@ -112,8 +96,6 @@ def check_read_only_query(document: str) -> None:
         denied = _root_fields(operation.selection_set, fragments) & DENIED_ROOT_FIELDS
         if denied:
             raise ToolError(f"Not available through MCP: {', '.join(sorted(denied))}.")
-        if _selection_depth(operation.selection_set, fragments) > MAX_SELECTION_DEPTH:
-            raise ToolError(f"The query nests deeper than {MAX_SELECTION_DEPTH} levels.")
 
 
 def readable_routes(app: FastAPI) -> list[APIRoute]:
@@ -163,13 +145,20 @@ class BackendCaller:
         """Bind to the FastAPI app whose endpoints the tools call."""
         self.app = app
 
+    async def _in_process(self, scope, receive, send):
+        # Marks the request as the MCP's own; only this transport can set ASGI scope state.
+        scope = {**scope, "state": {**scope.get("state", {}), MCP_IN_PROCESS: True}}
+        await self.app(scope, receive, send)
+
     async def _headers(self) -> dict[str, str]:
         access = get_access_token()
         sid = (access.claims or {}).get("sid") if access else None
         session = await SessionRepository(self.app.state.redis).get_session(sid) if sid else None
         if session is None:
             raise ToolError("This MCP session has ended; sign in again.")
-        token = security.create_access_token({"sub": session["user_uuid"]}, sid=sid, act=session.get("act"))
+        token = security.create_access_token(
+            {"sub": session["user_uuid"]}, sid=sid, act=session.get("act"), mcp=True
+        )
         return {
             "Authorization": f"Bearer {token}",
             "X-Forwarded-For": resolve_client_ip(get_http_request()),
@@ -177,7 +166,7 @@ class BackendCaller:
 
     async def request(self, method: str, path: str, **kwargs) -> Any:
         """Send one request to the app and return its JSON body, or raise its error for the agent."""
-        transport = httpx.ASGITransport(app=self.app)
+        transport = httpx.ASGITransport(app=self._in_process)
         try:
             async with (
                 asyncio.timeout(CALL_TIMEOUT_SECONDS),
