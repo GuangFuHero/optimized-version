@@ -243,7 +243,8 @@
     const canWrite = tk.canWriteTicket ? tk.canWriteTicket(t) : true;
     const status = window.tkStatus(t);
     const readonlyStatus = !!window.TK_STATUS[status].readonly;
-    const showVerification = t.verification === "disputed" && (tk.persona.rbac === "auditor" || tk.persona.rbac === "super");
+    // 🔒 DUP-VIS-101（Sucre 11-01）：「疑似重複」前台後台所有人都看得到，不限資料檢核員／超管
+    const showVerification = t.verification === "disputed";
 
     // 動態欄位的顯示規則
     //   TM-FS-110 護欄 2：仍在用的欄位一律顯示，沒值就顯示「未填」，不擋任何操作
@@ -395,7 +396,7 @@
                 開單後 {window.TK_SETTINGS.archiveDays} 天自動封存（不論是否結案）。
                 <a href={window.TK_SETTINGS.settingsHref} style={{ marginLeft: 8, whiteSpace: "nowrap", color: "var(--color-brand-secondary-default)" }}>前往設定 ↗</a>
               </Row>
-              {showVerification && <Row label="查核狀態">{t.duplicateOf ? "疑似與另一張單重複" /* 🔒 2026-11-01：後端沒有單號，不印對方的 #T-xxxx */ : "疑似重複"}（資料檢核員／超級管理員可見）</Row>}
+              {showVerification && <Row label="查核狀態">{t.duplicateOf ? "疑似與另一張單重複" /* 🔒 2026-11-01：後端沒有單號，不印對方的 #T-xxxx */ : "疑似重複"}</Row>}
             </div>
           </Section>
         </div>

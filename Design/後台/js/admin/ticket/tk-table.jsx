@@ -63,8 +63,9 @@
               </span>
             );
           })()}
-          {t.verification === "disputed" && (tk.persona.rbac === "auditor" || tk.persona.rbac === "super") && (
-            <span title="疑似重複 · 待查核（Data Auditor／Super Admin 可見）" style={{ display: "inline-flex", alignItems: "center", gap: 3, height: 18, padding: "0 7px", borderRadius: "var(--radius-full)", background: "var(--color-bg-warning-subtle)", border: "1px solid color-mix(in srgb, var(--color-fg-warning) 35%, transparent)", font: "var(--font-data-300)", fontWeight: 700, color: "var(--color-fg-warning)", whiteSpace: "nowrap" }}>
+          {/* 🔒 DUP-VIS-101（Sucre 11-01）：「疑似重複」前台後台所有人都看得到，不限資料檢核員／超管（前台見 DUP-FE-201） */}
+          {t.verification === "disputed" && (
+            <span title="疑似重複 · 待查核" style={{ display: "inline-flex", alignItems: "center", gap: 3, height: 18, padding: "0 7px", borderRadius: "var(--radius-full)", background: "var(--color-bg-warning-subtle)", border: "1px solid color-mix(in srgb, var(--color-fg-warning) 35%, transparent)", font: "var(--font-data-300)", fontWeight: 700, color: "var(--color-fg-warning)", whiteSpace: "nowrap" }}>
               <Icon n="Flag" s={10} c="var(--color-fg-warning)" />疑似重複
             </span>
           )}
