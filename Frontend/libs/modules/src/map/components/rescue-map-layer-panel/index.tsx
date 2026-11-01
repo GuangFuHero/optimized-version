@@ -353,9 +353,11 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         sx={{
           display: { mobile: 'block', tablet: 'none' },
           '& .MuiDrawer-paper': {
-            // Solid, without the blur: it moves with the finger, and the blur of the map under it
-            // was drawn again at every move.
+            // Solid, without the theme's paper blur: it moves with the finger, and the blur of the map
+            // under it was drawn again at every move.
             bgcolor: color.bg.neutral.default,
+            backdropFilter: 'none',
+            WebkitBackdropFilter: 'none',
             borderTopLeftRadius: radius.lg,
             borderTopRightRadius: radius.lg,
             boxShadow: shadow.lg,
