@@ -18,6 +18,7 @@ import {
   Typography,
 } from '@mui/material';
 import {
+  Fragment,
   useEffect,
   useId,
   useRef,
@@ -55,9 +56,9 @@ import {
   emptyHelpRequestForm,
   emptyNeed,
   findMissingFields,
-  hasRescueNeed,
   isQuantityMissing,
   MAX_NEEDS,
+  rescueNeedRow,
   type HelpRequestForm,
   type PickedPoint,
 } from './help-request-form';
@@ -462,6 +463,7 @@ function HelpRequestFormDrawer({
   const isMissing = (key: (typeof missing)[number]['key']) =>
     touched && missingKeys.has(key);
   const lastNeed = form.needs[form.needs.length - 1];
+  const emergencyNoticeRow = rescueNeedRow(form.needs);
   const note = addressNote({
     fields: form,
     pin: form.landmark,
@@ -821,34 +823,35 @@ function HelpRequestFormDrawer({
           ) : null}
           <Stack data-field="quantity" spacing={1.5}>
             {form.needs.map((row, index) => (
-              <NeedDraftRow
-                // A row has no id of its own; removing one re-keys those after it, which only
-                // remounts their two text boxes.
-                key={index}
-                row={row}
-                index={index}
-                showIndex={form.needs.length > 1}
-                canRemove={form.needs.length > 1}
-                invalid={isMissing('needs') && !row.need}
-                quantityMissing={
-                  isMissing('quantity') && isQuantityMissing(row)
-                }
-                onChange={(next) =>
-                  set('needs')(
-                    form.needs.map((current, at) =>
-                      at === index ? next : current,
-                    ),
-                  )
-                }
-                onRemove={() =>
-                  set('needs')(form.needs.filter((_, at) => at !== index))
-                }
-              />
+              // A row has no id of its own; removing one re-keys those after it, which only
+              // remounts their two text boxes.
+              <Fragment key={index}>
+                <NeedDraftRow
+                  row={row}
+                  index={index}
+                  showIndex={form.needs.length > 1}
+                  canRemove={form.needs.length > 1}
+                  invalid={isMissing('needs') && !row.need}
+                  quantityMissing={
+                    isMissing('quantity') && isQuantityMissing(row)
+                  }
+                  onChange={(next) =>
+                    set('needs')(
+                      form.needs.map((current, at) =>
+                        at === index ? next : current,
+                      ),
+                    )
+                  }
+                  onRemove={() =>
+                    set('needs')(form.needs.filter((_, at) => at !== index))
+                  }
+                />
+                {/* Right under the row that picked someone trapped or hurt: at the top of the form,
+                    or under the last row, a phone could leave it out of sight of whoever picked it. */}
+                {index === emergencyNoticeRow ? <EmergencyCallNotice /> : null}
+              </Fragment>
             ))}
           </Stack>
-          {/* Under the kind that brings it up, as the form is read from the top down: at the top, it
-              came up out of sight of whoever picked someone trapped or hurt. */}
-          {hasRescueNeed(form.needs) ? <EmergencyCallNotice /> : null}
           {/* Offered only once the last one has its kind: not a blank second row up front. At the
               most one request files, said instead — 「再加一件」 on the ticket takes the rest. */}
           {lastNeed?.need && !canAddNeedRow(form.needs) ? (

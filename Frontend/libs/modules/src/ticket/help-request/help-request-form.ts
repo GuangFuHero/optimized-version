@@ -211,11 +211,11 @@ export function findMissingFields(form: HelpRequestForm): MissingField[] {
 }
 
 /**
- * Someone trapped or hurt: the form then shows the 119 notice, and sets no flag — as in the
- * prototype, it asks nothing about how dangerous it is.
+ * The row the 119 notice goes under: the first with someone trapped or hurt, or -1 for none. It
+ * sets no flag — as in the prototype, the form asks nothing about how dangerous it is.
  */
-export function hasRescueNeed(needs: readonly NeedDraft[]): boolean {
-  return chosenNeeds(needs).some(({ option }) => option.kind === 'rescue');
+export function rescueNeedRow(needs: readonly NeedDraft[]): number {
+  return needs.findIndex((row) => getNeedOption(row.need)?.kind === 'rescue');
 }
 
 function textOrNull(value: string): string | null {
