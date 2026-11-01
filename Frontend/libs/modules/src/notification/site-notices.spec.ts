@@ -4,7 +4,9 @@ import {
   bellLabel,
   countUnreadSiteNotices,
   notMarkedRead,
+  PAGES_READ_UNASKED,
   readSiteNotices,
+  readsNextPageUnasked,
   ticketOfNeed,
   withReadState,
   type NotificationRow,
@@ -186,6 +188,38 @@ describe('ticketOfNeed', () => {
 
   it('finds nothing for a need on neither list, given back or deleted since', () => {
     expect(ticketOfNeed('gone-need', lists)).toBeNull();
+  });
+});
+
+describe('readsNextPageUnasked', () => {
+  const nothingShown = {
+    shown: 0,
+    pagesRead: 1,
+    hasNextPage: true,
+    nextPageFailed: false,
+  };
+
+  it('reads on while the pages read show nothing and another follows', () => {
+    expect(readsNextPageUnasked(nothingShown)).toBe(true);
+  });
+
+  it('stops once something shows, at the last page, or after a read that failed', () => {
+    expect(readsNextPageUnasked({ ...nothingShown, shown: 1 })).toBe(false);
+    expect(readsNextPageUnasked({ ...nothingShown, hasNextPage: false })).toBe(
+      false,
+    );
+    expect(
+      readsNextPageUnasked({ ...nothingShown, nextPageFailed: true }),
+    ).toBe(false);
+  });
+
+  it('waits for a tap after each round of pages, then reads another round', () => {
+    const after = (pagesRead: number) =>
+      readsNextPageUnasked({ ...nothingShown, pagesRead });
+
+    expect(after(PAGES_READ_UNASKED - 1)).toBe(true);
+    expect(after(PAGES_READ_UNASKED)).toBe(false);
+    expect(after(PAGES_READ_UNASKED + 1)).toBe(true);
   });
 });
 

@@ -25,6 +25,9 @@ class TicketYMetric(str, Enum):
     net_backlog_change = "net_backlog_change"
     task_completion_distribution = "task_completion_distribution"
     duplicate_count = "duplicate_count"
+    volunteers_needed = "volunteers_needed"
+    volunteers_matched = "volunteers_matched"
+    volunteer_gap = "volunteer_gap"
 
 
 class StationYMetric(str, Enum):
@@ -33,16 +36,41 @@ class StationYMetric(str, Enum):
     station_count = "station_count"
     station_status_count = "station_status_count"
     station_freshness_trend = "station_freshness_trend"
+    operating_station_count = "operating_station_count"
+
+
+class TicketTaskType(str, Enum):
+    """A ticket's task type, for the `task_type` filter — the kinds in app.services.ticket.TASK_TYPES."""
+
+    rescue = "rescue"
+    supply = "supply"
+    medical = "medical"
+    hr = "hr"
+
+
+class TicketStatus(str, Enum):
+    """A ticket's status, for the ticket `status` filter."""
+
+    pending = "pending"
+    in_progress = "in_progress"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
+class StationStatus(str, Enum):
+    """A station's operational status, for the station `status` filter."""
+
+    active = "active"
+    temporarily_closed = "temporarily_closed"
+    permanently_closed = "permanently_closed"
 
 
 class ChartX(str, Enum):
     """How to slice the chosen y-metric (the X axis).
 
-    Omit this param entirely for a single aggregate value/pie. Whether a given value
-    is valid for a given y-metric is enforced by app.services.chart_render.resolve()
-    — an inapplicable x is silently ignored (falls back to aggregate, or to the
-    metric's forced grouping if it has one), never rejected. See GET
-    /api/v1/analytics/catalog for which x values are valid per y-metric.
+    Omit this param entirely for a single aggregate value/pie. A value the chosen y-metric
+    does not allow is a 422. See GET /api/v1/analytics/catalog for which x values are
+    valid per y-metric.
     """
 
     date = "date"
@@ -50,7 +78,7 @@ class ChartX(str, Enum):
 
 
 class ChartXGranularity(str, Enum):
-    """Bucket size when x=date. Ignored otherwise."""
+    """Bucket size when x=date. Ignored otherwise, and by a metric whose catalog entry lacks it."""
 
     day = "day"
     week = "week"
@@ -60,9 +88,8 @@ class ChartType(str, Enum):
     """Plotly chart shape.
 
     See https://plotly.com/python/bar-charts/, https://plotly.com/python/line-charts/,
-    https://plotly.com/python/pie-charts/. Unlike `x`, an unsupported chart_type for
-    the chosen y-metric is a 400, not silently ignored — see GET /analytics/catalog
-    for each metric's allowed_chart_types.
+    https://plotly.com/python/pie-charts/. An unsupported chart_type for the chosen
+    y-metric is a 400 — see GET /analytics/catalog for each metric's allowed_chart_types.
     """
 
     bar = "bar"
@@ -116,7 +143,9 @@ class ChartResponse(BaseModel):
     The frontend owns the element and its size; nothing in here is HTML or script.
     """
 
-    data: list[dict[str, Any]] = Field(description="Plotly traces (https://plotly.com/javascript/reference/).")
+    data: list[dict[str, Any]] = Field(
+        description="Plotly traces (https://plotly.com/javascript/reference/)."
+    )
     layout: dict[str, Any] = Field(description="Plotly layout, with `style` and `layout_overrides` applied.")
     config: dict[str, Any] = Field(description="Plotly config: modebar visibility and responsive resizing.")
 
@@ -136,7 +165,7 @@ class DataResponse(BaseModel):
     x: str | None = Field(
         description="The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' "
         "(the two metrics with a built-in grouping), or null for one aggregate. "
-        "It can differ from the requested `x`, which is ignored where it doesn't apply."
+        "It differs from the request only when `x` is omitted on a metric with a built-in grouping."
     )
     x_values: list[str | datetime | None] = Field(
         description="Axis values in display order: bucket starts as wall-clock time in the request's `tz`, "
@@ -149,9 +178,7 @@ class DataResponse(BaseModel):
 class ValueResponse(BaseModel):
     """A metric's single ungrouped aggregate — the number a KPI card shows."""
 
-    value: int | float = Field(
-        description="In the metric's catalog `unit`; completion_rate is 0–100."
-    )
+    value: int | float = Field(description="In the metric's catalog `unit`; completion_rate is 0–100.")
 
 
 class YMetricSpec(BaseModel):
@@ -167,24 +194,61 @@ class YMetricSpec(BaseModel):
     allowed_x: list[str] = Field(
         description="Valid values for the `x` query param on this y-metric: any of "
         "'date', 'category', 'none' (aggregate/no grouping — omit `x` entirely). An "
-        "`x` outside this list is silently ignored (falls back to 'none', or to this "
-        "metric's forced value if 'none' isn't in the list), never rejected with 400."
+        "`x` outside this list is rejected with 422; omitting `x` gives 'none', or this "
+        "metric's forced value if 'none' isn't in the list."
+    )
+    allowed_x_granularities: list[str] = Field(
+        description="Bucket sizes `x_granularity` can take for this y-metric's `x=date` trend. A "
+        "size outside this list is not rejected: the trend is drawn at the first one listed."
     )
     default_chart_type: str = Field(description="chart_type used when the param is omitted.")
     allowed_chart_types: list[str] = Field(
-        description="Valid values for `chart_type` on this y-metric — unlike `x`, an "
-        "unsupported chart_type is rejected with 400."
+        description="Valid values for `chart_type` on this y-metric; an unsupported one is rejected with 400."
     )
     requires_date_range: bool = Field(
         description="When true, `start_date` and `end_date` are mandatory for this "
-        "y-metric and omitting either is a 400 — the underlying query is too expensive "
-        "to run unbounded. Currently only `duplicate_count`."
+        "y-metric and omitting either is a 400. No metric needs it now; the field stays "
+        "so existing clients keep reading it."
     )
     max_range_days: int | None = Field(
         default=None,
-        description="Widest allowed span between `start_date` and `end_date` for this "
-        "y-metric, in days; a wider range is a 400. Null means no limit. Clamp the date "
-        "picker to this instead of waiting for the error.",
+        description="Most days, both ends included, between `start_date` and `end_date` for this "
+        "y-metric's `x=date` trend; a longer range is a 400. Null means no limit. It applies "
+        "whether or not `requires_date_range` is set, so read it on its own to clamp the date picker.",
+    )
+
+
+class FilterOption(BaseModel):
+    """One allowed value of a filter, with the zh-TW name to show for it."""
+
+    value: str = Field(description="What to send as the query param.")
+    label: str = Field(description="Display name (zh-TW); the value itself when it has no glossary entry.")
+
+
+class AreaTown(BaseModel):
+    """A 鄉鎮市區 and the 村里 in it."""
+
+    town: str
+    villages: list[str]
+
+
+class AreaCounty(BaseModel):
+    """A 縣市 and the 鄉鎮市區 in it."""
+
+    county: str
+    towns: list[AreaTown]
+
+
+class DomainFilters(BaseModel):
+    """The values a domain's filter params accept, drawn from the rows the caller may chart."""
+
+    types: list[FilterOption] = Field(
+        description="Values for `task_type` (tickets) or `station_type` (stations)."
+    )
+    statuses: list[FilterOption] = Field(description="Values for `status`.")
+    areas: list[AreaCounty] = Field(
+        description="Values for `county`, `town` and `village`. A 村里 name can repeat across "
+        "towns, so send `town` (and `county`) with it to pin one."
     )
 
 
@@ -193,6 +257,9 @@ class CatalogResponse(BaseModel):
 
     tickets: dict[str, YMetricSpec]
     stations: dict[str, YMetricSpec]
+    filters: dict[str, DomainFilters] = Field(
+        description="Allowed filter values per domain ('tickets', 'stations')."
+    )
     default_style: ChartStyle = Field(
         description="What the chart endpoints render with when `style` is omitted."
     )

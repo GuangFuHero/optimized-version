@@ -19,7 +19,7 @@ import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawe
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from '../map/constants';
 import { countDetailOpenings } from '../map/detail-openings';
 import { useRescueMapController } from '../map/hooks/use-rescue-map-controller';
-import type { RescueMapMarkerItem } from '../map/types';
+import type { RescueMapGoneTicket, RescueMapMarkerItem } from '../map/types';
 import {
   createPointShareTarget,
   pointForMetadata,
@@ -38,9 +38,16 @@ import { useAuthSession } from '../session/auth-session';
 import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { resolveTicketSearch } from '../ticket/ticket-search';
-import { usePaginatedRescueMapMarkers } from '../map/site';
+import {
+  readLinkedSelection,
+  useLinkedTicketLookup,
+  usePaginatedRescueMapMarkers,
+} from '../map/site';
 import { SiteListRow } from './site-list-row';
 import {
+  countFloor,
+  listCountLabel,
+  listPaging,
   listTickets,
   pageFoldedAway,
   showsClosedTickets,
@@ -69,14 +76,15 @@ export function SiteListView() {
   const {
     markers: sourceMarkers,
     ticketQuery,
+    error,
     isFetching,
     hasFetchedOnce,
     hasNextPage,
     loadNextPage,
     pageIds,
-    loadTicketMarker,
     replaceTicket,
   } = usePaginatedRescueMapMarkers(state);
+  const lookUpLinkedTicket = useLinkedTicketLookup();
 
   const controller = useRescueMapController({
     routeState: state,
@@ -114,18 +122,31 @@ export function SiteListView() {
     marker: RescueMapMarkerItem;
     needs?: ListedTicket['needs'];
   }[] = ticketList?.tickets ?? controller.markers.map((marker) => ({ marker }));
-  // Past a page that folded away entirely, only finished tickets are left to fetch (含已滿額 off).
-  const canLoadMore =
-    hasNextPage && !(ticketList && pageFoldedAway(pageIds, ticketList.tickets));
+  // Past a page that folded away entirely, only finished tickets are left to fetch (含已滿額 off):
+  // where the list stops paging, and which of its counts are floors.
+  const { canLoadMore, countMore, fullMore } = listPaging({
+    hasNextPage,
+    pageFolded: Boolean(
+      ticketList && pageFoldedAway(pageIds, ticketList.tickets),
+    ),
+    foldsFullNeeds: !showFullNeeds && !closedTicketsAsked,
+    loading: isFetching || !hasFetchedOnce,
+  });
+  // The first page failed — or the first after a filter or a search reloaded the list — so nothing
+  // is loaded: neither 共 0 nor 沒有符合條件的資料 would be true.
+  const loadFailed = Boolean(error) && sourceMarkers.length === 0;
   const searchTooShort =
     dataType === 'ticket' &&
     resolveTicketSearch(state.search).kind === 'too-short';
 
   // A linked ticket that no loaded page holds — the list loads a page at a time — fetched on its
-  // own so its drawer still opens.
-  const [unlistedMarker, setUnlistedMarker] =
-    useState<RescueMapMarkerItem | null>(null);
-  // The last selection seen in the list. One that drops out of it afterwards was filtered out.
+  // own so its drawer still opens; or, when the backend says it is not there, what its drawer shows
+  // instead (ADR-444).
+  const [unlistedItem, setUnlistedItem] = useState<
+    RescueMapMarkerItem | RescueMapGoneTicket | null
+  >(null);
+  // The last selection seen in the list, or opened beside it. One that drops out of it afterwards was
+  // filtered out or found deleted, and its drawer shuts, without asking again.
   const listedSelectionRef = useRef<string | undefined>(undefined);
 
   const selectedMarker = useMemo(
@@ -133,10 +154,8 @@ export function SiteListView() {
       controller.markers.find(
         (marker) => marker.id === controller.selectedMarkerId,
       ) ??
-      (unlistedMarker?.id === controller.selectedMarkerId
-        ? unlistedMarker
-        : null),
-    [controller.markers, controller.selectedMarkerId, unlistedMarker],
+      (unlistedItem?.id === controller.selectedMarkerId ? unlistedItem : null),
+    [controller.markers, controller.selectedMarkerId, unlistedItem],
   );
 
   // A ticket found gone (deleted) leaves the list — and, opened from a link past the loaded
@@ -145,7 +164,7 @@ export function SiteListView() {
   const showReloadedTicket = useCallback(
     (ticketUuid: string, reloaded: ReloadedTicket | null) => {
       if (!reloaded) {
-        setUnlistedMarker((current) =>
+        setUnlistedItem((current) =>
           current?.id === ticketUuid ? null : current,
         );
       }
@@ -155,8 +174,9 @@ export function SiteListView() {
     [replaceTicket],
   );
 
-  const [displayMarker, setDisplayMarker] =
-    useState<RescueMapMarkerItem | null>(selectedMarker);
+  const [displayMarker, setDisplayMarker] = useState<
+    RescueMapMarkerItem | RescueMapGoneTicket | null
+  >(selectedMarker);
   const [{ open: detailOpen, openings: detailOpenings }, setDetailOpen] =
     useReducer(countDetailOpenings, {
       open: Boolean(selectedMarker),
@@ -183,7 +203,11 @@ export function SiteListView() {
   // document-metadata.ts): picking a card here changes only `?id=`, which the server's
   // generateMetadata never sees.
   useEffect(() => {
-    const point = pointForMetadata(controller.selectedMarkerId, selectedMarker);
+    // A gone ticket names nothing: the list's own title, as with nothing open.
+    const point =
+      selectedMarker?.detailType === 'gone-ticket'
+        ? null
+        : pointForMetadata(controller.selectedMarkerId, selectedMarker);
 
     if (point === 'reading') {
       return;
@@ -216,7 +240,8 @@ export function SiteListView() {
       return;
     }
 
-    if (unlistedMarker?.id === selectedId) {
+    if (unlistedItem?.id === selectedId) {
+      listedSelectionRef.current = selectedId;
       return;
     }
 
@@ -226,25 +251,46 @@ export function SiteListView() {
     };
 
     // Listed before and gone now: a filter left it out, and the drawer goes with it. Never listed:
-    // a link to a ticket past the loaded pages, looked up on its own. Stations are not looked up.
-    if (dataType !== 'ticket' || listedSelectionRef.current === selectedId) {
+    // a link to a ticket past the loaded pages, or one not there at all, looked up on its own — only
+    // the backend says it is gone (ADR-444), but for a link cut short, which names no ticket at all.
+    // Stations are not looked up.
+    const linkedSelection = readLinkedSelection({
+      selectedId,
+      dataType,
+      seenLoaded: listedSelectionRef.current === selectedId,
+    });
+
+    if (linkedSelection.kind === 'let-go') {
       clearSelection();
+      return;
+    }
+
+    if (linkedSelection.kind === 'replace') {
+      controller.setSelectedMarkerId(linkedSelection.uuid);
+      return;
+    }
+
+    if (linkedSelection.kind === 'gone') {
+      setUnlistedItem(linkedSelection.ticket);
       return;
     }
 
     let cancelled = false;
 
-    void loadTicketMarker(selectedId).then((marker) => {
+    void lookUpLinkedTicket(selectedId).then((linked) => {
       if (cancelled) {
         return;
       }
 
-      if (marker) {
-        setUnlistedMarker(marker);
-        return;
+      if (linked.kind === 'ticket') {
+        setUnlistedItem(linked.marker);
+      } else if (linked.kind === 'replace') {
+        controller.setSelectedMarkerId(linked.uuid);
+      } else if (linked.kind === 'gone') {
+        setUnlistedItem(linked.ticket);
+      } else {
+        clearSelection();
       }
-
-      clearSelection();
     });
 
     return () => {
@@ -254,8 +300,8 @@ export function SiteListView() {
     dataType,
     hasFetchedOnce,
     isFetching,
-    loadTicketMarker,
-    unlistedMarker,
+    lookUpLinkedTicket,
+    unlistedItem,
     controller.markers,
     controller.selectedMarkerId,
     controller.setSelectedMarkerId,
@@ -308,7 +354,7 @@ export function SiteListView() {
   // card does; one it does not — past the loaded pages, or left out by a filter — as a linked one does.
   const openBuildingTicket = (marker: RescueMapMarkerItem) => {
     if (!controller.markers.some((listed) => listed.id === marker.id)) {
-      setUnlistedMarker(marker);
+      setUnlistedItem(marker);
     }
 
     controller.setSelectedMarkerId(marker.id);
@@ -387,17 +433,26 @@ export function SiteListView() {
             direction="row"
             sx={{ ml: 'auto', alignItems: 'center', gap: 1.5 }}
           >
-            {/* The ticket side lists needs, so it counts them: the count matches the lines shown. */}
-            <Typography
-              sx={{
-                fontSize: displayTextSize[13],
-                color: color.fg.neutral.subtle,
-              }}
-            >
-              {ticketList
-                ? `共 ${ticketList.needCount} 筆需求`
-                : `共 ${controller.markers.length} 筆`}
-            </Typography>
+            {/* The ticket side lists needs, so it counts them: the count matches the lines shown.
+                Either side counts the loaded pages, so while the list can load more, or a page is on its
+                way, it is a floor (N+). */}
+            {loadFailed ? null : (
+              <Typography
+                sx={{
+                  fontSize: displayTextSize[13],
+                  color: color.fg.neutral.subtle,
+                }}
+              >
+                {ticketList
+                  ? listCountLabel(ticketList.needCount, {
+                      more: countMore,
+                      what: '需求',
+                    })
+                  : listCountLabel(controller.markers.length, {
+                      more: countMore,
+                    })}
+              </Typography>
+            )}
             {ticketList &&
             ticketList.fullNeedCount > 0 &&
             !closedTicketsAsked ? (
@@ -409,7 +464,8 @@ export function SiteListView() {
                     <VisibilityOffRoundedIcon sx={ACTION_ICON} />
                   )
                 }
-                label={`含已滿額（${ticketList.fullNeedCount}）`}
+                // Pages left unloaded once the list stops hold finished tickets, all full needs.
+                label={`含已滿額（${countFloor(ticketList.fullNeedCount, fullMore)}）`}
                 aria-pressed={showFullNeeds}
                 onClick={() => setShowFullNeeds((current) => !current)}
                 // Greyed while off, as the prototype has it — but in readable greys, since it
@@ -454,10 +510,23 @@ export function SiteListView() {
               as empty between keystrokes. Nor while a later page may still list something: the
               rows so far may all have folded away (含已滿額), and only the sentinel below can ask
               for the next page. */}
-          {listRows.length === 0 &&
-          hasFetchedOnce &&
-          !isFetching &&
-          !canLoadMore ? (
+          {loadFailed ? (
+            <Stack
+              sx={{
+                height: '100%',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: color.fg.neutral.muted,
+              }}
+            >
+              <Typography role="alert" sx={{ fontSize: displayTextSize[14] }}>
+                讀不到列表，請重新整理頁面後再試一次。
+              </Typography>
+            </Stack>
+          ) : listRows.length === 0 &&
+            hasFetchedOnce &&
+            !isFetching &&
+            !canLoadMore ? (
             <Stack
               sx={{
                 height: '100%',
@@ -542,6 +611,7 @@ export function SiteListView() {
                 : undefined
             }
             stationLayout="site"
+            goneTicketReturnLabel="回到列表"
           />
         </Box>
       </Box>
@@ -592,6 +662,7 @@ export function SiteListView() {
               : undefined
           }
           stationLayout="site"
+          goneTicketReturnLabel="回到列表"
         />
       </Drawer>
 

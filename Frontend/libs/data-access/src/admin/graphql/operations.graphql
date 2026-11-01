@@ -11,13 +11,23 @@ fragment AdminTicketFields on TicketType {
   status
   priority
   taskType
-  auditStatus
   contactName
   contactEmail
   contactPhone
   createdBy
   createdAt
   updatedAt
+  disasterTypes
+  locationCell
+  buildingMapUuid
+  secondaryLocation {
+    county
+    town
+    floor
+  }
+  viewerCanEdit
+  viewerCanDelete
+  viewerCanViewHistory
 }
 fragment AdminTaskFields on TicketTaskType {
   uuid
@@ -31,9 +41,12 @@ fragment AdminTaskFields on TicketTaskType {
   source
   createdAt
   updatedAt
+  assignedCount
+  recruitingStoppedAt
   assignments {
     uuid
     actorUuid
+    actorName
     role
     status
     assignedAt
@@ -82,6 +95,9 @@ query AdminTickets(
   $status: String
   $priority: String
   $q: String
+  $needType: String
+  $disasterType: String
+  $zoom: Float
   $skip: Int = 0
   $limit: Int = 50
 ) {
@@ -90,11 +106,34 @@ query AdminTickets(
     status: $status
     priority: $priority
     q: $q
+    needType: $needType
+    disasterType: $disasterType
+    zoom: $zoom
     skip: $skip
     limit: $limit
   ) {
     items {
       ...AdminTicketFields
+      # The board's row: the street line under the title, the 照片 count and the 指派 Team cell.
+      secondaryLocation {
+        fullAddress
+        landmarkNote
+      }
+      photos {
+        uuid
+      }
+      responsibleTeams {
+        uuid
+        name
+      }
+      # The 疑似重複 tag: null unless the viewer holds ai_duplicate.view.
+      verificationStatus {
+        state
+        duplicateOf {
+          uuid
+          title
+        }
+      }
       tasks {
         ...AdminTaskFields
       }
@@ -104,9 +143,94 @@ query AdminTickets(
     }
   }
 }
+query AdminTicketMapPins(
+  $bounds: BoundsInput
+  $status: String
+  $priority: String
+  $q: String
+  $needType: String
+  $disasterType: String
+  $zoom: Float
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  tickets(
+    bounds: $bounds
+    status: $status
+    priority: $priority
+    q: $q
+    needType: $needType
+    disasterType: $disasterType
+    zoom: $zoom
+    skip: $skip
+    limit: $limit
+  ) {
+    items {
+      uuid
+      title
+      geometry
+      status
+      priority
+      locationCell
+      buildingMapUuid
+      secondaryLocation {
+        county
+        town
+        fullAddress
+        landmarkNote
+      }
+    }
+    pageInfo {
+      totalCount
+    }
+  }
+}
+query AdminTicketsExtent(
+  $status: String
+  $priority: String
+  $q: String
+  $needType: String
+  $disasterType: String
+) {
+  ticketsExtent(
+    status: $status
+    priority: $priority
+    q: $q
+    needType: $needType
+    disasterType: $disasterType
+  ) {
+    count
+    minLat
+    maxLat
+    minLng
+    maxLng
+  }
+}
+query AdminTicketStats {
+  ticketStats {
+    total
+    pending
+    inProgress
+    completed
+    cancelled
+    gapPeople
+    gapNeeds
+  }
+}
 query AdminTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...AdminTicketFields
+    responsibleTeams {
+      uuid
+      name
+    }
+    verificationStatus {
+      state
+      duplicateOf {
+        uuid
+        title
+      }
+    }
     secondaryLocation {
       fullAddress
       county
@@ -122,6 +246,14 @@ query AdminTicket($uuid: UUID!) {
       floor
       room
       landmarkNote
+      locationType
+      buildingSection
+      spaceDescription
+      victimSpace
+      accessStatus
+      poleId
+      poleType
+      poleNote
     }
     photos {
       uuid
@@ -130,6 +262,12 @@ query AdminTicket($uuid: UUID!) {
     }
     tasks {
       ...AdminTaskFields
+      # The drawer's 指派承接 and its × on each person: ticket.assign on this need, and on each place.
+      viewerCanAssign
+      assignments {
+        uuid
+        viewerCanUnassign
+      }
       properties {
         uuid
         propertyName
@@ -250,6 +388,9 @@ query AdminReverseGeocode($lat: Float!, $lng: Float!) {
     floor
     room
     addressToken
+    lat
+    lng
+    buildingSection
   }
 }
 query AdminStationReview($uuid: UUID!) {
@@ -423,6 +564,14 @@ mutation AdminCreateTicket($input: CreateTicketInput!) {
         ...AdminTicketFields
       }
     }
+    ... on DuplicatesSuspected {
+      suspects {
+        draftRef
+        relatedKind
+        relatedUuid
+        relatedTicketUuid
+      }
+    }
   }
 }
 mutation AdminUpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
@@ -432,21 +581,6 @@ mutation AdminUpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
 }
 mutation AdminDeleteTicket($uuid: UUID!) {
   deleteTicket(uuid: $uuid)
-}
-mutation AdminAuditTicket(
-  $uuid: UUID!
-  $status: AuditVerdict!
-  $contentHash: String!
-  $note: String
-) {
-  auditTicket(
-    uuid: $uuid
-    status: $status
-    contentHash: $contentHash
-    note: $note
-  ) {
-    ...AdminTicketFields
-  }
 }
 mutation AdminSetTicketDisasterDetails(
   $uuid: UUID!
@@ -458,12 +592,26 @@ mutation AdminSetTicketDisasterDetails(
     value
   }
 }
-mutation AdminCreateTicketTask($input: CreateTicketTaskInput!) {
-  createTicketTask(input: $input) {
+mutation AdminCreateTicketTask(
+  $input: CreateTicketTaskInput!
+  $acknowledgedDuplicateOf: String
+) {
+  createTicketTask(
+    input: $input
+    acknowledgedDuplicateOf: $acknowledgedDuplicateOf
+  ) {
     __typename
     ... on TicketTaskCreated {
       task {
         ...AdminTaskFields
+      }
+    }
+    ... on DuplicatesSuspected {
+      suspects {
+        draftRef
+        relatedKind
+        relatedUuid
+        relatedTicketUuid
       }
     }
   }
@@ -499,6 +647,24 @@ mutation AdminUpdateTaskAssignment(
     status
     updatedAt
   }
+}
+mutation AdminStopRecruiting($taskUuid: UUID!) {
+  stopRecruiting(taskUuid: $taskUuid) {
+    ...AdminTaskFields
+  }
+}
+mutation AdminDeleteTicketTask($uuid: UUID!) {
+  deleteTicketTask(uuid: $uuid)
+}
+mutation AdminAttachTicketPhoto($ticketUuid: UUID!, $url: String!) {
+  attachTicketPhoto(ticketUuid: $ticketUuid, url: $url) {
+    uuid
+    url
+    createdAt
+  }
+}
+mutation AdminDetachTicketPhoto($uuid: UUID!) {
+  detachTicketPhoto(uuid: $uuid)
 }
 mutation AdminUnassignTaskActor($uuid: UUID!) {
   unassignTaskActor(uuid: $uuid)
@@ -737,4 +903,89 @@ mutation AdminAssignZoneToTeam($input: ZoneTeamAssignmentInput!) {
 }
 mutation AdminRemoveZoneFromTeam($input: ZoneTeamAssignmentInput!) {
   removeZoneFromTeam(input: $input)
+}
+fragment AdminBuildingMapFields on BuildingMapType {
+  uuid
+  name
+  geometry
+  floorsAboveGround
+  floorsBelowGround
+  createdAt
+  updatedAt
+  floors {
+    label
+  }
+  secondaryLocation {
+    fullAddress
+    normalizationStatus
+  }
+}
+fragment AdminSpaceTicketFields on TicketType {
+  uuid
+  propertyName
+  title
+  status
+  priority
+  disasterTypes
+  updatedAt
+  secondaryLocation {
+    floor
+    room
+  }
+  tasks {
+    uuid
+    taskType
+    status
+    quantity
+    assignedCount
+  }
+}
+query AdminBuildingMaps(
+  $bounds: BoundsInput
+  $skip: Int! = 0
+  $limit: Int! = 200
+) {
+  buildingMaps(bounds: $bounds, skip: $skip, limit: $limit) {
+    items {
+      ...AdminBuildingMapFields
+    }
+    pageInfo {
+      ...AdminPageInfo
+    }
+  }
+}
+query AdminBuildingMap($uuid: UUID!) {
+  buildingMap(uuid: $uuid) {
+    ...AdminBuildingMapFields
+  }
+}
+query AdminBuildingMapTickets($buildingMapUuid: UUID!, $limit: Int! = 200) {
+  buildingMapTickets(buildingMapUuid: $buildingMapUuid, limit: $limit) {
+    ...AdminSpaceTicketFields
+  }
+}
+query AdminNormalizeAddress($address: String!, $lat: Float, $lng: Float) {
+  normalizeAddress(address: $address, lat: $lat, lng: $lng) {
+    status
+    fullAddress
+    addressToken
+    lat
+    lng
+    buildingSection
+    floor
+    room
+  }
+}
+mutation AdminCreateBuildingMap($input: CreateBuildingMapInput!) {
+  createBuildingMap(input: $input) {
+    ...AdminBuildingMapFields
+  }
+}
+mutation AdminUpdateBuildingMap($uuid: UUID!, $input: UpdateBuildingMapInput!) {
+  updateBuildingMap(uuid: $uuid, input: $input) {
+    ...AdminBuildingMapFields
+  }
+}
+mutation AdminDeleteBuildingMap($uuid: UUID!) {
+  deleteBuildingMap(uuid: $uuid)
 }

@@ -16,6 +16,7 @@ from app.models.auth import User
 from app.models.notification import Notification
 from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
+from app.schemas.role_request import RoleRequestResponse
 from app.services import role_request
 from app.services.authz import refresh_actor
 from tests.conftest import TEST_DB_URL, acting_as
@@ -35,7 +36,7 @@ async def _team_admin(db, team: Team) -> User:
     db.add(user)
     await db.flush()
     admin = await _role(db, "admin", {Perm.TEAM_MEMBER_MANAGE: "team"}, kind="team")
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=admin.uuid, team_uuid=team.uuid, role_kind="team"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=admin.uuid, team_uuid=team.uuid))
     await db.flush()
     return acting_as(user, admin, team)
 
@@ -99,6 +100,37 @@ async def test_a_super_admin_approves_a_new_team_and_the_applicant_admins_it(db)
 
 
 @pytest.mark.asyncio
+async def test_the_response_names_the_team_a_new_team_application_founded(db):
+    """`granted_team_uuid` is the founded team; `team_uuid` stays what was applied for, None here."""
+    await _team_roles(db)
+    reviewer = await _reviewer(db)
+    citizen = await _citizen(db)
+    request = await _apply(db, citizen, requested_role="ngo", new_team_name="光復青年志工隊")
+    pending = RoleRequestResponse.from_request(request)
+
+    approved = RoleRequestResponse.from_request(await _approve(db, reviewer, request.uuid))
+
+    team = (await db.execute(select(Team).where(Team.name == "光復青年志工隊"))).scalar_one()
+    assert pending.granted_team_uuid is None
+    assert (approved.team_uuid, str(approved.granted_team_uuid)) == (None, str(team.uuid))
+
+
+@pytest.mark.asyncio
+async def test_the_response_names_the_team_a_member_request_joined(db):
+    """A member request's granted team is the one it asked to join."""
+    await _team_roles(db)
+    team = await _team(db)
+    team_uuid = team.uuid
+    admin = await _team_admin(db, team)
+    citizen = await _citizen(db)
+    request = await _apply(db, citizen, requested_role="ngo", team_uuid=team_uuid)
+
+    approved = RoleRequestResponse.from_request(await _approve(db, admin, request.uuid))
+
+    assert str(approved.team_uuid) == str(approved.granted_team_uuid) == str(team_uuid)
+
+
+@pytest.mark.asyncio
 async def test_a_name_taken_since_sending_is_a_conflict_and_stays_pending(db):
     """Checked again on approval (ADR-352 point 3)."""
     await _team_roles(db)
@@ -132,11 +164,7 @@ async def test_a_member_request_that_cannot_be_granted_any_more_is_a_conflict(db
         (await db.get(Team, team_uuid)).status = "suspended"
     else:
         member = await _role(db, "member", {}, kind="team")
-        db.add(
-            UserRoleAssign(
-                user_uuid=citizen_uuid, role_uuid=member.uuid, team_uuid=team_uuid, role_kind="team"
-            )
-        )
+        db.add(UserRoleAssign(user_uuid=citizen_uuid, role_uuid=member.uuid, team_uuid=team_uuid))
     await db.commit()
 
     with pytest.raises(role_request.RoleRequestConflictError):

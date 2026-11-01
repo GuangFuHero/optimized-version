@@ -66,6 +66,7 @@ async def _need(db, owner, ticket, task_type: str, name: str, quantity: int, sta
         quantity=quantity,
         status=status,
         created_by=owner.uuid,
+        completed_at=datetime.now(UTC) if status == "fulfilled" else None,
     )
     db.add(task)
     await db.flush()

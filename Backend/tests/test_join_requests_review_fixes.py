@@ -85,9 +85,7 @@ async def test_the_rbac_revoke_keeps_a_teams_last_admin(db):
     captain = User(name="隊長")
     db.add(captain)
     await db.flush()
-    db.add(
-        UserRoleAssign(user_uuid=captain.uuid, role_uuid=admin.uuid, team_uuid=team.uuid, role_kind="team")
-    )
+    db.add(UserRoleAssign(user_uuid=captain.uuid, role_uuid=admin.uuid, team_uuid=team.uuid))
     await db.flush()
 
     with pytest.raises(rbac_admin.RbacConflictError, match="^Cannot remove the team's only admin$"):
@@ -102,9 +100,7 @@ async def test_a_suspended_teams_member_still_cannot_become_a_data_auditor(db):
     team = await _team(db, status="suspended")
     citizen = await _citizen(db)
     member = await _role(db, "member", {}, kind="team")
-    db.add(
-        UserRoleAssign(user_uuid=citizen.uuid, role_uuid=member.uuid, team_uuid=team.uuid, role_kind="team")
-    )
+    db.add(UserRoleAssign(user_uuid=citizen.uuid, role_uuid=member.uuid, team_uuid=team.uuid))
     await db.flush()
     await refresh_actor(db, citizen)
 

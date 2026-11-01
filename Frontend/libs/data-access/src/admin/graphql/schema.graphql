@@ -535,6 +535,11 @@ input CreateTicketInput {
   secondaryLocation: SecondaryLocationInput = null
 
   """
+  Scene photos as https links to images kept elsewhere, at most 10, stored in the order given. Any bad link refuses the whole ticket
+  """
+  photoUrls: [String!] = null
+
+  """
   The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates
   """
   tasks: [CreateTicketTaskDraft!]! = []
@@ -777,6 +782,8 @@ type Mutation {
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
   createTicket(input: CreateTicketInput!): CreateTicketResult!
+  attachTicketPhoto(ticketUuid: UUID!, url: String!): PhotoType!
+  detachTicketPhoto(uuid: UUID!): Boolean!
   createHelpRequest(input: CreateHelpRequestInput!): CreateTicketResult!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
@@ -948,6 +955,9 @@ type Query {
     Only tickets in one of these statuses, as the map's filter ticks several; a status given more than once counts once. Leave it out to match every status, as the site does when its filter means all of them: an empty list matches none
     """
     statuses: [TicketStatus!] = null
+
+    """Only tickets filed under this disaster type (a disaster_types key)"""
+    disasterType: String = null
   ): TicketConnection!
   ticketCells(
     bounds: BoundsInput!
@@ -962,6 +972,34 @@ type Query {
     """
     statuses: [TicketStatus!] = null
   ): [TicketCellType!]!
+
+  """
+  Whether ticket(uuid) gives this ticket, and if not, whether it was merged into another, deleted, or never was, so a share link can say which and send a merged one on. Ask it beside ticket(uuid). The state and the kept ticket's uuid alone, nothing of the ticket (ADR-444)
+  """
+  ticketAvailability(uuid: UUID!): TicketAvailabilityType!
+  ticketsExtent(
+    status: String = null
+    priority: String = null
+    q: String = null
+
+    """As on `tickets`: only tickets with a need of this type"""
+    needType: String = null
+
+    """As on `tickets`: with needType, only a need still taking volunteers"""
+    openNeedsOnly: Boolean! = false
+
+    """As on `tickets`: only the tickets this caller is shown as this H3 cell"""
+    locationCell: String = null
+
+    """
+    Only tickets in one of these statuses, as the map's filter ticks several; a status given more than once counts once. Leave it out to match every status, as the site does when its filter means all of them: an empty list matches none
+    """
+    statuses: [TicketStatus!] = null
+
+    """Only tickets filed under this disaster type (a disaster_types key)"""
+    disasterType: String = null
+  ): TicketsExtentType!
+  ticketStats: TicketStatsType!
   ticket(
     uuid: UUID!
 
@@ -1052,6 +1090,11 @@ type RoleRequestType {
 
   """The existing team a member request asks to join"""
   team: RoleRequestTeam
+
+  """
+  The team approval handed out: the one joined, or the one a new-team application founded
+  """
+  grantedTeam: RoleRequestTeam
 }
 
 input SecondaryLocationInput {
@@ -1581,6 +1624,11 @@ type TaskAssignmentType {
   Display name of the assigned person. Null to a caller without ticket.view_history on the parent ticket, unless the assignment is their own
   """
   actorName: String
+
+  """
+  Whether unassignTaskActor would remove this person for the caller, so a page offers it only there: the caller holds ticket.assign over the assignment (`own` is the assignee themselves, `zone` the need's ticket in the caller's team zones), and recruiting on the need was not stopped by hand, after which nobody may give a place back
+  """
+  viewerCanUnassign: Boolean!
 }
 
 type TaskPropertyConfigType {
@@ -1711,6 +1759,25 @@ type TicketAuditEntryType {
   actorName: String
 }
 
+enum TicketAvailability {
+  available
+  merged
+  deleted
+  not_found
+}
+
+"""
+What a share link finds at a ticket's uuid: the state, nothing of the ticket
+"""
+type TicketAvailabilityType {
+  status: TicketAvailability!
+
+  """
+  Set only when status is merged: the ticket the request now lives in, which ticket(uuid) gives
+  """
+  replacedByUuid: UUID
+}
+
 """
 How many tickets one H3 cell holds, of those its caller is shown as the cell
 """
@@ -1759,6 +1826,12 @@ type TicketDisasterDetailType {
   value: String!
 }
 
+"""Another ticket a disputed ticket may duplicate"""
+type TicketDuplicateRefType {
+  uuid: UUID!
+  title: String!
+}
+
 enum TicketListOrder {
   NEWEST
   NEEDS_FIRST
@@ -1795,6 +1868,22 @@ type TicketPropertyConfigType {
 
   """Whether the field is in use"""
   isActive: Boolean!
+}
+
+type TicketStatsType {
+  total: Int!
+  pending: Int!
+  inProgress: Int!
+  completed: Int!
+  cancelled: Int!
+
+  """
+  People still short across open needs with a quantity: quantity less the people linked, never below 0. Needs on completed or cancelled tickets add nothing
+  """
+  gapPeople: Int!
+
+  """How many open needs are short of people (gapPeople > 0)"""
+  gapNeeds: Int!
 }
 
 enum TicketStatus {
@@ -1856,6 +1945,11 @@ type TicketTaskType {
   UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket
   """
   createdBy: String
+
+  """
+  Whether the caller holds ticket.assign over this need as assigning someone else to it is checked, so a page offers 指派承接 only where it would be allowed: `own` is the need's creator, `zone` its ticket in the caller's team zones. Room on the need is not part of it
+  """
+  viewerCanAssign: Boolean!
   properties: [TaskPropertyType!]!
 
   """
@@ -1950,9 +2044,29 @@ type TicketType {
   auditContentHash: String
 
   """
+  Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not, and to a caller without ai_duplicate.view here. Not the data check: that is `auditStatus`
+  """
+  verificationStatus: TicketVerificationType
+
+  """
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here
   """
   createdBy: String
+
+  """
+  Whether the caller holds ticket.edit over this ticket, so a page offers edit controls only where the edit would be allowed
+  """
+  viewerCanEdit: Boolean!
+
+  """
+  Whether the caller holds ticket.delete over this ticket, so a page offers a delete control only where the delete would be allowed
+  """
+  viewerCanDelete: Boolean!
+
+  """
+  Whether the caller holds ticket.view_history over this ticket, so a page offers the timeline only where reading it would be allowed
+  """
+  viewerCanViewHistory: Boolean!
 
   """
   Requester full name — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs
@@ -2000,6 +2114,43 @@ type TicketType {
   """
   responsibleTeams: [AssignedTeamType!]!
   disasterDetails: [TicketDisasterDetailType!]!
+}
+
+enum TicketVerificationState {
+  disputed
+}
+
+"""Where a ticket stands in 重複審核 (ADR-443)"""
+type TicketVerificationType {
+  """
+  'disputed': a card on this ticket or one of its needs waits for a verdict, or was judged a duplicate and not merged yet, and 重複審核 can still merge it: its far side is another ticket, neither cancelled nor deleted
+  """
+  state: TicketVerificationState!
+
+  """
+  The tickets on the far side of those cards, each once, oldest card first; never empty
+  """
+  duplicateOf: [TicketDuplicateRefType!]!
+}
+
+"""
+How many tickets match a `tickets` filter, and the box their map points span
+"""
+type TicketsExtentType {
+  """The `tickets` totalCount for the same filters"""
+  count: Int!
+
+  """Southern edge of the box around the points shown; null when none match"""
+  minLat: Float
+
+  """Northern edge; null when none match"""
+  maxLat: Float
+
+  """Western edge; null when none match"""
+  minLng: Float
+
+  """Eastern edge; null when none match"""
+  maxLng: Float
 }
 
 enum TriState {

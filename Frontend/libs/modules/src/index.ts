@@ -60,6 +60,7 @@ export type {
   RescueMapControllerValue,
   RescueMapDataType,
   RescueMapDraftPoint,
+  RescueMapGoneTicket,
   RescueMapMarkerItem,
   RescueMapOverlayLayer,
   RescueMapRouteState,
@@ -68,10 +69,12 @@ export type {
 export {
   dedupeMarkersById,
   MapCellsNotice,
+  readLinkedSelection,
   SiteMapControls,
   SiteMapRouteProvider,
   useCellMembersLoader,
   useCreatedTicketMarker,
+  useLinkedTicketLookup,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   usePaginatedRescueMapMarkers,
@@ -103,6 +106,7 @@ export type {
 } from './point-share';
 
 export { AnnouncementPage } from './admin/announcement';
+export { DashboardPage } from './admin/dashboard';
 export { SettingsPage } from './admin/settings/settings-page';
 export { BackOfficePlaceholder } from './role-request';
 export {
@@ -140,10 +144,13 @@ export {
 } from './station';
 
 export {
-  TicketCreateDrawer,
+  TicketBoardPage,
+  TicketCreateSheet,
   TicketDetailDrawer,
   createTaskMatchTicketDetailOverrides,
+  toCreatedTicketMarker,
 } from './ticket';
+export * from './ticket/admin/space';
 export { NeedClaimProvider } from './ticket/needs';
 export type { ReloadedTicket } from './ticket/needs';
 export {
