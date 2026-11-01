@@ -49,10 +49,12 @@
       canMerge: isSuper || isAuditor,
 
       // 寫入站點資料
-      // 2026-10-15 Sucre：政府可以手動新增站點（原本漏了 gov）。⚠️ canEdit 仍不含 gov —— 政府建完的站點自己改不了，待確認
+      // 2026-10-15 Sucre：政府可以手動新增站點（原本漏了 gov）。
+      // 🔒 STN-GOV-101（Sucre 2026-11-02）：政府也能編輯站點、快速改營運狀態，範圍是所有站點（同超管）。
+      //   不然政府建完的站自己改不了；政府本來就負責指派站點給團隊，看的是全局。
       canCreate: isSuper || isGov || isTeam,
-      canEdit: isSuper || isTeam,
-      canQuickStatus: isSuper || isTeam,
+      canEdit: isSuper || isGov || isTeam,
+      canQuickStatus: isSuper || isGov || isTeam,
       canRetire: isSuper,          // 下架＝軟刪除，AC-05 明訂僅 Super Admin
       canRollback: isSuper,
       // 責任區 polygon（Notion Work Zones：super ✅ / gov ✅ / 其餘 ❌）
@@ -71,7 +73,7 @@
   //    ADR-049），這裡先用站點上的 assignedTeam 欄位示意。
   function canHandleStation(c, station) {
     if (!c || !station) return false;
-    if (c.isSuper) return true;
+    if (c.isSuper || c.isGov) return true;   // STN-GOV-101：政府可處理所有站點
     if (c.isTeam) return !!c.team && station.assignedTeam === c.team;
     return false;
   }
