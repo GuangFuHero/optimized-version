@@ -46,7 +46,6 @@ describe('toStationDetailView', () => {
   it('summarises the station for the detail sheet', () => {
     expect(toStationDetailView(station, { canViewPii: true })).toMatchObject({
       title: '光復加水站',
-      typeLabel: '加水',
       district: '花蓮縣光復鄉',
       address: '花蓮縣光復鄉中正路12號',
       coordinates: '23.670, 121.420',

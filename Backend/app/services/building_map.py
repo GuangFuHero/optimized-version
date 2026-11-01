@@ -19,7 +19,8 @@ from app.services.geo_validation import validate_point
 OTHER_AREA = "其他"
 # Copied from a building onto every ticket filed inside it, already split and graded.
 ADDRESS_PARTS = (
-    "full_address",
+    "user_input_address",
+    "remainder",
     "county",
     "town",
     "village",
@@ -183,6 +184,7 @@ async def place_ticket(
     address = await secondary_location_repository.get_by_geometry(db, str(building.uuid))
     location["location_type"] = "address"
     # The reporter's own address text never stands in for the building's, even when it has none.
+    location.pop("full_address", None)
     location |= dict.fromkeys(ADDRESS_PARTS)
     if address is not None:
         location |= {k: getattr(address, k) for k in ADDRESS_PARTS}

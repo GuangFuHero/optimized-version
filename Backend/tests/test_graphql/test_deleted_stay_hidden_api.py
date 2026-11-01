@@ -74,6 +74,7 @@ async def _delete_need(task_uuid: str) -> None:
     async with graphql_db() as db:
         task = await db.get(TicketTask, uuidlib.UUID(task_uuid))
         task.status, task.delete_at = "canceled", datetime.now(UTC)
+        task.canceled_at = task.delete_at
 
 
 async def _ask(client, query: str, variables: dict) -> dict:

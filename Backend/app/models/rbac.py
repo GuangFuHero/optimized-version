@@ -15,16 +15,15 @@ genuinely downgraded.
 """
 
 from sqlalchemy import (
-    CheckConstraint,
+    DDL,
     ForeignKey,
-    ForeignKeyConstraint,
     Index,
     String,
     UniqueConstraint,
     event,
     text,
 )
-from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, UUIDPKMixin
 
@@ -33,9 +32,6 @@ class Role(Base, UUIDPKMixin):
     """A named, reusable bundle of permission grants. Definition is global (not per-team)."""
 
     __tablename__ = "roles"
-    # uq_roles_uuid_kind exists only so grant rows can point a composite FK at (uuid, kind)
-    # and let the database keep their redundant role_kind honest (ADR-073).
-    __table_args__ = (UniqueConstraint("uuid", "kind", name="uq_roles_uuid_kind"),)
     name: Mapped[str] = mapped_column(String(50), unique=True)
     kind: Mapped[str] = mapped_column(String(10))  # "platform" | "team"
 
@@ -66,13 +62,11 @@ class RolePermissionAssign(Base, UUIDPKMixin):
 class UserRoleAssign(Base, UUIDPKMixin):
     """One identity: a Role granted to a User, for a team when the role is team-kind.
 
-    `role_kind` is redundant with `roles.kind` on purpose. The invariant "platform grants
-    carry no team, team grants must carry one" needs to see the role's kind, which a plain
-    CHECK cannot reach across tables; copying the kind here lets CHECK do it, and the
-    composite FK to `roles(uuid, kind)` stops the copy from ever drifting. Chosen over a
-    validation trigger so the rule stays declarative — this repo already uses triggers for
-    auditing, and a second, unrelated kind of trigger would make "where is this enforced"
-    harder to answer (ADR-073).
+    The invariant "platform grants carry no team, team grants must carry one" depends on the
+    role's kind, which lives on `roles`. A CHECK cannot read another table, so a trigger on
+    this table enforces it (`USER_ROLE_ASSIGN_KIND_TRIGGER`), and a second one on `roles` stops
+    a role's kind changing while any grant holds it. Both raise `check_violation` for the
+    constraint `ck_ura_role_team_kind`, so callers see an IntegrityError as they always did.
 
     A user holds exactly one platform identity and any number of team identities.
     """
@@ -85,26 +79,16 @@ class UserRoleAssign(Base, UUIDPKMixin):
         # Postgres does not compare NULLs in a UNIQUE, so the constraint above would let a
         # user collect duplicate platform grants. A partial index closes that.
         Index(
-            "uq_user_role_platform", "user_uuid", "role_uuid",
-            unique=True, postgresql_where=text("team_uuid IS NULL"),
-        ),
-        ForeignKeyConstraint(
-            ["role_uuid", "role_kind"], ["roles.uuid", "roles.kind"], name="fk_ura_role_kind"
-        ),
-        CheckConstraint(
-            "(role_kind = 'platform' AND team_uuid IS NULL)"
-            " OR (role_kind = 'team' AND team_uuid IS NOT NULL)",
-            name="ck_ura_role_team_kind",
+            "uq_user_role_platform",
+            "user_uuid",
+            "role_uuid",
+            unique=True,
+            postgresql_where=text("team_uuid IS NULL"),
         ),
     )
     user_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"), index=True)
     role_uuid: Mapped[str] = mapped_column(ForeignKey("roles.uuid"), index=True)
-    team_uuid: Mapped[str | None] = mapped_column(
-        ForeignKey("teams.uuid"), nullable=True, index=True
-    )
-    # Mirror of roles.kind (see the class docstring). Filled automatically at flush time when
-    # the caller omits it; the composite FK is what actually guarantees it stays correct.
-    role_kind: Mapped[str] = mapped_column(String(10), nullable=False, default=None)
+    team_uuid: Mapped[str | None] = mapped_column(ForeignKey("teams.uuid"), nullable=True, index=True)
 
 
 class UserPermissionAssign(Base, UUIDPKMixin):
@@ -123,32 +107,70 @@ class UserPermissionAssign(Base, UUIDPKMixin):
     __table_args__ = (
         UniqueConstraint("user_uuid", "permission_uuid", "team_uuid", name="uq_user_perm"),
         Index(
-            "uq_user_perm_platform", "user_uuid", "permission_uuid",
-            unique=True, postgresql_where=text("team_uuid IS NULL"),
+            "uq_user_perm_platform",
+            "user_uuid",
+            "permission_uuid",
+            unique=True,
+            postgresql_where=text("team_uuid IS NULL"),
         ),
     )
     user_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"), index=True)
     permission_uuid: Mapped[str] = mapped_column(ForeignKey("permissions.uuid"), index=True)
-    team_uuid: Mapped[str | None] = mapped_column(
-        ForeignKey("teams.uuid"), nullable=True, index=True
-    )
+    team_uuid: Mapped[str | None] = mapped_column(ForeignKey("teams.uuid"), nullable=True, index=True)
     scope: Mapped[str] = mapped_column(String(10), default="none")
 
 
-@event.listens_for(Session, "before_flush")
-def _fill_role_kind(session, _flush_context, _instances):
-    """Derive `role_kind` from the granted role when the caller did not set it.
+USER_ROLE_ASSIGN_KIND_FUNCTION = """
+CREATE OR REPLACE FUNCTION user_role_assign_check_kind() RETURNS trigger AS $$
+DECLARE
+    role_kind text;
+BEGIN
+    SELECT kind INTO role_kind FROM roles WHERE uuid = NEW.role_uuid FOR SHARE;
+    IF NOT FOUND
+       OR (role_kind = 'platform' AND NEW.team_uuid IS NULL)
+       OR (role_kind = 'team' AND NEW.team_uuid IS NOT NULL) THEN
+        RETURN NEW;
+    END IF;
+    IF role_kind = 'platform' THEN
+        RAISE EXCEPTION 'a platform role carries no team'
+            USING ERRCODE = 'check_violation', TABLE = 'user_role_assign',
+                  CONSTRAINT = 'ck_ura_role_team_kind';
+    END IF;
+    RAISE EXCEPTION 'a team role must carry a team'
+        USING ERRCODE = 'check_violation', TABLE = 'user_role_assign',
+              CONSTRAINT = 'ck_ura_role_team_kind';
+END;
+$$ LANGUAGE plpgsql
+"""
+USER_ROLE_ASSIGN_KIND_TRIGGER = """
+CREATE TRIGGER user_role_assign_check_kind_trigger
+BEFORE INSERT OR UPDATE OF role_uuid, team_uuid ON user_role_assign
+FOR EACH ROW EXECUTE FUNCTION user_role_assign_check_kind()
+"""
+ROLES_KIND_FUNCTION = """
+CREATE OR REPLACE FUNCTION roles_kind_in_use() RETURNS trigger AS $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM user_role_assign WHERE role_uuid = NEW.uuid) THEN
+        RAISE EXCEPTION 'the kind of a role that has been granted cannot change'
+            USING ERRCODE = 'check_violation', TABLE = 'roles', CONSTRAINT = 'ck_roles_kind_in_use';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+"""
+ROLES_KIND_TRIGGER = """
+CREATE TRIGGER roles_kind_in_use_trigger
+BEFORE UPDATE OF kind ON roles
+FOR EACH ROW WHEN (OLD.kind IS DISTINCT FROM NEW.kind)
+EXECUTE FUNCTION roles_kind_in_use()
+"""
 
-    `role_kind` exists so a CHECK can see the role's kind without crossing tables (ADR-073);
-    it is bookkeeping, not something every call site should have to remember. Filling it here
-    keeps the constraint declarative while leaving callers to say only what they mean — and
-    the composite FK to `roles(uuid, kind)` still rejects a wrong value, so this is a
-    convenience, never the thing being trusted.
-
-    Runs inside the flush greenlet, so the `session.get` lookup is valid under AsyncSession.
-    """
-    for obj in session.new:
-        if isinstance(obj, UserRoleAssign) and obj.role_kind is None and obj.role_uuid:
-            role = session.get(Role, obj.role_uuid)
-            if role is not None:
-                obj.role_kind = role.kind
+# Created with the tables so a schema built from the models enforces the rule too. `roles` exists
+# by the time `user_role_assign` does, and the functions only name tables when they run.
+for _statement in (
+    USER_ROLE_ASSIGN_KIND_FUNCTION,
+    USER_ROLE_ASSIGN_KIND_TRIGGER,
+    ROLES_KIND_FUNCTION,
+    ROLES_KIND_TRIGGER,
+):
+    event.listen(UserRoleAssign.__table__, "after_create", DDL(_statement))

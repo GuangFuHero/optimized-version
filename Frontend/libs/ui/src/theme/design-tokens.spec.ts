@@ -10,6 +10,7 @@ import {
   fontStack,
   fontVariables,
   IOS_NO_ZOOM_INPUT_PX,
+  LABEL_400_SIZE_VAR,
   type DisplayTextStep,
 } from './design-tokens';
 import { theme } from './theme';
@@ -347,5 +348,11 @@ describe('display text scale', () => {
   /** Below 16px, iOS Safari zooms the page on focus and the user has to pinch back out. */
   it('keeps inputs at the size iOS will not zoom', () => {
     expect(IOS_NO_ZOOM_INPUT_PX).toBe(16);
+  });
+
+  /** A page raises it by setting the variable on `:root`, as the site does on a phone. */
+  it("gives label 400 the variable's size, the design system's 14px when it is unset", () => {
+    expect(LABEL_400_SIZE_VAR).toBe('--wg-label-400-size');
+    expect(designTokens.typography.label[400].fontSize).toBe('var(--wg-label-400-size, 14px)');
   });
 });
