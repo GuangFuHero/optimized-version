@@ -302,6 +302,8 @@ function RealmBar({
           target="_blank"
           rel="noopener"
           aria-label="回到公開地圖"
+          // On hover, as the collapsed nav items show their label, and in the expanded link's words.
+          title="回到前台（不會登出）"
           sx={{
             color: color.fg.neutral.subtle,
             borderRadius: `${radius.sm}px`,
