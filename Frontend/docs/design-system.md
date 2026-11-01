@@ -11,7 +11,7 @@
   ├── 前台/_ds/、後台/_ds/  設計系統匯出（tokens/*.css，兩份相同）
   ├── handoff/              給 libs/ui 的 TSX（目前在 components/）
   └── CHANGELOG.md          token 異動與「Frontend 待辦」
-        │  工程師 fetch 後讀取、手動改（不 merge、不 cherry-pick）
+        │  工程師 fetch 後讀取、手動改或逐檔複製（不 merge、不 cherry-pick）
         ▼
 main: Frontend/
                   libs/ui/src/theme/design-tokens.ts  ──▶  bridge.ts ──▶ theme.ts（MUI theme）
@@ -20,7 +20,7 @@ main: Frontend/
                          libs/ui 元件 ──▶ libs/modules、apps 的頁面
 ```
 
-- 設計分支就是設計的真實來源，永遠讀它的最新版（不釘在某個 commit）。`main` 會合進設計分支，反過來不會。
+- 設計分支就是設計的真實來源，永遠讀它的最新版（不釘在某個 commit）。兩個分支互不合併：需要的檔案由工程師逐一複製，做法見 [`Design/GUIDE.md`](../../Design/GUIDE.md)。
 - 讀法：先 `git fetch origin sucrelindesign`；單一檔案用 `git show "origin/sucrelindesign:Design/<路徑>"`；
   要開原型 HTML 就開唯讀 worktree：`git worktree add --detach <資料夾> origin/sucrelindesign`（更新：fetch 後 `git -C <資料夾> checkout --detach origin/sucrelindesign`）。
 - 設計師不改 `Frontend/`；工程師不改設計分支。進度不在 CHANGELOG 打勾，記在 [`design-system-audit.md`](design-system-audit.md)，PR 說明寫出對應哪一筆待辦。
