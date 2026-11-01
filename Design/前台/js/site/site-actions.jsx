@@ -2404,7 +2404,7 @@
               )
           ) : (
             claimedRows.length === 0
-              ? emptyBlock('HandHeart', '你還沒有承接任何任務。在地圖或列表上找一筆需求，按「接任務」。')
+              ? emptyBlock('HeartHandshake', '你還沒有承接任何任務。在地圖或列表上找一筆需求，按「接任務」。')
               : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                   {/* 出發前的下一步（VB-FEAT-001）。只在真的接了東西時出現 ——

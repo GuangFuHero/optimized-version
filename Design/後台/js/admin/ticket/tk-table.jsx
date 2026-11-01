@@ -261,14 +261,19 @@
       });
       return { total: tk.tickets.length, by, gapPeople, gapNeeds };
     }, [tk.tickets]);
-    // 🔒 STAT-107（Sucre 11-01 接受 PR #232）：多一格「已取消」—— 後端有這個狀態，少了它各格加起來對不上「全部」。
-    //    篩選面板的狀態 chip 也一起加，兩邊同一個 state（STAT-103）。
-    // 🔒 STAT-108（同上）：沒有任何單、還在載入時這排照樣出現，不等有資料才長出來（數字沒載到時寫「—」，STAT-105）。
+    // 🔄 STAT-107（Sucre 11-01 第二次裁示，推翻同日稍早「多一格已取消」）：統計排**不放「已取消」那一格**。
+    //    已取消的單不是要處理的工作，放成一格會讓人以為點了能篩出來處理。
+    //    🔒 但「全部」算的是所有單（含已取消），各格加起來會比「全部」少 → 在「全部」那格寫小字「含已取消 N」說明差在哪；
+    //    N 為 0 時不寫。❌ 不要把已取消從「全部」扣掉 —— 那樣「全部」就不是全部了。
+    //    篩選面板的狀態 chip 仍有「已取消」（要找已取消的單從那裡找）。
+    // 🔒 STAT-108（Sucre 11-01 接受 PR #232）：沒有任何單、還在載入時這排照樣出現，不等有資料才長出來（數字沒載到時寫「—」，STAT-105）。
     const TK_STAT_KEYS = [...window.TK_STATUS_EDITABLE, "canceled"];
+    const canceledN = stats.by.canceled || 0;
     const statTiles = window.WGStatTiles && (
       <window.WGStatTiles value={fStatus} onChange={setFStatus}
-        items={[{ key: "all", label: "全部", count: stats.total },
-          ...TK_STAT_KEYS.map((k) => ({ key: k, label: window.TK_STATUS[k].label, count: stats.by[k] || 0 }))]}
+        items={[{ key: "all", label: "全部", count: canceledN ? { main: stats.total, sub: `含已取消 ${canceledN}` } : stats.total,
+            title: canceledN ? `全部 ${stats.total} 張，其中 ${canceledN} 張已取消（不另列一格）` : undefined },
+          ...window.TK_STATUS_EDITABLE.map((k) => ({ key: k, label: window.TK_STATUS[k].label, count: stats.by[k] || 0 }))]}
         extras={[{ label: "志工缺口", icon: "Users", tone: "warning", count: stats.gapPeople ? { main: `缺 ${stats.gapPeople} 人`, sub: `${stats.gapNeeds} 項需求` } : 0,
           title: "還沒結束的單裡，有寫數量的需求還差幾人" }]} />
     );
