@@ -5,6 +5,7 @@ import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { designTokens } from '@rescue-frontend/ui';
 
 import { GRANULARITY_OPTIONS, type ChartGranularity } from './charts';
+import type { areaChoices, DashboardArea } from './filter-query';
 import {
   DASHBOARD_QUICK_RANGES,
   DASHBOARD_TIME_ZONES,
@@ -20,12 +21,13 @@ import { SegmentedControl } from './segmented-control';
 
 const { color, radius, shadow, typography } = designTokens;
 
-/** What the filter card owns: the three things every query on the page is asked within. */
+/** What the filter card owns: the four things every query on the page is asked within. */
 export interface DashboardFilters {
   range: DashboardDateRange;
   granularity: ChartGranularity;
   /** Sent as the backend's `tz`; it moves where each day starts. */
   timeZone: string;
+  area: DashboardArea;
 }
 
 /** The design's field caption: 14px muted, the field name carrying the weight. */
@@ -89,12 +91,169 @@ function FilterField({
 }
 
 /**
- * The filter card above the dashboard. Everything here is real: the range, the zone and the bucket
- * size drive the queries, and 重新整理 refetches. The design's API-hookup tools (mock/real switch,
- * base URL, bearer token) are not reproduced — this page always talks to our own backend.
+ * A compact select with an "all" first. Once something is picked its border takes the accent, so a
+ * filter in force shows from across the page.
+ */
+export function MiniSelect({
+  id,
+  label,
+  allLabel,
+  value,
+  options,
+  disabled = false,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  /** What the empty choice reads, e.g. 全部縣市. */
+  allLabel: string;
+  value: string | undefined;
+  options: readonly { value: string; label: string }[];
+  disabled?: boolean;
+  onChange: (next: string | undefined) => void;
+}) {
+  return (
+    <Stack direction="row" sx={{ alignItems: 'center', gap: '8px' }}>
+      <Typography
+        component="label"
+        htmlFor={id}
+        sx={{
+          ...caption,
+          color: disabled ? color.fg.disable : color.fg.neutral.muted,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {label}
+      </Typography>
+      <Box
+        component="select"
+        id={id}
+        value={value ?? ''}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value || undefined)}
+        sx={{
+          ...controlSx,
+          minWidth: 0,
+          maxWidth: '100%',
+          borderColor: value ? color.bg.primary.default : color.border.default,
+          '&:disabled': { color: color.fg.disable },
+        }}
+      >
+        <option value="">{allLabel}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </Box>
+    </Stack>
+  );
+}
+
+/** The arrow between two levels of the area, read past by a screen reader. */
+function AreaArrow() {
+  return (
+    <Typography aria-hidden sx={caption}>
+      →
+    </Typography>
+  );
+}
+
+/**
+ * The second row: 縣市 → 鄉鎮市區 → 村里, over the whole page. A level opens once the one above it
+ * is picked, and 村里 shows only where the town has any, as most addresses name none.
+ */
+function AreaRow({
+  area,
+  choices,
+  onChange,
+}: {
+  area: DashboardArea;
+  choices: ReturnType<typeof areaChoices>;
+  onChange: (next: DashboardArea) => void;
+}) {
+  const asOptions = (values: string[]) =>
+    values.map((value) => ({ value, label: value }));
+  const picked = Boolean(area.county || area.town || area.village);
+  return (
+    <Stack
+      direction="row"
+      sx={{
+        flexBasis: '100%',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: '10px 12px',
+        paddingTop: '14px',
+        borderTop: `1px solid ${color.border.default}`,
+      }}
+    >
+      <Typography component="span" sx={{ ...caption, fontWeight: 700 }}>
+        地區
+        <Box component="span" sx={{ fontWeight: 400 }}>
+          {' · '}整頁都套
+        </Box>
+      </Typography>
+      <MiniSelect
+        id="dashboard-county"
+        label="縣市"
+        allLabel="全部縣市"
+        value={area.county}
+        options={asOptions(choices.counties)}
+        onChange={(county) => onChange({ county })}
+      />
+      <AreaArrow />
+      <MiniSelect
+        id="dashboard-town"
+        label="鄉鎮市區"
+        allLabel={area.county ? '全部鄉鎮市區' : '先選縣市'}
+        value={area.town}
+        options={asOptions(choices.towns)}
+        disabled={!area.county}
+        onChange={(town) => onChange({ county: area.county, town })}
+      />
+      {area.town && choices.villages.length > 0 ? (
+        <>
+          <AreaArrow />
+          <MiniSelect
+            id="dashboard-village"
+            label="村里"
+            allLabel="全部村里"
+            value={area.village}
+            options={asOptions(choices.villages)}
+            onChange={(village) => onChange({ ...area, village })}
+          />
+        </>
+      ) : null}
+      {picked ? (
+        <ButtonBase
+          disableRipple
+          onClick={() => onChange({})}
+          sx={{
+            ...typography.label[300],
+            minHeight: 44,
+            color: color.fg.neutral.default,
+            textDecoration: 'underline',
+          }}
+        >
+          清除地區
+        </ButtonBase>
+      ) : null}
+      <Typography sx={{ ...caption, marginLeft: 'auto' }}>
+        類型、狀態在各區塊標題右邊，只套那一區
+      </Typography>
+    </Stack>
+  );
+}
+
+/**
+ * The filter card above the dashboard. Everything here is real: the range, the zone, the bucket
+ * size and the area drive the queries, and 重新整理 refetches. The design's API-hookup tools
+ * (mock/real switch, base URL, bearer token) are not reproduced — this page always talks to our own
+ * backend.
  */
 export function DashboardFilterBar({
   value,
+  areaOptions,
   dateProblem = null,
   onChange,
   syncedAt,
@@ -105,6 +264,8 @@ export function DashboardFilterBar({
   onEmptyPreviewChange,
 }: {
   value: DashboardFilters;
+  /** What the 地區 row offers for `value.area`, from `areaChoices`. */
+  areaOptions: ReturnType<typeof areaChoices>;
   /** Why the dates on screen are not applied yet (`dateRangeProblem`), or null when they are. */
   dateProblem?: string | null;
   onChange: (next: DashboardFilters) => void;
@@ -319,6 +480,12 @@ export function DashboardFilterBar({
           重新整理
         </ButtonBase>
       </Stack>
+
+      <AreaRow
+        area={value.area}
+        choices={areaOptions}
+        onChange={(area) => onChange({ ...value, area })}
+      />
     </Stack>
   );
 }

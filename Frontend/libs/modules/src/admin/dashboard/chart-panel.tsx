@@ -51,8 +51,12 @@ function chartQuery(
   range: DashboardDateRange,
   granularity: ChartGranularity,
   timeZone: string,
+  filters: Record<string, string>,
 ) {
-  const query = chartQueryParams(view, range, granularity, timeZone);
+  const query = {
+    ...chartQueryParams(view, range, granularity, timeZone),
+    ...filters,
+  };
   return chart.domain === 'tickets'
     ? ticketAnalyticsChartQuery({ query: { ...query, y: chart.metric } })
     : stationAnalyticsChartQuery({ query: { ...query, y: chart.metric } });
@@ -182,6 +186,7 @@ export function ChartPanel({
   range,
   granularity,
   timeZone,
+  filters = {},
   devMode,
   emptyPreview = false,
 }: {
@@ -191,6 +196,8 @@ export function ChartPanel({
   range: DashboardDateRange;
   granularity: ChartGranularity;
   timeZone: string;
+  /** The area, type and status params this chart is asked within (`filterQuery`). */
+  filters?: Record<string, string>;
   devMode: boolean;
   emptyPreview?: boolean;
 }) {
@@ -209,6 +216,7 @@ export function ChartPanel({
           range,
           chartGranularity(spec, granularity),
           timeZone,
+          filters,
         ),
         ...(emptyPreview
           ? {

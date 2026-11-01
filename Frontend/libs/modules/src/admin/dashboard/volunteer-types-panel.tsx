@@ -16,6 +16,11 @@ import {
   VOLUNTEER_TYPE_SERIES,
 } from './charts';
 import { FieldTag } from './field-tag';
+import {
+  filterQuery,
+  type DashboardArea,
+  type SectionFilter,
+} from './filter-query';
 import type { AnalyticsCatalog, DashboardDateRange } from './kpis';
 import { ACCENT_COLORS } from './tones';
 
@@ -28,6 +33,8 @@ export function VolunteerTypesPanel({
   catalog,
   range,
   timeZone,
+  area,
+  section,
   asOfCaption,
   devMode,
   emptyPreview,
@@ -35,6 +42,9 @@ export function VolunteerTypesPanel({
   catalog: AnalyticsCatalog | undefined;
   range: DashboardDateRange;
   timeZone: string;
+  area: DashboardArea;
+  /** The tickets section's 類型 and 狀態; the volunteer metrics take only the type. */
+  section: SectionFilter;
   /** From `rangeAsOfCaption`, e.g. 截至今日. */
   asOfCaption: string;
   devMode: boolean;
@@ -49,6 +59,7 @@ export function VolunteerTypesPanel({
           x: 'category',
           chart_type: 'bar',
           y: metric,
+          ...filterQuery('tickets', area, section, metric),
         },
       }),
       ...(emptyPreview

@@ -47,29 +47,52 @@ vi.mock('@rescue-frontend/data-access/admin', () => {
       'station_freshness_trend',
     ],
   };
-  const catalog = Object.fromEntries(
-    Object.entries(metrics).map(([domain, names]) => [
-      domain,
-      Object.fromEntries(
-        names.map((name) => [
-          name,
+  const catalog = {
+    ...Object.fromEntries(
+      Object.entries(metrics).map(([domain, names]) => [
+        domain,
+        Object.fromEntries(
+          names.map((name) => [
+            name,
+            {
+              label: `後端-${name}`,
+              description: `說明-${name}`,
+              unit: '件',
+              allowed_x: ['none', 'date', 'category'],
+              allowed_chart_types: ['bar', 'line', 'pie'],
+              default_chart_type: 'bar',
+              requires_date_range: false,
+              // As the real catalog: the gap's trend comes by day only, at most 366 days.
+              ...(name === 'volunteer_gap'
+                ? { allowed_x_granularities: ['day'], max_range_days: 366 }
+                : {}),
+            },
+          ]),
+        ),
+      ]),
+    ),
+    // 宜蘭縣 only has stations: picking it leaves the tickets section nothing to ask.
+    filters: {
+      tickets: {
+        types: [{ value: 'rescue', label: '搜救' }],
+        statuses: [{ value: 'pending', label: '未指派' }],
+        areas: [
           {
-            label: `後端-${name}`,
-            description: `說明-${name}`,
-            unit: '件',
-            allowed_x: ['none', 'date', 'category'],
-            allowed_chart_types: ['bar', 'line', 'pie'],
-            default_chart_type: 'bar',
-            requires_date_range: false,
-            // As the real catalog: the gap's trend comes by day only, at most 366 days.
-            ...(name === 'volunteer_gap'
-              ? { allowed_x_granularities: ['day'], max_range_days: 366 }
-              : {}),
+            county: '花蓮縣',
+            towns: [{ town: '光復鄉', villages: ['大安村'] }],
           },
-        ]),
-      ),
-    ]),
-  );
+        ],
+      },
+      stations: {
+        types: [{ value: 'supply', label: '物資' }],
+        statuses: [{ value: 'open', label: '營運中' }],
+        areas: [
+          { county: '花蓮縣', towns: [{ town: '光復鄉', villages: [] }] },
+          { county: '宜蘭縣', towns: [] },
+        ],
+      },
+    },
+  };
   const queryOptions = (
     domain: string,
     kind: string,
@@ -464,5 +487,89 @@ describe('dashboard states and filters', () => {
         '[aria-label="各需求類型：需求／已媒合／缺口圖表"]',
       ),
     ).not.toBeNull();
+  });
+
+  async function pick(id: string, value: string) {
+    await act(async () => {
+      const select = container.querySelector<HTMLSelectElement>(`#${id}`);
+      if (select) select.value = value;
+      select?.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await settle();
+  }
+
+  it('asks every query within the picked area, and a section only for an area it has', async () => {
+    await mount();
+    const select = (id: string) =>
+      container.querySelector<HTMLSelectElement>(`#${id}`);
+    expect(select('dashboard-town')?.disabled).toBe(true);
+
+    state.requests = [];
+    await pick('dashboard-county', '花蓮縣');
+    expect(state.requests.length).toBeGreaterThan(0);
+    expect(state.requests.every(({ query }) => query.county === '花蓮縣')).toBe(
+      true,
+    );
+    expect(select('dashboard-town')?.disabled).toBe(false);
+
+    // 村里 opens only under a town that has some.
+    expect(select('dashboard-village')).toBeNull();
+    await pick('dashboard-town', '光復鄉');
+    expect(select('dashboard-village')).not.toBeNull();
+
+    // Only stations have 宜蘭縣: the tickets section says so and is not asked, which would be a 422.
+    state.requests = [];
+    await pick('dashboard-county', '宜蘭縣');
+    expect(container.textContent).toContain('這個地區沒有任務單');
+    expect(state.requests.some(({ domain }) => domain === 'tickets')).toBe(
+      false,
+    );
+    const stations = state.requests.filter(
+      ({ domain }) => domain === 'stations',
+    );
+    expect(stations.length).toBeGreaterThan(0);
+    // A new county drops the town picked under the old one.
+    expect(
+      stations.every(
+        ({ query }) => query.county === '宜蘭縣' && query.town === undefined,
+      ),
+    ).toBe(true);
+
+    const clear = Array.from(container.querySelectorAll('button')).find(
+      (el) => el.textContent === '清除地區',
+    );
+    await act(async () => clear?.click());
+    await settle();
+    expect(container.textContent).not.toContain('這個地區沒有任務單');
+    expect(select('dashboard-county')?.value).toBe('');
+  });
+
+  it("applies a section's status to its own counts and charts, not to the volunteer numbers", async () => {
+    await mount();
+    state.requests = [];
+    await pick('dashboard-tickets-status', 'pending');
+    const tickets = state.requests.filter(({ domain }) => domain === 'tickets');
+    expect(tickets.length).toBeGreaterThan(0);
+    expect(tickets.every(({ query }) => query.status === 'pending')).toBe(true);
+    // The volunteer numbers do not take the status, so they are not asked again.
+    expect(
+      tickets.some(({ query }) => String(query.y).startsWith('volunteer')),
+    ).toBe(false);
+    expect(state.requests.some(({ domain }) => domain === 'stations')).toBe(
+      false,
+    );
+  });
+
+  it('applies the need type to the volunteer numbers too', async () => {
+    await mount();
+    state.requests = [];
+    await pick('dashboard-tickets-type', 'rescue');
+    const volunteer = state.requests.filter(({ query }) =>
+      String(query.y).startsWith('volunteer'),
+    );
+    expect(volunteer.length).toBeGreaterThan(0);
+    expect(volunteer.every(({ query }) => query.task_type === 'rescue')).toBe(
+      true,
+    );
   });
 });
