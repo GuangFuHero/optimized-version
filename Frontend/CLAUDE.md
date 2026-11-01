@@ -25,7 +25,7 @@
 - 不要改 `../Design/` 底下的檔案；那是設計師的。唯一例外：做完待辦後在 `../Design/CHANGELOG.md` 打勾。
   她給的元件在 `../Design/handoff/`，搬法見 `docs/design-system.md`。
 
-`pnpm lint` 會對 `libs/modules` 與 `apps` 報上面這些違規（目前是 warning）。新寫的程式不可以增加這類 warning。
+`pnpm lint` 會對 `libs/modules` 與 `apps` 報其中幾項（寫死的顏色、數字圓角與字級、MUI 的 `Button`；目前是 warning），其他規則 lint 抓不到，要自己對照。新寫的程式不可以增加這類 warning。
 
 ## 原型沒畫到的狀態
 
