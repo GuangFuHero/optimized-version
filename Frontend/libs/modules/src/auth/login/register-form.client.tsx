@@ -2,7 +2,7 @@
 
 import { Alert, Button, TextField } from '@mui/material';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useEffect, useId, useState } from 'react';
 
 import { type AuthIdentityType } from '@rescue-frontend/data-access';
 import {
@@ -69,6 +69,7 @@ export function RegisterFormClient({
   const [verificationSuccess, setVerificationSuccess] = useState<string>();
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const codeSentToId = useId();
 
   async function handleVerificationAsync() {
     if (!pendingRegistration || isVerifying) {
@@ -135,6 +136,7 @@ export function RegisterFormClient({
       <AuthActionCard
         title="輸入驗證碼"
         description={`驗證碼已寄送到 ${pendingRegistration.normalizedIdentity}`}
+        descriptionId={codeSentToId}
       >
         <TextField
           label="驗證碼"
@@ -143,6 +145,15 @@ export function RegisterFormClient({
           placeholder="請輸入 6 碼驗證碼"
           disabled={isVerifying}
           autoComplete="one-time-code"
+          // The code is what is left to type, and the 註冊 button pressed to get here is gone.
+          autoFocus
+          slotProps={{
+            htmlInput: {
+              inputMode: 'numeric',
+              // Read with the field: focus lands here, past the line saying where the code went.
+              'aria-describedby': codeSentToId,
+            },
+          }}
         />
 
         {verificationError ? (
