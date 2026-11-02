@@ -1,4 +1,5 @@
 """Integration tests for logged-out forgot/reset password."""
+import asyncio
 import re
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 from app.core.security import generate_salt, get_password_hash
 from app.messaging.email import build_password_reset_email, build_sso_notice_email
 from app.messaging.sms import build_password_reset_sms, build_sso_notice_sms
+from app.repositories.auth_repository import contact_repository
 from app.repositories.verification_repository import VerificationRepository
 from app.services.auth_account import create_account
 
@@ -29,6 +31,35 @@ async def test_pwreset_issue_then_consume_roundtrip(redis):
     assert payload["user_uuid"] == "u-1"
     # consumed -> gone
     assert await repo.consume_password_reset(type_="email", value="a@x.com", code=code) is None
+
+
+@pytest.mark.asyncio
+async def test_a_reset_code_works_once_even_when_sent_at_the_same_time(redis):
+    """Three requests with the same code: one gets the payload, the other two get None.
+
+    The Barrier holds every request after its read, so all three see the code still pending.
+    """
+    repo = VerificationRepository(redis)
+    code = await repo.issue_password_reset(user_uuid="u-1", type_="email", value="a@x.com")
+    gate = asyncio.Barrier(3)
+    orig_get = repo.redis.get
+
+    async def gated_get(k):
+        v = await orig_get(k)
+        await gate.wait()
+        return v
+
+    repo.redis.get = gated_get
+    try:
+        # A read that skips `get` would leave the others at the barrier: fail rather than hang.
+        async with asyncio.timeout(5):
+            results = await asyncio.gather(
+                *[repo.consume_password_reset(type_="email", value="a@x.com", code=code) for _ in range(3)]
+            )
+    finally:
+        repo.redis.get = orig_get
+
+    assert [r is not None for r in results].count(True) == 1
 
 
 # --- Task 3: message builders ---
@@ -150,6 +181,7 @@ async def test_reset_wrong_code_400(client, db_session, capture_email):
         "type": "email", "value": "owner@x.com", "code": "000000",
         "new_password": "newsecret", "salt_frontend": "webtest"})
     assert r.status_code == 400
+    assert len(capture_email.messages) == 1  # only the code: a failed reset tells no one
 
 
 @pytest.mark.asyncio
@@ -175,6 +207,23 @@ async def test_reset_revokes_sessions(client, db_session, capture_email):
         "new_password": "newsecret", "salt_frontend": "webtest"})
     r = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_a_reset_tells_every_contact_on_the_account(client, db_session, capture_email, capture_sms):
+    """As set-password and change-password do (ADR-218): each contact hears the password changed."""
+    user = await _email_pw_user(db_session)
+    await contact_repository.create_verified(
+        db_session, user_uuid=user.uuid, type_="phone", value="+886912345678")
+    await client.post("/api/v1/auth/forgot-password", json={"type": "email", "value": "owner@x.com"})
+    code = capture_email.last_code
+    r = await client.post("/api/v1/auth/reset-password", json={
+        "type": "email", "value": "owner@x.com", "code": code,
+        "new_password": "newsecret", "salt_frontend": "webtest"})
+    assert r.status_code == 204
+    assert [(to, "已變更" in subject) for to, subject, _, _ in capture_email.messages[1:]] == [
+        ("owner@x.com", True)]
+    assert [(to, "變更了" in body) for to, body in capture_sms.messages] == [("+886912345678", True)]
 
 
 @pytest.mark.asyncio

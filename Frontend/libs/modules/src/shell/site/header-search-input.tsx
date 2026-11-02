@@ -1,11 +1,16 @@
 'use client';
 
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import { Box, InputBase } from '@mui/material';
 import { usePathname } from 'next/navigation';
-import { startTransition, useEffect, useState, type ChangeEvent } from 'react';
+import {
+  startTransition,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from 'react';
 
-import { designTokens, Icons } from '@rescue-frontend/ui';
+import { designTokens, Icons, IOS_NO_ZOOM_INPUT_PX } from '@rescue-frontend/ui';
 
 import { useOptionalSiteMapRouteState } from '../../map/site/use-site-map-route-state';
 import { useSiteRouteState } from '../../route/use-site-route-state';
@@ -33,17 +38,29 @@ function SiteHeaderSearchField({
   value,
   onChange,
 }: SiteHeaderSearchFieldProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
     <Box
+      // The input is one line tall in a 40px box: a tap on the rest of the box, or on the icon, would
+      // not reach it on a phone. Anywhere but the clear button focuses it.
+      onClick={(event) => {
+        if (!(event.target as HTMLElement).closest('button')) {
+          inputRef.current?.focus();
+        }
+      }}
       sx={{
         width: '100%',
         maxWidth: compact ? 'none' : 520,
         minWidth: 0,
         height: compact ? 40 : 42,
-        px: compact ? 1.5 : 1.75,
+        // Tight in the phone's bar, with the icon close to the text: at 16px the placeholder needs
+        // 160px, and a signed-out 375px phone leaves the box little more.
+        px: compact ? 1 : 1.75,
         display: 'flex',
         alignItems: 'center',
         gap: 1,
+        cursor: 'text',
         borderRadius: `${radius.full}px`,
         bgcolor: color.bg.neutral.subtle,
         // Inset ring rather than a border, matching the design system's `Input`: the ring can
@@ -56,6 +73,7 @@ function SiteHeaderSearchField({
       }}
     >
       <InputBase
+        inputRef={inputRef}
         value={value ?? ''}
         onChange={onChange}
         placeholder="搜尋站點、任務或地點"
@@ -63,12 +81,12 @@ function SiteHeaderSearchField({
           'aria-label': '搜尋',
         }}
         startAdornment={
-          <SearchRoundedIcon
+          <Icons.search
             sx={{
               fontSize: compact ? 18 : 20,
               color: color.fg.neutral.muted,
               flexShrink: 0,
-              mr: 1,
+              mr: compact ? 0.5 : 1,
             }}
           />
         }
@@ -103,13 +121,22 @@ function SiteHeaderSearchField({
           ) : null
         }
         sx={{
+          // The box's fill, for autofill to be painted over with (the theme's `MuiInputBase`).
+          '--wg-field-bg': color.bg.neutral.subtle,
           minWidth: 0,
           flex: 1,
           color: color.fg.neutral.default,
           '& .MuiInputBase-input': {
             p: 0,
             fontFamily: typography.body[400].fontFamily,
-            fontSize: compact ? 15 : 14,
+            // Set here, the size would win over the theme's 16px for phones (`MuiInputBase`), and a
+            // focused input under 16px makes iOS Safari zoom the whole page in. A phone held sideways
+            // is as wide as a tablet, so a touch screen of any width gets 16px too; a mouse does not.
+            fontSize: {
+              mobile: IOS_NO_ZOOM_INPUT_PX,
+              tablet: compact ? 15 : 14,
+            },
+            '@media (pointer: coarse)': { fontSize: IOS_NO_ZOOM_INPUT_PX },
             lineHeight: compact ? '22px' : '20px',
             fontWeight: 600,
             color: color.fg.neutral.default,

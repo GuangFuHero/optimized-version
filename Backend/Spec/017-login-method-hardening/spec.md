@@ -131,7 +131,7 @@ DELETE /api/v1/auth/link/{provider} body: {step_up?}              新增
   3. 要求證明（慢的事情在鎖外做）
   4. 取 `users` 列的鎖後**重新**檢查第 2 步，通過才刪除（ADR-235）
   5. 刪除後撤銷該帳號所有 session（ADR-236）
-- 成功的 link / unlink / `change-password` 都會透過 BackgroundTasks 通知帳號每一個聯絡方式；寄送失敗不會回滾變更（ADR-218，沿用 ADR-162）。
+- 成功的 link / unlink / `change-password` / `reset-password` 都會透過 BackgroundTasks 通知帳號每一個聯絡方式；寄送失敗不會回滾變更（ADR-218，沿用 ADR-162；`reset-password` 是 ADR-399 補上的）。
 
 錯誤碼（PR #41 的 `code` 合約）與前端應對方式見 `prd.md` §5。
 
@@ -151,7 +151,8 @@ pool    = settled or [最舊的那一個]      # 全新帳號的第一週仍然�
 ## 6. 已知缺口與後續票
 
 - **零聯絡方式、零密碼、零 SSO 的帳號**：沒有任何可證明的東西，所以新增第一個聯絡方式不設門檻（ADR-220），
-  而 `link` 與 `set-password` 會 422 `no_proof_channel` 要求先新增聯絡方式。這種帳號也沒有密碼重設路徑可以被偷。
+  而 `link` 會 422 `no_proof_channel`、`set-password` 會 409 `password_needs_contact`（ADR-401），都要求先新增
+  聯絡方式。這種帳號也沒有密碼重設路徑可以被偷。
   有 SSO 的帳號不屬於這一類（ADR-234）。
 - **session 沒有 recent-auth 概念**。`session["created_at"]` 已經存在且 refresh 不會更新它，所以
   sudo window 幾乎零儲存成本；但它是**補強**不是替代（它縮短被竊 session 的有效窗口，而寄碼到
@@ -196,6 +197,8 @@ pool    = settled or [最舊的那一個]      # 全新帳號的第一週仍然�
 | 解綁沒有綁定的 provider → 404 | 218 | `test_unlinking_something_the_account_does_not_have_is_404` |
 | 未知 provider → 404 | 218 | `test_an_unknown_provider_is_404` |
 | 改密碼通知帳號 | 218 | `test_changing_a_password_notifies_the_account` |
+| 忘記密碼重設後通知帳號每一個聯絡方式 | 399 | `test_forgot_password.py::test_a_reset_tells_every_contact_on_the_account` |
+| 同一組驗證碼只能用一次，同時送也只有一個通過（四種碼共用） | 399 | `test_forgot_password.py::test_a_reset_code_works_once_even_when_sent_at_the_same_time` |
 | 只有 session 不能加聯絡方式再走密碼重設（路徑 C） | 220 | `test_a_session_cannot_attach_a_contact_and_reset_the_password_through_it` |
 | 擁有者仍能新增第二種聯絡方式 | 220 | `test_the_owner_can_still_add_a_second_contact_type` |
 | SSO-only 帳號在既有管道上證明新增 | 220 | `test_an_sso_only_account_proves_the_add_on_its_existing_channel` |

@@ -418,7 +418,7 @@ async def test_the_attackers_own_provider_token_does_not_prove_this_account(
 async def test_a_provider_only_account_cannot_mint_a_password_from_a_session(
     client, db_session, redis, capture_email
 ):
-    """Step 3 of the chain, gated on its own account of the proof it needs."""
+    """Step 3 of the chain: with no email or phone it is refused before any proof (ADR-401)."""
     user = await create_account(db_session, name="Bare", provider="line",
                                 provider_subject="bare-line-sub")
     headers = await auth_headers_for(redis, user.uuid)
@@ -426,8 +426,9 @@ async def test_a_provider_only_account_cannot_mint_a_password_from_a_session(
     res = await client.post("/api/v1/auth/set-password", headers=headers,
                             json={"password": "attackerpw", "salt_frontend": "aa"})
 
-    assert res.status_code == 422, res.text
-    assert "step_up.id_token" in res.json()["detail"]
+    assert res.status_code == 409, res.text
+    assert res.json()["code"] == "password_needs_contact"
+    assert capture_email.last_code is None
 
 
 # ──────────────────────────────────────────────

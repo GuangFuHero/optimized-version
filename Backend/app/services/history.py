@@ -206,7 +206,7 @@ ASSIGNED = "ASSIGNED"
 UNASSIGNED = "UNASSIGNED"
 
 _GEOMETRIES = "base_geometries"
-_SYSTEM_SOURCES = frozenset({"crawler", "gov", "ngo"})
+_SYSTEM_SOURCES = frozenset({"crawler", "gov", "ngo", "official"})
 
 # Which entity each audited table speaks for (ADR-200). The resource's own tables map to the
 # resource itself — a save that writes base_geometries + stations is one event about the

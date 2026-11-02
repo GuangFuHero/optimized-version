@@ -52,8 +52,10 @@ async def test_bootstrap_grants_super_admin_to_first_user(db):
     await bootstrap("email", "first@example.com", force=False)
 
     rows = (
-        await db.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == user_uuid))
-    ).scalars().all()
+        (await db.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == user_uuid)))
+        .scalars()
+        .all()
+    )
     assert len(rows) == 1
     assert str(rows[0].role_uuid) == role_uuid
 
@@ -83,8 +85,10 @@ async def test_bootstrap_allows_a_second_super_admin_with_force(db):
     await bootstrap("email", "second@example.com", force=True)
 
     rows = (
-        await db.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == second_uuid))
-    ).scalars().all()
+        (await db.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == second_uuid)))
+        .scalars()
+        .all()
+    )
     assert len(rows) == 1
 
 
@@ -100,12 +104,16 @@ async def test_bootstrap_exits_when_contact_not_found(db):
 async def _platform_roles_held(db, user_uuid: str) -> list[str]:
     """Names of the platform roles the user holds, sorted."""
     names = (
-        await db.execute(
-            select(Role.name)
-            .join(UserRoleAssign, UserRoleAssign.role_uuid == Role.uuid)
-            .where(UserRoleAssign.user_uuid == user_uuid, UserRoleAssign.team_uuid.is_(None))
+        (
+            await db.execute(
+                select(Role.name)
+                .join(UserRoleAssign, UserRoleAssign.role_uuid == Role.uuid)
+                .where(UserRoleAssign.user_uuid == user_uuid, UserRoleAssign.team_uuid.is_(None))
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return sorted(names)
 
 
@@ -118,7 +126,7 @@ async def _verified_user_holding(db, email: str, *role_names: str) -> str:
             role = Role(name=name, kind="platform")
             db.add(role)
             await db.flush()
-        db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role.uuid, role_kind="platform"))
+        db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role.uuid))
     await db.commit()
     return user_uuid
 
@@ -164,8 +172,9 @@ async def test_bootstrap_leaves_team_identities_alone(db):
     user_uuid = await _make_verified_user(db, email="teamed@example.com")
     db.add(
         UserRoleAssign(
-            user_uuid=user_uuid, role_uuid=team_role_uuid,
-            team_uuid=team_uuid, role_kind="team",
+            user_uuid=user_uuid,
+            role_uuid=team_role_uuid,
+            team_uuid=team_uuid,
         )
     )
     await db.commit()
@@ -173,9 +182,9 @@ async def test_bootstrap_leaves_team_identities_alone(db):
     await bootstrap("email", "teamed@example.com", force=False)
 
     rows = (
-        await db.execute(
-            select(UserRoleAssign).where(UserRoleAssign.user_uuid == user_uuid)
-        )
-    ).scalars().all()
+        (await db.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == user_uuid)))
+        .scalars()
+        .all()
+    )
     by_team = {str(r.team_uuid) if r.team_uuid else None: str(r.role_uuid) for r in rows}
     assert by_team == {None: sa_role_uuid, team_uuid: team_role_uuid}

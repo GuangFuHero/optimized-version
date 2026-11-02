@@ -113,11 +113,17 @@ async def set_password(
     revoked, and it means a session that watched a password being set does not keep running
     on the strength of it. The owner is told afterwards, because a first password on an
     SSO-only account is a new permanent way in and must not appear silently.
+
+    An account with no verified email or phone is refused before any proof (ADR-401): a password
+    signs in with one of them, so it could never be used.
     """
     user_uuid = str(current_user.uuid)
     if await identity_repository.get_password_identity(db, user_uuid) is not None:
         raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_ALREADY_SET,
                        detail="Password already set; use /auth/change-password")
+    if not any(contact.verified for contact in await contact_repository.list_by_user(db, user_uuid)):
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_NEEDS_CONTACT,
+                       detail="Add an email or phone number first: a password signs in with one")
     try:
         await contact_service.require_step_up_for_first_password(
             db, redis, actor=current_user, step_up=body.step_up,
@@ -203,10 +209,17 @@ async def forgot_password(
              dependencies=[Depends(get_rate_limiter(10, 60))])
 async def reset_password(
         body: ResetPasswordRequest,
+        background_tasks: BackgroundTasks,
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
+        email_sender=Depends(get_email_sender),
+        sms_sender=Depends(get_sms_sender),
 ):
-    """Complete a logged-out reset: consume the code, write the new password, revoke all sessions."""
+    """Complete a logged-out reset: consume the code, write the new password, revoke all sessions.
+
+    Every contact on the account is then told, as after `change-password` (ADR-218), not only
+    the one the code went to.
+    """
     bad = ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID,
                    detail="Invalid or expired code")
     try:
@@ -227,3 +240,7 @@ async def reset_password(
     new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
     await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
+    await contact_service.notify_password_set(
+        db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
+        dispatch=background_tasks.add_task, changed=True,
+    )

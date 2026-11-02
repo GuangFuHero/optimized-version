@@ -27,6 +27,9 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   password_not_set: '你的帳號還沒有設定密碼，請改用「建立密碼」。',
   password_already_set: '你的帳號已經設過密碼了，請改用「變更密碼」。',
   password_incorrect: '目前密碼不正確，請重新輸入。',
+  // A first password on an account with no email or phone to sign in with: 帳號安全 greys the button
+  // out before it is ever sent.
+  password_needs_contact: '要先新增電子郵件或手機，才能設定密碼。',
   // Also what a request that needs a sign-in gets without a token, so here it means the session is
   // gone; only the login form reads it as a wrong password (`loginErrorMessage`).
   credentials_invalid: '登入已失效，請重新登入。',

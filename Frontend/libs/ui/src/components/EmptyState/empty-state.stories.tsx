@@ -1,4 +1,4 @@
-import { Inbox, SearchX } from 'lucide-react';
+import { BellOff, Inbox, SearchX } from 'lucide-react';
 import { Button } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -27,4 +27,12 @@ export const TitleOnly: Story = {
 };
 export const WithAction: Story = {
   args: { action: <Button variant="outlined">清除篩選</Button> },
+};
+export const Prominent: Story = {
+  args: {
+    icon: <BellOff />,
+    title: '目前沒有通知',
+    description: '有新動態時會出現在這裡。',
+    prominent: true,
+  },
 };

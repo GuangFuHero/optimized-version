@@ -3,6 +3,8 @@
  * stop recruiting for it, and delete it. Nobody else gets the ⋯.
  */
 
+import type { ReactNode } from 'react';
+
 import type { TicketNeed } from './need-claim';
 
 /** One entry of a need's ⋯ menu. */
@@ -11,6 +13,13 @@ export interface NeedAction {
   onSelect: () => void;
   /** For what takes something away for good — deleting the need. */
   tone?: 'danger';
+  /** A leading glyph, for menus that draw one (the board's row menu). */
+  icon?: ReactNode;
+  /** Shown but not selectable; `hint` says why on hover. */
+  disabled?: boolean;
+  hint?: string;
+  /** A divider above this entry. */
+  dividerBefore?: boolean;
 }
 
 /**

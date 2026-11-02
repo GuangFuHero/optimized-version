@@ -17,7 +17,7 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
-import { getRescueColorScheme } from '@rescue-frontend/ui';
+import { getRescueColorScheme, safeAreaBottom } from '@rescue-frontend/ui';
 
 import {
   countActiveTicketFilters,
@@ -294,7 +294,7 @@ export function MobileTicketFilterBottomSheet() {
               overflowY: 'auto',
               px: 2,
               py: 2,
-              pb: 'max(24px, env(safe-area-inset-bottom))',
+              pb: safeAreaBottom(24),
             }}
           >
             <Box sx={{ minWidth: 0 }}>

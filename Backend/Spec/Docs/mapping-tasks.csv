@@ -12,7 +12,7 @@ all,all,經度,longitude,Float,Yes,-180 to 180,地理座標,,,base_geometries.ge
 all,all,緯度,latitude,Float,Yes,-90 to 90,地理座標,,,base_geometries.geometry (PostGIS POINT)
 all,all,地址,address,String,No,-,人類可讀位置,,,secondary_locations (location_type=address: full_address split into county/town/village/neighborhood/road/section/lane/alley/no; floor/room)
 all,all,電線桿編號,pole_id,String,No,-,台灣定位輔助（無地址時關鍵識別）,,,secondary_locations (location_type=pole: pole_id)
-all,all,來源,source,Enum,Yes,"user, gov, crawler, ngo, admin",資料來源識別,,,ticket_tasks.source
+all,all,來源,source,Enum,Yes,"user, official",資料來源識別：由建立的身分決定，後台為 official；之前建的需求保留 gov 或 import（ADR-438）,,,ticket_tasks.source
 all,all,可見性,visibility,Enum,Yes,"public, restricted, internal",控制前端顯示範圍,,,tickets.visibility + ticket_tasks.visibility (both levels)
 all,all,現場照片,photo_urls,Array,No,URL list,支援多張照片,,,photos.url (ref_type=ticket)
 all,all,進度說明,progress_note,Text,No,-,目前處理進展,,,ticket_tasks.progress_note

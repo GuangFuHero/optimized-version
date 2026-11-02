@@ -38,9 +38,18 @@ type AuthProviderAction = {
   icon?: ReactNode;
 };
 
+/** What the form opens filled in with. The password always opens empty. */
+export interface AuthFormInitialValues {
+  identityType: AuthIdentityType;
+  /** As typed, not normalized: a phone comes back as 0912345678, not +886912345678. */
+  identity: string;
+  name?: string;
+}
+
 interface LoginFormProps {
   mode?: AuthFormMode;
   providerActions?: readonly AuthProviderAction[];
+  initialValues?: AuthFormInitialValues;
   onSubmitAsync?: (values: {
     identityType: AuthIdentityType;
     identity: string;
@@ -51,7 +60,11 @@ interface LoginFormProps {
   onForgotPasswordAsync?: AuthAsyncAction;
   onSmsLoginAsync?: AuthAsyncAction;
   secondaryActionLabel?: string;
-  onSecondaryAction?: AuthAsyncAction;
+  /** Given the tab and the address as they stand, for the page it goes to to open with them. */
+  onSecondaryAction?: (current: {
+    identityType: AuthIdentityType;
+    identity: string;
+  }) => Promise<void> | void;
   successMessage?: string;
 }
 
@@ -105,6 +118,7 @@ function resolveIdentityFieldCopy(identityType: AuthIdentityType) {
 export function LoginForm({
   mode = 'login',
   providerActions = mode === 'login' ? defaultProviderActions : [],
+  initialValues,
   onSubmitAsync,
   onForgotPasswordAsync,
   onSmsLoginAsync,
@@ -117,7 +131,9 @@ export function LoginForm({
   const [submissionSuccess, setSubmissionSuccess] = useState<
     string | undefined
   >();
-  const [identityType, setIdentityType] = useState<AuthIdentityType>('email');
+  const [identityType, setIdentityType] = useState<AuthIdentityType>(
+    initialValues?.identityType ?? 'email',
+  );
 
   const {
     control,
@@ -128,7 +144,13 @@ export function LoginForm({
     name: string;
     identity: string;
     password: string;
-  }>({ defaultValues: { name: '', identity: '', password: '' } });
+  }>({
+    defaultValues: {
+      name: initialValues?.name ?? '',
+      identity: initialValues?.identity ?? '',
+      password: '',
+    },
+  });
 
   const nameValue = useWatch({ control, name: 'name' }) ?? '';
   const identityValue = useWatch({ control, name: 'identity' }) ?? '';
@@ -169,6 +191,13 @@ export function LoginForm({
     successMessage ??
     (mode === 'register' ? loginFormText.registerSuccessMessage : undefined);
   const shouldShowProviderActions = resolvedProviderActions.length > 0;
+  // Opened filled in, focus goes to the first field left to fill: the name, when only the address
+  // came along from the login page; else the password. It also needs a place to go: the button
+  // pressed to get here is gone.
+  const focusesName =
+    mode === 'register' &&
+    initialValues !== undefined &&
+    !initialValues.name?.trim();
 
   const handleFormSubmit = handleSubmit(async (values) => {
     setSubmissionError(undefined);
@@ -259,6 +288,7 @@ export function LoginForm({
               onChange={field.onChange}
               placeholder={loginFormText.displayNamePlaceholder}
               autoComplete="nickname"
+              autoFocus={focusesName}
               disabled={isSubmitting}
               errorText={fieldState.error?.message}
             />
@@ -271,7 +301,8 @@ export function LoginForm({
         disabled={isSubmitting}
         onChange={(value) => {
           setIdentityType(value);
-          resetField('identity');
+          // Emptied, not reset to the one the form opened with: that was the other kind.
+          resetField('identity', { defaultValue: '' });
           setSubmissionError(undefined);
           setSubmissionSuccess(undefined);
         }}
@@ -328,6 +359,7 @@ export function LoginForm({
             autoComplete={
               mode === 'register' ? 'new-password' : 'current-password'
             }
+            autoFocus={initialValues !== undefined && !focusesName}
             disabled={isSubmitting}
             errorText={fieldState.error?.message}
           />
@@ -401,7 +433,12 @@ export function LoginForm({
           variant="outline"
           type="button"
           onClick={() => {
-            void runAction(onSecondaryAction);
+            void runAction(() =>
+              onSecondaryAction({
+                identityType,
+                identity: identityValue.trim(),
+              }),
+            );
           }}
           disabled={isSubmitting}
           sx={{ width: '100%', height: 40, minHeight: 40 }}

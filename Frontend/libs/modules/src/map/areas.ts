@@ -61,16 +61,21 @@ export function areaLabelText(
 }
 
 /**
+ * 「負責：A、B」: who a 責任區 is assigned to, as its label's popup and a ticket's detail both write it.
+ * Null when there is nobody to name.
+ */
+export function responsibleTeamsText(teams: readonly string[]): string | null {
+  return teams.length > 0 ? `負責：${teams.join('、')}` : null;
+}
+
+/**
  * What tapping an area's label tells (prototype ZONE-CLICK-101): its title, the teams of a 責任區,
  * and its note. One per line, as a note can run long.
  */
 export function areaPopupLines(
   area: RescueMapArea | RescueMapPublicZone,
 ): string[] {
-  const teams =
-    'teams' in area && area.teams.length > 0
-      ? `負責：${area.teams.join('、')}`
-      : null;
+  const teams = 'teams' in area ? responsibleTeamsText(area.teams) : null;
 
   return [areaTitle(area), teams, area.comment?.trim()].filter(
     (line): line is string => Boolean(line),

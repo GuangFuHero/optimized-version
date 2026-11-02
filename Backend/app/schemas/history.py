@@ -15,7 +15,9 @@ class ActorResponse(BaseModel):
 
     uuid: str | None = Field(description="操作者 UUID；系統寫入為 null")
     name: str | None = Field(description="操作者顯示名稱；系統寫入為 null")
-    kind: str = Field(description="user / system / crawler / gov / ngo（後三者僅建立事件，ADR-137）")
+    kind: str = Field(
+        description="user / system / crawler / gov / ngo / official（後四者僅建立事件，ADR-137）"
+    )
     is_removed: bool = Field(description="該使用者是否已被移除（仍顯示姓名，ADR-136）")
 
 

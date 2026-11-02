@@ -3,22 +3,21 @@
 import {
   GetMapAreasDocument,
   GetStationsDocument,
+  GetTicketCellsDocument,
   GetTicketsDocument,
-  createUrqlClient,
   type GetStationsQuery,
   type GetTicketsQuery,
 } from '@rescue-frontend/data-access';
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { fetchExchange, type CombinedError } from 'urql';
+import type { CombinedError } from 'urql';
 
 import type {
   RescueMapClosureArea,
+  RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapPublicZone,
 } from '../types';
 import type { SiteRouteState } from '../../route/types';
-import { sessionExpiryFetch } from '../../session/end-expired-session';
-import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import { fetchAllAreaPages } from './area-pages';
 import {
   areaOverlaysSignature,
@@ -29,10 +28,22 @@ import {
   toBoundsInput,
   withTicketStatus,
 } from './markers';
+import {
+  createSiteMapClient,
+  SITE_MAP_QUERY_CONTEXT as LIVE_QUERY_CONTEXT,
+} from './site-map-client';
+import {
+  readTicketCells,
+  ticketCellStatuses,
+  type TicketCellsNotice,
+  type TicketCellsRead,
+} from './ticket-cells';
 import { useSiteMapViewportStore } from './use-site-map-viewport-state';
 
 const EMPTY_LIVE_DATA_SNAPSHOT: SiteMapLiveDataSnapshot = {
   markers: [],
+  cells: [],
+  cellsNotice: null,
   closureAreas: [],
   publicZones: [],
   isFetching: false,
@@ -40,13 +51,15 @@ const EMPTY_LIVE_DATA_SNAPSHOT: SiteMapLiveDataSnapshot = {
   hasFetchedOnce: false,
 };
 
-const LIVE_QUERY_CONTEXT = {
-  requestPolicy: 'network-only' as const,
-  suspense: false,
-};
-
 export interface SiteMapLiveDataSnapshot {
   markers: readonly RescueMapMarkerItem[];
+  /**
+   * The cells a viewer shown tickets as cells sees, as the backend counts them (`ticketCells`,
+   * ADR-387): all of them, where `markers` holds a page. Empty for stations.
+   */
+  cells: readonly RescueMapLocationCell[];
+  /** Why the counts could not be read, kept until a read works. */
+  cellsNotice: TicketCellsNotice | null;
   closureAreas: readonly RescueMapClosureArea[];
   publicZones: readonly RescueMapPublicZone[];
   isFetching: boolean;
@@ -88,12 +101,11 @@ function resolveStationTypeFilter(state: SiteRouteState): string | undefined {
   return selectedTypes[0];
 }
 
-function resolveTicketStatusFilter(state: SiteRouteState): string | undefined {
-  if (state.dataType !== 'ticket') {
-    return undefined;
-  }
-
-  return resolveTicketStatusQueryValue(state.subDataTypes);
+function cellsSignature(
+  cells: readonly RescueMapLocationCell[],
+  notice: TicketCellsNotice | null,
+) {
+  return `${cells.map((cell) => `${cell.id}:${cell.count}:${cell.variant}`).join('|')}#${notice?.text ?? ''}`;
 }
 
 function mapMarkersForDataType({
@@ -129,6 +141,10 @@ export function createSiteMapLiveDataStore(
 ): SiteMapLiveDataStore {
   let snapshot = initialState;
   let currentMarkerSignature = markersSignature(initialState.markers);
+  let currentCellsSignature = cellsSignature(
+    initialState.cells,
+    initialState.cellsNotice,
+  );
   let currentAreaSignature = areaOverlaysSignature(initialState);
   let currentErrorSignature = initialState.error?.message ?? '';
   const dismissedMarkerIds = new Set<string>();
@@ -139,12 +155,14 @@ export function createSiteMapLiveDataStore(
       (marker) => !dismissedMarkerIds.has(marker.id),
     );
     const nextMarkerSignature = markersSignature(filteredMarkers);
+    const nextCellsSignature = cellsSignature(next.cells, next.cellsNotice);
     const nextAreaSignature = areaOverlaysSignature(next);
     const nextErrorSignature = next.error?.message ?? '';
     const unchanged =
       snapshot.isFetching === next.isFetching &&
       snapshot.hasFetchedOnce === next.hasFetchedOnce &&
       currentMarkerSignature === nextMarkerSignature &&
+      currentCellsSignature === nextCellsSignature &&
       currentAreaSignature === nextAreaSignature &&
       currentErrorSignature === nextErrorSignature;
 
@@ -154,6 +172,12 @@ export function createSiteMapLiveDataStore(
 
     snapshot = {
       markers: filteredMarkers,
+      // The same array while the cells are the same, so nothing downstream redraws them.
+      cells:
+        currentCellsSignature === nextCellsSignature
+          ? snapshot.cells
+          : next.cells,
+      cellsNotice: next.cellsNotice,
       closureAreas: next.closureAreas,
       publicZones: next.publicZones,
       isFetching: next.isFetching,
@@ -161,6 +185,7 @@ export function createSiteMapLiveDataStore(
       hasFetchedOnce: next.hasFetchedOnce,
     };
     currentMarkerSignature = nextMarkerSignature;
+    currentCellsSignature = nextCellsSignature;
     currentAreaSignature = nextAreaSignature;
     currentErrorSignature = nextErrorSignature;
     emitStoreListeners(listeners);
@@ -213,18 +238,7 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
   const viewportStore = useSiteMapViewportStore();
   const storeRef = useRef<SiteMapLiveDataStore | null>(null);
   const subDataTypesSignature = (baseRouteState.subDataTypes ?? []).join('|');
-  const client = useMemo(
-    () =>
-      createUrqlClient({
-        runtime: 'client',
-        url: '/api/graphql',
-        exchanges: [fetchExchange],
-        fetch: sessionExpiryFetch,
-        requestPolicy: 'network-only',
-        suspense: false,
-      }),
-    [],
-  );
+  const client = useMemo(() => createSiteMapClient(), []);
 
   if (!storeRef.current) {
     storeRef.current = createSiteMapLiveDataStore();
@@ -239,6 +253,9 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
 
     let cancelled = false;
     let requestId = 0;
+    // The counts last read in this run. They stay while the map is only panned or zoomed; a new run
+    // is a new filter or layer, which they do not count, so it starts with none.
+    let counted: TicketCellsRead = { cells: [], notice: null };
 
     store.clearDismissedMarkers();
 
@@ -255,11 +272,20 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
       const bounds = toBoundsInput(state);
       const activeDataType = state.dataType ?? 'station';
       const stationType = resolveStationTypeFilter(state);
-      const ticketStatus = resolveTicketStatusFilter(state);
+      // The same tickets for the pins and the cells' counts (468: left out means every status).
+      const statuses =
+        activeDataType === 'ticket'
+          ? ticketCellStatuses(state.subDataTypes)
+          : undefined;
+      // Coarser cells as the map zooms out; the server caps how fine they get and ignores it
+      // entirely for a viewer who may see exact points (ADR-283).
+      const zoom = state.position?.zoom;
 
       if (!bounds) {
         store.replaceData({
           markers: [],
+          cells: [],
+          cellsNotice: null,
           closureAreas: [],
           publicZones: [],
           isFetching: false,
@@ -271,20 +297,25 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
 
       store.setFetching(true);
 
+      // Every cell's count: a page of tickets holds 200, a cell can hold more (ADR-387). Asked with
+      // the rest, but the pins and the areas go up without waiting for it: near the backend's time
+      // limit it takes seconds.
+      const cellsRequest =
+        activeDataType === 'ticket'
+          ? client
+              .query(
+                GetTicketCellsDocument,
+                { bounds, statuses, zoom },
+                LIVE_QUERY_CONTEXT,
+              )
+              .toPromise()
+          : null;
       const [markerResult, areaResult] = await Promise.all([
         activeDataType === 'ticket'
           ? client
               .query(
                 GetTicketsDocument,
-                {
-                  bounds,
-                  status: ticketStatus,
-                  skip: 0,
-                  limit: 200,
-                  // Coarser cells as the map zooms out; the server caps how fine they get and
-                  // ignores it entirely for a viewer who may see exact points (ADR-283).
-                  zoom: state.position?.zoom,
-                },
+                { bounds, statuses, skip: 0, limit: 200, zoom },
                 LIVE_QUERY_CONTEXT,
               )
               .toPromise()
@@ -334,11 +365,39 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
 
       store.replaceData({
         markers,
+        cells: cellsRequest ? counted.cells : [],
+        cellsNotice: cellsRequest ? counted.notice : null,
         closureAreas,
         publicZones,
-        isFetching: false,
+        // Still fetching while the counts are on their way, so a cell left open waits for them
+        // before the map decides it is gone.
+        isFetching: Boolean(cellsRequest),
         error: markerResult.error ?? areaResult.error ?? null,
         hasFetchedOnce: true,
+      });
+
+      if (!cellsRequest) {
+        return;
+      }
+
+      const cellsResult = await cellsRequest;
+
+      if (cancelled || nextRequestId !== requestId) {
+        return;
+      }
+
+      // Refused (its time limit, zoomed far out) or failed: the cells this run last counted stay,
+      // rather than an empty map that reads as no requests, and the notice says why.
+      counted = readTicketCells(
+        cellsResult.data?.ticketCells,
+        cellsResult.error,
+        counted.cells,
+      );
+      store.replaceData({
+        ...store.getSnapshot(),
+        cells: counted.cells,
+        cellsNotice: counted.notice,
+        isFetching: false,
       });
     };
 

@@ -46,7 +46,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 - **不做擁有者與志工通知**（屬合併票，ADR-345）。
 - **不改演算法**，不改 `app/dedup_engine/`。
 - **不做慢層**（背景掃描、群組）。API 以配對卡為單位，`duplicate_group_uuid` 原樣回傳。
-- **批次匯入不去重**（ADR-299 不變）。
+- **不改批次匯入**。它從 ADR-398（`Spec/015`）起也跑快層；確認仍要建立的列，配對卡和提醒跟單筆建立一樣進這個佇列。
 - **不處理前端**：交接說明寫在 plan。
 
 ---
@@ -80,7 +80,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 
 - 卡本身：`uuid`、`entity_kind`、`status`、`similarity`、`evidence`（原樣，結構由 engine 決定）、
   `engine_version`、`method`、`source_layer`、`duplicate_group_uuid`、`hint_outcome`、
-  `created_at`、`reviewed_by`、`reviewed_at`。
+  `created_at`、`reviewed_by`、`reviewed_by_name`（審核者的暱稱，ADR-441）、`reviewed_at`。
 - `low`、`high` 兩邊的摘要（ADR-340），三種實體共用一個形狀（`app/services/dedup_review.py::EntitySummary`）：
 
   | 欄位 | ticket_task | station | ticket |
@@ -100,6 +100,7 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 ### 2.2 `GET /admin/duplicate-pairs/{uuid}` — `ai_duplicate.view`
 
 單張卡（同上的形狀）＋ `events`：這張卡的 `dedup_audit_events`，依時間排序。
+每筆事件附 `actor_name`：`actor_uuid` 的暱稱，系統寫的事件為 `null`（ADR-441）。
 找不到或已軟刪除 → 404。
 
 ### 2.3 `POST /admin/duplicate-pairs/{uuid}/confirm`、`/reject` — `ai_duplicate.review`
@@ -123,7 +124,8 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 
 - `dedup_submission.submit_new_ticket`／`submit_new_task`／`submit_new_station` commit 之後，
   這次送出若寫了 `dup_ignored` 卡，就發一則通知給有 `ai_duplicate.review` 的人
-  （`NotificationRecipientResolver.resolve_permission`），內容「N 筆疑似重複待審」。
+  （`NotificationRecipientResolver.resolve_permission`），內容「N 筆疑似重複待審」，
+  請對方到「重複審核」處理（頁面名稱不帶「AI」，ADR-442）。
   類型 `dedup_review_pending`，`ref_type = "dedup_review"`、`ref_uuid = None`（指向審核頁）。
 - 通知失敗只記 log，不影響已完成的建立。
 - 移除 `ticket.py`、`station.py` 裡兩個永遠不會觸發的 `dedup_flag_*` 分支與其測試。

@@ -115,6 +115,16 @@ export const rescueMapMarkerStyles = {
     transform: 'rotate(-45deg)',
     boxShadow: '0 3px 8px rgba(15, 23, 42, 0.24)',
   },
+  // A 開啟空間 space: the drop's box, unrotated (designer §開啟空間 3).
+  '.map-pin--square .map-pin__drop': {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    transform: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   '.map-pin--dimmed .map-pin__drop': {
     opacity: 0.45,
   },

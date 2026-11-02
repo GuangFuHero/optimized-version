@@ -22,6 +22,8 @@ from app.models.ticket_task import TaskAssignment, TicketTask
 # The need statuses that still take volunteers. Needs no longer get `in_progress` (ADR-293), with
 # no data migration; on rows written before that, it still means "open".
 OPEN_NEED_STATUSES = frozenset({"pending", "in_progress"})
+# The ticket statuses that say a need is still open: what recompute_ticket_status gives such a ticket.
+OPEN_TICKET_STATUSES = frozenset({"pending", "in_progress"})
 
 
 async def recompute_ticket_status(db: AsyncSession, *, ticket_uuid: str) -> None:

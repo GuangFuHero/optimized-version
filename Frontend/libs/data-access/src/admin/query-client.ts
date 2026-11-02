@@ -1,4 +1,9 @@
-import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  type Query,
+} from '@tanstack/react-query';
 import { CombinedError } from 'urql';
 
 import ApiError from '../rest/api-error';
@@ -17,6 +22,33 @@ export function isAdminPermissionError(error: Error | null) {
     // Resolver HTTPExceptions carry permission failures; transport 403s may have other causes.
     error.graphQLErrors.some((item) => item.message.startsWith('403:'))
   );
+}
+
+/**
+ * Set `meta: { [SILENT_ERROR_META]: true }` on a query that shows its own error state, so a failure
+ * is not also raised through `onError` (the admin app toasts it). A 401 is still raised: the
+ * app's sign-out on an expired session hangs off `onError`.
+ */
+export const SILENT_ERROR_META = 'silentError';
+
+/**
+ * Whether a failed query turns the whole page into the shell's 403 page. A silent query shows its
+ * own forbidden state, so the rest of the page keeps rendering (ADMIN-023: one section per domain).
+ */
+export function forbidsPage(query: Query) {
+  return (
+    query.meta?.[SILENT_ERROR_META] !== true &&
+    isAdminPermissionError(query.state.error)
+  );
+}
+
+/** The HTTP status behind a REST or GraphQL failure; undefined when there was no response. */
+function statusOf(error: Error): number | undefined {
+  if (error instanceof ApiError) return error.status;
+  if (error instanceof CombinedError && error.response instanceof Response) {
+    return error.response.status;
+  }
+  return undefined;
 }
 
 export function createAdminQueryClient(onError: (error: Error) => void) {
@@ -40,6 +72,8 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
       // is retried on the next poll, not reported.
       onError: (error, query) => {
         if (query.meta?.quietErrors) return;
+        const silent = query.meta?.[SILENT_ERROR_META] === true;
+        if (silent && statusOf(error) !== 401) return;
         if (!isAdminPermissionError(error)) reportError(error);
       },
     }),
@@ -48,13 +82,7 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
       queries: {
         staleTime: 30_000,
         retry: (count, error) => {
-          const status =
-            error instanceof ApiError
-              ? error.status
-              : error instanceof CombinedError &&
-                  error.response instanceof Response
-                ? error.response.status
-                : undefined;
+          const status = statusOf(error);
           if (
             status === 401 ||
             status === 403 ||

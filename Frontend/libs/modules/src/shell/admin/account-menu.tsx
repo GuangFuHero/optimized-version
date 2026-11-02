@@ -21,6 +21,7 @@ import type { components } from '@rescue-frontend/data-access/openapi';
 
 import { Avatar, Badge, designTokens } from '@rescue-frontend/ui';
 import {
+  backOfficeIdentities,
   identityLabel,
   ROLE_DESCRIPTIONS,
   ROLE_DISPLAY_NAMES,
@@ -57,7 +58,7 @@ export function AccountMenu() {
   const session = useAuthSession();
   const name = user?.name ?? session.user?.name ?? '';
   const identity = user?.active_identity;
-  const identities = user?.identities ?? [];
+  const identities = backOfficeIdentities(user?.identities ?? []);
   const switchIdentity = useSwitchIdentity();
   const canViewTeams = Boolean(
     identity?.team_uuid && user?.capabilities.includes('team.view'),
@@ -74,7 +75,7 @@ export function AccountMenu() {
   const open = Boolean(anchorEl);
   const itemSx = {
     gap: '10px',
-    minHeight: 0,
+    minHeight: 44,
     px: '10px',
     borderRadius: `${radius.sm}px`,
     ...typography.label[400],
@@ -91,8 +92,10 @@ export function AccountMenu() {
         aria-expanded={open}
         onClick={(event) => setAnchorEl(event.currentTarget)}
         sx={{
-          gap: '10px',
-          p: '5px 9px 5px 5px',
+          gap: { mobile: 0, tablet: '10px' },
+          minHeight: 44,
+          minWidth: 44,
+          p: { mobile: '4px', tablet: '5px 9px 5px 5px' },
           borderRadius: `${radius.full}px`,
           bgcolor: open ? color.bg.neutral.subtle : 'transparent',
           textAlign: 'left',
@@ -101,7 +104,12 @@ export function AccountMenu() {
         }}
       >
         <Avatar name={name} size={36} />
-        <Box sx={{ lineHeight: 1.25 }}>
+        <Box
+          sx={{
+            lineHeight: 1.25,
+            display: { mobile: 'none', tablet: 'block' },
+          }}
+        >
           <Box
             sx={{
               display: 'flex',
@@ -128,7 +136,12 @@ export function AccountMenu() {
                 color: color.fg.neutral.muted,
               }}
             >
-              <Box component={ArrowLeftRight} sx={{ width: 12, height: 12 }} />
+              {identities.length > 1 ? (
+                <Box
+                  component={ArrowLeftRight}
+                  sx={{ width: 12, height: 12 }}
+                />
+              ) : null}
               {identityLabel(identity)}
             </Box>
           )}
@@ -136,6 +149,7 @@ export function AccountMenu() {
         <Box
           component={ChevronDown}
           sx={{
+            display: { mobile: 'none', tablet: 'block' },
             width: 16,
             height: 16,
             color: color.fg.neutral.muted,

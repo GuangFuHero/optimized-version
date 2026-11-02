@@ -72,13 +72,15 @@ async def _task(db, owner, ticket, *, minutes_ago=10.0, uuid=None, **overrides) 
         "task_name": "一樓淹水需要抽水機",
         "task_description": "水深及膝",
         "status": "pending",
-    }
+    } | overrides
     task = TicketTask(
         uuid=uuid or uuid_mod.uuid4(),
         ticket_uuid=ticket.uuid,
         created_by=owner,
         created_at=NOW - timedelta(minutes=minutes_ago),
-        **(fields | overrides),
+        completed_at=NOW if fields["status"] == "fulfilled" else None,
+        canceled_at=NOW if fields["status"] == "canceled" else None,
+        **fields,
     )
     db.add(task)
     await db.flush()
@@ -221,7 +223,7 @@ async def test_check_writes_nothing(db):
 def test_version_and_radius():
     """The radius per kind is the hint boundary (phone bonus included) plus a float-rounding margin."""
     engine = FastEngine()
-    assert engine.version == "fast-v4"
+    assert engine.version == "fast-v5"
     assert engine.radius_m("ticket_task") == pytest.approx(max_hint_distance_m(TICKET_TASK_PARAMETERS) * 1.1)
     assert engine.radius_m("station") == pytest.approx(max_hint_distance_m(STATION_PARAMETERS) * 1.1)
     assert engine.radius_m("ticket_task") == pytest.approx(290.8, abs=0.1)

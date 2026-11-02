@@ -23,7 +23,6 @@ import {
 } from '../../areas';
 import { PUBLIC_ZONE_COLORS } from '../../constants';
 import {
-  buildLocationCells,
   isCoarseTicket,
   locationCellBoundary,
   locationCellLabelFit,
@@ -36,6 +35,7 @@ import type {
   RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapPublicZone,
+  RescueMapView,
   RescueMapViewportStoreSnapshot,
   RescueMapViewportStoreLike,
 } from '../../types';
@@ -48,6 +48,8 @@ const { color, primitives } = designTokens;
 interface RescueMapCanvasProps {
   controller: RescueMapControllerValue;
   onMarkerClick: (item: RescueMapMarkerItem) => void;
+  /** 訪客的概略區塊（ADR-281），由 `Map` 決定：從 markers 分組，或後端每格的筆數。 */
+  locationCells: readonly RescueMapLocationCell[];
   /** 點選訪客的概略區塊（ADR-281）。未提供時格子只畫不接點擊。 */
   onLocationCellClick?: (cell: RescueMapLocationCell) => void;
   previewMarker?: RescueMapMarkerItem | null;
@@ -73,6 +75,8 @@ interface RescueMapCanvasProps {
   zoomControlPosition?: L.ControlPosition;
   /** Hands the Leaflet map over once it is built, for callers that steer it themselves. */
   onMapReady?: (map: L.Map) => void;
+  /** Where the map came to rest after it moved — see `Map`'s `viewMemoryKey`. */
+  onViewChange?: (view: RescueMapView) => void;
 }
 
 /**
@@ -107,7 +111,8 @@ function createDraftPointIcon(): L.DivIcon {
 
 /** moveend／zoomend 後延遲寫回路由狀態，把連續手勢合併成一次提交。 */
 const VIEWPORT_SYNC_DEBOUNCE_MS = 250;
-const MARKER_CLUSTER_MODULE_ID = 'react-leaflet-cluster';
+/** Adds `L.markerClusterGroup` to the global `L` that `leaflet` set, which is why it loads after it. */
+const MARKER_CLUSTER_MODULE_ID = 'leaflet.markercluster';
 const EMPTY_VIEWPORT_STATE: RescueMapViewportStoreSnapshot = {};
 
 interface MarkerHandle {
@@ -703,7 +708,7 @@ function createLocationCellLabelIcon(
     className: 'map-location-cell-wrapper',
     html: [
       `<div class="map-location-cell${selected ? ' map-location-cell--active' : ''}">`,
-      `<span class="map-location-cell__count">${cell.members.length}</span>`,
+      `<span class="map-location-cell__count">${cell.count}</span>`,
       '<span class="map-location-cell__unit">求助</span>',
       '</div>',
     ].join(''),
@@ -720,7 +725,7 @@ function getLocationCellLayerSignature(
   return cells
     .map(
       (cell) =>
-        `${cell.id}:${cell.members.length}:${cell.variant}:${cell.id === selectedId ? 1 : 0}`,
+        `${cell.id}:${cell.count}:${cell.variant}:${cell.id === selectedId ? 1 : 0}`,
     )
     .join('|');
 }
@@ -842,7 +847,7 @@ function syncLocationCellLayer({
 
     const marker = L.marker(cell.position, {
       icon: createLocationCellLabelIcon(cell, selected),
-      title: `${cell.members.length} 筆求助（概略區塊）`,
+      title: `${cell.count} 筆求助（概略區塊）`,
       keyboard: true,
     })
       .on('click', onClick)
@@ -860,6 +865,7 @@ function syncLocationCellLayer({
 export function RescueMapCanvas({
   controller,
   onMarkerClick,
+  locationCells,
   onLocationCellClick,
   previewMarker,
   cursor,
@@ -874,6 +880,7 @@ export function RescueMapCanvas({
   clusterMaxZoom,
   zoomControlPosition,
   onMapReady,
+  onViewChange,
 }: RescueMapCanvasProps) {
   const externalViewportState =
     useSyncExternalStore<RescueMapViewportStoreSnapshot>(
@@ -909,6 +916,7 @@ export function RescueMapCanvas({
   const onMarkerClickRef = useRef(onMarkerClick);
   const onLocationCellClickRef = useRef(onLocationCellClick);
   const onDraftPointChangeRef = useRef(onDraftPointChange);
+  const onViewChangeRef = useRef(onViewChange);
   const initialViewportStateRef = useRef(externalViewportState);
   // Read once, when the map is built.
   const mapOptionsRef = useRef({
@@ -923,6 +931,7 @@ export function RescueMapCanvas({
   onMarkerClickRef.current = onMarkerClick;
   onLocationCellClickRef.current = onLocationCellClick;
   onDraftPointChangeRef.current = onDraftPointChange;
+  onViewChangeRef.current = onViewChange;
 
   // 地圖實例整個生命週期只建立一次；受控的視角變化由下方 setView 效果套用，
   // 避免位置寫回路由狀態後反過來把整張地圖銷毀重建。
@@ -1066,12 +1075,23 @@ export function RescueMapCanvas({
       syncViewportStateToController(currentMap, controllerRef.current);
     };
 
+    // Told on the map's own moves, as the prototype's `watchMapLast` is on `moveend`; not on the
+    // first sync below, which only reports where the map opened.
+    const reportViewChange = () => {
+      const center = map.getCenter();
+
+      onViewChangeRef.current?.({
+        center: [center.lat, center.lng],
+        zoom: map.getZoom(),
+      });
+    };
+
     const scheduleViewportSync = () => {
       window.clearTimeout(viewportSyncTimer);
-      viewportSyncTimer = window.setTimeout(
-        syncViewport,
-        VIEWPORT_SYNC_DEBOUNCE_MS,
-      );
+      viewportSyncTimer = window.setTimeout(() => {
+        syncViewport();
+        reportViewChange();
+      }, VIEWPORT_SYNC_DEBOUNCE_MS);
     };
 
     const handleMapClick = (event: L.LeafletMouseEvent) => {
@@ -1323,9 +1343,8 @@ export function RescueMapCanvas({
       return;
     }
 
-    const cells = buildLocationCells(controller.markers);
     const signature = getLocationCellLayerSignature(
-      cells,
+      locationCells,
       controller.selectedMarkerId,
     );
 
@@ -1337,12 +1356,12 @@ export function RescueMapCanvas({
     cellLabelsRef.current = syncLocationCellLayer({
       map,
       cellLayer,
-      cells,
+      cells: locationCells,
       selectedId: controller.selectedMarkerId,
       onCellClickRef: onLocationCellClickRef,
     });
     queueAreaLabelsRef.current?.();
-  }, [controller.markers, controller.selectedMarkerId]);
+  }, [locationCells, controller.selectedMarkerId]);
 
   useEffect(() => {
     const overlayLayer = overlayLayerRef.current;

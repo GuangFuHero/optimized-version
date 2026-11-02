@@ -74,7 +74,7 @@ class GeoMutation:
             geometry=input.geometry,
             type=input.type, name=input.name, description=input.description,
             op_hour=input.op_hour, level=input.level, comment=input.comment,
-            source=input.source, visibility=input.visibility.value,
+            visibility=input.visibility.value,
             contact_name=input.contact_name, contact_email=input.contact_email,
             contact_phone=input.contact_phone,
             operational_status=input.operational_status.value,

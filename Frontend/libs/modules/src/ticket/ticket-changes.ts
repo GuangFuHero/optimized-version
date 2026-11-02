@@ -9,6 +9,7 @@ import type { CreateHelpRequestMutation } from '@rescue-frontend/data-access';
 
 const channel = new EventTarget();
 const TICKET_CHANGED = 'ticket-changed';
+const TICKET_REREAD = 'ticket-reread';
 const TICKET_CREATED = 'ticket-created';
 
 type TicketFiled = Extract<
@@ -37,6 +38,27 @@ export function onTicketChanged(
   channel.addEventListener(TICKET_CHANGED, handle);
 
   return () => channel.removeEventListener(TICKET_CHANGED, handle);
+}
+
+/**
+ * Word that a page read a ticket again after a change (`NeedClaimProvider`), for a copy of it the
+ * page does not hold to read it again too: a building's tickets, shown in its drawer and stepped
+ * through from a ticket's detail. The cache cannot do it: tickets are not keyed in it.
+ */
+export function announceTicketReread(ticketUuid: string): void {
+  channel.dispatchEvent(new CustomEvent(TICKET_REREAD, { detail: ticketUuid }));
+}
+
+/** Listen for it; returns what stops listening, for an effect's cleanup. */
+export function onTicketReread(
+  listener: (ticketUuid: string) => void,
+): () => void {
+  const handle = (event: Event) =>
+    listener((event as CustomEvent<string>).detail);
+
+  channel.addEventListener(TICKET_REREAD, handle);
+
+  return () => channel.removeEventListener(TICKET_REREAD, handle);
 }
 
 /**

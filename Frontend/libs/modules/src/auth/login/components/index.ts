@@ -4,4 +4,8 @@ export { AuthIdentityToggle } from './auth-identity-toggle';
 export { AuthPasswordField } from './auth-password-field';
 export { AuthReturnHint } from './auth-return-hint';
 export { AuthShell } from './auth-shell';
-export { LoginForm, RegisterForm } from './login-form';
+export {
+  LoginForm,
+  RegisterForm,
+  type AuthFormInitialValues,
+} from './login-form';

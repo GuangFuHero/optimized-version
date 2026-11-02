@@ -3,8 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   PAGE_HELP_SEEN_KEY,
   hasSeenPageHelp,
+  helpTextRuns,
   markPageHelpSeen,
   pageHelpKey,
+  pageHelpWidth,
+  type PageHelp,
   type SeenStorage,
 } from './page-help';
 
@@ -51,6 +54,56 @@ describe('pageHelpKey', () => {
     expect(pageHelpKey('/mapping')).toBeNull();
     expect(pageHelpKey('/listings')).toBeNull();
     expect(pageHelpKey('/')).toBeNull();
+  });
+});
+
+describe('helpTextRuns', () => {
+  it('sets in bold what ** marks, as the prototype does', () => {
+    expect(helpTextRuns('以橘白斜紋**顯示於前後台所有地圖**，提醒')).toEqual([
+      { text: '以橘白斜紋', bold: false },
+      { text: '顯示於前後台所有地圖', bold: true },
+      { text: '，提醒', bold: false },
+    ]);
+  });
+
+  it('keeps text without marks as one plain run', () => {
+    expect(helpTextRuns('點一筆看詳細資訊')).toEqual([
+      { text: '點一筆看詳細資訊', bold: false },
+    ]);
+  });
+
+  it('leaves out the empty runs a mark at either end makes', () => {
+    expect(helpTextRuns('**可選擇「前台可見」**決定')).toEqual([
+      { text: '可選擇「前台可見」', bold: true },
+      { text: '決定', bold: false },
+    ]);
+  });
+
+  it('runs a mark left open to the end in bold, as the prototype does', () => {
+    expect(helpTextRuns('前面**後面')).toEqual([
+      { text: '前面', bold: false },
+      { text: '後面', bold: true },
+    ]);
+  });
+});
+
+describe('pageHelpWidth', () => {
+  const help: PageHelp = { title: '地圖', what: '看附近', can: [] };
+
+  it("is the prototype's 340 for a page of sentences", () => {
+    expect(pageHelpWidth(help)).toBe(340);
+    expect(
+      pageHelpWidth({ ...help, sections: [{ title: '說明', body: '一段話' }] }),
+    ).toBe(340);
+  });
+
+  it('widens to 400 when a section holds a list, as the prototype does', () => {
+    expect(
+      pageHelpWidth({
+        ...help,
+        sections: [{ title: '區域標示定義', items: ['危險區', '責任區'] }],
+      }),
+    ).toBe(400);
   });
 });
 

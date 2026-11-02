@@ -3,15 +3,6 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
-import AlternateEmailRoundedIcon from '@mui/icons-material/AlternateEmailRounded';
-import ChatRoundedIcon from '@mui/icons-material/ChatRounded';
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import FacebookRoundedIcon from '@mui/icons-material/FacebookRounded';
-import FileDownloadRoundedIcon from '@mui/icons-material/FileDownloadRounded';
-import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded';
-import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
-import XIcon from '@mui/icons-material/X';
 import {
   Box,
   Button,
@@ -27,11 +18,18 @@ import { createQrDataUrl, downloadQrSvg } from './qr-code';
 import {
   copyPointShareUrl,
   createPointShareLinks,
+  isShareSheetDismissal,
   openPointShareLink,
+  sharesThroughDeviceSheet,
 } from './share-links';
 import type { PointShareChannel, PointShareTarget } from './types';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  safeAreaBottom,
+  Icons,
+} from '@rescue-frontend/ui';
 
 const { color, radius } = designTokens;
 
@@ -42,10 +40,10 @@ interface PointShareDrawerProps {
 }
 
 const channelIcons: Record<PointShareChannel, ReactElement> = {
-  line: <ChatRoundedIcon />,
-  facebook: <FacebookRoundedIcon />,
-  threads: <AlternateEmailRoundedIcon />,
-  x: <XIcon />,
+  line: <Icons.messageCircle />,
+  facebook: <Icons.facebookBrand />,
+  threads: <Icons.atSign />,
+  x: <Icons.xBrand />,
 };
 
 // A tile a finger can hit (prototype site-actions.jsx:1318). Five of them fit one row at 390px, each
@@ -87,6 +85,8 @@ export function PointShareDrawer({
   // After mount: the server has no `navigator`, and most desktop browsers have no share sheet —
   // a button that does nothing is left out rather than shown.
   const [canShareNatively, setCanShareNatively] = useState(false);
+  // A finger, not a mouse: where a channel's own app may be installed and take its links.
+  const touchScreen = useMediaQuery('(pointer: coarse)');
   const links = useMemo(
     () => (target ? createPointShareLinks(target) : []),
     [target],
@@ -110,15 +110,20 @@ export function PointShareDrawer({
     window.setTimeout(() => setCopyState('idle'), 1400);
   };
 
-  const handleNativeShare = () => {
+  const handleNativeShare = (fallbackHref?: string) => {
     if (!target) {
       return;
     }
 
-    // A dismissed sheet rejects; there is nothing to tell the person who dismissed it.
+    // A dismissed sheet rejects; there is nothing to tell the person who dismissed it. One that
+    // fails, opened from a channel's tile, gives way to that channel's page.
     navigator
       .share({ title: target.title, text: target.description, url: target.url })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (fallbackHref && !isShareSheetDismissal(error)) {
+          openPointShareLink(fallbackHref);
+        }
+      });
   };
 
   return (
@@ -146,7 +151,7 @@ export function PointShareDrawer({
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          pb: 'env(safe-area-inset-bottom)',
+          pb: safeAreaBottom(0),
         }}
       >
         {isPhone ? (
@@ -185,7 +190,7 @@ export function PointShareDrawer({
             {target?.title ?? '分享'}
           </Typography>
           <IconButton aria-label="關閉分享" onClick={onClose} size="small">
-            <CloseRoundedIcon />
+            <Icons.close />
           </IconButton>
         </Box>
 
@@ -239,7 +244,7 @@ export function PointShareDrawer({
               </Typography>
               <Button
                 size="small"
-                startIcon={<FileDownloadRoundedIcon />}
+                startIcon={<Icons.download />}
                 onClick={() => downloadQrSvg(target.url, `${target.title}.svg`)}
                 sx={{ textTransform: 'none' }}
               >
@@ -250,8 +255,8 @@ export function PointShareDrawer({
             {canShareNatively ? (
               <Button
                 variant="contained"
-                startIcon={<IosShareRoundedIcon />}
-                onClick={handleNativeShare}
+                startIcon={<Icons.share />}
+                onClick={() => handleNativeShare()}
                 sx={{ textTransform: 'none', fontWeight: 700 }}
               >
                 分享到⋯
@@ -279,7 +284,14 @@ export function PointShareDrawer({
                 {links.map((link) => (
                   <ButtonBase
                     key={link.channel}
-                    onClick={() => openPointShareLink(link.href)}
+                    onClick={() =>
+                      sharesThroughDeviceSheet(link.channel, {
+                        canShareNatively,
+                        touchScreen,
+                      })
+                        ? handleNativeShare(link.href)
+                        : openPointShareLink(link.href)
+                    }
                     sx={tileSx}
                   >
                     {channelIcons[link.channel]}
@@ -287,11 +299,7 @@ export function PointShareDrawer({
                   </ButtonBase>
                 ))}
                 <ButtonBase onClick={handleCopy} sx={tileSx}>
-                  {copyState === 'copied' ? (
-                    <CheckRoundedIcon />
-                  ) : (
-                    <LinkRoundedIcon />
-                  )}
+                  {copyState === 'copied' ? <Icons.check /> : <Icons.link />}
                   {copyState === 'copied' ? '已複製' : '複製連結'}
                 </ButtonBase>
               </Box>

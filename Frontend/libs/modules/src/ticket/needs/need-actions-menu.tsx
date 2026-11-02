@@ -1,16 +1,17 @@
 'use client';
 
-import MoreHorizRoundedIcon from '@mui/icons-material/MoreHorizRounded';
 import {
   ButtonBase,
+  Divider,
   Menu,
   MenuItem,
+  Tooltip,
   type SxProps,
   type Theme,
 } from '@mui/material';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import type { NeedAction } from './need-actions';
 
@@ -59,7 +60,7 @@ export function NeedActionsMenu({ needName, items, sx }: NeedActionsMenuProps) {
           ...(Array.isArray(sx) ? sx : [sx]),
         ]}
       >
-        <MoreHorizRoundedIcon sx={{ fontSize: 20 }} />
+        <Icons.ellipsis sx={{ fontSize: 20 }} />
       </ButtonBase>
 
       <Menu
@@ -83,23 +84,36 @@ export function NeedActionsMenu({ needName, items, sx }: NeedActionsMenuProps) {
         }}
       >
         {items.map((item) => (
-          <MenuItem
-            key={item.label}
-            onClick={() => {
-              setAnchorEl(null);
-              item.onSelect();
-            }}
-            sx={{
-              minHeight: 44,
-              fontSize: displayTextSize[14],
-              color:
-                item.tone === 'danger'
-                  ? color.fg.danger
-                  : color.fg.neutral.default,
-            }}
-          >
-            {item.label}
-          </MenuItem>
+          <Fragment key={item.label}>
+            {item.dividerBefore && <Divider sx={{ my: 0.5 }} />}
+            <Tooltip
+              title={item.disabled ? (item.hint ?? '') : ''}
+              placement="left"
+            >
+              {/* A disabled item takes no pointer events, so the tooltip hangs on a wrapper. */}
+              <span>
+                <MenuItem
+                  disabled={item.disabled}
+                  onClick={() => {
+                    setAnchorEl(null);
+                    item.onSelect();
+                  }}
+                  sx={{
+                    minHeight: 44,
+                    gap: 1.25,
+                    fontSize: displayTextSize[14],
+                    color:
+                      item.tone === 'danger'
+                        ? color.fg.danger
+                        : color.fg.neutral.default,
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                </MenuItem>
+              </span>
+            </Tooltip>
+          </Fragment>
         ))}
       </Menu>
     </>

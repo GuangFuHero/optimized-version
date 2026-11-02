@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BASE_LAYER_CONFIG,
   DEFAULT_RESCUE_MAP_OVERLAY_LAYERS,
+  MAP_VIEW_TAIWAN,
   OVERLAY_LAYER_CONFIG,
-  RESCUE_MAP_INITIAL_VIEW,
   RESCUE_MAP_OVERLAY_LAYER_ORDER,
   isSelectableBaseLayer,
 } from '../constants';
@@ -20,6 +20,7 @@ import type {
   RescueMapMarkerItem,
   RescueMapOverlayLayer,
   RescueMapRouteState,
+  RescueMapView,
 } from '../types';
 import { filterRescueMapMarkers } from '../utils/filter-markers';
 
@@ -85,6 +86,8 @@ interface RescueMapControllerOptions {
    * 描述、需求名稱這裡看不到，再過濾一次會把命中的單濾掉。
    */
   filterMarkersBySearch?: boolean;
+  /** Where the map opens with no position of its own yet; all of Taiwan when not given. */
+  defaultView?: RescueMapView;
 }
 
 const EMPTY_ROUTE_STATE: RescueMapRouteState = {};
@@ -198,6 +201,7 @@ export function useRescueMapController({
   filterMarkersByOverlayLayers = true,
   filterMarkersByBbox = true,
   filterMarkersBySearch = true,
+  defaultView = MAP_VIEW_TAIWAN,
 }: RescueMapControllerOptions = {}): RescueMapControllerValue {
   // 受控（提供 onRouteStateChange）由外部網址驅動；
   // 非受控（後台）則退回內部狀態，維持既有行為。
@@ -502,10 +506,10 @@ export function useRescueMapController({
   }, [sourceClosureAreas.length, sourcePublicZones.length]);
   const initialView = useMemo(
     () => ({
-      center: state.position?.center ?? RESCUE_MAP_INITIAL_VIEW.center,
-      zoom: state.position?.zoom ?? RESCUE_MAP_INITIAL_VIEW.zoom,
+      center: state.position?.center ?? defaultView.center,
+      zoom: state.position?.zoom ?? defaultView.zoom,
     }),
-    [state.position],
+    [defaultView, state.position],
   );
 
   return {

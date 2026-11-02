@@ -137,8 +137,9 @@ for viewers without `ticket.view_detail`.
 1. **Site help request** (`ticket/help-request/help-request-form.ts`): call `normalizeAddress` with the
    pin when the address field loses focus, then send the line as `fullAddress` with its `addressToken`
    instead of putting it in `landmarkNote`.
-2. **Admin create drawers** (`station-create-drawer.tsx`, `ticket-create-drawer.tsx`): replace the call
-   to `/api/google/reverse-geocode` with `reverseGeocode`, show `fullAddress`, and send it with the token.
+2. **Admin create forms**: done. The station form (`station-form.tsx`) and the ticket board's form
+   (`ticket-board/ticket-form.tsx`) call the backend `reverseGeocode` — the `/api/google/reverse-geocode`
+   route is gone — show `fullAddress`, and send it with the token.
    The drawers' separate county / city / lane / alley fields can become one address field plus floor
    and room; the parts come back from the backend already split.
 3. **Station bulk files**: the five address columns are now one `address` column; `floor` and `room`

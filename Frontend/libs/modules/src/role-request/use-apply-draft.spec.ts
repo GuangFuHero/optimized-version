@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { readSavedApplyDraft, type ApplyDraft } from './use-apply-draft';
+import {
+  clearApplyDraft,
+  readSavedApplyDraft,
+  type ApplyDraft,
+} from './use-apply-draft';
 
 const DRAFT: ApplyDraft = {
   role: 'ngo',
@@ -50,5 +54,29 @@ describe('readSavedApplyDraft', () => {
     expect(
       readSavedApplyDraft(JSON.stringify({ v: 1, draft: DRAFT })),
     ).toBeNull();
+  });
+});
+
+describe('clearApplyDraft', () => {
+  it('takes the form typed out of the tab on signing out, and nothing else', () => {
+    const items = new Map([
+      ['wg:role-request-draft', '{"userId":"u-1"}'],
+      ['wg:other', 'kept'],
+    ]);
+
+    clearApplyDraft({ removeItem: (key) => void items.delete(key) });
+
+    expect([...items.keys()]).toEqual(['wg:other']);
+  });
+
+  it('does nothing without storage, or when the browser refuses it', () => {
+    expect(() => clearApplyDraft(null)).not.toThrow();
+    expect(() =>
+      clearApplyDraft({
+        removeItem: () => {
+          throw new Error('blocked');
+        },
+      }),
+    ).not.toThrow();
   });
 });

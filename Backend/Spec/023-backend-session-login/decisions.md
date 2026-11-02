@@ -209,6 +209,8 @@ write: loudly, rather than accepting one it should not.
 
 ### ADR-328 Every 401 a token earns names why: refresh, or signed out
 
+> **Partly superseded 2026-10-28 (Spec 029, ADR-402–404, 415).** A revoked identity now answers `identity_reset`, which clears no cookies: the session is moved to the default identity and a refresh carries on. The backend no longer answers `identity_revoked`.
+
 > **Status: ACCEPTED (2026-10-18).** Chosen by the product owner on 2026-10-16, together with moving sign-in
 > to the backend. Answering an unreachable session store with a 503 instead of signing everyone out was
 > chosen on 2026-10-18, after the frontend's testing showed that stopping Redis for a moment signed every
@@ -551,8 +553,10 @@ browser never holds an `id_token`, so the third proof is out of its reach, and e
      the usual 401 (ADR-328), so the site's proxy refreshes and sends the request again. Anything a refresh
      cannot fix (no token, a session that has ended, a revoked identity) is sent to
      `{app}/login?error=session_expired` instead of answering JSON, because this is a page navigation.
-   - `action` is one of `add_contact`, `set_password`, `link_identity` and `unlink_identity`, the actions
-     whose proof can be the third one. `provider` must be one the account holds.
+   - `action` is one of `add_contact`, `link_identity` and `unlink_identity`, the actions whose proof can be
+     the third one. `provider` must be one the account holds. (`set_password` was one until ADR-401,
+     `Spec/012`, 2026-10-27: an account with no email or phone is now refused a password, and one with a
+     contact proves it there.)
    - `app`, `return_to` and the `Referer` follow ADR-331 points 4 and 6.
    - The state also records the purpose, the action, the session (`sid`) and the account.
    - The provider is asked to check the person afresh: for LINE, `prompt=login` (the sign-in screen even

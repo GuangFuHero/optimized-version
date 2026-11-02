@@ -21,5 +21,5 @@ export default async function AdminLayout({
   if (user === NO_BACK_OFFICE_IDENTITY) {
     return <NoBackOfficeAccess siteUrl={process.env.SITE_APP_URL} />;
   }
-  return <AdminShell>{children}</AdminShell>;
+  return <AdminShell siteUrl={process.env.SITE_APP_URL}>{children}</AdminShell>;
 }

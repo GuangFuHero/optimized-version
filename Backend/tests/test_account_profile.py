@@ -515,7 +515,8 @@ async def test_an_account_with_no_contact_proves_itself_with_its_provider(
 
     This used to answer "add a contact first", because `_proof_contact` raised as soon as the
     account held none. That framing was wrong: the account has something to prove with, and
-    treating it as having nothing is what left the shape ungated in the first place.
+    treating it as having nothing is what left the shape ungated in the first place. Asked
+    through a first contact: a first password is refused to such an account (ADR-401).
     """
     user_uuid, headers = await _sso_only_user(db_session, redis)
     contact = (await db_session.scalars(
@@ -524,8 +525,7 @@ async def test_an_account_with_no_contact_proves_itself_with_its_provider(
     await db_session.delete(contact)
     await db_session.commit()
 
-    res = await client.post("/api/v1/auth/set-password", headers=headers,
-                            json={"password": "brandnew", "salt_frontend": "s"})
+    res = await client.post(CONTACTS_URL, headers=headers, json={"type": "email", "value": "new@x.com"})
 
     assert res.status_code == 422, res.text
     assert "step_up.id_token" in res.json()["detail"]

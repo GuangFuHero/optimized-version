@@ -11,7 +11,6 @@ import {
 import { Box, Divider, IconButton, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import { Fragment } from 'react';
-import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import {
   useCapability,
@@ -30,7 +29,10 @@ import {
   signOutHereAsync,
 } from '../../auth/session/sign-out';
 import { GuangFuBrandIcon } from '../../brand';
+import { siteBrandName } from '../site/event-name';
+import { eventDayNumber } from './event-day';
 import { useAdminNavSections, type AdminNavItem } from './nav';
+import { siteMapUrl } from './site-map-url';
 
 const { color, radius, typography, motion } = designTokens;
 
@@ -38,12 +40,15 @@ interface AdminSidebarProps {
   collapsed: boolean;
   onToggle: () => void;
   activeId?: string;
+  /** The site's origin (`SITE_APP_URL`), for 回到前台; without it there is no link. */
+  siteUrl?: string;
 }
 
 export function AdminSidebar({
   collapsed,
   onToggle,
   activeId,
+  siteUrl,
 }: AdminSidebarProps) {
   const sections = useAdminNavSections();
   const renderItem = (item: AdminNavItem) => (
@@ -72,10 +77,11 @@ export function AdminSidebar({
         bgcolor: color.bg.neutral.subtle,
         borderRight: `1px solid ${color.border.default}`,
         transition: `width ${motion.transition.base}`,
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
       <EventHeader collapsed={collapsed} onToggle={onToggle} />
-      <RealmBar collapsed={collapsed} />
+      <RealmBar collapsed={collapsed} siteUrl={siteUrl} />
 
       <Stack
         component="nav"
@@ -160,8 +166,11 @@ function EventHeader({
     isError,
   } = useProjectSettings({ enabled: canViewProject });
   const settings = canViewProject ? projectSettings : undefined;
+  const eventName = settings?.name
+    ? siteBrandName({ name: settings.name, shortName: settings.short_name })
+    : null;
   const name =
-    settings?.name ??
+    eventName?.label ??
     (!canViewProject
       ? '管理平台'
       : isPending
@@ -169,11 +178,8 @@ function EventHeader({
         : isError
           ? '無法載入專案'
           : '尚未設定專案');
-  const elapsedDays = settings?.started_at
-    ? differenceInCalendarDays(new Date(), parseISO(settings.started_at))
-    : -1;
-  const day =
-    Number.isFinite(elapsedDays) && elapsedDays >= 0 ? elapsedDays + 1 : null;
+  const fullName = eventName?.fullName ?? name;
+  const day = eventDayNumber(settings?.started_at, new Date());
   const status = day == null ? null : `進行中 · 第 ${day} 天`;
   const statusDot = (
     <Box
@@ -191,7 +197,12 @@ function EventHeader({
     <IconButton
       aria-label={collapsed ? '展開選單' : '收合選單'}
       onClick={onToggle}
-      sx={{ color: color.fg.neutral.default, borderRadius: `${radius.sm}px` }}
+      sx={{
+        width: 44,
+        height: 44,
+        color: color.fg.neutral.default,
+        borderRadius: `${radius.sm}px`,
+      }}
     >
       {collapsed ? <ChevronsRight /> : <ChevronsLeft />}
     </IconButton>
@@ -200,7 +211,7 @@ function EventHeader({
   if (collapsed) {
     return (
       <Stack
-        title={[name, status].filter(Boolean).join('　')}
+        title={[fullName, status].filter(Boolean).join('　')}
         sx={{
           alignItems: 'center',
           gap: '8px',
@@ -226,7 +237,7 @@ function EventHeader({
         <GuangFuBrandIcon width={36} height={26} />
         <Typography
           noWrap
-          title={name}
+          title={fullName}
           sx={{
             flex: 1,
             minWidth: 0,
@@ -264,8 +275,18 @@ function EventHeader({
   );
 }
 
-function RealmBar({ collapsed }: { collapsed: boolean }) {
+/** 回到前台 opens the site's map in a new window, so the back office stays open where it was. */
+function RealmBar({
+  collapsed,
+  siteUrl,
+}: {
+  collapsed: boolean;
+  siteUrl?: string;
+}) {
+  const siteMap = siteMapUrl(siteUrl);
+
   if (collapsed) {
+    if (!siteMap) return null;
     return (
       <Box
         sx={{
@@ -276,9 +297,13 @@ function RealmBar({ collapsed }: { collapsed: boolean }) {
         }}
       >
         <IconButton
-          component={Link}
-          href="/map"
+          component="a"
+          href={siteMap}
+          target="_blank"
+          rel="noopener"
           aria-label="回到公開地圖"
+          // On hover, as the collapsed nav items show their label, and in the expanded link's words.
+          title="回到前台（不會登出）"
           sx={{
             color: color.fg.neutral.subtle,
             borderRadius: `${radius.sm}px`,
@@ -308,23 +333,27 @@ function RealmBar({ collapsed }: { collapsed: boolean }) {
         />
         管理平台
       </Badge>
-      <Box
-        component={Link}
-        href="/map"
-        title="回到前台（不會登出）"
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '4px',
-          ...typography.data[300],
-          fontWeight: 700,
-          color: color.fg.neutral.muted,
-          textDecoration: 'none',
-        }}
-      >
-        回到前台
-        <Box component={ArrowLeftRight} sx={{ width: 13, height: 13 }} />
-      </Box>
+      {siteMap ? (
+        <Box
+          component="a"
+          href={siteMap}
+          target="_blank"
+          rel="noopener"
+          title="回到前台（不會登出）"
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            ...typography.data[300],
+            fontWeight: 700,
+            color: color.fg.neutral.muted,
+            textDecoration: 'none',
+          }}
+        >
+          回到前台
+          <Box component={ArrowLeftRight} sx={{ width: 13, height: 13 }} />
+        </Box>
+      ) : null}
     </Stack>
   );
 }

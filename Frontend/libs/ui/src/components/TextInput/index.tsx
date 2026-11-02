@@ -72,6 +72,8 @@ export function TextInput({
         startAdornment={leadingIcon}
         endAdornment={trailing}
         sx={{
+          // What autofill is painted over with (the theme's `MuiInputBase`).
+          '--wg-field-bg': color.bg.neutral.subtle,
           gap: '8px',
           minHeight: 48,
           px: '16px',
@@ -81,7 +83,13 @@ export function TextInput({
           color: color.fg.neutral.default,
           ...typography.body[400],
           transition: `box-shadow ${motion.transition.fast}`,
-          '& svg': { color: color.fg.neutral.muted, flexShrink: 0 },
+          // An icon lets a tap through to the box, which focuses the input; one in a `trailing` button
+          // passes it to the button.
+          '& svg': {
+            color: color.fg.neutral.muted,
+            flexShrink: 0,
+            pointerEvents: 'none',
+          },
           '&.Mui-focused': {
             boxShadow: `inset 0 0 0 1.5px ${color.brand.secondary.default}`,
           },

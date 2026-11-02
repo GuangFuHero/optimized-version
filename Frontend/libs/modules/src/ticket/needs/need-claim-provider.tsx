@@ -16,7 +16,7 @@ import { useClient, useMutation } from 'urql';
 import { ClaimNeedDocument, GetTicketDocument } from '@rescue-frontend/data-access';
 
 import { useAuthSession } from '../../session/auth-session';
-import { onTicketChanged } from '../ticket-changes';
+import { announceTicketReread, onTicketChanged } from '../ticket-changes';
 import { claimErrorMessage } from './claim-error';
 import {
   buildClaimSignInHref,
@@ -114,7 +114,8 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
    * nothing in its result tells the cache that `assignedCount` and `myAssignment` changed — nor
    * the ticket's status, which follows its needs. The drawer and this dialog read the answer from
    * the cache; the list and the map keep their own copies, so they are told — that it is gone too,
-   * when it is. A request that failed tells them nothing.
+   * when it is — and so is a building it was filed in, whose copy the page does not hold. A request
+   * that failed tells them nothing.
    */
   const reloadTicket = useCallback(
     async (ticketUuid: string): Promise<ReloadedTicket | null> => {
@@ -133,6 +134,7 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
 
       const reloaded = reload.kind === 'found' ? reload.ticket : null;
       onTicketReloaded?.(ticketUuid, reloaded);
+      announceTicketReread(ticketUuid);
 
       return reloaded;
     },

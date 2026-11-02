@@ -9,6 +9,7 @@ import {
   isAreaKind,
   largestAreasFirst,
   placeAreaLabels,
+  responsibleTeamsText,
   type AreaLabelRequest,
   type ScreenBox,
 } from './areas';
@@ -82,6 +83,19 @@ describe('areaLabelText', () => {
       '責任區・一二三四五六七八九十',
     );
     expect(areaLabelText({ ...ZONE, name: null })).toBe('責任區');
+  });
+});
+
+describe('responsibleTeamsText', () => {
+  it('names every team after 負責：, as the map and a ticket write them', () => {
+    expect(responsibleTeamsText(['慈濟基金會', '紅十字會'])).toBe(
+      '負責：慈濟基金會、紅十字會',
+    );
+    expect(responsibleTeamsText(['光復鄉公所'])).toBe('負責：光復鄉公所');
+  });
+
+  it('writes nothing when there is nobody to name', () => {
+    expect(responsibleTeamsText([])).toBeNull();
   });
 });
 

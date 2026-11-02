@@ -185,7 +185,6 @@ async def _make_seeded_identity(db, role_name: str) -> tuple[str, str, str | Non
             user_uuid=user.uuid,
             role_uuid=role.uuid,
             team_uuid=team.uuid if team is not None else None,
-            role_kind=spec["kind"],
         )
     )
     uuids = (str(user.uuid), str(role.uuid), str(team.uuid) if team is not None else None)

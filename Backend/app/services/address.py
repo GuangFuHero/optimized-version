@@ -1,8 +1,8 @@
 """Address lookups against TGOS, and the address step of every write.
 
 The frontend looks an address up before saving it, and each address TGOS confirms comes back with
-a signed token. A save never calls TGOS: `apply_address` splits the line into columns and grades it
-by that token.
+a signed token. A save never calls TGOS: `apply_address` keeps the line as received, splits it into
+columns and grades it by that token.
 """
 
 import asyncio
@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.address import MAX_ADDRESS_LENGTH, AddressParts, fold, parse_tw_address
 from app.core.config import settings
 from app.graphql.scalars import geom_to_geojson
-from app.models.secondary_location import SecondaryLocation
+from app.models.secondary_location import USER_INPUT_ADDRESS_LENGTH, SecondaryLocation
 from app.repositories.geo_repository import secondary_location_repository
 from app.services.column_lengths import check_lengths
 
@@ -40,16 +40,19 @@ _BASE_URL = "https://addr.tgos.tw/addrws/v40"
 _TIMEOUT_S = 3.0
 # TGOS slows sharply once more than about four requests run at once.
 _SLOTS = asyncio.Semaphore(4)
-# TGOS's certificate has no Subject Key Identifier, which Python's strict mode rejects; the chain
-# is still verified.
-_SSL = ssl.create_default_context()
-_SSL.verify_flags &= ~ssl.VERIFY_X509_STRICT
+# TGOS and NLSC chain to a TWCA root with no Subject Key Identifier, which Python's strict mode
+# rejects; the chain and hostname are still verified.
+NON_STRICT_SSL = ssl.create_default_context()
+NON_STRICT_SSL.verify_flags &= ~ssl.VERIFY_X509_STRICT
 _STRING_RE = re.compile(r"<string[^>]*>(.*)</string>", re.S)
 
 _TOKEN_TYPE = "address"
 _TOKEN_LIFETIME = timedelta(days=1)  # long enough to finish a form
 _UNIT_FIELDS = ("building_section", "floor", "room")
-_ADDRESS_COLUMNS = tuple(f for f in AddressParts.__dataclass_fields__ if f not in _UNIT_FIELDS)
+# The parts apply_address writes; `full_address` is built by the database from them.
+_ADDRESS_COLUMNS = tuple(
+    f for f in AddressParts.__dataclass_fields__ if f not in (*_UNIT_FIELDS, "full_address")
+)
 
 # QueryAddr takes every parameter on every call. Exact matches only: fuzzy matching lands on the
 # nearest existing number, which can be a different house.
@@ -137,7 +140,7 @@ async def _tgos(operation: str, app_id: str, api_key: str, **params) -> dict | N
         return None
     data = {"oAPPId": app_id, "oAPIKey": api_key, "oSRS": "EPSG:4326", "oResultDataType": "JSON", **params}
     try:
-        async with asyncio.timeout(_TIMEOUT_S), _SLOTS, httpx.AsyncClient(verify=_SSL) as client:
+        async with asyncio.timeout(_TIMEOUT_S), _SLOTS, httpx.AsyncClient(verify=NON_STRICT_SSL) as client:
             resp = await client.post(f"{_BASE_URL}/{operation}", data=data)
             resp.raise_for_status()
     except (httpx.HTTPError, TimeoutError) as err:
@@ -222,22 +225,33 @@ def _grade(token: str | None, full_address: str, point: tuple[float, float] | No
 
 
 def apply_address(sl: dict | None, *, point: tuple[float, float] | None) -> dict | None:
-    """The address step of every write: split `full_address` into columns and grade it by its token.
+    """The address step of every write: keep the received line, split it into columns, grade it by its token.
 
     Returns the values to store, which callers save in place of their input; only a part too long for
-    its column is refused.
+    its column is refused. `full_address` is never written: the database builds it from the parts.
+    The received line is kept with its outer whitespace trimmed.
     """
     if sl is None:
         return None
     values = dict(sl)
     token = values.pop("address_token", None)
-    parts = parse_tw_address(values.get("full_address"))
-    values |= {k: getattr(parts, k) for k in _ADDRESS_COLUMNS}
+    received = (values.pop("full_address", None) or "").strip() or None
+    parts = parse_tw_address(received)
+    values |= {k: getattr(parts, k) for k in _ADDRESS_COLUMNS} | {"user_input_address": received}
     # A 棟/樓/室 typed into the line fills its field only when that was left empty; a filled field wins.
     for unit in _UNIT_FIELDS:
         values[unit] = values.get(unit) or getattr(parts, unit)
     values["normalization_status"] = _grade(token, parts.full_address, point) if parts.full_address else None
-    check_lengths(SecondaryLocation, **values)
+    # The folded line is checked as `full_address`, the name the API gives it, so a line too long is
+    # refused with the message it has always had; the raw line and the remainder never exceed it by
+    # more than whitespace, which the raw line's wider column holds.
+    check_lengths(
+        SecondaryLocation,
+        full_address=parts.full_address,
+        **{k: v for k, v in values.items() if k not in ("user_input_address", "remainder")},
+    )
+    if received and len(received) > USER_INPUT_ADDRESS_LENGTH:
+        raise ValueError(f"full_address must be at most {USER_INPUT_ADDRESS_LENGTH} characters")
     return values
 
 

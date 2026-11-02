@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell } from 'lucide-react';
+import { Bell, Menu } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -17,9 +17,15 @@ const TITLE_SLOT_ID = 'admin-header-title-slot';
 
 interface AdminHeaderProps {
   title?: string;
+  onOpenNavigation?: () => void;
+  navigationOpen?: boolean;
 }
 
-export function AdminHeader({ title }: AdminHeaderProps) {
+export function AdminHeader({
+  title,
+  onOpenNavigation,
+  navigationOpen,
+}: AdminHeaderProps) {
   return (
     <Box
       component="header"
@@ -28,18 +34,33 @@ export function AdminHeader({ title }: AdminHeaderProps) {
         flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
-        gap: '16px',
-        px: '28px',
+        gap: { mobile: '4px', tablet: '16px' },
+        px: { mobile: '8px', tablet: '28px' },
         bgcolor: color.bg.neutral.default,
         borderBottom: `1px solid ${color.border.default}`,
       }}
     >
+      <IconButton
+        aria-label="開啟導覽選單"
+        aria-expanded={navigationOpen}
+        aria-controls="admin-mobile-navigation"
+        onClick={onOpenNavigation}
+        sx={{
+          display: { mobile: 'inline-flex', tablet: 'none' },
+          width: 44,
+          height: 44,
+          flexShrink: 0,
+        }}
+      >
+        <Menu />
+      </IconButton>
       <Typography
         component="h1"
         noWrap
         sx={{
           ...typography.heading[700],
-          fontSize: 20,
+          fontSize: { mobile: 17, tablet: 20 },
+          minWidth: 0,
           color: color.fg.neutral.default,
         }}
       >
@@ -49,9 +70,17 @@ export function AdminHeader({ title }: AdminHeaderProps) {
       <Box id={TITLE_SLOT_ID} sx={{ display: 'contents' }} />
       <Stack
         direction="row"
-        sx={{ ml: 'auto', alignItems: 'center', gap: '16px' }}
+        sx={{
+          ml: 'auto',
+          alignItems: 'center',
+          gap: { mobile: '2px', tablet: '16px' },
+          flexShrink: 0,
+        }}
       >
-        <IconButton aria-label="通知" sx={{ color: color.fg.neutral.subtle }}>
+        <IconButton
+          aria-label="通知"
+          sx={{ color: color.fg.neutral.subtle, width: 44, height: 44 }}
+        >
           <Box component={Bell} sx={{ width: 22, height: 22 }} />
         </IconButton>
         <AccountMenu />

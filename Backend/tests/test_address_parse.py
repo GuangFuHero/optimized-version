@@ -1,8 +1,12 @@
 """The address parser: official TGOS lines split exactly, typed lines split as far as they go."""
 
+import ast
+import itertools
+from pathlib import Path
+
 import pytest
 
-from app.core.address import AddressParts, parse_tw_address
+from app.core.address import AddressParts, join_address, parse_tw_address
 
 # Official lines as TGOS returned them, with TGOS's own components for each.
 TGOS_ROWS = [
@@ -306,11 +310,12 @@ def test_a_road_named_like_a_lane_stays_the_road():
     assert (parts.road, parts.lane) == ("松羅南巷", None)
 
 
-def test_a_sub_alley_stays_only_in_the_line():
-    """衖 has no column of its own, but it must not swallow the 號 after it."""
+def test_a_sub_alley_stays_inside_the_alley():
+    """衖 and 衕 are kept in `alley` after the 弄, and do not swallow the 號 after them."""
     parts = parse_tw_address("臺北市中山區民生東路一段1巷2弄3衖4號")
-    assert (parts.lane, parts.alley, parts.no) == ("1巷", "2弄", "4號")
+    assert (parts.lane, parts.alley, parts.no) == ("1巷", "2弄3衖", "4號")
     assert parts.full_address == "臺北市中山區民生東路一段1巷2弄3衖4號"
+    assert parse_tw_address("臺北市中山區民生東路5衖6衕7號").alley == "5衖6衕"
 
 
 def test_a_road_only_address_parses():
@@ -331,10 +336,73 @@ def test_unrecognised_text_stays_whole_and_is_not_a_road():
 def test_a_line_too_long_to_store_is_kept_whole():
     """A line longer than the column is not split, so its cost stays bounded; saving it is refused."""
     line = "花蓮縣光復鄉糖廠街19號" + "糖" * 250
-    assert parse_tw_address(line) == AddressParts(full_address=line)
+    assert parse_tw_address(line) == AddressParts(full_address=line, remainder=line)
 
 
 @pytest.mark.parametrize("blank", [None, "", "   "])
 def test_blank_parses_to_nothing(blank):
     """Blank input gives an empty address, not an error."""
     assert parse_tw_address(blank) == AddressParts()
+
+
+def test_text_after_the_door_and_unrecognised_text_are_the_remainder():
+    """What the parser cannot place comes back as `remainder`, so the parts and it join to the line."""
+    assert parse_tw_address("臺北市中正區中正路100號後面的鐵皮屋").remainder == "後面的鐵皮屋"
+    assert parse_tw_address("我家在糖廠附近").remainder == "我家在糖廠附近"
+    assert parse_tw_address("花蓮縣光復鄉糖廠街19號3樓").remainder is None
+
+
+_ADDRESS_WORDS = set("縣市鄉鎮區路街號樓室段巷弄村里鄰")
+
+
+def _address_literals() -> set[str]:
+    """Every address-like string this file mentions: the inputs of its cases and their expected lines."""
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    return {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and len(node.value) > 2
+        and _ADDRESS_WORDS & set(node.value)
+    }
+
+
+def _generated_lines() -> list[str]:
+    """Lines made by combining the pieces of an address, with and without each tail."""
+    pieces = [
+        ("", "花蓮縣", "台北市", "123臺中市"),
+        ("", "光復鄉", "前鎮區"),
+        ("", "大進村3鄰", "3鄰"),
+        ("", "糖廠街", "松羅南巷", "中正路二段"),
+        ("", "469巷", "1之2巷"),
+        ("", "1弄", "3弄2衖", "5衖", "2衕"),
+        ("", "19號", "19-1號", "100號之2"),
+        ("", "3樓", "A棟3樓", "302室", "之", "旁邊", "-"),
+    ]
+    return ["".join(combination) for combination in itertools.product(*pieces)]
+
+
+def _joins_to_its_own_line(line: str) -> bool:
+    """Whether the parts and the remainder join to the parser's line, and that line parses to itself."""
+    parts = parse_tw_address(line)
+    rebuilt = join_address(**{**parts.as_dict(), "remainder": parts.remainder})
+    return (
+        rebuilt == parts.full_address
+        and parse_tw_address(parts.full_address).full_address == parts.full_address
+    )
+
+
+@pytest.mark.parametrize("line", sorted(_address_literals()))
+def test_the_parts_and_the_remainder_join_to_the_line_the_parser_returns(line):
+    """The database builds `full_address` from the parts; it must equal the parser's own line.
+
+    Checked for every address this file mentions. Parsing that line again gives the same line, so a
+    stored line survives a re-split.
+    """
+    assert _joins_to_its_own_line(line)
+
+
+def test_the_parts_and_the_remainder_join_to_the_line_for_generated_lines():
+    """The same, over every combination of the pieces of an address and its tails."""
+    assert [line for line in _generated_lines() if not _joins_to_its_own_line(line)] == []

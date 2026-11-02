@@ -174,11 +174,15 @@ async def _ticket_with_task(db, owner, task_uuid=None) -> tuple[str, str]:
     return str(ticket.uuid), str(task.uuid)
 
 
-async def _score(db, actor, related_uuid, kind="ticket_task", ref="task:0"):
-    return await dedup_service.score_acknowledged(
-        db, submission=SUBMISSION, draft_ref=ref, related_kind=kind, related_uuid=related_uuid,
-        actor=actor, now=NOW,
-    )  # fmt: skip
+async def _settled(db, actor, acknowledged: dict) -> dedup_service.Settled:
+    return await dedup_service.settle_submission(
+        db, submission=SUBMISSION, acknowledged=acknowledged, actor=actor, now=NOW
+    )
+
+
+async def _settle(db, actor, acknowledged: dict) -> list[dedup_service.AcknowledgedPair]:
+    """The acknowledgements the check bears out."""
+    return (await _settled(db, actor, acknowledged)).pairs
 
 
 async def _committed_task(db, actor, task_uuid=None) -> str:
@@ -194,12 +198,13 @@ async def _count(db, model) -> int:
 
 
 async def test_record_pair_ignored_cards_the_pair(db, engine):
-    """The acknowledged pair: a dup_ignored card scored by the engine and an ignored_by_submitter event."""
+    """The acknowledged pair: a dup_ignored card scored by the engine's hint, and its audit event."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     related = await _committed_task(db, actor)
     created = str(uuid_mod.uuid4())
+    engine.suspects = [_suspect("task:0", uuid=related)]
 
-    scored = await _score(db, actor, related)
+    (scored,) = await _settle(db, actor, {"task:0": related})
     pair = await dedup_service.record_pair_ignored(
         db, pair=scored, created_uuid=created, actor_uuid=str(actor.uuid)
     )
@@ -208,55 +213,70 @@ async def test_record_pair_ignored_cards_the_pair(db, engine):
         "ticket_task", "dup_ignored", "ignored_hint", "stub-v2",
     )  # fmt: skip
     assert {str(pair.low_uuid), str(pair.high_uuid)} == {created, related}
-    assert float(pair.similarity) == 0.91
+    assert float(pair.similarity) == 0.93
     (event,) = (await db.execute(select(DedupAuditEvent))).scalars().all()
     assert (event.event_type, str(event.primary_uuid), str(event.duplicate_uuid)) == (
         "ignored_by_submitter", related, created,
     )  # fmt: skip
-    assert engine.score_calls == [("task:0", "ticket_task", related)]
+    assert engine.check_calls == [SUBMISSION]
 
 
-async def test_record_pair_ignored_without_a_target_writes_nothing(db, engine):
-    """The engine reports the related entity gone: nothing to card."""
-    actor = await actor_with(db, Perm.TICKET_ADD)
-    engine.scored = None
-    assert await _score(db, actor, str(uuid_mod.uuid4())) is None
-    assert await _count(db, DuplicatePair) == 0
-
-
-async def test_record_pair_ignored_when_scoring_fails_still_cards(db, engine):
-    """The submitter's choice is recorded even without a score."""
+async def test_one_check_says_what_to_card_and_what_to_hold(db, engine):
+    """The acknowledged draft's hint is borne out; the other draft's hint still holds the submission."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     related = await _committed_task(db, actor)
-    engine.fail_score = True
-    scored = await _score(db, actor, related)
+    engine.suspects = [_suspect("task:0", uuid=related), _suspect("task:1")]
+
+    settled = await _settled(db, actor, {"task:0": related})
+
+    assert [pair.draft_ref for pair in settled.pairs] == ["task:0"]
+    assert [suspect.draft_ref for suspect in settled.suspects] == ["task:1"]
+    assert engine.check_calls == [SUBMISSION]
+
+
+async def test_an_acknowledgement_naming_anything_but_its_drafts_hint_is_not_borne_out(db, engine):
+    """`related` exists and is a hint, but for task:1; acknowledged on task:0 it counts for nothing."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    related = await _committed_task(db, actor)
+    engine.suspects = [_suspect("task:0"), _suspect("task:1", uuid=related)]
+    settled = await _settled(db, actor, {"task:0": related})
+    assert (settled.pairs, [s.draft_ref for s in settled.suspects]) == ([], ["task:0", "task:1"])
+
+
+async def test_when_the_check_fails_an_entity_that_exists_is_still_carded_unscored(db, engine):
+    """Nothing was checked, so the submitter's choice is recorded without a score (ADR-313)."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    related = await _committed_task(db, actor)
+    engine.fail = True
+    (scored,) = await _settle(db, actor, {"task:0": related})
     pair = await dedup_service.record_pair_ignored(
         db, pair=scored, created_uuid=str(uuid_mod.uuid4()), actor_uuid=str(actor.uuid)
     )
     assert (pair.similarity, pair.evidence, pair.engine_version) == (None, None, "stub-v2")
 
 
-async def test_record_pair_ignored_when_scoring_fails_on_a_missing_target_writes_nothing(db, engine):
-    """A failed score is carded only if the related entity exists; an unknown uuid writes nothing."""
+async def test_when_the_check_fails_an_unknown_uuid_is_not_carded(db, engine):
+    """Carded unscored only if the related entity exists; an unknown uuid writes nothing."""
     actor = await actor_with(db, Perm.TICKET_ADD)
-    engine.fail_score = True
-    for kind, ref in (("ticket_task", "task:0"), ("ticket", "ticket"), ("station", "station")):
-        assert await _score(db, actor, str(uuid_mod.uuid4()), kind=kind, ref=ref) is None
+    engine.fail = True
+    for ref in ("task:0", "ticket", "station"):
+        assert await _settle(db, actor, {ref: str(uuid_mod.uuid4())}) == []
 
 
-async def test_record_pair_ignored_with_a_malformed_uuid_writes_nothing(db, engine):
-    """A related uuid that is not a uuid never reaches the engine or the uuid columns."""
+async def test_an_acknowledgement_that_is_not_a_uuid_is_not_borne_out(db, engine):
+    """It names nothing, so it is never compared or carded; the draft is held like any other."""
     actor = await actor_with(db, Perm.TICKET_ADD)
-    assert await _score(db, actor, "not-a-uuid") is None
-    assert engine.score_calls == []
+    engine.suspects = [_suspect("task:0")]
+    settled = await _settled(db, actor, {"task:0": "not-a-uuid"})
+    assert (settled.pairs, [s.draft_ref for s in settled.suspects]) == ([], ["task:0"])
 
 
-async def test_a_failing_query_in_score_leaves_the_session_usable(db, engine):
+async def test_a_failing_query_in_the_check_leaves_the_session_usable(db, engine):
     """An engine query error stays inside the guard: carded unscored, and the create still commits."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     related = await _committed_task(db, actor)
-    engine.score_sql = "SELECT 1/0"
-    scored = await _score(db, actor, related)
+    engine.check_sql = "SELECT 1/0"
+    (scored,) = await _settle(db, actor, {"task:0": related})
     assert scored.suspect is None
     _, created = await _ticket_with_task(db, str(actor.uuid))
     await dedup_service.record_pair_ignored(db, pair=scored, created_uuid=created, actor_uuid=str(actor.uuid))
@@ -264,14 +284,14 @@ async def test_a_failing_query_in_score_leaves_the_session_usable(db, engine):
     assert (await _count(db, Tickets), await _count(db, DuplicatePair)) == (2, 1)
 
 
-async def test_a_slow_score_is_cut_at_the_timeout(db, engine, monkeypatch):
-    """A slow query in score stops at ENGINE_TIMEOUT_S; carded unscored, and the create still commits."""
+async def test_a_slow_check_is_cut_at_the_timeout(db, engine, monkeypatch):
+    """A slow query in the check stops at ENGINE_TIMEOUT_S; carded unscored, and the create still commits."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     related = await _committed_task(db, actor)
     monkeypatch.setattr(dedup_service, "ENGINE_TIMEOUT_S", 0.2)
-    engine.score_sql = "SELECT pg_sleep(5)"
+    engine.check_sql = "SELECT pg_sleep(5)"
     start = time.perf_counter()
-    scored = await _score(db, actor, related)
+    (scored,) = await _settle(db, actor, {"task:0": related})
     assert time.perf_counter() - start < 2
     assert scored.suspect is None
     _, created = await _ticket_with_task(db, str(actor.uuid))
@@ -280,13 +300,14 @@ async def test_a_slow_score_is_cut_at_the_timeout(db, engine, monkeypatch):
     assert (await _count(db, Tickets), await _count(db, DuplicatePair)) == (2, 1)
 
 
-async def test_an_engine_that_writes_in_score_is_discarded(db, engine):
-    """Score runs before anything is written, so a write is detected; its answer is dropped, card unscored."""
+async def test_an_engine_that_writes_while_settling_an_acknowledgement_is_discarded(db, engine):
+    """The check runs before any write, so a write is detected; its answer is dropped, card unscored."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     related = await _committed_task(db, actor)
     users = await _users(db)
-    engine.score_sql = "INSERT INTO users (uuid, name) VALUES (gen_random_uuid(), 'engine-was-here')"
-    scored = await _score(db, actor, related)
+    engine.check_sql = "INSERT INTO users (uuid, name) VALUES (gen_random_uuid(), 'engine-was-here')"
+    engine.suspects = [_suspect("task:0", uuid=related)]  # an answer that must not count
+    (scored,) = await _settle(db, actor, {"task:0": related})
     assert scored.suspect is None
     await db.commit()
     assert await _users(db) == users
@@ -297,7 +318,8 @@ async def test_an_upper_case_uuid_is_ordered_like_postgres(db, engine):
     actor = await actor_with(db, Perm.TICKET_ADD)
     related = await _committed_task(db, actor, task_uuid="b0000000-0000-4000-8000-000000000000")
     created = "a0000000-0000-4000-8000-000000000000"
-    scored = await _score(db, actor, related.upper())
+    engine.suspects = [_suspect("task:0", uuid=related)]
+    (scored,) = await _settle(db, actor, {"task:0": related.upper()})
     pair = await dedup_service.record_pair_ignored(
         db, pair=scored, created_uuid=created, actor_uuid=str(actor.uuid)
     )

@@ -458,6 +458,8 @@ API 上每一個同類欄位都寫明了、且下限是 6：`ChangePasswordReque
 
 ### ADR-215 `/auth/set-password` 本身要 step-up；ADR-160 的撤銷不足以擋帳號接管
 
+> **2026-10-27 補（ADR-401）**：沒有驗證過的電子郵件或手機的帳號，在 step-up 之前就被擋（409 `password_needs_contact`）。
+
 **白話**：只拿到一個 session 的人，不可以自己造一把「session 死了還在用」的鑰匙。
 
 **Date**: 2026-08-31（PR #39 第二輪 review 後補）
@@ -736,3 +738,34 @@ stacked、一起合併的，同一份實作出現在兩邊只會製造衝突。�
 ➕ 少兩個會被誤認為現行機制的方法。
 ➖ 之後若真的需要「只要數量」的查詢，要重寫一個。`list_by_user()` 已經夠用，
    而且守門本來就需要知道**剩下哪些**，不只是剩幾個。
+
+---
+
+### ADR-401 沒有電子郵件或手機的帳號不能設定密碼
+
+**白話**：密碼要搭配電子郵件或手機號碼才能登入。帳號上一個都沒有（例如只用 LINE 登入的人），設了密碼也永遠
+用不到，所以直接說「要先新增電子郵件或手機」，不讓他設。
+
+**Date**：2026-10-27。Carol 和糖在 Discord #frontend-only 定；前台的「建立密碼」按鈕在這種帳號上會灰掉（#144）。
+
+**Context**：
+
+- 密碼登入用電子郵件或手機找帳號，而且只認驗證過的（`contact_repository.get_user_by_contact`）。
+- 只用 LINE、帳號上沒有聯絡方式的人，`/auth/set-password` 原本會走 ADR-234／361 的證明（回 LINE 重新登入），
+  證明完就把密碼建起來。這把密碼沒有任何帳號名稱可以搭配，登入頁用不到它。
+
+**Decision**：
+
+1. `/auth/set-password` 在「已經設過密碼」（409 `password_already_set`）之後、要求任何證明之前，先看帳號有沒有
+   驗證過的聯絡方式；沒有就回 409 `password_needs_contact`，不寄碼、不建密碼。
+2. 設定密碼不再能到第三方登入證明：`set_password` 從 `REAUTH_ACTIONS` 拿掉（ADR-361）。有聯絡方式的帳號照 ADR-215
+   把碼寄到聯絡方式；沒有的在第 1 點就被擋，到第三方證明的路用不到了。
+3. 新增聯絡方式、連結與移除第三方登入照舊可以到第三方證明（ADR-234、361）。
+
+**Consequences**：
+➕ 不會再有一把建了卻永遠用不到的密碼。
+➕ 前端分得出原因：`password_needs_contact` 要顯示「先新增電子郵件或手機」，不是證明欄位。
+➖ 只用 LINE 的人要先新增電子郵件或手機（這一步照 ADR-361 回 LINE 證明），才能設密碼，多一步。
+◾ 測試：`tests/test_set_password.py`（沒有聯絡方式、只有未驗證的聯絡方式）、`tests/test_oauth_step_up.py`（直接設
+  被擋、不會為了設密碼送去 LINE）、`tests/test_login_method_hardening.py`（只有第三方登入的帳號鑄不出密碼）；
+  `tests/test_account_profile.py` 的 ADR-234 那支改走新增聯絡方式。

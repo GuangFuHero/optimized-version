@@ -1,13 +1,15 @@
 'use client';
 
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { Box, ButtonBase, Portal, Snackbar, Typography } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  RowAction,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import { layoutSizes } from '@rescue-frontend/ui';
 import { sessionStorageOrNull } from './end-expired-session';
@@ -68,7 +70,7 @@ export function SessionExpiredNotice() {
             boxShadow: shadow.lg,
           }}
         >
-          <WarningAmberRoundedIcon
+          <Icons.triangleAlert
             sx={{ fontSize: 20, mt: '1px', color: color.fg.warning }}
           />
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -87,7 +89,7 @@ export function SessionExpiredNotice() {
               label={
                 <>
                   重新登入
-                  <ChevronRightRoundedIcon sx={{ fontSize: 14 }} />
+                  <Icons.chevronRight sx={{ fontSize: 14 }} />
                 </>
               }
               sx={{ mt: 1.5, minHeight: 44 }}
@@ -104,7 +106,7 @@ export function SessionExpiredNotice() {
               color: color.fg.neutral.subtle,
             }}
           >
-            <CloseRoundedIcon sx={{ fontSize: 16 }} />
+            <Icons.close sx={{ fontSize: 16 }} />
           </ButtonBase>
         </Box>
       </Snackbar>

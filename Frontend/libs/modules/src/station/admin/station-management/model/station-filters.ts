@@ -1,6 +1,6 @@
 import { differenceInCalendarDays, parseISO } from 'date-fns';
 
-import { getFreshness } from './freshness';
+import { getFreshness } from '../../../../admin/shared/model/freshness';
 import type { StationRow } from './station-row';
 import {
   OPERATIONAL_STATUS_OPTIONS,
@@ -102,9 +102,23 @@ export function countActiveFilters(filters: StationFilters): number {
   ].filter(Boolean).length;
 }
 
+/** The keyword the `stations` query applies: the backend rejects one outside 2..50 characters. */
+function searchKeyword(q: string): string | null {
+  const keyword = q.trim();
+  return keyword.length >= 2 && keyword.length <= 50 ? keyword : null;
+}
+
+/** The filters as one string, leaving out a keyword the `stations` query ignores. */
+export function stationFiltersKey(filters: StationFilters): string {
+  return writeStationFilters(new URLSearchParams(), {
+    ...filters,
+    q: searchKeyword(filters.q) ?? '',
+  }).toString();
+}
+
 /** The filters the `stations` query can apply itself. */
 export function toServerVariables(filters: StationFilters) {
-  const q = filters.q.trim();
+  const q = searchKeyword(filters.q);
   return {
     ...(filters.type ? { stationType: filters.type } : {}),
     ...(filters.status ? { operationalStatus: filters.status } : {}),
@@ -113,8 +127,7 @@ export function toServerVariables(filters: StationFilters) {
       : filters.team
         ? { assignedTeamUuid: filters.team }
         : {}),
-    // The backend rejects a keyword outside 2..50 characters.
-    ...(q.length >= 2 && q.length <= 50 ? { q } : {}),
+    ...(q ? { q } : {}),
     // The queue is the caller's own: another team's suggestions are not theirs to decide (WG-168).
     ...(filters.pending
       ? { hasPendingSuggestions: true, reviewableOnly: true }

@@ -499,6 +499,17 @@ def test_a_crawler_insert_is_attributed_to_the_crawler():
     assert events[0].actor_kind == "crawler"
 
 
+def test_an_official_station_a_seed_wrote_reads_official():
+    """The seed's official stations carry source='official' (ADR-394), named as gov and ngo are."""
+    events = build_events(
+        [
+            _audit("stations", "INSERT", uuidlib.uuid4(), new={"name": "光復鄉公所", "source": "official"}),
+        ]
+    )
+
+    assert events[0].actor_kind == "official"
+
+
 def test_a_person_editing_a_crawler_row_is_not_the_crawler():
     """The trap ADR-137 exists to avoid.
 

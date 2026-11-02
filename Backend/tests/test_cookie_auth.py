@@ -257,15 +257,20 @@ async def test_a_token_that_proves_nothing_clears_the_cookies(ask_with_cookie, d
     )
 
 
-async def test_a_revoked_identity_clears_the_cookies(ask_with_cookie, db_session, redis):
-    """The identity the session acts as was taken away: signed out, so the cookies go too."""
+async def test_a_revoked_identity_keeps_the_cookies(ask_with_cookie, db_session, redis):
+    """The identity the session acts as was taken away: not a sign-out since Spec 029 (ADR-402, ADR-404).
+
+    The session moves to the default identity and the refresh that follows needs the cookies.
+    """
     user_uuid, _, _ = await sign_in(db_session, redis)
     act = encode_act(str(uuid.uuid4()), None)
     sid, _ = await SessionRepository(redis).create_session(user_uuid, "test", act=act)
 
-    _assert_cleared(
-        await ask_with_cookie(create_access_token({"sub": user_uuid}, sid=sid, act=act)), "identity_revoked"
-    )
+    res = await ask_with_cookie(create_access_token({"sub": user_uuid}, sid=sid, act=act))
+
+    assert res.status_code == 401, res.text
+    assert res.json()["code"] == "identity_reset"
+    assert cookies_set_by(res) == {}
 
 
 async def test_an_expired_token_keeps_the_cookies_for_the_refresh(ask_with_cookie, db_session, redis):

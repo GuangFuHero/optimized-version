@@ -23,6 +23,16 @@ MAX_OTP_ATTEMPTS = 5
 # target — this is the bound that protects the person receiving the messages (ADR-165).
 MAX_STEPUP_SENDS_PER_WINDOW = 3
 
+# Delete a pending record only if it is still the one the caller read, in one step. A separate
+# DELETE after the GET would let every request that read the record before the first delete
+# succeed as well, so one code could be used several times at once.
+_DELETE_IF_UNCHANGED_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1], KEYS[2])
+end
+return 0
+"""
+
 
 def _gen_code() -> str:
     """Generate a zero-padded 6-digit numeric code."""
@@ -48,6 +58,9 @@ class VerificationRepository:
     async def _consume(self, key: str, code: str) -> dict | None:
         """Verify a code. Correct → delete + return payload. Wrong → count, burn at cap. None on fail.
 
+        A correct code returns the payload only to the call that deletes the record, so a code works
+        once even when the same one arrives several times at once.
+
         Wrong-guess counting uses an atomic `INCR` on a separate `:attempts` key so concurrent wrong
         guesses cannot lose increments and slip past the cap (a non-atomic read-modify-write would).
         """
@@ -56,7 +69,8 @@ class VerificationRepository:
             return None
         record = json.loads(raw)
         if hash_refresh_token(code) == record["code_hash"]:
-            await self.redis.delete(key, key + ":attempts")
+            if not await self.redis.eval(_DELETE_IF_UNCHANGED_LUA, 2, key, key + ":attempts", raw):
+                return None
             return record
         n = await self.redis.incr(key + ":attempts")
         if n == 1:

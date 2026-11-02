@@ -8,9 +8,10 @@ from typing import Annotated
 from uuid import UUID
 
 import strawberry
+from strawberry.dataloader import DataLoader
 
 from app.core.permissions import Perm
-from app.core.rbac_scopes import Scope, in_scope
+from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.security import resolve_scope
 from app.graphql.area.types import AssignedTeamType
 from app.graphql.masking import mask_email, mask_name, mask_phone
@@ -25,7 +26,9 @@ from app.graphql.shared import (  # noqa: F401 -- the address types and their ma
     secondary_location_to_dict,
 )
 from app.graphql.suggestions.types import StationSuggestionMergeType, SuggestedFieldType
-from app.graphql.tickets.types import PhotoType
+from app.graphql.tickets.types import PhotoType, ticket_detail_scope
+from app.models.request import Tickets
+from app.repositories.tickets_repository import ticket_repository
 from app.services.building_map import OTHER_AREA, floor_labels
 
 
@@ -66,6 +69,16 @@ class StationOperationalStatus(enum.Enum):
     active = "active"
     temporarily_closed = "temporarily_closed"
     permanently_closed = "permanently_closed"
+
+
+@strawberry.enum
+class StationOrder(enum.Enum):
+    """How `stations` sorts (ADR-394)."""
+
+    # Relevance while searching, then newest first: the order the site has always had.
+    DEFAULT = "default"
+    # Open stations first, then the most recently updated: the back office's list.
+    OPEN_FIRST_RECENTLY_UPDATED = "open_first_recently_updated"
 
 
 @strawberry.input
@@ -183,7 +196,10 @@ class StationType:
     )
     is_official: bool = strawberry.field(
         default=False,
-        description="True if this station is operated by a government or official body",
+        description=(
+            "True if the back office made this station: `source` is 'official', as the `official` filter "
+            "reads it"
+        ),
     )
     operational_status: str = strawberry.field(
         default="active",
@@ -448,6 +464,64 @@ class StationConnection:
     page_info: PageInfo
 
 
+@strawberry.type
+class StationStatusCountType:
+    """How many of the counted stations have one operational status."""
+
+    status: str = strawberry.field(
+        description="An operationalStatus value: active, temporarily_closed or permanently_closed"
+    )
+    count: int
+
+
+@strawberry.type
+class StationTypeCountType:
+    """How many of the counted stations have one type, and how many of those an export would include."""
+
+    type: str | None = strawberry.field(description="The station type; null for stations with none")
+    count: int
+    exportable: int = strawberry.field(
+        description=(
+            "How many of them the caller's station export of this type would include: none without "
+            "station.export, and none on the row with no type, which the export can't ask for. It follows "
+            "this request's filters, while the export takes the type alone, so the two agree only when no "
+            "other filter is given"
+        )
+    )
+
+
+@strawberry.type
+class StationAreaCountType:
+    """How many of the counted stations have their address in one 縣市 and 鄉鎮市區."""
+
+    county: str
+    town: str | None = strawberry.field(
+        description=(
+            "Null for the stations in this 縣市 whose address names no 鄉鎮市區. No filter selects just "
+            "those: `county` alone matches the whole 縣市"
+        )
+    )
+    count: int
+
+
+@strawberry.type
+class StationFacetsType:
+    """Counts over the stations `stations` would list for the same filters (ADR-394)."""
+
+    total: int
+    by_status: list[StationStatusCountType]
+    by_type: list[StationTypeCountType]
+    areas: list[StationAreaCountType] = strawberry.field(
+        description=(
+            "Per 縣市 and 鄉鎮市區 of the address; a station with no address is in none, and one with a "
+            "縣市 but no 鄉鎮市區 is in a row whose `town` is null"
+        )
+    )
+    pending_review_count: int = strawberry.field(
+        description="Stations with a pending suggestion that the caller holds station.review over"
+    )
+
+
 @strawberry.input
 class CreateStationInput:
     """Input for creating a new map station."""
@@ -463,7 +537,11 @@ class CreateStationInput:
     op_hour: str | None = strawberry.field(default=None, description="Operating hours in free-text format")
     level: int = strawberry.field(default=0, description="Importance level for map rendering (0 = default)")
     comment: str | None = None
-    source: str = strawberry.field(default="user", description="Data origin: 'user' (default) or 'official'")
+    source: str = strawberry.field(
+        default="user",
+        description="Not read: the identity making the station decides it",
+        deprecation_reason="The backend sets `source` from the identity making the station; leave it out",
+    )
     visibility: Visibility = strawberry.field(
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",
@@ -564,6 +642,37 @@ class HazardousZoneConnection:
 # --- Building Map ---
 
 
+def _building_counts_loader(info: strawberry.types.Info) -> "asyncio.Future[DataLoader | None]":
+    """The request's loader of building counts, or None when the caller may place no ticket in one.
+
+    Counting a building's tickets says where they are, as listing them does, so the count follows
+    the rows `buildingMapTickets` gives this caller (ADR-450). Unlike the other loaders, what it
+    counts depends on who asks, so it is made here, once per request. Every building awaits the
+    one decision and so asks the loader in the same turn of the event loop, and one statement counts
+    them all. The check-then-store runs with no await between, so two fields never make two.
+    """
+    decided = info.context.get("_building_counts_loader")
+    if decided is None:
+        decided = info.context["_building_counts_loader"] = asyncio.ensure_future(_make_counts_loader(info))
+    return decided
+
+
+async def _make_counts_loader(info: strawberry.types.Info) -> DataLoader | None:
+    user = info.context["user"]
+    detail = await ticket_detail_scope(info)
+    if detail == Scope.NONE:
+        return None
+    db = info.context["db"]
+    # ticket.view is public, so like buildingMapTickets only view_detail narrows the rows.
+    filters = scope_filter(detail, actor=user, model=Tickets)
+
+    async def load_fn(uuids: list[str]) -> list[tuple[int, int]]:
+        counts = await ticket_repository.building_counts(db, uuids, extra_filters=filters)
+        return [counts.get(uuid, (0, 0)) for uuid in uuids]
+
+    return DataLoader(load_fn=load_fn)
+
+
 @strawberry.type
 class BuildingFloorType:
     """One floor of a building map, and the areas a ticket on it picks from."""
@@ -606,6 +715,36 @@ class BuildingMapType:
     async def secondary_location(self, info: strawberry.types.Info) -> SecondaryLocationType | None:
         """Resolve the building's address row."""
         return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
+
+    @strawberry.field(
+        description=(
+            "How many tickets are filed in this building and not deleted, completed and cancelled ones "
+            "too: every one buildingMapTickets lists, past any page (ADR-450). Null to a caller without "
+            "ticket.view_detail, to whom those tickets are not placed in the building"
+        )
+    )
+    async def ticket_count(self, info: strawberry.types.Info) -> int | None:
+        """The building's tickets, as this caller may count them."""
+        counts = await self._ticket_counts(info)
+        return None if counts is None else counts[0]
+
+    @strawberry.field(
+        description=(
+            "How much this building is still short, people and supplies together (ADR-450): over its "
+            "tickets not completed or cancelled, each pending 'hr' or 'supply' need with a quantity "
+            "adds that quantity less assignedCount, never below 0. Rescue and medical needs, and needs "
+            "with no quantity, add nothing. Null to a caller without ticket.view_detail"
+        )
+    )
+    async def shortfall(self, info: strawberry.types.Info) -> int | None:
+        """What its open needs still lack, people and supplies together, as this caller may count it."""
+        counts = await self._ticket_counts(info)
+        return None if counts is None else counts[1]
+
+    async def _ticket_counts(self, info: strawberry.types.Info) -> tuple[int, int] | None:
+        """(tickets, shortfall), or None to a caller who may place none of its tickets here."""
+        loader = await _building_counts_loader(info)
+        return None if loader is None else await loader.load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "BuildingMapType":

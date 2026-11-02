@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatTicketStatusLabel, getTicketPriorityBadge } from './status';
+import {
+  formatTicketStatusLabel,
+  getTicketPriorityBadge,
+  getTicketPriorityLabel,
+} from './status';
 
 describe('formatTicketStatusLabel', () => {
   it('calls a need that has its people 已滿足需求, not 已完成 — nobody on it has gone yet', () => {
@@ -44,5 +48,23 @@ describe('getTicketPriorityBadge', () => {
   it('reads the value as the backend may spell it, in any case and with spaces around', () => {
     expect(getTicketPriorityBadge(' Critical ')?.label).toBe('最高優先');
     expect(getTicketPriorityBadge('HIGH')?.label).toBe('高優先');
+  });
+});
+
+describe('getTicketPriorityLabel', () => {
+  it('words all four priorities, matching the badge for the top two', () => {
+    expect(getTicketPriorityLabel('critical')).toBe(
+      getTicketPriorityBadge('critical')?.label,
+    );
+    expect(getTicketPriorityLabel('high')).toBe(
+      getTicketPriorityBadge('high')?.label,
+    );
+    expect(getTicketPriorityLabel(' Medium ')).toBe('中優先');
+    expect(getTicketPriorityLabel('low')).toBe('低優先');
+  });
+
+  it('is null for anything else', () => {
+    expect(getTicketPriorityLabel('urgent')).toBeNull();
+    expect(getTicketPriorityLabel(null)).toBeNull();
   });
 });

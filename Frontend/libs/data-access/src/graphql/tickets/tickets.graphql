@@ -52,6 +52,7 @@ fragment TicketNeedFields on TicketTaskType {
 query GetTickets(
   $bounds: BoundsInput
   $status: String
+  $statuses: [TicketStatus!]
   $priority: String
   $skip: Int = 0
   $limit: Int = 50
@@ -60,6 +61,7 @@ query GetTickets(
   tickets(
     bounds: $bounds
     status: $status
+    statuses: $statuses
     priority: $priority
     skip: $skip
     limit: $limit
@@ -76,9 +78,46 @@ query GetTickets(
   }
 }
 
+# How many tickets each cell on the map holds, for a viewer shown tickets as cells (ADR-387). All of
+# them, where a page of GetTickets holds 200.
+query GetTicketCells(
+  $bounds: BoundsInput!
+  $zoom: Float
+  $statuses: [TicketStatus!]
+) {
+  ticketCells(bounds: $bounds, zoom: $zoom, statuses: $statuses) {
+    cell
+    ticketCount
+    urgentCount
+  }
+}
+
+# The tickets one cell on the map stands for, a page at a time, as the cell's count counted them.
+query GetCellTickets(
+  $locationCell: String!
+  $statuses: [TicketStatus!]
+  $skip: Int = 0
+  $limit: Int = 200
+) {
+  tickets(
+    locationCell: $locationCell
+    statuses: $statuses
+    skip: $skip
+    limit: $limit
+  ) {
+    items {
+      ...TicketFields
+    }
+    pageInfo {
+      hasNextPage
+    }
+  }
+}
+
 # The site list's page of tickets, each with the needs its rows claim. The map keeps GetTickets:
 # it has no claim buttons, so it has no use for the needs. `q` is the header's search, 2 to 50
-# characters: the backend reads the tickets' text and their needs, every page of them.
+# characters: the backend reads the tickets' text and their needs, every page of them. `order`
+# NEEDS_FIRST orders every page as the list draws it (backend ADR-419).
 query GetTicketsWithNeeds(
   $bounds: BoundsInput
   $status: String
@@ -87,6 +126,7 @@ query GetTicketsWithNeeds(
   $skip: Int = 0
   $limit: Int = 50
   $zoom: Float
+  $order: TicketListOrder
 ) {
   tickets(
     bounds: $bounds
@@ -96,6 +136,7 @@ query GetTicketsWithNeeds(
     skip: $skip
     limit: $limit
     zoom: $zoom
+    order: $order
   ) {
     items {
       ...TicketFields
@@ -114,6 +155,9 @@ query GetTicketsWithNeeds(
 query GetTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...TicketFields
+    # The building it was filed inside, for 看各樓層 and 上一張／下一張 (modules/building). Null when
+    # it was not, and to a caller without ticket.view_detail: the building gives the place away.
+    buildingMapUuid
     # Where a volunteer is going, for the claim confirmation. Null without an address, and to a
     # caller without ticket.view_detail.
     secondaryLocation {
@@ -134,6 +178,12 @@ query GetTicket($uuid: UUID!) {
       # The address as typed on the site's 請求協助, when the parts above are empty.
       landmarkNote
     }
+    # Who answers for where it is, written under the address: the teams of the 責任區 it lies in.
+    # Empty when in none, and to a caller without ticket.view_detail (ADR-422).
+    responsibleTeams {
+      uuid
+      name
+    }
     photos {
       uuid
       url
@@ -143,6 +193,19 @@ query GetTicket($uuid: UUID!) {
       ...TicketTaskFields
       ...TicketNeedFields
     }
+  }
+}
+
+# A ticket a link names that no loaded page holds (modules/map/site/linked-ticket): the ticket as a
+# list row has it, and, when it is null, whether it was merged into another (and which), deleted, or
+# never was (ADR-444). No needs: the drawer loads its own.
+query GetLinkedTicket($uuid: UUID!) {
+  ticket(uuid: $uuid) {
+    ...TicketFields
+  }
+  ticketAvailability(uuid: $uuid) {
+    status
+    replacedByUuid
   }
 }
 

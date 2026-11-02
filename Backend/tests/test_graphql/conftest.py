@@ -50,6 +50,36 @@ async def _grant(db, role: Role, perm_cache: dict, perm: Perm, scope: str) -> No
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
 
 
+async def _ensure_platform_role(name: str, grants) -> None:
+    """The platform role `name` holding at least `grants` ((Perm, scope) pairs), made or topped up.
+
+    For the production role names the fixture seed does not make, `user` above all: several modules
+    need it, each with its own grants, and whichever runs first must not leave the others without.
+    """
+    async with test_db() as db:
+        role = (await db.execute(select(Role).where(Role.name == name))).scalar_one_or_none()
+        if role is None:
+            role = Role(name=name, kind="platform")
+            db.add(role)
+            await db.flush()
+        for perm, scope in grants:
+            permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
+            if permission is None:
+                permission = Permission(key=perm.value)
+                db.add(permission)
+                await db.flush()
+            held = await db.scalar(
+                select(RolePermissionAssign).where(
+                    RolePermissionAssign.role_uuid == role.uuid,
+                    RolePermissionAssign.permission_uuid == permission.uuid,
+                )
+            )
+            if held is None:
+                db.add(
+                    RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope)
+                )
+
+
 async def _ensure_db():
     """Create tables and seed RBAC roles, unless another test left them in place.
 

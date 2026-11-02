@@ -1,7 +1,7 @@
 """station_update_suggestions.previous_value: the field's value when the suggestion was sent (ADR-420)
 
 Revision ID: f563197f1f3c
-Revises: b5d8e2a41c07
+Revises: 197c174410bd
 Create Date: 2026-10-29
 
 One nullable column with no backfill: what a field held before a suggestion was sent is not recorded
@@ -18,7 +18,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "f563197f1f3c"
-down_revision: str | Sequence[str] | None = "b5d8e2a41c07"
+down_revision: str | Sequence[str] | None = "197c174410bd"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

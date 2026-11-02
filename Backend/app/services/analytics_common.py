@@ -10,15 +10,19 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 
+from app.core.search import StatementTimeoutError
+
 # Stand-in label for a NULL category key. A NULL can't be ordered against a str, so it
 # would crash chart_render's line-chart sort; giving it a real name also means the chart
 # shows an honest "uncategorized" bar instead of a blank one.
 UNCATEGORIZED_LABEL = "uncategorized"
 
-# Widest start->end span accepted by ticket_analytics.get_duplicate_count, whose self-join
-# grows with the rows in range. With no statement_timeout and no rate limit deployed, this
-# cap is the only thing stopping one request from holding a connection indefinitely.
-MAX_DUPLICATE_RANGE_DAYS = 120
+# A day-by-day trend evaluates every need once per day, so its span is capped at this many days.
+# The cap bounds days, not rows: the cost also grows with the needs and claims in the audit log,
+# which is why the trend runs under the statement ceiling as well. The default is what the dashboard
+# opens on.
+MAX_TREND_DAYS = 366
+DEFAULT_TREND_DAYS = 30
 
 # Outermost dates local_bounds can convert. Not a domain rule — these are the limits of what
 # the conversion and the driver can represent. `end_date + timedelta(days=1)` runs off
@@ -38,6 +42,10 @@ class AnalyticsInputError(ValueError):
     enough that the endpoint can 400 on a real client mistake without also blaming the
     caller for an internal bug, which raises a plain ValueError.
     """
+
+
+class AnalyticsTimeoutError(StatementTimeoutError, AnalyticsInputError):
+    """A volunteer query that ran past the statement ceiling; the endpoint turns it into HTTP 400."""
 
 
 def local_bounds(

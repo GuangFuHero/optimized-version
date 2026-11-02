@@ -62,9 +62,7 @@ async def _remaining_super_admins(db: AsyncSession, role_uuid: str, *, excluding
     """
     rows = (
         await db.execute(
-            select(UserRoleAssign.user_uuid)
-            .where(UserRoleAssign.role_uuid == role_uuid)
-            .with_for_update()
+            select(UserRoleAssign.user_uuid).where(UserRoleAssign.role_uuid == role_uuid).with_for_update()
         )
     ).all()
     # `user_uuid` deserializes to a uuid.UUID (the FK targets users.uuid, a UUID(as_uuid=True)
@@ -99,9 +97,7 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
     # under feature 010 a team role IS the membership, so granting one without saying which
     # team is meaningless (ADR-072).
     if new_role.kind == "team":
-        raise AdminConflictError(
-            "Team roles are granted via POST /admin/teams/{team_uuid}/members"
-        )
+        raise AdminConflictError("Team roles are granted via POST /admin/teams/{team_uuid}/members")
 
     existing = (
         await db.execute(
@@ -124,9 +120,7 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
 
     replaced_super_admin = next((role for _, role in replaced if role.name == SUPER_ADMIN_ROLE_NAME), None)
     if replaced_super_admin is not None:
-        remaining = await _remaining_super_admins(
-            db, replaced_super_admin.uuid, excluding=str(target.uuid)
-        )
+        remaining = await _remaining_super_admins(db, replaced_super_admin.uuid, excluding=str(target.uuid))
         if remaining == 0:
             raise AdminConflictError("Cannot remove the last super_admin")
 
@@ -137,9 +131,7 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
     if already_assigned is not None:
         assignment = already_assigned
     else:
-        assignment = UserRoleAssign(
-            user_uuid=target.uuid, role_uuid=new_role.uuid, team_uuid=None, role_kind=new_role.kind
-        )
+        assignment = UserRoleAssign(user_uuid=target.uuid, role_uuid=new_role.uuid, team_uuid=None)
         db.add(assignment)
     await db.commit()
     await db.refresh(assignment)
@@ -178,7 +170,7 @@ async def grant_team_role(db: AsyncSession, *, user_uuid, team_uuid, role: Role)
             UserRoleAssign.team_uuid == team_uuid,
         )
     )
-    db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role.uuid, team_uuid=team_uuid, role_kind="team"))
+    db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role.uuid, team_uuid=team_uuid))
     await db.flush()
 
 
@@ -423,9 +415,7 @@ async def create_team(
     await team_repository.lock_name(db, name)
     if await team_repository.name_taken(db, name):
         raise AdminConflictError("A team with this name already exists")
-    return await team_repository.create(
-        db, obj_in={"name": name, "type": type_, "tax_id": tax_id}
-    )
+    return await team_repository.create(db, obj_in={"name": name, "type": type_, "tax_id": tax_id})
 
 
 async def update_team(db: AsyncSession, *, actor: User, team_uuid: str, changes: dict) -> Team:
@@ -467,8 +457,9 @@ async def set_team_status(db: AsyncSession, *, actor: User, team_uuid: str, new_
 
     Suspended: members keep their grants, but the identities resolve to nothing until it is
     restored (active_identity_repository), and the team's pending join requests are rejected
-    with a note and their applicants told. There is no disbanding: a team stays, and its last
-    admin with it (ADMIN-027 Story 4, ADR-356).
+    with a note and their applicants told. Everyone in the team is told too (Spec 029, ADR-405).
+    There is no disbanding: a team stays, and its last admin with it (ADMIN-027 Story 4, ADR-356).
+    The notices go after the commit; one that fails is logged and the status stands.
     """
     if await require_scope(actor, Perm.TEAM_EDIT, db) != Scope.ALL:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
@@ -482,14 +473,17 @@ async def set_team_status(db: AsyncSession, *, actor: User, team_uuid: str, new_
     if team.status == new_status:
         return team
     team.status = new_status
-    team_id, actor_uuid = team.uuid, actor.uuid  # read before the commit expires them
-    closed = []
+    team_id, team_name, actor_uuid = team.uuid, team.name, actor.uuid  # read before the commit expires them
+    closed, members = [], []
     if new_status == "suspended":
         closed = await _close_pending_requests(db, team_id, actor_uuid, _CLOSED_NOTE)
+        members = await _team_member_uuids(db, team_id)
     await db.commit()
+    # Each notice in its own try: one applicant's failing must not keep the team from hearing.
     for request_uuid, applicant_uuid in closed:
-        await NotificationService.dispatch(
+        await _notify_or_log(
             db,
+            f"Telling applicant {applicant_uuid} that team {team_id} closed their request failed",
             event_type="role_request_rejected",
             title="你的加入團隊申請沒有通過",
             body=_CLOSED_NOTE,
@@ -498,19 +492,53 @@ async def set_team_status(db: AsyncSession, *, actor: User, team_uuid: str, new_
             ref_uuid=request_uuid,
             explicit_recipients=[applicant_uuid],
         )
+    if members:
+        await _notify_or_log(
+            db,
+            f"Telling the members that team {team_id} is suspended failed",
+            event_type="team_suspended",
+            title=f"「{team_name}」已暫停",
+            body=f"你在「{team_name}」的身分暫時無法使用，恢復後會自動回來。",
+            priority="high",
+            actor_uuid=actor_uuid,
+            ref_type="team",
+            ref_uuid=team_id,
+            explicit_recipients=members,
+        )
     await db.refresh(team)
     return team
+
+
+async def _notify_or_log(db: AsyncSession, failure: str, **notice) -> None:
+    """Send one notice; a failure is logged and rolled back, and the caller carries on."""
+    try:
+        await NotificationService.dispatch(db, **notice)
+    except Exception:
+        logger.exception(failure)
+        await db.rollback()
+
+
+async def _team_member_uuids(db: AsyncSession, team_uuid) -> list:
+    """Everyone holding any role in the team, once each (ADR-405)."""
+    rows = await db.execute(
+        select(UserRoleAssign.user_uuid).where(UserRoleAssign.team_uuid == team_uuid).distinct()
+    )
+    return list(rows.scalars().all())
 
 
 async def _close_pending_requests(db: AsyncSession, team_uuid, reviewer_uuid, note: str) -> list[tuple]:
     """Reject the team's pending member requests; return (request uuid, applicant uuid) pairs."""
     pending = (
-        await db.execute(
-            select(RoleRequest)
-            .where(RoleRequest.team_uuid == team_uuid, RoleRequest.status == "pending")
-            .with_for_update()
+        (
+            await db.execute(
+                select(RoleRequest)
+                .where(RoleRequest.team_uuid == team_uuid, RoleRequest.status == "pending")
+                .with_for_update()
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     now = datetime.now(UTC)
     for request in pending:
         request.status, request.review_note = "rejected", note

@@ -67,7 +67,6 @@ async def _acting(db, role: Role, team: Team | None = None) -> User:
             user_uuid=user.uuid,
             role_uuid=role.uuid,
             team_uuid=team.uuid if team is not None else None,
-            role_kind=role.kind,
         )
     )
     await db.flush()

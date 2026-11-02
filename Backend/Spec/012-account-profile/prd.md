@@ -73,7 +73,8 @@
 **驗收條件**（ADR-215）
 1. **When** 只憑 session 呼叫 `set-password`，**Then** 回 422，驗證碼寄到帳號既有的聯絡方式。
 2. **When** 帶碼設定，**Then** 回 204、所有 session 被撤銷、每個聯絡方式都收到「已設定密碼」通知。
-3. **Given** 帳號沒有任何聯絡方式，**Then** 回 422 `no_proof_channel`，提示先新增聯絡方式。
+3. **Given** 帳號沒有驗證過的電子郵件或手機，**Then** 在任何證明之前回 409 `password_needs_contact`，不寄碼，
+   提示先新增電子郵件或手機（ADR-401）。
 
 ## 4. 功能需求
 
@@ -103,7 +104,7 @@
 | | 404 | `no_proof_channel` | ⚠️ 見 §8 待決 1 |
 | `POST /auth/contacts/resend` | 404 | `no_pending_contact` | 「沒有等待驗證的變更，請重新送出」 |
 | `POST /auth/set-password` | 409 | `password_already_set` | 導去改密碼 |
-| | 422 | `no_proof_channel` | 「請先新增一個聯絡方式」 |
+| | 409 | `password_needs_contact` | 「要先新增電子郵件或手機，才能設定密碼」，**不要**顯示證明欄位（ADR-401） |
 
 `step_up` 的欄位：`password`（前端先雜湊，與 change-password 相同）、`old_channel_code`、`id_token`。
 

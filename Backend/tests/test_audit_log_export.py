@@ -281,17 +281,19 @@ async def test_a_forbidden_download_records_nothing(client, db_session, redis):
 @pytest.mark.asyncio
 async def test_times_are_utc_unless_a_zone_is_asked_for(client, db_session, redis, monkeypatch):
     """ADR-430: `tz` writes `created_at` and the file name in that zone, still with its offset."""
-    row = _row("teams", new={"n": 1})
+    # Exported by its own row_id: the first export records itself, a newer row the second would list first.
+    row_id = uuid.uuid4()
+    row = _row("teams", new={"n": 1}, row_id=row_id)
     row.created_at = datetime(2026, 10, 29, 16, 30, tzinfo=UTC)
     db_session.add(row)
     headers = await _reader(db_session, redis, "boss", Perm.AUDIT_VIEW, Perm.AUDIT_EXPORT)
 
-    utc = await _export(client, headers)
-    taipei = await _export(client, headers, tz="Asia/Taipei")
+    utc = await _export(client, headers, row_id=str(row_id))
+    taipei = await _export(client, headers, row_id=str(row_id), tz="Asia/Taipei")
 
     column = HEADER.index("created_at")
-    assert _table(utc)[1][column] == "2026-10-29T16:30:00+00:00"
-    assert _table(taipei)[1][column] == "2026-10-30T00:30:00+08:00"
+    assert [line[column] for line in _table(utc)[1:]] == ["2026-10-29T16:30:00+00:00"]
+    assert [line[column] for line in _table(taipei)[1:]] == ["2026-10-30T00:30:00+08:00"]
     now_taipei = datetime.now(UTC) + timedelta(hours=8)
     name = taipei.headers["content-disposition"].split('filename="audit-logs-', 1)[1]
     stamp = datetime.strptime(name[:15], "%Y%m%d-%H%M%S").replace(tzinfo=UTC)

@@ -27,6 +27,7 @@ from app.models.auth import User
 from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import user_repository
+from app.services.identity_reset import reset_to_default
 
 # --- 密碼處理框架 ---
 
@@ -325,10 +326,10 @@ async def get_current_user(
     """Resolve the authenticated user AND the identity this token acts as (ADR-069/096).
 
     An `act` claim that no longer names a grant the user holds — role revoked, role deleted,
-    team soft-deleted — is refused here rather than quietly downgraded. Silently dropping to
-    a lesser identity would leave the caller acting with permissions they cannot see they
-    lost; refusing makes it visible. `/auth/refresh` refuses the same case with the same
-    `identity_revoked`, so between them the user is signed out and comes back on their platform identity.
+    team suspended or soft-deleted — is refused here rather than quietly downgraded: the request
+    is not carried out under a lesser identity the caller did not choose. Since Spec 029
+    (ADR-402) that refusal is `identity_reset`, not a sign-out: the session is moved to the
+    default identity first, so the refresh that follows lands there and the user stays signed in.
 
     A request the site marks with `realm` = `site` then acts as the caller's `user` grant
     instead, for that request alone (ADR-289): everyone signed in has the same
@@ -355,8 +356,9 @@ async def get_current_user(
     if act:
         identity = await active_identity_repository.resolve(db, str(user.uuid), act)
         if identity is None:
-            # The code a refresh answers too, so a client can say the access was taken away (ADR-328).
-            raise _credentials_exception(ErrorCode.IDENTITY_REVOKED)
+            # Not a sign-out any more (Spec 029, ADR-402): the session moves to the default identity
+            # and this request is refused with `identity_reset`, the code a refresh answers too.
+            raise await reset_to_default(db, redis, user_uuid=str(user.uuid), sid=payload["sid"], act=act)
     else:
         # No `act` at all is a different case from one that names a vanished identity: nothing
         # was claimed, so fall back to the platform identity — the ADR-069 default, and what

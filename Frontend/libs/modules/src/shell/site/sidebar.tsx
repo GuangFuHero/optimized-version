@@ -1,8 +1,5 @@
 'use client';
 
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
-import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import { Box, IconButton, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -12,11 +9,9 @@ import {
   designTokens,
   displayTextSize,
   SidebarItem,
+  Icons,
 } from '@rescue-frontend/ui';
 
-import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
-import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
-import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import { BACK_OFFICE_HREF, type SitePortalEntry } from '../../role-request';
 import { openHelpRequest } from '../../ticket/help-request/open-help-request';
 import { BRIEFING_HREF } from '../../briefing/href';
@@ -129,6 +124,7 @@ function SiteSidebarNav({
         >
           <GuangFuBrandIcon width={38} height={26} />
           {/* The phone's top bar has no room for the name, so the drawer has it (`site-shell.jsx:722`). */}
+          {/* Two lines, then the ellipsis: a phone shows no `title`, so a cut name could not be read. */}
           <SiteBrandName
             sx={{
               flex: 1,
@@ -137,6 +133,12 @@ function SiteSidebarNav({
               lineHeight: '28px',
               fontWeight: 700,
               color: color.fg.neutral.default,
+              whiteSpace: 'normal',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              // A long run of Latin letters or digits has nowhere to break, so it could not wrap.
+              overflowWrap: 'anywhere',
             }}
           />
           <IconButton
@@ -144,7 +146,7 @@ function SiteSidebarNav({
             onClick={onClose}
             sx={{ color: color.fg.neutral.subtle }}
           >
-            <CloseRoundedIcon sx={{ fontSize: 20 }} />
+            <Icons.close sx={{ fontSize: 20 }} />
           </IconButton>
         </Stack>
       ) : null}
@@ -183,7 +185,7 @@ function SiteSidebarNav({
       <SidebarItem
         LinkComponent={Link}
         href={BRIEFING_HREF}
-        icon={<MenuBookRoundedIcon />}
+        icon={<Icons.bookOpen />}
         label="行前資訊"
         active={pathname === BRIEFING_HREF}
         collapsed={collapsed}
@@ -192,7 +194,7 @@ function SiteSidebarNav({
 
       <Stack sx={{ mt: 'auto', gap: '8px' }}>
         <SidebarItem
-          icon={<HandshakeRoundedIcon />}
+          icon={<Icons.heartHandshake />}
           label="請求協助"
           collapsed={collapsed}
           onClick={() => {
@@ -215,14 +217,14 @@ function SiteSidebarNav({
           <SidebarItem
             LinkComponent={Link}
             href={BACK_OFFICE_HREF}
-            icon={<SwapHorizRoundedIcon />}
+            icon={<Icons.arrowLeftRight />}
             label="前往管理平台"
             collapsed={collapsed}
           />
         ) : null}
         {portalEntry === 'apply' ? (
           <SidebarItem
-            icon={<VerifiedRoundedIcon />}
+            icon={<Icons.badgeCheck />}
             label="申請管理權限"
             collapsed={collapsed}
             onClick={onApplyRoleRequest}
@@ -230,7 +232,7 @@ function SiteSidebarNav({
         ) : null}
         {isAuthenticated ? null : (
           <SidebarItem
-            icon={<LoginRoundedIcon />}
+            icon={<Icons.logIn />}
             label="登入"
             collapsed={collapsed}
             onClick={onSignIn}

@@ -21,7 +21,7 @@ async def actor_with(db, *perms: Perm) -> User:
         db.add(permission)
         await db.flush()
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, role_kind="platform"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     acting_as(user, role)  # before the commit expires `role`
     seed_disaster_types(db)
     await db.commit()
@@ -34,10 +34,8 @@ class AsyncStubEngine:
     """A dedup engine whose answers the test sets.
 
     `suspects` is returned by `check` (a callable receives the submission); `delay_s` sleeps
-    first; `fail` raises; `write` adds a row before answering, to exercise the read-only guard.
-    `scored` is what `score` returns (None = the related entity is gone); `fail_score` makes
-    `score` raise; `score_sql` is run by `score` first, to exercise a failing or slow query
-    inside the guard.
+    first; `fail` raises; `write` adds a row before answering, to exercise the read-only guard;
+    `check_sql` is run first, to exercise a failing or slow query inside the guard.
     """
 
     version: str = "stub-v2"
@@ -45,17 +43,18 @@ class AsyncStubEngine:
     delay_s: float = 0.0
     fail: bool = False
     write: bool = False
-    scored: object = "default"
-    fail_score: bool = False
-    score_sql: str | None = None
+    check_sql: str | None = None
     check_calls: list = field(default_factory=list)
-    score_calls: list = field(default_factory=list)
 
     async def check(self, db, submission, now):
         """The configured suspects, after the configured misbehaviour."""
         import asyncio
 
         self.check_calls.append(submission)
+        if self.check_sql:
+            from sqlalchemy import text
+
+            await db.execute(text(self.check_sql))
         if self.delay_s:
             await asyncio.sleep(self.delay_s)
         if self.fail:
@@ -66,16 +65,5 @@ class AsyncStubEngine:
         return list(self.suspects(submission) if callable(self.suspects) else self.suspects)
 
     async def score(self, db, submission, draft_ref, related_kind, related_uuid, now):
-        """A fixed score for any pair, or the configured failure."""
-        from app.dedup_engine.contract import Suspect
-
-        self.score_calls.append((draft_ref, related_kind, related_uuid))
-        if self.score_sql:
-            from sqlalchemy import text
-
-            await db.execute(text(self.score_sql))
-        if self.fail_score:
-            raise RuntimeError("engine exploded")
-        if self.scored != "default":
-            return self.scored
-        return Suspect(draft_ref, related_kind, related_uuid, 0.91, {"stub": True})
+        """In the contract, but the backend settles acknowledgements with `check` (ADR-400)."""
+        raise AssertionError("the backend asked score; acknowledgements are settled by check")

@@ -1,12 +1,18 @@
 'use client';
 
-import { Box } from '@mui/material';
-import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Box, Drawer, useMediaQuery, useTheme } from '@mui/material';
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { usePathname } from 'next/navigation';
 
 import {
   AnnouncementFilter,
-  isAdminPermissionError,
+  forbidsPage,
   useAnnouncements,
   useCurrentUser,
 } from '@rescue-frontend/data-access/admin';
@@ -22,10 +28,24 @@ const { color } = designTokens;
 export interface AdminShellProps {
   children: ReactNode;
   notFound?: boolean;
+  /** The site's origin (`SITE_APP_URL`), which the sidebar's 回到前台 opens. */
+  siteUrl?: string;
 }
 
-export function AdminShell({ children, notFound = false }: AdminShellProps) {
+export function AdminShell({
+  children,
+  notFound = false,
+  siteUrl,
+}: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  // The drawer is open on the page it was opened on, so any navigation closes it: a link in the
+  // drawer, the browser's back button, or a redirect.
+  const pathname = usePathname();
+  const [openedOn, setOpenedOn] = useState<string | null>(null);
+  const mobileOpen = openedOn === pathname;
+  const theme = useTheme();
+  const mobile = useMediaQuery(theme.breakpoints.down('tablet'));
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   const matchedItem = useActiveAdminNavItem();
   const activeItem = notFound ? undefined : matchedItem;
   const { data: user } = useCurrentUser();
@@ -35,7 +55,7 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
     () =>
       queryCache
         .findAll({ queryKey: ['admin'], type: 'active' })
-        .some((query) => isAdminPermissionError(query.state.error)),
+        .some(forbidsPage),
     () => false,
   );
   const capabilityForbidden = Boolean(
@@ -56,6 +76,11 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
     { filter: AnnouncementFilter.Active },
     { enabled: canViewAnnouncements },
   );
+
+  // Widening past the breakpoint closes the drawer, so it does not reopen on the next narrowing.
+  useEffect(() => {
+    if (!mobile) setOpenedOn(null);
+  }, [mobile]);
 
   return (
     <Box
@@ -80,11 +105,41 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
           bgcolor: color.bg.neutral.subtle,
         }}
       >
-        <AdminSidebar
-          collapsed={collapsed}
-          onToggle={() => setCollapsed((value) => !value)}
-          activeId={forbidden ? undefined : activeItem?.id}
-        />
+        {/* Both are rendered and CSS picks one: `useMediaQuery` is false during SSR and hydration,
+            so choosing in JS painted the 252px desktop sidebar on phones until the script ran. */}
+        <Drawer
+          open={mobile && mobileOpen}
+          transitionDuration={reduceMotion ? 0 : undefined}
+          onClose={() => setOpenedOn(null)}
+          slotProps={{
+            paper: {
+              id: 'admin-mobile-navigation',
+              sx: { maxWidth: '85vw' },
+            },
+          }}
+        >
+          <Box sx={{ display: 'flex', height: '100%' }}>
+            <AdminSidebar
+              collapsed={false}
+              onToggle={() => setOpenedOn(null)}
+              activeId={forbidden ? undefined : activeItem?.id}
+              siteUrl={siteUrl}
+            />
+          </Box>
+        </Drawer>
+        <Box
+          sx={{
+            display: { mobile: 'none', tablet: 'flex' },
+            flexShrink: 0,
+          }}
+        >
+          <AdminSidebar
+            collapsed={collapsed}
+            onToggle={() => setCollapsed((value) => !value)}
+            activeId={forbidden ? undefined : activeItem?.id}
+            siteUrl={siteUrl}
+          />
+        </Box>
         <Box
           sx={{
             flex: 1,
@@ -93,7 +148,11 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
             flexDirection: 'column',
           }}
         >
-          <AdminHeader title={pageTitle} />
+          <AdminHeader
+            title={pageTitle}
+            onOpenNavigation={() => setOpenedOn(pathname)}
+            navigationOpen={mobileOpen}
+          />
           <Box
             component="main"
             sx={{

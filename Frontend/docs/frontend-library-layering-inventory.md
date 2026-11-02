@@ -74,7 +74,6 @@
 - `shell/admin/*`
 - `layout.ts`
 - `sidebar.ts`
-- `menu-glyph.ts`
 
 ### `station/`
 
@@ -90,7 +89,6 @@
 
 ### `ticket/`
 
-- `admin/ticket-create/*`
 - `admin/ticket-detail/*`
 - `admin/ticket-list/*`
 - `admin/ticket-report/*`

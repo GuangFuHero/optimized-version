@@ -262,8 +262,9 @@ def test_an_expired_token_is_unverified():
 def test_a_typed_building_fills_an_empty_building_section():
     """A 棟 in the line fills an empty building section, as a typed floor fills the floor."""
     stored = apply_address({"full_address": "花蓮縣光復鄉糖廠街19號A棟3樓"}, point=None)
-    assert (stored["full_address"], stored["building_section"], stored["floor"]) == (
-        "花蓮縣光復鄉糖廠街19號",
+    assert (stored["user_input_address"], stored["no"], stored["building_section"], stored["floor"]) == (
+        "花蓮縣光復鄉糖廠街19號A棟3樓",
+        "19號",
         "A棟",
         "3樓",
     )
@@ -287,7 +288,7 @@ def test_a_pole_has_no_address_status():
 def test_unparseable_text_is_kept_not_refused():
     """Unparseable text is stored as typed and unverified, never refused."""
     stored = apply_address({"full_address": "我家在糖廠附近"}, point=NEAR_DOOR)
-    assert (stored["full_address"], stored["road"], stored["normalization_status"]) == (
+    assert (stored["remainder"], stored["road"], stored["normalization_status"]) == (
         "我家在糖廠附近",
         None,
         "unverified",
@@ -306,7 +307,62 @@ def test_a_line_too_long_to_store_is_refused():
         apply_address({"full_address": "花蓮縣光復鄉糖廠街19號" + "糖" * 250}, point=None)
 
 
+def test_a_line_padded_with_whitespace_is_checked_by_its_folded_length():
+    """Outer whitespace is neither stored nor counted: 250 characters and 10 spaces is still a line."""
+    door = "花蓮縣光復鄉糖廠街19號"
+    for sent in (door + "糖" * 240 + " " * 10, door + " " * 250, " " * 10 + door + "\n" * 250):
+        stored = apply_address({"full_address": sent}, point=None)
+        assert stored["user_input_address"] == sent.strip()
+
+
+def test_a_line_that_widens_past_the_limit_is_refused_as_full_address():
+    """Compatibility folding can lengthen a line; the message names `full_address`, never `remainder`."""
+    with pytest.raises(ValueError, match="full_address must be at most 255 characters"):
+        apply_address({"full_address": "㎞" * 200}, point=None)
+
+
+def test_a_line_whose_folded_form_fits_but_whose_raw_form_is_too_long_is_refused():
+    """Interior whitespace is kept in the raw line, which has its own limit of 500."""
+    with pytest.raises(ValueError, match="full_address must be at most 500 characters"):
+        apply_address({"full_address": "花蓮縣" + " " * 600 + "光復鄉糖廠街19號"}, point=None)
+
+
+def test_a_blank_line_stores_nothing():
+    """Only whitespace was sent: no line, no parts."""
+    stored = apply_address({"full_address": " \n "}, point=None)
+    assert stored["user_input_address"] is None and stored["county"] is None
+
+
 def test_an_address_token_is_not_a_login():
     """An address token cannot pass as an access token."""
     with pytest.raises(Exception, match="401"):
         _decode_access_payload(_token())
+
+
+def test_the_line_is_kept_as_received_and_full_address_is_never_written():
+    """`user_input_address` holds the line as sent, outer whitespace trimmed; the parser gives the rest."""
+    sent = "  花蓮縣 光復鄉糖廠街19號後面的鐵皮屋 \n"
+    stored = apply_address({"location_type": "address", "full_address": sent}, point=None)
+    assert stored["user_input_address"] == "花蓮縣 光復鄉糖廠街19號後面的鐵皮屋"
+    assert "full_address" not in stored
+    assert (stored["county"], stored["road"], stored["no"], stored["remainder"]) == (
+        "花蓮縣",
+        "糖廠街",
+        "19號",
+        "後面的鐵皮屋",
+    )
+
+
+def test_an_address_edit_overwrites_the_line_and_a_missing_line_clears_it():
+    """No line, no parts: the same as before, now for the received line too."""
+    stored = apply_address({"location_type": "address"}, point=None)
+    assert stored["user_input_address"] is None
+    assert all(stored[k] is None for k in ("county", "town", "road", "no", "remainder"))
+
+
+def test_a_sub_alley_is_graded_by_the_line_the_database_will_build():
+    """The token covers the rebuilt line, which keeps the 衖 the parts now hold."""
+    line = "臺北市中山區民生東路一段1巷2弄3衖4號"
+    token = _token(line)
+    stored = apply_address({"full_address": line, "address_token": token}, point=NEAR_DOOR)
+    assert stored["alley"] == "2弄3衖" and stored["normalization_status"] == "verified"

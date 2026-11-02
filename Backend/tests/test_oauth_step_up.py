@@ -14,12 +14,16 @@ from datetime import timedelta
 from urllib.parse import parse_qsl, urlsplit
 
 import pytest
+from sqlalchemy import delete
 
 from app.core import auth_cookies
 from app.core.config import settings
+from app.core.identity import encode_act
 from app.core.security import create_access_token
 from app.main import app
 from app.models.auth import UserIdentity
+from app.models.rbac import Role, UserRoleAssign
+from app.models.team import Team
 from app.repositories.session_repository import SessionRepository
 from app.services.auth_account import create_account
 from app.sso.oauth import get_oauth_exchanger
@@ -153,14 +157,24 @@ async def _set_password(client, token: str, proof: str | None = None):
     )
 
 
-async def test_a_first_password_asks_the_person_to_prove_it_at_line(client, db_session, redis):
-    """The same gate as a first contact (ADR-215), so the same answer."""
+async def test_a_first_password_is_refused_before_anything_is_proved_at_line(client, db_session, redis):
+    """With no email or phone to sign in with, a password could never be used (ADR-401)."""
     user_uuid, _ = await _line_only(db_session, redis)
 
     response = await _set_password(client, await token_for(redis, user_uuid))
 
-    assert response.status_code == 422, response.text
-    assert (response.json()["code"], response.json()["providers"]) == ("step_up_reauth_required", ["line"])
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "password_needs_contact"
+
+
+async def test_a_step_up_for_a_first_password_is_not_offered_at_line(client, db_session, redis):
+    """A first password is proved by the account's contact or refused, so never at the provider (ADR-401)."""
+    user_uuid, _ = await _line_only(db_session, redis)
+
+    started = await _start_step_up(client, await token_for(redis, user_uuid), action="set_password")
+
+    _back_on_the_page(started, step_up_error="oauth_request_invalid")
+    assert cookies_set_by(started) == {}
 
 
 async def test_linking_a_provider_asks_the_person_to_prove_it_at_line(client, db_session, redis):
@@ -476,27 +490,15 @@ async def test_a_proof_lets_one_request_through(client, db_session, redis, excha
 
 
 async def test_a_proof_is_for_the_action_it_was_asked_for(client, db_session, redis, exchanger):
-    """Proved for a password: adding a contact still asks, as a code is bound to its action (ADR-164)."""
+    """Proved for linking: adding a contact still asks, as a code is bound to its action (ADR-164)."""
     user_uuid, _ = await _line_only(db_session, redis)
     token = await token_for(redis, user_uuid)
-    back = await _step_up_at_line(client, exchanger, token, action="set_password")
+    back = await _step_up_at_line(client, exchanger, token, action="link_identity")
     _back_on_the_page(back, step_up="ok")
 
     response = await _add_phone(client, token, _proof_handed_over(back))
 
     assert response.json()["code"] == "step_up_reauth_required"
-
-
-async def test_once_proved_at_line_a_first_password_is_set(client, db_session, redis, exchanger):
-    """The same proof, asked for this action, lets the first password through."""
-    user_uuid, _ = await _line_only(db_session, redis)
-    token = await token_for(redis, user_uuid)
-    back = await _step_up_at_line(client, exchanger, token, action="set_password")
-    _back_on_the_page(back, step_up="ok")
-
-    response = await _set_password(client, token, _proof_handed_over(back))
-
-    assert response.status_code == 204, response.text
 
 
 async def test_a_proof_is_for_the_session_that_asked_for_it(client, db_session, redis, exchanger):
@@ -544,3 +546,45 @@ async def test_once_proved_at_line_another_provider_is_unlinked(client, db_sessi
     )
 
     assert response.status_code == 204, response.text
+
+
+async def _token_whose_identity_was_taken_away(db, redis) -> tuple[str, str, str]:
+    """A LINE-only account signed in as 甲隊's member, then removed from 甲隊; returns (sid, act, token)."""
+    user_uuid, _ = await _line_only(db, redis)
+    member = Role(name="member", kind="team")
+    team = Team(name="甲隊", type="ngo")
+    db.add_all([member, team])
+    await db.flush()
+    member_uuid, team_uuid = member.uuid, team.uuid
+    db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=member_uuid, team_uuid=team_uuid))
+    await db.commit()
+    act = encode_act(str(member_uuid), str(team_uuid))
+    sid, _ = await SessionRepository(redis).create_session(user_uuid, "test", act=act)
+    token = create_access_token({"sub": user_uuid}, sid=sid, act=act)
+    await db.execute(delete(UserRoleAssign).where(UserRoleAssign.team_uuid == team_uuid))
+    await db.commit()
+    return sid, act, token
+
+
+async def test_a_step_up_whose_identity_was_taken_away_goes_back_to_the_page(client, db_session, redis):
+    """Spec 029 (ADR-424): not signed out, so back to the page with `identity_reset`, the cookies kept.
+
+    The session has moved to the default identity already, so the page refreshes and can start again.
+    """
+    sid, act, token = await _token_whose_identity_was_taken_away(db_session, redis)
+
+    started = await _start_step_up(client, token)
+
+    _back_on_the_page(started, step_up_error="identity_reset")
+    assert cookies_set_by(started) == {}
+    assert (await SessionRepository(redis).get_session(sid))["act"] != act
+
+
+async def test_a_step_up_whose_identity_was_taken_away_never_leaves_our_site(client, db_session, redis):
+    """ADR-424: a `return_to` that is not a path on our site is refused, as on any start."""
+    _, _, token = await _token_whose_identity_was_taken_away(db_session, redis)
+
+    started = await _start_step_up(client, token, return_to="//evil.test/x")
+
+    assert started.status_code == 302, started.text
+    assert started.headers["location"] == f"{oauth_flow.SITE}/login?error=oauth_request_invalid"

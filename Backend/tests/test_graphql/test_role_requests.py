@@ -7,13 +7,13 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select
+from jose import jwt
 
 from app.core.permissions import Perm
 from app.models.auth import UserContact
-from app.models.rbac import Permission, Role, RolePermissionAssign
+from app.models.role_request import RoleRequest
 from app.models.team import Team
-from tests.test_graphql.conftest import _create_user_with_role, auth_header
+from tests.test_graphql.conftest import _create_user_with_role, _ensure_platform_role, auth_header
 from tests.test_graphql.conftest import test_db as graphql_db  # renamed so pytest does not collect it
 
 SUBMIT = """
@@ -42,19 +42,7 @@ async def _citizen_token(redis, phone: str | None = None) -> str:
     The GraphQL fixtures seed their own role names, not the production `user` that the
     eligibility rule keys on, so the role is added here once and reused across tests.
     """
-    async with graphql_db() as db:
-        role = (await db.execute(select(Role).where(Role.name == "user"))).scalar_one_or_none()
-        if role is None:
-            role = Role(name="user", kind="platform")
-            db.add(role)
-            permission = (
-                await db.execute(select(Permission).where(Permission.key == Perm.ROLE_REQUEST_ADD.value))
-            ).scalar_one_or_none()
-            if permission is None:
-                permission = Permission(key=Perm.ROLE_REQUEST_ADD.value)
-                db.add(permission)
-            await db.flush()
-            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
+    await _ensure_platform_role("user", [(Perm.ROLE_REQUEST_ADD, "all")])
     user_uuid, token = await _create_user_with_role(redis, "user")
     # Applying needs a verified phone since Spec 026 (ADR-355). Unique by value, so one per test run.
     async with graphql_db() as db:
@@ -199,3 +187,50 @@ async def test_contact_is_no_longer_accepted(client, redis):
     body = await _post(client, SUBMIT, token, {"input": {**APPLICATION, "contact": "03-8701234"}})
 
     assert "contact" in body["errors"][0]["message"]
+
+
+MINE_WITH_TEAMS = """
+query { myRoleRequests { requests { status newTeamName team { uuid } grantedTeam { uuid name type } } } }
+"""
+
+
+@pytest.mark.asyncio
+async def test_my_approved_new_team_application_names_the_team_it_founded(client, redis):
+    """ADR-418: the applicant sees which team approval founded; `team` stays what was asked for."""
+    token = await _citizen_token(redis)
+    applicant_uuid = jwt.get_unverified_claims(token)["sub"]
+    async with graphql_db() as db:
+        team = Team(name="光復青年志工隊", type="ngo", status="active")
+        db.add(team)
+        await db.flush()
+        team_uuid = str(team.uuid)
+        db.add(
+            RoleRequest(
+                requested_role="ngo",
+                reason="想成立新團隊",
+                new_team_name="光復青年志工隊",
+                status="approved",
+                created_by=applicant_uuid,
+                granted_team_uuid=team.uuid,
+                closed_at=datetime.now(UTC),
+            )
+        )
+
+    body = await _post(client, MINE_WITH_TEAMS, token)
+
+    assert "errors" not in body, body
+    [mine] = body["data"]["myRoleRequests"]["requests"]
+    assert mine["team"] is None
+    assert mine["grantedTeam"] == {"uuid": team_uuid, "name": "光復青年志工隊", "type": "NGO"}
+
+
+@pytest.mark.asyncio
+async def test_a_pending_application_has_no_granted_team(client, redis):
+    """Nothing is handed out before approval."""
+    token = await _citizen_token(redis)
+    await _post(client, SUBMIT, token, {"input": APPLICATION})
+
+    body = await _post(client, MINE_WITH_TEAMS, token)
+
+    assert "errors" not in body, body
+    assert body["data"]["myRoleRequests"]["requests"][0]["grantedTeam"] is None

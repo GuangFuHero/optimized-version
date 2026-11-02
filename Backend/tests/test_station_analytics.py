@@ -5,7 +5,7 @@ aggregation shapes plus the NULL-key handling that H1 was about (a nullable
 `Station.type` category, and a closed station carrying no `status_changed_at`).
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -29,13 +29,21 @@ async def _make_user(db) -> str:
 
 
 def _make_station(
-    user_uuid: str, *, type: str | None = "shelter", operational_status: str = "active",
-    lon: float = 121.5, lat: float = 25.0,
+    user_uuid: str,
+    *,
+    type: str | None = "shelter",
+    operational_status: str = "active",
+    lon: float = 121.5,
+    lat: float = 25.0,
 ) -> Station:
     return Station(
         geometry=from_shape(Point(lon, lat), srid=4326),
-        created_by=user_uuid, level=1, source="user", visibility="public",
-        type=type, operational_status=operational_status,
+        created_by=user_uuid,
+        level=1,
+        source="user",
+        visibility="public",
+        type=type,
+        operational_status=operational_status,
     )
 
 
@@ -43,20 +51,32 @@ def _make_station(
 async def test_station_count_aggregate_and_by_category(db):
     """Ungrouped returns one total; x="category" splits by type."""
     user_uuid = await _make_user(db)
-    db.add_all([
-        _make_station(user_uuid, type="shelter"),
-        _make_station(user_uuid, type="shelter"),
-        _make_station(user_uuid, type="medical"),
-    ])
+    db.add_all(
+        [
+            _make_station(user_uuid, type="shelter"),
+            _make_station(user_uuid, type="shelter"),
+            _make_station(user_uuid, type="medical"),
+        ]
+    )
     await db.flush()
 
     aggregate = await station_analytics.get_station_count(
-        db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x=None,
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert aggregate == [{"count": 3}]
 
     by_category = await station_analytics.get_station_count(
-        db, x="category", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x="category",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert {r["x"]: r["count"] for r in by_category} == {"shelter": 2, "medical": 1}
 
@@ -69,7 +89,12 @@ async def test_station_count_labels_null_type(db):
     await db.flush()
 
     rows = await station_analytics.get_station_count(
-        db, x="category", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x="category",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert {r["x"] for r in rows} == {"shelter", UNCATEGORIZED_LABEL}
     assert render_chart("stations", "station_count", rows, x="category", chart_type="bar")
@@ -79,15 +104,22 @@ async def test_station_count_labels_null_type(db):
 async def test_station_status_count_by_category(db):
     """x="category" groups by operational_status."""
     user_uuid = await _make_user(db)
-    db.add_all([
-        _make_station(user_uuid, operational_status="active"),
-        _make_station(user_uuid, operational_status="temporarily_closed"),
-        _make_station(user_uuid, operational_status="temporarily_closed"),
-    ])
+    db.add_all(
+        [
+            _make_station(user_uuid, operational_status="active"),
+            _make_station(user_uuid, operational_status="temporarily_closed"),
+            _make_station(user_uuid, operational_status="temporarily_closed"),
+        ]
+    )
     await db.flush()
 
     rows = await station_analytics.get_station_status_count(
-        db, x="category", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x="category",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert {r["x"]: r["count"] for r in rows} == {"active": 1, "temporarily_closed": 2}
 
@@ -108,7 +140,12 @@ async def test_station_freshness_trend_counts_added_and_closed(db):
     await db.flush()
 
     rows = await station_analytics.get_station_freshness_trend(
-        db, x="date", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x="date",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     by_day = {r["x"].date(): r for r in rows}
     assert by_day[day_one.date()]["added_count"] == 2
@@ -131,8 +168,50 @@ async def test_station_freshness_trend_skips_closed_without_a_stamp(db):
     await db.flush()
 
     rows = await station_analytics.get_station_freshness_trend(
-        db, x="date", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        db,
+        x="date",
+        x_granularity="day",
+        start_date=None,
+        end_date=None,
+        tz=UTC_TZ,
     )
     assert all(r["x"] is not None for r in rows)
     assert sum(r["closed_count"] for r in rows) == 0
     assert render_chart("stations", "station_freshness_trend", rows, x="date", chart_type="line")
+
+
+@pytest.mark.asyncio
+async def test_operating_station_count_is_a_running_total_of_active_stations(db):
+    """Only active stations count, however old, and the dates do not narrow the total."""
+    user_uuid = await _make_user(db)
+    stranger = await _make_user(db)
+    old = _make_station(user_uuid, type="shelter")
+    old.created_at = datetime(2020, 1, 1, tzinfo=UTC)
+    db.add_all(
+        [
+            old,
+            _make_station(user_uuid, type="water"),
+            _make_station(user_uuid, type="water", operational_status="temporarily_closed"),
+            _make_station(user_uuid, type="water", operational_status="permanently_closed"),
+            _make_station(stranger, type="water"),
+        ]
+    )
+    await db.flush()
+
+    def count(**kwargs):
+        args = {
+            "x": None,
+            "x_granularity": "day",
+            "start_date": None,
+            "end_date": None,
+            "tz": UTC_TZ,
+            **kwargs,
+        }
+        return station_analytics.get_operating_station_count(db, **args)
+
+    assert await count() == [{"count": 3}]
+    assert await count(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)) == [{"count": 3}]
+    by_type = await count(x="category")
+    assert {r["x"]: r["count"] for r in by_type} == {"shelter": 1, "water": 2}
+    # The caller's row filters still narrow it.
+    assert await count(extra_filters=[Station.created_by == user_uuid]) == [{"count": 2}]

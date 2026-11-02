@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { Box, Tab, Typography } from '@mui/material';
+import { Box, Tab } from '@mui/material';
 import { useCurrentUser, useStation } from '@rescue-frontend/data-access/admin';
 import {
   Badge,
@@ -14,6 +14,8 @@ import {
 } from '@rescue-frontend/ui';
 import { EyeOff, PencilLine, ShieldCheck, Trash2 } from 'lucide-react';
 
+import { DetailBlock, DetailRow } from '../../../admin/shared/detail-rows';
+import { Muted } from '../../../admin/shared/muted';
 import {
   STATION_SHEET_WIDTH,
   StationForm,
@@ -27,7 +29,8 @@ import {
   type DetailStation,
   type StationDetailView,
 } from './model/station-detail-view';
-import { FreshnessCell, StatusBadge } from './station-cells';
+import { FreshnessCell } from '../../../admin/shared/freshness-cell';
+import { StatusBadge, TypeChip } from './station-cells';
 import {
   StationHistoryPanel,
   useLoadedStationVersion,
@@ -109,7 +112,7 @@ export function StationDetailSheet({
         closeLabel="關閉站點詳情"
       >
         {query.isPending ? null : (
-          <Muted>找不到這個站點，可能已刪除或不在你的權限範圍。</Muted>
+          <Muted inline>找不到這個站點，可能已刪除或不在你的權限範圍。</Muted>
         )}
       </SheetLayout>
     );
@@ -155,7 +158,6 @@ function StationDetailContent({
 
   return (
     <SheetLayout
-      eyebrow={view.typeLabel}
       title={view.title}
       closeLabel="關閉站點詳情"
       headerContent={
@@ -179,7 +181,7 @@ function StationDetailContent({
             {view.verification.verified ? (
               <Badge tone="success">已驗證</Badge>
             ) : (
-              <Badge>未驗證</Badge>
+              <Badge tone="warning">未驗證</Badge>
             )}
             {view.pendingFieldCount > 0 ? (
               <Badge tone="warning">{view.pendingFieldCount} 欄待審</Badge>
@@ -226,7 +228,7 @@ function StationDetailContent({
               編輯站點
             </Button>
           ) : (
-            <Muted>
+            <Muted inline>
               {readOnlyCaption({ canEditStations: caps.canEdit, teamName })}
             </Muted>
           )}
@@ -253,19 +255,23 @@ function StationInfo({
   now: Date;
 }) {
   return (
-    <Box sx={{ '& > :first-of-type': { borderTop: 'none', pt: 0 } }}>
-      <Row label="指派團隊">
-        {station.assignedTeam?.name ?? <Muted>未指派</Muted>}
-      </Row>
-      <Row label="行政區">{view.district}</Row>
-      <Row label="地址">{view.address}</Row>
-      <Row label="座標">
+    <Box>
+      {/* The prototype's type line opens 基本資料, above the rows. */}
+      <Box sx={{ mb: '4px' }}>
+        <TypeChip type={station.type} />
+      </Box>
+      <DetailRow label="指派團隊">
+        {station.assignedTeam?.name ?? <Muted inline>未指派</Muted>}
+      </DetailRow>
+      <DetailRow label="行政區">{view.district}</DetailRow>
+      <DetailRow label="地址">{view.address}</DetailRow>
+      <DetailRow label="座標">
         {view.coordinates ? <Data>{view.coordinates}</Data> : '—'}
-      </Row>
-      <Row label="營運狀態">
+      </DetailRow>
+      <DetailRow label="營運狀態">
         <StatusBadge status={station.operationalStatus} />
-      </Row>
-      <Row label={<PrivateLabel>聯絡人 / 電話</PrivateLabel>}>
+      </DetailRow>
+      <DetailRow label={<PrivateLabel>聯絡人 / 電話</PrivateLabel>}>
         <Box
           component="span"
           sx={{
@@ -275,22 +281,22 @@ function StationInfo({
             gap: '4px',
           }}
         >
-          {view.contact.line ?? <Muted>—</Muted>}
+          {view.contact.line ?? <Muted inline>—</Muted>}
           {view.contact.email ? <span>{view.contact.email}</span> : null}
           {view.contact.maskedNote ? (
             <Data>{view.contact.maskedNote}</Data>
           ) : null}
         </Box>
-      </Row>
-      <Row label="開放時間">{station.opHour || '—'}</Row>
-      <Row label="說明">{station.description || '—'}</Row>
-      <Row label={<PrivateLabel>內部備註</PrivateLabel>}>
+      </DetailRow>
+      <DetailRow label="開放時間">{station.opHour || '—'}</DetailRow>
+      <DetailRow label="說明">{station.description || '—'}</DetailRow>
+      <DetailRow label={<PrivateLabel>內部備註</PrivateLabel>}>
         {station.comment || '—'}
-      </Row>
-      <Block label="站點照片">
+      </DetailRow>
+      <DetailBlock label="站點照片">
         <PhotoStrip photos={station.photos} />
-      </Block>
-      <Block label="物資盤點">
+      </DetailBlock>
+      <DetailBlock label="物資盤點">
         {station.supplyStatus ? (
           <Box
             sx={{
@@ -312,68 +318,21 @@ function StationInfo({
             ))}
           </Box>
         ) : (
-          <Muted>（無盤點資料）</Muted>
+          <Muted inline>（無盤點資料）</Muted>
         )}
-      </Block>
-      <Row label="成立時間">{view.createdDate}</Row>
+      </DetailBlock>
+      <DetailRow label="成立時間">{view.createdDate}</DetailRow>
       {/* 建立者: the station only carries a `createdBy` uuid, no name to show. */}
-      <Row label="驗證">{view.verification.label}</Row>
-      <Row label="最後更新">
+      <DetailRow label="驗證">{view.verification.label}</DetailRow>
+      <DetailRow label="最後更新">
         <FreshnessCell updatedAt={station.updatedAt} now={now} />
-      </Row>
-    </Box>
-  );
-}
-
-const ROW_BORDER = `1px solid ${color.border.default}`;
-
-/** A caption on the left, its value right-aligned, on the designer's ~48px rhythm. */
-function Row({ label, children }: { label: ReactNode; children: ReactNode }) {
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        gap: '16px',
-        minHeight: 48,
-        boxSizing: 'border-box',
-        py: '12px',
-        borderTop: ROW_BORDER,
-      }}
-    >
-      <Caption>{label}</Caption>
-      <Box
-        component="span"
-        sx={{
-          ...typography.body[400],
-          color: color.fg.neutral.default,
-          textAlign: 'right',
-          minWidth: 0,
-          overflowWrap: 'anywhere',
-          whiteSpace: 'pre-line',
-        }}
-      >
-        {children}
-      </Box>
-    </Box>
-  );
-}
-
-/** A row whose value is too wide to sit beside its caption: the caption over it. */
-function Block({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <Box sx={{ py: '12px', borderTop: ROW_BORDER }}>
-      <Box sx={{ mb: '8px' }}>
-        <Caption>{label}</Caption>
-      </Box>
-      {children}
+      </DetailRow>
     </Box>
   );
 }
 
 function PhotoStrip({ photos }: { photos: DetailStation['photos'] }) {
-  if (photos.length === 0) return <Muted>（尚無照片）</Muted>;
+  if (photos.length === 0) return <Muted inline>（尚無照片）</Muted>;
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
       {photos.map((photo) => (
@@ -414,33 +373,6 @@ function PrivateLabel({ children }: { children: ReactNode }) {
         不公開
       </Badge>
     </Box>
-  );
-}
-
-function Caption({ children }: { children: ReactNode }) {
-  return (
-    <Typography
-      component="span"
-      sx={{
-        ...typography.body[300],
-        fontSize: 15,
-        color: color.fg.neutral.muted,
-        flexShrink: 0,
-      }}
-    >
-      {children}
-    </Typography>
-  );
-}
-
-function Muted({ children }: { children: ReactNode }) {
-  return (
-    <Typography
-      component="span"
-      sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
-    >
-      {children}
-    </Typography>
   );
 }
 

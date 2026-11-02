@@ -175,3 +175,169 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
 時要用它判斷權限，讀到過期的物件就丟 MissingGreenlet：工單已經建好，回應卻帶著 `Unexpected error.`。
 修法：`notify_new_cards` 多收 `actor`，rollback 之後 `refresh(actor)`；建立的 entity 本來就由呼叫端在通知後 refresh。
 回歸測試：`tests/test_graphql/test_dedup_review_notify_graphql.py`。
+
+---
+
+## ADR-441：配對卡與事件附上做事的人的暱稱
+
+**Date**: 2026-10-29　**Status**: Accepted（使用者拍板用暱稱；回應形狀為慣例，未另外拍板）
+
+**背景**：DEDUP-008 的測試案例 WG-163 要求「每個判定都顯示是誰、什麼時候、做了什麼」。
+配對卡只回 `reviewed_by`，事件只回 `actor_uuid`，都只是 uuid。前端沒有用 uuid 查使用者的 API：
+`GET /admin/users` 只能用暱稱搜尋（`app/api/v1/endpoints/admin.py::list_users`），所以前端自己查不到名字。
+
+**決定**：
+- 配對卡（清單、詳情、判定、撤銷、處理的回應）多一個 `reviewed_by_name`：`reviewed_by` 的暱稱，沒有審核者時為 `null`。
+- 詳情的每一筆事件多一個 `actor_name`：`actor_uuid` 的暱稱。系統寫的事件（沒有 `actor_uuid`）為 `null`。
+- 暱稱就是 `users.name`（`app/models/auth.py::User`，「display nickname」）。不給本名 `real_name`、不給聯絡方式。
+- 看得到卡就看得到暱稱，不另外檢查 `user.view`。工單歷程顯示動手的人的暱稱，也是同樣做法（`graphql/tickets/types.py` 的 `actor_name`）。
+- 一頁不論幾張卡，暱稱都只多一條 query；沒有人要查時不跑（`dedup_review.py::_nicknames`）。
+
+---
+
+## ADR-442：通知與 API 標籤不再寫「AI」
+
+**Date**: 2026-10-29　**Status**: Accepted（Carol 在 DEDUP-008 決定 1：頁面叫「重複審核」，比對重複不用 AI）
+
+**決定**：
+- 待審提醒（ADR-345）的內文改成「…請到「重複審核」處理。」。
+- REST API 的分組標籤 `AI 重複審核` 改成 `重複審核`，前端的 OpenAPI 合約檔跟著重新產生。
+- 有改到的檔案，說明文字也一併拿掉「AI」。
+- **權限 key 不改**：`ai_duplicate.view`／`review`／`revoke` 已寫進資料庫的授權列和前端導覽，改名要寫 migration，
+  畫面上也看不到 key。DEDUP-008 決定 2 也直接用這三個 key。
+- 之前的 ADR 和 Spec 標題裡的「AI 重複審核」是當時的紀錄，不改寫。
+
+## ADR-443：任務單加唯讀 `verificationStatus`，從配對卡讀出「疑似重複」
+
+**Date**: 2026-10-30　**Status**: Accepted（使用者 2026-10-30 照建議；依據糖的管理平台原型
+`Design/後台/docs/任務管理.md`（`sucrelindesign` 分支）：`verification` 查核狀態，`disputed`＝疑似重複
+→ 後端 `TicketType.verificationStatus`；2026-10-31 popo review #174 後改成卡兩邊要是兩張不同、還在的單才算，
+Dan 同意）
+
+**背景**：管理平台任務單看板要在單上標「疑似重複」，並寫出跟哪張單重複（原型 `tk-table.jsx` 列表標題旁、
+`tk-detail.jsx` 抽屜「查核狀態：疑似與 X 重複」），只給資料檢核員和超管看。配對卡（`duplicate_pairs`）已經記了
+哪兩筆疑似重複、審核到哪，但快層的卡是需求對需求（`ticket_task`），單上讀不到。`auditStatus` 是另一件事
+（PR #84 的資料檢核），不拿來用。
+
+**決定**：
+
+- `TicketType.verificationStatus: TicketVerificationType`（可為 null），每次讀的時候從配對卡算，不存：
+  - `state: TicketVerificationState!`：目前只有 `disputed`。
+  - `duplicateOf: [TicketDuplicateRefType!]!`：跟哪幾張單（`uuid`、`title`）。
+- **什麼算疑似重複**：這張單或它的需求，有一張重複審核還能合併的卡：
+  - 卡沒軟刪除，種類是 `ticket` 或 `ticket_task`；
+  - 狀態是 `dup_ignored`／`suggested`（待審，ADR-339），或 `confirmed_duplicate` 但還沒合併（沒有 `merged` 事件）；
+  - 卡兩邊對回的是兩張不同的單，兩張都沒取消、沒刪除。
+  - 跟 `dedup_resolve` 能合併的卡同一個條件：前兩條是 `RESOLVABLE_KINDS`、`RESOLVABLE_STATUSES`、`has_merged_event`；
+    最後一條不成立，合併會擋下來：一邊取消或刪了回 409（`_locked_snapshot`），兩邊是同一張單回 422（`build_plan`）。
+  - 判「不是重複」或合併後就不算；撤回判定後卡回到待審，又算。
+- **合併留下的卡**：仍要建立時，每個像既有需求的需求各寫一張卡（`dedup_submission._record_acknowledged`），
+  合併只結掉審核員按的那張。例：A 有抽水機、飲用水兩個需求，B 在同一個地方送一樣的兩個、仍要建立，寫了兩張卡；
+  合併抽水機那張（B 併進 A）後，飲用水那張還是待審，但另一邊是已取消的 B（飲用水併進 A 的那個），或 A 自己
+  （飲用水搬到 A）。這張卡合併不了，不算，A 不會一直標疑似重複。
+- **卡對回單**：`ticket` 卡兩邊就是單；`ticket_task` 卡用需求**現在**所屬的單（`ticket_tasks.ticket_uuid`），
+  跟 `dedup_review_tickets.ticket_uuids_for_pair` 一樣。合併把需求搬到主單後，那個需求還能處理的卡跟著算在主單；
+  需求刪了，卡還在審核清單裡，兩張單都還在就照樣算（合併只看單）。
+- **`duplicateOf`**：卡另一邊的單，同一張只列一次，照最早那張卡的建立時間排。算數的卡另一邊一定是還在的另一張單，
+  所以 `disputed` 時至少有一張。
+- **誰看得到**：在這張單上持有 `ai_duplicate.view` 的人（超管、資料檢核員，ADR-337），跟重複審核頁同一個權限；
+  其他人（含前台、訪客）拿到 null，也不查。審核頁已經給整張單，標題不會多給。前台標「疑似重複」另讀公開的
+  `suspectedDuplicateOf`（ADR-454）。
+  *2026-11-02 起改照 ADR-455：所有人都讀得到，各角色的看板都標「疑似重複」。*
+- **怎麼查**：`disputes_by_ticket` DataLoader（`app/services/ticket_verification.py`），一頁的單一起查：
+  卡一句、對方單的標題一句，不隨筆數增加。
+- **不做**：不能用它篩選或排序；不加存資料的欄位、不用 migration；不改 `ticket_audit`／`auditStatus`／通知；
+  不改重複審核頁和合併的程式。
+
+**理由**：卡的狀態由建卡、判定、撤回、合併四條路徑改，存一份在單上就要每條都記得同步；讀的時候算，判完下一次讀
+就對，也不會多一個從別的表推得出來的欄位（第三正規化）。
+
+**Consequences**：
+
+- ➕ 看板跟重複審核頁同一個來源，判完就看得到。
+- ➖ 看得到的人每頁多兩句 SQL。卡那句從還能處理的卡找起（`ix_duplicate_pairs_status`）；已合併的卡也是
+  `confirmed_duplicate`，會一直累積，靠 `ix_dedup_audit_events_pair` 排掉。卡只在「仍要建立」時寫，數量小。
+- ➖ 不能用它篩選；要的話得另外決定存一份，或在列表查詢裡加子查詢。
+- ➖ 判了「是重複」還沒合併的卡，審核頁預設清單看不到（ADR-339 預設只列待審），要篩 `confirmed_duplicate`
+  才找得到，看板卻會標它。
+- ➖ 反過來，合併留下的卡、另一邊的單取消或刪了的卡，看板不標，審核頁清單卻還列著（清單只照卡的狀態），
+  只能判「是／不是重複」，合併不了。這是重複審核本來的行為，這裡不改。
+- ◾ `auditStatus` 照舊是資料檢核；看板的「疑似重複」改讀 `verificationStatus`。同一次拿掉看板不再用、
+  也還沒進 main 的 `viewerCanAudit` 和 `ticketsExtent(auditStatus:)`；`tickets(auditStatus:)` 不動。
+
+---
+
+## ADR-454：任務單加公開的 `suspectedDuplicateOf`，前台標「疑似重複」
+
+**Date**: 2026-11-01　**Status**: Accepted（使用者 2026-11-01 照建議；糖要前台標「疑似重複」，必做；
+介面跟前台對過）
+
+**背景**：管理平台看板讀 `verificationStatus`（ADR-443），標「查核中 · 疑似重複」，但它要 `ai_duplicate.view`，
+訪客和志工拿到 null。前台的列表卡片和詳情也要標「疑似重複」，寫出跟哪張重複、可以點過去看，但不說重複審核
+進行到哪（不寫「查核中」）。
+
+**決定**：
+
+- `TicketType.suspectedDuplicateOf: [TicketDuplicateRefType!]!`，任何人都讀得到（含訪客），不檢查權限：
+  - 跟 `verificationStatus.duplicateOf` 同一份：同一個 `disputes_by_ticket` DataLoader，算數的卡、排序、
+    每張只列一次都照 ADR-443。
+  - 沒有疑似重複回空陣列，不回 null。
+  - 只給另一張單的 `uuid`、`title`。不給 `state`，待審和判了是重複、還沒合併的卡讀起來一樣。
+- `verificationStatus` 不動，還是要 `ai_duplicate.view`，管理平台看板照舊。
+  *2026-11-02 起 `verificationStatus` 也開放給所有人（ADR-455），下面「為什麼另開欄位」的理由不再成立。*
+
+**為什麼另開欄位，不放寬 `verificationStatus`**：`verificationStatus` 說的是重複審核還在等這張單
+（`state: disputed`），看板照它標「查核中」；放寬就是把查核中告訴訪客。另開一個只列單的欄位，前台拿不到審核的
+狀態。
+
+**不會多給資料**：列出的單都沒取消、沒刪除（ADR-443 的條件）。`ticket.view` 對所有人都是 `all`，訪客也有
+（`PUBLIC_PERMS`，ADR-027、ADR-273）；`tickets` 只排掉刪除的單，`title` 不遮。所以看得到這張單的人，本來就看得到
+另一張和它的標題，前台用 `ticket(uuid)` 點過去。
+
+**效能**：前台把它放進共用的 fragment，列表（每頁 100 筆）、地圖（每次視野最多 200 筆）、`ticket(uuid)` 都會選。
+一頁的單一起查：卡一句、對方標題一句，不隨筆數增加；沒選就不查。
+
+**不做**：不能用它篩選或排序；不加欄位、不用 migration；不改配對卡、重複審核頁和合併。
+
+**Consequences**：
+
+- ➕ 前台跟管理平台讀同一份，判完下一次讀就對。
+- ➖ 以前只有審核員的頁多兩句 SQL，現在每個選了它的頁都多，訪客的地圖每次平移也是。卡那句從還能處理的卡找起
+  （`ix_duplicate_pairs_status`），數量小。
+- ➖ 哪天 `ticket.view` 對某些人收窄，另一張單可能在他們的範圍外，這裡要跟著照範圍過濾，不然標題會從這裡露出。
+- ◾ 網站的 schema 快照由前台的 PR 更新，這支只重產管理平台的。
+
+---
+
+## ADR-455：`verificationStatus` 開放給所有人，各角色都看得到「疑似重複」
+
+**Date**: 2026-11-02　**Status**: Accepted（糖 2026-11-01 在 #236 定 DUP-VIS-101（更正）：「疑似重複」前台後台
+所有人都看得到；Carol 2026-11-02 確認所有角色都要看到；使用者照建議）
+
+**背景**：管理平台任務列表的「疑似重複」標籤和詳情的「查核狀態」那一行都讀 `verificationStatus`（ADR-443）。它要
+`ai_duplicate.view`，只有資料檢核員和超管有，團隊管理員和成員拿到 null，兩處都不顯示。DUP-VIS-101 更正成：前台
+後台所有人都看得到疑似重複，列表的標籤和詳情的查核狀態要開給所有後台角色。
+
+**決定**：
+
+- `verificationStatus` 拿掉 `ai_duplicate.view` 的檢查，有 `ticket.view` 就讀得到，也就是所有角色和訪客
+  （`PUBLIC_PERMS`）。欄位、算法、DataLoader 都不變。
+- 不把 `ai_duplicate.view` 發給團隊角色：那會連重複審核清單和配對卡詳情一起打開。
+- 不另外定義「只有後台角色看得到」：同樣的單 `suspectedDuplicateOf` 已經公開（ADR-454），只擋這個欄位擋不住。
+
+**不會多給資料**：`verificationStatus` 跟 `suspectedDuplicateOf` 讀同一批卡、列同一批單（ADR-454）；`state` 只有
+`disputed`，意思就是那份清單不是空的。所以它沒有比 `suspectedDuplicateOf` 多說什麼。ADR-454「放寬就是把查核中告訴
+訪客」的理由不再成立：「查核中」是看板的字樣，前台照舊讀 `suspectedDuplicateOf`，不寫查核中。
+
+**效能**：以前沒有權限的人讀一頁，這個欄位不查；現在每個選了它的頁都會查。跟 `suspectedDuplicateOf` 共用
+`disputes_by_ticket` DataLoader，一頁卡一句、標題一句，同一個 query 兩個都選也只查一次。
+
+**不做**：前端不用改程式，看板本來就無條件選這個欄位；`operations.graphql` 裡「null unless the viewer holds
+ai_duplicate.view」的註解留給前端改。不改重複審核頁、配對卡和合併。
+
+**Consequences**：
+
+- ➕ 所有後台角色在列表和詳情都看得到疑似重複，跟原型一致。
+- ➖ 管理平台看板每頁都多兩句 SQL，以前只有審核員才多。
+- ◾ `verificationStatus` 和 `suspectedDuplicateOf` 現在一樣公開、內容重疊。兩個都留，是因為看板和前台已經各自接好；
+  要不要合成一個另外決定。

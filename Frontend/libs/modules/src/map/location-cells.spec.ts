@@ -53,6 +53,7 @@ describe('buildLocationCells', () => {
       id: `cell:${CELL_A}`,
       detailType: 'cell',
       position: CENTRE_A,
+      count: 2,
     });
   });
 
@@ -103,6 +104,30 @@ describe('location cell ids', () => {
     expect(hasRescueMapDetailItem(markers, locationCellId(CELL_A))).toBe(true);
     expect(hasRescueMapDetailItem(markers, locationCellId(CELL_B))).toBe(false);
     expect(hasRescueMapDetailItem(markers, 'gone')).toBe(false);
+  });
+
+  it('finds a cell the backend counted, though none of its tickets are in the page', () => {
+    const [counted] = buildLocationCells([
+      ticket('b1', { locationCell: CELL_B }),
+    ]);
+
+    expect(hasRescueMapDetailItem([], locationCellId(CELL_B), [counted])).toBe(
+      true,
+    );
+    expect(hasRescueMapDetailItem([], locationCellId(CELL_A), [counted])).toBe(
+      false,
+    );
+  });
+
+  it('with counted cells, finds a cell among them alone: tickets held for it may be under another filter', () => {
+    const held = [ticket('a1'), ticket('a2')];
+
+    // The counts failed after the filter changed: no cells, though the tickets read with the
+    // cell, under the old filter, are still held.
+    expect(hasRescueMapDetailItem(held, locationCellId(CELL_A), [])).toBe(
+      false,
+    );
+    expect(hasRescueMapDetailItem(held, 'a1', [])).toBe(true);
   });
 
   it('marks a ticket coarse only when it carries a cell', () => {

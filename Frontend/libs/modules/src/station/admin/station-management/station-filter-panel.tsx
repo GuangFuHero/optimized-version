@@ -1,14 +1,12 @@
 'use client';
 
-import { Box, ButtonBase, Typography } from '@mui/material';
 import { useTeams } from '@rescue-frontend/data-access/admin';
-import { designTokens } from '@rescue-frontend/ui';
+import { Card } from '@rescue-frontend/ui';
 
+import { ChipRow } from '../../../admin/shared/chip-row';
 import { STATION_TYPE_OPTIONS } from '../../type-options';
 import { UNASSIGNED_TEAM, type StationFilters } from './model/station-filters';
 import { OPERATIONAL_STATUS_OPTIONS } from '../../operational-status';
-
-const { color, radius, shadow, typography } = designTokens;
 
 interface StationFilterPanelProps {
   filters: StationFilters;
@@ -38,19 +36,9 @@ export function StationFilterPanel({
       ? [...areas, filters.area]
       : areas;
 
+  // The prototype's panel is the design system's Card: 24 inside, border.default, shadow.md.
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-        p: '20px 24px',
-        border: `1px solid ${color.border.subtle}`,
-        borderRadius: `${radius.lg}px`,
-        boxShadow: shadow.sm,
-        bgcolor: color.bg.neutral.default,
-      }}
-    >
+    <Card sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <ChipRow
         label="類型"
         value={filters.type}
@@ -116,67 +104,6 @@ export function StationFilterPanel({
         ]}
         onChange={(v) => set('freshness', v)}
       />
-    </Box>
-  );
-}
-
-function ChipRow<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T | null;
-  options: readonly { value: T; label: string }[];
-  onChange: (value: T | null) => void;
-}) {
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      {/* Narrow on purpose: a long label (指派 Team) wraps to two lines rather than widening the column. */}
-      <Typography
-        sx={{
-          ...typography.body[300],
-          lineHeight: 1.4,
-          color: color.fg.neutral.muted,
-          width: 64,
-          flexShrink: 0,
-        }}
-      >
-        {label}
-      </Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-        {[{ value: null, label: '全部' }, ...options].map((option) => {
-          const selected = option.value === value;
-          return (
-            <ButtonBase
-              key={option.value ?? '__all__'}
-              aria-pressed={selected}
-              onClick={() => onChange(option.value as T | null)}
-              sx={{
-                height: 32,
-                px: '12px',
-                borderRadius: `${radius.full}px`,
-                ...typography.label[400],
-                whiteSpace: 'nowrap',
-                bgcolor: selected
-                  ? color.bg.secondary.subtle
-                  : color.bg.neutral.default,
-                boxShadow: `inset 0 0 0 1.5px ${
-                  selected
-                    ? color.brand.secondary.subtle
-                    : color.fg.neutral.subtle
-                }`,
-                color: selected
-                  ? color.brand.secondary.subtle
-                  : color.fg.neutral.default,
-              }}
-            >
-              {option.label}
-            </ButtonBase>
-          );
-        })}
-      </Box>
-    </Box>
+    </Card>
   );
 }

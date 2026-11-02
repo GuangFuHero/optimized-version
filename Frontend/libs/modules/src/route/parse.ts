@@ -143,7 +143,7 @@ function parsePosition(value: string | null): SiteRouteState['position'] {
 
   return {
     center: [lat, lng],
-    zoom: Math.min(18, Math.max(9, Math.round(zoom))),
+    zoom: Math.min(18, Math.max(7, Math.round(zoom))),
   };
 }
 
@@ -172,7 +172,7 @@ function parsePositionSegment(
 
   return {
     center: [lat, lng],
-    zoom: Math.min(18, Math.max(9, zoom)),
+    zoom: Math.min(18, Math.max(7, zoom)),
   };
 }
 

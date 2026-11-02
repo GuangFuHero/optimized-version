@@ -1,14 +1,16 @@
 'use client';
 
 import 'leaflet/dist/leaflet.css';
-import 'react-leaflet-cluster/dist/assets/MarkerCluster.css';
-import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
 import {
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -37,22 +39,29 @@ import {
   withAlpha,
 } from '@rescue-frontend/ui';
 
+import { useMapOpening } from './hooks/use-event-map-view';
 import { useRescueMapController } from './hooks/use-rescue-map-controller';
 import { buildLocationCells } from './location-cells';
+import { rememberMapView, type RescueMapMemoryKey } from './map-opening';
 import type {
   RescueMapClusterAppearance,
+  LocationCellMembersLoader,
   RescueMapClosureArea,
   RescueMapControllerValue,
   RescueMapDetailItem,
   RescueMapDraftPoint,
+  RescueMapGoneTicket,
   RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapPublicZone,
   RescueMapRouteState,
+  RescueMapView,
   RescueMapViewportStoreLike,
 } from './types';
 
 const { color, primitives, radius, shadow } = designTokens;
+
+const MAP_LOADING_MESSAGE = '救災寶加載地圖中...';
 
 const RescueMapCanvas = dynamic(
   () =>
@@ -61,7 +70,7 @@ const RescueMapCanvas = dynamic(
     ),
   {
     ssr: false,
-    loading: () => <RescueMapStatusMessage message="救災寶加載地圖中..." />,
+    loading: () => <RescueMapStatusMessage message={MAP_LOADING_MESSAGE} />,
   },
 );
 
@@ -223,6 +232,12 @@ interface MapProps {
   ) => StationDetailActionProps | undefined;
   /** 站點詳情的版面：前台傳 `'site'`；後台不傳，維持後台的版面。 */
   stationLayout?: RescueMapStationLayout;
+  /**
+   * A ticket the caller holds beside the markers — opened from a building, or looked up for a link
+   * (ADR-444) — opened when selected: the ticket, even when the map's own filters leave its pin out,
+   * or the word that it was deleted or never was. The map does not look it up itself.
+   */
+  linkedItem?: RescueMapMarkerItem | RescueMapGoneTicket | null;
   /** 是否顯示比例尺。 */
   showScale?: boolean;
   /** 點擊地圖空白處時回傳經緯度。 */
@@ -259,8 +274,23 @@ interface MapProps {
   clusterAppearance?: RescueMapClusterAppearance;
   /** Opt-in: markers stop clustering above this zoom (read once). Default: they always cluster. */
   clusterMaxZoom?: number;
-  /** Opt-in: receives the Leaflet map once it is built, for callers that steer it themselves. */
-  onMapReady?: (map: LeafletMap) => void;
+  /**
+   * Opt-in: receives the Leaflet map once it is built, for callers that steer it themselves, and
+   * whether it opened where this browser last left it (`viewMemoryKey`).
+   */
+  onMapReady?: (map: LeafletMap, opening: { restored: boolean }) => void;
+  /**
+   * Which map this is, for it to open where this browser last left it (MAP-VIEW-104). Not given, it
+   * remembers nothing and opens at the event's view.
+   */
+  viewMemoryKey?: RescueMapMemoryKey;
+  /**
+   * Opt-in: the guest's cells as the backend counts them (`ticketCells`, ADR-387), in place of
+   * grouping the coarse tickets among `markers`, which holds a page of them only. Default: grouped.
+   */
+  locationCells?: readonly RescueMapLocationCell[];
+  /** With `locationCells`: reads a cell's tickets when it is opened, as those cells come without. */
+  loadLocationCellMembers?: LocationCellMembersLoader;
 }
 
 export const Map = memo(function Map({
@@ -271,6 +301,7 @@ export const Map = memo(function Map({
   ticketDetailOverrides,
   stationDetailSecondaryAction,
   stationLayout,
+  linkedItem,
   showScale = false,
   onMapClick,
   previewMarker,
@@ -287,7 +318,44 @@ export const Map = memo(function Map({
   clusterAppearance,
   clusterMaxZoom,
   onMapReady,
+  viewMemoryKey,
+  locationCells: countedCells,
+  loadLocationCellMembers,
 }: MapProps = {}) {
+  // Read once, as the canvas reads it: a position in the address (a shared link, a reload) is where
+  // the map opens, at once. Without one, the map waits to know where to open (MAP-VIEW-101–104);
+  // so does one from a `bbox` alone, which names no zoom, for the event's.
+  const [addressPosition] = useState(
+    () => viewportStore?.getSnapshot().position ?? routeState?.position,
+  );
+  const opening = useMapOpening({
+    memoryKey: viewMemoryKey,
+    addressHasPosition: Boolean(addressPosition),
+    remembersOpening: viewportStore !== undefined,
+  });
+  const opensAtOnce = addressPosition?.zoom !== undefined;
+  const openingRef = useRef(opening);
+  openingRef.current = opening;
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
+
+  // The canvas is built once the opening is worked out (or at a position in the address), and reads
+  // this once, as it is built.
+  const handleMapReady = useCallback((map: LeafletMap) => {
+    onMapReadyRef.current?.(map, {
+      restored: openingRef.current?.restored ?? false,
+    });
+  }, []);
+
+  const rememberView = useCallback(
+    (view: RescueMapView) => {
+      if (viewMemoryKey) {
+        rememberMapView(viewMemoryKey, view);
+      }
+    },
+    [viewMemoryKey],
+  );
+
   const controller = useRescueMapController({
     routeState,
     onRouteStateChange,
@@ -296,12 +364,14 @@ export const Map = memo(function Map({
     publicZones,
     // 視窗外的標記在地圖上本就不可見，關閉 bbox 過濾讓視角移動不重建 markers。
     filterMarkersByBbox: false,
+    defaultView: opening?.view,
   });
 
-  // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。
+  // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。後端數好的
+  // 格子（`locationCells`）優先：markers 只有一頁。
   const locationCells = useMemo(
-    () => buildLocationCells(controller.markers),
-    [controller.markers],
+    () => countedCells ?? buildLocationCells(controller.markers),
+    [controller.markers, countedCells],
   );
   const selectedMarker = useMemo<RescueMapDetailItem | null>(
     () =>
@@ -309,8 +379,15 @@ export const Map = memo(function Map({
         (marker) => marker.id === controller.selectedMarkerId,
       ) ??
       locationCells.find((cell) => cell.id === controller.selectedMarkerId) ??
-      null,
-    [controller.markers, controller.selectedMarkerId, locationCells],
+      (linkedItem && linkedItem.id === controller.selectedMarkerId
+        ? linkedItem
+        : null),
+    [
+      controller.markers,
+      controller.selectedMarkerId,
+      linkedItem,
+      locationCells,
+    ],
   );
   const isTicketTone = controller.dataType === 'ticket';
   const globalStyles = useMemo(
@@ -427,24 +504,30 @@ export const Map = memo(function Map({
             overflow: 'hidden',
           }}
         >
-          <RescueMapCanvas
-            controller={controller}
-            onMarkerClick={handleMarkerClick}
-            onLocationCellClick={handleLocationCellClick}
-            previewMarker={previewMarker}
-            cursor={cursor}
-            onMapClick={onMapClick}
-            layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}
-            showScale={showScale}
-            clusterAppearance={clusterAppearance}
-            clusterMaxZoom={clusterMaxZoom}
-            zoomControlPosition={showZoomControl ? 'topright' : undefined}
-            onMapReady={onMapReady}
-            viewportStore={viewportStore}
-            draftPoint={draftPoint}
-            onDraftPointChange={onDraftPointChange}
-            draftPointAction={draftPointAction}
-          />
+          {opensAtOnce || opening ? (
+            <RescueMapCanvas
+              controller={controller}
+              onMarkerClick={handleMarkerClick}
+              locationCells={locationCells}
+              onLocationCellClick={handleLocationCellClick}
+              previewMarker={previewMarker}
+              cursor={cursor}
+              onMapClick={onMapClick}
+              layoutKey={drawerOpen ? 'detail-open' : 'detail-closed'}
+              showScale={showScale}
+              clusterAppearance={clusterAppearance}
+              clusterMaxZoom={clusterMaxZoom}
+              zoomControlPosition={showZoomControl ? 'topright' : undefined}
+              onMapReady={onMapReady ? handleMapReady : undefined}
+              viewportStore={viewportStore}
+              draftPoint={draftPoint}
+              onDraftPointChange={onDraftPointChange}
+              draftPointAction={draftPointAction}
+              onViewChange={rememberView}
+            />
+          ) : (
+            <RescueMapStatusMessage message={MAP_LOADING_MESSAGE} />
+          )}
           {renderControls ? (
             renderControls(controller)
           ) : (
@@ -482,6 +565,7 @@ export const Map = memo(function Map({
                 marker={displayMarker}
                 onClose={closeDetail}
                 onSelectMarker={controller.setSelectedMarkerId}
+                loadLocationCellMembers={loadLocationCellMembers}
                 isAuthenticated={isAuthenticated}
                 ticketDetailOverrides={
                   displayMarker?.detailType === 'ticket'
@@ -527,6 +611,7 @@ export const Map = memo(function Map({
             marker={displayMarker}
             onClose={closeDetail}
             onSelectMarker={controller.setSelectedMarkerId}
+            loadLocationCellMembers={loadLocationCellMembers}
             isAuthenticated={isAuthenticated}
             ticketDetailOverrides={
               displayMarker?.detailType === 'ticket'

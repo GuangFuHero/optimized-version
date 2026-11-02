@@ -73,7 +73,6 @@ async def _assign_seed_role(db, user: User, role_name: str, *, team_type: str = 
             user_uuid=user.uuid,
             role_uuid=role.uuid,
             team_uuid=team.uuid if team is not None else None,
-            role_kind=spec["kind"],
         )
     )
     # Without an active identity `get_user_permissions` returns {} — the fail-closed default
@@ -695,7 +694,7 @@ async def _grant(db, user: User, perm: Perm, scope: str) -> None:
         role = Role(name=identity_role, kind="platform")
         db.add(role)
         await db.flush()
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform"))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None))
         acting_as(user, role)
     await db.flush()
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))

@@ -1,11 +1,14 @@
 import type {
-  AdminReverseGeocodeQuery,
   AdminStationQuery,
   CreateStationInput,
   SecondaryLocationInput,
   UpdateStationInput,
 } from '@rescue-frontend/data-access/admin';
 
+import {
+  afterPinMove,
+  updateAddressFields,
+} from '../../admin/shared/model/address-fill';
 import type { OperationalStatus } from '../operational-status';
 import { stationPoint } from '../station-point';
 
@@ -41,7 +44,6 @@ export interface StationFormState {
 export type StationFormErrors = Partial<Record<keyof StationFormState, string>>;
 
 type Station = NonNullable<AdminStationQuery['station']>;
-type AddressLookup = AdminReverseGeocodeQuery['reverseGeocode'];
 
 const TEXT_FIELDS = [
   'name',
@@ -112,34 +114,32 @@ export function stationToForm(station: Station): StationFormState {
   };
 }
 
-/** One field typed into the form. A new address line no longer matches the lookup's token. */
+/**
+ * One field typed into the form. A new address line no longer matches the lookup's token, and
+ * neither does a line once the coordinates change.
+ */
 export function updateStationForm<K extends keyof StationFormState>(
   form: StationFormState,
   key: K,
   value: StationFormState[K],
 ): StationFormState {
-  const next = { ...form, [key]: value };
-  if (key === 'fullAddress') next.addressToken = '';
-  return next;
+  const next = updateAddressFields(form, {
+    [key]: value,
+  } as Partial<StationFormState>);
+  const moved =
+    (key === 'latitude' || key === 'longitude') && form[key] !== value;
+  return moved ? afterPinMove(next) : next;
 }
 
-/**
- * What a lookup found, filled in only where the form is still blank: the line with its token, and
- * a 樓 or 室 the lookup split off. A typed line is never replaced.
- */
-export function applyReverseGeocode(
+/** The pin moved on the map: the coordinates follow it, and a looked-up line loses its token. */
+export function followStationPin(
   form: StationFormState,
-  lookup: AddressLookup,
+  [lat, lng]: [number, number],
 ): StationFormState {
-  if (lookup.status !== 'found' || !lookup.fullAddress) return form;
-  if (form.fullAddress.trim()) return form;
-  return {
-    ...form,
-    fullAddress: lookup.fullAddress,
-    addressToken: lookup.addressToken ?? '',
-    floor: form.floor.trim() ? form.floor : (lookup.floor ?? form.floor),
-    room: form.room.trim() ? form.room : (lookup.room ?? form.room),
-  };
+  const latitude = String(lat);
+  const longitude = String(lng);
+  if (form.latitude === latitude && form.longitude === longitude) return form;
+  return afterPinMove({ ...form, latitude, longitude });
 }
 
 function validCoordinate(value: string, max: number): boolean {

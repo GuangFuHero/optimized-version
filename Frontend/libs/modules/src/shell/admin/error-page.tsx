@@ -7,7 +7,7 @@ import { useCurrentUser } from '@rescue-frontend/data-access/admin';
 import { designTokens } from '@rescue-frontend/ui';
 
 import { GuangFuMascot } from '../../brand';
-import { identityLabel } from '../../constants/roles';
+import { backOfficeIdentities, identityLabel } from '../../constants/roles';
 import { useAdminNavSections } from './nav';
 
 const { color, focusRing, radius, typography } = designTokens;
@@ -29,7 +29,7 @@ export function AdminErrorPage({ code }: { code: '404' | '403' }) {
     ? (identity?.role === 'super_admin'
         ? '你目前的身份沒有開放這個頁面'
         : `你目前的身份沒有開放這個頁面。如果工作上需要，請聯絡${contact}開通`) +
-      ((user?.identities?.length ?? 0) > 1
+      (backOfficeIdentities(user?.identities ?? []).length > 1
         ? '；或從右上角的人名切換到其他身份再試一次。'
         : '。') +
       '也可以從左邊的選單，或從這裡繼續：'

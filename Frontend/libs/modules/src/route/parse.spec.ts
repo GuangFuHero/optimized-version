@@ -35,3 +35,27 @@ describe('parseSiteRouteState', () => {
     });
   });
 });
+
+function mapPosition(segments: string[], query = '') {
+  return parseSiteRouteState('map', segments, new URLSearchParams(query))
+    .position;
+}
+
+describe('parseSiteRouteState position', () => {
+  it('keeps the zoom of all of Taiwan, where a map opens with no event view set', () => {
+    expect(mapPosition(['@23.6500000,120.9500000,7z'])).toEqual({
+      center: [23.65, 120.95],
+      zoom: 7,
+    });
+    expect(mapPosition([], 'pos=23.65,120.95,7')).toEqual({
+      center: [23.65, 120.95],
+      zoom: 7,
+    });
+  });
+
+  it('holds the zoom to what the map allows, 7 to 18', () => {
+    expect(mapPosition(['@23.65,120.95,5z'])?.zoom).toBe(7);
+    expect(mapPosition([], 'pos=23.65,120.95,5')?.zoom).toBe(7);
+    expect(mapPosition(['@23.65,120.95,20z'])?.zoom).toBe(18);
+  });
+});

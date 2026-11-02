@@ -29,6 +29,17 @@ export const TEAM_TYPE_DISPLAY_NAMES = new Map<
   ['ngo', '非政府組織'],
 ]);
 
+/**
+ * The identities the back office can act as: all but `user`, the site's identity. The back office
+ * never acts as it, but as the first back-office identity instead (ADR-329), so offering it there
+ * would change nothing.
+ */
+export function backOfficeIdentities<
+  T extends components['schemas']['IdentityOption'],
+>(identities: readonly T[]): T[] {
+  return identities.filter((identity) => identity.role !== 'user');
+}
+
 export function identityLabel(
   identity: components['schemas']['IdentityOption'],
 ) {
