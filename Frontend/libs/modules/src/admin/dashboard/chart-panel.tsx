@@ -31,6 +31,7 @@ import {
 import { FieldTag } from './field-tag';
 import {
   chartAvailability,
+  openTrendDays,
   type DashboardDateRange,
   type MetricSpec,
 } from './kpis';
@@ -204,6 +205,7 @@ export function ChartPanel({
   const [x, setX] = useState<ChartXOption>(chart.x);
   const [chartType, setChartType] = useState<ChartType>(chart.chartType);
   const availability = chartAvailability(spec, range, x);
+  const openDays = openTrendDays(spec, range, x);
 
   // useQueries for the same reason as the KPI cards: the ticket and station options differ in
   // their key type, so the union does not fit useQuery's overloads.
@@ -328,6 +330,12 @@ export function ChartPanel({
               <Box component="b" sx={{ color: color.fg.warning }}>
                 一次最多查 {spec.max_range_days} 天
               </Box>
+            </>
+          ) : null}
+          {openDays ? (
+            <>
+              {'　'}
+              <Box component="b">「全部」只畫最近 {openDays} 天</Box>
             </>
           ) : null}
           {devMode ? (

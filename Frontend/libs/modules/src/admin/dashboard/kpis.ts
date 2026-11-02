@@ -304,6 +304,22 @@ export function chartAvailability(
   return kpiAvailability(spec, range);
 }
 
+/** How many days the backend draws such a trend over when the range has no start. */
+export const OPEN_TREND_DAYS = 30;
+
+/**
+ * The days a capped daily trend covers when the range is open (全部), for its card to say: the other
+ * charts start at the beginning of the event there, and this one does not. Null otherwise.
+ */
+export function openTrendDays(
+  spec: Pick<MetricSpec, 'requires_date_range' | 'max_range_days'> | undefined,
+  range: DashboardDateRange,
+  x: string,
+): number | null {
+  const capped = !spec?.requires_date_range && Boolean(spec?.max_range_days);
+  return x === 'date' && capped && !range.start_date ? OPEN_TREND_DAYS : null;
+}
+
 const countFormat = new Intl.NumberFormat('zh-TW', {
   maximumFractionDigits: 0,
 });

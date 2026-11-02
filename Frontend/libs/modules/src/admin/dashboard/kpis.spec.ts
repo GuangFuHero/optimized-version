@@ -16,6 +16,7 @@ import {
   kpiAvailability,
   localDateString,
   lookbackRange,
+  openTrendDays,
   rangeLengthDays,
   quickRangeDates,
   rangeCreatedCaption,
@@ -354,5 +355,31 @@ describe('chartAvailability', () => {
         'category',
       ),
     ).toEqual({ kind: 'ready' });
+  });
+});
+
+describe('openTrendDays', () => {
+  const trend = { requires_date_range: false, max_range_days: 366 };
+  const open = { end_date: '2026-11-01' };
+
+  it('gives the 30 days the backend draws a capped daily trend over when the range is open', () => {
+    expect(openTrendDays(trend, open, 'date')).toBe(30);
+  });
+
+  it('is null with a start date, for another grouping, or for a metric that is not capped that way', () => {
+    expect(
+      openTrendDays(trend, { start_date: '2026-10-03', ...open }, 'date'),
+    ).toBeNull();
+    expect(openTrendDays(trend, open, 'category')).toBeNull();
+    expect(openTrendDays({ requires_date_range: false }, open, 'date')).toBe(
+      null,
+    );
+    expect(
+      openTrendDays(
+        { requires_date_range: true, max_range_days: 90 },
+        open,
+        'date',
+      ),
+    ).toBeNull();
   });
 });

@@ -433,6 +433,8 @@ describe('dashboard states and filters', () => {
       charts.filter(isGapTrend).map(({ query }) => query.x_granularity),
     ).toEqual(['day']);
     expect(container.textContent).toContain('事件發生至今建立');
+    // The other trends start at the beginning of the event; the gap's says it does not.
+    expect(container.textContent).toContain('「全部」只畫最近 30 天');
   });
 
   it('asks for the volunteer cards at the end date only and captions them 截至', async () => {
