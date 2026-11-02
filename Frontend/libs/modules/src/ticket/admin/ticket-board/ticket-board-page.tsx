@@ -50,8 +50,6 @@ import { useSpaces } from '../space/use-space-data';
 
 const { color } = designTokens;
 
-const PAGE_HELP = '檢視並處理各地點的任務單與需求';
-
 // The station page's frame: 12px 28px 28px around a centred 1200px column.
 const FRAME_GAP = '12px';
 const SECTION_SX = { px: '28px' };
@@ -186,7 +184,6 @@ export function TicketBoardPage() {
         <ViewSwitch
           count={count}
           view={view}
-          help={PAGE_HELP}
           onChange={(next) => setParam('view', next === 'map' ? 'map' : null)}
         />
       </AdminHeaderSlot>

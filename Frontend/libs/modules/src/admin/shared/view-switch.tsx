@@ -2,7 +2,7 @@
 
 import { Box, ButtonBase, Typography } from '@mui/material';
 import { designTokens } from '@rescue-frontend/ui';
-import { CircleHelp, List, Map as MapIcon } from 'lucide-react';
+import { List, Map as MapIcon } from 'lucide-react';
 
 const { color, shadow, typography } = designTokens;
 
@@ -10,20 +10,17 @@ const { color, shadow, typography } = designTokens;
 export type BoardView = 'table' | 'map';
 
 /**
- * The title-side controls the page renders into the admin header: a ? with the page's one-line
- * explanation, the `(N)` count, and the list/map switch.
+ * The title-side controls the page renders into the admin header: the `(N)` count and the list/map
+ * switch. What the page is for is the header's own 這一頁怎麼用, before these.
  */
 export function ViewSwitch({
   count,
   view,
-  help,
   onChange,
 }: {
   /** Null while unknown (loading, or failed): shown as —. */
   count: number | null;
   view: BoardView;
-  /** The header ?'s one-line explanation of the page. */
-  help: string;
   onChange: (view: BoardView) => void;
 }) {
   const options = [
@@ -32,15 +29,6 @@ export function ViewSwitch({
   ] as const;
   return (
     <>
-      <Box
-        component="span"
-        title={help}
-        aria-label={help}
-        role="img"
-        sx={{ display: 'inline-flex', ml: '-8px', cursor: 'help' }}
-      >
-        <CircleHelp size={17} color={color.fg.neutral.muted} />
-      </Box>
       <Typography
         component="span"
         sx={{ ...typography.data[300], color: color.fg.neutral.muted }}

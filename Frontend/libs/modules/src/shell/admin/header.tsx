@@ -9,6 +9,7 @@ import { Box, IconButton, Stack, Typography } from '@mui/material';
 import { designTokens, layoutSizes } from '@rescue-frontend/ui';
 
 import { AccountMenu } from './account-menu';
+import { AdminPageHelpButton } from './page-help-button';
 
 const { color, typography } = designTokens;
 
@@ -17,12 +18,15 @@ const TITLE_SLOT_ID = 'admin-header-title-slot';
 
 interface AdminHeaderProps {
   title?: string;
+  /** Whether the page's 這一頁怎麼用 shows: not on 找不到這一頁 or 沒有權限訪問此頁. */
+  pageHelp?: boolean;
   onOpenNavigation?: () => void;
   navigationOpen?: boolean;
 }
 
 export function AdminHeader({
   title,
+  pageHelp = true,
   onOpenNavigation,
   navigationOpen,
 }: AdminHeaderProps) {
@@ -66,6 +70,8 @@ export function AdminHeader({
       >
         {title}
       </Typography>
+      {/* Right after the title, as the prototype draws it; before a page's own title-side controls. */}
+      {pageHelp ? <AdminPageHelpButton /> : null}
       {/* `display: contents` so the slot adds no box (and no gap) on pages that leave it empty. */}
       <Box id={TITLE_SLOT_ID} sx={{ display: 'contents' }} />
       <Stack

@@ -125,16 +125,19 @@ export function PageHelpPanel({
         <HelpText text={help.what} />
       </Typography>
 
-      <Box>
-        <Typography sx={LABEL_SX}>你可以</Typography>
-        <Box component="ul" sx={{ ...BODY_SX, pl: 2.25 }}>
-          {help.can.map((line) => (
-            <li key={line}>
-              <HelpText text={line} />
-            </li>
-          ))}
+      {/* A page that is only for reading (the back office's 總覽儀表板) has no 你可以. */}
+      {help.can.length > 0 ? (
+        <Box>
+          <Typography sx={LABEL_SX}>你可以</Typography>
+          <Box component="ul" sx={{ ...BODY_SX, pl: 2.25 }}>
+            {help.can.map((line) => (
+              <li key={line}>
+                <HelpText text={line} />
+              </li>
+            ))}
+          </Box>
         </Box>
-      </Box>
+      ) : null}
 
       {help.sections?.map((section) => (
         <Box key={section.title}>

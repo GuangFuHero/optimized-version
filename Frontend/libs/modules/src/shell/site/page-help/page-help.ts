@@ -102,7 +102,7 @@ export function pageHelpKey(pathname: string): SitePageHelpKey | null {
 /** The parts of `Storage` the marks use: `localStorage` on the site, a stand-in in tests. */
 export type SeenStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-/** On this device, which pages' help was opened: `{ "site:map": 1, … }`. */
+/** On this device, which pages' help was opened: `{ "site:map": 1, "/tickets": 1, … }`. */
 export const PAGE_HELP_SEEN_KEY = 'wg:page-help-seen';
 
 /** Null where the browser will not hand it over (site data blocked); reading it can throw. */
@@ -131,14 +131,14 @@ function readSeen(storage: SeenStorage | null): Record<string, unknown> {
 /** False when it cannot be read: the dot then stays, which only means it shows once too often. */
 export function hasSeenPageHelp(
   storage: SeenStorage | null,
-  key: SitePageHelpKey,
+  key: string,
 ): boolean {
   return readSeen(storage)[key] === 1;
 }
 
 export function markPageHelpSeen(
   storage: SeenStorage | null,
-  key: SitePageHelpKey,
+  key: string,
 ): void {
   try {
     storage?.setItem(
