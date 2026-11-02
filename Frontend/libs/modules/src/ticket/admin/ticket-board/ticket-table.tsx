@@ -38,6 +38,7 @@ import {
   type TicketColumnId,
 } from './model/ticket-columns';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
+import type { TicketListFailure } from './model/ticket-list-failure';
 import { adminTicketPriorityBadge } from './model/ticket-priority';
 import {
   needChipLabel,
@@ -66,8 +67,11 @@ interface TicketTableProps {
   /** The page on view, as the server cut it. */
   rows: readonly TicketRow[];
   loading: boolean;
-  /** The tickets did not load: an error with 重試, never 「沒有符合條件」. */
-  failed: boolean;
+  /**
+   * The tickets did not load: an error, with 重試 unless trying again cannot help, never
+   * 「沒有符合條件」. Null when they did.
+   */
+  failure: TicketListFailure | null;
   retrying: boolean;
   onRetry: () => void;
   /**
@@ -97,7 +101,7 @@ interface TicketTableProps {
 export function TicketTable({
   rows,
   loading,
-  failed,
+  failure,
   retrying,
   onRetry,
   unfiltered,
@@ -202,17 +206,19 @@ export function TicketTable({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {failed ? (
+      {failure ? (
         <Callout tone="danger">
-          無法載入任務單，請稍後再試
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={retrying}
-            onClick={onRetry}
-          >
-            重試
-          </Button>
+          {failure.text}
+          {failure.retry ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={retrying}
+              onClick={onRetry}
+            >
+              重試
+            </Button>
+          ) : null}
         </Callout>
       ) : null}
       <DataTable
@@ -224,7 +230,7 @@ export function TicketTable({
           isSpaceRow(row) ? onOpenSpace?.(row.id) : onOpenTicket(row.uuid)
         }
         empty={
-          loading || failed ? (
+          loading || failure ? (
             <Box sx={{ p: 4, textAlign: 'center' }}>
               <Muted cell>{loading ? '載入中…' : '—'}</Muted>
             </Box>

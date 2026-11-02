@@ -30,6 +30,7 @@ import {
   type TicketBox,
   type TicketFilters,
 } from './model/ticket-filters';
+import { ticketListFailure } from './model/ticket-list-failure';
 import { toTicketStats } from './model/ticket-stats';
 import { TicketCreateSheet } from './ticket-create-sheet';
 import type { TicketRow } from './model/ticket-row';
@@ -304,7 +305,11 @@ export function TicketBoardPage() {
                 rows={tickets.rows}
                 // An empty first page isn't 沒有任務單 while the spaces above it may still come.
                 loading={tickets.isPending || spaceData.isLoading}
-                failed={tickets.error != null}
+                failure={
+                  tickets.error != null
+                    ? ticketListFailure(tickets.error)
+                    : null
+                }
                 unfiltered={listsEveryTicket(filters)}
                 retrying={tickets.isFetching}
                 onRetry={() => void tickets.refetch()}
