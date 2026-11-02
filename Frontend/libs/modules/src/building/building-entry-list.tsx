@@ -102,6 +102,8 @@ export function BuildingEntryList({
             alignItems: 'center',
             gap: `${spacing[3]}px`,
             width: '100%',
+            // A long name or address ends in …, never widening the block's one column past it.
+            minWidth: 0,
             minHeight: 44,
             px: `${spacing[3]}px`,
             py: `${spacing[2]}px`,
