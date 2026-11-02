@@ -23,6 +23,7 @@ import {
   parseTicketFilters,
   parseTicketPage,
   TICKET_PAGE_KEYS,
+  ticketFiltersKey,
   toExtentVariables,
   toPageVariables,
   writeTicketFilters,
@@ -64,6 +65,9 @@ export function TicketBoardPage() {
     [searchParams],
   );
   const filters = useMemo(() => parseTicketFilters(params), [params]);
+  const filtersKey = ticketFiltersKey(filters);
+  // The filters the page opened with, by a link or a reload; changed here, they are the page's own.
+  const [openedFiltersKey] = useState(filtersKey);
   const view: BoardView = params.get('view') === 'map' ? 'map' : 'table';
   const page = parseTicketPage(params);
   const caps = useTicketCapabilities();
@@ -251,6 +255,7 @@ export function TicketBoardPage() {
             {view === 'map' ? (
               <TicketMapView
                 filters={filters}
+                filtersFromLink={filtersKey === openedFiltersKey}
                 selectedUuid={viewedUuid}
                 onOpenTicket={openTicket}
                 spaces={spaceRows}
