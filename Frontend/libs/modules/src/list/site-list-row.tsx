@@ -34,6 +34,10 @@ interface SiteListRowProps {
 
 const ICON_SIZE = 18;
 const ACTION_ICON = { fontSize: iconSize.sm } as const;
+// From this width of the card's text column on (a container query, in MUI's `@` shorthand), the
+// badges sit beside the title: a guest's 最高優先, 疑似重複, 概略位置 and status take some 370px at a
+// phone's text size, which leaves the title about 110px.
+const BADGES_BESIDE_TITLE = '@480';
 
 /**
  * 列表單列：顯示標題、分類標籤與摘要，選取時切換選中樣式。
@@ -111,21 +115,22 @@ export function SiteListRow({
             />
           </Box>
 
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            {/* On a phone the badges take a line of their own, under the title and the status: they
-                do not shrink, and beside a guest's 概略位置 they squeezed the title to nothing. */}
+          <Box sx={{ flex: 1, minWidth: 0, containerType: 'inline-size' }}>
+            {/* On a narrow card — a phone's, or a tablet's with a ticket open beside the list — the
+                badges take a line of their own, under the title and the status: they do not shrink,
+                and beside a guest's 概略位置 they squeezed the title to nothing. */}
             <Stack
               direction="row"
               sx={{
                 alignItems: 'center',
-                flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                flexWrap: { '@': 'wrap', [BADGES_BESIDE_TITLE]: 'nowrap' },
                 columnGap: 0.75,
                 rowGap: 0.5,
               }}
             >
               <Typography
                 sx={{
-                  flex: { xs: '1 1 0', sm: '0 1 auto' },
+                  flex: { '@': '1 1 0', [BADGES_BESIDE_TITLE]: '0 1 auto' },
                   minWidth: 0,
                   fontSize: displayTextSize[15],
                   fontWeight: 700,
@@ -139,8 +144,8 @@ export function SiteListRow({
               <Stack
                 direction="row"
                 sx={{
-                  order: { xs: 1, sm: 0 },
-                  flexBasis: { xs: '100%', sm: 'auto' },
+                  order: { '@': 1, [BADGES_BESIDE_TITLE]: 0 },
+                  flexBasis: { '@': '100%', [BADGES_BESIDE_TITLE]: 'auto' },
                   flexShrink: 0,
                   flexWrap: 'wrap',
                   alignItems: 'center',
@@ -179,7 +184,7 @@ export function SiteListRow({
                   getTicketStatusTone(marker.ticketMeta?.status)
                 }
                 variant="solid"
-                sx={{ flexShrink: 0, ml: { sm: 'auto' } }}
+                sx={{ flexShrink: 0, ml: { [BADGES_BESIDE_TITLE]: 'auto' } }}
               >
                 {availability?.headline ?? marker.label}
               </SiteBadge>
