@@ -159,9 +159,7 @@ export function MemberTable({
       data={rows}
       getRowId={(row) => row.uuid}
       getRowSx={(row) =>
-        row.uuid === highlightUuid
-          ? { bgcolor: color.bg.primary.subtle }
-          : {}
+        row.uuid === highlightUuid ? { bgcolor: color.bg.primary.subtle } : {}
       }
       // An empty roster has only its message to show, which a scrolling minimum would cut off.
       minWidth={basic || rows.length === 0 ? undefined : 640}

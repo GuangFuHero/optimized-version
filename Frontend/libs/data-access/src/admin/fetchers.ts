@@ -101,18 +101,20 @@ export type TeamMember = components['schemas']['TeamMemberItem'];
 
 /**
  * One team's members and their role in it (`team.member.view` covering the team); another team
- * answers 404. The first 500, the backend's cap for one page.
+ * answers 404. Every page, so a roster or a last-administrator check sees the whole team.
  */
 export const teamMembersQuery = (teamUuid: string) =>
   queryOptions({
     queryKey: ['admin', 'teams', 'TeamMembers', { teamUuid }],
     queryFn: ({ signal }): Promise<TeamMember[]> =>
-      adminRestClient
-        .GET('/api/v1/admin/teams/{team_uuid}/members', {
-          params: { path: { team_uuid: teamUuid }, query: { limit: 500 } },
-          signal,
-        })
-        .then(responseData),
+      readAllTeamMembers((skip, limit) =>
+        adminRestClient
+          .GET('/api/v1/admin/teams/{team_uuid}/members', {
+            params: { path: { team_uuid: teamUuid }, query: { skip, limit } },
+            signal,
+          })
+          .then(responseData),
+      ),
   });
 
 export function useTeamMembers(
@@ -643,27 +645,6 @@ export function useRemoveTeamMember() {
         .then(responseData),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
   });
-}
-
-export const teamMembersQuery = (teamUuid: string) =>
-  queryOptions({
-    queryKey: ['admin', 'teams', 'TeamMembers', teamUuid],
-    queryFn: ({ signal }) =>
-      readAllTeamMembers((skip, limit) =>
-        adminRestClient
-          .GET('/api/v1/admin/teams/{team_uuid}/members', {
-            params: { path: { team_uuid: teamUuid }, query: { skip, limit } },
-            signal,
-          })
-          .then(responseData),
-      ),
-  });
-
-export function useTeamMembers(
-  teamUuid: string,
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({ ...teamMembersQuery(teamUuid), enabled: options.enabled });
 }
 
 export interface UpdateTeamInput {

@@ -28,7 +28,14 @@ function user(
   platform_role: string,
   identities: AdminUser['identities'] = [],
 ): AdminUser {
-  return { uuid, name, platform_role, identities, last_activity_at: null };
+  return {
+    uuid,
+    name,
+    platform_role,
+    identities,
+    created_at: '2026-05-03T00:00:00+08:00',
+    last_activity_at: null,
+  };
 }
 
 const grant = (role: string, team_uuid?: string, team?: string) => ({
