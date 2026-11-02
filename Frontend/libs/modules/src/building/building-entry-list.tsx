@@ -2,16 +2,14 @@
 
 import { useMemo, useState } from 'react';
 
-import { Building2, ChevronRight } from 'lucide-react';
-
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { BUILDING_ENTRY_LIMIT, buildingEntries } from './building-entry';
 import type { BuildingMapEntry } from './use-building-maps';
 
-const { color, radius, spacing } = designTokens;
+const { color, iconSize, radius, spacing } = designTokens;
 
 const ellipsis = {
   overflow: 'hidden',
@@ -114,7 +112,7 @@ export function BuildingEntryList({
           }}
         >
           <Box sx={{ display: 'flex', color: color.fg.neutral.subtle }}>
-            <Building2 size={18} />
+            <Icons.building sx={{ fontSize: iconSize.md }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, display: 'grid' }}>
             <Typography
@@ -153,7 +151,8 @@ export function BuildingEntryList({
             看各樓層
           </Typography>
           <Box sx={{ display: 'flex', color: color.fg.neutral.muted }}>
-            <ChevronRight size={16} />
+            {/* The prototype's 16 isn't on the scale: md, as the floors' chevron is. */}
+            <Icons.chevronRight sx={{ fontSize: iconSize.md }} />
           </Box>
         </ButtonBase>
       ))}
