@@ -1,20 +1,13 @@
 # Design/ — 設計師的 agent 守則
 
 設計師在 `sucrelindesign` 分支工作，這個分支就是**最新的設計**，**不會合併進 `main`**。
-前端工程師永遠讀這個分支的最新版本（不釘在某個 commit）。`main` 會合進這個分支，反過來不會。
-這份守則放在 `main`，合進來之後你才看得到它。
+前端工程師永遠讀這個分支的最新版本（不釘在某個 commit）。
+`main` 也**不會合進這個分支**：兩個分支互不合併，需要的檔案由工程師逐一複製過去。這份守則就是這樣從 `main` 複製過來的。
 
-## 跟上 main
+## 不要合併 main
 
-定期把 `main` 合進設計分支（至少每次交付前一次）：
-
-```sh
-git switch sucrelindesign
-git fetch origin && git merge origin/main
-```
-
-- 衝突在 `Design/` 底下：在設計分支上解決。
-- 衝突在 `Design/` 以外的檔案：先停下，在 #uiux 請工程師處理，不要自己改。
+- 不要跑 `git merge origin/main`，也不要把其他分支合進來。
+- 需要 `main` 上的檔案（例如這份守則的新版），在 #uiux 請工程師複製過來，不要自己複製。
 
 ## 檔案放哪裡（設計分支上）
 
@@ -33,7 +26,7 @@ Design/
 ```
 
 - 給工程師的程式碼放 `handoff/<元件名>/index.tsx`。現在放在 `components/` 的，下次交付時搬到 `handoff/`，並在 CHANGELOG 記一筆。
-- handoff 的 TSX：給前台畫面的用 MUI 圖示（`@mui/icons-material`），給後台畫面的用 Lucide（`lucide-react`）。
+- handoff 的 TSX：前台、後台畫面都用 Lucide（`lucide-react`），不用 `@mui/icons-material`。
 - 只改 `Design/` 底下的檔案。`Design/` 以外的改動（根目錄 `README.md`、`logo/`、`Frontend/`…）不要自己做：程式碼放 `handoff/`，其他在 #uiux 告訴工程師，由他們開 PR 到 `main`。
 - 不要改名或搬動既有路徑，除非在 CHANGELOG 記下「舊路徑 → 新路徑」：前端文件與程式註解連結到這些路徑。
 - 不要新增大型二進位檔（影片、大圖、新字型）。截圖壓到合理大小再放。

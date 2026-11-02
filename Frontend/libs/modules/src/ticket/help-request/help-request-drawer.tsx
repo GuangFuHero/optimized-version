@@ -1,11 +1,5 @@
 'use client';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
-import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import {
   Alert,
   AlertTitle,
@@ -18,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import {
+  Fragment,
   useEffect,
   useId,
   useRef,
@@ -27,7 +22,7 @@ import {
   type Ref,
 } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { LocationPicker } from '../../map/components/location-picker';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
@@ -46,6 +41,7 @@ import {
   type FoundDoor,
 } from '../address-lookup';
 import { PhotoLinkEditor } from '../photos';
+import { EmergencyCallNotice } from './emergency-call-notice';
 import {
   holdHelpRequestDraft,
   sessionDraftStorage,
@@ -55,9 +51,9 @@ import {
   emptyHelpRequestForm,
   emptyNeed,
   findMissingFields,
-  hasRescueNeed,
   isQuantityMissing,
   MAX_NEEDS,
+  rescueNeedRow,
   type HelpRequestForm,
   type PickedPoint,
 } from './help-request-form';
@@ -165,7 +161,7 @@ function GuestHelpRequestDrawer({
           </Button>
           <Button
             variant="contained"
-            startIcon={<LoginRoundedIcon />}
+            startIcon={<Icons.logIn />}
             onClick={onSignIn}
             sx={{ flex: 2 }}
           >
@@ -183,27 +179,6 @@ function GuestHelpRequestDrawer({
         <EmergencyCallNotice />
       </Stack>
     </SiteActionDrawer>
-  );
-}
-
-/**
- * Small, in the PM's words (2026-10-10): whoever reaches the site already knows to call 119, so it
- * says what the platform is for instead of leading the form.
- */
-function EmergencyCallNotice() {
-  return (
-    <Alert
-      severity="error"
-      sx={{
-        py: 0.25,
-        fontSize: displayTextSize[12],
-        lineHeight: 1.5,
-        '& .MuiAlert-icon': { py: 0.5, fontSize: 18 },
-      }}
-    >
-      緊急醫療需求請即時撥打 <strong>119</strong>{' '}
-      或當地醫院電話，平台為災害時期透明資訊、尋求志工用。
-    </Alert>
   );
 }
 
@@ -278,22 +253,22 @@ function noteLook(kind: AddressNote['kind'], error: boolean) {
     case 'confirmed':
       return {
         color: color.fg.success,
-        icon: <VerifiedRoundedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.badgeCheck sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     case 'mismatch':
       return {
         color: color.fg.warning,
-        icon: <WarningAmberRoundedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.triangleAlert sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     case 'edited':
       return {
         color: color.fg.neutral.muted,
-        icon: <EditRoundedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.penLine sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     default:
       return {
         color: error ? color.fg.danger : color.fg.neutral.muted,
-        icon: <InfoOutlinedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.info sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
   }
 }
@@ -462,6 +437,7 @@ function HelpRequestFormDrawer({
   const isMissing = (key: (typeof missing)[number]['key']) =>
     touched && missingKeys.has(key);
   const lastNeed = form.needs[form.needs.length - 1];
+  const emergencyNoticeRow = rescueNeedRow(form.needs);
   const note = addressNote({
     fields: form,
     pin: form.landmark,
@@ -651,8 +627,6 @@ function HelpRequestFormDrawer({
           </Alert>
         ) : null}
 
-        {hasRescueNeed(form.needs) ? <EmergencyCallNotice /> : null}
-
         {/* The asterisk is hidden from screen readers, so the rule is said in words, up front. */}
         <Typography
           sx={{
@@ -841,29 +815,33 @@ function HelpRequestFormDrawer({
           ) : null}
           <Stack data-field="quantity" spacing={1.5}>
             {form.needs.map((row, index) => (
-              <NeedDraftRow
-                // A row has no id of its own; removing one re-keys those after it, which only
-                // remounts their two text boxes.
-                key={index}
-                row={row}
-                index={index}
-                showIndex={form.needs.length > 1}
-                canRemove={form.needs.length > 1}
-                invalid={isMissing('needs') && !row.need}
-                quantityMissing={
-                  isMissing('quantity') && isQuantityMissing(row)
-                }
-                onChange={(next) =>
-                  set('needs')(
-                    form.needs.map((current, at) =>
-                      at === index ? next : current,
-                    ),
-                  )
-                }
-                onRemove={() =>
-                  set('needs')(form.needs.filter((_, at) => at !== index))
-                }
-              />
+              // A row has no id of its own; removing one re-keys those after it, which only
+              // remounts their two text boxes.
+              <Fragment key={index}>
+                <NeedDraftRow
+                  row={row}
+                  index={index}
+                  showIndex={form.needs.length > 1}
+                  canRemove={form.needs.length > 1}
+                  invalid={isMissing('needs') && !row.need}
+                  quantityMissing={
+                    isMissing('quantity') && isQuantityMissing(row)
+                  }
+                  onChange={(next) =>
+                    set('needs')(
+                      form.needs.map((current, at) =>
+                        at === index ? next : current,
+                      ),
+                    )
+                  }
+                  onRemove={() =>
+                    set('needs')(form.needs.filter((_, at) => at !== index))
+                  }
+                />
+                {/* Right under the row that picked someone trapped or hurt: at the top of the form,
+                    or under the last row, a phone could leave it out of sight of whoever picked it. */}
+                {index === emergencyNoticeRow ? <EmergencyCallNotice /> : null}
+              </Fragment>
             ))}
           </Stack>
           {/* Offered only once the last one has its kind: not a blank second row up front. At the
@@ -884,7 +862,7 @@ function HelpRequestFormDrawer({
                 fontWeight: 500,
               }}
             >
-              <AddRoundedIcon sx={{ fontSize: 16 }} />
+              <Icons.plus sx={{ fontSize: 16 }} />
               還需要別的嗎？
             </ButtonBase>
           ) : null}

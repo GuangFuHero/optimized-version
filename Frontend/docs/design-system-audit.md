@@ -7,9 +7,9 @@
 
 元件在設計分支：`origin/sucrelindesign` 的 `Design/handoff/Button/index.tsx`（目前在 `Design/components/Button/index.tsx`），設計稿是 `Design/後台/元件 Components.html` 第 2、3 節。
 
-| 項目                                                                                                                                         | 負責人   | PR   | 狀態                                                                         |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---- | ---------------------------------------------------------------------------- |
-| 把設計師的 handoff `Button` 搬進 `libs/ui`（加 neutral、tone、loading、iconOnly、selected、count），照 `design-system.md`「搬 handoff 元件」 | jujuyuzu | #233 | 完成（另搬 SplitButton、SearchField、Tag、Progress、設定元件；站點圖示未搬） |
+| 項目                                                                                                                                         | 負責人   | PR   | 狀態                                                                                               |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---- | -------------------------------------------------------------------------------------------------- |
+| 把設計師的 handoff `Button` 搬進 `libs/ui`（加 neutral、tone、loading、iconOnly、selected、count），照 `design-system.md`「搬 handoff 元件」 | jujuyuzu | #233 | 完成（另搬 SplitButton、SearchField、Tag、Progress、設定元件；站點圖示在 `station-type-icon.tsx`） |
 
 ## 模組
 
@@ -67,24 +67,10 @@
 
 9. `pnpm lint` 通過、該模組 0 個 design-system warning，才算完成。
 
-## 圖示（資訊，不在這次修正範圍）
+## 圖示（已統一）
 
-規則：前台用 MUI 圖示、後台用 Lucide（見 `design-system.md`「圖示」）。既有程式還有混用，下表是 import 該套件的檔案數（不含測試與 story），**不在這次修正範圍，要不要統一另外決定**。沒有圖示的 lint 規則。
-
-| 區域                                                         | Lucide | MUI |
-| ------------------------------------------------------------ | ------ | --- |
-| `libs/ui`（兩邊共用）                                        | 13     | 0   |
-| `apps/admin`                                                 | 1      | 0   |
-| `apps/demo`                                                  | 0      | 2   |
-| 模組的後台部分（`admin/`、`*/admin/`、`shell/admin`）        | 58     | 0   |
-| `map`（前台／共用）                                          | 8      | 1   |
-| `station`（前台／共用）                                      | 3      | 2   |
-| `auth`                                                       | 2      | 1   |
-| 其他前台模組（`ticket`、`shell/site`、`route`、`building`…） | 0      | 47  |
-
-之後的項目（未排程）：
-
-- 前台改用 Lucide：之後會做，時間未定。在那之前不要搬。
+前台和後台都用 Lucide（見 `design-system.md`「圖示」）。整個前端已經沒有程式 import `@mui/icons-material`，
+`package.json` 也拿掉了這個依賴。沒有圖示的 lint 規則，review 時留意有沒有人把它加回來。
 
 ## lint 抓不到的（review 時要看）
 
