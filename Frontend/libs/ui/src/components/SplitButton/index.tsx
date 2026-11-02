@@ -86,7 +86,7 @@ export function SplitButton({
         '& > .WgSplit-arrow[aria-expanded="true"]': {
           borderRadius: `${half}px`,
         },
-        // 兩塊是一個整體，不各自上浮。&& 讓這條贏過 Button 自己的 :hover:not([aria-busy])。
+        // 兩塊是一個整體，不各自上浮。&& 讓這條一定贏過 Button 自己的 :hover／:active。
         '&& > .MuiButton-root:hover, && > .MuiButton-root:active': {
           transform: 'none',
         },

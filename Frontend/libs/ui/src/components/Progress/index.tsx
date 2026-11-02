@@ -123,6 +123,8 @@ export function Progress({
           aria-labelledby={label ? labelId : textId}
           // 超過總數（5/4）時 aria-valuenow 不能大於 aria-valuemax。
           aria-valuenow={Math.min(Math.max(value, 0), max ?? 0)}
+          // 讀出畫面上那句，不是「38%」。
+          aria-valuetext={typeof text === 'string' ? text : undefined}
           aria-valuemin={0}
           aria-valuemax={max}
           sx={{

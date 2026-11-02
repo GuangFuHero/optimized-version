@@ -184,12 +184,18 @@ export function Button({
             '&:not([aria-expanded="true"]) .MuiButton-startIcon, &:not([aria-expanded="true"]) .MuiButton-endIcon':
               { color: color.fg.neutral.subtle },
           }),
-          '&:hover:not([aria-busy="true"])': {
+          // :where() 讓「不是 loading」這個條件不加權重，呼叫端在 sx 寫的 '&:hover' 照樣蓋得過。
+          '&:hover:not(:where([aria-busy="true"]))': {
             bgcolor: v.hover,
             transform: flat ? 'none' : 'translateY(-2px)',
             boxShadow: variant === 'primary' ? shadow.md : 'none',
           },
           '&:active': { transform: flat ? 'none' : 'scale(0.97)' },
+          // 減少動態：不彈、滑過不上浮（原型 wg-button.css 同一條）。
+          '@media (prefers-reduced-motion: reduce)': {
+            transition: 'none',
+            '&:hover': { transform: 'none' },
+          },
           // BTN-111
           '&[aria-expanded="true"], &[aria-expanded="true"]:hover': opened,
           '&[aria-expanded="true"] .WgButton-count:not(.WgButton-count--warning)':

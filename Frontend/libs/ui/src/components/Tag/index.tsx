@@ -89,6 +89,7 @@ export interface TagProps {
   /** 自訂色（災害類型）：字與點用這個色，底是同色 10% */
   hue?: string;
   onRemove?: () => void;
+  /** × 的名字；不給＝「移除「字」」（字是文字時），一排可移除的標籤才分得出哪個 × 移除哪個。 */
   removeLabel?: string;
   children: ReactNode;
 }
@@ -134,10 +135,15 @@ export function Tag({
   strong = false,
   hue,
   onRemove,
-  removeLabel = '移除',
+  removeLabel,
   children,
 }: TagProps) {
   const quiet = fill === 'quiet';
+  const removeName =
+    removeLabel ??
+    (typeof children === 'string' || typeof children === 'number'
+      ? `移除「${children}」`
+      : '移除');
   const { fg, bg } = tagColors({ tone, fill, strong, hue });
 
   return (
@@ -178,7 +184,7 @@ export function Tag({
         <Box
           component="button"
           type="button"
-          aria-label={removeLabel}
+          aria-label={removeName}
           onClick={onRemove}
           sx={{
             mr: '-6px',

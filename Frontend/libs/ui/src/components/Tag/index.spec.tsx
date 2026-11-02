@@ -46,10 +46,20 @@ describe('Tag', () => {
     expect(render(<Tag>官方</Tag>).markup).not.toContain('<button');
   });
 
-  it('names its × for a screen reader (TAG-106)', () => {
+  it('names its × by the tag it removes, for a screen reader (TAG-106)', () => {
     expect(
       openingTag(
         render(<Tag onRemove={noop}>水災</Tag>).markup,
+        /<button[^>]*>/,
+      ),
+    ).toContain('aria-label="移除「水災」"');
+    expect(
+      openingTag(
+        render(
+          <Tag onRemove={noop}>
+            <b>水災</b>
+          </Tag>,
+        ).markup,
         /<button[^>]*>/,
       ),
     ).toContain('aria-label="移除"');

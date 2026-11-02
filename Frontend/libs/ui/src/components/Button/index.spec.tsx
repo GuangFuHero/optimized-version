@@ -18,9 +18,31 @@ describe('Button', () => {
     const { styles } = render(<Button loading>送出中</Button>);
 
     expect(styles).toMatch(
-      /:hover:not\(\[aria-busy="true"\]\)\{[^}]*translateY\(-2px\)/,
+      /:hover:not\(:where\(\[aria-busy="true"\]\)\)\{[^}]*translateY\(-2px\)/,
     );
     expect(styles).not.toMatch(/:hover\{[^}]*translateY/);
+  });
+
+  it('lets a caller’s own hover win, as the loading check adds no weight', () => {
+    const { styles } = render(
+      <Button sx={{ '&:hover': { transform: 'translateY(0px)' } }}>
+        新增站點
+      </Button>,
+    );
+    const own = styles.indexOf(':hover:not(:where([aria-busy="true"])){');
+    const caller = styles.search(/:hover\{[^}]*translateY\(0px\)/);
+
+    // Same weight, so the later rule wins: the caller's.
+    expect(own).toBeGreaterThan(-1);
+    expect(caller).toBeGreaterThan(own);
+  });
+
+  it('neither springs nor lifts for someone who asks for less motion', () => {
+    const { styles } = render(<Button>儲存</Button>);
+
+    expect(styles).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\{[^{]*\{[^}]*transition:none;\}[^{]*:hover\{[^}]*transform:none;\}\}/,
+    );
   });
 
   it('keeps a caller’s own aria-busy when it is not loading', () => {

@@ -91,6 +91,23 @@ describe('Progress', () => {
     expect(tag).toContain('aria-valuemax="4"');
   });
 
+  it('says its value in the words on screen, not as a percentage', () => {
+    expect(bar(render(<Progress value={3} max={8} />).markup)).toContain(
+      'aria-valuetext="3/8 · 還缺 5 人"',
+    );
+    expect(
+      bar(
+        render(<Progress value={1} max={2} valueText="待承接 1／2" />).markup,
+      ),
+    ).toContain('aria-valuetext="待承接 1／2"');
+    expect(
+      bar(
+        render(<Progress value={1} max={2} valueText={<span>1／2</span>} />)
+          .markup,
+      ),
+    ).not.toContain('aria-valuetext');
+  });
+
   it('always shows its numbers (PRG-103)', () => {
     expect(render(<Progress value={3} max={8} />).markup).toContain(
       '>3/8 · 還缺 5 人<',
