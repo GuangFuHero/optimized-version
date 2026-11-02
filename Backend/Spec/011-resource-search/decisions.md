@@ -1,4 +1,4 @@
-# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394、419、438、439、440）
+# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394、419、438、439、440、452）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
@@ -1028,3 +1028,42 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
 ➖ 帶 衖／衕 的地址，`alley` 欄的值變長（`3弄` → `3弄2衖`）；API 的各欄不增不減。關鍵字搜尋也跟著變：`search_text` 含 `alley`，所以搜 `2衖` 找得到、搜 `3弄5號` 不再找到 `3弄2衖5號`（那本來就是另一戶）。
 ◾ 測試：`tests/test_identity_model.py`、`tests/test_migration_third_normal_form.py`、`tests/test_ticket_task_stamps.py`、
   `tests/test_address_parse.py`、`tests/test_address_service.py`、`tests/test_address_tools.py`。
+
+### ADR-452 `tickets(outsideBounds:)`：一個框外面的單
+
+**白話**：任務管理地圖縮回預設範圍時，要寫「有 N 張單在這個範圍外」，按「看是哪幾張」就列出那幾張。後端多一個
+篩選，只回點位在框外的單。
+
+**Date**：2026-11-01。糖定了任務管理地圖範圍外的提示和「看是哪幾張」；前端提議加這個篩選，使用者排進這一版。
+
+**Context**：
+
+- `tickets` 只有 `bounds`（框裡的單）。前端想列框外的單只能拆成四條帶狀 `bounds`（沒辦法一起分頁），或不帶 `bounds`
+  抓 200 張再自己篩（超過 200 張就漏）。
+- 框外的張數用 `ticketsExtent.count` 減 `tickets(bounds:).totalCount` 算時，`ticketsExtent` 沒有 `auditStatus`，
+  篩審核狀態的話兩邊數的不是同一群單。
+
+**Decision**：
+
+1. `tickets` 加 `outsideBounds: BoundsInput`。totalCount 和列表一起套用（`_active_conditions` 是兩邊唯一的條件來源）。
+2. 就是 `bounds` 反過來，逐列用同一個判斷：看得到點位的列用點位，看不到的列用它被顯示的格子中心（ADR-282）。
+   所以訪客或 `own` 範圍的呼叫者，從框外的單也推不出比格子更細的位置。
+3. 框線上的點算框內（`ST_Intersects`）；沒有點位的列算框外。同一組篩選下，`bounds` 和 `outsideBounds` 對同一個框
+   剛好把所有單分成兩半，不重複也不遺漏。
+4. 跟 `bounds` 一起帶的話兩個都套用；其他篩選、分頁、排序照舊。
+5. 框外通常是大部分的單，放大的框也縮不小範圍，所以 `outsideBounds` 不像 `bounds` 先用 index 預篩。`search_timeout`
+   只在有 `q` 時作用，所以沒帶 `q` 的 `outsideBounds` 改在 `statement_ceiling` 底下，跟 `ticketCells`、`ticketsExtent`
+   一樣，逾時回「範圍外的單太多，查詢逾時已中止，請縮小篩選再試」；帶 `q` 時照舊用 `search_timeout`（2026-11-02 review
+   時補上）。有看不到點位的列時跟 `bounds` 一樣用 generic plan（ADR-437）。
+6. 框外的張數不用 `outsideBounds` 算，用同一組篩選的總數減框內的 totalCount（第 3 點保證相減剛好是框外）：框內的
+   用得到 index，總數不用逐張判斷框。`outsideBounds` 只用在「看是哪幾張」的分頁列表。管理平台拿 `ticketsExtent.count`
+   當總數；任務管理沒有審核狀態篩選，所以它就是 `tickets` 的 totalCount。要篩審核狀態時改用 `tickets(limit: 0)` 的
+   totalCount。
+7. `bounds` 的判斷抽成 `_in_box`，兩個篩選共用。`bounds` 的 SQL 不變。
+
+➕ 「看是哪幾張」可以照常分頁；同一組篩選下，列表的 totalCount 就是相減得到的張數（第 3 點）。
+➕ 前台訪客不會用到，用了也不會多透露位置。
+➖ 框外的查詢沒有 index 可用，單量大時比 `bounds` 慢；目前單量小，又有第 5 點的上限擋著。
+◾ 測試：`tests/test_graphql/test_tickets_outside_bounds.py`（簽入的人用點位：框外只列框外的單；沒有點位的單算框外；
+  框內、框外對同一個框不重複也不遺漏、框線上算框內、其他篩選照套；`limit: 0` 只回張數；沒帶關鍵字時在上限底下；
+  訪客用格子中心；`own` 範圍自己的單用點位、別人的用格子中心）。

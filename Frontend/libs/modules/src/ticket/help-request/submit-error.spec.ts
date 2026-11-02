@@ -27,10 +27,10 @@ describe('submitErrorMessage', () => {
   });
 
   it('says what to fix when the form let through a need without a quantity, or too many', () => {
-    for (const kind of ['hr', 'supply', 'medical']) {
+    for (const kind of ['rescue', 'hr', 'supply', 'medical']) {
       expect(
         submitErrorMessage(refusal(`quantity is required for a ${kind} task`)),
-      ).toBe('每項需求都要填數量（人員受困除外）。');
+      ).toBe('每項需求都要填數量。');
     }
     expect(submitErrorMessage(refusal('At most 20 tasks are allowed'))).toBe(
       '一次最多 20 項需求。',

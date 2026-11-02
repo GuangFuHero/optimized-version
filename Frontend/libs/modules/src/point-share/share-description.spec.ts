@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketNeed } from '../ticket/needs/need-claim';
-import { describeTicketForShare } from './share-description';
+import {
+  describeStationForShare,
+  describeTicketForShare,
+} from './share-description';
 
 const need = (overrides: Partial<TicketNeed>): TicketNeed => ({
   uuid: 'need',
@@ -70,5 +73,69 @@ describe('describeTicketForShare', () => {
     );
     expect(describeTicketForShare({ taskType: 'hr' })).toBe('島嶼守望｜人力');
     expect(describeTicketForShare({})).toBe('島嶼守望｜救災任務');
+  });
+});
+
+describe('describeStationForShare', () => {
+  it('adds its description after what it is, as the 位置說明 the site shows it as', () => {
+    expect(
+      describeStationForShare({
+        type: 'supply',
+        description: '  操場東側帳篷 ',
+        opHour: '08:00-20:00',
+      }),
+    ).toBe('島嶼守望｜物資站點，服務時間 08:00-20:00。位置說明：操場東側帳篷');
+    expect(
+      describeStationForShare({ type: null, description: '操場東側帳篷' }),
+    ).toBe('島嶼守望｜救災站點。位置說明：操場東側帳篷');
+  });
+
+  it('names the platform, the kind of station and its hours when it has no description', () => {
+    expect(
+      describeStationForShare({ type: 'supply', opHour: '08:00-20:00' }),
+    ).toBe('島嶼守望｜物資站點，服務時間 08:00-20:00');
+    expect(
+      describeStationForShare({
+        type: 'water',
+        description: ' ',
+        opHour: 'unknown',
+      }),
+    ).toBe('島嶼守望｜加水站點');
+  });
+
+  it('says in brackets that a station is closed, as its page does, and drops the hours of one closed for good', () => {
+    const station = {
+      type: 'water',
+      description: '操場東側帳篷',
+      opHour: '08:00-20:00',
+    };
+
+    expect(
+      describeStationForShare({ ...station, operationalStatus: 'active' }),
+    ).toBe('島嶼守望｜加水站點，服務時間 08:00-20:00。位置說明：操場東側帳篷');
+    expect(
+      describeStationForShare({
+        ...station,
+        operationalStatus: 'temporarily_closed',
+      }),
+    ).toBe(
+      '島嶼守望｜加水站點（暫停服務），服務時間 08:00-20:00。位置說明：操場東側帳篷',
+    );
+    expect(
+      describeStationForShare({
+        ...station,
+        operationalStatus: 'permanently_closed',
+      }),
+    ).toBe('島嶼守望｜加水站點（已關閉）。位置說明：操場東側帳篷');
+  });
+
+  it('never says its level, and calls a station of no known kind a 救災站點', () => {
+    for (const station of [
+      { level: 0 },
+      { type: 'warehouse', level: 0 },
+      { type: null, opHour: '-' },
+    ]) {
+      expect(describeStationForShare(station)).toBe('島嶼守望｜救災站點');
+    }
   });
 });

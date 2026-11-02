@@ -27,6 +27,16 @@ from app.graphql.shared import (
 from app.services import ticket_audit
 
 
+async def ticket_detail_scope(info: strawberry.types.Info) -> Scope:
+    """The caller's ticket.view_detail scope: NONE to the anonymous caller, who holds no grant at all."""
+    user = info.context["user"]
+    if user is None:
+        return Scope.NONE
+    return await resolve_scope(
+        user, Perm.TICKET_VIEW_DETAIL, info.context["db"], cache=info.context["_rbac_cache"]
+    )
+
+
 def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resource=None):
     """Whether the caller may see this ticket's detail (ADR-281), decided once per request.
 
@@ -464,8 +474,8 @@ class TicketTaskType:
     quantity: int | None = strawberry.field(
         default=None,
         description=(
-            "Number of people or units needed. Null means unspecified and uncapped: a rescue need "
-            "may leave it out, and needs filed before every other kind had to give one"
+            "Number of people or units needed. Null only on a need filed before every need had to "
+            "give one: unspecified and uncapped"
         ),
     )
     status: str = strawberry.field(
@@ -630,9 +640,7 @@ class CreateTicketTaskInput:
     task_description: str | None = None
     quantity: int | None = strawberry.field(
         default=None,
-        description=(
-            "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
-        ),
+        description="People or units needed, at least 1; required, for a 'rescue' task too",
     )
     source: str = strawberry.field(
         default="user",
@@ -653,9 +661,7 @@ class HelpRequestTaskInput:
     task_description: str | None = None
     quantity: int | None = strawberry.field(
         default=None,
-        description=(
-            "People or units needed, at least 1; required except for a 'rescue' need, which may omit it"
-        ),
+        description="People or units needed, at least 1; required, for a 'rescue' need too",
     )
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,
@@ -1409,7 +1415,10 @@ class CreateTicketTaskDraft:
     task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str
     task_description: str | None = None
-    quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
+    quantity: int | None = strawberry.field(
+        default=None,
+        description="People or units needed, at least 1; required, for a 'rescue' task too",
+    )
     source: str = strawberry.field(
         default="user",
         description="Not read: the identity making the task decides it",

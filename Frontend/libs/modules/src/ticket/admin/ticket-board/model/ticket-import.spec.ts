@@ -16,9 +16,9 @@ describe('IMPORT_NEED_TYPES', () => {
 });
 
 describe('ticketImportCaption', () => {
-  it("names a rescue file's required columns, with no head count", () => {
+  it("names a rescue file's required columns, its head count included", () => {
     expect(ticketImportCaption('rescue')).toBe(
-      '從「匯出」下載的「搜救」檔案就是範本。新的單必填：標題、聯絡人、緯度、經度、需求名稱。位置用經緯度，沒有地址欄。',
+      '從「匯出」下載的「搜救」檔案就是範本。新的單必填：標題、聯絡人、緯度、經度、需求名稱、需求數量。位置用經緯度，沒有地址欄。',
     );
   });
 
@@ -30,7 +30,7 @@ describe('ticketImportCaption', () => {
 
   it('reads without a type picked', () => {
     expect(ticketImportCaption(null)).toBe(
-      '從「匯出」下載的檔案就是範本。新的單必填：標題、聯絡人、緯度、經度、需求名稱。位置用經緯度，沒有地址欄。',
+      '從「匯出」下載的檔案就是範本。新的單必填：標題、聯絡人、緯度、經度、需求名稱、需求數量。位置用經緯度，沒有地址欄。',
     );
   });
 });

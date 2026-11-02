@@ -62,28 +62,3 @@ export function decideStationFit({
 
   return 'frame';
 }
-
-const SHOWN_FILTERS_KEY = 'station-management:shown-filters';
-
-// Reads and writes below fail quietly, as the map's remembered view does (map-opening.ts): the
-// filters then count as new, and a map that could remember nothing frames them anyway.
-
-/**
- * The filters the station map last framed or left alone, as `stationFiltersKey` writes them. The map
- * writes them, not the page: the page can be built twice as it opens, and would count its own.
- */
-export function readShownStationFilters(): string | null {
-  try {
-    return window.localStorage.getItem(SHOWN_FILTERS_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function rememberShownStationFilters(filtersKey: string) {
-  try {
-    window.localStorage.setItem(SHOWN_FILTERS_KEY, filtersKey);
-  } catch {
-    // Nothing remembered; see above.
-  }
-}

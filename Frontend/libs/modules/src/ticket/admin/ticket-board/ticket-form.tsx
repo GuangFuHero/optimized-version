@@ -680,7 +680,6 @@ function NeedRow({
   onChange: (key: keyof NeedDraft, value: string) => void;
   onRemove: () => void;
 }) {
-  const rescue = need.taskType === 'rescue';
   return (
     <Box
       role="group"
@@ -740,8 +739,8 @@ function NeedRow({
           onChange={(event) => onChange('taskName', event.target.value)}
         />
         <TextInput
-          required={!rescue}
-          placeholder={rescue ? '數量（可不填）' : '數量'}
+          required
+          placeholder="數量"
           type="number"
           inputProps={{
             min: 1,
