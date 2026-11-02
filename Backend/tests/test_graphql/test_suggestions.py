@@ -1144,10 +1144,16 @@ async def test_my_suggestions_list_only_yours_with_the_value_you_saw(
     assert len(rows) == 1
     row = rows[0]
     assert (row["targetType"], row["fieldName"], row["previousValue"], row["newValue"]) == (
-        "station", "op_hour", "08:00-18:00", "24h",
+        "station",
+        "op_hour",
+        "08:00-18:00",
+        "24h",
     )
     assert (row["comment"], row["status"], row["appliedValue"], row["decidedAt"]) == (
-        "the sign says so", "pending", None, None,
+        "the sign says so",
+        "pending",
+        None,
+        None,
     )
     assert row["submittedAt"]
     assert row["station"] == {"uuid": sample_station, "opHour": "08:00-18:00"}
@@ -1174,19 +1180,25 @@ async def test_a_field_without_a_value_was_recorded_as_empty(client, login_user_
 async def test_my_suggestions_show_what_the_reviewer_wrote_and_when(
     client, auditor_auth, login_user_auth, sample_station
 ):
-    """Approved with the reviewer's own value, and rejected: each says how it ended, and when."""
+    """Adopted with the reviewer's own value, and rejected: each says how it ended, and when."""
     _, token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, token, "station", sample_station, "op_hour", "24h")
     await _create(client, token, "station", sample_station, "name", "光復國小")
-    await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", "00:00-24:00"),
-        _decide(sample_station, "name", approve=False),
-    ], note="for the review record")
+    await _merge(
+        client,
+        auditor_token,
+        sample_station,
+        [
+            _decide(sample_station, "op_hour", "00:00-24:00"),
+            _decide(sample_station, "name", approve=False),
+        ],
+        note="for the review record",
+    )
 
     rows = {r["fieldName"]: r for r in await _mine(client, token)}
 
-    assert rows["op_hour"]["status"] == "approved"
+    assert rows["op_hour"]["status"] == "adopted_edited"
     assert rows["op_hour"]["newValue"] == "24h"
     assert rows["op_hour"]["appliedValue"] == "00:00-24:00"
     assert rows["op_hour"]["previousValue"] == "08:00-18:00"
@@ -1203,9 +1215,16 @@ async def test_a_revoked_suggestion_keeps_what_was_applied_and_dates_the_revoke(
     _, token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, token, "station", sample_station, "op_hour", "24h")
-    merge = (await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", "24h"),
-    ]))["data"]["mergeStationSuggestions"]
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "24h"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
     approved_at = (await _mine(client, token))[0]["decidedAt"]
     await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
 
@@ -1216,10 +1235,10 @@ async def test_a_revoked_suggestion_keeps_what_was_applied_and_dates_the_revoke(
 
 
 @pytest.mark.asyncio
-async def test_an_approved_property_suggestion_shows_the_value_applied(
+async def test_an_adopted_property_suggestion_shows_the_value_applied(
     client, auditor_auth, login_user_auth, sample_station, sample_station_property
 ):
-    """A property's approval is read from the merge too, with the reviewer's value."""
+    """A property's adoption is read from the merge too, with the reviewer's value."""
     _, token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, token, "station_property", sample_station_property, "quantity", "10")
@@ -1227,7 +1246,25 @@ async def test_an_approved_property_suggestion_shows_the_value_applied(
 
     row = (await _mine(client, token))[0]
 
-    assert (row["status"], row["newValue"], row["appliedValue"]) == ("approved", "10", "12")
+    assert (row["status"], row["newValue"], row["appliedValue"]) == ("adopted_edited", "10", "12")
+
+
+@pytest.mark.asyncio
+async def test_a_suggestion_not_adopted_shows_no_applied_value(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """When another suggester's value was taken, the row reads not_adopted, dated by the merge."""
+    _, token = login_user_auth
+    _, auditor_token = auditor_auth
+    other = (await _create_user_with_role(redis, "Login User"))[1]
+    await _create(client, token, "station", sample_station, "op_hour", "03:00-03:10")
+    await _create(client, other, "station", sample_station, "op_hour", "08:00-20:00")
+    await _merge(client, auditor_token, sample_station, [_decide(sample_station, "op_hour", "08:00-20:00")])
+
+    row = (await _mine(client, token))[0]
+
+    assert (row["status"], row["newValue"], row["appliedValue"]) == ("not_adopted", "03:00-03:10", None)
+    assert row["decidedAt"]
 
 
 @pytest.mark.asyncio
@@ -1270,8 +1307,13 @@ async def test_an_old_comment_approval_keeps_the_reviewers_note_from_the_submitt
             station_uuid=sample_station,
             reviewed_by=auditor_uuid,
             changes=[
-                {"target_type": "station", "target_uuid": sample_station, "field_name": field,
-                 "before": before, "after": after}
+                {
+                    "target_type": "station",
+                    "target_uuid": sample_station,
+                    "field_name": field,
+                    "before": before,
+                    "after": after,
+                }
                 for field, before, after in (
                     ("comment", "Test station", "內部：負責人電話另存"),
                     ("op_hour", "08:00-18:00", "24h"),
@@ -1281,10 +1323,18 @@ async def test_an_old_comment_approval_keeps_the_reviewers_note_from_the_submitt
         db.add(merge)
         await db.flush()
         for field, value in (("comment", "請更新備註"), ("op_hour", "24h")):
-            db.add(StationUpdateSuggestion(
-                target_type="station", target_uuid=sample_station, field_name=field, new_value=value,
-                status="approved", created_by=user_uuid, reviewed_by=auditor_uuid, merge_uuid=merge.uuid,
-            ))
+            db.add(
+                StationUpdateSuggestion(
+                    target_type="station",
+                    target_uuid=sample_station,
+                    field_name=field,
+                    new_value=value,
+                    status="approved",
+                    created_by=user_uuid,
+                    reviewed_by=auditor_uuid,
+                    merge_uuid=merge.uuid,
+                )
+            )
 
     rows = {r["fieldName"]: r for r in await _mine(client, token)}
 

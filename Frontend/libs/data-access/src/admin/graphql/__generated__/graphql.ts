@@ -975,7 +975,7 @@ export type MyRoleRequestsType = {
 
 export type MyStationSuggestionType = {
   __typename?: 'MyStationSuggestionType';
-  /** Approved or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded */
+  /** Approved, adopted_edited or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded */
   appliedValue?: Maybe<Scalars['String']['output']>;
   comment?: Maybe<Scalars['String']['output']>;
   /** When it was approved or rejected, or for a revoked one when the approval was undone; for one decided before merges were recorded, when the row last changed. Null while pending */
@@ -987,7 +987,7 @@ export type MyStationSuggestionType = {
   previousValue?: Maybe<Scalars['String']['output']>;
   /** The station it is about, or its property's; null once deleted or out of the caller's view, by the rules of `station` */
   station?: Maybe<StationType>;
-  /** 'pending', 'approved', 'rejected', or 'revoked' */
+  /** 'pending', 'approved', 'adopted_edited', 'not_adopted', 'rejected', or 'revoked' */
   status: Scalars['String']['output'];
   /** When it was first sent */
   submittedAt: Scalars['DateTime']['output'];

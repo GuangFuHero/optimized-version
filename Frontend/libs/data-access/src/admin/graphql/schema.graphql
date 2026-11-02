@@ -879,11 +879,13 @@ type MyStationSuggestionType {
   newValue: String!
   comment: String
 
-  """'pending', 'approved', 'rejected', or 'revoked'"""
+  """
+  'pending', 'approved', 'adopted_edited', 'not_adopted', 'rejected', or 'revoked'
+  """
   status: String!
 
   """
-  Approved or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded
+  Approved, adopted_edited or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded
   """
   appliedValue: String
 

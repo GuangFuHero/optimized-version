@@ -476,7 +476,7 @@ async def _notify_suggesters(db: AsyncSession, station_name: str | None, outcome
     for recipient, suggestion_uuid, field_name, status in outcomes:
         field = f"「{_FIELD_LABELS.get(field_name, field_name)}」"
         if status == "adopted_edited":
-            event_type, title = "station_suggestion_adopted_edited", "📝 站點修改建議已參考"
+            event_type, title = "station_suggestion_adopted_edited", "📝 站點修改建議已納入參考"
             body = f"{where}{field}已參考你的建議修改。"
         else:
             result = "已採用" if status == "approved" else "未採用"

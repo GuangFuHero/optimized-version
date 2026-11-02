@@ -1316,7 +1316,7 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 > **狀態：ACCEPTED（2026-10-01）。** PR #57 review（jujuyuzu）指出 seed 已發出這兩個能力、但與 ADR-049 矛盾，使用者決定保留並補記本條。
 >
-> **補充**：同一欄位的待審建議還是一次決定，按採用時，只有建議值和合併寫入的值相同的那幾筆記 `approved`，其他記新的狀態 `not_adopted`（未採用）；如果寫入的值和每一筆都不同（審核者自己打或整理過），該欄位的每一筆都記 `adopted_edited`（參考修改）。按不採用照舊全部記 `rejected`。撤銷合併時，`approved` 和 `adopted_edited` 改成 `revoked`，`not_adopted`、`rejected` 不變。審完會通知每個建議者：`approved` 收到 `station_suggestion_adopted`（已採用），`adopted_edited` 收到 `station_suggestion_adopted_edited`（已參考你的建議修改），`not_adopted` 或 `rejected` 收到 `station_suggestion_not_adopted`（未採用），對建議者來說後兩種一樣。撤銷不另外通知。
+> **補充**：同一欄位每一筆建議的審核結果，以及審完通知建議者，見 ADR-457。
 
 **白話**：稽核員仍然不能直接改站點，但可以決定群眾的修改建議，也可以把任何一次決定撤回。
 
@@ -1564,16 +1564,52 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
    - `review_note`：一次審核共用一段，每一筆都寫進去，是寫給審核紀錄的；管理平台的輸入框寫「會記在這次審核
      紀錄」，審核者寫的時候沒預期提報人看得到。要不要開放，另外決定。
    - 站點 `comment` 那筆的 `appliedValue` 也不給：ADR-332 之前的合併可能寫入過內部備註，那是審核者寫的。
-5. **不在這次**：審完通知提報人、民眾撤回自己待審的建議。
+5. **不在這次**：審完通知提報人（後來由 ADR-457 補上）、民眾撤回自己待審的建議。
 
 **後果**：
 
 - ➕ 前台做得出「我回報的站點」，而且寫得出「原本 → 建議」。
 - ◾ 合併紀錄、站點、屬性各查一次，不論筆數多少。
 - ◾ 舊資料的 `previousValue` 是 `null`，前台只顯示建議的值。
-- ➖ 民眾要自己打開這一頁才知道結果，沒有通知。
+- ➖ 民眾要自己打開這一頁才知道結果，沒有通知（ADR-457 補上了審完通知）。
 - 測試：`tests/test_graphql/test_suggestions.py` 的 myStationSuggestions 一段、
   `tests/test_migration_suggestion_previous_value.py`。
+
+---
+
+#### ADR-457 站點修改建議審完，每一筆記自己的結果，並通知建議者
+
+> **狀態：ACCEPTED（2026-11-02）。** 原本寫在 ADR-300 的狀態補充，獨立成一條比較好找；也補上 ADR-420 第 5 條留下的審完通知。
+
+**白話**：同一欄有好幾個人提建議，審核者採用其中一個時，其他人的建議記成「未採用」，不會跟著記成「已採用」。審完每個建議者都會收到通知，知道自己的建議結果如何。
+
+**Context**：
+
+- 審核畫面一次決定一整個欄位（採用或不採用），合併原本把這一欄所有待審建議記成同一個狀態。兩個人對同一欄提了不同的值，審核者只採用其中一個，另一個也記成 `approved`。
+- 所以 `approved` 原本只代表「這一欄審過、也改了」，不代表「你的建議被採用」。前台「我回報的站點」（ADR-420）照這個狀態顯示，會跟沒被採用的人說「已採用」。
+
+**Decision**：
+
+1. 按採用時，合併把每一筆待審建議的值，用寫入時同一套轉換（依欄位型別轉換、`supply_status` 空白算沒有）處理後，跟實際寫入的值比：
+   - 一樣的記 `approved`（已採用），其他記 `not_adopted`（未採用）。
+   - 寫入的值跟每一筆都不一樣（審核者自己打，或整理過格式），這一欄每一筆都記 `adopted_edited`（參考修改）。審核畫面記不下審核者是從哪一筆改起的，所以每一筆都算參考過。
+   - 建議的值已經不符合欄位現在的規則，算沒採用。
+2. 按不採用照舊，全部記 `rejected`。
+3. 撤銷合併時，`approved` 和 `adopted_edited` 改成 `revoked`；`not_adopted`、`rejected` 不變。
+4. 審完通知每個建議者，審核者自己也提過建議時不通知自己：
+   - `approved`：`station_suggestion_adopted`，「你對「站名」的「欄位」的修改建議已採用。」
+   - `adopted_edited`：`station_suggestion_adopted_edited`，「「站名」的「欄位」已參考你的建議修改。」
+   - `not_adopted` 或 `rejected`：`station_suggestion_not_adopted`，「你對「站名」的「欄位」的修改建議未採用。」對建議者來說這兩種一樣。
+   - 站名用合併前的名字：這次合併剛好改了站名，建議者還認得出是哪個站。欄位用前台建議表單上的名稱。
+   - 撤銷不另外通知。
+5. `status` 是 `String(20)`，沒有 CHECK，不用 migration。`myStationSuggestions` 的 `appliedValue` 在 `adopted_edited` 也給審核者實際寫入的值；`not_adopted` 不給。
+
+**後果**：
+
+- ➕ 「我回報的站點」分得出已採用、參考修改、未採用。
+- ➖ 審核者自己打的值跟某一筆差很多時，那個建議者也會收到「已參考」。要分得出來，審核畫面得記下審核者從哪一筆改起，這次不做；通知文字之後要改，只動一行。
+- ◾ 前台通知鈴鐺只顯示 `SITE_NOTICE_TYPES`（`Frontend/libs/modules/src/notification/site-notices.ts`）列出的類型。這三種要前端加進去才看得到，點下去要開哪個畫面也還沒定。
+- 測試：`tests/test_graphql/test_suggestions.py`。
 
 ---
 
