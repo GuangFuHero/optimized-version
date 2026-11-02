@@ -12,7 +12,7 @@ build dropdowns from that response instead of hardcoding the rules.
 
 Example queries:
 - `?y=total_tickets&x=date&x_granularity=week` — ticket volume trend, weekly buckets
-- `?y=total_tickets&x=category` — ticket volume broken down by task_type
+- `?y=total_tickets&x=category` — ticket volume broken down by need type (once per type)
 - `?y=task_completion_distribution` — no `x` needed, always a fixed 2-slice pie
 - `?y=net_backlog_change` — no `x` needed either; this metric is always date-grouped
 
@@ -118,6 +118,9 @@ _VALUE_Y_DESCRIPTION = (
 )
 _X_DESCRIPTION = (
     "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). "
+    "For the ticket counts, completion rate and duplicate count, 'category' is the types of the "
+    "ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total "
+    "(a deleted ticket counted through `include_deleted` uses all its needs). "
     "Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; "
     "see GET /analytics/catalog."
 )
@@ -195,7 +198,9 @@ async def _require_known_area(
 
 async def _ticket_filters(
     task_type: TicketTaskType | None = Query(
-        None, description="Only tickets of this task type; the volunteer metrics read each need's own type."
+        None,
+        description="Only tickets with a need of this type, as the public tickets list matches it; "
+        "the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
     ),
     ticket_status: TicketStatus | None = Query(
         None, alias="status", description="Only tickets with this status."
@@ -203,6 +208,12 @@ async def _ticket_filters(
     county: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="縣市")),
     town: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="鄉鎮市區")),
     village: str | None = Query(None, description=_AREA_DESCRIPTION.format(part="村里")),
+    include_deleted: bool = Query(
+        False,
+        description="Also count deleted tickets, as 已取消 and in the total; only the ticket counts, "
+        "completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` "
+        "and groups by category through any of its needs, since they were deleted with it.",
+    ),
     scope: Scope = security.has_permission(Perm.TICKET_VIEW),
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
@@ -212,7 +223,12 @@ async def _ticket_filters(
         db, Tickets, scope_filter(scope, actor=current_user, model=Tickets), county, town, village
     )
     return analytics_filters.ticket_filters(
-        task_type=task_type, status=ticket_status, county=county, town=town, village=village
+        task_type=task_type,
+        status=ticket_status,
+        county=county,
+        town=town,
+        village=village,
+        include_deleted=include_deleted,
     )
 
 
