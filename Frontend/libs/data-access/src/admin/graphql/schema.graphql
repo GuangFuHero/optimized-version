@@ -568,7 +568,7 @@ input CreateTicketTaskDraft {
   taskName: String!
   taskDescription: String = null
 
-  """Number of people or units needed"""
+  """People or units needed, at least 1; required, for a 'rescue' task too"""
   quantity: Int = null
 
   """Not read: the identity making the task decides it"""
@@ -590,9 +590,7 @@ input CreateTicketTaskInput {
   taskName: String!
   taskDescription: String = null
 
-  """
-  People or units needed, at least 1; required except for a 'rescue' task, which may omit it
-  """
+  """People or units needed, at least 1; required, for a 'rescue' task too"""
   quantity: Int = null
 
   """Not read: the identity making the task decides it"""
@@ -754,9 +752,7 @@ input HelpRequestTaskInput {
   taskName: String!
   taskDescription: String = null
 
-  """
-  People or units needed, at least 1; required except for a 'rescue' need, which may omit it
-  """
+  """People or units needed, at least 1; required, for a 'rescue' need too"""
   quantity: Int = null
 
   """
@@ -1925,7 +1921,7 @@ type TicketTaskType {
   taskName: String!
 
   """
-  Number of people or units needed. Null means unspecified and uncapped: a rescue need may leave it out, and needs filed before every other kind had to give one
+  Number of people or units needed. Null only on a need filed before every need had to give one: unspecified and uncapped
   """
   quantity: Int
 
