@@ -1,9 +1,8 @@
 'use client';
 
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import { Box, ButtonBase, Stack, TextField, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import {
   getNeedOption,
@@ -100,7 +99,7 @@ export function NeedDraftRow({
                 fontSize: displayTextSize[12],
               }}
             >
-              <DeleteOutlineRoundedIcon sx={{ fontSize: 14 }} />
+              <Icons.trash sx={{ fontSize: 14 }} />
               移除
             </ButtonBase>
           ) : null}

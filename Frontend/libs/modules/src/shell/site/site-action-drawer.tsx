@@ -1,6 +1,5 @@
 'use client';
 
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import {
   Box,
   Drawer,
@@ -15,6 +14,7 @@ import {
   designTokens,
   displayTextSize,
   safeAreaBottom,
+  Icons,
 } from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
@@ -172,7 +172,7 @@ export function SiteActionDrawer({
             color: color.fg.neutral.subtle,
           }}
         >
-          <CloseRoundedIcon sx={{ fontSize: 20 }} />
+          <Icons.close sx={{ fontSize: 20 }} />
         </IconButton>
       </Box>
 

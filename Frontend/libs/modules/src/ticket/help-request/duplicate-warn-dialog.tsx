@@ -1,7 +1,5 @@
 'use client';
 
-import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import { Box, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import { useContext, type MouseEvent } from 'react';
@@ -21,6 +19,7 @@ import {
   displayTextSize,
   Modal,
   RowAction,
+  Icons,
 } from '@rescue-frontend/ui';
 
 import { useOptionalSiteMapRouteState } from '../../map/site/use-site-map-route-state';
@@ -162,13 +161,13 @@ function SuspectTicketCard({
         <Stack spacing={0.5} sx={{ mt: 1 }}>
           {meters !== null ? (
             <Typography component="div" sx={reason}>
-              <PlaceRoundedIcon sx={reasonIcon} />
+              <Icons.pin sx={reasonIcon} />
               相距 {meters} 公尺
             </Typography>
           ) : null}
           {suspect.alike?.length ? (
             <Typography component="div" sx={reason}>
-              <ContentCopyRoundedIcon sx={reasonIcon} />
+              <Icons.copy sx={reasonIcon} />
               <span>
                 像你填的：
                 <Box

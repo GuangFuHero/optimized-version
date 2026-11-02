@@ -5,12 +5,14 @@ row filter, so the endpoints append it to `extra_filters` and every metric alrea
 Because the two are only ever ANDed, a filter narrows the caller's scope and never widens it.
 """
 
-from sqlalchemy import exists, select
+from sqlalchemy import and_, exists, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
+from app.models.ticket_task import TicketTask
 from app.schemas.analytics import (
     AreaCounty,
     AreaTown,
@@ -53,6 +55,35 @@ def _in_area(geometry_uuid, *, county: str | None, town: str | None, village: st
     ]
 
 
+# The annotation key a need-type filter carries its type under, for metrics that read each need's own type.
+NEED_TYPE = "analytics_need_type"
+# Its own alias, so the check never correlates with a metric whose query is itself on the needs.
+_TYPED_NEED = aliased(TicketTask, name="typed_need")
+
+# A filter that is always true and tells the ticket metrics to count deleted tickets too.
+INCLUDE_DELETED = literal(True).label(None)
+
+
+def live_tickets(extra_filters: list | None) -> list:
+    """The live-ticket condition, or none when `extra_filters` holds INCLUDE_DELETED."""
+    if any(clause is INCLUDE_DELETED for clause in extra_filters or []):
+        return []
+    return [Tickets.delete_at.is_(None)]
+
+
+def _has_need_of_type(task_type: str):
+    """The ticket has a live need of `task_type`, as the public tickets list matches a type.
+
+    A deleted ticket's needs were deleted with it, so any of them counts, as the category grouping reads them.
+    """
+    clause = exists().where(
+        _TYPED_NEED.ticket_uuid == Tickets.uuid,
+        or_(_TYPED_NEED.delete_at.is_(None), Tickets.delete_at.is_not(None)),
+        _TYPED_NEED.task_type == task_type,
+    )
+    return clause._annotate({NEED_TYPE: task_type})
+
+
 def ticket_filters(
     *,
     task_type: TicketTaskType | None,
@@ -60,13 +91,20 @@ def ticket_filters(
     county: str | None,
     town: str | None,
     village: str | None,
+    include_deleted: bool = False,
 ) -> list:
     """WHERE clauses against `Tickets` for the ticket endpoints' filter params."""
-    clauses = []
+    clauses = [INCLUDE_DELETED] if include_deleted else []
     if task_type is not None:
-        clauses.append(Tickets.task_type == task_type.value)
+        clauses.append(_has_need_of_type(task_type.value))
     if status is not None:
-        clauses.append(Tickets.status == status.value)
+        # A deleted ticket is cancelled whatever status it was left at, as the buckets count it.
+        stored = Tickets.status == status.value
+        clauses.append(
+            or_(Tickets.delete_at.is_not(None), stored)
+            if status.value == "cancelled"
+            else and_(Tickets.delete_at.is_(None), stored)
+        )
     return [*clauses, *_in_area(Tickets.uuid, county=county, town=town, village=village)]
 
 

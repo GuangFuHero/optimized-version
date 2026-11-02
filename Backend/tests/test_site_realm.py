@@ -130,7 +130,7 @@ async def test_an_account_without_user_keeps_its_identity(client, db_session, re
 
 
 async def test_the_marker_does_not_revive_a_revoked_identity(client, db_session, redis):
-    """The token is checked first: a revoked identity signs the session out, marked or not (ADR-096)."""
+    """The token is checked first: a revoked identity is refused, marked or not (ADR-096, ADR-402)."""
     _, auditor_uuid, headers = await _auditor(db_session, redis)
     await db_session.execute(delete(UserRoleAssign).where(UserRoleAssign.role_uuid == auditor_uuid))
     await db_session.commit()
@@ -138,7 +138,7 @@ async def test_the_marker_does_not_revive_a_revoked_identity(client, db_session,
     response = await client.get("/api/v1/users/me", headers={**headers, **SITE})
 
     assert response.status_code == 401
-    assert response.json()["code"] == "identity_revoked"
+    assert response.json()["code"] == "identity_reset"
 
 
 @pytest.mark.parametrize("realm", ["back-office", "Site"])
