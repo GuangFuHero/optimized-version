@@ -5727,6 +5727,79 @@
         }
       }
     },
+    "/api/v1/history/tickets/{uuid}/public": {
+      "get": {
+        "tags": [
+          "異動時間軸"
+        ],
+        "summary": "求助單的公開時間軸",
+        "description": "What happened to this help request, newest first, without anyone's name (ADR-421).\n\nNo sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who\nclaimed a need is a count, who acted is a role, and a change to the contact details is told\nwithout them.",
+        "operationId": "ticket_public_history_api_v1_history_tickets__uuid__public_get",
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicHistoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found（不存在或已刪除）"
+          },
+          "429": {
+            "description": "rate_limited"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/history/stations/{uuid}": {
       "get": {
         "tags": [
@@ -5827,7 +5900,7 @@
           "地圖圖磚"
         ],
         "summary": "Get Tile",
-        "description": "Proxy a map tile from an upstream source with 7-day Redis caching.\n\n**type** — `satellite` or `road`\n\n**source** — one of:\n- satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)\n- road: `osm` (image/png), `carto` (image/png)\n\n**z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)\n\n**layer** — Required only for `source=sinica`. Pass the Sinica layer name\n(e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/\nfor available layers. Ignored for all other sources.\n\nReturns the raw tile image bytes with the upstream Content-Type header.\nOn upstream error, returns a 1×1 transparent PNG.",
+        "description": "Proxy a map tile from an upstream source with 7-day Redis caching.\n\n**type** — `satellite` or `road`\n\n**source** — one of:\n- satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/jpeg), `sinica` (image/png)\n- road: `osm` (image/png), `carto` (image/png)\n\n**z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)\n\n**layer** — Required only for `source=sinica`. Pass the Sinica layer name\n(e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/\nfor available layers. Ignored for all other sources.\n\nReturns the raw tile image bytes with the upstream Content-Type header.\nOn upstream error, returns a 1×1 transparent PNG.",
         "operationId": "get_tile_api_v1_map_tile__type____source___z___x___y__get",
         "parameters": [
           {
@@ -6058,10 +6131,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -6228,10 +6301,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type."
           },
           {
             "name": "status",
@@ -6304,6 +6377,18 @@
               "title": "Village"
             },
             "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it."
           },
           {
             "name": "X-WG-Realm",
@@ -6383,10 +6468,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -6461,10 +6546,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type."
           },
           {
             "name": "status",
@@ -6537,6 +6622,18 @@
               "title": "Village"
             },
             "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it."
           },
           {
             "name": "X-WG-Realm",
@@ -6665,10 +6762,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only tickets of this task type; the volunteer metrics read each need's own type.",
+              "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type.",
               "title": "Task Type"
             },
-            "description": "Only tickets of this task type; the volunteer metrics read each need's own type."
+            "description": "Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type."
           },
           {
             "name": "status",
@@ -6741,6 +6838,18 @@
               "title": "Village"
             },
             "description": "Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422."
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it.",
+              "default": false,
+              "title": "Include Deleted"
+            },
+            "description": "Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it."
           },
           {
             "name": "X-WG-Realm",
@@ -6820,10 +6929,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -7145,10 +7254,10 @@
                   "type": "null"
                 }
               ],
-              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog.",
               "title": "X"
             },
-            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog."
           },
           {
             "name": "x_granularity",
@@ -11234,6 +11343,134 @@
         ],
         "title": "PropertyForReviewResponse",
         "description": "One live item under a need (Spec 028 §2)."
+      },
+      "PublicHistoryEventResponse": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "ticket_created / ticket_updated / ticket_merged / need_added / need_updated / need_filled / need_stopped / need_reopened / need_removed / volunteer_joined / volunteer_left"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "actor_role": {
+            "type": "string",
+            "title": "Actor Role",
+            "description": "requester / volunteer / staff / system"
+          },
+          "need": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicNeedResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "這個事件的需求（需求與承接事件）"
+          },
+          "needs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PublicNeedResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs",
+            "description": "建單時的需求（ticket_created）；重複審核合併帶進來的需求（ticket_merged）：整件搬過來的，和收下另一張單同類需求的，人數是合併後的"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeResponse"
+            },
+            "type": "array",
+            "title": "Changes",
+            "description": "改了什麼。標題、說明、地點、聯絡方式、受困／危險、需求名稱、進度備註、需求細項只有 changed=true；檢核不列（ADR-421）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "at",
+          "actor_role"
+        ],
+        "title": "PublicHistoryEventResponse",
+        "description": "What happened to a ticket, and in what role, with nobody's name (ADR-421)."
+      },
+      "PublicHistoryResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PublicHistoryEventResponse"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/HistoryMeta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "PublicHistoryResponse",
+        "description": "The standard envelope around a page of the public timeline."
+      },
+      "PublicNeedResponse": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "需求現在的名稱（不是當時的，ADR-421）"
+          },
+          "matched": {
+            "type": "integer",
+            "title": "Matched",
+            "description": "已承接人數"
+          },
+          "required": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required",
+            "description": "需要人數；沒填為 null"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "matched",
+          "required"
+        ],
+        "title": "PublicNeedResponse",
+        "description": "A need in an event: its name as it is now, and how many were coming of how many asked right after."
       },
       "RefreshRequest": {
         "properties": {

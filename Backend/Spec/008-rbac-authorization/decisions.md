@@ -1521,6 +1521,60 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 ---
 
+#### ADR-420 民眾讀得到自己送出的站點修改建議（`myStationSuggestions`）；建議記下送出時的值
+> **狀態：ACCEPTED（2026-10-28）。** 使用者 2026-10-28 定：加 `previous_value` 欄位、舊資料不回填；審核者和審核
+> 備註先不給民眾看。
+
+**白話**：前台「我回報的站點」列出自己送過的每一筆修改建議和審核結果，每筆寫得出「原本 → 建議」。
+
+**Context**：
+
+- 修改建議只能送、讀不回來：公開 schema 只有 `suggestableFields`。審完也不通知提報人（只在建立時通知審核者，
+  `station_suggestion_created`），所以民眾不知道建議有沒有被採用。原型有「我回報的站點」抽屜
+  （`Design/前台/js/site/site-actions.jsx` 的 `StationReportsDrawer`；糖 2026-09-11 定另開入口，不併進「我的任務」）。
+- 原型每筆寫「現值 → 建議值」，送出時就把當時的值存下來。後端沒存，事後也推不出來：
+  - 拿現在的站點值推：已採用的那筆，現在的值就是建議值，畫面變成「A → A」。
+  - 拿合併紀錄的 `before` 推：那是審核當下的值，而且只有被採用的有；待審和被拒絕的推不出來。
+
+**Decision**：
+
+1. **`station_update_suggestions.previous_value`**（text，可空，migration `f563197f1f3c`）：
+   - `createStationSuggestion` 寫入時記下目標欄位當時的值；再送一次（upsert 同一筆）時一起更新。
+   - 欄位沒有值記 `''`，所以 `NULL` 只表示這欄上線前送出的舊資料。舊資料不回填：當時的值沒有記在任何地方。
+   - 在欄位通過 `coerce_and_validate`（確定是可建議的欄位）之後才讀，不會抄出其他欄位。站點的內部備註
+     `comment` 已經不能建議（ADR-332 第 5 條），不會被記進來。
+2. **`Query.myStationSuggestions(limit: Int = 100, skip: Int = 0)`**：
+   - 只要登入、不看 capability，只回 `created_by = 呼叫者`、沒被軟刪的，做法同 `myTickets`。被收回
+     `station.contribute` 只擋新的建議，不擋讀以前送過的。
+   - 依 `updated_at` 新到舊：再送一次或被審過都會往前。`limit` 只收 1–100，`skip` 不能是負數；超過 100 筆用
+     `skip` 往後翻（HC 2026-10-29 review）。
+3. **每筆給的欄位**：
+   - `targetType`、`fieldName`、`previousValue`、`newValue`、`comment`、`status`。
+   - `station`：跟 `station` 查詢同一套規則（`station.view`＋checkpoint 2）；站點已刪除或在範圍外是 `null`。
+     建議的對象是站點屬性時，給那個屬性的站點（屬性已刪除也給）。
+   - `appliedValue`：採用（或採用後被撤銷）的那筆，審核者實際寫入的值；審核者可以改值，所以可能跟 `newValue`
+     不同。取自決定那一筆的合併紀錄（`changes` 裡同一欄位的 `after`）。
+   - `submittedAt`（第一次送出，`created_at`）、`decidedAt`（審核時間；被撤銷的是撤銷時間；待審是 `null`）。
+   - 合併紀錄出現前就審過的舊建議沒有合併紀錄：`decidedAt` 用那一筆最後更新的時間（`updated_at`），
+     `appliedValue` 是 `null`，因為沒有地方記當時寫了什麼（HC 2026-10-29 review）。
+4. **不給審核者和審核備註**：
+   - `reviewed_by`：後台的人是誰不給民眾。
+   - `review_note`：一次審核共用一段，每一筆都寫進去，是寫給審核紀錄的；管理平台的輸入框寫「會記在這次審核
+     紀錄」，審核者寫的時候沒預期提報人看得到。要不要開放，另外決定。
+   - 站點 `comment` 那筆的 `appliedValue` 也不給：ADR-332 之前的合併可能寫入過內部備註，那是審核者寫的。
+5. **不在這次**：審完通知提報人、民眾撤回自己待審的建議。
+
+**後果**：
+
+- ➕ 前台做得出「我回報的站點」，而且寫得出「原本 → 建議」。
+- ◾ 合併紀錄、站點、屬性各查一次，不論筆數多少。
+- ◾ 舊資料的 `previousValue` 是 `null`，前台只顯示建議的值。
+- ➖ 民眾要自己打開這一頁才知道結果，沒有通知。
+- 測試：`tests/test_graphql/test_suggestions.py` 的 myStationSuggestions 一段、
+  `tests/test_migration_suggestion_previous_value.py`。
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|

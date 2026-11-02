@@ -1,8 +1,5 @@
 'use client';
 
-import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded';
-import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import {
   Alert,
   Box,
@@ -18,7 +15,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { ApiError } from '@rescue-frontend/data-access';
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, Icons } from '@rescue-frontend/ui';
 
 import {
   continueSignedOut,
@@ -211,7 +208,7 @@ function SecurityRow({
               }}
             >
               {open ? '收起' : '打開'}
-              {open ? <ExpandLessRoundedIcon /> : <ExpandMoreRoundedIcon />}
+              {open ? <Icons.chevronUp /> : <Icons.chevronDown />}
             </Stack>
           </ButtonBase>
           {open ? (
@@ -240,7 +237,7 @@ function SecurityRow({
 function CannotHere({ children }: { children: React.ReactNode }) {
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-      <InfoOutlinedIcon sx={{ mt: '4px', fontSize: 20, color: '#6A5F5B' }} />
+      <Icons.info sx={{ mt: '4px', fontSize: 20, color: '#6A5F5B' }} />
       <Typography sx={BODY_TEXT}>{children}</Typography>
     </Stack>
   );

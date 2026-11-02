@@ -74,6 +74,17 @@ const RescueMapCanvas = dynamic(
   },
 );
 
+/**
+ * Starts fetching the canvas and Leaflet, which the map otherwise asks for only once it knows where
+ * to open (the event read, a round trip) and has laid itself out. A page that opens on a map calls it
+ * as its code runs, so the two are under way together.
+ */
+export function preloadRescueMapCanvas() {
+  import('./components/rescue-map-canvas').catch(() => {
+    // The map's own load of the canvas reports a failure; this one only starts it early.
+  });
+}
+
 // 與資料維度無關的靜態全域樣式，避免每次 render 重建樣式物件。
 const MAP_STATIC_GLOBAL_STYLES = {
   '.leaflet-container': {
@@ -284,6 +295,8 @@ interface MapProps {
    * remembers nothing and opens at the event's view.
    */
   viewMemoryKey?: RescueMapMemoryKey;
+  /** A tap on an open building's entry (`marker.building`), which selects nothing: its floors. */
+  onOpenBuilding?: (buildingUuid: string) => void;
   /**
    * Opt-in: the guest's cells as the backend counts them (`ticketCells`, ADR-387), in place of
    * grouping the coarse tickets among `markers`, which holds a page of them only. Default: grouped.
@@ -319,6 +332,7 @@ export const Map = memo(function Map({
   clusterMaxZoom,
   onMapReady,
   viewMemoryKey,
+  onOpenBuilding,
   locationCells: countedCells,
   loadLocationCellMembers,
 }: MapProps = {}) {
@@ -328,15 +342,12 @@ export const Map = memo(function Map({
   const [addressPosition] = useState(
     () => viewportStore?.getSnapshot().position ?? routeState?.position,
   );
-  const { opening, openedUnder, eventView } = useMapOpening({
+  const opening = useMapOpening({
     memoryKey: viewMemoryKey,
     addressHasPosition: Boolean(addressPosition),
+    remembersOpening: viewportStore !== undefined,
   });
   const opensAtOnce = addressPosition?.zoom !== undefined;
-  const openedUnderRef = useRef(openedUnder);
-  openedUnderRef.current = openedUnder;
-  const eventViewRef = useRef(eventView);
-  eventViewRef.current = eventView;
   const openingRef = useRef(opening);
   openingRef.current = opening;
   const onMapReadyRef = useRef(onMapReady);
@@ -353,12 +364,7 @@ export const Map = memo(function Map({
   const rememberView = useCallback(
     (view: RescueMapView) => {
       if (viewMemoryKey) {
-        rememberMapView(
-          viewMemoryKey,
-          view,
-          openedUnderRef.current,
-          eventViewRef.current,
-        );
+        rememberMapView(viewMemoryKey, view);
       }
     },
     [viewMemoryKey],
@@ -468,6 +474,12 @@ export const Map = memo(function Map({
 
   const handleMarkerClick = (marker: RescueMapMarkerItem) => {
     controller.closeLayerPanel();
+
+    if (marker.building) {
+      onOpenBuilding?.(marker.building.uuid);
+      return;
+    }
+
     controller.setSelectedMarkerId(marker.id);
   };
 

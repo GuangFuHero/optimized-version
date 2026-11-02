@@ -161,7 +161,7 @@ def max_hint_distance_m(p: FastParameters) -> float:
 class FastEngine:
     """The fast layer as a `DedupEngine`."""
 
-    version = "fast-v4"
+    version = "fast-v5"
 
     def __init__(self, parameters: dict[RelatedKind, FastParameters] | None = None):
         """`parameters` per kind; defaults to the shipped ones."""
@@ -183,11 +183,16 @@ class FastEngine:
             best = self._best_station(submission.station, rows, now)
             return [best] if best else []
 
-        drafts, at, phone, exclude = await self._task_context(db, submission)
+        drafts, at, phone, exclude, building, floor = await self._task_context(db, submission)
         if not drafts or at is None:
             return []
         rows = await candidates.open_tasks_near(
-            db, at=at, radius_m=self.radius_m("ticket_task"), exclude_ticket_uuid=exclude
+            db,
+            at=at,
+            radius_m=self.radius_m("ticket_task"),
+            exclude_ticket_uuid=exclude,
+            building_map_uuid=building,
+            floor=floor,
         )
         same_phones = _same_phones(phone, rows)
         suspects = (
@@ -219,7 +224,8 @@ class FastEngine:
 
         if related_kind != "ticket_task":
             return None  # only tasks are compared, never the ticket itself
-        drafts, at, phone, _ = await self._task_context(db, submission)
+        # A pair named by the caller is scored wherever its tickets are; only `check` skips floors.
+        drafts, at, phone, *_ = await self._task_context(db, submission)
         index = int(draft_ref.partition(":")[2])
         if at is None or index >= len(drafts):
             return None
@@ -232,14 +238,33 @@ class FastEngine:
 
     async def _task_context(
         self, db: AsyncSession, submission: NewTicket | NewTask
-    ) -> tuple[tuple[TaskDraft, ...], GeoPoint | None, str | None, str | None]:
-        """The task drafts, the search point, the submitting ticket's phone, and the ticket to skip."""
+    ) -> tuple[tuple[TaskDraft, ...], GeoPoint | None, str | None, str | None, str | None, str | None]:
+        """The task drafts and what they are compared from.
+
+        That is the search point, the submitting ticket's phone, the ticket to skip, and the building
+        and floor it is filed on (ADR-451).
+        """
         if isinstance(submission, NewTicket):
-            return submission.tasks, submission.ticket.location, submission.ticket.contact_phone, None
+            ticket = submission.ticket
+            return (
+                submission.tasks,
+                ticket.location,
+                ticket.contact_phone,
+                None,
+                ticket.building_map_uuid,
+                ticket.floor,
+            )
         anchor = await candidates.ticket_anchor(db, submission.ticket_uuid)
         if anchor is None:
-            return (submission.task,), None, None, submission.ticket_uuid
-        return (submission.task,), anchor.location, anchor.contact_phone, submission.ticket_uuid
+            return (submission.task,), None, None, submission.ticket_uuid, None, None
+        return (
+            (submission.task,),
+            anchor.location,
+            anchor.contact_phone,
+            submission.ticket_uuid,
+            anchor.building_map_uuid,
+            anchor.floor,
+        )
 
     def _best_task(
         self,

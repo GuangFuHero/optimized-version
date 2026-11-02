@@ -1,11 +1,11 @@
 'use client';
 
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import { Box, ButtonBase, Stack, TextField, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import {
+  chooseNeed,
   getNeedOption,
   SITE_NEED_OPTIONS,
   type NeedDraft,
@@ -24,7 +24,7 @@ interface NeedDraftRowProps {
   canRemove: boolean;
   /** No kind chosen after a try to send: the card itself turns red, there being no box to mark. */
   invalid: boolean;
-  /** A kind but a rescue chosen and no quantity, after a try to send (`isQuantityMissing`). */
+  /** A kind chosen and no quantity, after a try to send (`isQuantityMissing`). */
   quantityMissing: boolean;
   onChange: (next: NeedDraft) => void;
   onRemove: () => void;
@@ -53,9 +53,6 @@ export function NeedDraftRow({
 }: NeedDraftRowProps) {
   const option = getNeedOption(row.need);
   const ordinal = `第 ${index + 1} 件`;
-  // Nobody knows yet how many are trapped; every other kind is counted (backend
-  // `QUANTITY_REQUIRED_TASK_TYPES`).
-  const quantityOptional = option?.kind === 'rescue';
 
   return (
     <Box
@@ -100,7 +97,7 @@ export function NeedDraftRow({
                 fontSize: displayTextSize[12],
               }}
             >
-              <DeleteOutlineRoundedIcon sx={{ fontSize: 14 }} />
+              <Icons.trash sx={{ fontSize: 14 }} />
               移除
             </ButtonBase>
           ) : null}
@@ -120,7 +117,7 @@ export function NeedDraftRow({
               key={choice.value}
               role="radio"
               aria-checked={checked}
-              onClick={() => onChange({ ...row, need: choice.value })}
+              onClick={() => onChange(chooseNeed(row, choice.value))}
               sx={{
                 minHeight: 40,
                 px: 2,
@@ -188,16 +185,14 @@ export function NeedDraftRow({
                 htmlInput: {
                   min: 1,
                   inputMode: 'numeric',
-                  'aria-required': !quantityOptional,
-                  'aria-label': `${ordinal}需要幾個／幾人${quantityOptional ? '（選填）' : ''}`,
+                  'aria-required': true,
+                  'aria-label': `${ordinal}需要幾個／幾人`,
                 },
               }}
             />
           </Box>
           <Typography sx={{ ...hintSx, color: color.fg.neutral.muted }}>
-            {quantityOptional
-              ? `說明留空就用「${option.label}」；人數不知道就留空，志工到現場再回報。`
-              : `說明留空就用「${option.label}」。`}
+            {`說明留空就用「${option.label}」。`}
           </Typography>
         </>
       ) : (

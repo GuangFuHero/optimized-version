@@ -1,9 +1,8 @@
 'use client';
 
-import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import { Box, Button, Stack, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../shell/site/site-badge';
 import {
@@ -28,7 +27,7 @@ export function SuspectedDuplicateBadge({ duplicates }: DuplicatesProps) {
 
   return (
     <SiteBadge tone="warning" variant="subtle">
-      <ContentCopyRoundedIcon sx={{ fontSize: 12 }} />
+      <Icons.copy sx={{ fontSize: 12 }} />
       疑似重複
     </SiteBadge>
   );
@@ -99,7 +98,7 @@ export function SuspectedDuplicateNotice({
             direction="row"
             sx={{ alignItems: 'flex-start', gap: 1 }}
           >
-            <ContentCopyRoundedIcon
+            <Icons.copy
               sx={{ mt: '4px', fontSize: 16, color: color.fg.warning }}
             />
             <Box sx={{ flex: 1, minWidth: 0 }}>

@@ -9,9 +9,6 @@ import {
   useState,
 } from 'react';
 
-import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
-import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
-import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 
 import { BuildingDrawer } from '../building';
@@ -57,6 +54,7 @@ import {
 import {
   designTokens,
   displayTextSize,
+  Icons,
   RowAction,
   safeAreaBottom,
 } from '@rescue-frontend/ui';
@@ -461,9 +459,9 @@ export function SiteListView() {
               <RowAction
                 icon={
                   showFullNeeds ? (
-                    <VisibilityRoundedIcon sx={ACTION_ICON} />
+                    <Icons.eye sx={ACTION_ICON} />
                   ) : (
-                    <VisibilityOffRoundedIcon sx={ACTION_ICON} />
+                    <Icons.eyeOff sx={ACTION_ICON} />
                   )
                 }
                 // Pages left unloaded once the list stops hold finished tickets, all full needs.
@@ -607,7 +605,7 @@ export function SiteListView() {
               displayMarker?.detailType === 'station'
                 ? {
                     label: '分享',
-                    icon: <ShareRoundedIcon />,
+                    icon: <Icons.share />,
                     onClick: () => openPointShare(displayMarker),
                   }
                 : undefined
@@ -658,7 +656,7 @@ export function SiteListView() {
             displayMarker?.detailType === 'station'
               ? {
                   label: '分享',
-                  icon: <ShareRoundedIcon />,
+                  icon: <Icons.share />,
                   onClick: () => openPointShare(displayMarker),
                 }
               : undefined

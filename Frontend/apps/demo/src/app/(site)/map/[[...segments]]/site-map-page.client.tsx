@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react';
 
 import dynamic from 'next/dynamic';
 
+import { preloadRescueMapCanvas } from '@rescue-frontend/modules';
+
+// Fetched as this page's code runs, not once the map has read the event and laid itself out: on a
+// slow connection that wait put the canvas and Leaflet behind everything else the page asks for.
+if (typeof window !== 'undefined') {
+  preloadRescueMapCanvas();
+}
+
 const SiteMapView = dynamic(
   () =>
     import('./site-map-view.client').then((module) => module.SiteMapView),

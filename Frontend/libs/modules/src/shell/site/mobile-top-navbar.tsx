@@ -5,10 +5,14 @@ import { Suspense } from 'react';
 import { Box, ButtonBase } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
-import { getRescueColorScheme, layoutSizes } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  getRescueColorScheme,
+  Icons,
+  layoutSizes,
+} from '@rescue-frontend/ui';
 
 import { SiteNotifyBell } from '../../notification';
-import { MenuGlyph } from './menu-glyph';
 import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
@@ -66,7 +70,7 @@ export function SiteMobileTopNavBar({
           },
         }}
       >
-        <MenuGlyph color={palette.brandText} />
+        <Icons.menu sx={{ fontSize: designTokens.iconSize.lg }} />
       </ButtonBase>
 
       <Box

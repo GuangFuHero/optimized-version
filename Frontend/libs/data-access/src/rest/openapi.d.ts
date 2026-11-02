@@ -1682,6 +1682,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/history/tickets/{uuid}/public': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * 求助單的公開時間軸
+     * @description What happened to this help request, newest first, without anyone's name (ADR-421).
+     *
+     *     No sign-in: the board is public (ADR-027), and what this tells is the same to everyone. Who
+     *     claimed a need is a count, who acted is a role, and a change to the contact details is told
+     *     without them.
+     */
+    get: operations['ticket_public_history_api_v1_history_tickets__uuid__public_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/history/stations/{uuid}': {
     parameters: {
       query?: never;
@@ -1716,7 +1740,7 @@ export interface paths {
      *     **type** — `satellite` or `road`
      *
      *     **source** — one of:
-     *     - satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)
+     *     - satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/jpeg), `sinica` (image/png)
      *     - road: `osm` (image/png), `carto` (image/png)
      *
      *     **z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)
@@ -3739,6 +3763,74 @@ export interface components {
        * @description Whether the item's field setting is still in use; null when there is none (ADR-447)
        */
       is_active?: boolean | null;
+    };
+    /**
+     * PublicHistoryEventResponse
+     * @description What happened to a ticket, and in what role, with nobody's name (ADR-421).
+     */
+    PublicHistoryEventResponse: {
+      /**
+       * Kind
+       * @description ticket_created / ticket_updated / ticket_merged / need_added / need_updated / need_filled / need_stopped / need_reopened / need_removed / volunteer_joined / volunteer_left
+       */
+      kind: string;
+      /**
+       * At
+       * Format: date-time
+       */
+      at: string;
+      /**
+       * Actor Role
+       * @description requester / volunteer / staff / system
+       */
+      actor_role: string;
+      /** @description 這個事件的需求（需求與承接事件） */
+      need?: components['schemas']['PublicNeedResponse'] | null;
+      /**
+       * Needs
+       * @description 建單時的需求（ticket_created）；重複審核合併帶進來的需求（ticket_merged）：整件搬過來的，和收下另一張單同類需求的，人數是合併後的
+       */
+      needs?: components['schemas']['PublicNeedResponse'][] | null;
+      /**
+       * Changes
+       * @description 改了什麼。標題、說明、地點、聯絡方式、受困／危險、需求名稱、進度備註、需求細項只有 changed=true；檢核不列（ADR-421）
+       */
+      changes?: components['schemas']['ChangeResponse'][];
+    };
+    /**
+     * PublicHistoryResponse
+     * @description The standard envelope around a page of the public timeline.
+     */
+    PublicHistoryResponse: {
+      /**
+       * Success
+       * @default true
+       */
+      success: boolean;
+      /** Data */
+      data: components['schemas']['PublicHistoryEventResponse'][];
+      meta: components['schemas']['HistoryMeta'];
+    };
+    /**
+     * PublicNeedResponse
+     * @description A need in an event: its name as it is now, and how many were coming of how many asked right after.
+     */
+    PublicNeedResponse: {
+      /**
+       * Name
+       * @description 需求現在的名稱（不是當時的，ADR-421）
+       */
+      name: string | null;
+      /**
+       * Matched
+       * @description 已承接人數
+       */
+      matched: number;
+      /**
+       * Required
+       * @description 需要人數；沒填為 null
+       */
+      required: number | null;
     };
     /**
      * RefreshRequest
@@ -7917,6 +8009,54 @@ export interface operations {
       };
     };
   };
+  ticket_public_history_api_v1_history_tickets__uuid__public_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path: {
+        uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PublicHistoryResponse'];
+        };
+      };
+      /** @description Not Found（不存在或已刪除） */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+      /** @description rate_limited */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   station_history_api_v1_history_stations__uuid__get: {
     parameters: {
       query?: {
@@ -8072,7 +8212,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
@@ -8092,7 +8232,7 @@ export interface operations {
         height?: number | null;
         /** @description JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{"title": {"text": "Custom title"}}'. */
         layout_overrides?: string | null;
-        /** @description Only tickets of this task type; the volunteer metrics read each need's own type. */
+        /** @description Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type. */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
@@ -8102,6 +8242,8 @@ export interface operations {
         town?: string | null;
         /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
+        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it. */
+        include_deleted?: boolean;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -8136,7 +8278,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
@@ -8146,7 +8288,7 @@ export interface operations {
         end_date?: string | null;
         /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
         tz: string;
-        /** @description Only tickets of this task type; the volunteer metrics read each need's own type. */
+        /** @description Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type. */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
@@ -8156,6 +8298,8 @@ export interface operations {
         town?: string | null;
         /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
+        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it. */
+        include_deleted?: boolean;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -8196,7 +8340,7 @@ export interface operations {
         end_date?: string | null;
         /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
         tz: string;
-        /** @description Only tickets of this task type; the volunteer metrics read each need's own type. */
+        /** @description Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type. */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
@@ -8206,6 +8350,8 @@ export interface operations {
         town?: string | null;
         /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
+        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it. */
+        include_deleted?: boolean;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -8240,7 +8386,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
@@ -8304,7 +8450,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
