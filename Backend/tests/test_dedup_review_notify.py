@@ -101,6 +101,7 @@ async def test_one_created_anyway_task_sends_one_notice(db, sent):
 
     (notice,) = _pending(sent)
     assert "1 筆" in notice["title"]
+    assert notice["params"] == {"count": 1}
     assert (notice["ref_type"], notice["ref_uuid"]) == ("dedup_review", None)
     assert notice["priority"] == "medium"
 
@@ -115,6 +116,7 @@ async def test_three_cards_in_one_submission_send_one_notice(db, sent):
 
     (notice,) = _pending(sent)
     assert "3 筆" in notice["title"]
+    assert notice["params"] == {"count": 3}
 
 
 async def test_a_submission_without_cards_sends_none(db, engine, sent):

@@ -49,9 +49,10 @@ async def test_notification_dispatch_actor_exclusion():
 
     results = await NotificationService.dispatch(
         db=mock_db,
-        event_type="ticket_task_status_update",
-        title="工單狀態更新",
-        body="任務已進入進行中狀態",
+        event_type="task_full",
+        title="「搬沙包」已經湊齊人了",
+        body="光復路淹水　你仍然在名單上，時間到請照常前往。",
+        params={"ticket_title": "光復路淹水", "task_name": "搬沙包"},
         priority="medium",
         actor_uuid=actor_id,
         ref_type="ticket_task",
@@ -68,9 +69,27 @@ async def test_notification_dispatch_actor_exclusion():
 
     for n in results:
         assert n.actor_uuid == actor_id
-        assert n.type == "ticket_task_status_update"
+        assert n.type == "task_full"
+        assert n.params == {"ticket_title": "光復路淹水", "task_name": "搬沙包"}
         assert n.priority == "medium"
         assert n.read is False
+
+
+@pytest.mark.asyncio
+async def test_dispatch_refuses_params_other_than_the_type_keys():
+    """A missing or an extra key is refused before anything is written, recipients or not."""
+    mock_db = AsyncMock()
+    for params in ({}, {"placement": "all", "excerpt": "內容"}):
+        with pytest.raises(ValueError, match="announcement_published needs params"):
+            await NotificationService.dispatch(
+                mock_db,
+                event_type="announcement_published",
+                title="公告",
+                body="內容",
+                params=params,
+                explicit_recipients=[],
+            )
+    mock_db.add_all.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -85,6 +104,7 @@ async def test_notification_dispatch_empty_recipients():
         event_type="announcement_published",
         title="公告",
         body="內容",
+        params={"placement": "all"},
         explicit_recipients=[],
     )
     assert res1 == []
@@ -95,6 +115,7 @@ async def test_notification_dispatch_empty_recipients():
         event_type="announcement_published",
         title="公告",
         body="內容",
+        params={"placement": "all"},
         actor_uuid=actor_id,
         explicit_recipients=[actor_id],
     )

@@ -612,6 +612,12 @@ async def test_an_issue_is_told_to_the_requester_and_the_volunteers_without_the_
         volunteer_uuid: "你報名的求助單「一樓客廳積泥需要幫忙清」資料可能有誤，出發前請先跟開單者確認。",
     }
     assert not any("電話打不通" in body for body in notices.values())
+    rows = await db.execute(select(Notification).where(Notification.type == "ticket_audit_issue"))
+    title = "一樓客廳積泥需要幫忙清"
+    assert {str(n.recipient_uuid): n.params for n in rows.scalars()} == {
+        requester_uuid: {"ticket_title": title, "recipient": "requester"},
+        volunteer_uuid: {"ticket_title": title, "recipient": "volunteer"},
+    }
 
 
 @pytest.mark.asyncio

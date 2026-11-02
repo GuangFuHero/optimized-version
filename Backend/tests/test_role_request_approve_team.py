@@ -97,6 +97,12 @@ async def test_a_super_admin_approves_a_new_team_and_the_applicant_admins_it(db)
     team = (await db.execute(select(Team).where(Team.name == "花蓮縣光復鄉公所"))).scalar_one()
     assert (team.type, team.status, approved.granted_team_uuid) == ("gov", "active", team.uuid)
     assert await _team_identities(db, citizen_uuid) == {("花蓮縣光復鄉公所", "admin")}
+    notice = await db.scalar(select(Notification).where(Notification.type == "role_request_approved"))
+    assert notice.params == {
+        "requested_role": "government",
+        "team_name": None,
+        "new_team_name": "花蓮縣光復鄉公所",
+    }
 
 
 @pytest.mark.asyncio
@@ -231,6 +237,7 @@ async def test_the_applicant_hears_which_team_they_joined(db):
     ).scalars()
     assert notice.recipient_uuid == citizen_uuid
     assert notice.body.startswith("你已加入「光復互助」。")
+    assert notice.params == {"requested_role": "ngo", "team_name": "光復互助", "new_team_name": None}
 
 
 @pytest.mark.asyncio
@@ -246,11 +253,19 @@ async def test_the_teams_admins_hear_of_a_member_request(db):
 
     await _apply(db, citizen, requested_role="ngo", team_uuid=team.uuid)
 
-    notices = (
-        await db.execute(select(Notification).where(Notification.type == "role_request_submitted"))
-    ).scalars()
+    notices = list(
+        (
+            await db.execute(select(Notification).where(Notification.type == "role_request_submitted"))
+        ).scalars()
+    )
     recipients = sorted(str(n.recipient_uuid) for n in notices)
     assert recipients == sorted({str(admin_uuid), str(reviewer_uuid)})
+    assert notices[0].params == {
+        "requested_role": "ngo",
+        "team_name": "光復在地互助協會",
+        "new_team_name": None,
+        "applicant_name": "申請人",
+    }
 
 
 @pytest.mark.asyncio

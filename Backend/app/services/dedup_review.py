@@ -385,6 +385,7 @@ async def notify_new_cards(db: AsyncSession, *, count: int, actor: User, actor_u
             event_type="dedup_review_pending",
             title=f"疑似重複待審核：{count} 筆",
             body=f"有 {count} 筆照樣建立的資料和既有的項目疑似重複，請到「重複審核」處理。",
+            params={"count": count},
             priority="medium",
             actor_uuid=actor_uuid,
             ref_type="dedup_review",

@@ -3621,6 +3621,13 @@ export interface components {
        */
       body: string;
       /**
+       * Params
+       * @description The values this type's sentence names, keyed per type; null on older rows
+       */
+      params?: {
+        [key: string]: unknown;
+      } | null;
+      /**
        * Read
        * @description Read status
        */
