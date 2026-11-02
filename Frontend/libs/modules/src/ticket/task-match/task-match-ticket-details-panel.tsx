@@ -2,8 +2,6 @@
 
 import { useMemo, type ReactNode } from 'react';
 
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Alert, Box, Stack, Typography } from '@mui/material';
 import { useQuery } from 'urql';
 
@@ -24,8 +22,9 @@ import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
 import { NeedRow, readTicketNeeds, useNeedClaim } from '../needs';
 import { PhotoThumb } from '../photos';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
+import { SuspectedDuplicateNotice } from '../suspected-duplicate-tag';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -135,6 +134,7 @@ export function TaskMatchTicketDetailsPanel({
   isAuthenticated = false,
   onOpenBuilding,
   onSelectTicket,
+  onOpenTicket,
 }: {
   marker: RescueMapMarkerItem;
   isAuthenticated?: boolean;
@@ -142,6 +142,8 @@ export function TaskMatchTicketDetailsPanel({
   onOpenBuilding?: (buildingUuid: string) => void;
   /** Open another ticket of the same building, from 上一張／下一張. */
   onSelectTicket?: (marker: RescueMapMarkerItem) => void;
+  /** Open a ticket by its uuid alone: one this ticket may repeat, from 看那張. */
+  onOpenTicket?: (ticketUuid: string) => void;
 }) {
   // The backend withheld this ticket's detail (ADR-281): the point is a cell centre, and the
   // free text, notes and photos came back empty. Rows for them are left out rather than shown as
@@ -216,6 +218,15 @@ export function TaskMatchTicketDetailsPanel({
       {/* At the very top, as the design has it: orange, not red, as the ticket stands. */}
       {auditNotice ? <Alert severity="warning">{auditNotice}</Alert> : null}
 
+      {/* Then 疑似重複, before the needs a volunteer would claim: a reminder, which holds no claim back. */}
+      <SuspectedDuplicateNotice
+        duplicates={
+          ticket?.suspectedDuplicateOf ??
+          marker.ticketMeta?.suspectedDuplicateOf
+        }
+        onOpenTicket={onOpenTicket}
+      />
+
       {ticketError ? (
         <Alert severity="error">
           {ticketError.message ?? '載入任務詳情失敗。'}
@@ -226,7 +237,7 @@ export function TaskMatchTicketDetailsPanel({
       {needs.length > 0 || isTicketFetching || canAddNeed ? (
         <SectionCard
           title={needs.length > 0 ? `需求（${needs.length} 筆）` : '需求'}
-          icon={<VolunteerActivismRoundedIcon sx={{ fontSize: 18 }} />}
+          icon={<Icons.heartHandshake sx={{ fontSize: 18 }} />}
         >
           {/* Under the title, not beside it: on a phone the two squeezed each other onto two lines. */}
           {needs.length > 1 ? (
@@ -270,7 +281,7 @@ export function TaskMatchTicketDetailsPanel({
           prototype does not show. */}
       <SectionCard
         title="任務資訊"
-        icon={<InfoOutlinedIcon sx={{ fontSize: 18 }} />}
+        icon={<Icons.info sx={{ fontSize: 18 }} />}
       >
         <Stack spacing={1.25}>
           <DetailRow

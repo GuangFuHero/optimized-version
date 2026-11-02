@@ -27,14 +27,28 @@ describe('submitErrorMessage', () => {
   });
 
   it('says what to fix when the form let through a need without a quantity, or too many', () => {
-    for (const kind of ['hr', 'supply', 'medical']) {
+    for (const kind of ['rescue', 'hr', 'supply', 'medical']) {
       expect(
         submitErrorMessage(refusal(`quantity is required for a ${kind} task`)),
-      ).toBe('每項需求都要填數量（人員受困除外）。');
+      ).toBe('每項需求都要填數量。');
     }
     expect(submitErrorMessage(refusal('At most 20 tasks are allowed'))).toBe(
       '一次最多 20 項需求。',
     );
+  });
+
+  it('says what to do when the building, its floor or the area picked is refused', () => {
+    expect(submitErrorMessage(refusal('Building map not found'))).toBe(
+      '這一棟已經不在了，可能剛被刪除。請關掉後重新選地點。',
+    );
+    expect(
+      submitErrorMessage(refusal("Floor '9F' is not in this building")),
+    ).toBe('這一棟沒有這一層，請關掉後重新選一層。');
+    expect(
+      submitErrorMessage(
+        refusal("Room on 1F must be one of ['閱覽室', '健身房'] or '其他'"),
+      ),
+    ).toBe('請從清單選你在這一層的哪一區，清單裡沒有就選「其他」。');
   });
 
   it('says only that it failed for every other refusal, whose words are about fields', () => {

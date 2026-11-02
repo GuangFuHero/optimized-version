@@ -1,7 +1,5 @@
 'use client';
 
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import HideImageOutlinedIcon from '@mui/icons-material/HideImageOutlined';
 import {
   Box,
   Button,
@@ -12,7 +10,7 @@ import {
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { PHOTO_LOAD_TIMEOUT_MS } from './photo-links';
 
@@ -153,7 +151,7 @@ export function PhotoThumb({
             textAlign: 'center',
           }}
         >
-          <HideImageOutlinedIcon
+          <Icons.imageOff
             sx={{ fontSize: 20, color: color.fg.neutral.muted }}
           />
           <Typography
@@ -261,7 +259,7 @@ export function PhotoThumb({
             color: color.fg.neutral.muted,
           }}
         >
-          <CloseRoundedIcon sx={{ fontSize: 14 }} />
+          <Icons.close sx={{ fontSize: 14 }} />
         </ButtonBase>
       ) : null}
     </Box>

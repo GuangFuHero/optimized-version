@@ -240,14 +240,67 @@ def test_a_quantity_equal_to_the_headcount_passes():
     assert _plan(claimants=claimants)
 
 
-def test_a_rescue_need_may_go_without_a_quantity():
-    """Rescue alone may have no quantity, and then has no cap."""
-    low = replace(LOW, tasks=(replace(LOW.tasks[0], task_type="rescue", quantity=None), LOW.tasks[1]))
-    high = replace(HIGH, tasks=(replace(HIGH.tasks[0], task_type="rescue", quantity=None), *HIGH.tasks[1:]))
+def _blank_a1(task_type: str) -> TicketForReview:
+    """A with a1 filed before every need had to say how many."""
+    return replace(LOW, tasks=(replace(LOW.tasks[0], quantity=None, task_type=task_type), LOW.tasks[1]))
+
+
+@pytest.mark.parametrize("task_type", ["rescue", "hr"])
+def test_a_need_filed_without_a_quantity_is_carried_over_without_one(task_type):
+    """Kept or moved on its own with its quantity left alone, a blank need stays blank, uncapped (ADR-448)."""
+    high = replace(
+        HIGH,
+        tasks=(
+            replace(HIGH.tasks[0], quantity=None, task_type=task_type),
+            HIGH.tasks[1],
+            replace(HIGH.tasks[2], quantity=None),
+        ),
+    )
+    a1 = {"task": _u("a1"), "action": "keep", "properties": [{"property": _u("pa1"), "action": "keep"}]}
+    a2 = {
+        "task": _u("a2"),
+        "action": "keep",
+        "absorb": [_u("b2")],
+        "values": {"quantity": 6},
+        "properties": [],
+    }
+    b1 = {"task": _u("b1"), "action": "move", "properties": [{"property": _u("pb1"), "action": "keep"}]}
+    request = _request(
+        primary_tasks=[a1, a2],
+        secondary_tasks=[b1, {"task": _u("b3"), "action": "move", "properties": []}],
+    )
+
+    nine = {_u("a1"): {f"p{n}" for n in range(9)}}
+
+    plan = _plan(request, low=_blank_a1(task_type), high=high, claimants=nine)
+
+    kept = {k.uuid: k for k in plan.kept_tasks}
+    assert (kept[_u("a1")].changes, kept[_u("a1")].headcount) == ({}, 9)
+    assert kept[_u("b1")].moved and kept[_u("b3")].moved
+
+
+@pytest.mark.parametrize("task_type", ["rescue", "hr"])
+def test_a_blank_need_that_absorbs_another_must_say_how_many(task_type):
+    """It takes in the other need's people, so left blank it would never fill (ADR-448)."""
+    high = replace(HIGH, tasks=(replace(HIGH.tasks[0], task_type=task_type), *HIGH.tasks[1:]))
     request = _request()
     request.primary_tasks[0].values = None
 
-    assert _plan(request, low=low, high=high, claimants={_u("a1"): {f"p{n}" for n in range(9)}})
+    message = _refused(request, low=_blank_a1(task_type), high=high)
+
+    assert f"quantity is required for a {task_type} task" in message
+
+
+def test_a_blank_need_that_absorbs_another_takes_the_quantity_given_and_its_cap():
+    """The quantity the merge gives it is checked against everyone on the needs folded together."""
+    seven = {_u("a1"): {"p1", "p2"}, _u("b1"): {"p3", "p4", "p5", "p6", "p7"}}
+
+    plan = _plan(low=_blank_a1("hr"), claimants=seven)
+
+    assert {k.uuid: k.changes for k in plan.kept_tasks}[_u("a1")] == {"quantity": 7}
+    assert "more than the quantity 7" in _refused(
+        low=_blank_a1("hr"), claimants={**seven, _u("b1"): seven[_u("b1")] | {"p8"}}
+    )
 
 
 # --- refusals (Spec 028 §3.4) -------------------------------------------------------------
@@ -338,12 +391,14 @@ def test_a_moved_need_is_held_to_its_own_headcount():
     assert "more than the quantity 3" in _refused(request, claimants=claimants)
 
 
-@pytest.mark.parametrize("quantity", [None, 0])
-def test_a_quantity_a_non_rescue_need_cannot_have_is_refused(quantity):
-    """Only rescue may go without a quantity, and none may ask for zero."""
+@pytest.mark.parametrize(("task_type", "quantity"), [("hr", None), ("hr", 0), ("rescue", None)])
+def test_a_quantity_a_need_cannot_have_is_refused(task_type, quantity):
+    """A merge may not clear a need's quantity, a rescue's included, nor ask for zero."""
+    low = replace(LOW, tasks=(replace(LOW.tasks[0], task_type=task_type), LOW.tasks[1]))
+    high = replace(HIGH, tasks=(replace(HIGH.tasks[0], task_type=task_type), *HIGH.tasks[1:]))
     request = _request()
     request.primary_tasks[0].values.quantity = quantity
-    message = _refused(request)
+    message = _refused(request, low=low, high=high)
     assert "quantity" in message
 
 

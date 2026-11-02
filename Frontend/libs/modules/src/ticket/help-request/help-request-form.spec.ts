@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canAddNeedRow,
+  chooseNeed,
   emptyHelpRequestForm,
   emptyNeed,
   findMissingFields,
-  hasRescueNeed,
   isQuantityMissing,
   MAX_NEEDS,
+  rescueNeedRow,
   SITE_NEED_OPTIONS,
   toHelpRequestInput,
   type HelpRequestForm,
@@ -27,9 +28,12 @@ function filledForm(overrides: Partial<HelpRequestForm> = {}): HelpRequestForm {
     needs: [{ need: 'cleanup', name: '', quantity: '2' }],
     description: '',
     photoUrls: [],
+    building: null,
     ...overrides,
   };
 }
+
+const BUILDING = '20000000-0000-4000-8000-000000000101';
 
 describe('SITE_NEED_OPTIONS', () => {
   it('maps each choice to a kind of need the server accepts (backend TASK_TYPES)', () => {
@@ -62,6 +66,35 @@ describe('findMissingFields', () => {
     expect(findMissingFields(filledForm())).toEqual([]);
   });
 
+  it("asks no landmark or address of one filed in a building: they are the building's", () => {
+    expect(
+      findMissingFields(
+        filledForm({ building: BUILDING, landmark: null, address: '' }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('never lets one on a building floor with areas go without one of them: blank, typed or gone', () => {
+    const areas = ['閱覽室', '走廊', '其他'];
+    const onFloor = (room: string) =>
+      findMissingFields(
+        filledForm({ building: BUILDING, floor: '3F', room }),
+        areas,
+      ).map((field) => field.key);
+
+    expect(onFloor('')).toEqual(['area']);
+    expect(onFloor('302室')).toEqual(['area']);
+    expect(onFloor('閱覽室')).toEqual([]);
+    expect(onFloor('其他')).toEqual([]);
+  });
+
+  it('asks no area of a building floor without areas, nor of a request filed at a point', () => {
+    expect(
+      findMissingFields(filledForm({ building: BUILDING, floor: '3F' })),
+    ).toEqual([]);
+    expect(findMissingFields(filledForm(), ['閱覽室', '其他'])).toEqual([]);
+  });
+
   it('takes a field of spaces as empty', () => {
     const keys = findMissingFields(
       filledForm({ title: '  ', address: ' ', contactName: '　' }),
@@ -88,13 +121,12 @@ describe('findMissingFields', () => {
     ).toEqual([]);
   });
 
-  it('asks how many for every chosen need but a rescue (backend QUANTITY_REQUIRED_TASK_TYPES)', () => {
+  it('asks how many for every chosen need, once', () => {
     const missing = findMissingFields(
       filledForm({
         needs: [
           { need: 'cleanup', name: '', quantity: '' },
           { need: 'supplies', name: '', quantity: ' ' },
-          { need: 'rescue', name: '', quantity: '' },
         ],
       }),
     );
@@ -102,11 +134,19 @@ describe('findMissingFields', () => {
     expect(missing).toEqual([{ key: 'quantity', label: '需求的數量' }]);
   });
 
+  it('asks how many for a rescue too: one person at least, and recruiting stops once they come', () => {
+    expect(
+      findMissingFields(
+        filledForm({ needs: [{ need: 'rescue', name: '', quantity: '' }] }),
+      ),
+    ).toEqual([{ key: 'quantity', label: '需求的數量' }]);
+  });
+
   it('asks for the quantity once a kind is chosen, after asking for one at all', () => {
     expect(
       findMissingFields(
         filledForm({
-          needs: [{ need: 'rescue', name: '', quantity: '' }, emptyNeed()],
+          needs: [{ need: 'rescue', name: '', quantity: '1' }, emptyNeed()],
         }),
       ),
     ).toEqual([]);
@@ -114,7 +154,7 @@ describe('findMissingFields', () => {
 });
 
 describe('isQuantityMissing', () => {
-  it('flags a chosen need left without a quantity, a rescue excepted', () => {
+  it('flags a chosen need left without a quantity, a rescue too', () => {
     expect(isQuantityMissing({ need: 'cleanup', name: '', quantity: '' })).toBe(
       true,
     );
@@ -122,7 +162,7 @@ describe('isQuantityMissing', () => {
       isQuantityMissing({ need: 'supplies', name: '', quantity: ' ' }),
     ).toBe(true);
     expect(isQuantityMissing({ need: 'rescue', name: '', quantity: '' })).toBe(
-      false,
+      true,
     );
     expect(isQuantityMissing({ need: 'repair', name: '', quantity: '3' })).toBe(
       false,
@@ -131,6 +171,42 @@ describe('isQuantityMissing', () => {
 
   it('leaves a row nobody chose a kind for to the need check', () => {
     expect(isQuantityMissing(emptyNeed())).toBe(false);
+  });
+});
+
+describe('chooseNeed', () => {
+  it('starts a rescue at one person, the least it may ask for, when nothing is typed yet', () => {
+    expect(chooseNeed(emptyNeed(), 'rescue')).toEqual({
+      need: 'rescue',
+      name: '',
+      quantity: '1',
+    });
+    expect(
+      chooseNeed({ need: 'cleanup', name: '找人', quantity: ' ' }, 'rescue'),
+    ).toEqual({ need: 'rescue', name: '找人', quantity: '1' });
+  });
+
+  it('keeps a quantity already typed, and leaves the other kinds blank for the requester to count', () => {
+    expect(
+      chooseNeed({ need: 'cleanup', name: '', quantity: '3' }, 'rescue'),
+    ).toEqual({ need: 'rescue', name: '', quantity: '3' });
+    expect(chooseNeed(emptyNeed(), 'cleanup')).toEqual({
+      need: 'cleanup',
+      name: '',
+      quantity: '',
+    });
+  });
+
+  it('gives the one back when a rescue still at it changes kind, and keeps any other count', () => {
+    expect(
+      chooseNeed({ need: 'rescue', name: '找人', quantity: '1' }, 'cleanup'),
+    ).toEqual({ need: 'cleanup', name: '找人', quantity: '' });
+    expect(
+      chooseNeed({ need: 'rescue', name: '', quantity: '4' }, 'cleanup'),
+    ).toEqual({ need: 'cleanup', name: '', quantity: '4' });
+    expect(
+      chooseNeed({ need: 'supplies', name: '', quantity: '1' }, 'cleanup'),
+    ).toEqual({ need: 'cleanup', name: '', quantity: '1' });
   });
 });
 
@@ -149,20 +225,31 @@ describe('canAddNeedRow', () => {
   });
 });
 
-describe('hasRescueNeed', () => {
-  it('is true once someone is trapped or hurt, for the 119 notice at the top', () => {
+describe('rescueNeedRow', () => {
+  it('is the row with someone trapped or hurt, for the 119 notice under it', () => {
     expect(
-      hasRescueNeed([
+      rescueNeedRow([
         { need: 'cleanup', name: '', quantity: '' },
         { need: 'rescue', name: '', quantity: '' },
+        { need: 'repair', name: '', quantity: '' },
       ]),
-    ).toBe(true);
+    ).toBe(1);
   });
 
-  it('is false for other needs and rows not chosen yet', () => {
+  it('is the first of two such rows, so the notice shows once', () => {
     expect(
-      hasRescueNeed([emptyNeed(), { need: 'repair', name: '', quantity: '' }]),
-    ).toBe(false);
+      rescueNeedRow([
+        { need: 'cleanup', name: '', quantity: '' },
+        { need: 'rescue', name: '', quantity: '' },
+        { need: 'rescue', name: '', quantity: '' },
+      ]),
+    ).toBe(1);
+  });
+
+  it('is none for other needs and rows not chosen yet', () => {
+    expect(
+      rescueNeedRow([emptyNeed(), { need: 'repair', name: '', quantity: '' }]),
+    ).toBe(-1);
   });
 });
 
@@ -181,6 +268,54 @@ describe('toHelpRequestInput', () => {
 
   it('starts a form with no address looked up', () => {
     expect(emptyHelpRequestForm().addressFilled).toBeNull();
+  });
+
+  it("starts on a building's floor, filed in that building, its address and the floor filled in", () => {
+    const point = { lat: 23.67, lng: 121.43, source: 'seed' as const };
+    const form = emptyHelpRequestForm(point, {
+      buildingUuid: BUILDING,
+      address: '花蓮縣光復鄉大進路12號',
+      floor: '3F',
+    });
+
+    expect(form).toMatchObject({
+      landmark: point,
+      building: BUILDING,
+      address: '花蓮縣光復鄉大進路12號',
+      floor: '3F',
+      room: '',
+      addressFilled: null,
+    });
+    expect(
+      emptyHelpRequestForm(point, {
+        buildingUuid: BUILDING,
+        address: null,
+        floor: 'B1',
+      }),
+    ).toMatchObject({ address: '', floor: 'B1' });
+    expect(emptyHelpRequestForm(point).building).toBeNull();
+  });
+
+  it('files one in a building there: no point beside it, and only the floor and room of the address', () => {
+    const input = toHelpRequestInput(
+      filledForm({
+        building: BUILDING,
+        address: '花蓮縣光復鄉大進路12號',
+        floor: '3F',
+        room: ' 閱覽室 ',
+      }),
+    );
+
+    expect(input.buildingMapUuid).toBe(BUILDING);
+    expect(input.geometry).toBeUndefined();
+    expect(input.secondaryLocation).toEqual({ floor: '3F', room: '閱覽室' });
+  });
+
+  it("leaves a building's floor unsaid when the requester does not know it", () => {
+    expect(
+      toHelpRequestInput(filledForm({ building: BUILDING, floor: ' ' }))
+        .secondaryLocation,
+    ).toEqual({ floor: null, room: null });
   });
 
   it('sends the point as GeoJSON, longitude first', () => {
@@ -265,14 +400,14 @@ describe('toHelpRequestInput', () => {
         needs: [
           { need: 'supplies', name: '晚餐便當', quantity: '3' },
           emptyNeed(),
-          { need: 'rescue', name: '', quantity: '' },
+          { need: 'rescue', name: '', quantity: '1' },
         ],
       }),
     );
 
     expect(input.tasks).toEqual([
       { taskType: 'supply', taskName: '晚餐便當', quantity: 3 },
-      { taskType: 'rescue', taskName: '人員受困／急難', quantity: null },
+      { taskType: 'rescue', taskName: '人員受困／急難', quantity: 1 },
     ]);
   });
 
@@ -307,17 +442,17 @@ describe('toHelpRequestInput', () => {
     expect(input.tasks[0].taskName).toBe('陪同／照顧');
   });
 
-  it("leaves a rescue's unknown quantity unknown, and never asks for fewer than one", () => {
+  it('never asks for fewer than one, a rescue included', () => {
     const quantities = toHelpRequestInput(
       filledForm({
         needs: [
-          { need: 'rescue', name: '', quantity: ' ' },
+          { need: 'rescue', name: '', quantity: '0' },
           { need: 'cleanup', name: '', quantity: '0' },
           { need: 'cleanup', name: '', quantity: '2.5' },
         ],
       }),
     ).tasks.map((task) => task.quantity);
 
-    expect(quantities).toEqual([null, 1, 2]);
+    expect(quantities).toEqual([1, 1, 2]);
   });
 });

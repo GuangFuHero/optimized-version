@@ -1,20 +1,25 @@
 'use client';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
-import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
-import ShieldRoundedIcon from '@mui/icons-material/Shield';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  RowAction,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { SiteBadge } from '../shell/site/site-badge';
 import { resolveStationAvailability } from '../station/availability';
-import { getStationTypeIcon } from '../station/type-options';
+import { getStationTypeIcon } from '../station/station-type-icon';
 import { NeedLine, type TicketNeed } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
 import { getTicketStatusTone } from '../ticket/status';
+import {
+  SuspectedDuplicateBadge,
+  SuspectedDuplicateLine,
+} from '../ticket/suspected-duplicate-tag';
 
 const { color, radius, shadow, spacing, motion, iconSize } = designTokens;
 
@@ -30,6 +35,10 @@ interface SiteListRowProps {
 
 const ICON_SIZE = 18;
 const ACTION_ICON = { fontSize: iconSize.sm } as const;
+// From this width of the card's text column on (a container query, in MUI's `@` shorthand), the
+// badges sit beside the title: a guest's 最高優先, 疑似重複, 概略位置 and status take some 370px at a
+// phone's text size, which leaves the title about 110px.
+const BADGES_BESIDE_TITLE = '@480';
 
 /**
  * 列表單列：顯示標題、分類標籤與摘要，選取時切換選中樣式。
@@ -50,7 +59,7 @@ export function SiteListRow({
   const isStation = marker.detailType === 'station';
   const TypeIcon = isStation
     ? getStationTypeIcon(marker.stationMeta?.type)
-    : AssignmentRoundedIcon;
+    : Icons.clipboardList;
   const needs =
     marker.detailType === 'ticket' ? (listedNeeds ?? marker.needs ?? []) : [];
   const availability = isStation
@@ -107,39 +116,57 @@ export function SiteListRow({
             />
           </Box>
 
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ flex: 1, minWidth: 0, containerType: 'inline-size' }}>
+            {/* On a narrow card — a phone's, or a tablet's with a ticket open beside the list — the
+                badges take a line of their own, under the title and the status: they do not shrink,
+                and beside a guest's 概略位置 they squeezed the title to nothing. */}
             <Stack
               direction="row"
               sx={{
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: `${spacing[2]}px`,
+                flexWrap: { '@': 'wrap', [BADGES_BESIDE_TITLE]: 'nowrap' },
+                columnGap: 0.75,
+                rowGap: 0.5,
               }}
             >
+              <Typography
+                sx={{
+                  flex: { '@': '1 1 0', [BADGES_BESIDE_TITLE]: '0 1 auto' },
+                  minWidth: 0,
+                  fontSize: displayTextSize[15],
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                  color: color.fg.neutral.default,
+                }}
+                noWrap
+              >
+                {marker.title}
+              </Typography>
               <Stack
                 direction="row"
-                sx={{ alignItems: 'center', gap: 0.75, minWidth: 0 }}
+                sx={{
+                  order: { '@': 1, [BADGES_BESIDE_TITLE]: 0 },
+                  flexBasis: { '@': '100%', [BADGES_BESIDE_TITLE]: 'auto' },
+                  flexShrink: 0,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  // No empty line under the title for a card with no badge.
+                  '&:empty': { display: 'none' },
+                }}
               >
-                <Typography
-                  sx={{
-                    fontSize: displayTextSize[15],
-                    fontWeight: 700,
-                    lineHeight: 1.4,
-                    color: color.fg.neutral.default,
-                  }}
-                  noWrap
-                >
-                  {marker.title}
-                </Typography>
                 {/* How urgent, beside the title as the prototype has it (2026-09-21). */}
                 <TicketPriorityBadge
                   priority={marker.ticketMeta?.priority}
                   high="solid"
                 />
+                <SuspectedDuplicateBadge
+                  duplicates={marker.ticketMeta?.suspectedDuplicateOf}
+                />
                 {/* 官方認定：只有官方站點掛 chip，非官方不掛。 */}
                 {isStation && marker.stationMeta?.isOfficial ? (
                   <SiteBadge tone="secondary" variant="subtle">
-                    <ShieldRoundedIcon sx={{ fontSize: 12 }} />
+                    <Icons.shieldCheck sx={{ fontSize: 12 }} />
                     官方
                   </SiteBadge>
                 ) : null}
@@ -147,7 +174,7 @@ export function SiteListRow({
                     front that this ticket's place is a region (ADR-281). */}
                 {marker.locationCell ? (
                   <SiteBadge tone="neutral" variant="subtle">
-                    <HexagonOutlinedIcon sx={{ fontSize: 12 }} />
+                    <Icons.hexagon sx={{ fontSize: 12 }} />
                     概略位置
                   </SiteBadge>
                 ) : null}
@@ -158,10 +185,15 @@ export function SiteListRow({
                   getTicketStatusTone(marker.ticketMeta?.status)
                 }
                 variant="solid"
+                sx={{ flexShrink: 0, ml: { [BADGES_BESIDE_TITLE]: 'auto' } }}
               >
                 {availability?.headline ?? marker.label}
               </SiteBadge>
             </Stack>
+
+            <SuspectedDuplicateLine
+              duplicates={marker.ticketMeta?.suspectedDuplicateOf}
+            />
 
             <Typography
               sx={{
@@ -207,7 +239,7 @@ export function SiteListRow({
           }}
         >
           <RowAction
-            icon={<ShareRoundedIcon sx={ACTION_ICON} />}
+            icon={<Icons.share sx={ACTION_ICON} />}
             label="分享"
             onClick={onShare}
             aria-label={`分享 ${marker.title}`}
