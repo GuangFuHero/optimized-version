@@ -10,14 +10,28 @@ describe('ticketStatTiles', () => {
     gapNeeds: 14,
   };
 
-  it('gives 全部 and each status, 已取消 too, a tile to filter by', () => {
+  it('gives 全部 and the statuses still worked on a tile to filter by, 已取消 none', () => {
     expect(ticketStatTiles(stats).items).toEqual([
-      { key: 'all', label: '全部', count: 9 },
+      {
+        key: 'all',
+        label: '全部',
+        count: { main: '9', sub: '含已取消 1' },
+        title: '全部 9 張，其中 1 張已取消（不另列一格）',
+      },
       { key: 'pending', label: '待處理', count: 4 },
       { key: 'in_progress', label: '處理中', count: 3 },
       { key: 'completed', label: '已完成', count: 1 },
-      { key: 'cancelled', label: '已取消', count: 1 },
     ]);
+  });
+
+  it('writes no 含已取消 under 全部 when none is cancelled', () => {
+    const [all] = ticketStatTiles({
+      ...stats,
+      total: 8,
+      byStatus: { ...stats.byStatus, cancelled: 0 },
+    }).items;
+    expect(all).toEqual({ key: 'all', label: '全部', count: 8 });
+    expect(all).not.toHaveProperty('title');
   });
 
   it('splits the volunteer gap into the people short and the needs short of them', () => {
@@ -37,7 +51,6 @@ describe('ticketStatTiles', () => {
       null,
       null,
       null,
-      null,
     ]);
     expect(tiles.gap).toBeNull();
   });
@@ -49,7 +62,7 @@ describe('ticketStatTiles', () => {
       gapPeople: 0,
       gapNeeds: 0,
     });
-    expect(tiles.items.map((item) => item.count)).toEqual([0, 0, 0, 0, 0]);
+    expect(tiles.items.map((item) => item.count)).toEqual([0, 0, 0, 0]);
     expect(tiles.gap).toBe(0);
   });
 });

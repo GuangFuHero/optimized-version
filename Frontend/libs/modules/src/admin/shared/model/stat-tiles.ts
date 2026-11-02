@@ -8,7 +8,7 @@ export type StatTileCount = number | null;
 export interface StatTileItem<K extends string = string> {
   key: K | typeof STAT_TILE_ALL;
   label: string;
-  count: StatTileCount;
+  count: StatTileCount | StatTileParts;
   /** What hovering the tile says, instead of 只看「…」 or 再點一次取消篩選. */
   title?: string;
 }
@@ -21,7 +21,7 @@ export interface StatTileParts {
 
 /**
  * Whether the counts' last answer was a failure. It stays so while 重試 tries again, which clears the
- * query's error, so the Callout holds its place instead of going and coming back.
+ * query's error, so the line saying so holds its place instead of going and coming back.
  */
 export function statCountsFailed(query: {
   errorUpdatedAt: number;
