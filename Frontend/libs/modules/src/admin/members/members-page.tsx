@@ -82,11 +82,17 @@ function usePersonActions(
     uuid: string;
     name: string;
   } | null>(null);
+  // 指派為超級管理員 and 改回一般帳號 confirm first, as 撤銷超級管理員 does.
+  const [granting, setGranting] = useState<{
+    uuid: string;
+    name: string;
+    role: 'super_admin' | 'user';
+  } | null>(null);
   const supers = superAdminCount(users);
 
   const assign = (
     person: { uuid: string; name: string },
-    role: 'super_admin' | 'data_auditor',
+    role: 'super_admin' | 'data_auditor' | 'user',
   ) =>
     assignRole.mutate(
       {
@@ -98,9 +104,12 @@ function usePersonActions(
           toast.success(
             role === 'super_admin'
               ? `已指派 ${person.name} 為超級管理員`
-              : `已撤銷 ${person.name} 的超級管理員`,
+              : role === 'user'
+                ? `已將 ${person.name} 改回一般帳號`
+                : `已撤銷 ${person.name} 的超級管理員`,
           );
           setRevokingSuper(null);
+          setGranting(null);
         },
       },
     );
@@ -110,7 +119,13 @@ function usePersonActions(
       ? [
           {
             label: '指派為超級管理員',
-            onSelect: () => assign(person, 'super_admin'),
+            onSelect: () => setGranting({ ...person, role: 'super_admin' }),
+          },
+          // Assigning `user` takes the platform role away (019/ADR-294).
+          {
+            label: '改回一般帳號',
+            tone: 'danger' as const,
+            onSelect: () => setGranting({ ...person, role: 'user' }),
           },
         ]
       : []),
@@ -160,6 +175,31 @@ function usePersonActions(
           >
             撤銷後改為{platformLabel('data_auditor')}
             ，保留全域檢核的工作，但不再能管理成員與權限。
+          </Typography>
+        </Dialog>
+      ) : null}
+      {granting ? (
+        <Dialog
+          open
+          title={
+            granting.role === 'super_admin'
+              ? `指派 ${granting.name} 為超級管理員`
+              : `將 ${granting.name} 改回一般帳號`
+          }
+          confirmLabel={
+            granting.role === 'super_admin' ? '確認指派' : '確認改回'
+          }
+          confirmTone={granting.role === 'super_admin' ? 'primary' : 'danger'}
+          submitting={assignRole.isPending}
+          onClose={() => setGranting(null)}
+          onConfirm={() => assign(granting, granting.role)}
+        >
+          <Typography
+            sx={{ ...typography.body[400], color: color.fg.neutral.default }}
+          >
+            {granting.role === 'super_admin'
+              ? '新的超級管理員將擁有與您相同的最高權限，可互相撤銷（平台至少保留 1 位）。'
+              : `改回後不再是${platformLabel('data_auditor')}，失去全域檢核的權限；帳號與團隊身分都保留。`}
           </Typography>
         </Dialog>
       ) : null}

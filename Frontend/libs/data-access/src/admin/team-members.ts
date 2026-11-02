@@ -1,12 +1,15 @@
-/** Read every page before building a roster or checking its last administrator. */
-export async function readAllTeamMembers<T>(
+/**
+ * Read every page: a roster or its last-administrator check, and the review queue, whose badge and
+ * kind chips would otherwise stop at the backend's first page.
+ */
+export async function readAllPages<T>(
   readPage: (skip: number, limit: number) => Promise<T[]>,
   pageSize = 200,
 ): Promise<T[]> {
-  const members: T[] = [];
+  const rows: T[] = [];
   for (;;) {
-    const page = await readPage(members.length, pageSize);
-    members.push(...page);
-    if (page.length < pageSize) return members;
+    const page = await readPage(rows.length, pageSize);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
   }
 }

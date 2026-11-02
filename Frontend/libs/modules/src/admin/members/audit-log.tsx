@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 import { Box, Chip, Stack, Typography } from '@mui/material';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useAuditLogs } from '@rescue-frontend/data-access/admin';
 import {
@@ -42,6 +42,13 @@ const CATEGORIES: { id: Filter; label: string }[] = [
   { id: 'request', label: '申請審核' },
   { id: 'qr', label: 'QR 邀請' },
 ];
+
+/**
+ * 全部 asks the backend for every audited table and keeps the team and membership rows, so a page
+ * can hold none of them on a busy deployment. It reads on, up to this many pages, until there is
+ * something to show, instead of looking empty when it isn't.
+ */
+const ALL_PAGES_TO_SCAN = 10;
 
 const CATEGORY_ICON: Record<AuditCategory, LucideIcon> = {
   team: Building2,
@@ -97,6 +104,17 @@ export function AuditLog({
     [logs.data, lookups],
   );
 
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = logs;
+  const pagesRead = logs.data?.pages.length ?? 0;
+  const scanning =
+    category === 'all' &&
+    entries.length === 0 &&
+    hasNextPage &&
+    pagesRead < ALL_PAGES_TO_SCAN;
+  useEffect(() => {
+    if (scanning && !isFetchingNextPage) void fetchNextPage();
+  }, [scanning, isFetchingNextPage, fetchNextPage]);
+
   return (
     <Stack sx={{ gap: 1.75 }}>
       <Stack
@@ -114,7 +132,7 @@ export function AuditLog({
           />
         ))}
       </Stack>
-      {logs.isPending ? (
+      {logs.isPending || scanning ? (
         <Typography sx={captionSx}>載入中…</Typography>
       ) : logs.isError ? (
         <Callout tone="danger">無法載入操作紀錄，請重新整理再試一次。</Callout>
@@ -123,8 +141,16 @@ export function AuditLog({
           {entries.length === 0 ? (
             <EmptyState
               icon={<ScrollText />}
-              title="此範圍內沒有紀錄"
-              description="建立或暫停團隊、成員加入或移出、指派平台角色、產生邀請 QR，都會自動記在這裡，誰在什麼時候做的一目了然。"
+              title={
+                hasNextPage
+                  ? '最近的紀錄裡沒有團隊或成員的操作'
+                  : '此範圍內沒有紀錄'
+              }
+              description={
+                hasNextPage
+                  ? '可以按「載入更早的紀錄」再往前找。'
+                  : '建立或暫停團隊、成員加入或移出、指派平台角色、產生邀請 QR，都會自動記在這裡，誰在什麼時候做的一目了然。'
+              }
             />
           ) : (
             entries.map((entry) => {
@@ -197,7 +223,7 @@ export function AuditLog({
           )}
         </Panel>
       )}
-      {logs.hasNextPage ? (
+      {logs.hasNextPage && !scanning ? (
         <Button
           variant="outline"
           size="sm"

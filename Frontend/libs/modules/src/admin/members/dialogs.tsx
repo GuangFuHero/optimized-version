@@ -132,6 +132,8 @@ export function ReasonDialog({
         required
         multiline
         minRows={3}
+        // The backend refuses a longer note with an English 422.
+        inputProps={{ maxLength: 500 }}
         value={reason}
         placeholder="請說明原因…"
         onChange={(event) => setReason(event.target.value)}
@@ -160,7 +162,10 @@ export function CreateTeamDialog({
   const trimmed = name.trim();
   const nameError = !trimmed
     ? '請輸入團隊名稱'
-    : teams.some((team) => team.name === trimmed)
+    : // Taken ignoring case and surrounding spaces, as the backend and 編輯團隊資料 check it.
+      teams.some(
+          (team) => team.name.trim().toLowerCase() === trimmed.toLowerCase(),
+        )
       ? '已有同名的團隊'
       : undefined;
   const taxIdError =

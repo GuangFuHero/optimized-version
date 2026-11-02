@@ -15,7 +15,7 @@ import {
   invalidateTicketWrite,
   type AdminQueryOptions,
 } from './graphql-fetchers';
-import { readAllTeamMembers } from './team-members';
+import { readAllPages } from './team-members';
 import { ticketKeys } from './ticket-query-keys';
 
 export const currentUserQuery = () =>
@@ -107,7 +107,7 @@ export const teamMembersQuery = (teamUuid: string) =>
   queryOptions({
     queryKey: ['admin', 'teams', 'TeamMembers', { teamUuid }],
     queryFn: ({ signal }): Promise<TeamMember[]> =>
-      readAllTeamMembers((skip, limit) =>
+      readAllPages((skip, limit) =>
         adminRestClient
           .GET('/api/v1/admin/teams/{team_uuid}/members', {
             params: { path: { team_uuid: teamUuid }, query: { skip, limit } },
@@ -528,13 +528,22 @@ export interface RoleRequestsParams {
   query?: RoleRequestsQuery;
 }
 
+/**
+ * Every matching request, page by page: the backend's first page holds only the oldest 100, so
+ * the queue's badge and kind chips would miss whatever waits behind them.
+ */
 export const roleRequestsQuery = (params: RoleRequestsParams = {}) =>
   queryOptions({
     queryKey: ['admin', 'role-requests', 'RoleRequests', params],
     queryFn: ({ signal }) =>
-      adminRestClient
-        .GET('/api/v1/admin/role-requests', { params, signal })
-        .then(responseData),
+      readAllPages((skip, limit) =>
+        adminRestClient
+          .GET('/api/v1/admin/role-requests', {
+            params: { ...params, query: { ...params.query, skip, limit } },
+            signal,
+          })
+          .then(responseData),
+      ),
   });
 
 export function useRoleRequests(

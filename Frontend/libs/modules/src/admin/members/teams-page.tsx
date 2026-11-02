@@ -83,8 +83,12 @@ type Blocked = { title: string; body: string } | null;
 function useRosterActions(team: Team, roster: readonly RosterMember[]) {
   const addMember = useAddTeamMember();
   const removeMember = useRemoveTeamMember();
+  const { data: self } = useCurrentUser();
   const [blocked, setBlocked] = useState<Blocked>(null);
   const [removing, setRemoving] = useState<RosterMember | null>(null);
+  // Demoting yourself loses this team's admin rights on one click, so the own row asks first.
+  const [demotingSelf, setDemotingSelf] = useState<RosterMember | null>(null);
+  const isSelf = (member: RosterMember) => member.uuid === self?.uuid;
 
   const setRole = (member: RosterMember, role: 'admin' | 'member') =>
     addMember.mutate(
@@ -93,12 +97,14 @@ function useRosterActions(team: Team, roster: readonly RosterMember[]) {
         body: { user_uuid: member.uuid, team_role_name: role },
       },
       {
-        onSuccess: () =>
+        onSuccess: () => {
           toast.success(
             role === 'admin'
               ? `${member.name} 已升為管理員`
               : `${member.name} 已降為成員`,
-          ),
+          );
+          setDemotingSelf(null);
+        },
       },
     );
 
@@ -113,7 +119,9 @@ function useRosterActions(team: Team, roster: readonly RosterMember[]) {
                   title: '無法降級此成員',
                   body: `${member.name} 是「${team.name}」目前唯一一位管理員。請先將另一位成員升為管理員接班，才能降級。`,
                 })
-              : setRole(member, 'member'),
+              : isSelf(member)
+                ? setDemotingSelf(member)
+                : setRole(member, 'member'),
         },
     {
       label: '移除出隊',
@@ -138,10 +146,32 @@ function useRosterActions(team: Team, roster: readonly RosterMember[]) {
           onClose={() => setBlocked(null)}
         />
       ) : null}
+      {demotingSelf ? (
+        <Dialog
+          open
+          title="將自己降為成員"
+          confirmLabel="確認降級"
+          confirmTone="danger"
+          submitting={addMember.isPending}
+          onClose={() => setDemotingSelf(null)}
+          onConfirm={() => setRole(demotingSelf, 'member')}
+        >
+          <Typography
+            sx={{ ...typography.body[400], color: color.fg.neutral.default }}
+          >
+            這是你自己。降級後你在「{team.name}
+            」只剩成員身分，不能再管理這一隊；要恢復，需由這一隊的其他管理員把你升回管理員。
+          </Typography>
+        </Dialog>
+      ) : null}
       {removing ? (
         <Dialog
           open
-          title={`將 ${removing.name} 移除出隊`}
+          title={
+            isSelf(removing)
+              ? `將自己移出「${team.name}」`
+              : `將 ${removing.name} 移除出隊`
+          }
           confirmLabel="確認移除"
           confirmTone="danger"
           submitting={removeMember.isPending}
@@ -165,8 +195,9 @@ function useRosterActions(team: Team, roster: readonly RosterMember[]) {
           <Typography
             sx={{ ...typography.body[400], color: color.fg.neutral.default }}
           >
-            僅移除其在「{team.name}
-            」的歸屬，不影響其在其他團隊的身份，也不變更其平台角色。
+            {isSelf(removing)
+              ? `這是你自己。移除後你會失去在「${team.name}」的身分，不能再以這一隊的身分操作；其他團隊的身分與平台角色不受影響。`
+              : `僅移除其在「${team.name}」的歸屬，不影響其在其他團隊的身份，也不變更其平台角色。`}
           </Typography>
         </Dialog>
       ) : null}

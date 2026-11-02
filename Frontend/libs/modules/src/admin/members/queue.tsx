@@ -336,7 +336,11 @@ export function RoleRequestQueue({ teamUuid }: { teamUuid?: string }) {
                 },
                 onError: (error) => {
                   showDecisionConflict(error);
-                  setRejecting(null);
+                  // Only a 409 means the request has left the queue; otherwise keep the reason
+                  // that was typed for another try.
+                  if (error instanceof ApiError && error.status === 409) {
+                    setRejecting(null);
+                  }
                 },
               },
             )
