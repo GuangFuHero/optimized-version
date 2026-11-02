@@ -73,6 +73,27 @@ describe('findMissingFields', () => {
     ).toEqual([]);
   });
 
+  it('never lets one on a building floor with areas go without one of them: blank, typed or gone', () => {
+    const areas = ['閱覽室', '走廊', '其他'];
+    const onFloor = (room: string) =>
+      findMissingFields(
+        filledForm({ building: BUILDING, floor: '3F', room }),
+        areas,
+      ).map((field) => field.key);
+
+    expect(onFloor('')).toEqual(['area']);
+    expect(onFloor('302室')).toEqual(['area']);
+    expect(onFloor('閱覽室')).toEqual([]);
+    expect(onFloor('其他')).toEqual([]);
+  });
+
+  it('asks no area of a building floor without areas, nor of a request filed at a point', () => {
+    expect(
+      findMissingFields(filledForm({ building: BUILDING, floor: '3F' })),
+    ).toEqual([]);
+    expect(findMissingFields(filledForm(), ['閱覽室', '其他'])).toEqual([]);
+  });
+
   it('takes a field of spaces as empty', () => {
     const keys = findMissingFields(
       filledForm({ title: '  ', address: ' ', contactName: '　' }),

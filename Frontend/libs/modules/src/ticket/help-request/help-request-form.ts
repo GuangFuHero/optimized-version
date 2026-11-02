@@ -178,6 +178,7 @@ export type HelpRequestFieldKey =
   | 'title'
   | 'landmark'
   | 'address'
+  | 'area'
   | 'contact'
   | 'needs'
   | 'quantity';
@@ -197,9 +198,14 @@ function chosenNeeds(needs: readonly NeedDraft[]) {
 /**
  * What still has to be filled in, in the form's order from the top, so the first is the one to
  * scroll to. At least one need is required, and how many of each but a rescue. Filed in a building,
- * the place is the building's: no landmark or address is asked for.
+ * the place is the building's: no landmark or address is asked for. `floorAreas` are the areas of
+ * its floor (`useBuilding`), which end with 其他: on a floor with them, one must be picked, as the
+ * backend takes nothing else.
  */
-export function findMissingFields(form: HelpRequestForm): MissingField[] {
+export function findMissingFields(
+  form: HelpRequestForm,
+  floorAreas: readonly string[] = [],
+): MissingField[] {
   const missing: MissingField[] = [];
 
   if (!form.title.trim()) {
@@ -210,6 +216,13 @@ export function findMissingFields(form: HelpRequestForm): MissingField[] {
   }
   if (!form.building && !form.address.trim()) {
     missing.push({ key: 'address', label: '地址' });
+  }
+  if (
+    form.building &&
+    floorAreas.length > 0 &&
+    !floorAreas.includes(form.room)
+  ) {
+    missing.push({ key: 'area', label: '在這一層的哪一區' });
   }
   if (!form.contactName.trim()) {
     missing.push({ key: 'contact', label: '現場聯絡人' });

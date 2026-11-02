@@ -12,7 +12,7 @@ import {
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { floorName } from '../../building/floors';
-import { useBuilding } from '../../building/use-building';
+import type { BuildingMap } from '../../building/use-building';
 
 const { color, radius } = designTokens;
 
@@ -20,33 +20,99 @@ const { color, radius } = designTokens;
 const ROOM_MAX_LENGTH = 20;
 
 interface BuildingPlaceProps {
-  buildingUuid: string;
+  /** As `useBuilding` read it: null until then, and for one deleted since. */
+  building: BuildingMap | null;
+  /** `useBuilding`'s `hasData`: read, or found deleted. */
+  loaded: boolean;
+  /** `useBuilding`'s `error`: it could not be read. */
+  failed: boolean;
   /** The building's label for the floor; empty when the requester does not know it. */
   floor: string;
+  /** The floor's areas, ending with 其他; empty where the room is typed instead. */
+  areas: readonly string[];
+  /** None of `areas` picked, once the form was tried. */
+  areaMissing: boolean;
   room: string;
   onRoomChange: (room: string) => void;
   /** 改成其他地點: the form asks for a landmark and an address again, as for any request. */
   onLeave: () => void;
 }
 
+function buildingLine(
+  building: BuildingMap | null,
+  loaded: boolean,
+  failed: boolean,
+) {
+  if (building) {
+    return building.name;
+  }
+  if (loaded) {
+    return '這一棟已經不在了';
+  }
+
+  return failed ? '這一棟的資料載入失敗' : '載入中…';
+}
+
 /**
  * Where a request filed from a building's floor is (prototype `SiteTicketCreateDrawer`, its card for a
  * floor picked): the building and the floor, already answered by the tap that opened the form, so not
- * asked again as a landmark and an address. On a floor the building divides into areas, the area is
- * picked from them (the backend takes one of them or 其他); on any other, the room is typed. A way out
- * stays, for whoever tapped the wrong floor.
+ * asked again as a landmark and an address. On a floor the building divides into areas, one of them
+ * must be picked, 其他 for whoever is not sure (the backend takes nothing else); on any other, the room
+ * is typed. Neither until the building is read, as which one it is depends on it. A way out stays, for
+ * whoever tapped the wrong floor.
  */
 export function BuildingPlace({
-  buildingUuid,
+  building,
+  loaded,
+  failed,
   floor,
+  areas,
+  areaMissing,
   room,
   onRoomChange,
   onLeave,
 }: BuildingPlaceProps) {
-  const { building, hasData } = useBuilding(buildingUuid);
-  const areas =
-    building?.floors.find((candidate) => candidate.label === floor)?.areas ??
-    [];
+  let roomField = null;
+
+  if (loaded && areas.length > 0) {
+    roomField = (
+      <Box data-field="area">
+        <TextField
+          select
+          required
+          fullWidth
+          label="在這一層的哪一區"
+          size="small"
+          // Blank until one is picked: a room the menu does not offer, as a draft can hold, is none.
+          value={areas.includes(room) ? room : ''}
+          onChange={(event) => onRoomChange(event.target.value)}
+          error={areaMissing}
+          helperText={
+            areaMissing ? '必填，不確定就選「其他」' : '不確定就選「其他」'
+          }
+        >
+          {areas.map((area) => (
+            <MenuItem key={area} value={area}>
+              {area}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Box>
+    );
+  } else if (loaded) {
+    roomField = (
+      <TextField
+        label="戶／室"
+        size="small"
+        value={room}
+        onChange={(event) => onRoomChange(event.target.value)}
+        placeholder="302室"
+        slotProps={{
+          htmlInput: { maxLength: ROOM_MAX_LENGTH, autoComplete: 'off' },
+        }}
+      />
+    );
+  }
 
   return (
     <Stack data-field="address" spacing={1.5}>
@@ -62,7 +128,10 @@ export function BuildingPlace({
         }}
       >
         <Icons.building
-          sx={{ fontSize: 18, color: color.fg.neutral.subtle }}
+          sx={{
+            fontSize: designTokens.iconSize.md,
+            color: color.fg.neutral.subtle,
+          }}
         />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
@@ -74,7 +143,7 @@ export function BuildingPlace({
           >
             {/* 3F, not 3F 樓: the floor is the building's own name for it. */}
             {[
-              building?.name ?? (hasData ? '這一棟已經不在了' : '載入中...'),
+              buildingLine(building, loaded, failed),
               floor ? floorName(floor) : '不確定在哪一層',
             ].join('　')}
           </Typography>
@@ -92,31 +161,7 @@ export function BuildingPlace({
         </Box>
       </Box>
 
-      {areas.length > 0 ? (
-        <TextField
-          select
-          label="在這一層的哪一區"
-          size="small"
-          value={room}
-          onChange={(event) => onRoomChange(event.target.value)}
-        >
-          <MenuItem value="">不確定</MenuItem>
-          {areas.map((area) => (
-            <MenuItem key={area} value={area}>
-              {area}
-            </MenuItem>
-          ))}
-        </TextField>
-      ) : (
-        <TextField
-          label="戶／室"
-          size="small"
-          value={room}
-          onChange={(event) => onRoomChange(event.target.value)}
-          placeholder="302室"
-          slotProps={{ htmlInput: { maxLength: ROOM_MAX_LENGTH } }}
-        />
-      )}
+      {roomField}
 
       <Button
         variant="text"

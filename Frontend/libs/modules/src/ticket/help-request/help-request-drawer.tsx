@@ -24,6 +24,7 @@ import {
 
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
+import { useBuilding } from '../../building/use-building';
 import { LocationPicker } from '../../map/components/location-picker';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import { SiteBadge } from '../../shell/site/site-badge';
@@ -439,7 +440,12 @@ function HelpRequestFormDrawer({
     }
   }, [draftHold, form, open, userId]);
 
-  const missing = findMissingFields(form);
+  // Filed in a building: its floor's areas decide whether one must be picked.
+  const placeBuilding = useBuilding(form.building);
+  const floorAreas =
+    placeBuilding.building?.floors.find((floor) => floor.label === form.floor)
+      ?.areas ?? [];
+  const missing = findMissingFields(form, floorAreas);
   const missingKeys = new Set(missing.map((field) => field.key));
   const isMissing = (key: (typeof missing)[number]['key']) =>
     touched && missingKeys.has(key);
@@ -550,8 +556,9 @@ function HelpRequestFormDrawer({
     }
 
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // A menu's own input is hidden: it is the combobox that takes the focus.
     host
-      .querySelector<HTMLElement>('input, textarea, button')
+      .querySelector<HTMLElement>('input, textarea, button, [role="combobox"]')
       ?.focus({ preventScroll: true });
   };
 
@@ -674,8 +681,12 @@ function HelpRequestFormDrawer({
               the address, which the backend copies from it. */}
           {form.building ? (
             <BuildingPlace
-              buildingUuid={form.building}
+              building={placeBuilding.building}
+              loaded={placeBuilding.hasData}
+              failed={Boolean(placeBuilding.error)}
               floor={form.floor}
+              areas={floorAreas}
+              areaMissing={isMissing('area')}
               room={form.room}
               onRoomChange={set('room')}
               onLeave={() =>
