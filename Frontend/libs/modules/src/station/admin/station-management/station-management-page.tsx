@@ -35,6 +35,7 @@ import { StationImportDialog } from './station-import-dialog';
 import { StationMapView } from './station-map-view';
 import { offersImport } from './model/import';
 import { QuickStatusCell, TeamAssignCell } from './station-row-controls';
+import { StationStatsStrip } from './station-stats-strip';
 import { StationTable } from './station-table';
 import { StationToolbar } from './station-toolbar';
 
@@ -45,6 +46,7 @@ const { color } = designTokens;
 const FRAME_GAP = '12px';
 const SECTION_SX = { px: '28px' };
 const COLUMN_SX = { maxWidth: 1200, mx: 'auto', width: '100%' };
+const LEAD_SX = { ...SECTION_SX, pt: FRAME_GAP, '& > *': COLUMN_SX };
 
 /** What the header's ? explains: the page in one line. */
 const PAGE_HELP = '維護資源站點並審查民眾送來的修改建議';
@@ -146,6 +148,15 @@ export function StationManagementPage() {
       </AdminHeaderSlot>
       <AdminListPageLayout
         canvasColor={color.bg.neutral.subtle}
+        // The counts scroll away with the list; the toolbar stays (STAT-101).
+        lead={
+          <Box sx={LEAD_SX}>
+            <StationStatsStrip
+              status={filters.status}
+              onStatusChange={(status) => setFilters({ ...filters, status })}
+            />
+          </Box>
+        }
         header={
           <Stack
             sx={{
