@@ -70,6 +70,9 @@ const { color } = designTokens;
 
 const ACTION_ICON = { fontSize: 14 } as const;
 
+/** How long the first cards wait for the buildings above them before they show without them. */
+const BUILDINGS_WAIT_MS = 1000;
+
 /**
  * 前台列表模組：與地圖共用路由狀態與篩選邏輯，支援維度切換、子分類篩選與詳情雙向綁定。
  */
@@ -108,8 +111,22 @@ export function SiteListView() {
     enabled: dataType === 'ticket',
   });
   // The first page shows with the buildings above it, not before them: come second, the buildings
-  // would push down the cards, and a tap aimed at one would land on a building.
-  const firstPageIn = hasFetchedOnce && !buildingsLoading;
+  // would push down the cards, and a tap aimed at one would land on a building. But not for long: on
+  // a slow buildings request the cards show after a second, and the buildings push them down late.
+  const buildingsHoldCards = hasFetchedOnce && buildingsLoading;
+  const [buildingsWaitOver, setBuildingsWaitOver] = useState(false);
+  useEffect(() => {
+    if (!buildingsHoldCards) {
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setBuildingsWaitOver(true),
+      BUILDINGS_WAIT_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [buildingsHoldCards]);
+  const firstPageIn =
+    hasFetchedOnce && (!buildingsLoading || buildingsWaitOver);
 
   // 含已滿額: full needs, and the tickets left with nothing else, fold away until asked for.
   const [showFullNeeds, setShowFullNeeds] = useState(false);
