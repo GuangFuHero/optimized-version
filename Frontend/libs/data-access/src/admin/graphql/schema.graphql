@@ -960,7 +960,7 @@ type Query {
     disasterType: String = null
 
     """
-    Only tickets outside this box: those `bounds` leaves out for it, each matched as `bounds` matches it, so the two split the matches between them. A point on its edge is inside
+    Only tickets outside this box: those `bounds` leaves out for it, each matched as `bounds` matches it, so the two split the matches between them. A point on its edge is inside; a ticket with no point is outside
     """
     outsideBounds: BoundsInput = null
   ): TicketConnection!

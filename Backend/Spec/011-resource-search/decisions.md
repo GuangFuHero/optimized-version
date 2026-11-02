@@ -1051,14 +1051,16 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
 3. 框線上的點算框內（`ST_Intersects`）；沒有點位的列算框外。同一組篩選下，`bounds` 和 `outsideBounds` 對同一個框
    剛好把所有單分成兩半，不重複也不遺漏。
 4. 跟 `bounds` 一起帶的話兩個都套用；其他篩選、分頁、排序照舊。
-5. 框外通常是大部分的單，放大的框也縮不小範圍，所以 `outsideBounds` 不像 `bounds` 先用 index 預篩，整個查詢照舊在
-   `search_timeout` 底下。有看不到點位的列時跟 `bounds` 一樣用 generic plan（ADR-437）。
+5. 框外通常是大部分的單，放大的框也縮不小範圍，所以 `outsideBounds` 不像 `bounds` 先用 index 預篩。`search_timeout`
+   只在有 `q` 時作用，所以沒帶 `q` 的 `outsideBounds` 改在 `statement_ceiling` 底下，跟 `ticketCells`、`ticketsExtent`
+   一樣，逾時回「範圍外的單太多，查詢逾時已中止，請縮小篩選再試」；帶 `q` 時照舊用 `search_timeout`（2026-11-02 review
+   時補上）。有看不到點位的列時跟 `bounds` 一樣用 generic plan（ADR-437）。
 6. 前端拿框外的張數用 `tickets(outsideBounds: …, limit: 0) { pageInfo { totalCount } }`，跟按下去列出來的單一定一致。
 7. `bounds` 的判斷抽成 `_in_box`，兩個篩選共用。`bounds` 的 SQL 不變。
 
 ➕ 「看是哪幾張」可以照常分頁，張數跟列表一定對得上。
 ➕ 前台訪客不會用到，用了也不會多透露位置。
-➖ 框外的查詢沒有 index 可用，單量大時比 `bounds` 慢；目前單量小，又有 `search_timeout` 擋著。
-◾ 測試：`tests/test_graphql/test_tickets_outside_bounds.py`（簽入的人用點位：框外只列框外的單；框內、框外對同一個框
-  不重複也不遺漏、框線上算框內、其他篩選照套；`limit: 0` 只回張數；訪客用格子中心；`own` 範圍自己的單用點位、
-  別人的用格子中心）。
+➖ 框外的查詢沒有 index 可用，單量大時比 `bounds` 慢；目前單量小，又有第 5 點的上限擋著。
+◾ 測試：`tests/test_graphql/test_tickets_outside_bounds.py`（簽入的人用點位：框外只列框外的單；沒有點位的單算框外；
+  框內、框外對同一個框不重複也不遺漏、框線上算框內、其他篩選照套；`limit: 0` 只回張數；沒帶關鍵字時在上限底下；
+  訪客用格子中心；`own` 範圍自己的單用點位、別人的用格子中心）。

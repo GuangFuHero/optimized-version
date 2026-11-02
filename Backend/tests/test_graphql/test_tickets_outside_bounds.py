@@ -1,8 +1,11 @@
 """`tickets(outsideBounds:)`: the tickets a box leaves out, matched as `bounds` matches them (ADR-452)."""
 
 import pytest
+from sqlalchemy import text
 
+from app.core import search
 from app.models.request import Tickets
+from app.repositories.tickets_repository import ticket_repository
 from tests.test_graphql.conftest import test_db
 from tests.test_graphql.test_ticket_detail_boundary import (  # noqa: F401 — _only_this_tests_tickets is autouse
     INSIDE,
@@ -42,6 +45,36 @@ async def test_outside_bounds_lists_the_tickets_the_box_leaves_out(client, redis
 
     assert await _uuids(client, {"outside": box}, token) == ([far], 1)
     assert await _uuids(client, {"bounds": box}, token) == ([near], 1)
+
+
+async def test_a_ticket_with_no_point_is_outside(client, redis):
+    """A ticket filed without coordinates is in no box: `outsideBounds` lists it and `bounds` never does."""
+    _, token = await _signed_in(redis)
+    uuid = await _ticket(OUTSIDE)
+    async with test_db() as db:
+        (await db.get(Tickets, uuid)).geometry = None
+    box = _box([INSIDE.x, INSIDE.y], 0.01)
+
+    assert await _uuids(client, {"outside": box}, token) == ([uuid], 1)
+    assert await _uuids(client, {"outside": box}) == ([uuid], 1)
+    assert await _uuids(client, {"bounds": box}, token) == ([], 0)
+
+
+async def test_a_list_outside_a_box_runs_under_the_ceiling_without_a_keyword(client, monkeypatch):
+    """With no `q` nothing else bounds the read, so a slow one is cancelled, not left holding a connection."""
+    monkeypatch.setattr(search, "SEARCH_STATEMENT_TIMEOUT_MS", 100)
+
+    async def slow_count(db, **_):
+        await db.execute(text("SELECT pg_sleep(3)"))
+        return 0
+
+    monkeypatch.setattr(ticket_repository, "count_active", slow_count)
+    query = "query($outside: BoundsInput) { tickets(outsideBounds: $outside) { pageInfo { totalCount } } }"
+    variables = {"outside": _box([INSIDE.x, INSIDE.y], 0.01)}
+
+    body = (await client.post("/graphql", json={"query": query, "variables": variables})).json()
+
+    assert any("範圍外的單太多" in e["message"] for e in body["errors"]), body
 
 
 async def test_the_two_boxes_split_every_ticket_once_with_the_edge_inside(client, redis):
