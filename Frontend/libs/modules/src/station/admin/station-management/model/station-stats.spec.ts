@@ -15,9 +15,9 @@ describe('stationStatTiles', () => {
     ).toEqual([
       { key: 'all', label: '全部', count: 12 },
       { key: 'active', label: '開設中', count: 9 },
-      { key: 'temporarily_closed', label: '暫時關閉', count: 3 },
+      { key: 'temporarily_closed', label: '暫停服務', count: 3 },
       // No station in it is a count of 0 once the counts are in, not —.
-      { key: 'permanently_closed', label: '永久關閉', count: 0 },
+      { key: 'permanently_closed', label: '已關閉', count: 0 },
     ]);
   });
 

@@ -5,7 +5,7 @@ import {
   useTicket,
   useTicketsExtent,
 } from '@rescue-frontend/data-access/admin';
-import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
+import { Button, Callout, designTokens, Tag } from '@rescue-frontend/ui';
 import { Building2, ChevronRight, MapPinOff, X } from 'lucide-react';
 import type { Map as LeafletMap } from 'leaflet';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
@@ -23,7 +23,7 @@ import type {
   RescueMapMarkerItem,
 } from '../../../map/types';
 import { stationPoint } from '../../../station/station-point';
-import { adminTicketPriorityBadge } from './model/ticket-priority';
+import { adminTicketPriorityTag } from './model/ticket-priority';
 import { useTicketPins } from './hooks/use-ticket-pins';
 import {
   boxFitsWhole,
@@ -846,7 +846,8 @@ function CellTicketList({
         sx={{ m: 0, p: 0, listStyle: 'none', overflowY: 'auto' }}
       >
         {rows.map((row) => {
-          const badge = adminTicketPriorityBadge(row.priority);
+          // Only 生命危急 and 緊急 are tagged in this short list; the quiet ones would only crowd it.
+          const tag = adminTicketPriorityTag(row.priority);
           return (
             <Box component="li" key={row.uuid}>
               <ButtonBase
@@ -868,10 +869,10 @@ function CellTicketList({
                 >
                   {row.title}
                 </Typography>
-                {badge ? (
-                  <Badge tone={badge.tone} variant={badge.variant}>
-                    {badge.label}
-                  </Badge>
+                {tag && tag.fill !== 'quiet' ? (
+                  <Tag tone={tag.tone} fill={tag.fill}>
+                    {tag.label}
+                  </Tag>
                 ) : null}
               </ButtonBase>
             </Box>

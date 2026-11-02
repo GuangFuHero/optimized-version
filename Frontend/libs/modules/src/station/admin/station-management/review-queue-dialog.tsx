@@ -19,10 +19,10 @@ import {
   useStationReview,
 } from '@rescue-frontend/data-access/admin';
 import {
-  Badge,
   Button,
   Callout,
   designTokens,
+  Tag,
   TextInput,
 } from '@rescue-frontend/ui';
 import {
@@ -308,13 +308,13 @@ function QueueItem({
           {row.name}
         </Typography>
         {hasConflict(fields) ? (
-          <Badge tone="danger" variant="solid" size="sm">
+          <Tag tone="danger" fill="solid" size="sm">
             衝突
-          </Badge>
+          </Tag>
         ) : (
-          <Badge tone="warning" size="sm">
+          <Tag tone="warning" size="sm">
             {pendingFieldsLabel(row.pendingFieldCount)}
-          </Badge>
+          </Tag>
         )}
       </Box>
       {firstSuggestedAt ? (
@@ -330,9 +330,9 @@ function QueueItem({
       ) : null}
       <Box sx={{ mt: '7px' }}>
         {/* Suggestions come from the site, so every one is crowd-sourced. */}
-        <Badge tone="primary" size="sm" icon={<Users size={13} />}>
+        <Tag tone="brand" size="sm" icon={<Users size={13} />}>
           群眾投稿
-        </Badge>
+        </Tag>
       </Box>
     </ButtonBase>
   );
@@ -818,9 +818,9 @@ function ReviewHeader({
         ) : null}
       </Box>
       {current !== null ? (
-        <Badge tone={base === current ? 'success' : 'warning'} size="sm">
+        <Tag tone={base === current ? 'success' : 'warning'} size="sm">
           站點現為 v{current}
-        </Badge>
+        </Tag>
       ) : null}
     </Box>
   );

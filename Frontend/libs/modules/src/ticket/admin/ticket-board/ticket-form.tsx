@@ -20,11 +20,11 @@ import {
   useUpdateTicket,
 } from '@rescue-frontend/data-access/admin';
 import {
-  Badge,
   Button,
   Callout,
   designTokens,
   SheetLayout,
+  Tag,
   TextInput,
 } from '@rescue-frontend/ui';
 import { Check, Plus, Trash2 } from 'lucide-react';
@@ -464,7 +464,7 @@ export function TicketForm(props: TicketFormProps) {
             title="需求清單"
             aside={
               <>
-                <Badge tone="neutral">{values.needs.length}</Badge>
+                <Tag tone="neutral">{values.needs.length}</Tag>
                 <Muted>一個地點可有多筆需求；志工以「需求」為單位承接</Muted>
               </>
             }

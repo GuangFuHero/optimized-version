@@ -288,6 +288,9 @@ export function TicketBoardPage() {
                 onOpenTicket={openTicket}
                 onDeleteTicket={setDeleting}
                 onCreate={caps.canAdd ? () => setCreating(true) : undefined}
+                onImport={
+                  caps.canImport ? () => setImportOpen(true) : undefined
+                }
                 spaces={spaceRows}
                 spaceTags={spaceTags}
                 onOpenSpace={openSpace}

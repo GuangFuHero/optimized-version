@@ -400,7 +400,7 @@ describe('suggestionVersions', () => {
 describe('reviewValueLabel', () => {
   it('names an operational status the way the page does', () => {
     expect(reviewValueLabel('operational_status', 'temporarily_closed')).toBe(
-      '暫時關閉',
+      '暫停服務',
     );
   });
 
