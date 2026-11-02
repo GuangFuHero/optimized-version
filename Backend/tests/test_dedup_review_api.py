@@ -326,3 +326,20 @@ async def test_revoke_refusals_carry_their_status(client, db_session, redis):
     refused = await client.post(f"{URL}/{pending['pair']}/revoke", headers=citizen)
 
     assert (conflict.status_code, missing.status_code, refused.status_code) == (409, 404, 403)
+
+
+# --- names (ADR-441) ----------------------------------------------------------------------
+
+
+async def test_the_card_and_its_events_name_who_decided(client, db_session, redis):
+    """The reviewer's nickname beside `reviewed_by`, and each event's beside its `actor_uuid`."""
+    card, headers = await _decided_by(client, db_session, redis, "data_auditor")
+
+    listing = await client.get(URL, params={"status": "confirmed_duplicate"}, headers=headers)
+    detail = await client.get(f"{URL}/{card['pair']}", headers=headers)
+
+    assert listing.json()["items"][0]["reviewed_by_name"] == "data_auditor 帳號"
+    body = detail.json()
+    assert body["reviewed_by_name"] == "data_auditor 帳號"
+    named = {e["event_type"]: e["actor_name"] for e in body["events"]}
+    assert named["confirmed"] == "data_auditor 帳號"

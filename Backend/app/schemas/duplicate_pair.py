@@ -1,4 +1,4 @@
-"""Pydantic schemas for the AI 重複審核 queue in the back office (Spec 025 §2)."""
+"""Pydantic schemas for the 重複審核 queue in the back office (Spec 025 §2)."""
 
 from datetime import datetime
 from typing import Literal
@@ -46,6 +46,7 @@ class DuplicatePairResponse(BaseModel):
     hint_outcome: str | None
     created_at: datetime
     reviewed_by: UUID | None
+    reviewed_by_name: str | None = Field(description="The nickname of `reviewed_by` (ADR-441)")
     reviewed_at: datetime | None
     low: EntitySummaryResponse
     high: EntitySummaryResponse
@@ -66,6 +67,7 @@ class DedupEventResponse(BaseModel):
     uuid: UUID
     event_type: str
     actor_uuid: UUID | None
+    actor_name: str | None = Field(default=None, description="The nickname of `actor_uuid` (ADR-441)")
     source_layer: SourceLayer
     decision_reason: str | None
     engine_version: str | None
@@ -85,6 +87,29 @@ class PropertyForReviewResponse(BaseModel):
     quantity: int | None
     status: str | None
     comment: str | None
+    display_label: str = Field(
+        description="How the item reads: the label set for its need type, else property_name (ADR-446)"
+    )
+    sort_order: int | None = Field(
+        default=None,
+        description="The item's order among its need type's items, from the same field setting, inactive "
+        "ones included; null when there is none (ADR-447)",
+    )
+    data_type: str | None = Field(
+        default=None,
+        description="The control the item's field setting asks for (number, text, single_select, ...); "
+        "null when there is none (ADR-447)",
+    )
+    enum_options: list[str] | None = Field(
+        default=None, description="The choices of a select field; null otherwise (ADR-447)"
+    )
+    unit: str | None = Field(
+        default=None, description="A number field's unit, e.g. 箱; null otherwise (ADR-447)"
+    )
+    is_active: bool | None = Field(
+        default=None,
+        description="Whether the item's field setting is still in use; null when there is none (ADR-447)",
+    )
 
 
 class TaskForReviewResponse(BaseModel):
@@ -101,6 +126,15 @@ class TaskForReviewResponse(BaseModel):
     claim_count: int
     recruiting_stopped: bool
     properties: list[PropertyForReviewResponse]
+    claimant_keys: list[str] = Field(
+        description=(
+            "One opaque key per person on the need (ADR-445). A person on needs of both tickets has the "
+            "same key on each, so the people after a fold are the distinct keys of the needs folded "
+            "together. Keys differ on every other card and do not contain the person's uuid; they are a "
+            "plain hash, so someone who already holds the card and a person's uuid can test for that "
+            "person"
+        )
+    )
 
 
 class PhotoForReviewResponse(BaseModel):
@@ -111,6 +145,19 @@ class PhotoForReviewResponse(BaseModel):
     uuid: UUID
     url: str
     created_at: datetime | None
+
+
+class LocationForReviewResponse(BaseModel):
+    """Where a ticket is: the address down to the room, or the pole (ADR-440). Read-only here."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    location_type: str = Field(description="'address' or 'pole'")
+    full_address: str | None
+    building_section: str | None
+    floor: str | None
+    room: str | None
+    pole_id: str | None
 
 
 class TicketForReviewResponse(BaseModel):
@@ -142,6 +189,9 @@ class TicketForReviewResponse(BaseModel):
     tasks: list[TaskForReviewResponse]
     photos: list[PhotoForReviewResponse]
     disaster_details: dict[str, list[str]]
+    location: LocationForReviewResponse | None = Field(
+        description="Where the ticket is; null when it has no address or pole. A resolve cannot change it"
+    )
 
 
 class TicketsForReviewResponse(BaseModel):

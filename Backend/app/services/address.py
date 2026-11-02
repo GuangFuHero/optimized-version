@@ -40,10 +40,10 @@ _BASE_URL = "https://addr.tgos.tw/addrws/v40"
 _TIMEOUT_S = 3.0
 # TGOS slows sharply once more than about four requests run at once.
 _SLOTS = asyncio.Semaphore(4)
-# TGOS's certificate has no Subject Key Identifier, which Python's strict mode rejects; the chain
-# is still verified.
-_SSL = ssl.create_default_context()
-_SSL.verify_flags &= ~ssl.VERIFY_X509_STRICT
+# TGOS and NLSC chain to a TWCA root with no Subject Key Identifier, which Python's strict mode
+# rejects; the chain and hostname are still verified.
+NON_STRICT_SSL = ssl.create_default_context()
+NON_STRICT_SSL.verify_flags &= ~ssl.VERIFY_X509_STRICT
 _STRING_RE = re.compile(r"<string[^>]*>(.*)</string>", re.S)
 
 _TOKEN_TYPE = "address"
@@ -140,7 +140,7 @@ async def _tgos(operation: str, app_id: str, api_key: str, **params) -> dict | N
         return None
     data = {"oAPPId": app_id, "oAPIKey": api_key, "oSRS": "EPSG:4326", "oResultDataType": "JSON", **params}
     try:
-        async with asyncio.timeout(_TIMEOUT_S), _SLOTS, httpx.AsyncClient(verify=_SSL) as client:
+        async with asyncio.timeout(_TIMEOUT_S), _SLOTS, httpx.AsyncClient(verify=NON_STRICT_SSL) as client:
             resp = await client.post(f"{_BASE_URL}/{operation}", data=data)
             resp.raise_for_status()
     except (httpx.HTTPError, TimeoutError) as err:

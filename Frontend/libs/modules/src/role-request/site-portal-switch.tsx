@@ -1,11 +1,9 @@
 'use client';
 
-import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
-import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import { ButtonBase } from '@mui/material';
 import Link from 'next/link';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { BACK_OFFICE_HREF, type SitePortalEntry } from './portal-entry';
 
@@ -54,7 +52,7 @@ export function SitePortalSwitch({
         title="前往管理平台（不需再次登入）"
         sx={PILL_SX}
       >
-        <SwapHorizRoundedIcon sx={ICON_SX} />
+        <Icons.arrowLeftRight sx={ICON_SX} />
         前往管理平台
       </ButtonBase>
     );
@@ -63,7 +61,7 @@ export function SitePortalSwitch({
   if (entry === 'apply') {
     return (
       <ButtonBase onClick={onApply} title="送出管理權限的申請" sx={PILL_SX}>
-        <VerifiedRoundedIcon sx={ICON_SX} />
+        <Icons.badgeCheck sx={ICON_SX} />
         申請管理權限
       </ButtonBase>
     );

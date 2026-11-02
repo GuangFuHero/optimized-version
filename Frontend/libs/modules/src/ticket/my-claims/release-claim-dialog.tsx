@@ -1,10 +1,13 @@
 'use client';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import PersonRemoveRoundedIcon from '@mui/icons-material/PersonRemoveRounded';
 import { Box, Stack, Typography } from '@mui/material';
 
-import { designTokens, Dialog, displayTextSize } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  Dialog,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import type { MyClaim } from './my-claims';
 
@@ -44,7 +47,7 @@ export function ReleaseClaimDialog({
       onConfirm={onConfirm}
       title="釋出這個名額？"
       confirmLabel={submitting ? '釋出中...' : '釋出名額'}
-      confirmIcon={<PersonRemoveRoundedIcon />}
+      confirmIcon={<Icons.userMinus />}
       confirmDisabled={settled || !claim}
       cancelLabel={settled ? '關閉' : '取消'}
       error={error}
@@ -87,7 +90,7 @@ export function ReleaseClaimDialog({
               '& svg': { fontSize: 14 },
             }}
           >
-            <AssignmentRoundedIcon />
+            <Icons.clipboardList />
           </Box>
           <Typography sx={{ fontSize: displayTextSize[13], lineHeight: 1.6 }}>
             {claim?.ticketTitle}

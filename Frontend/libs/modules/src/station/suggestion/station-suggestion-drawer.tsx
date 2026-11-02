@@ -1,7 +1,5 @@
 'use client';
 
-import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
 import {
   Alert,
   AlertTitle,
@@ -16,7 +14,7 @@ import { useId, useState } from 'react';
 import { useQuery } from 'urql';
 
 import { GetStationForSuggestionDocument } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import {
@@ -90,7 +88,7 @@ function GuestStationSuggestionDrawer({
           </Button>
           <Button
             variant="contained"
-            startIcon={<LoginRoundedIcon />}
+            startIcon={<Icons.logIn />}
             onClick={onSignIn}
             sx={{ flex: 2 }}
           >
@@ -270,7 +268,7 @@ function SuggestionForm({
           label="目前"
           value={describeSuggestionValue(field, current)}
         />
-        <ArrowForwardRoundedIcon
+        <Icons.arrowRight
           aria-hidden
           sx={{
             justifySelf: 'center',
