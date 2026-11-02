@@ -17,9 +17,7 @@ class SuggestableFieldType:
     """One field a user may suggest a change to, with the metadata the frontend needs."""
 
     field_name: str
-    data_type: str = strawberry.field(
-        description="Input widget hint: 'string', 'integer', or 'enum'"
-    )
+    data_type: str = strawberry.field(description="Input widget hint: 'string', 'integer', or 'enum'")
     enum_options: list[str] | None = strawberry.field(
         default=None, description="Allowed values when data_type is 'enum', else null"
     )
@@ -36,18 +34,15 @@ class StationSuggestionType:
     target_uuid: str = strawberry.field(description="UUID of the targeted station/property")
     field_name: str
     new_value: str = strawberry.field(description="Proposed value, stored as text")
-    comment: str | None = strawberry.field(
-        default=None, description="Why the user suggests this change"
-    )
+    comment: str | None = strawberry.field(default=None, description="Why the user suggests this change")
     status: str = strawberry.field(
-        default="pending", description="'pending', 'approved', 'not_adopted', 'rejected', or 'revoked'"
+        default="pending",
+        description="'pending', 'approved', 'adopted_edited', 'not_adopted', 'rejected', or 'revoked'",
     )
     review_note: str | None = strawberry.field(
         default=None, description="Admin's note recorded when approving/rejecting"
     )
-    reviewed_by: str | None = strawberry.field(
-        default=None, description="UUID of the admin who decided"
-    )
+    reviewed_by: str | None = strawberry.field(default=None, description="UUID of the admin who decided")
     created_by: str | None = strawberry.field(
         default=None, description="UUID of the user who made the suggestion"
     )
@@ -58,12 +53,18 @@ class StationSuggestionType:
     def from_model(cls, m) -> "StationSuggestionType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, target_type=m.target_type, target_uuid=m.target_uuid,
-            field_name=m.field_name, new_value=m.new_value, comment=m.comment,
-            status=m.status, review_note=m.review_note,
+            uuid=m.uuid,
+            target_type=m.target_type,
+            target_uuid=m.target_uuid,
+            field_name=m.field_name,
+            new_value=m.new_value,
+            comment=m.comment,
+            status=m.status,
+            review_note=m.review_note,
             reviewed_by=str(m.reviewed_by) if m.reviewed_by else None,
             created_by=str(m.created_by) if m.created_by else None,
-            created_at=m.created_at, updated_at=m.updated_at,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
         )
 
 
@@ -156,20 +157,24 @@ class StationSuggestionMergeType:
     def from_model(cls, m) -> "StationSuggestionMergeType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, station_uuid=str(m.station_uuid),
+            uuid=m.uuid,
+            station_uuid=str(m.station_uuid),
             _changes=[
                 SuggestionChangeType(
-                    target_type=c["target_type"], target_uuid=c["target_uuid"],
+                    target_type=c["target_type"],
+                    target_uuid=c["target_uuid"],
                     field_name=c["field_name"],
                     before=None if c["before"] is None else str(c["before"]),
                     after=None if c["after"] is None else str(c["after"]),
                 )
                 for c in m.changes
             ],
-            status=m.status, review_note=m.review_note,
+            status=m.status,
+            review_note=m.review_note,
             reviewed_by=str(m.reviewed_by) if m.reviewed_by else None,
             revoked_by=str(m.revoked_by) if m.revoked_by else None,
-            revoked_at=m.revoked_at, created_at=m.created_at,
+            revoked_at=m.revoked_at,
+            created_at=m.created_at,
         )
 
 

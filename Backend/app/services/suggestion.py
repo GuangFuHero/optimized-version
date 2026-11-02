@@ -143,8 +143,9 @@ async def merge_station_suggestions(
 
     Only fields with a pending suggestion can be decided; anything else is a station.edit.
     A decided field closes every pending row on it. A rejected field rejects them all; an approved
-    one approves the rows whose own value it wrote and marks the rest not_adopted (WG-125).
-    Fields left out stay pending. Each suggester is told whether their suggestion was adopted.
+    one approves the rows whose own value it wrote and marks the rest not_adopted, or, when the
+    written value matches none of them, marks them all adopted_edited.
+    Fields left out stay pending. Each suggester is told the outcome of their suggestion.
     """
     _check_length(review_note=review_note)
     for decision in decisions:
@@ -180,6 +181,8 @@ async def merge_station_suggestions(
 
     # The database's clock, read under the station's lock; every stamp this merge writes carries it.
     decided_at = await db.scalar(select(func.clock_timestamp()))
+    # The name the suggesters knew, read before a merge that renames the station writes the new one.
+    station_name = station.name
     changes, touched = await _apply_decisions(db, station, decisions, rows_by_field, decided_at)
     if changes:
         # An approval is an update at its own time, even one that wrote a property or an unchanged value.
@@ -198,21 +201,18 @@ async def merge_station_suggestions(
     written = {(c["target_uuid"], c["field_name"]): c["after"] for c in changes}
     for decision in decisions:
         key = (decision.target_uuid, decision.field_name)
-        for row in rows_by_field[key]:
-            if not decision.approve:
-                row.status = "rejected"
-            else:
-                row.status = "approved" if _adopted(row, written[key]) else "not_adopted"
+        rows = rows_by_field[key]
+        _set_outcomes(rows, decision.approve, written.get(key))
+        for row in rows:
             row.reviewed_by = actor_uid
             row.review_note = review_note
             row.merge_uuid = merge.uuid
     # Read before the commit expires the rows.
     outcomes = [
-        (row.created_by, row.uuid, row.field_name, row.status == "approved")
+        (row.created_by, row.uuid, row.field_name, row.status)
         for decision in decisions
         for row in rows_by_field[(decision.target_uuid, decision.field_name)]
     ]
-    station_name = station.name
 
     operational = _operational_changes(touched, changes)
     await db.commit()
@@ -281,7 +281,7 @@ async def revoke_station_suggestion_merge(
         update(StationUpdateSuggestion)
         .where(
             StationUpdateSuggestion.merge_uuid == merge.uuid,
-            StationUpdateSuggestion.status == "approved",
+            StationUpdateSuggestion.status.in_(("approved", "adopted_edited")),
         )
         .values(status="revoked")
     )
@@ -363,8 +363,8 @@ async def _revoke_target(db: AsyncSession, station: Station, change: dict):
     return await _station_target(db, station, change["target_type"], change["target_uuid"])
 
 
-# How a notification names a field: the station labels the public suggestion form shows (Frontend
-# station/suggestion/fields.ts), plain words for a property's; anything else keeps its column name.
+# How a notification names a field: the labels the public suggestion form shows for a station's fields
+# and plain words for a property's; anything else keeps its column name.
 _FIELD_LABELS = {
     "operational_status": "營運狀態",
     "op_hour": "服務時間",
@@ -378,18 +378,28 @@ _FIELD_LABELS = {
 
 
 async def _notify_suggesters(db: AsyncSession, station_name: str | None, outcomes, actor_uid: str):
-    """Tell each suggester whether the review adopted their suggestion (approved) or not (anything else).
+    """Tell each suggester whether their suggestion was adopted, adopted with edits, or not adopted.
 
-    Two event types, like role_request_approved/rejected, so a client can tell them apart by type.
+    Not adopted covers both not_adopted and rejected rows, which read the same to a suggester.
     """
     where = f"「{station_name}」的" if station_name else ""
-    for recipient, suggestion_uuid, field_name, adopted in outcomes:
-        result = "已採用" if adopted else "未採用"
+    for recipient, suggestion_uuid, field_name, status in outcomes:
+        field = f"「{_FIELD_LABELS.get(field_name, field_name)}」"
+        if status == "adopted_edited":
+            event_type, title = "station_suggestion_adopted_edited", "📝 站點修改建議已參考"
+            body = f"{where}{field}已參考你的建議修改。"
+        else:
+            result = "已採用" if status == "approved" else "未採用"
+            event_type = (
+                "station_suggestion_adopted" if status == "approved" else "station_suggestion_not_adopted"
+            )
+            title = f"📝 站點修改建議{result}"
+            body = f"你對{where}{field}的修改建議{result}。"
         await NotificationService.dispatch(
             db,
-            event_type="station_suggestion_adopted" if adopted else "station_suggestion_not_adopted",
-            title=f"📝 站點修改建議{result}",
-            body=f"你對{where}「{_FIELD_LABELS.get(field_name, field_name)}」的修改建議{result}。",
+            event_type=event_type,
+            title=title,
+            body=body,
             actor_uuid=actor_uid,
             ref_type="station_suggestion",
             ref_uuid=suggestion_uuid,
@@ -398,11 +408,27 @@ async def _notify_suggesters(db: AsyncSession, station_name: str | None, outcome
 
 
 def _merge_value(target_type: str, field_name: str, raw: str):
-    """A value as a merge writes it: typed for its column, a supply status stripped (ADR-333)."""
+    """A value as a merge writes it: typed for its column, a supply status stripped."""
     value = coerce_and_validate(target_type, field_name, raw)
     if target_type == "station" and field_name == "supply_status":
         value = normalize_supply_status(value)
     return value
+
+
+def _set_outcomes(rows: list[StationUpdateSuggestion], approve: bool, written) -> None:
+    """Set each row's status from its field's decision and the value that decision wrote.
+
+    Rows matching the written value are approved and the rest not_adopted; when none match, the
+    reviewer edited the value, and every row counts as adopted with edits.
+    """
+    adopted = {row.uuid for row in rows if approve and _adopted(row, written)}
+    for row in rows:
+        if not approve:
+            row.status = "rejected"
+        elif not adopted:
+            row.status = "adopted_edited"
+        else:
+            row.status = "approved" if row.uuid in adopted else "not_adopted"
 
 
 def _adopted(row: StationUpdateSuggestion, written) -> bool:
