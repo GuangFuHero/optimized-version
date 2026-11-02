@@ -327,8 +327,8 @@ class DuplicateHintRatesResponse(BaseModel):
         "＝ 跳提示的次數 ＋ 這段時間沒跳提示就建立的 task 或 station 數"
     )
     hinted: int = Field(
-        description="跳提示的次數：跳出「可能重複」提示的次數。"
-        "同一個人、同一天（台灣時間）、被提示同一筆舊資料，只算一次"
+        description="跳提示的次數：跳出「可能重複」提示的次數。每一次按「仍要建立」都算一次；"
+        "沒按「仍要建立」的提示，同一個人、同一天（台灣時間）、被提示同一筆舊資料，只算一次"
     )
     hint_rate: float | None = Field(description="提示率 ＝ 跳提示的次數 ÷ 送出次數（hinted ÷ submissions）")
     overridden: int = Field(

@@ -2944,7 +2944,7 @@ export interface components {
       submissions: number;
       /**
        * Hinted
-       * @description 跳提示的次數：跳出「可能重複」提示的次數。同一個人、同一天（台灣時間）、被提示同一筆舊資料，只算一次
+       * @description 跳提示的次數：跳出「可能重複」提示的次數。每一次按「仍要建立」都算一次；沒按「仍要建立」的提示，同一個人、同一天（台灣時間）、被提示同一筆舊資料，只算一次
        */
       hinted: number;
       /**

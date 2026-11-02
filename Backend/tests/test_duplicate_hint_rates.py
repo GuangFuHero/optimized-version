@@ -231,6 +231,30 @@ async def test_counts_and_rates(db_session):
     assert station.false_alarm_rate_with_auditors == pytest.approx(1.0)
 
 
+async def test_each_filing_anyway_is_its_own_hint(db_session):
+    """Two tasks of one ticket hinted at the same old task and both filed anyway: two of each, not one."""
+    actor = await _user(db_session, "兩個都照樣送出")
+    old = uuid_mod.uuid4()
+    db_session.add_all([_hint(actor, old, at=DAY1), _hint(actor, old, at=DAY1)])
+    for status in ("not_duplicate", "dup_ignored"):
+        new = await _task(db_session, actor, at=DAY1 + timedelta(minutes=1))
+        await _filed_anyway(db_session, actor, old, new, at=DAY1 + timedelta(minutes=1), status=status)
+    viewer = await _actor(db_session, Perm.AI_DUP_VIEW)
+
+    rates = await duplicate_hint_rates.duplicate_hint_rates(
+        db_session, actor=viewer, since=SINCE, until=UNTIL
+    )
+
+    task = next(m for m in rates if m.entity_kind == "ticket_task")
+    assert (task.submissions, task.hinted, task.overridden, task.reviewed, task.judged_not_duplicate) == (
+        2,
+        2,
+        2,
+        1,
+        1,
+    )
+
+
 async def test_nothing_counted_gives_null_rates(db_session):
     """Both kinds are listed; with nothing to divide by, a rate is null, not 0."""
     viewer = await _actor(db_session, Perm.AI_DUP_VIEW)

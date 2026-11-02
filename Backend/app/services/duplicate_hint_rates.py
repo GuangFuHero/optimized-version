@@ -13,8 +13,11 @@ and the tasks and stations created in the window. Nothing records a hint the sub
   - `false_alarm_rate_with_auditors`: the share of reviewed "filed anyway" cards judged
     `not_duplicate`, applied to all of them. `review_coverage` says how many were reviewed.
 
-One hint is one (submitter, old entity, Taipei day): going back to edit and sending again can show
-the same hint twice. Batch-import hints count too, as imported rows count as submissions.
+Each filing anyway is one hint, as it made its own entity and card. A hint not filed anyway is one
+per (submitter, old entity, Taipei day): going back to edit and sending again can show the same hint
+twice. An entity filed anyway and its `ignored_by_submitter` are written in one transaction, so they
+share `created_at` and the window. Batch-import hints count too, as imported rows count as
+submissions.
 """
 
 from dataclasses import dataclass
@@ -31,23 +34,11 @@ KINDS = ("ticket_task", "station")
 
 _COUNTS = text(
     """
-    WITH hints AS (
-        SELECT DISTINCT
-               e.entity_kind,
+    WITH overrides AS (
+        SELECT e.entity_kind,
                e.actor_uuid,
                e.primary_uuid,
-               (e.created_at AT TIME ZONE 'Asia/Taipei')::date AS day_tw
-        FROM dedup_audit_events e
-        WHERE e.event_type = 'hint_shown'
-          AND e.source_layer = 'fast'
-          AND e.created_at >= :since AND e.created_at < :until
-    ),
-    overrides AS (
-        SELECT DISTINCT ON (e.entity_kind, e.actor_uuid, e.primary_uuid,
-                            (e.created_at AT TIME ZONE 'Asia/Taipei')::date)
-               e.entity_kind,
-               e.actor_uuid,
-               e.primary_uuid,
+               e.duplicate_uuid,
                (e.created_at AT TIME ZONE 'Asia/Taipei')::date AS day_tw,
                c.status AS verdict
         FROM dedup_audit_events e
@@ -55,17 +46,23 @@ _COUNTS = text(
         WHERE e.event_type = 'ignored_by_submitter'
           AND e.source_layer = 'fast'
           AND e.created_at >= :since AND e.created_at < :until
-        ORDER BY e.entity_kind, e.actor_uuid, e.primary_uuid,
-                 (e.created_at AT TIME ZONE 'Asia/Taipei')::date, e.created_at DESC
+    ),
+    taken AS (
+        SELECT e.entity_kind,
+               e.actor_uuid,
+               e.primary_uuid,
+               (e.created_at AT TIME ZONE 'Asia/Taipei')::date AS day_tw
+        FROM dedup_audit_events e
+        WHERE e.event_type = 'hint_shown'
+          AND e.source_layer = 'fast'
+          AND e.created_at >= :since AND e.created_at < :until
+        EXCEPT
+        SELECT entity_kind, actor_uuid, primary_uuid, day_tw FROM overrides
     ),
     outcomes AS (
-        SELECT h.entity_kind, o.day_tw IS NOT NULL AS overridden, o.verdict
-        FROM hints h
-        LEFT JOIN overrides o
-               ON o.entity_kind = h.entity_kind
-              AND o.actor_uuid = h.actor_uuid
-              AND o.primary_uuid = h.primary_uuid
-              AND o.day_tw = h.day_tw
+        SELECT entity_kind, false AS overridden, NULL AS verdict FROM taken
+        UNION ALL
+        SELECT entity_kind, true, verdict FROM overrides
     ),
     created AS (
         SELECT 'ticket_task' AS entity_kind, t.uuid
@@ -88,10 +85,8 @@ _COUNTS = text(
              WHERE o.entity_kind = k.entity_kind AND o.verdict = 'not_duplicate') AS judged_not_duplicate,
            (SELECT count(*) FROM created c
              WHERE c.entity_kind = k.entity_kind
-               AND NOT EXISTS (
-                   SELECT 1 FROM dedup_audit_events e
-                   WHERE e.event_type = 'ignored_by_submitter' AND e.duplicate_uuid = c.uuid
-               )) AS created_without_hint
+               AND NOT EXISTS (SELECT 1 FROM overrides o WHERE o.duplicate_uuid = c.uuid))
+               AS created_without_hint
     FROM (VALUES ('ticket_task'), ('station')) AS k(entity_kind)
     """
 )
