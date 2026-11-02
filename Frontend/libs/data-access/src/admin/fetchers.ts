@@ -871,7 +871,8 @@ export function useDuplicatePairs(
 
 /**
  * Every card a filter matches, read page by page: for an order only the page can work out, the
- * time of the later-created side (DUP-BE-412). The API sorts by the card's own fields.
+ * time of the later-created side (DUP-BE-412). The API sorts by the card's own fields. Meant for
+ * the pending queue, which stays short; the decided list only grows and is paged instead.
  */
 export function useAllDuplicatePairs(
   query: Omit<DuplicatePairsQuery, 'sort' | 'skip' | 'limit'>,

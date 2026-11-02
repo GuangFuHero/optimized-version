@@ -41,16 +41,20 @@ const { color, radius, shadow, typography } = designTokens;
 const PAGE_SIZE = 50;
 type Sort = 'similarity' | 'latest';
 
-/** The query a list shows; also used to find the next pair after one is handled. */
+/**
+ * The query a list shows, a page at a time. 已處理 sorted by latest goes by when the card was
+ * found (`-created_at`), which the API can page: that list only grows, so it is never read whole.
+ */
 export function listQuery(
   tab: PairTab,
   view: PairView,
   page: number,
+  sort: Sort = 'similarity',
 ): DuplicatePairsQuery {
   return {
     status: [...(view === 'pending' ? PENDING_STATUSES : DONE_STATUSES)],
     entity_kind: TAB_KINDS[tab],
-    sort: '-similarity',
+    sort: sort === 'latest' ? '-created_at' : '-similarity',
     skip: page * PAGE_SIZE,
     limit: PAGE_SIZE,
   };
@@ -72,24 +76,25 @@ export function DedupReviewPage() {
   const canView = user?.capabilities.includes('ai_duplicate.view') ?? false;
   const canReview = user?.capabilities.includes('ai_duplicate.review') ?? false;
 
-  const byPage = useDuplicatePairs(listQuery(tab, view, page), {
-    enabled: canView && sort === 'similarity',
+  // 待處理 by latest is the later-created side, which the API cannot sort by, so that list is read
+  // whole; it is the work still to do, so it stays short. Every other list is paged by the API.
+  const readWhole = sort === 'latest' && view === 'pending';
+  const byPage = useDuplicatePairs(listQuery(tab, view, page, sort), {
+    enabled: canView && !readWhole,
   });
-  // The API cannot sort by the later-created side, so that order reads the whole list.
   const whole = useAllDuplicatePairs(
     {
-      status: [...(view === 'pending' ? PENDING_STATUSES : DONE_STATUSES)],
+      status: [...PENDING_STATUSES],
       entity_kind: TAB_KINDS[tab],
     },
-    { enabled: canView && sort === 'latest' },
+    { enabled: canView && readWhole },
   );
-  const list = sort === 'latest' ? whole : byPage;
+  const list = readWhole ? whole : byPage;
   const allItems = whole.data ? byLatestCreated(whole.data) : [];
-  const items =
-    sort === 'latest'
-      ? allItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-      : (byPage.data?.items ?? []);
-  const total = sort === 'latest' ? allItems.length : (byPage.data?.total ?? 0);
+  const items = readWhole
+    ? allItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+    : (byPage.data?.items ?? []);
+  const total = readWhole ? allItems.length : (byPage.data?.total ?? 0);
   // The tab counts are the pending totals; one card each is the smallest page that carries them.
   const counts = {
     ticket: useDuplicatePairs(
