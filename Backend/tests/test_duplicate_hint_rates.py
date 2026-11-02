@@ -1,4 +1,4 @@
-"""提示率 and 誤報率 for the back office (Spec 025 ADR-457).
+"""提示率 and 誤報率 for the back office (Spec 025 ADR-458).
 
 The service, and its route `GET /admin/duplicate-hint-rates`.
 """

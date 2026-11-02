@@ -344,7 +344,7 @@ ai_duplicate.view」的註解留給前端改。不改重複審核頁、配對卡
 
 ---
 
-## ADR-457：重複審核加「提示率」和「誤報率」（`GET /admin/duplicate-hint-rates`）
+## ADR-458：重複審核加「提示率」和「誤報率」（`GET /admin/duplicate-hint-rates`）
 
 **Date**: 2026-11-01　**Status**: Proposed
 
