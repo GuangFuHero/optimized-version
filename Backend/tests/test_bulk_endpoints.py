@@ -73,7 +73,7 @@ async def _user_with(db, redis, name: str, *perms) -> dict:
                 db.add(permission)
                 await db.flush()
             db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform"))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None))
     uuid = str(user.uuid)
     headers = await auth_headers_for(redis, uuid, role)
     await db.commit()

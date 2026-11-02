@@ -99,7 +99,13 @@ export type {
   TimelineProps,
   TimelineTone,
 } from './components/Timeline';
-export { getRescueColorScheme, Icons, layoutSizes, theme } from './foundation';
+export {
+  getRescueColorScheme,
+  Icons,
+  layoutSizes,
+  theme,
+  themedIcon,
+} from './foundation';
 export {
   designExtensions,
   designTokens,
@@ -110,7 +116,9 @@ export {
   fontStack,
   fontVariables,
   IOS_NO_ZOOM_INPUT_PX,
+  LABEL_400_SIZE_VAR,
   safeAreaBottom,
+  TOUCH_FIELD_MEDIA,
   withAlpha,
 } from './theme';
 export type {

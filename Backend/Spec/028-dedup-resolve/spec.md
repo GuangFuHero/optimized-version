@@ -118,10 +118,11 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `title`、`description`、`priority`、`task_type`、`disaster_types`、`person_trapped_reported`、`immediate_danger_reported` | 單的欄位 |
 | `contact_name`、`contact_phone`、`contact_email` | 聯絡人。需要 `ai_duplicate.view`，審核員要能比對 |
 | `longitude`、`latitude` | 單的點 |
+| `location` | 單的地點（ADR-440）：`location_type`、`full_address`、`building_section`、`floor`、`room`、`pole_id`；沒有時為 `null`。權限同聯絡人，算進 `version`，處理時不能改 |
 | `status`、`audit_status` | 唯讀 |
 | `created_by`、`created_at` | 開單者 |
-| `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`recruiting_stopped`、`properties` |
-| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`property_value`、`quantity`、`status`、`comment` |
+| `tasks` | 還在的需求：`uuid`、`task_type`、`task_name`、`task_description`、`quantity`、`status`、`claim_count`、`claimant_keys`（ADR-445：這張卡專用的承接人代號，同一人兩邊相同；不算進 `version`）、`recruiting_stopped`、`properties` |
+| `tasks[].properties` | 還在的細項：`uuid`、`property_name`、`display_label`（ADR-446：需求類型的設定名稱，沒有就用 key；不算進 `version`）、`sort_order`、`data_type`、`enum_options`、`unit`、`is_active`（ADR-447：同一筆設定的順序、型別、選項、單位、是否啟用，停用的也算，沒有設定為 `null`；不算進 `version`）、`property_value`、`quantity`、`status`、`comment` |
 | `photos` | 還在的照片：`uuid`、`url`、`created_at`（ADR-384） |
 | `disaster_details` | 災害欄位答案：`{property_name: [value, …]}`（ADR-385） |
 
@@ -276,6 +277,7 @@ B ticket                        B ticket：已取消，replaced_by = A
 | `ticket_tasks` | 新增 `merged_into_uuid`（FK `ticket_tasks.uuid`，nullable） | 被併入時指向併入的那一項 |
 
 這兩個欄位只做紀錄，GraphQL 不回傳（ADR-372）。導向主要單靠通知：每則通知的 `ref_uuid` 都是主要單（§6）。
+例外是分享連結用的 `ticketAvailability`：順著 `replaced_by_uuid` 回還在的那張的 uuid（ADR-444）。
 
 不新增事件類型，`merged` 已經在 CHECK 裡。
 

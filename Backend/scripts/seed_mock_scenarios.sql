@@ -320,11 +320,11 @@ WHERE u.uuid::text LIKE 'c0000000-%' AND u.uuid NOT IN (SELECT uuid FROM kept_mo
 -- ADR-026 dropped the Group/Policy model: the old 'Login User' group is now the `user` platform
 -- role that every registered account gets (see scripts/seed_rbac.py). role_uuid is NOT NULL, so
 -- this fails loudly rather than silently if seed_rbac.py has not been run on this database first.
--- role_kind 與 team_uuid 是 ADR-073 之後的必填欄位:平台角色的 kind='platform'、team_uuid 必須為
--- NULL(ck_ura_role_team_kind),而 role_kind 另有複合 FK 指向 roles(uuid, kind),寫錯會被擋下。
-INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid)
+-- 平台角色的 team_uuid 必須為 NULL、團隊角色一定要帶 team_uuid:user_role_assign 上的觸發器依角色的 kind
+-- 檢查(ck_ura_role_team_kind),寫錯會被擋下。
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, team_uuid)
 SELECT gen_random_uuid(), u.uuid,
-       (SELECT uuid FROM roles WHERE name='user' AND kind='platform'), 'platform', NULL
+       (SELECT uuid FROM roles WHERE name='user' AND kind='platform'), NULL
 FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
 
 -- 1c. TEAMS — RBAC v1 組織身分(13 個:官方 4 + NGO 9,每個官方/NGO 帳號一個)
@@ -347,8 +347,8 @@ INSERT INTO teams (uuid, name, type, tax_id, status) VALUES
 -- ADR-068/073:「屬於哪個 team」不再是 users 的欄位(users.team_uuid 已被 90c93167fa66 移除),
 -- 而是 user_role_assign 這一列的性質——一筆 team 角色的授予就是一個身分。
 -- 24 個志工帳號不拿 team 身分,只有 1b 給的 user 平台角色,才會與官方/NGO 形成對比。
-INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid)
-SELECT gen_random_uuid(), m.user_uuid::uuid, r.uuid, 'team', m.team_uuid::uuid
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, team_uuid)
+SELECT gen_random_uuid(), m.user_uuid::uuid, r.uuid, m.team_uuid::uuid
 FROM (VALUES
  ('c0000000-0000-4000-8000-000000000021','10000000-0000-4000-8000-000000000001'),
  ('c0000000-0000-4000-8000-000000000022','10000000-0000-4000-8000-000000000002'),
@@ -369,11 +369,11 @@ CROSS JOIN (SELECT uuid FROM roles WHERE name='admin' AND kind='team') r;
 -- 1e. 2 個平台管理帳號:除了 1b 給的 user,再拿一個平台角色。原本是在 staging 上手動加的,用的也是 c… 前綴,
 -- 所以每次 SEED_MOCK 都被第 0 節刪掉;現在帳號留著(kept_mock_users),角色每次在這裡重新給。
 -- 角色找不到時 role_uuid 是 NULL,會直接報錯。
-INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid) VALUES
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, team_uuid) VALUES
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000038',
-  (SELECT uuid FROM roles WHERE name='super_admin' AND kind='platform'), 'platform', NULL),
+  (SELECT uuid FROM roles WHERE name='super_admin' AND kind='platform'), NULL),
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000039',
-  (SELECT uuid FROM roles WHERE name='data_auditor' AND kind='platform'), 'platform', NULL);
+  (SELECT uuid FROM roles WHERE name='data_auditor' AND kind='platform'), NULL);
 
 -- 2. STATIONS — base_geometries + stations + EAV + 投票
 INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_at, updated_at) VALUES
@@ -436,7 +436,7 @@ INSERT INTO stations (uuid, type, name, description, op_hour, level, comment, so
 UPDATE stations s
 SET team_uuid = ura.team_uuid
 FROM base_geometries bg
-JOIN user_role_assign ura ON ura.user_uuid = bg.created_by AND ura.role_kind = 'team'
+JOIN user_role_assign ura ON ura.user_uuid = bg.created_by AND ura.team_uuid IS NOT NULL
 WHERE bg.uuid = s.uuid
   AND (s.uuid::text LIKE 'a0000000-%' OR s.uuid::text LIKE 'b0000000-%');
 
@@ -632,8 +632,8 @@ INSERT INTO tickets (uuid, title, description, contact_name, contact_email, cont
 UPDATE base_geometries SET delete_at = '2024-07-25 12:00+08', updated_at = '2024-07-25 12:00+08'
  WHERE uuid = 'd0000000-0000-4000-8000-000000000045';
 
--- 3b. 地址 — avol01 的單:整行在 full_address,也拆好各欄;沒經 TGOS 確認,所以是 unverified。
-INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, full_address, county, town, village, road, section, no, normalization_status, floor, room) VALUES
+-- 3b. 地址 — avol01 的單:整行在 user_input_address,也拆好各欄,full_address 由資料庫從各欄串出來;沒經 TGOS 確認,所以是 unverified。
+INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, user_input_address, county, town, village, road, section, no, normalization_status, floor, room) VALUES
  ('40000000-0000-4000-8000-000000000039','d0000000-0000-4000-8000-000000000039','address','花蓮縣光復鄉中山路二段45號','花蓮縣','光復鄉',NULL,'中山路','二段','45號','unverified','1樓',NULL),
  ('40000000-0000-4000-8000-000000000040','d0000000-0000-4000-8000-000000000040','address','花蓮縣光復鄉大安村大安路6號','花蓮縣','光復鄉','大安村','大安路',NULL,'6號','unverified',NULL,NULL),
  ('40000000-0000-4000-8000-000000000041','d0000000-0000-4000-8000-000000000041','address','花蓮縣光復鄉大全街88號','花蓮縣','光復鄉',NULL,'大全街',NULL,'88號','unverified',NULL,NULL),
@@ -930,7 +930,7 @@ INSERT INTO building_maps (uuid, name, floors_above_ground, floors_below_ground,
  ('20000000-0000-4000-8000-000000000101','中正路二段61號集合住宅',5,1,'{}'),
  ('20000000-0000-4000-8000-000000000102','光復國小(臨時收容處)',2,0,'{"1F": ["禮堂", "健康中心"], "2F": ["圖書室"]}'),
  ('20000000-0000-4000-8000-000000000103','大全街12號透天厝',3,0,'{}');
-INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, full_address, county, town, village, road, section, no, normalization_status, floor, room) VALUES
+INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, user_input_address, county, town, village, road, section, no, normalization_status, floor, room) VALUES
  ('40000000-0000-4000-8000-000000000101','20000000-0000-4000-8000-000000000101','address','花蓮縣光復鄉中正路二段61號','花蓮縣','光復鄉',NULL,'中正路','二段','61號','unverified',NULL,NULL),
  ('40000000-0000-4000-8000-000000000102','20000000-0000-4000-8000-000000000102','address','花蓮縣光復鄉林森路8號','花蓮縣','光復鄉',NULL,'林森路',NULL,'8號','unverified',NULL,NULL),
  ('40000000-0000-4000-8000-000000000103','20000000-0000-4000-8000-000000000103','address','花蓮縣光復鄉大全街12號','花蓮縣','光復鄉',NULL,'大全街',NULL,'12號','unverified',NULL,NULL);
@@ -972,8 +972,8 @@ INSERT INTO building_map_ticket_map (ticket_uuid, building_map_uuid) VALUES
  ('d0000000-0000-4000-8000-000000000055','20000000-0000-4000-8000-000000000103');
 
 -- 大樓的地址照抄,加上樓層、戶別。052 不知道幾樓(前台的「未定位」)。
-INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, full_address, county, town, village, road, section, no, normalization_status, floor, room)
-SELECT n.uuid, n.ticket_uuid, 'address', b.full_address, b.county, b.town, b.village, b.road, b.section, b.no,
+INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, user_input_address, remainder, county, town, village, road, section, no, normalization_status, floor, room)
+SELECT n.uuid, n.ticket_uuid, 'address', b.user_input_address, b.remainder, b.county, b.town, b.village, b.road, b.section, b.no,
        b.normalization_status, n.floor, n.room
   FROM (VALUES
    ('40000000-0000-4000-8000-000000000046'::uuid,'d0000000-0000-4000-8000-000000000046'::uuid,'20000000-0000-4000-8000-000000000101'::uuid,'B1',NULL),

@@ -15,22 +15,23 @@ way, and app.services.chart_render.resolve() is what guarantees each function on
 ever receives an `x` value that's actually valid for it (see that module's CATALOG).
 
 `extra_filters` is the caller's RBAC row filter — a list of WHERE clauses from
-app.core.rbac_scopes.scope_filter against `Tickets`, empty for `all` scope. Every
-function must apply it; an aggregate that skips it leaks numbers, if not rows.
+app.core.rbac_scopes.scope_filter against `Tickets`, empty for `all` scope — plus the
+endpoint's own filters. Every function must apply it; an aggregate that skips it leaks
+numbers, if not rows. The ticket-level counts leave deleted tickets out unless it holds
+analytics_filters.INCLUDE_DELETED; a deleted ticket then counts as canceled, whatever its status.
 
 Grouped rows use a uniform `"x"` output column regardless of what's being grouped by
 (day/week bucket, task_type, ...) so chart_render.py never needs per-metric field
 lookups.
 
-Per Spec/Docs/er-diagram.md, `tickets.status` doesn't track work progress at the
-granularity needed here, so bucket-based metrics classify a ticket by rolling up its
-`ticket_tasks` (and their `task_assignments`) instead. The four buckets are exclusive
-and exhaustive:
+Bucket-based metrics classify a ticket by `tickets.status`, which
+app.services.ticket_status works out from its needs, so the dashboard and the ticket list
+always agree. The four buckets are exclusive and exhaustive:
 
-    unassigned  -- no task_assignments at all: nobody has picked it up yet
-    canceled    -- someone did, but every task has since been canceled
-    completed   -- >=1 task still standing, and all of them 'fulfilled'
-    ongoing     -- anything else: picked up, work still outstanding
+    unassigned  -- pending: a need is open and nobody is on any need
+    ongoing     -- in_progress: a need is open and somebody is on one
+    completed   -- completed: no need is open (filled, stopped or deleted)
+    canceled    -- cancelled: the ticket was called off
 
 `canceled` is an outcome, not a flavour of `ongoing`: such a ticket must leave the
 backlog, count toward neither success nor failure, and stop ageing.
@@ -53,6 +54,7 @@ from sqlalchemy import (
     literal_column,
     null,
     or_,
+    outerjoin,
     select,
     union_all,
     values,
@@ -60,7 +62,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
-from sqlalchemy.sql.expression import ColumnClause
 from sqlalchemy.sql.visitors import replacement_traverse
 
 from app.core.search import statement_ceiling
@@ -77,60 +78,77 @@ from app.services.analytics_common import (
     local_bounds,
     resolve_granularity,
 )
+from app.services.analytics_filters import NEED_TYPE, live_tickets
 from app.services.dedup_review import PENDING_STATUSES
 from app.services.ticket_status import OPEN_NEED_STATUSES
 
-# The two buckets a ticket exits through, and the task column recording when. Per-task, so
-# a ticket's own exit date is max() over its tasks. "unassigned"/"ongoing" have no exit date.
-_DRAIN_TIMESTAMP = {
-    "completed": TicketTask.completed_at,
-    "canceled": TicketTask.canceled_at,
+# The two buckets a ticket exits through; "unassigned"/"ongoing" have no exit date.
+_EXIT_BUCKETS = ("completed", "canceled")
+
+_BUCKET_OF_STATUS = {
+    "pending": "unassigned",
+    "in_progress": "ongoing",
+    "completed": "completed",
+    "cancelled": "canceled",
 }
 
 
-def _task_rollup_subquery():
-    """Per-ticket task/assignment counts feeding the bucket classification in _bucket_expr."""
+def _bucket_expr():
+    """CASE naming the module docstring's bucket for the ticket's status; a deleted ticket is always canceled.
+
+    Tickets deleted before deleting set the status were left at theirs, so the status alone is not enough.
+    """
+    return case(
+        (Tickets.delete_at.is_not(None), "canceled"),
+        else_=case(_BUCKET_OF_STATUS, value=Tickets.status),
+    )
+
+
+def _exited_subquery(bucket: str, extra_filters: list | None):
+    """Tickets now in exit `bucket`, each with the moment it left: columns ticket_uuid, stamp.
+
+    The moment is when its last need, deleted ones included, was filled, stopped or canceled. Only
+    a ticket with no such need falls back to its own updated_at, so a ticket cancelled by hand that
+    has one is dated by that need, not by the cancel.
+    """
+    need_stamp = func.max(func.greatest(TicketTask.completed_at, TicketTask.canceled_at))
     return (
         select(
-            TicketTask.ticket_uuid.label("ticket_uuid"),
-            func.count(func.distinct(TicketTask.uuid))
-            .filter(TicketTask.status != "canceled")
-            .label("active_tasks"),
-            func.count(func.distinct(TicketTask.uuid))
-            .filter(TicketTask.status == "fulfilled")
-            .label("fulfilled_tasks"),
-            func.count(func.distinct(TaskAssignment.uuid)).label("assigned_count"),
+            Tickets.uuid.label("ticket_uuid"),
+            func.coalesce(need_stamp, func.max(Tickets.updated_at)).label("stamp"),
         )
-        .select_from(TicketTask)
-        .outerjoin(TaskAssignment, TaskAssignment.task_uuid == TicketTask.uuid)
-        .where(TicketTask.delete_at.is_(None))
-        .group_by(TicketTask.ticket_uuid)
+        .select_from(Tickets)
+        .outerjoin(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
+        .where(*live_tickets(extra_filters), _bucket_expr() == bucket, *(extra_filters or []))
+        .group_by(Tickets.uuid)
         .subquery()
     )
 
 
-def _bucket_expr(rollup):
-    """CASE assigning a ticket one of the module docstring's four buckets.
+def _need_types():
+    """One row per ticket and distinct type among its live needs: columns ticket_uuid, task_type.
 
-    `active_tasks` excludes canceled tasks, so it reaches zero exactly when every task was
-    called off. That branch must precede "completed": "all active tasks fulfilled" is
-    trivially true of zero, so the other order reports withdrawn work as delivered.
+    A deleted ticket's needs all count, deleted or not, so it still lands under its types.
     """
-    return case(
-        (
-            (rollup.c.assigned_count.is_(None)) | (rollup.c.assigned_count == 0),
-            "unassigned",
-        ),
-        (
-            rollup.c.active_tasks == 0,
-            "canceled",
-        ),
-        (
-            and_(rollup.c.active_tasks > 0, rollup.c.fulfilled_tasks == rollup.c.active_tasks),
-            "completed",
-        ),
-        else_="ongoing",
+    owner = aliased(Tickets)
+    return (
+        select(TicketTask.ticket_uuid, TicketTask.task_type)
+        .join(owner, owner.uuid == TicketTask.ticket_uuid)
+        .where(or_(TicketTask.delete_at.is_(None), owner.delete_at.is_not(None)))
+        .distinct()
+        .subquery("need_types")
     )
+
+
+def _by_need_type(source, ticket_uuid, extra_filters: list | None):
+    """`source` joined to its tickets' need types, the category column, and `extra_filters` for it.
+
+    A ticket counts once under each type, so categories can sum to more than the total; one with no
+    live needs is uncategorised. A type filter then reads the joined type, so only its bucket shows.
+    """
+    types = _need_types()
+    joined = outerjoin(source, types, types.c.ticket_uuid == ticket_uuid)
+    return joined, category_expr(types.c.task_type), _on_need_type(extra_filters or [], types.c.task_type)
 
 
 async def get_ticket_count(
@@ -147,48 +165,26 @@ async def get_ticket_count(
     """Ticket count for one bucket, optionally grouped by date/week or category.
 
     Backs 5 y-metrics via a fixed `bucket`: `None` counts every ticket ("total_tickets"),
-    the four bucket names narrow to that bucket. `x="category"` groups by `task_type`,
-    labelling NULLs (analytics_common.UNCATEGORIZED_LABEL).
+    the four bucket names narrow to that bucket. `x="category"` groups by the types of the
+    ticket's live needs (see _by_need_type), so categories can sum to more than the total.
 
     `x="date"` groups by whichever date the metric is really about. The two exit buckets
-    (completed, canceled) group by the day the ticket left — `max()` of the relevant task
-    timestamp — matching get_net_backlog_change's exit series; the rest group by
-    `Tickets.created_at`, since they haven't left.
+    (completed, canceled) group by the day the ticket left (see _exited_subquery),
+    matching get_net_backlog_change's exit series; the rest group by `Tickets.created_at`,
+    since they haven't left.
 
-    The exit-date path needs a timestamp, not just a status, so it drops tickets whose
-    columns are NULL. Migration a1b2c3d4e5f6 backfills pre-existing rows, so in practice
-    the two paths agree. It is also point-in-time, not history: services/ticket.py clears
-    those timestamps when a task leaves 'fulfilled'/'canceled', so re-opening one erases
-    its exit day and the same query run twice can report a different past. Faithful
-    history needs a status-transition table, out of scope here.
+    The exit day is the ticket's last need event, point-in-time, not history: re-opening a need
+    clears its timestamps and deleting one stamps it anew, so the exit day can move and the same
+    query run twice can report a different past. A ticket cancelled by hand is dated by its last
+    stamped need when it has one, not by the cancel. Faithful history needs a status-transition
+    table, out of scope here.
     """
-    rollup = _task_rollup_subquery()
-    bucket_expr = _bucket_expr(rollup)
+    bucket_expr = _bucket_expr()
     lower, upper = local_bounds(start_date, end_date, tz)
     granularity = resolve_granularity(x_granularity)
 
-    if bucket in _DRAIN_TIMESTAMP and x == "date":
-        stamp = _DRAIN_TIMESTAMP[bucket]
-        drained = (
-            select(
-                Tickets.uuid.label("ticket_uuid"),
-                func.max(stamp).label("stamp"),
-            )
-            .select_from(Tickets)
-            .join(rollup, rollup.c.ticket_uuid == Tickets.uuid)
-            .join(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
-            .where(
-                Tickets.delete_at.is_(None),
-                TicketTask.delete_at.is_(None),
-                bucket_expr == bucket,
-                # No exit timestamp, no day to plot it on. Without this the NULL survives
-                # max() and the caller's sort raises TypeError comparing it to a datetime.
-                stamp.is_not(None),
-                *(extra_filters or []),
-            )
-            .group_by(Tickets.uuid)
-            .subquery()
-        )
+    if bucket in _EXIT_BUCKETS and x == "date":
+        drained = _exited_subquery(bucket, extra_filters)
         period = func.date_trunc(granularity, func.timezone(tz.key, drained.c.stamp))
         query = select(period.label("x"), func.count(drained.c.ticket_uuid).label("count")).select_from(
             drained
@@ -207,17 +203,13 @@ async def get_ticket_count(
         period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
         cols.insert(0, period.label("x"))
         group_cols.append(period)
-    elif x == "category":
-        category = category_expr(Tickets.task_type)
+    source, filters = Tickets, extra_filters or []
+    if x == "category":
+        source, category, filters = _by_need_type(Tickets, Tickets.uuid, extra_filters)
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = (
-        select(*cols)
-        .select_from(Tickets)
-        .outerjoin(rollup, rollup.c.ticket_uuid == Tickets.uuid)
-        .where(Tickets.delete_at.is_(None), *(extra_filters or []))
-    )
+    query = select(*cols).select_from(source).where(*live_tickets(extra_filters), *filters)
     if bucket is not None:
         query = query.where(bucket_expr == bucket)
     if lower is not None:
@@ -241,7 +233,7 @@ async def get_completion_rate(
     tz: ZoneInfo,
     extra_filters: list | None = None,
 ) -> list[dict]:
-    """Completed / total ticket ratio, overall, per task_type, or per creation day/week.
+    """Completed / total ticket ratio, overall, per need type (see _by_need_type), or per creation day/week.
 
     Canceled tickets are excluded from both halves: in the denominator they would read as
     work we failed to deliver, when it was called off.
@@ -249,8 +241,7 @@ async def get_completion_rate(
     `x="date"` is a cohort rate — grouped by creation day, but reflecting each ticket's
     *current* status, not the rate as of that day.
     """
-    rollup = _task_rollup_subquery()
-    bucket_expr = _bucket_expr(rollup)
+    bucket_expr = _bucket_expr()
     lower, upper = local_bounds(start_date, end_date, tz)
     granularity = resolve_granularity(x_granularity)
 
@@ -263,17 +254,13 @@ async def get_completion_rate(
         period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
         cols.insert(0, period.label("x"))
         group_cols.append(period)
-    elif x == "category":
-        category = category_expr(Tickets.task_type)
+    source, filters = Tickets, extra_filters or []
+    if x == "category":
+        source, category, filters = _by_need_type(Tickets, Tickets.uuid, extra_filters)
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = (
-        select(*cols)
-        .select_from(Tickets)
-        .outerjoin(rollup, rollup.c.ticket_uuid == Tickets.uuid)
-        .where(Tickets.delete_at.is_(None), *(extra_filters or []))
-    )
+    query = select(*cols).select_from(source).where(*live_tickets(extra_filters), *filters)
     if lower is not None:
         query = query.where(Tickets.created_at >= lower)
     if upper is not None:
@@ -312,8 +299,7 @@ async def get_age_distribution(
     `allowed_x={None}`, a fixed shape like get_task_completion_distribution. Duration-
     based, so `tz` only affects start/end filtering, not the buckets themselves.
     """
-    rollup = _task_rollup_subquery()
-    bucket_expr = _bucket_expr(rollup)
+    bucket_expr = _bucket_expr()
     lower, upper = local_bounds(start_date, end_date, tz)
 
     age_hours = func.extract("epoch", func.now() - Tickets.created_at) / 3600.0
@@ -327,9 +313,8 @@ async def get_age_distribution(
     query = (
         select(age_bucket.label("x"), func.count(Tickets.uuid).label("count"))
         .select_from(Tickets)
-        .outerjoin(rollup, rollup.c.ticket_uuid == Tickets.uuid)
         .where(
-            Tickets.delete_at.is_(None),
+            *live_tickets(extra_filters),
             bucket_expr.notin_(("completed", "canceled")),
             *(extra_filters or []),
         )
@@ -384,8 +369,11 @@ async def get_time_to_completion(
         # Rooted at TicketTask, but the filters are written against Tickets, so reach the
         # parent row. Repointing them at TicketTask would be wrong, not just awkward: its
         # `created_by` is the task's author rather than the ticket's owner, and it has no
-        # geometry — so `own` would answer a different question and `zone` would match none.
-        query = query.join(Tickets, Tickets.uuid == TicketTask.ticket_uuid).where(*extra_filters)
+        # geometry — so `own` would answer a different question and `zone` would match none. A type
+        # filter is the exception: it reads the need's own type, as the volunteer metrics do.
+        query = query.join(Tickets, Tickets.uuid == TicketTask.ticket_uuid).where(
+            *_on_need_type(extra_filters, TicketTask.task_type)
+        )
     if lower is not None:
         query = query.where(TicketTask.completed_at >= lower)
     if upper is not None:
@@ -418,22 +406,18 @@ async def get_net_backlog_change(
     `x_granularity` is the only param that varies this query's shape.
 
     The three series are independent: "new" groups by creation day, each exit series by
-    the day the ticket's last task reached that state. A ticket created before the window
+    the day the ticket left that way. A ticket created before the window
     can still appear as an exit inside it.
 
-    Exits with no timestamp are missing from their series (a1b2c3d4e5f6 backfills the
-    pre-existing ones), and the timestamps are mutable — see get_ticket_count for both
-    caveats.
+    The exit timestamps are mutable — see get_ticket_count for that caveat.
     """
     granularity = resolve_granularity(x_granularity)
     lower, upper = local_bounds(start_date, end_date, tz)
-    rollup = _task_rollup_subquery()
-    bucket_expr = _bucket_expr(rollup)
     empty_row = {"new_count": 0, "completed_count": 0, "canceled_count": 0}
 
     new_period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
     new_query = select(new_period.label("x"), func.count(Tickets.uuid).label("count")).where(
-        Tickets.delete_at.is_(None), *(extra_filters or [])
+        *live_tickets(extra_filters), *(extra_filters or [])
     )
     if lower is not None:
         new_query = new_query.where(Tickets.created_at >= lower)
@@ -447,22 +431,7 @@ async def get_net_backlog_change(
 
         Both exits have the same shape, so this runs twice instead of being written twice.
         """
-        stamp = _DRAIN_TIMESTAMP[bucket]
-        exited = (
-            select(Tickets.uuid.label("ticket_uuid"), func.max(stamp).label("stamp"))
-            .select_from(Tickets)
-            .join(rollup, rollup.c.ticket_uuid == Tickets.uuid)
-            .join(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
-            .where(
-                Tickets.delete_at.is_(None),
-                TicketTask.delete_at.is_(None),
-                bucket_expr == bucket,
-                stamp.is_not(None),  # see get_ticket_count: no timestamp, no day
-                *(extra_filters or []),
-            )
-            .group_by(Tickets.uuid)
-            .subquery()
-        )
+        exited = _exited_subquery(bucket, extra_filters)
         period = func.date_trunc(granularity, func.timezone(tz.key, exited.c.stamp))
         query = select(period.label("x"), func.count(exited.c.ticket_uuid).label("count")).select_from(exited)
         if lower is not None:
@@ -512,8 +481,11 @@ async def get_task_completion_distribution(
         func.count(TicketTask.uuid).filter(TicketTask.status != "canceled").label("total"),
     ).where(TicketTask.delete_at.is_(None))
     if extra_filters:
-        # Reach the parent row, same reasoning as get_time_to_completion above.
-        query = query.join(Tickets, Tickets.uuid == TicketTask.ticket_uuid).where(*extra_filters)
+        # Reach the parent row, same reasoning as get_time_to_completion above; a type filter reads
+        # the need's own type.
+        query = query.join(Tickets, Tickets.uuid == TicketTask.ticket_uuid).where(
+            *_on_need_type(extra_filters, TicketTask.task_type)
+        )
     if lower is not None:
         query = query.where(TicketTask.created_at >= lower)
     if upper is not None:
@@ -609,15 +581,11 @@ def _versions_at(table: str, live, days, *, of_live_rows: bool = False):
 
 
 def _on_need_type(clauses: list, need_type):
-    """`clauses` with the ticket's task_type read as the need's own, as the other need metrics do."""
+    """`clauses` with the need-type filter read as the need's own type rather than any need of the ticket."""
 
     def swap(element):
-        if (
-            isinstance(element, ColumnClause)
-            and element.table is Tickets.__table__
-            and element.name == "task_type"
-        ):
-            return need_type
+        if NEED_TYPE in element._annotations:
+            return need_type == element._annotations[NEED_TYPE]
         return None
 
     return [replacement_traverse(clause, {}, swap) for clause in clauses]
@@ -745,7 +713,7 @@ async def get_duplicate_count(
     A ticket counts once, however many cards name it, when at least one card about tickets still
     waits for a reviewer (dedup_review.PENDING_STATUSES) and was not resolved by a merge. A need
     card counts the ticket its need belongs to. The date range filters on the card's `created_at`;
-    `x="date"` groups a ticket by its earliest such card, `x="category"` by `task_type`.
+    `x="date"` groups a ticket by its earliest such card, `x="category"` by its need types.
 
     Both tickets of a card must be live and inside `extra_filters`: scoping only the counted side
     would flag a ticket as a duplicate of one the caller isn't allowed to see.
@@ -788,28 +756,26 @@ async def get_duplicate_count(
         .subquery()
     )
     flagged = (
-        select(
-            sides.c.ticket_uuid,
-            Tickets.task_type.label("category"),
-            func.min(sides.c.created_at).label("flagged_at"),
-        )
-        .join(Tickets, Tickets.uuid == sides.c.ticket_uuid)
-        .group_by(sides.c.ticket_uuid, Tickets.task_type)
+        select(sides.c.ticket_uuid, func.min(sides.c.created_at).label("flagged_at"))
+        .group_by(sides.c.ticket_uuid)
         .subquery()
     )
 
     cols = [func.count(flagged.c.ticket_uuid).label("count")]
     group_cols = []
+    source, filters = flagged, []
     if x == "date":
         period = func.date_trunc(granularity, func.timezone(tz.key, flagged.c.flagged_at))
         cols.insert(0, period.label("x"))
         group_cols.append(period)
     elif x == "category":
-        category = category_expr(flagged.c.category)
+        # The scope already held in `in_scope`; only a type filter narrows the buckets.
+        type_filters = [c for c in extra_filters or [] if NEED_TYPE in c._annotations]
+        source, category, filters = _by_need_type(flagged, flagged.c.ticket_uuid, type_filters)
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = select(*cols).select_from(flagged)
+    query = select(*cols).select_from(source).where(*filters)
     if group_cols:
         query = query.group_by(*group_cols)
 

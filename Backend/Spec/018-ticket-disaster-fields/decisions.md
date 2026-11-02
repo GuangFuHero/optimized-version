@@ -1,4 +1,4 @@
-# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387、ADR-422、ADR-437）
+# 通報單災害動態欄位 — ADR 全集（ADR-244~258、ADR-263~272、ADR-277~283、ADR-310、ADR-386、ADR-387、ADR-422、ADR-437、ADR-444、ADR-449）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/016-resource-history/decisions.md`（ADR-243 為目前全 repo 最大值）。
@@ -736,7 +736,7 @@ floor 是 RF、nF、Bn     → 往下驗 room
 
 ➕ 回 `TicketType` 的地方（list、single、mutation 回傳）都由同一個 resolver 給，不用逐支改。
 ➖ 建物刪了以後，原本在裡面的單看不出曾經屬於哪一棟；對照表的列還在，要查得直接查 DB。
-◾ 民眾的 `createHelpRequest` 建進建物：Carol 10-25 說 V1 要做，另開一支 PR。
+◾ 民眾的 `createHelpRequest` 建進建物：Carol 10-25 說 V1 要做，另開一支 PR（ADR-449）。
 
 ### ADR-387 格子的筆數由後端算（`ticketCells`），一格的單用 `tickets(locationCell:)` 列
 
@@ -875,3 +875,94 @@ Dan 2026-10-29 決定用這個做法（A），另開一支 PR 接在 #121 後面
 主鍵查詢兩種都 1～3 ms；目前前台沒有把這兩支跟別的 root field 放在同一個請求。
 ◾ 測試量不了時間，所以測的是設定：`tests/test_generic_plan.py` 釘住這個視窗（裡面是 generic、出去還原、
 巢狀不提早還原、失敗時留原本的錯），`test_ticket_cells.py` 釘住哪幾條路有包、哪幾條沒有。
+
+### ADR-444 分享連結分得出「已刪除」「已合併到另一張」和「找不到」：另一個只回狀態的查詢
+
+**白話**：打開一張單的分享連結時，前台分得出單是被刪了、被合併到另一張（帶得過去）、還是根本沒有這張單；
+分的時候不給單的任何內容。
+
+**Date**: 2026-10-31（糖要前台分得出「這張任務單已刪除」和「找不到這張任務單」兩種畫面，Dan 定這個做法；
+同日 HC review #192 後加 `merged`、先看範圍再看刪了沒，Dan 同意）
+
+**Context**：
+
+- `ticket(uuid)` 用 `get_by_uuid_active`，刪掉的單和不存在的 uuid 都回 null（`graphql/tickets/queries.py`）。
+- 刪單都是軟刪除：建單者刪（`services/ticket.py::delete_ticket`）和重複審核合併掉的那張
+  （`services/dedup_resolve.py::_cancel_secondary`）都寫 `cancelled`＋`delete_at`。網站沒有硬刪單的路徑。
+- 合併掉的那張另外寫 `replaced_by_uuid`，指向留下那張（ADR-372）。需求還在，只是搬到留下那張上。
+- 分享頁在伺服器端讀 `ticket`（`point-share/target.ts`），拿到 null 就沒有東西可以分。
+
+**Decision**：
+
+- 加 `Query.ticketAvailability(uuid: UUID!): TicketAvailabilityType!`。`status` 是 `TicketAvailability`
+  （`available`／`merged`／`deleted`／`not_found`），`replacedByUuid` 只有 `merged` 時有值。
+  前台跟 `ticket(uuid)` 放在同一個 request 問，`ticket` 是 null 時看這裡。
+- 先看範圍：這張單不在呼叫者的 `ticket.view` 範圍內，不管刪了沒都是 `not_found`，跟 `ticket(uuid)` 一樣。
+  先看刪了沒的話，範圍外的單會因為刪了沒而回不同的值，跟 `ticket(uuid)` 對範圍外的單一律回 null 不一致。
+  `ticket.view` 是公開能力（ADR-273），所以現在每個人都是 ALL，這段不會走到。
+- `available`：`tickets` 有這個 uuid，`delete_at` 是 NULL，就是 `ticket(uuid)` 會回這張單的時候。
+- `merged`：這張刪了、`replaced_by_uuid` 有值，而且順著它找得到一張還在、呼叫者看得到的單。`replacedByUuid`
+  就是那張，`ticket(replacedByUuid)` 拿得到。
+  - 留下那張後來又被合併進別張，就一路順著 `replaced_by_uuid` 走到還在的那張：A 併進 B、B 又併進 C，A 和 B
+    都回 `merged`＋C。拿著分享連結的人要找的是需求，需求現在在 C 上。
+  - 這條鏈不會繞回自己：合併時兩張都要還在，有一張已經取消或刪了就回 409
+    （`services/dedup_resolve.py::_locked_snapshot`），所以每一步指到的單，在那一步時都還在；刪掉的單沒有路徑
+    變回還在（沒有地方把 `delete_at` 清回 NULL），所以不會指回鏈上前面的單。
+- `deleted`：建單者刪的（`replaced_by_uuid` 是 NULL）；或順著鏈走到一張建單者刪的；或走到呼叫者看不到的。
+  最後這種，呼叫者看得到一開始那張，說它沒了是對的，但不給看不到那張的 uuid。
+- `not_found`：其他都是。包括從來沒有這個 uuid、別種東西的 uuid（站點、區域、需求；只查 `tickets`）、硬刪的、
+  呼叫者看不到的。
+- 每看一張單一句主鍵查詢，只讀 `delete_at` 和 `replaced_by_uuid` 兩欄（`ticket_repository.deletion`）：
+  還在、刪了、找不到都是一句，合併掉的每多走一張多一句。回的只有狀態和留下那張的 uuid：不給標題、地址、
+  聯絡人、刪除時間，也不給單本身。
+- `replaced_by_uuid` 原本 GraphQL 不回（ADR-372）。這裡只在 `merged` 時回鏈最後那張的 uuid，`TicketType` 仍然
+  不回這個欄位。
+- `ticket(uuid)` 不動。
+- 不用的做法：
+  - `ticket(uuid)` 改回 union（單／已刪除／找不到）：改了現有查詢的型別，前台、管理平台、分享頁都要一起改。
+  - 刪掉的單讓 `ticket(uuid)` 回 error code：每個呼叫的地方都會當失敗，「沒有」跟「出錯」混在一起。
+  - 刪掉的單照樣回 `TicketType`、其他欄位清空：每個欄位 resolver 都要記得擋，漏一個就露出內容。
+  - `tickets` 加刪除狀態欄位：跟 `delete_at` 重複（3NF），還要 migration。
+  - 合併掉的單也回 `deleted`（本 ADR 第一版）：拿著分享連結的人會以為需求沒了，其實還在留下那張上。
+  - 只走一層，留下那張又被合併就回 `deleted`：需求其實在鏈的最後一張上，跟上一條一樣。
+
+**Consequences**：
+➕ 現有的 `ticket` 呼叫都不用改；分享頁同一個 request 多問一個欄位就分得出來。
+➕ 不露內容不靠每個欄位各自擋：這個查詢拿不到內容。
+➕ 不存新欄位、不用 migration：刪除只記在 `delete_at`，合併記在 `replaced_by_uuid`。
+➕ 合併掉的單的分享連結帶得到需求現在所在的單。
+➖ 多一個 root query；合併掉的單每多一層多一句查詢（通常只有一層）。
+◾ mock seed 清掉的單（含測試者用 mock 帳號建的）是硬刪，分享連結是「找不到」。
+
+### ADR-449 民眾的請求協助也能建在建物底下（`createHelpRequest(buildingMapUuid:)`）
+
+**白話**：在前台請求協助時，可以直接報在某一棟裡、選樓層和區域，規則跟管理平台在建物底下建單一樣。
+
+**Date**: 2026-11-01（Carol 10-25 說 V1 要做，見 ADR-386 最後一點；11-01 使用者把「開啟空間」排進這一版，
+這是後端三項的第一項）
+
+**Context**：
+
+- 建物底下的單只有 `createTicket` 建得出來（ADR-310）：`CreateTicketInput.buildingMapUuid`，點和地址從建物
+  複製，樓層和區域照建物配置驗。民眾用的 `createHelpRequest` 一定要帶 `geometry`，沒有建物可選。
+- 「開啟空間」的前台入口要從一棟建物進去請求協助，選樓層、區域。
+
+**Decision**：
+
+- `CreateHelpRequestInput.buildingMapUuid: UUID`，可不帶；`geometry` 改成可不帶。兩個二選一：
+  - 帶 `buildingMapUuid`：不能再帶 `geometry`（`Omit geometry when filing under a building map; its point is
+    used`）。點和地址從建物複製，送來的 `fullAddress` 不讀；樓層和區域照 ADR-310 驗。
+  - 不帶：`geometry` 必填（`geometry or buildingMapUuid is required`），其他跟以前一樣。
+- 跟 `validate_ticket` 走同一個 `place_ticket`，錯誤訊息一字不差，前台照 `createTicket` 的方式對應中文。
+  建物的地址已經拆好、評過，所以只檢查欄位長度（`check_address_lengths`），不再過 `apply_address`。
+- 寫入也照 `createTicket`：`building_map_ticket_map` 寫一列，`TicketType.buildingMapUuid` 照 ADR-386 由
+  `ticket.view_detail` 把關。被拒的請求一列都不寫。
+- 權限不變：仍是 `ticket.add`。建物本身是公開的（`buildingMaps`），所以帶 uuid 不會讓人知道更多。
+- 不用的做法：另開一支 `createHelpRequestInBuilding`。輸入幾乎一樣，前台要分兩條路送出，驗證也要寫兩份。
+
+**Consequences**：
+➕ 前台的建物入口跟管理平台用同一套規則，同一棟的單照樓層、區域分得開。
+➕ 不帶 `buildingMapUuid` 的請求協助完全不變。
+➖ 去重（ADR-397）照跑，點是建物的點：同一棟不同樓層的請求會被當成疑似重複。Carol 定了同一棟不同樓層
+不算重複，另開一支修。
+◾ `geometry` 從必填改成可不帶，GraphQL schema 是相容的改動：已經會帶 `geometry` 的前台不用改。

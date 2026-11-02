@@ -437,7 +437,9 @@ async def test_nobody_is_offered_a_removal_once_recruiting_was_stopped_by_hand(c
         await db.execute(
             update(TicketTask)
             .where(TicketTask.uuid == stopped)
-            .values(status="fulfilled", recruiting_stopped_at=datetime.now(UTC))
+            .values(
+                status="fulfilled", completed_at=datetime.now(UTC), recruiting_stopped_at=datetime.now(UTC)
+            )
         )
 
     tasks = (await _gql(client, token, ASSIGN_RIGHTS, {"t": ticket}))["ticket"]["tasks"]

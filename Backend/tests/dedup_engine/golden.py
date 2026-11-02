@@ -100,7 +100,7 @@ async def seed(db) -> None:
             task(_u(102), T_DONE, 120, task_name="淹水 需要抽水機"),
             task(_u(103), T_FAR, 5),
             task(_u(104), T_CANCELLED, 5),
-            task(_u(105), T_FLOOD, 5, status="fulfilled"),
+            task(_u(105), T_FLOOD, 5, status="fulfilled", completed_at=NOW),
             task(_u(106), T_PHONE, 5),
         ]
     )

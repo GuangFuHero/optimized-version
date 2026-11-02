@@ -72,7 +72,6 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, *, team
                 user_uuid=user.uuid,
                 role_uuid=role.uuid,
                 team_uuid=team.uuid if team is not None else None,
-                role_kind=kind,
             )
         )
         acting_as(user, role, team)
@@ -120,7 +119,7 @@ async def _station(
         SecondaryLocation(
             geometry_uuid=str(station.uuid),
             location_type="address",
-            full_address="花蓮縣光復鄉",
+            user_input_address="花蓮縣光復鄉",
             county="花蓮縣",
             town="光復鄉",
         )

@@ -1,18 +1,15 @@
 'use client';
 
-import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import { ButtonBase, Dialog, Popover, Tooltip } from '@mui/material';
 import { useId, useState, type MouseEvent } from 'react';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, Icons } from '@rescue-frontend/ui';
 
+import { pageHelpWidth } from './page-help';
 import { FreshDot, PageHelpPanel } from './page-help-panel';
 import { usePageHelp } from './use-page-help';
 
 const { color } = designTokens;
-
-/** As wide as the prototype's (`wg-help.jsx`, 340 for a page without a roles table). */
-const PANEL_WIDTH = 340;
 
 /**
  * Solid, as the prototype's: the theme's frosted popover lets the map through, and paragraphs read
@@ -69,7 +66,7 @@ export function PageHelpButton({ ringColor }: { ringColor: string }) {
             },
           }}
         >
-          <HelpOutlineRoundedIcon sx={{ fontSize: 26 }} />
+          <Icons.support sx={{ fontSize: 26 }} />
           {page.fresh ? <FreshDot ringColor={ringColor} /> : null}
         </ButtonBase>
       </Tooltip>
@@ -87,7 +84,7 @@ export function PageHelpButton({ ringColor }: { ringColor: string }) {
             'aria-labelledby': titleId,
             sx: {
               ...panelSurface,
-              width: PANEL_WIDTH,
+              width: pageHelpWidth(page.help),
               maxWidth: 'calc(100vw - 24px)',
               mt: 1,
             },

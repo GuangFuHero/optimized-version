@@ -68,7 +68,7 @@ async def _importer(db, *perms: Perm) -> User:
         db.add(permission)
         await db.flush()
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, role_kind="platform"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     acting_as(user, role)  # before the commit expires `role`
     await db.commit()
     await db.refresh(user)

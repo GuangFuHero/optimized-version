@@ -356,7 +356,7 @@ async def validate_help_request(
     db: AsyncSession,
     *,
     actor: User,
-    geometry: dict,
+    geometry: dict | None,
     title: str,
     description: str | None,
     contact_name: str,
@@ -365,12 +365,16 @@ async def validate_help_request(
     tasks: list[dict],
     photo_urls: list[str] | None = None,
     contact_email: str | None = None,
+    building_map_uuid: str | None = None,
 ) -> HelpRequestFields:
     """Every check the site's help request (「請求協助」) must pass, without writing anything.
 
     The site never asks how urgent a request is: priority is `medium`, and staff adjust it
     afterwards. The ticket's own `task_type` is the first need's, as the admin form sets it. An
     email is optional; the account's own is never filled in for it.
+
+    Filed inside a building, it is placed as `validate_ticket` places a ticket there: the building's
+    point and address, and the reporter's floor and area checked against its layout (`place_ticket`).
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
     if not title.strip():
@@ -386,12 +390,20 @@ async def validate_help_request(
     for task in tasks:
         _validate_help_request_task(task)
     photo_links = _checked_photo_links(photo_urls)
+    if building_map_uuid:
+        geometry, secondary_location = await place_ticket(db, building_map_uuid, geometry, secondary_location)
+    if geometry is None:
+        raise ValueError("geometry or buildingMapUuid is required")
     validate_point(geometry, entity="Ticket")
     contacts = normalize_contact_fields(
         {"contact_name": contact_name, "contact_email": contact_email, "contact_phone": contact_phone},
         required=frozenset({"contact_name"}),
     )
-    secondary_location = apply_address(secondary_location, point=point_of(geometry))
+    if building_map_uuid:
+        # The building's address is copied in already split and graded.
+        check_address_lengths(secondary_location)
+    else:
+        secondary_location = apply_address(secondary_location, point=point_of(geometry))
     return HelpRequestFields(
         ticket=TicketFields(
             point=geometry,
@@ -403,6 +415,7 @@ async def validate_help_request(
                 "task_type": tasks[0]["task_type"],
             },
             secondary_location=secondary_location,
+            building_map_uuid=building_map_uuid,
             photo_links=tuple(photo_links),
         ),
         needs=tuple(
@@ -526,7 +539,8 @@ async def update_ticket(
 async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, values: dict) -> bool:
     """Overwrite the address row for a geometry, or create it when there is none; say whether it changed.
 
-    A whole-input replacement, so clearing a member means sending it null, not omitting it.
+    A whole-input replacement, so clearing a member means sending it null, not omitting it. The raw line
+    is written only when something else changes, so an edit that changes nothing visible stays a no-op.
     Flush only: `update_ticket` commits.
     """
     existing = await secondary_location_repository.get_by_geometry(db, geometry_uuid)
@@ -534,8 +548,11 @@ async def _replace_secondary_location(db: AsyncSession, geometry_uuid: str, valu
         await secondary_location_repository.add(db, obj_in={"geometry_uuid": geometry_uuid, **values})
         return True
     for field, value in values.items():
-        setattr(existing, field, value)
+        if field != "user_input_address":
+            setattr(existing, field, value)
     changed = edited(existing)
+    if changed:
+        existing.user_input_address = values.get("user_input_address")
     await db.flush()
     return changed
 

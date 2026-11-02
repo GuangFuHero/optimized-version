@@ -33,8 +33,8 @@ import { StationExportMenu } from './station-export-menu';
 import { StationFilterPanel } from './station-filter-panel';
 import { StationImportDialog } from './station-import-dialog';
 import { StationMapView } from './station-map-view';
+import { offersImport } from './model/import';
 import { QuickStatusCell, TeamAssignCell } from './station-row-controls';
-import { StationStatsStrip } from './station-stats-strip';
 import { StationTable } from './station-table';
 import { StationToolbar } from './station-toolbar';
 
@@ -130,7 +130,7 @@ export function StationManagementPage() {
     setFormTarget({ mode: 'edit', uuid });
   };
   const emptyStateNew = caps.canAdd ? () => openNew() : undefined;
-  const emptyStateImport = caps.canImport
+  const emptyStateImport = offersImport(caps)
     ? () => setImportOpen(true)
     : undefined;
 
@@ -156,10 +156,6 @@ export function StationManagementPage() {
               '& > *': COLUMN_SX,
             }}
           >
-            <StationStatsStrip
-              activeStatus={filters.status}
-              onSelectStatus={(status) => setFilters({ ...filters, status })}
-            />
             <StationToolbar
               caps={caps}
               query={filters.q}

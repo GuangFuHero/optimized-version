@@ -15,6 +15,7 @@ const OPTIONS: ReadonlyArray<{ value: AuthIdentityType; label: string }> = [
 
 interface AuthIdentityToggleProps {
   value: AuthIdentityType;
+  /** Called for the other option only: the one already chosen, tapped again, keeps what was typed. */
   onChange: (value: AuthIdentityType) => void;
   disabled?: boolean;
 }
@@ -46,7 +47,11 @@ export function AuthIdentityToggle({
             fullWidth
             disabled={disabled}
             aria-pressed={active}
-            onClick={() => onChange(option.value)}
+            onClick={() => {
+              if (!active) {
+                onChange(option.value);
+              }
+            }}
             sx={{
               minHeight: 40,
               borderRadius: `${radius.md}px`,

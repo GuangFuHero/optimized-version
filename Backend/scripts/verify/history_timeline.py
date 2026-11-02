@@ -51,7 +51,7 @@ async def _grant(db, user, keys, scope="all") -> ActiveIdentity:
             db.add(permission)
             await db.flush()
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, role_kind="platform", team_uuid=None))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None))
     # Built before the commit, which expires `role` (see the MissingGreenlet note in main).
     identity = ActiveIdentity(role_uuid=str(role.uuid), team_uuid=None, role_name=role.name, team_name=None)
     await db.commit()

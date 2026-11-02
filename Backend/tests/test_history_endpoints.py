@@ -63,11 +63,8 @@ async def _user_with(db, redis, name: str, *perms, scope: str = "all") -> str:
                 permission = Permission(key=perm.value)
                 db.add(permission)
                 await db.flush()
-            db.add(RolePermissionAssign(
-                role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-            ))
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
-                              team_uuid=None, role_kind="platform"))
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None))
     await db.flush()
     uuid = str(user.uuid)
     _HEADERS[uuid] = await auth_headers_for(redis, uuid, role)
@@ -77,8 +74,13 @@ async def _user_with(db, redis, name: str, *perms, scope: str = "all") -> str:
 async def _ticket(db, owner_uuid: str, title="需要飲用水") -> str:
     """Create a ticket owned by `owner_uuid` and return its uuid as a string."""
     ticket = Tickets(
-        uuid=uuidlib.uuid4(), property_name="request", created_by=owner_uuid,
-        title=title, contact_name="王小姐", status="pending", priority="high",
+        uuid=uuidlib.uuid4(),
+        property_name="request",
+        created_by=owner_uuid,
+        title=title,
+        contact_name="王小姐",
+        status="pending",
+        priority="high",
     )
     db.add(ticket)
     await db.flush()
@@ -87,8 +89,12 @@ async def _ticket(db, owner_uuid: str, title="需要飲用水") -> str:
 
 def _audit(row_id, *, table="tickets", action="UPDATE", old=None, new=None, minute=0):
     return AuditLog(
-        uuid=uuidlib.uuid4(), table_name=table, action=action, row_id=row_id,
-        old_values=old, new_values=new,
+        uuid=uuidlib.uuid4(),
+        table_name=table,
+        action=action,
+        row_id=row_id,
+        old_values=old,
+        new_values=new,
         created_at=datetime(2026, 8, 21, 9, minute, tzinfo=UTC),
     )
 
@@ -101,8 +107,7 @@ async def test_a_ticket_timeline_comes_back_in_the_standard_envelope(client, db_
     """Success / data / meta — the same shape as every other endpoint."""
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
-    db_session.add(_audit(ticket, old={"status": "pending"},
-                          new={"status": "in_progress"}))
+    db_session.add(_audit(ticket, old={"status": "pending"}, new={"status": "in_progress"}))
     await db_session.commit()
 
     resp = await client.get(f"{BASE}/tickets/{ticket}", headers=_auth(owner))
@@ -120,14 +125,18 @@ async def test_a_station_timeline_uses_its_own_capability(client, db_session, re
     """station.view_history, not ticket.view_history — holding one is not holding the other."""
     owner = await _user_with(db_session, redis, "Keeper", Perm.STATION_VIEW_HISTORY)
     station = Station(
-        uuid=uuidlib.uuid4(), property_name="station", created_by=owner,
-        name="光復國小避難所", type="shelter",
+        uuid=uuidlib.uuid4(),
+        property_name="station",
+        created_by=owner,
+        name="光復國小避難所",
+        type="shelter",
     )
     db_session.add(station)
     await db_session.flush()
     station_uuid = str(station.uuid)
-    db_session.add(_audit(station_uuid, table="stations",
-                          old={"op_hour": "0800-1700"}, new={"op_hour": "24h"}))
+    db_session.add(
+        _audit(station_uuid, table="stations", old={"op_hour": "0800-1700"}, new={"op_hour": "24h"})
+    )
     await db_session.commit()
 
     resp = await client.get(f"{BASE}/stations/{station_uuid}", headers=_auth(owner))
@@ -170,9 +179,7 @@ async def test_without_the_capability_it_is_a_403(client, db_session, redis):
 async def test_someone_elses_ticket_is_a_403_under_own_scope(client, db_session, redis):
     """ADR-023: an ownership mismatch is a 403 — it leaks no boundary information."""
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
-    stranger = await _user_with(
-        db_session, redis, "Stranger", Perm.TICKET_VIEW_HISTORY, scope="own"
-    )
+    stranger = await _user_with(db_session, redis, "Stranger", Perm.TICKET_VIEW_HISTORY, scope="own")
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
 
@@ -188,9 +195,7 @@ async def test_out_of_zone_is_a_404_not_a_403(client, db_session, redis):
     ADR-023: a 403 would confirm the resource exists on the other side of that boundary.
     """
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
-    outsider = await _user_with(
-        db_session, redis, "Outsider", Perm.TICKET_VIEW_HISTORY, scope="zone"
-    )
+    outsider = await _user_with(db_session, redis, "Outsider", Perm.TICKET_VIEW_HISTORY, scope="zone")
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
 
@@ -213,9 +218,7 @@ async def test_an_unknown_uuid_is_a_404(client, db_session, redis):
 @pytest.mark.asyncio
 async def test_a_ticket_uuid_is_not_a_station(client, db_session, redis):
     """Both live in base_geometries; asking for the wrong kind must not resolve."""
-    owner = await _user_with(
-        db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY, Perm.STATION_VIEW_HISTORY
-    )
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY, Perm.STATION_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
 
@@ -245,16 +248,13 @@ async def test_paging_slices_events_and_reports_the_full_total(client, db_sessio
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     for minute in range(5):
-        db_session.add(_audit(ticket, old={"status": f"s{minute}"},
-                              new={"status": f"s{minute + 1}"}, minute=minute))
+        db_session.add(
+            _audit(ticket, old={"status": f"s{minute}"}, new={"status": f"s{minute + 1}"}, minute=minute)
+        )
     await db_session.commit()
 
-    first = await client.get(
-        f"{BASE}/tickets/{ticket}?limit=2&offset=0", headers=_auth(owner)
-    )
-    second = await client.get(
-        f"{BASE}/tickets/{ticket}?limit=2&offset=2", headers=_auth(owner)
-    )
+    first = await client.get(f"{BASE}/tickets/{ticket}?limit=2&offset=0", headers=_auth(owner))
+    second = await client.get(f"{BASE}/tickets/{ticket}?limit=2&offset=2", headers=_auth(owner))
 
     assert first.json()["meta"]["total"] == 5
     assert len(first.json()["data"]) == 2
@@ -270,9 +270,7 @@ async def test_an_offset_past_the_end_is_an_empty_page(client, db_session, redis
     db_session.add(_audit(ticket, new={"status": "a"}))
     await db_session.commit()
 
-    resp = await client.get(
-        f"{BASE}/tickets/{ticket}?offset=999", headers=_auth(owner)
-    )
+    resp = await client.get(f"{BASE}/tickets/{ticket}?offset=999", headers=_auth(owner))
 
     assert resp.status_code == 200
     assert resp.json()["data"] == []
@@ -287,9 +285,7 @@ async def test_out_of_range_paging_is_rejected(client, db_session, redis, query)
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
 
-    resp = await client.get(
-        f"{BASE}/tickets/{ticket}?{query}", headers=_auth(owner)
-    )
+    resp = await client.get(f"{BASE}/tickets/{ticket}?{query}", headers=_auth(owner))
 
     assert resp.status_code == 422
 
@@ -302,8 +298,7 @@ async def test_contact_details_arrive_masked_without_view_pii(client, db_session
     """The tier logic is unit-tested; this proves it is actually wired into the endpoint."""
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
-    db_session.add(_audit(ticket, old={"contact_phone": "0912345678"},
-                          new={"contact_phone": "0987654321"}))
+    db_session.add(_audit(ticket, old={"contact_phone": "0912345678"}, new={"contact_phone": "0987654321"}))
     await db_session.commit()
 
     resp = await client.get(f"{BASE}/tickets/{ticket}", headers=_auth(owner))
@@ -329,13 +324,18 @@ async def test_the_raw_payload_is_absent_without_audit_view(client, db_session, 
 async def test_an_auditor_receives_the_raw_payload(client, db_session, redis):
     """RAW reaches unclassified columns like search_text; `changes` still does not."""
     auditor = await _user_with(
-        db_session, redis, "Auditor", Perm.TICKET_VIEW_HISTORY, Perm.AUDIT_VIEW,
+        db_session,
+        redis,
+        "Auditor",
+        Perm.TICKET_VIEW_HISTORY,
+        Perm.AUDIT_VIEW,
         Perm.TICKET_VIEW_PII,
     )
     owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW)
     ticket = await _ticket(db_session, owner)
-    db_session.add(_audit(ticket, old={"status": "a", "search_text": "舊"},
-                          new={"status": "b", "search_text": "新"}))
+    db_session.add(
+        _audit(ticket, old={"status": "a", "search_text": "舊"}, new={"status": "b", "search_text": "新"})
+    )
     await db_session.commit()
 
     resp = await client.get(f"{BASE}/tickets/{ticket}", headers=_auth(auditor))

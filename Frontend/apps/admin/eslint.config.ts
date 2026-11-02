@@ -1,6 +1,6 @@
 import nextEslintPluginNext from '@next/eslint-plugin-next';
 import nx from '@nx/eslint-plugin';
-import baseConfig from '../../eslint.config.mjs';
+import baseConfig, { designSystemGuardrail } from '../../eslint.config.mjs';
 
 export default [
   { plugins: { '@next/next': nextEslintPluginNext } },
@@ -9,4 +9,5 @@ export default [
   {
     ignores: ['.next/**/*'],
   },
+  designSystemGuardrail(['**/*.ts', '**/*.tsx']),
 ];

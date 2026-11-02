@@ -1,4 +1,4 @@
-# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394、419、438、439）
+# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276、394、419、438、439、440）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
@@ -979,7 +979,52 @@ staging 2026-10-29 唯讀查過：229 筆，不一致 0 筆。
 `read = (read_at IS NOT NULL)`。不改程式、不改 API。資料庫裡已經有不一致的列時，upgrade 會失敗，不替它猜哪一欄是對的。
 
 **Consequences**：
-➕ 跟 `user_role_assign.role_kind`（ADR-073）一樣，是資料庫強制的受控冗餘。
+➕ 資料庫強制的受控冗餘（ADR-073 當時的 `role_kind` 也是，後來被 ADR-440 拿掉）。
 ➖ 之後要是有人只改其中一欄，會直接報錯，不會悄悄寫進去。
 ◾ 測試：`tests/test_migration_notification_read_check.py`（兩種不一致都被擋、一致的照常寫入、有不一致的列時
   upgrade 失敗、downgrade 拿掉 CHECK）。
+
+---
+
+### ADR-440 3NF 稽核的三處修正：授予列不再抄角色種類、需求的時間戳跟狀態一致、地址整行由資料庫串出來
+
+**白話**：三個「同一件事存兩次」的地方，改成只存一次。其中第一個**推翻**了 ADR-073 的選擇：當時為了讓 CHECK 看得到角色種類，
+把 `roles.kind` 抄一份放在授予列上；現在拿掉那份抄本，改用 trigger 檢查。
+
+**Date**：2026-10-30。3NF 稽核（`Spec/Docs/3nf-compliance.md`）的 E1、E2 與「需求時間戳」三項，一支修完。
+
+**Context**：
+
+1. `user_role_assign.role_kind` 是 `roles.kind` 的抄本。ADR-073 當時選抄本加複合 FK，而不選 trigger，理由是規則維持宣告式。
+   但抄本本身就是第二份事實（`role_uuid → role_kind`），3NF 不收；FK 只是讓它不會漂掉，不是讓它不存在。
+2. `ticket_tasks.completed_at`、`canceled_at` 由 `services/ticket.py`、`services/dedup_resolve.py` 的幾個動作跟著 `status` 設定，
+   資料庫沒擋。逐一讀過所有寫入點：湊滿、停止招募、重複審核留下的需求（`fulfilled` 蓋 `completed_at`）、
+   刪除與重複審核併走的需求（`canceled` 蓋 `canceled_at`、清掉 `completed_at`），都符合「有 `completed_at` ⇔ `fulfilled`、
+   有 `canceled_at` ⇔ `canceled`」。
+3. `secondary_locations.full_address` 是解析器對輸入行的結果，各欄（縣市…號）又是它的拆解，兩邊都存。
+
+**Decision**：migration `197c174410bd`，一支做完。
+
+1. **推翻 ADR-073 的抄本**：刪掉 `role_kind` 欄、CHECK、複合 FK 與 `uq_roles_uuid_kind`，改兩個 trigger。
+   `user_role_assign` 上的 BEFORE INSERT／UPDATE OF `role_uuid`, `team_uuid`：用 `SELECT kind … FOR SHARE` 讀角色種類，
+   平台角色帶 team、團隊角色沒 team 就丟 `check_violation`（`CONSTRAINT = 'ck_ura_role_team_kind'`，呼叫端看到的還是同一個
+   IntegrityError）；`roles` 上的 BEFORE UPDATE OF `kind`：有任何授予在用這個角色時不准改種類。程式裡的
+   `_fill_role_kind` 與所有 `role_kind=` 一併移除。
+2. 加 CHECK `ck_ticket_tasks_stamps_match_status`。upgrade 先回報不一致的列數，再依狀態修（缺的時間戳補 `updated_at`、
+   不該有的清掉），最後用有守衛的 DO 區塊加上 CHECK。
+3. 加 `user_input_address`（使用者輸入原文，去掉頭尾空白，欄寬 500，比 `full_address` 的 255 寬，因為解析器會丟掉空白；只有編輯真的改到這一列的其他欄位才寫入，所以重送同樣的地址、換個寫法的樓層、或欄位蓋過原文的樓層都保留原文、不算編輯，原本只有各欄沒有原文的列也維持 NULL，直到下一次真正的修改）與 `remainder`（解析器放不進各欄的文字）；`full_address`
+   改成 `GENERATED ALWAYS AS (縣市…號、remainder 串起來) STORED`。解析器讓 衖／衕 留在 `alley` 裡（`3弄2衖`），
+   重新串出來的行跟原本解析器回傳的 `full_address` 逐字相同。各欄仍是解析器對 `user_input_address` 的結果，這是唯一保留的例外
+   （解析器需要 Python，資料庫算不出來），由 `scripts/resplit_addresses.py`（重新拆解，預設只印報告）與
+   `scripts/check_address_drift.py`（列出各欄跟重新解析不同的列）守著。
+
+**Consequences**：
+➕ 授予列沒有第二份角色種類；改種類、改授予都由資料庫擋，直接寫 SQL 也一樣。
+➕ 需求的時間戳不可能跟狀態矛盾。
+➕ 地址整行不可能跟各欄矛盾（它就是各欄串出來的）。
+➖ 規則從宣告式的 CHECK 變成兩個 trigger；`create_all` 蓋出來的測試資料庫靠模型上的 DDL 事件一起建同樣的 trigger。
+➖ 遷移前的地址列，`user_input_address` 放的是當時解析器存的行，不是使用者原本輸入的。
+➖ 遷移前只有各欄、沒有整行的列（先前改名留下的），各欄原樣保留、`user_input_address` 維持 NULL，`full_address` 由各欄串出；重新拆解跳過它們，drift 檢查把它們列為「只有各欄」，不算 drift。
+➖ 帶 衖／衕 的地址，`alley` 欄的值變長（`3弄` → `3弄2衖`）；API 的各欄不增不減。關鍵字搜尋也跟著變：`search_text` 含 `alley`，所以搜 `2衖` 找得到、搜 `3弄5號` 不再找到 `3弄2衖5號`（那本來就是另一戶）。
+◾ 測試：`tests/test_identity_model.py`、`tests/test_migration_third_normal_form.py`、`tests/test_ticket_task_stamps.py`、
+  `tests/test_address_parse.py`、`tests/test_address_service.py`、`tests/test_address_tools.py`。

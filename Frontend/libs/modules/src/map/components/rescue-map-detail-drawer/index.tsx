@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
@@ -26,7 +25,12 @@ import { TicketDetailDrawer } from '../../../ticket';
 import { formatTicketTypeLabel } from '../../../ticket/status';
 import type { TicketDetailDrawerProps } from '../../../ticket/ticket-detail';
 import { describeLocationCellSpan } from '../../location-cells';
-import type { RescueMapDetailItem, RescueMapMarkerItem } from '../../types';
+import type {
+  LocationCellMembersLoader,
+  RescueMapDetailItem,
+  RescueMapMarkerItem,
+} from '../../types';
+import { GoneTicketDetail } from '../gone-ticket-detail';
 import { LocationCellDetail } from '../location-cell-detail';
 
 export type RescueMapTicketDetailOverrides = Partial<
@@ -57,11 +61,15 @@ interface RescueMapDetailDrawerProps {
   onClose: () => void;
   /** 從概略區塊的清單點進某一筆時切換選取。 */
   onSelectMarker?: (markerId: string) => void;
+  /** 後端數好的格子不帶成員，打開時用這個讀（見 `Map` 的同名 prop）。 */
+  loadLocationCellMembers?: LocationCellMembersLoader;
   /** 只影響訪客提示文案（「登入後可看」），不決定遮不遮 —— 遮在後端。 */
   isAuthenticated?: boolean;
   ticketDetailOverrides?: RescueMapTicketDetailOverrides;
   stationSecondaryAction?: StationDetailActionProps;
   stationLayout?: RescueMapStationLayout;
+  /** What a gone ticket's button says, after the page it opened on. Default: 回到地圖. */
+  goneTicketReturnLabel?: string;
 }
 
 const DetailsIcon = Icons.details;
@@ -156,6 +164,7 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
       taskValue: formatTicketTypeLabel(marker.ticketMeta?.taskType),
       requesterLabel: '現場聯絡人',
       requesterValue: contactSummary.join(' / ') || '未提供',
+      requesterIcon: <Icons.user />,
       notesLabel: '任務說明',
       notesValue: marker.subtitle,
     },
@@ -168,7 +177,7 @@ function createStationEditAction(
 ): StationDetailActionProps {
   return {
     label: '修改建議',
-    icon: <EditRoundedIcon />,
+    icon: <Icons.pencilLine />,
     onClick: () => openStationSuggestion(marker.id),
   };
 }
@@ -232,10 +241,12 @@ export function RescueMapDetailDrawer({
   marker,
   onClose,
   onSelectMarker,
+  loadLocationCellMembers,
   isAuthenticated = false,
   ticketDetailOverrides,
   stationSecondaryAction,
   stationLayout = 'admin',
+  goneTicketReturnLabel = '回到地圖',
 }: RescueMapDetailDrawerProps) {
   const [activeStationTab, setActiveStationTab] =
     useState<StationDetailTabId>('info');
@@ -259,10 +270,23 @@ export function RescueMapDetailDrawer({
   if (marker.detailType === 'cell') {
     return (
       <LocationCellDetail
+        // A cell opened again, or another cell, reads its tickets from the first page again.
+        key={marker.id}
         cell={marker}
+        loadMembers={loadLocationCellMembers}
         isAuthenticated={isAuthenticated}
         onClose={onClose}
         onSelectMember={(markerId) => onSelectMarker?.(markerId)}
+      />
+    );
+  }
+
+  if (marker.detailType === 'gone-ticket') {
+    return (
+      <GoneTicketDetail
+        ticket={marker}
+        returnLabel={goneTicketReturnLabel}
+        onClose={onClose}
       />
     );
   }

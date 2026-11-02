@@ -28,9 +28,15 @@ const { color } = designTokens;
 export interface AdminShellProps {
   children: ReactNode;
   notFound?: boolean;
+  /** The site's origin (`SITE_APP_URL`), which the sidebar's 回到前台 opens. */
+  siteUrl?: string;
 }
 
-export function AdminShell({ children, notFound = false }: AdminShellProps) {
+export function AdminShell({
+  children,
+  notFound = false,
+  siteUrl,
+}: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   // The drawer is open on the page it was opened on, so any navigation closes it: a link in the
   // drawer, the browser's back button, or a redirect.
@@ -117,6 +123,7 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
               collapsed={false}
               onToggle={() => setOpenedOn(null)}
               activeId={forbidden ? undefined : activeItem?.id}
+              siteUrl={siteUrl}
             />
           </Box>
         </Drawer>
@@ -130,6 +137,7 @@ export function AdminShell({ children, notFound = false }: AdminShellProps) {
             collapsed={collapsed}
             onToggle={() => setCollapsed((value) => !value)}
             activeId={forbidden ? undefined : activeItem?.id}
+            siteUrl={siteUrl}
           />
         </Box>
         <Box

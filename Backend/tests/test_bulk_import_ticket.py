@@ -101,7 +101,6 @@ async def _grant(db, user: User, *perms_and_scopes, team=None) -> None:
             user_uuid=user.uuid,
             role_uuid=role.uuid,
             team_uuid=team.uuid if team is not None else None,
-            role_kind=kind,
         )
     )
     # Before the commit: `expire_on_commit` is True on this fixture, so reading `role.uuid`
@@ -354,7 +353,11 @@ async def test_a_different_phone_makes_it_a_different_ticket(db):
     held = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
     assert (held.updated, held.created, held.suspected) == (0, 0, 1)
     await commit_tickets(
-        db, actor=actor, raw=raw, filename=filename, task_type="rescue",
+        db,
+        actor=actor,
+        raw=raw,
+        filename=filename,
+        task_type="rescue",
         decisions={2: held.suspects[0].related_uuid},
     )
 

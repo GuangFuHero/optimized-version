@@ -9,7 +9,10 @@ import { formatTaiwanDateTime } from '../../time';
 
 const { color, radius, typography } = designTokens;
 
-/** 最後更新: muted past 24 hours, an orange outlined pill past 72. Staleness is never shown as danger. */
+/**
+ * 最後更新: muted past 24 hours, a warning pill past 72 (the prototype's `UpdatedCell`). Staleness
+ * is never shown as danger.
+ */
 export function FreshnessCell({
   updatedAt,
   now,
@@ -34,9 +37,9 @@ export function FreshnessCell({
             boxSizing: 'border-box',
             borderRadius: `${radius.full}px`,
             whiteSpace: 'nowrap',
-            bgcolor: color.bg.primary.subtle,
-            border: `1px solid ${color.brand.primary.default}`,
-            color: color.brand.primary.subtle,
+            bgcolor: color.bg.warning.subtle,
+            border: `1px solid color-mix(in srgb, ${color.fg.warning} 35%, transparent)`,
+            color: color.fg.warning,
             ...typography.data[300],
             fontWeight: 700,
           }}

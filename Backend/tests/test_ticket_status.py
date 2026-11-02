@@ -56,6 +56,8 @@ async def _need(db, ticket: Tickets, *, status: str = "pending", deleted: bool =
         task_name="清淤",
         status=status,
         created_by=ticket.created_by,
+        completed_at=datetime.now(UTC) if status == "fulfilled" else None,
+        canceled_at=datetime.now(UTC) if status == "canceled" else None,
         delete_at=datetime.now(UTC) if deleted else None,
     )
     db.add(task)

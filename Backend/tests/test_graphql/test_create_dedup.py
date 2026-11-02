@@ -13,7 +13,7 @@ import pytest_asyncio
 from geoalchemy2.shape import from_shape
 from graphql import print_schema
 from shapely.geometry import Point
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 
 from app.dedup_engine.registry import get_engine
 from app.graphql.schema import schema
@@ -22,7 +22,7 @@ from app.models.geo import BuildingMapTicketMap, Station
 from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
-from app.models.ticket_task import TicketTask
+from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from tests.test_graphql.conftest import auth_header, test_db
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.real_dedup]
@@ -84,15 +84,35 @@ WATER = {"taskType": "supply", "taskName": "需要飲用水", "taskDescription":
 
 @pytest_asyncio.fixture(autouse=True)
 async def _clean_tables():
-    """No leftovers from other tests become candidates."""
+    """No leftovers from other tests become candidates.
+
+    A need's assignments and properties go first: another file may leave some, and they hold the need.
+    So do merges: a ticket or need folded into another points at it, and the rows below go one at a
+    time, so the one pointed at could go first. Those pointers are cleared before anything is deleted.
+    """
     async with test_db() as db:
+        await db.execute(
+            update(Tickets).where(Tickets.replaced_by_uuid.is_not(None)).values(replaced_by_uuid=None)
+        )
+        await db.execute(
+            update(TicketTask).where(TicketTask.merged_into_uuid.is_not(None)).values(merged_into_uuid=None)
+        )
         await db.execute(delete(BuildingMapTicketMap))
         await db.execute(
             delete(SecondaryLocation).where(
                 SecondaryLocation.geometry_uuid.in_(select(Tickets.uuid).union(select(Station.uuid)))
             )
         )
-        for model in (DedupAuditEvent, DuplicatePair, Photo, TicketTask, Tickets, Station):
+        for model in (
+            DedupAuditEvent,
+            DuplicatePair,
+            Photo,
+            TaskAssignment,
+            TaskProperty,
+            TicketTask,
+            Tickets,
+            Station,
+        ):
             for row in (await db.execute(select(model))).scalars().all():
                 await db.delete(row)
     yield

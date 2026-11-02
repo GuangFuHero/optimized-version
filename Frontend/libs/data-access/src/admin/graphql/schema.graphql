@@ -370,9 +370,14 @@ input CreateHelpRequestInput {
   description: String = null
 
   """
-  GeoJSON Point for the location where help is needed — [longitude, latitude]
+  GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted
   """
-  geometry: GeoJSON!
+  geometry: GeoJSON = null
+
+  """
+  File the request inside this building map, as createTicket does: its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it
+  """
+  buildingMapUuid: UUID = null
 
   """Who to ask for at the place"""
   contactName: String!
@@ -972,6 +977,11 @@ type Query {
     """
     statuses: [TicketStatus!] = null
   ): [TicketCellType!]!
+
+  """
+  Whether ticket(uuid) gives this ticket, and if not, whether it was merged into another, deleted, or never was, so a share link can say which and send a merged one on. Ask it beside ticket(uuid). The state and the kept ticket's uuid alone, nothing of the ticket (ADR-444)
+  """
+  ticketAvailability(uuid: UUID!): TicketAvailabilityType!
   ticketsExtent(
     status: String = null
     priority: String = null
@@ -1085,6 +1095,11 @@ type RoleRequestType {
 
   """The existing team a member request asks to join"""
   team: RoleRequestTeam
+
+  """
+  The team approval handed out: the one joined, or the one a new-team application founded
+  """
+  grantedTeam: RoleRequestTeam
 }
 
 input SecondaryLocationInput {
@@ -1749,6 +1764,25 @@ type TicketAuditEntryType {
   actorName: String
 }
 
+enum TicketAvailability {
+  available
+  merged
+  deleted
+  not_found
+}
+
+"""
+What a share link finds at a ticket's uuid: the state, nothing of the ticket
+"""
+type TicketAvailabilityType {
+  status: TicketAvailability!
+
+  """
+  Set only when status is merged: the ticket the request now lives in, which ticket(uuid) gives
+  """
+  replacedByUuid: UUID
+}
+
 """
 How many tickets one H3 cell holds, of those its caller is shown as the cell
 """
@@ -2015,9 +2049,14 @@ type TicketType {
   auditContentHash: String
 
   """
-  Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not, and to a caller without ai_duplicate.view here. Not the data check: that is `auditStatus`
+  Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not. Anyone can read it (ADR-455): it names the tickets `suspectedDuplicateOf` does. Not the data check: that is `auditStatus`
   """
   verificationStatus: TicketVerificationType
+
+  """
+  Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them
+  """
+  suspectedDuplicateOf: [TicketDuplicateRefType!]!
 
   """
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here

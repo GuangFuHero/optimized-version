@@ -43,6 +43,10 @@ class TicketDraft:
     person_trapped_reported: str | None = None
     immediate_danger_reported: str | None = None
     contact_phone: str | None = None  # E.164; how (or whether) to compare it is the engine's call
+    # Filed inside a building map: its uuid, and the floor label picked from that building's floors
+    # ('3F', 'B1', 'RF'), None when the reporter left it out. Both None outside a building (ADR-451).
+    building_map_uuid: str | None = None
+    floor: str | None = None
 
 
 @dataclass(frozen=True)

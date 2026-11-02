@@ -47,6 +47,14 @@ class RoleRequestTeam:
     type: RoleRequestTeamType
 
 
+async def _team_by_uuid(info: strawberry.types.Info, team_uuid: UUID | None) -> RoleRequestTeam | None:
+    """The team-picker entry for `team_uuid`, whatever the team's status now; None for None."""
+    if team_uuid is None:
+        return None
+    team = (await info.context["db"].execute(select(Team).where(Team.uuid == team_uuid))).scalar_one()
+    return RoleRequestTeam(uuid=team.uuid, name=team.name, type=RoleRequestTeamType(team.type))
+
+
 @strawberry.type
 class RoleRequestType:
     """One application. Only its applicant and those who may decide it ever see it."""
@@ -65,15 +73,19 @@ class RoleRequestType:
     applicant_phone: str | None = strawberry.field(description="Masked")
     applicant_email: str | None
     team_uuid: strawberry.Private[UUID | None]
+    granted_team_uuid: strawberry.Private[UUID | None]
 
     @strawberry.field(description="The existing team a member request asks to join")
     async def team(self, info: strawberry.types.Info) -> RoleRequestTeam | None:
         """Read by uuid whatever the team's status now, so a closed request still names it."""
-        if self.team_uuid is None:
-            return None
-        db = info.context["db"]
-        team = (await db.execute(select(Team).where(Team.uuid == self.team_uuid))).scalar_one()
-        return RoleRequestTeam(uuid=team.uuid, name=team.name, type=RoleRequestTeamType(team.type))
+        return await _team_by_uuid(info, self.team_uuid)
+
+    @strawberry.field(
+        description="The team approval handed out: the one joined, or the one a new-team application founded"
+    )
+    async def granted_team(self, info: strawberry.types.Info) -> RoleRequestTeam | None:
+        """None until approved, and for a data auditor (ADR-418, as `granted_team_uuid` in ADR-411)."""
+        return await _team_by_uuid(info, self.granted_team_uuid)
 
     @classmethod
     def from_model(cls, m) -> "RoleRequestType":
@@ -93,6 +105,7 @@ class RoleRequestType:
             applicant_phone=mask_phone(m.applicant_phone),
             applicant_email=m.applicant_email,
             team_uuid=m.team_uuid,
+            granted_team_uuid=m.granted_team_uuid,
         )
 
 

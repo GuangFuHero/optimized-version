@@ -16,6 +16,7 @@ import { sessionStorageOrNull } from '../../session/end-expired-session';
 import { takeSessionExpired } from '@rescue-frontend/modules/session';
 import { continueSignedIn } from './continue-signed-in';
 import { resolveHashedCredentialAsync } from './credentials';
+import { handOffIdentity } from './utils/identity-hand-off';
 import {
   loginErrorMessage,
   passwordSignInErrorMessage,
@@ -111,7 +112,10 @@ export function LoginFormClient({
             );
           });
         }}
-        onSecondaryAction={() => {
+        onSecondaryAction={(current) => {
+          // Turned away for a wrong password or no such account, the person often registers next:
+          // the register page opens on the same tab, with the address already typed.
+          handOffIdentity(current);
           startTransition(() => {
             router.push(
               authHref('/register', { callbackUrl: requestedCallbackUrl }),

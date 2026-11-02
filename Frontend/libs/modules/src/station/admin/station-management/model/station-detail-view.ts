@@ -2,7 +2,6 @@ import type { AdminStationQuery } from '@rescue-frontend/data-access/admin';
 
 import { taiwanDateParts } from '../../../../time';
 import { stationPoint } from '../../../station-point';
-import { getStationTypeLabel } from '../../../type-options';
 import { UNNAMED_STATION } from './station-row';
 
 export type DetailStation = NonNullable<AdminStationQuery['station']>;
@@ -10,7 +9,6 @@ export type DetailStation = NonNullable<AdminStationQuery['station']>;
 /** What `StationDetailSheet` shows for a station, ready to render. */
 export interface StationDetailView {
   title: string;
-  typeLabel: string;
   /** 行政區: county and township, e.g. 花蓮縣光復鄉. */
   district: string;
   address: string;
@@ -103,7 +101,6 @@ export function toStationDetailView(
 ): StationDetailView {
   return {
     title: station.name?.trim() || UNNAMED_STATION,
-    typeLabel: getStationTypeLabel(station.type),
     district: formatDistrict(station) || '—',
     address: formatStationAddress(station) || '未提供地址',
     coordinates: formatCoordinates(station),

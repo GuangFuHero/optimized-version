@@ -1,8 +1,7 @@
 'use client';
 
-import { Box } from '@mui/material';
 import { useDisasterTypes } from '@rescue-frontend/data-access/admin';
-import { designTokens } from '@rescue-frontend/ui';
+import { Card } from '@rescue-frontend/ui';
 
 import { ChipRow } from '../../../admin/shared/chip-row';
 import { TICKET_STATUS_OPTIONS } from '../../status';
@@ -13,8 +12,6 @@ import {
   TICKET_PRIORITIES,
   type TicketPriority,
 } from './model/ticket-row';
-
-const { color, radius, shadow } = designTokens;
 
 const PRIORITY_OPTIONS: readonly { value: TicketPriority; label: string }[] =
   TICKET_PRIORITIES.map((value) => ({
@@ -51,19 +48,10 @@ export function TicketFilterPanel({
       ? [...disasters, { value: filters.disaster, label: filters.disaster }]
       : disasters;
 
+  // The prototype's panel (tk-table.jsx) is the design system's Card: 24 inside, border.default,
+  // shadow.md.
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-        p: '20px 24px',
-        border: `1px solid ${color.border.subtle}`,
-        borderRadius: `${radius.lg}px`,
-        boxShadow: shadow.sm,
-        bgcolor: color.bg.neutral.default,
-      }}
-    >
+    <Card sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <ChipRow
         label="狀態"
         value={filters.status}
@@ -90,6 +78,6 @@ export function TicketFilterPanel({
           onChange={(v) => set('disaster', v)}
         />
       ) : null}
-    </Box>
+    </Card>
   );
 }

@@ -82,21 +82,11 @@ class World:
             people[name] = user
         db.add_all(
             [
-                UserRoleAssign(
-                    user_uuid=people["A admin"].uuid, role_uuid=admin.uuid, team_uuid=a.uuid, role_kind="team"
-                ),
-                UserRoleAssign(
-                    user_uuid=people["A1"].uuid, role_uuid=member.uuid, team_uuid=a.uuid, role_kind="team"
-                ),
-                UserRoleAssign(
-                    user_uuid=people["A2"].uuid, role_uuid=member.uuid, team_uuid=a.uuid, role_kind="team"
-                ),
-                UserRoleAssign(
-                    user_uuid=people["A2"].uuid, role_uuid=member.uuid, team_uuid=b.uuid, role_kind="team"
-                ),
-                UserRoleAssign(
-                    user_uuid=people["B admin"].uuid, role_uuid=admin.uuid, team_uuid=b.uuid, role_kind="team"
-                ),
+                UserRoleAssign(user_uuid=people["A admin"].uuid, role_uuid=admin.uuid, team_uuid=a.uuid),
+                UserRoleAssign(user_uuid=people["A1"].uuid, role_uuid=member.uuid, team_uuid=a.uuid),
+                UserRoleAssign(user_uuid=people["A2"].uuid, role_uuid=member.uuid, team_uuid=a.uuid),
+                UserRoleAssign(user_uuid=people["A2"].uuid, role_uuid=member.uuid, team_uuid=b.uuid),
+                UserRoleAssign(user_uuid=people["B admin"].uuid, role_uuid=admin.uuid, team_uuid=b.uuid),
                 UserRoleAssign(user_uuid=people["super"].uuid, role_uuid=boss.uuid),
                 UserRoleAssign(user_uuid=people["nobody"].uuid, role_uuid=plain.uuid),
             ]

@@ -151,6 +151,23 @@ async def test_the_list_filters_by_kind_and_team(client, db_session, redis, para
 
 
 @pytest.mark.asyncio
+async def test_filtering_by_a_team_does_not_show_its_admin_the_application_that_founded_it(
+    client, db_session, redis
+):
+    """ADR-423 widens the filter, not who sees what: the founding application stays with reviewers."""
+    world = await World().build(db_session, redis)
+    founding = await db_session.get(RoleRequest, uuid.UUID(world.requests["new team"]))
+    founding.status, founding.granted_team_uuid = "approved", uuid.UUID(world.team_a_uuid)
+    await db_session.commit()
+
+    assert await _listed(client, world, "A admin", team_uuid=world.team_a_uuid) == {"A member request"}
+    assert await _listed(client, world, "super", team_uuid=world.team_a_uuid) == {
+        "A member request",
+        "new team",
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("who", ["A member", "applicant"])
 async def test_someone_who_reviews_nothing_cannot_list(client, db_session, redis, who):
     """Neither role_request.review nor team.member.manage: 403."""

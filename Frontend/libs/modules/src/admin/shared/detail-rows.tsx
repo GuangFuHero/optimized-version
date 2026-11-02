@@ -6,7 +6,8 @@ import type { ReactNode } from 'react';
 
 const { color, typography } = designTokens;
 
-const ROW_BORDER = `1px solid ${color.border.default}`;
+// The prototype's faint rule between a drawer's rows (station-drawer.jsx), lighter than a border.
+const ROW_BORDER = `1px solid ${color.bg.neutral.sunken}`;
 
 /** One fact in a detail sheet: its caption on the left, the value on the right. */
 export function DetailRow({

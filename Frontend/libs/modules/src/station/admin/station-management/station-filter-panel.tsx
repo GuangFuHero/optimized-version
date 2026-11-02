@@ -1,15 +1,12 @@
 'use client';
 
-import { Box } from '@mui/material';
 import { useTeams } from '@rescue-frontend/data-access/admin';
-import { designTokens } from '@rescue-frontend/ui';
+import { Card } from '@rescue-frontend/ui';
 
 import { ChipRow } from '../../../admin/shared/chip-row';
 import { STATION_TYPE_OPTIONS } from '../../type-options';
 import { UNASSIGNED_TEAM, type StationFilters } from './model/station-filters';
 import { OPERATIONAL_STATUS_OPTIONS } from '../../operational-status';
-
-const { color, radius, shadow } = designTokens;
 
 interface StationFilterPanelProps {
   filters: StationFilters;
@@ -39,19 +36,9 @@ export function StationFilterPanel({
       ? [...areas, filters.area]
       : areas;
 
+  // The prototype's panel is the design system's Card: 24 inside, border.default, shadow.md.
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-        p: '20px 24px',
-        border: `1px solid ${color.border.subtle}`,
-        borderRadius: `${radius.lg}px`,
-        boxShadow: shadow.sm,
-        bgcolor: color.bg.neutral.default,
-      }}
-    >
+    <Card sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <ChipRow
         label="類型"
         value={filters.type}
@@ -117,6 +104,6 @@ export function StationFilterPanel({
         ]}
         onChange={(v) => set('freshness', v)}
       />
-    </Box>
+    </Card>
   );
 }

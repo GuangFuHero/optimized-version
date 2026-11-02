@@ -2,7 +2,6 @@
 
 import {
   GetStationsDocument,
-  GetTicketDocument,
   GetTicketsWithNeedsDocument,
   PageInfoFieldsFragmentDoc,
   TicketNeedFieldsFragmentDoc,
@@ -264,24 +263,6 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     [dismissMarker],
   );
 
-  /**
-   * One ticket as a marker, fetched on its own — for a link to a ticket that none of the loaded
-   * pages holds. Only its drawer shows it, and the drawer reads the needs itself, so the marker
-   * carries none (a copy here would go stale after a claim). Null when the ticket is gone or has
-   * no point to place.
-   */
-  const loadTicketMarker = useCallback(
-    async (uuid: string): Promise<RescueMapMarkerItem | null> => {
-      const result = await client
-        .query(GetTicketDocument, { uuid }, IMPERATIVE_QUERY_CONTEXT)
-        .toPromise();
-      const ticket = result.data?.ticket;
-
-      return ticket ? mapTicketToMarker(ticket) : null;
-    },
-    [client],
-  );
-
   return {
     markers,
     /** The `q` the loaded tickets were searched with, once typing settled; undefined for none. */
@@ -294,7 +275,6 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     loadNextPage,
     /** The ids the newest page brought, so the list can tell whether any of them is listed. */
     pageIds,
-    loadTicketMarker,
     replaceTicket,
   };
 }

@@ -138,11 +138,12 @@ through the Next app's proxy (`/api/v1/*`), so the provider calls back to the si
 Staging's values are in `scripts/deploy-config.staging.env`. `gen_env` appends it to `.env` (the backend) and
 `.env.frontend` (the site), and the back office's container reads it as it is. Both Next apps read
 `AUTH_COOKIE_PREFIX`, `SITE_APP_URL` and `ADMIN_APP_URL` too. The back office reads `SITE_APP_URL` at request
-time for the link back to the site's map on the page it shows an account with no back-office identity;
-without it that page has no way back. The site reads it at request time too, as the origin of the links and
-the link-preview card its pages hand out; without it, it takes the host the request names, which any client
-can forge, so a deployed site must have it. The OAuth secrets are written to the backend's `.env` only.
-Production does not exist yet; its column is the plan.
+time for its links to the site's map: 回到前台 in the sidebar, and the way back on the page it shows an account
+with no back-office identity; without it, or with a value that has no scheme, neither link shows. The site
+reads it at request time too, as the origin of the links and the link-preview card its pages hand out;
+without it, it takes the host the request names, which any client can forge, so a deployed site must have it.
+The OAuth secrets are written to the backend's `.env` only. Production does not exist yet; its column is the
+plan.
 
 | Setting | Production | Staging | Local |
 |---------|------------|---------|-------|
@@ -150,7 +151,7 @@ Production does not exist yet; its column is the plan.
 | `AUTH_COOKIE_DOMAIN` | `.wan-guard.com` | `.wan-guard.com` | empty (default): the cookie stays on `localhost` |
 | `AUTH_COOKIE_SECURE` | `true` | `true` | `false`, set in `docker-compose.yml`; a browser drops a `Secure` cookie over http |
 | `AUTH_ALLOWED_ORIGINS` | `https://wan-guard.com,https://admin.wan-guard.com` | `https://staging.wan-guard.com,https://admin-staging.wan-guard.com` | `http://localhost:3000,http://localhost:3001` (default) |
-| `SITE_APP_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` (default) |
+| `SITE_APP_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000`, the backend's default; the back office has none, so its links to the site show only once `apps/admin/.env.local` sets it, as `.env.example` does |
 | `ADMIN_APP_URL` | `https://admin.wan-guard.com` | `https://admin-staging.wan-guard.com` | `http://localhost:3001` (default) |
 | `OAUTH_REDIRECT_BASE_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` (default) |
 | `GOOGLE_CLIENT_SECRET`, `LINE_CHANNEL_SECRET` | Secret Manager | `staging-backend-google-client-secret`, `staging-backend-line-channel-secret`, written by `gen_env` | `Backend/.env` |

@@ -91,7 +91,6 @@ async def _grant(db, user: User, *perms_and_scopes, team: Team | None = None) ->
             user_uuid=user.uuid,
             role_uuid=role.uuid,
             team_uuid=team.uuid if team is not None else None,
-            role_kind=kind,
         )
     )
     # Before the commit: `expire_on_commit` is True on this fixture, so reading `role.uuid`

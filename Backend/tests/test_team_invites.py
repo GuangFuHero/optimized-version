@@ -84,7 +84,7 @@ async def _in_team(db, user: User, team: Team | uuid.UUID, role_name: str) -> Ro
     grants = {"admin": ((Perm.TEAM_MEMBER_MANAGE, "team"),), "member": ()}[role_name]
     role = await _role(db, role_name, "team", grants)
     team_uuid = team if isinstance(team, uuid.UUID) else team.uuid
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid, role_kind="team"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
     await db.flush()
     return role
 
