@@ -1,20 +1,13 @@
 # Design/ — 設計師的 agent 守則
 
 設計師在 `sucrelindesign` 分支工作，這個分支就是**最新的設計**，**不會合併進 `main`**。
-前端工程師永遠讀這個分支的最新版本（不釘在某個 commit）。`main` 會合進這個分支，反過來不會。
-這份守則放在 `main`，合進來之後你才看得到它。
+前端工程師永遠讀這個分支的最新版本（不釘在某個 commit）。
+`main` 也**不會合進這個分支**：兩個分支互不合併，需要的檔案由工程師逐一複製過去。這份守則就是這樣從 `main` 複製過來的。
 
-## 跟上 main
+## 不要合併 main
 
-定期把 `main` 合進設計分支（至少每次交付前一次）：
-
-```sh
-git switch sucrelindesign
-git fetch origin && git merge origin/main
-```
-
-- 衝突在 `Design/` 底下：在設計分支上解決。
-- 衝突在 `Design/` 以外的檔案：先停下，在 #uiux 請工程師處理，不要自己改。
+- 不要跑 `git merge origin/main`，也不要把其他分支合進來。
+- 需要 `main` 上的檔案（例如這份守則的新版），在 #uiux 請工程師複製過來，不要自己複製。
 
 ## 檔案放哪裡（設計分支上）
 

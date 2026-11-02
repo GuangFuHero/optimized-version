@@ -1,4 +1,4 @@
-"""Back-office AI 重複審核: list the duplicate pair cards, read, decide, revoke or resolve one.
+"""Back-office 重複審核: list the duplicate pair cards, read, decide, revoke or resolve one.
 
 Also the fast layer's hint rates (提示率, 誤報率) the review page shows (ADR-455).
 
@@ -55,6 +55,7 @@ def _response(item: PairItem) -> dict:
         "hint_outcome": pair.hint_outcome,
         "created_at": pair.created_at,
         "reviewed_by": pair.reviewed_by,
+        "reviewed_by_name": item.reviewed_by_name,
         "reviewed_at": pair.reviewed_at,
         "low": EntitySummaryResponse.model_validate(item.low),
         "high": EntitySummaryResponse.model_validate(item.high),
@@ -65,9 +66,16 @@ def _detail(detail) -> DuplicatePairDetail:
     """A card with its events and whole tickets, as the detail and a resolve answer it."""
     return DuplicatePairDetail(
         **_response(detail.item),
-        events=[DedupEventResponse.model_validate(event) for event in detail.events],
+        events=[_event(event, detail.actor_names) for event in detail.events],
         tickets=_tickets(detail.tickets),
     )
+
+
+def _event(event, names) -> DedupEventResponse:
+    """One event, with the nickname of whoever did it (ADR-441)."""
+    response = DedupEventResponse.model_validate(event)
+    name = names.get(str(event.actor_uuid)) if event.actor_uuid else None
+    return response.model_copy(update={"actor_name": name})
 
 
 def _tickets(tickets) -> TicketsForReviewResponse | None:
