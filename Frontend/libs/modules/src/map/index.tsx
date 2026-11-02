@@ -78,7 +78,9 @@ const RescueMapCanvas = dynamic(
  * as its code runs, so the two are under way together.
  */
 export function preloadRescueMapCanvas() {
-  void import('./components/rescue-map-canvas');
+  import('./components/rescue-map-canvas').catch(() => {
+    // The map's own load of the canvas reports a failure; this one only starts it early.
+  });
 }
 
 // 與資料維度無關的靜態全域樣式，避免每次 render 重建樣式物件。

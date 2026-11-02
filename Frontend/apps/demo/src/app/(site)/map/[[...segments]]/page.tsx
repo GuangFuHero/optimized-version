@@ -55,7 +55,9 @@ export async function generateMetadata({
 export default function Page() {
   // The connection to the tile server is set up while the page's code loads: the first tile is
   // asked for only once the map has opened, and on a slow connection the handshake is round trips.
-  preconnect(DEFAULT_TILE_ORIGIN);
+  if (DEFAULT_TILE_ORIGIN) {
+    preconnect(DEFAULT_TILE_ORIGIN);
+  }
 
   return <SiteMapPageClient />;
 }
