@@ -1878,11 +1878,13 @@ type TicketStatsType {
   cancelled: Int!
 
   """
-  People still short across open needs with a quantity: quantity less the people linked, never below 0. Needs on completed or cancelled tickets add nothing
+  People still short across open hr needs with a quantity: quantity less the people linked, never below 0. Other need types, and needs on completed or cancelled tickets, add nothing. The dashboard's volunteer_gap gives the same number (ADR-456)
   """
   gapPeople: Int!
 
-  """How many open needs are short of people (gapPeople > 0)"""
+  """
+  How many of those needs are short of people; the dashboard's volunteer_gap_needs
+  """
   gapNeeds: Int!
 }
 
@@ -2047,6 +2049,11 @@ type TicketType {
   Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not, and to a caller without ai_duplicate.view here. Not the data check: that is `auditStatus`
   """
   verificationStatus: TicketVerificationType
+
+  """
+  Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them
+  """
+  suspectedDuplicateOf: [TicketDuplicateRefType!]!
 
   """
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here

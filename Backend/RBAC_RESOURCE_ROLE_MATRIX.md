@@ -164,6 +164,8 @@
 > 查詢的 `includeInactive: true`（管理端才看得到已停用欄位）在 `dynamic_field.view` 之外**額外**要求
 > `dynamic_field.edit`（ADR-226）：看得到誰把欄位退役，屬於「有權退役」的一環，而不是「有權填表單」。
 >
+> 配對卡詳情另有一個只涵蓋卡上細項的例外，見下方「AI 重複審核」一節（028/ADR-447）。
+>
 > **例外：`ticketPropertyConfigs` 與 `disasterTypes` 改由公開的 `ticket.view` 把關（ADR-263）。**
 > 那是民眾填的通報單表單本身，而 `ticket.disasterTypes` / `disasterDetails` 本來就匿名可讀 ——
 > 擋住只會讓持有 `ticket.add` 的民眾送得出單、看不到題目。`includeInactive` 仍各自要
@@ -244,6 +246,12 @@
 > 不檢查這三個權限。`view` 讀審核清單與單張卡；`review` 判定「確認重複／不是重複」並撤銷**自己**的判定；
 > 撤銷**別人**的判定另需 `revoke`，只給 super_admin（025/ADR-337、ADR-342）。待審提醒（`dedup_review_pending`）
 > 發給持有 `review` 的人（ADR-345）。
+>
+> **例外：配對卡詳情裡的細項設定（028/ADR-446、ADR-447）。** 詳情的 `tasks[].properties[]` 帶著該細項的欄位設定
+> （名稱、順序、型別、選項、單位、是否啟用），**停用的設定也給**，只要 `ai_duplicate.view`。這和
+> `taskPropertyConfigs` 的規則（`dynamic_field.view`，停用的另要 `dynamic_field.edit`，ADR-226）不同，但不衝突：
+> 這裡只給「卡上兩張單已經有的細項」那幾筆設定，不是整份欄位定義；審核員要知道一個停用欄位在畫面上怎麼顯示、
+> 怎麼編輯，才比對得了。資料檢核員因此看得到這幾筆停用設定，仍然呼叫不了 `taskPropertyConfigs`。
 
 ## 補充說明
 

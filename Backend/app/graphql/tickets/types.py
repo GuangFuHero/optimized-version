@@ -25,6 +25,7 @@ from app.graphql.shared import (
     TriState,
 )
 from app.services import ticket_audit
+from app.services.ticket_status import VOLUNTEER_NEED_TYPES
 
 
 def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resource=None):
@@ -215,7 +216,7 @@ class TicketVerificationState(enum.Enum):
 
 @strawberry.type(description="Another ticket a disputed ticket may duplicate")
 class TicketDuplicateRefType:
-    """An entry of `TicketVerificationType.duplicateOf`."""
+    """An entry of `TicketVerificationType.duplicateOf` and of `TicketType.suspectedDuplicateOf`."""
 
     uuid: UUID
     title: str
@@ -1008,6 +1009,21 @@ class TicketType:
 
     @strawberry.field(
         description=(
+            "Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus "
+            "names, each once, oldest card first; empty when there are none. Not whether a verdict "
+            "was given on them"
+        )
+    )
+    async def suspected_duplicate_of(self, info: strawberry.types.Info) -> list[TicketDuplicateRefType]:
+        """Read the same cards as `verification_status`, and give only the tickets on their far side.
+
+        Every one is neither cancelled nor deleted, so whoever reads this ticket can open it too.
+        """
+        refs = await info.context["loaders"]["disputes_by_ticket"].load(str(self.uuid))
+        return [TicketDuplicateRefType(uuid=UUID(ref.uuid), title=ref.title) for ref in refs or []]
+
+    @strawberry.field(
+        description=(
             "UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here"
         )
     )
@@ -1335,10 +1351,13 @@ class TicketStatsType:
     completed: int
     cancelled: int
     gap_people: int = strawberry.field(
-        description="People still short across open needs with a quantity: quantity less the "
-        "people linked, never below 0. Needs on completed or cancelled tickets add nothing"
+        description=f"People still short across open {'/'.join(VOLUNTEER_NEED_TYPES)} needs with a quantity: "
+        "quantity less the people linked, never below 0. Other need types, and needs on completed or "
+        "cancelled tickets, add nothing. The dashboard's volunteer_gap gives the same number (ADR-456)"
     )
-    gap_needs: int = strawberry.field(description="How many open needs are short of people (gapPeople > 0)")
+    gap_needs: int = strawberry.field(
+        description="How many of those needs are short of people; the dashboard's volunteer_gap_needs"
+    )
 
 
 @strawberry.type(description="How many tickets match a `tickets` filter, and the box their map points span")

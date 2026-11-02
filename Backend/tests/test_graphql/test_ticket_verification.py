@@ -1,4 +1,8 @@
-"""TicketType.verificationStatus: whether 重複審核 still waits on a ticket, read from its cards (ADR-443)."""
+"""Whether 重複審核 still waits on a ticket, read from its cards.
+
+TicketType.verificationStatus tells a reviewer (ADR-443); suspectedDuplicateOf tells anyone which
+tickets those are, and nothing more (ADR-454).
+"""
 
 import uuid as uuid_mod
 from datetime import UTC, datetime, timedelta
@@ -23,6 +27,12 @@ query($q: String!) {
     tickets(q: $q, limit: 200) {
         items { title verificationStatus { state duplicateOf { uuid title } } }
     }
+}
+"""
+
+SUSPECTED = """
+query($q: String!) {
+    tickets(q: $q, limit: 200) { items { title suspectedDuplicateOf { uuid title } } }
 }
 """
 
@@ -103,19 +113,24 @@ async def _merged(card: str, primary: str) -> None:
         )
 
 
-async def _states(client, token: str | None, tag: str) -> dict:
-    """Each tagged ticket's verificationStatus, keyed by the title after the tag."""
+async def _states(client, token: str | None, tag: str, query: str = LIST) -> dict:
+    """The one field `query` reads on each tagged ticket (verificationStatus), by title after the tag."""
     headers = auth_header(token) if token else {}
-    resp = await client.post("/graphql", json={"query": LIST, "variables": {"q": tag}}, headers=headers)
+    resp = await client.post("/graphql", json={"query": query, "variables": {"q": tag}}, headers=headers)
     body = resp.json()
     assert "errors" not in body, body
     items = body["data"]["tickets"]["items"]
-    return {i["title"].removeprefix(f"{tag} "): i["verificationStatus"] for i in items}
+    return {i.pop("title").removeprefix(f"{tag} "): next(iter(i.values())) for i in items}
+
+
+def _refs(*others: tuple[str, str]) -> list[dict]:
+    """The tickets a ticket may duplicate, as read, given (uuid, title) of each."""
+    return [{"uuid": u, "title": t} for u, t in others]
 
 
 def _disputed(*others: tuple[str, str]) -> dict:
     """What a disputed ticket reads as, given (uuid, title) of each ticket it may duplicate."""
-    return {"state": "disputed", "duplicateOf": [{"uuid": u, "title": t} for u, t in others]}
+    return {"state": "disputed", "duplicateOf": _refs(*others)}
 
 
 @pytest.mark.asyncio
@@ -279,7 +294,7 @@ async def test_only_a_caller_with_ai_duplicate_view_is_told(client, redis):
     assert await _states(client, None, tag) == {"a": None, "b": None}
 
 
-async def _card_statements(client, token: str, tag: str) -> tuple[dict, int]:
+async def _card_statements(client, token: str | None, tag: str, query: str = LIST) -> tuple[dict, int]:
     """Read the tagged tickets; return their states and how many statements read the cards."""
     seen = []
 
@@ -289,7 +304,7 @@ async def _card_statements(client, token: str, tag: str) -> tuple[dict, int]:
 
     event.listen(app_engine.sync_engine, "before_cursor_execute", on_execute)
     try:
-        states = await _states(client, token, tag)
+        states = await _states(client, token, tag, query)
     finally:
         event.remove(app_engine.sync_engine, "before_cursor_execute", on_execute)
     return states, len(seen)
@@ -313,3 +328,60 @@ async def test_a_page_reads_the_cards_once_and_not_at_all_without_the_capability
 
     _, statements = await _card_statements(client, viewer, tag)
     assert statements == 0
+
+
+@pytest.mark.asyncio
+async def test_anyone_is_told_which_tickets_a_ticket_may_repeat(client, redis):
+    """No capability is asked for: signed in or not, each side's suspectedDuplicateOf names the other.
+
+    A ticket with no card reads an empty list.
+    """
+    _, viewer = await _create_user_with_grants(redis, [(Perm.TICKET_VIEW, "all")])
+    tag = uuid_mod.uuid4().hex[:10]
+    a, b = await _ticket(f"{tag} a"), await _ticket(f"{tag} b")
+    await _ticket(f"{tag} alone")
+    await _card(await _need(a), await _need(b))
+
+    told = {"a": _refs((b, f"{tag} b")), "b": _refs((a, f"{tag} a")), "alone": []}
+    assert await _states(client, None, tag, SUSPECTED) == told
+    assert await _states(client, viewer, tag, SUSPECTED) == told
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "merged", "suspected"),
+    [
+        ("dup_ignored", False, True),
+        ("suggested", False, True),
+        ("confirmed_duplicate", False, True),
+        ("confirmed_duplicate", True, False),
+        ("not_duplicate", False, False),
+    ],
+)
+async def test_the_cards_review_can_act_on_count_and_no_verdict_is_told(
+    client, redis, status, merged, suspected
+):
+    """The cards verificationStatus counts; one judged a duplicate reads as one still waiting."""
+    tag = uuid_mod.uuid4().hex[:10]
+    a, b = await _ticket(f"{tag} a"), await _ticket(f"{tag} b")
+    card = await _card(await _need(a), await _need(b), status=status)
+    if merged:
+        await _merged(card, primary=a)
+
+    told = await _states(client, None, tag, SUSPECTED)
+    assert told["a"] == (_refs((b, f"{tag} b")) if suspected else [])
+
+
+@pytest.mark.asyncio
+async def test_a_page_told_to_anyone_reads_the_cards_once(client, redis):
+    """A guest's page of 2 or 8 tickets takes one statement on the cards, as a reviewer's does."""
+    counts = []
+    for size in (1, 4):
+        tag = uuid_mod.uuid4().hex[:10]
+        for i in range(size):
+            a, b = await _ticket(f"{tag} a{i}"), await _ticket(f"{tag} b{i}")
+            await _card(await _need(a), await _need(b))
+        states, statements = await _card_statements(client, None, tag, SUSPECTED)
+        assert len(states) == 2 * size and all(states.values())
+        counts.append(statements)
+    assert counts == [1, 1]

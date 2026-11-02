@@ -1902,9 +1902,9 @@ export type TicketStatsType = {
   __typename?: 'TicketStatsType';
   cancelled: Scalars['Int']['output'];
   completed: Scalars['Int']['output'];
-  /** How many open needs are short of people (gapPeople > 0) */
+  /** How many of those needs are short of people; the dashboard's volunteer_gap_needs */
   gapNeeds: Scalars['Int']['output'];
-  /** People still short across open needs with a quantity: quantity less the people linked, never below 0. Needs on completed or cancelled tickets add nothing */
+  /** People still short across open hr needs with a quantity: quantity less the people linked, never below 0. Other need types, and needs on completed or cancelled tickets, add nothing. The dashboard's volunteer_gap gives the same number (ADR-456) */
   gapPeople: Scalars['Int']['output'];
   inProgress: Scalars['Int']['output'];
   pending: Scalars['Int']['output'];
@@ -2013,6 +2013,8 @@ export type TicketType = {
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
   status: Scalars['String']['output'];
+  /** Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them */
+  suspectedDuplicateOf: Array<TicketDuplicateRefType>;
   /** Type of help needed: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: Maybe<Scalars['String']['output']>;
   tasks: Array<TicketTaskType>;
