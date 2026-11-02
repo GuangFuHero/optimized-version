@@ -111,11 +111,11 @@ export const TICKET_KPIS: readonly DashboardKpi[] = [
  * The row under the six, as the needs stood at the end of the range (the backend rebuilds past days
  * from the audit log). The gap card turns to the warning colours while anyone is missing.
  *
- * Volunteer numbers count 人力 needs only, never 物資 or 搜救: a 物資 need's quantity is things, not
- * people (便當 84 個 would read as 84 volunteers), and 搜救's head count is not something volunteers
- * signing up can fill. 物資 does not disappear: its own card, counted in 筆, goes first, in the same
- * accent as 志工需求人數 (both are 需求), and without the warning colours — an unclaimed 物資 need is
- * not a missing person.
+ * Volunteer numbers count 人力 needs only, never 物資, 搜救 or 醫療: a 物資 need's quantity is things,
+ * not people (便當 84 個 would read as 84 volunteers), and the others' head counts are not something
+ * volunteers signing up can fill. 物資 does not disappear: its own card, counted in 筆, goes first,
+ * in the same accent as 志工需求人數 (both are 需求), and without the warning colours — an unclaimed
+ * 物資 need is not a missing person.
  */
 export const VOLUNTEER_KPIS: readonly DashboardKpi[] = [
   {

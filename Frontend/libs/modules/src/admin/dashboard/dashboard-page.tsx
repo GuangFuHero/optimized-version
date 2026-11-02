@@ -755,7 +755,7 @@ export function DashboardPage() {
                     true,
                   )}
                   <Typography sx={caption}>
-                    {`「${asOfCaption}」的總數。志工只算人力（不含物資、搜救）；缺口只算還在招募的，不是需求人數減已媒合。`}
+                    {`「${asOfCaption}」的總數。志工只算人力（不含物資、搜救、醫療）；缺口只算還在招募的，不是需求人數減已媒合。`}
                   </Typography>
                 </Stack>
                 <ChartGrid
