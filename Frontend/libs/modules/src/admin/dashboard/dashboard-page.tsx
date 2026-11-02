@@ -796,7 +796,7 @@ export function DashboardPage() {
                     )}
                     {showDetails
                       ? '收起細部分析'
-                      : '展開細部分析（完成率、等待時間、處理耗時、重複單）'}
+                      : '展開細部分析（各需求類型缺口、完成率、等待時間、處理耗時、重複單）'}
                   </ButtonBase>
                 </Box>
                 {showDetails ? (

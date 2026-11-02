@@ -523,8 +523,9 @@ describe('dashboard states and filters', () => {
     expect(container.textContent).toContain('目前沒有缺人的需求');
   });
 
-  it('draws no volunteer chart by need type in the detail charts', async () => {
+  it('draws only the gap by need type in the detail charts, without the status', async () => {
     await mount();
+    await pick('dashboard-tickets-status', 'pending');
     state.requests = [];
     await act(async () =>
       Array.from(container.querySelectorAll('button'))
@@ -532,12 +533,20 @@ describe('dashboard states and filters', () => {
         ?.click(),
     );
     await settle();
-    expect(state.requests.length).toBeGreaterThan(0);
     expect(
-      state.requests.some(({ query }) =>
-        String(query.y).startsWith('volunteer'),
-      ),
-    ).toBe(false);
+      state.requests
+        .filter(({ query }) => String(query.y).startsWith('volunteer'))
+        .map(({ kind, query }) => [
+          kind,
+          query.y,
+          query.x,
+          query.chart_type,
+          query.status,
+        ]),
+    ).toEqual([['chart', 'volunteer_gap', 'category', 'bar', undefined]]);
+    expect(
+      container.querySelector('[aria-label="各需求類型還缺幾人圖表"]'),
+    ).not.toBeNull();
   });
 
   async function pick(id: string, value: string) {
