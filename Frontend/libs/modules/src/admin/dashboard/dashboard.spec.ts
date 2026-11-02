@@ -452,7 +452,27 @@ describe('dashboard states and filters', () => {
     expect(container.textContent).not.toContain('（近 30 天建立）');
     // A gap above zero keeps the catalog's description; how many needs are short is not in the API.
     expect(container.textContent).not.toContain('目前沒有缺人的需求');
+    expect(container.textContent).toContain('說明-volunteer_gap');
     expect(container.textContent).toContain('志工缺口每天的變化');
+  });
+
+  it('puts the short lines under the needed and matched cards, the whole description in the title', async () => {
+    await mount();
+    const card = (metric: string) =>
+      container.querySelector(`article[aria-label^="後端-${metric}，"]`);
+    expect(card('volunteers_needed')?.textContent).toContain(
+      '人力共要幾人（含已額滿、已結束）',
+    );
+    expect(card('volunteers_needed')?.textContent).not.toContain(
+      '說明-volunteers_needed',
+    );
+    expect(card('volunteers_needed')?.getAttribute('title')).toBe(
+      '說明-volunteers_needed',
+    );
+    expect(card('volunteers_matched')?.textContent).toContain(
+      '已被承接的名額（一人接兩筆算 2）',
+    );
+    expect(container.textContent).toContain('不是前兩個相減');
   });
 
   it('says nothing is missing when the gap is zero', async () => {

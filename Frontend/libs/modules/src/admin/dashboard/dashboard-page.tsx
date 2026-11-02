@@ -55,6 +55,7 @@ import {
   rangeCreatedCaption,
   rangeLengthDays,
   volunteerGapLine,
+  VOLUNTEER_SHORT_LINES,
   type AnalyticsCatalog,
   type DashboardDateRange,
   type DashboardKpi,
@@ -195,7 +196,10 @@ function KpiCard({
   const isGap = kpi.metric === 'volunteer_gap';
   // The design turns the whole gap card to the warning colours while anyone is missing.
   const warn = isGap && value !== undefined && value > 0;
-  const footer = (isGap && volunteerGapLine(value)) || spec?.description;
+  const footer =
+    (isGap && volunteerGapLine(value)) ||
+    VOLUNTEER_SHORT_LINES[kpi.metric] ||
+    spec?.description;
   return (
     <Box
       component="article"
@@ -696,8 +700,7 @@ export function DashboardPage() {
                     3,
                   )}
                   <Typography sx={caption}>
-                    {`這三個是「${asOfCaption}」的總數，不是這段期間建立的。`}
-                    跟著地區、需求類型篩選；不受狀態篩選影響。
+                    {`「${asOfCaption}」的總數。志工只算人力（不含物資、搜救）；缺口只算還在招募的，不是前兩個相減。`}
                   </Typography>
                 </Stack>
                 <ChartGrid
