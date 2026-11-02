@@ -27,6 +27,16 @@ from app.graphql.shared import (
 from app.services import ticket_audit
 
 
+async def ticket_detail_scope(info: strawberry.types.Info) -> Scope:
+    """The caller's ticket.view_detail scope: NONE to the anonymous caller, who holds no grant at all."""
+    user = info.context["user"]
+    if user is None:
+        return Scope.NONE
+    return await resolve_scope(
+        user, Perm.TICKET_VIEW_DETAIL, info.context["db"], cache=info.context["_rbac_cache"]
+    )
+
+
 def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resource=None):
     """Whether the caller may see this ticket's detail (ADR-281), decided once per request.
 
