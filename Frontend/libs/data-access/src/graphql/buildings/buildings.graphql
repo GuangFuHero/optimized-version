@@ -29,3 +29,28 @@ query GetBuildingMapWithTickets($uuid: UUID!, $limit: Int! = 200) {
     }
   }
 }
+
+# Every open building map (開啟空間), its tickets left out: for the site's list, at the top of 任務
+# (這些大樓可以看各樓層), and for the map's building markers, one request between them. Public, as a
+# station is, so a guest gets them too. No bounds: the list needs every one, not only those in view, and
+# there are few. 200 at once; `totalCount` says when there are more.
+query GetBuildingMaps($limit: Int! = 200) {
+  buildingMaps(limit: $limit) {
+    items {
+      uuid
+      name
+      # A GeoJSON point, [lng, lat]: where the map puts its marker.
+      geometry
+      floors {
+        label
+      }
+      secondaryLocation {
+        fullAddress
+        landmarkNote
+      }
+    }
+    pageInfo {
+      totalCount
+    }
+  }
+}

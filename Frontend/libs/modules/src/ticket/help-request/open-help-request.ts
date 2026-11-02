@@ -5,10 +5,19 @@
  * as with `ticket-changes.ts`.
  */
 
+/** A building's floor picked (在這一層請求協助): its address line and the floor, filled in. */
+export interface HelpRequestPlace {
+  /** Null when the building has no address. */
+  address: string | null;
+  /** The building's label for it, as `3F`, `B1` or `RF`. */
+  floor: string;
+}
+
 /** A point picked on the map, for the drawer's map to start from instead of the device's location. */
 export interface HelpRequestSeed {
   lat: number;
   lng: number;
+  place?: HelpRequestPlace;
 }
 
 const channel = new EventTarget();
