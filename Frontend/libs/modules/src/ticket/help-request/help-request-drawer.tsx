@@ -1,11 +1,5 @@
 'use client';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
-import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import {
   Alert,
   AlertTitle,
@@ -28,7 +22,7 @@ import {
   type Ref,
 } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { LocationPicker } from '../../map/components/location-picker';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
@@ -167,7 +161,7 @@ function GuestHelpRequestDrawer({
           </Button>
           <Button
             variant="contained"
-            startIcon={<LoginRoundedIcon />}
+            startIcon={<Icons.logIn />}
             onClick={onSignIn}
             sx={{ flex: 2 }}
           >
@@ -259,22 +253,22 @@ function noteLook(kind: AddressNote['kind'], error: boolean) {
     case 'confirmed':
       return {
         color: color.fg.success,
-        icon: <VerifiedRoundedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.badgeCheck sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     case 'mismatch':
       return {
         color: color.fg.warning,
-        icon: <WarningAmberRoundedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.triangleAlert sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     case 'edited':
       return {
         color: color.fg.neutral.muted,
-        icon: <EditRoundedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.penLine sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
     default:
       return {
         color: error ? color.fg.danger : color.fg.neutral.muted,
-        icon: <InfoOutlinedIcon sx={{ fontSize: NOTE_ICON_SIZE }} />,
+        icon: <Icons.info sx={{ fontSize: NOTE_ICON_SIZE }} />,
       };
   }
 }
@@ -868,7 +862,7 @@ function HelpRequestFormDrawer({
                 fontWeight: 500,
               }}
             >
-              <AddRoundedIcon sx={{ fontSize: 16 }} />
+              <Icons.plus sx={{ fontSize: 16 }} />
               還需要別的嗎？
             </ButtonBase>
           ) : null}

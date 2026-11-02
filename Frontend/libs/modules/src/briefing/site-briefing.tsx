@@ -1,8 +1,5 @@
 'use client';
 
-import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import {
   Box,
   Button,
@@ -21,6 +18,7 @@ import {
   displayTextSize,
   EmptyState,
   Markdown,
+  Icons,
 } from '@rescue-frontend/ui';
 
 import { formatTaiwanTime, timeAgo } from '../time';
@@ -144,7 +142,7 @@ function BriefingStamp({ publishedAt }: { publishedAt: string | null }) {
           fontSize: displayTextSize[12],
         }}
       >
-        <AccessTimeRoundedIcon sx={{ fontSize: 14 }} />
+        <Icons.clock sx={{ fontSize: 14 }} />
         <span>
           最後更新 {at ?? '—'}
           {age ? `（${age}）` : null}
@@ -213,7 +211,7 @@ function NoBriefing() {
       }}
     >
       <EmptyState
-        icon={<MenuBookRoundedIcon />}
+        icon={<Icons.bookOpen />}
         title="目前還沒有發布行前資訊"
         description="協調單位還在整理。出發前請先看地圖上的任務與站點，或直接聯繫你要前往的團隊確認交通與裝備。"
         action={
@@ -298,7 +296,7 @@ export function SiteBriefing() {
                   boxShadow: `inset 0 0 0 1px ${color.border.default}`,
                 }}
               >
-                <InfoOutlinedIcon
+                <Icons.info
                   sx={{
                     fontSize: 16,
                     mt: '4px',
