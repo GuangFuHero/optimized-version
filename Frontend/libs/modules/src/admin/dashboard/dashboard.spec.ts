@@ -514,7 +514,7 @@ describe('dashboard states and filters', () => {
     expect(card('volunteers_matched')?.textContent).toContain(
       '已被承接的名額（一人接兩筆算 2）',
     );
-    expect(container.textContent).toContain('不是前兩個相減');
+    expect(container.textContent).toContain('不是需求人數減已媒合');
   });
 
   it('says nothing is missing when the gap is zero', async () => {
