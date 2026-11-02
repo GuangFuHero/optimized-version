@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, IconButton, Stack, Typography } from '@mui/material';
+import { Fragment } from 'react';
 
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
@@ -142,11 +143,12 @@ export function PageHelpPanel({
       {help.sections?.map((section) => (
         <Box key={section.title}>
           <Typography sx={LABEL_SX}>{section.title}</Typography>
-          {section.body ? (
-            <Typography sx={BODY_SX}>
-              <HelpText text={section.body} />
+          {/* A blank line in the body starts a new paragraph. */}
+          {section.body?.split('\n\n').map((paragraph) => (
+            <Typography key={paragraph} sx={BODY_SX}>
+              <HelpText text={paragraph} />
             </Typography>
-          ) : null}
+          ))}
           {section.items?.length ? (
             <Box component="ul" sx={{ ...BODY_SX, pl: 2.25 }}>
               {section.items.map((item) => (
@@ -158,6 +160,48 @@ export function PageHelpPanel({
           ) : null}
         </Box>
       ))}
+
+      {help.roles?.length ? (
+        <Box>
+          <Typography sx={LABEL_SX}>誰可以做什麼</Typography>
+          <Box
+            component="dl"
+            sx={{
+              m: 0,
+              mt: 0.75,
+              display: 'grid',
+              gridTemplateColumns: 'auto 1fr',
+              columnGap: 1.5,
+              borderTop: `1px solid ${color.border.default}`,
+              fontSize: displayTextSize[13],
+              lineHeight: 1.6,
+              '& > dt, & > dd': {
+                m: 0,
+                py: 0.75,
+                borderBottom: `1px solid ${color.border.default}`,
+              },
+            }}
+          >
+            {help.roles.map(([role, can]) => (
+              <Fragment key={role}>
+                <Box
+                  component="dt"
+                  sx={{
+                    color: color.fg.neutral.default,
+                    fontWeight: 700,
+                    maxWidth: 104,
+                  }}
+                >
+                  {role}
+                </Box>
+                <Box component="dd" sx={{ color: color.fg.neutral.subtle }}>
+                  <HelpText text={can} />
+                </Box>
+              </Fragment>
+            ))}
+          </Box>
+        </Box>
+      ) : null}
 
       {help.note ? (
         <Typography

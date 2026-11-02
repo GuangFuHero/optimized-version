@@ -7,8 +7,8 @@
  * page or a wrong account.
  *
  * Left out until the page they describe is in: 互助地圖 (its areas), 重複審核, 團隊, 成員與權限 —
- * the prototype has their words. Left out until the permissions are settled: the 誰可以做什麼
- * tables of 任務管理 and 資源站點管理.
+ * the prototype has their words. The 誰可以做什麼 tables follow the permissions as decided, the
+ * 政府隊's members importing tickets and reviewing every station's suggestions included.
  */
 
 import type { PageHelp } from '../site/page-help/page-help';
@@ -31,12 +31,29 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
     sections: [
       {
         title: '開啟空間',
-        body: '同一棟大樓裡有很多人需要幫忙時，按工具列的「開啟空間」：在地圖上點那棟建築（地址會自動帶出），填名稱與地上、地下幾層，每棟會自動加上頂樓 RF。開好之後，這個空間會跟任務單一起出現在列表與地圖上；點開可以看各樓層哪幾層還需要幫忙，也可以編輯名稱、地址、樓層數或刪除（刪除不會刪掉底下的任務單）。',
+        body: '同棟大樓有多人需要協助時，可透過工具列「開啟空間」，在地圖點選建築（自動帶入地址），填寫名稱及地上、地下樓層數，系統會自動新增頂樓 RF。\n\n建立後，空間會與任務單一同顯示於列表及地圖（方形圖釘）。點選可查看各樓層的待協助情況，並編輯空間資訊或刪除（不影響底下任務單）。任務單樓層填寫 RF 或「頂樓」，皆會歸入頂樓。',
+      },
+      {
+        title: '志工缺口',
+        // Volunteer numbers count 人力 needs only; 物資 is counted in 筆 on the dashboard.
+        body: '上方「志工缺口」只算人力需求還差幾人。物資（便當、水這類東西）不算人數，改在總覽儀表板的「物資需求」看還有幾筆沒人接。',
       },
     ],
     // A ticket belongs to the team whose 責任區 its place is in; there is no handing a ticket to a
     // team by itself.
-    note: '團隊的人只能修改自己責任區內的任務單，其他的只能看。「疑似重複」的標記所有人都看得到。',
+    roles: [
+      ['超級管理員', '全部功能'],
+      [
+        '政府隊（管理員、成員）',
+        '建立任務單；修改、派人處理責任區內的任務；匯入任務單。管理員另外可以開啟空間、匯出',
+      ],
+      [
+        '團隊管理員',
+        '建立任務單；修改、刪除、派人處理責任區內的任務；匯入、匯出',
+      ],
+      ['團隊成員', '建立任務單；修改責任區內的任務'],
+      ['資料檢核員', '查看全部任務單與紀錄、匯出、處理重複審核'],
+    ],
   },
   '/stations': {
     title: '資源站點管理',
@@ -50,8 +67,18 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
     sections: [
       {
         title: '個別指派',
-        body: '站點是一個一個指派給團隊的：在列表的「指派 Team」欄直接選，不用在地圖上圈選。指派之後，那個團隊就能修改這個站點、處理它的修改建議。站點不會因為位在互助地圖的責任區裡，就自動歸給那個團隊。',
+        body: '站點需在列表的「指派 Team」欄逐一指定團隊，無須在地圖圈選。指派後，團隊即可編輯站點及處理修改建議。站點不會因位於團隊責任區內而自動指派。',
       },
+    ],
+    roles: [
+      ['超級管理員', '全部功能，包含撤銷已採用的修改建議'],
+      [
+        '政府隊（管理員、成員）',
+        '新增、編輯所有站點（含營運狀態）；把站點指派給團隊；審核所有站點的修改建議（核准或退回）',
+      ],
+      ['團隊管理員', '新增站點；編輯、刪除、審核指派給本隊的站點；匯入、匯出'],
+      ['團隊成員', '新增站點；編輯指派給本隊的站點'],
+      ['資料檢核員', '審核、撤銷所有站點的修改建議；匯出'],
     ],
     note: '所有後台人員都可以查看站點。',
   },

@@ -24,6 +24,8 @@ export interface PageHelp {
   /** 你可以 — what a person can do here. */
   can: readonly string[];
   sections?: readonly PageHelpSection[];
+  /** 誰可以做什麼: each role beside what it may do here, as two columns. */
+  roles?: ReadonlyArray<readonly [role: string, can: string]>;
   /** 注意, in a grey box at the foot. */
   note?: string;
 }
@@ -82,9 +84,12 @@ export function helpTextRuns(text: string): HelpTextRun[] {
     .filter((run) => run.text !== '');
 }
 
-/** As wide as the prototype's panel: 400 when a section holds a list, 340 otherwise. */
+/** As wide as the prototype's panel: 400 with a role table or a section holding a list, 340 otherwise. */
 export function pageHelpWidth(help: PageHelp): number {
-  return help.sections?.some((section) => section.items?.length) ? 400 : 340;
+  return help.roles?.length ||
+    help.sections?.some((section) => section.items?.length)
+    ? 400
+    : 340;
 }
 
 /** The page an address is on, if it has words of its own: the account pages do not. */
