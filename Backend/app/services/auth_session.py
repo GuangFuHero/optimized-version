@@ -27,6 +27,7 @@ from app.repositories.session_repository import InvalidRefreshToken, RefreshToke
 from app.repositories.verification_repository import VerificationRepository
 from app.schemas.auth import SwitchIdentityRequest, VerifyRequest
 from app.services.auth_account import create_account
+from app.services.identity_reset import identity_reset_error, reset_to_default
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,39 @@ def _refresh_token_invalid() -> ApiError:
     )
 
 
+async def _unresolved_identity(
+    db: AsyncSession, redis, repo, raw_refresh: str, record, session, wanted
+) -> ApiError | None:
+    """What a refresh whose identity does not resolve answers, or None to let `rotate()` judge it.
+
+    Not a sign-out (Spec 029, ADR-403): when the identity the *session* acts as is gone, the session
+    moves to the default identity and nothing is rotated (ADR-096), so the same token, sent again
+    without naming one, lands there.
+
+    Only the session's current refresh token may move it, and only the session's own identity is
+    named back (ADR-415). An older token — rotated, still on record until it expires — is answered
+    None: `rotate()` judges it like any other, a replay within the grace period getting the new token
+    and one after it ending the session (ADR-330). An identity the caller merely names, while the
+    session's own still works, gets `identity_reset` with no names and changes nothing, or anyone
+    could look a team's name up by its uuid.
+    """
+    if session is None:
+        # Nothing to move: the session is over, which the rotation would also say.
+        return _refresh_token_invalid()
+    if not repo.is_current(session, raw_refresh):
+        return None
+    session_act = session.get("act")
+    session_lost_it = session_act is not None and (
+        session_act == wanted
+        or await active_identity_repository.resolve(db, record["user_uuid"], session_act) is None
+    )
+    if session_lost_it:
+        return await reset_to_default(
+            db, redis, user_uuid=record["user_uuid"], sid=record["sid"], act=session_act
+        )
+    return identity_reset_error()
+
+
 async def refresh_session(
     db: AsyncSession, redis, raw_refresh: str | None, wanted: str | None = None
 ) -> tuple[str, str, ActiveIdentity | None]:
@@ -182,20 +216,19 @@ async def refresh_session(
     if wanted is not None and record is not None:
         identity = await active_identity_repository.resolve(db, record["user_uuid"], wanted)
         if identity is None:
-            # The identity this client was acting as is gone. Refuse here as well as on the
-            # request path, so a revoked identity means signed out, not silently downgraded.
-            raise ApiError(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                code=ErrorCode.IDENTITY_REVOKED,
-                detail="This identity no longer exists",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            refusal = await _unresolved_identity(db, redis, repo, raw_refresh, record, session, wanted)
+            if refusal is not None:
+                raise refusal
+            # An older token, for `rotate()` to judge (ADR-415). If it lets it through — a replay
+            # within the grace period — the session keeps its own identity while that still works,
+            # else lands on the default below. The name the caller sent is not trusted either way.
+            identity = await active_identity_repository.resolve(db, record["user_uuid"], session.get("act"))
     try:
         sid, user_uuid, new_refresh = await repo.rotate(raw_refresh)
     except (InvalidRefreshToken, RefreshTokenReuse) as err:
         raise _refresh_token_invalid() from err
     # Only the no-identity path still needs a query here: `wanted` was already resolved above.
-    if not wanted:
+    if identity is None:
         identity = await active_identity_repository.default_for_user(db, user_uuid)
     # Rotation preserves the session record, so a `wanted` that came from it is already
     # stored; one the caller named has to be written back, or the next refresh without an

@@ -17,7 +17,7 @@ import { SiteDetailRow } from '../../shell/site/detail-info';
 import { SiteBadge } from '../../shell/site/site-badge';
 import { StationDetailFooterAction } from '../admin/station-detail/station-detail-footer-action';
 import type { StationDetailActionProps } from '../admin/station-detail/types';
-import { getStationTypeIcon } from '../type-options';
+import { getStationTypeIcon } from '../station-type-icon';
 import { describeSiteStation } from './site-station-detail';
 
 const { color, radius, spacing } = designTokens;

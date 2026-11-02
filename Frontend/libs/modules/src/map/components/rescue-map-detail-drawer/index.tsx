@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
@@ -163,6 +162,7 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
       taskValue: formatTicketTypeLabel(marker.ticketMeta?.taskType),
       requesterLabel: '現場聯絡人',
       requesterValue: contactSummary.join(' / ') || '未提供',
+      requesterIcon: <Icons.user />,
       notesLabel: '任務說明',
       notesValue: marker.subtitle,
     },
@@ -175,7 +175,7 @@ function createStationEditAction(
 ): StationDetailActionProps {
   return {
     label: '修改建議',
-    icon: <EditRoundedIcon />,
+    icon: <Icons.pencilLine />,
     onClick: () => openStationSuggestion(marker.id),
   };
 }

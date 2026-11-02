@@ -32,7 +32,7 @@ import {
 import { PhotoThumb } from '../photos';
 import { formatTicketTypeLabel } from '../status';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 const { color, spacing } = designTokens;
 

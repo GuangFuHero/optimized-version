@@ -1716,7 +1716,7 @@ export interface paths {
      *     **type** — `satellite` or `road`
      *
      *     **source** — one of:
-     *     - satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)
+     *     - satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/jpeg), `sinica` (image/png)
      *     - road: `osm` (image/png), `carto` (image/png)
      *
      *     **z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)
@@ -2817,6 +2817,11 @@ export interface components {
       /** Actor Uuid */
       actor_uuid: string | null;
       /**
+       * Actor Name
+       * @description The nickname of `actor_uuid` (ADR-441)
+       */
+      actor_name?: string | null;
+      /**
        * Source Layer
        * @enum {string}
        */
@@ -2944,6 +2949,11 @@ export interface components {
       created_at: string;
       /** Reviewed By */
       reviewed_by: string | null;
+      /**
+       * Reviewed By Name
+       * @description The nickname of `reviewed_by` (ADR-441)
+       */
+      reviewed_by_name: string | null;
       /** Reviewed At */
       reviewed_at: string | null;
       low: components['schemas']['EntitySummaryResponse'];
@@ -3012,6 +3022,11 @@ export interface components {
       created_at: string;
       /** Reviewed By */
       reviewed_by: string | null;
+      /**
+       * Reviewed By Name
+       * @description The nickname of `reviewed_by` (ADR-441)
+       */
+      reviewed_by_name: string | null;
       /** Reviewed At */
       reviewed_at: string | null;
       low: components['schemas']['EntitySummaryResponse'];
@@ -3364,6 +3379,27 @@ export interface components {
       step_up?: components['schemas']['StepUp'] | null;
     };
     /**
+     * LocationForReviewResponse
+     * @description Where a ticket is: the address down to the room, or the pole (ADR-440). Read-only here.
+     */
+    LocationForReviewResponse: {
+      /**
+       * Location Type
+       * @description 'address' or 'pole'
+       */
+      location_type: string;
+      /** Full Address */
+      full_address: string | null;
+      /** Building Section */
+      building_section: string | null;
+      /** Floor */
+      floor: string | null;
+      /** Room */
+      room: string | null;
+      /** Pole Id */
+      pole_id: string | null;
+    };
+    /**
      * LoginMethodOut
      * @description One of the caller's login methods.
      *
@@ -3673,6 +3709,36 @@ export interface components {
       status: string | null;
       /** Comment */
       comment: string | null;
+      /**
+       * Display Label
+       * @description How the item reads: the label set for its need type, else property_name (ADR-446)
+       */
+      display_label: string;
+      /**
+       * Sort Order
+       * @description The item's order among its need type's items, from the same field setting, inactive ones included; null when there is none (ADR-447)
+       */
+      sort_order?: number | null;
+      /**
+       * Data Type
+       * @description The control the item's field setting asks for (number, text, single_select, ...); null when there is none (ADR-447)
+       */
+      data_type?: string | null;
+      /**
+       * Enum Options
+       * @description The choices of a select field; null otherwise (ADR-447)
+       */
+      enum_options?: string[] | null;
+      /**
+       * Unit
+       * @description A number field's unit, e.g. 箱; null otherwise (ADR-447)
+       */
+      unit?: string | null;
+      /**
+       * Is Active
+       * @description Whether the item's field setting is still in use; null when there is none (ADR-447)
+       */
+      is_active?: boolean | null;
     };
     /**
      * RefreshRequest
@@ -4289,6 +4355,11 @@ export interface components {
       recruiting_stopped: boolean;
       /** Properties */
       properties: components['schemas']['PropertyForReviewResponse'][];
+      /**
+       * Claimant Keys
+       * @description One opaque key per person on the need (ADR-445). A person on needs of both tickets has the same key on each, so the people after a fold are the distinct keys of the needs folded together. Keys differ on every other card and do not contain the person's uuid; they are a plain hash, so someone who already holds the card and a person's uuid can test for that person
+       */
+      claimant_keys: string[];
     };
     /**
      * TeamMemberItem
@@ -4446,6 +4517,8 @@ export interface components {
       disaster_details: {
         [key: string]: string[];
       };
+      /** @description Where the ticket is; null when it has no address or pole. A resolve cannot change it */
+      location: components['schemas']['LocationForReviewResponse'] | null;
     };
     /**
      * TicketStatus
@@ -7999,7 +8072,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
@@ -8019,7 +8092,7 @@ export interface operations {
         height?: number | null;
         /** @description JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{"title": {"text": "Custom title"}}'. */
         layout_overrides?: string | null;
-        /** @description Only tickets of this task type; the volunteer metrics read each need's own type. */
+        /** @description Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type. */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
@@ -8029,6 +8102,8 @@ export interface operations {
         town?: string | null;
         /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
+        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it. */
+        include_deleted?: boolean;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -8063,7 +8138,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['TicketYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
@@ -8073,7 +8148,7 @@ export interface operations {
         end_date?: string | null;
         /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
         tz: string;
-        /** @description Only tickets of this task type; the volunteer metrics read each need's own type. */
+        /** @description Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type. */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
@@ -8083,6 +8158,8 @@ export interface operations {
         town?: string | null;
         /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
+        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it. */
+        include_deleted?: boolean;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -8123,7 +8200,7 @@ export interface operations {
         end_date?: string | null;
         /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), required: there is no default, and a missing one is a 422. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
         tz: string;
-        /** @description Only tickets of this task type; the volunteer metrics read each need's own type. */
+        /** @description Only tickets with a need of this type, as the public tickets list matches it; the need-level metrics (volunteers, time to completion, need completion) read each need's own type. */
         task_type?: components['schemas']['TicketTaskType'] | null;
         /** @description Only tickets with this status. */
         status?: components['schemas']['TicketStatus'] | null;
@@ -8133,6 +8210,8 @@ export interface operations {
         town?: string | null;
         /** @description Only rows whose address has this 村里. `county`, `town` and `village` combine, and a 村里 name can repeat across towns, so pin it with `town`. GET /analytics/catalog lists the values for your scope; a combination that is not in that list is a 422. */
         village?: string | null;
+        /** @description Also count deleted tickets, as 已取消 and in the total; only the ticket counts, completion rate, open-ticket age and backlog change read it. A deleted ticket matches `task_type` and groups by category through any of its needs, since they were deleted with it. */
+        include_deleted?: boolean;
       };
       header?: {
         'X-WG-Realm'?: string | null;
@@ -8167,7 +8246,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
@@ -8231,7 +8310,7 @@ export interface operations {
       query: {
         /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
         y: components['schemas']['StationYMetric'];
-        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). For the ticket counts, completion rate and duplicate count, 'category' is the types of the ticket's live needs: a ticket counts once per type, so the categories can sum to more than the total (a deleted ticket counted through `include_deleted` uses all its needs). Omit for a single aggregate value. An `x` outside the chosen `y`'s `allowed_x` is a 422; see GET /analytics/catalog. */
         x?: components['schemas']['ChartX'] | null;
         /** @description Bucket size when x=date. Ignored for every other x, and for a metric whose catalog `allowed_x_granularities` lacks it (its trend is drawn at the size listed there). */
         x_granularity?: components['schemas']['ChartXGranularity'];
