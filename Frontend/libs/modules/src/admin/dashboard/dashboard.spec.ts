@@ -87,7 +87,13 @@ vi.mock('@rescue-frontend/data-access/admin', () => {
         types: [{ value: 'supply', label: '物資' }],
         statuses: [{ value: 'open', label: '營運中' }],
         areas: [
-          { county: '花蓮縣', towns: [{ town: '光復鄉', villages: [] }] },
+          {
+            county: '花蓮縣',
+            towns: [
+              { town: '光復鄉', villages: [] },
+              { town: '鳳林鎮', villages: [] },
+            ],
+          },
           { county: '宜蘭縣', towns: [] },
         ],
       },
@@ -532,10 +538,20 @@ describe('dashboard states and filters', () => {
     );
     expect(select('dashboard-town')?.disabled).toBe(false);
 
-    // 村里 opens only under a town that has some.
-    expect(select('dashboard-village')).toBeNull();
+    // 村里 waits disabled for a town, then opens under one that has some.
+    expect(select('dashboard-village')?.disabled).toBe(true);
+    expect(select('dashboard-village')?.textContent).toContain('先選鄉鎮市區');
     await pick('dashboard-town', '光復鄉');
-    expect(select('dashboard-village')).not.toBeNull();
+    expect(select('dashboard-village')?.disabled).toBe(false);
+    expect(container.textContent).not.toContain('只算地址有寫到村里的單');
+    await pick('dashboard-village', '大安村');
+    expect(container.textContent).toContain(
+      '只算地址有寫到村里的單；地址沒寫村里的不會算進「大安村」。',
+    );
+    // A town no address names a 村里 in has no 村里 to pick.
+    await pick('dashboard-town', '鳳林鎮');
+    expect(select('dashboard-village')).toBeNull();
+    expect(container.textContent).not.toContain('只算地址有寫到村里的單');
 
     // Only stations have 宜蘭縣: the tickets section says so and is not asked, which would be a 422.
     state.requests = [];

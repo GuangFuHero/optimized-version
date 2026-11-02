@@ -161,7 +161,8 @@ function AreaArrow() {
 
 /**
  * The second row: 縣市 → 鄉鎮市區 → 村里, over the whole page. A level opens once the one above it
- * is picked, and 村里 shows only where the town has any, as most addresses name none.
+ * is picked; 村里 waits disabled until then, and goes away under a town that has none, as most
+ * addresses name none. A picked 村里 says what it leaves out: an address without one.
  */
 function AreaRow({
   area,
@@ -211,15 +212,16 @@ function AreaRow({
         disabled={!area.county}
         onChange={(town) => onChange({ county: area.county, town })}
       />
-      {area.town && choices.villages.length > 0 ? (
+      {!area.town || choices.villages.length > 0 ? (
         <>
           <AreaArrow />
           <MiniSelect
             id="dashboard-village"
             label="村里"
-            allLabel="全部村里"
+            allLabel={area.town ? '全部村里' : '先選鄉鎮市區'}
             value={area.village}
             options={asOptions(choices.villages)}
+            disabled={!area.town}
             onChange={(village) => onChange({ ...area, village })}
           />
         </>
@@ -241,6 +243,12 @@ function AreaRow({
       <Typography sx={{ ...caption, marginLeft: 'auto' }}>
         類型、狀態在各區塊標題右邊，只套那一區
       </Typography>
+      {area.village ? (
+        // The backend splits a 村里 out of the address, so a row whose address names none has none.
+        <Typography role="note" sx={{ ...caption, flexBasis: '100%' }}>
+          {`只算地址有寫到村里的單；地址沒寫村里的不會算進「${area.village}」。`}
+        </Typography>
+      ) : null}
     </Stack>
   );
 }
