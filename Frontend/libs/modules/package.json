@@ -8,7 +8,8 @@
     "./briefing": "./src/briefing/index.ts",
     "./session": "./src/session/index.ts",
     "./server": "./src/server.ts",
-    "./document": "./src/document-layout.tsx"
+    "./document": "./src/document-layout.tsx",
+    "./content-security-policy": "./src/http/content-security-policy.js"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

@@ -1,0 +1,40 @@
+// @ts-check
+// Plain CommonJS on purpose: both apps' next.config files load it as-is (the site's is CommonJS,
+// the admin app's is TypeScript), before any bundler runs, so it cannot be TypeScript itself.
+
+/**
+ * The Content-Security-Policy both apps send, enforced.
+ *
+ * - script-src `'unsafe-inline'`: Next writes inline scripts into every page. Dropping it needs a
+ *   per-request nonce in `proxy.ts`.
+ * - script-src `'unsafe-eval'` under `next dev` only, for hot reload.
+ * - img-src `https:`: the direct OSM tiles (`tile.openstreetmap.org`) and photo links people paste
+ *   (duk.tw and others), plus `data:`/`blob:` for the QR code, marker icons and downloads.
+ * - style-src `'unsafe-inline'`: Emotion (MUI) and Leaflet both write inline styles.
+ * - connect-src `'self'`: the browser reaches the backend only through the app's own `/api/*` proxy;
+ *   TGOS, SMS, mail, OAuth tokens and the cached tile sources are all called by the backend.
+ * - frame-ancestors `'self'`: the same rule as `X-Frame-Options: SAMEORIGIN`, which browsers that
+ *   understand frame-ancestors ignore in its favour.
+ * - form-action `'self'`: OAuth starts by navigating to `/api/v1/auth/oauth/*`, not by a form post.
+ *
+ * @param {boolean} [isDevelopment] defaults to whether `next dev` is running
+ * @returns {string}
+ */
+function contentSecurityPolicy(
+  isDevelopment = process.env.NODE_ENV === 'development',
+) {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+  ].join('; ');
+}
+
+module.exports = { contentSecurityPolicy };
