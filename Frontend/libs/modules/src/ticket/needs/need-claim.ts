@@ -97,6 +97,38 @@ export function formatNeedQuota(need: TicketNeed, kind: NeedClaimKind): NeedQuot
   };
 }
 
+export interface NeedsProgress {
+  matched: number;
+  required: number;
+  /** Every need, those without a quantity too: the label counts them all. */
+  needCount: number;
+}
+
+/**
+ * The whole ticket's 志工媒合 (prototype `VolunteerProgress`): the people its needs have against the
+ * people they ask for. A need without a quantity is left out, as its own row draws no bar; an
+ * over-sent need counts as full, so it cannot cover for another still short; a need that stopped
+ * recruiting, or any need of a completed ticket, asks for no one beyond the people it has. Null when
+ * that leaves nobody asked for.
+ */
+export function summarizeNeedsProgress(
+  needs: readonly TicketNeed[],
+  ticketStatus?: string | null,
+): NeedsProgress | null {
+  let matched = 0;
+  let required = 0;
+
+  for (const need of needs) {
+    if (need.quantity == null) continue;
+    const closed = need.status === 'fulfilled' || ticketStatus === 'completed';
+    const has = Math.min(need.assignedCount, need.quantity);
+    matched += has;
+    required += closed ? has : need.quantity;
+  }
+
+  return required > 0 ? { matched, required, needCount: needs.length } : null;
+}
+
 /**
  * The line the claim confirmation reads out before a volunteer commits (prototype
  * `NeedClaimConfirmDialog`).
