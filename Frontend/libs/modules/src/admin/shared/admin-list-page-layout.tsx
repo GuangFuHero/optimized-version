@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 import { Box } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material/styles';
@@ -46,8 +46,34 @@ export function AdminListPageLayout({
   filterPanelSx,
   listContainerSx,
 }: AdminListPageLayoutProps) {
+  const sectionRef = useRef<HTMLElement>(null);
+  const stuckHeaderRef = useRef<HTMLDivElement>(null);
+  const scrolls = Boolean(lead);
+
+  // With the page scrolling under the sticky header, a row reached by keyboard (Shift+Tab) is scrolled
+  // into view below the header rather than behind it.
+  useEffect(() => {
+    const section = sectionRef.current;
+    const stuckHeader = stuckHeaderRef.current;
+    if (!scrolls || !section || !stuckHeader) {
+      return;
+    }
+    const write = () => {
+      section.style.scrollPaddingTop = `${stuckHeader.offsetHeight}px`;
+    };
+    write();
+    const observer = new ResizeObserver(write);
+    observer.observe(stuckHeader);
+
+    return () => {
+      observer.disconnect();
+      section.style.removeProperty('scroll-padding-top');
+    };
+  }, [scrolls]);
+
   return (
     <Box
+      ref={sectionRef}
       component="section"
       sx={{
         width: '100%',
@@ -62,6 +88,7 @@ export function AdminListPageLayout({
       {lead}
       {lead ? (
         <Box
+          ref={stuckHeaderRef}
           sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: canvasColor }}
         >
           {header}
@@ -73,9 +100,10 @@ export function AdminListPageLayout({
       <Box
         sx={mergeSx(
           {
-            // With a lead the page scrolls, so the list takes its height and fills what is left.
+            // With a lead the page scrolls, so the list takes its height and fills what is left. Its
+            // own stacking context keeps everything in it, a map's overlays too, under the header.
             ...(lead
-              ? { flex: '1 0 auto' }
+              ? { flex: '1 0 auto', isolation: 'isolate' }
               : { flex: 1, minHeight: 0, overflow: 'auto' }),
             bgcolor: canvasColor,
           },
