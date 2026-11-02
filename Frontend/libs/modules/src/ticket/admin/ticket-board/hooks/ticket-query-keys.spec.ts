@@ -8,7 +8,6 @@ import {
   ticketDetailUuid,
   ticketQuery,
   ticketsExtentQuery,
-  ticketsOutsideCountQuery,
   ticketsQuery,
   ticketStatsQuery,
   ticketWriteKeys,
@@ -33,19 +32,11 @@ describe('ticket write invalidation', () => {
     expect(hits(keys, ticketStatsQuery().queryKey)).toBe(true);
   });
 
-  it("makes the map's pins, the filters' extent and the count outside the view stale", () => {
+  it("makes the map's pins and the filters' extent stale", () => {
     expect(hits(keys, ticketMapPinsQuery({ zoom: 12 }).queryKey)).toBe(true);
     expect(hits(keys, ticketsExtentQuery({ status: 'pending' }).queryKey)).toBe(
       true,
     );
-    expect(
-      hits(
-        keys,
-        ticketsOutsideCountQuery({
-          outsideBounds: { minLat: 23, maxLat: 24, minLng: 121, maxLng: 122 },
-        }).queryKey,
-      ),
-    ).toBe(true);
   });
 
   it("keeps the map's pins apart from the board's pages", () => {

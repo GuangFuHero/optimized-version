@@ -183,18 +183,31 @@ describe('boxFitsWhole', () => {
 });
 
 describe('outsideCount', () => {
-  it("gives the server's count outside the view, after a framing that went home", () => {
-    expect(outsideCount({ wentHome: true, outsideTotal: 1 })).toBe(1);
-    expect(outsideCount({ wentHome: true, outsideTotal: 5139 })).toBe(5139);
+  it('counts the matches the view leaves out, after a framing that went home', () => {
+    expect(
+      outsideCount({ wentHome: true, inViewTotal: 12, matchingTotal: 13 }),
+    ).toBe(1);
+    expect(
+      outsideCount({ wentHome: true, inViewTotal: 0, matchingTotal: 2 }),
+    ).toBe(2);
   });
 
   it('says nothing after any other framing, or with every match in view', () => {
-    expect(outsideCount({ wentHome: false, outsideTotal: 1 })).toBeNull();
-    expect(outsideCount({ wentHome: true, outsideTotal: 0 })).toBeNull();
+    expect(
+      outsideCount({ wentHome: false, inViewTotal: 12, matchingTotal: 13 }),
+    ).toBeNull();
+    expect(
+      outsideCount({ wentHome: true, inViewTotal: 13, matchingTotal: 13 }),
+    ).toBeNull();
   });
 
-  it('waits for the count', () => {
-    expect(outsideCount({ wentHome: true, outsideTotal: null })).toBeNull();
+  it('waits for both counts', () => {
+    expect(
+      outsideCount({ wentHome: true, inViewTotal: null, matchingTotal: 13 }),
+    ).toBeNull();
+    expect(
+      outsideCount({ wentHome: true, inViewTotal: 12, matchingTotal: null }),
+    ).toBeNull();
   });
 });
 

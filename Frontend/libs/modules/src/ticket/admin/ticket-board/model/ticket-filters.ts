@@ -1,7 +1,6 @@
 import type {
   AdminTicketMapPinsQueryVariables,
   AdminTicketsExtentQueryVariables,
-  AdminTicketsOutsideCountQueryVariables,
   AdminTicketsQueryVariables,
 } from '@rescue-frontend/data-access/admin';
 
@@ -278,19 +277,5 @@ export function toMapVariables(
     zoom: Math.round(viewport.zoom),
     skip: 0,
     limit: TICKET_MAP_LIMIT,
-  };
-}
-
-/**
- * How many matching tickets lie outside the box the map loads inside: with the same box and the
- * same filters, the two split the matches between them (ADR-452), so 看是哪幾張 lists exactly these.
- */
-export function toOutsideCountVariables(
-  filters: TicketFilters,
-  viewport: MapViewport,
-): AdminTicketsOutsideCountQueryVariables {
-  return {
-    ...toServerVariables(filters),
-    outsideBounds: viewportBox(viewport),
   };
 }

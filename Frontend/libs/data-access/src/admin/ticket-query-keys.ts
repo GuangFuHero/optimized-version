@@ -10,8 +10,6 @@ export const ticketKeys = {
   lists: () => ['admin', 'tickets', 'tickets'] as const,
   mapPins: () => [...ticketKeys.lists(), 'mapPins'] as const,
   extents: () => [...ticketKeys.lists(), 'extent'] as const,
-  /** How many matching tickets lie outside the map's view. */
-  outsideCounts: () => [...ticketKeys.lists(), 'outsideCount'] as const,
   /** Each need type's export rows (the 匯出 popover's 「N 筆」). */
   exportCounts: () => [...ticketKeys.lists(), 'exportCounts'] as const,
   stats: () => ['admin', 'tickets', 'stats'] as const,

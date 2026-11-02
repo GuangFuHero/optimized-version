@@ -4,7 +4,6 @@ import { Box, ButtonBase, IconButton, Typography } from '@mui/material';
 import {
   useTicket,
   useTicketsExtent,
-  useTicketsOutsideCount,
 } from '@rescue-frontend/data-access/admin';
 import { Badge, Button, Callout, designTokens } from '@rescue-frontend/ui';
 import { Building2, ChevronRight, MapPinOff, X } from 'lucide-react';
@@ -43,7 +42,6 @@ import {
   ticketFiltersKey,
   toExtentVariables,
   toMapVariables,
-  toOutsideCountVariables,
   viewportBox,
   type MapViewport,
   type TicketBox,
@@ -173,20 +171,16 @@ export function TicketMapView({
     matchingTotal: framing.totalCount,
     wentHome: framing.wentHome,
   });
-  // Counted only after a framing that went home: the box the view loads inside, turned round.
-  const outsideVariables = useMemo(
-    () => (viewport ? toOutsideCountVariables(filters, viewport) : {}),
-    [filters, viewport],
-  );
-  const outsideQuery = useTicketsOutsideCount(outsideVariables, {
-    enabled: framing.wentHome && viewport !== null,
-  });
+  // The matches less those in the box the view loads inside: what 看是哪幾張 then lists outside that
+  // box, as the two split the matches between them (ADR-452). Both counts are read with an index,
+  // where counting outside the box directly can run past the backend's time limit.
   const outside =
     notice === 'error'
       ? null
       : outsideCount({
           wentHome: framing.wentHome,
-          outsideTotal: outsideQuery.data?.tickets.pageInfo.totalCount ?? null,
+          inViewTotal,
+          matchingTotal: framing.totalCount,
         });
 
   return (

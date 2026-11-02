@@ -145,30 +145,6 @@ query AdminTickets(
     }
   }
 }
-# How many matching tickets lie outside the map's view: 有 N 張單在這個範圍外, counted as 看是哪幾張 lists
-# them (ADR-452).
-query AdminTicketsOutsideCount(
-  $outsideBounds: BoundsInput
-  $status: String
-  $priority: String
-  $q: String
-  $needType: String
-  $disasterType: String
-) {
-  tickets(
-    outsideBounds: $outsideBounds
-    status: $status
-    priority: $priority
-    q: $q
-    needType: $needType
-    disasterType: $disasterType
-    limit: 0
-  ) {
-    pageInfo {
-      totalCount
-    }
-  }
-}
 query AdminTicketMapPins(
   $bounds: BoundsInput
   $status: String

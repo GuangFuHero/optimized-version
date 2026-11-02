@@ -15,9 +15,9 @@ import {
   TICKET_PAGE_KEYS,
   toExtentVariables,
   toMapVariables,
-  toOutsideCountVariables,
   toPageVariables,
   toServerVariables,
+  viewportBox,
   writeTicketFilters,
 } from './ticket-filters';
 import { NEED_TYPES } from './ticket-row';
@@ -320,11 +320,8 @@ describe('outside: the tickets outside the map', () => {
     expect(listsEveryTicket(filters)).toBe(false);
   });
 
-  it('counts outside the very box the map loads inside, with the same filters', () => {
+  it('lists outside the very box the map counts inside, so the list holds the N it said', () => {
     const filters = { ...EMPTY_TICKET_FILTERS, priority: 'high' as const };
-    expect(toOutsideCountVariables(filters, view)).toEqual({
-      priority: 'high',
-      outsideBounds: toMapVariables(filters, view).bounds,
-    });
+    expect(viewportBox(view)).toEqual(toMapVariables(filters, view).bounds);
   });
 });
