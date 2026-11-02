@@ -6,7 +6,7 @@ import path from 'node:path';
 const securityHeaders = [
   {
     key: 'Strict-Transport-Security',
-    value: 'max-age=31536000; includeSubDomains',
+    value: 'max-age=604800; includeSubDomains',
   },
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },

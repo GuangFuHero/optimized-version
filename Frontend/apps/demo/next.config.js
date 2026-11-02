@@ -7,10 +7,12 @@ const path = require('path');
 // (apps/admin/next.config.ts). No Content-Security-Policy yet: it has to let the map's tiles and
 // the fonts through first.
 const securityHeaders = [
-  // HTTPS only, for a year, on this host and those under it. Not preloaded, which is hard to undo.
+  // HTTPS only on this host and those under it, for a week: a browser keeps to it that long, with no
+  // way to take it back sooner. A year once every host under the domain is known to be HTTPS only.
+  // Not preloaded, which is harder still to undo.
   {
     key: 'Strict-Transport-Security',
-    value: 'max-age=31536000; includeSubDomains',
+    value: 'max-age=604800; includeSubDomains',
   },
   // No other site frames these pages; SAMEORIGIN rather than DENY leaves their own frames working.
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
