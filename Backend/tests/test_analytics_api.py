@@ -311,6 +311,9 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
         "volunteers_needed",
         "volunteers_matched",
         "volunteer_gap",
+        "volunteer_gap_needs",
+        "supply_needs",
+        "supply_needs_unclaimed",
     }
     assert set(body["stations"]) == {
         "station_count",
@@ -339,21 +342,43 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
     assert "AI" not in body["tickets"]["duplicate_count"]["description"]
     assert "近 30 天" in body["tickets"]["total_tickets"]["description"]
     assert "近 30 天" in body["stations"]["station_count"]["description"]
-    for y, label in (
-        ("volunteers_needed", "志工需求人數"),
-        ("volunteers_matched", "已媒合志工人數"),
-        ("volunteer_gap", "志工缺口"),
+    for y, label, unit in (
+        ("volunteers_needed", "志工需求人數", "人"),
+        # A person on two needs fills two places.
+        ("volunteers_matched", "已媒合", "人次"),
+        ("volunteer_gap", "志工缺口", "人"),
+        ("volunteer_gap_needs", "還缺人的需求", "項"),
+        # Supply needs count in needs: their units do not add up.
+        ("supply_needs", "物資需求", "筆"),
+        ("supply_needs_unclaimed", "還沒人接的物資需求", "筆"),
     ):
-        assert (body["tickets"][y]["label"], body["tickets"][y]["unit"]) == (label, "人")
-        assert "截至查詢期間最後一天" in body["tickets"][y]["description"]
-    assert body["tickets"]["volunteer_gap"]["allowed_x"] == ["category", "date", "none"]
+        assert (body["tickets"][y]["label"], body["tickets"][y]["unit"]) == (label, unit)
+    # The three cards show their descriptions as the designer worded them and say up to which day on
+    # their own line, so these do not repeat it; each says it counts 人力 needs only. The gap's needs,
+    # which no card describes, still say how a day is read.
+    assert body["tickets"]["volunteers_needed"]["description"] == (
+        "沒取消的人力需求總共要幾個人（含已額滿、已結束；只算有寫人數的）"
+    )
+    assert body["tickets"]["volunteers_matched"]["description"] == (
+        "沒取消的人力需求上已經被承接的名額，同一人接兩筆算 2（含已額滿、已結束；只算有寫人數的）"
+    )
+    assert body["tickets"]["volunteer_gap"]["description"] == (
+        "還在招募的人力需求還差幾人（不是需求人數減已媒合）。跟任務管理列表上方的「志工缺口」是同一個數字"
+    )
+    assert "人力需求" in body["tickets"]["volunteer_gap_needs"]["description"]
+    assert "截至查詢期間最後一天" in body["tickets"]["volunteer_gap_needs"]["description"]
+    for y in ("supply_needs", "supply_needs_unclaimed"):
+        assert body["tickets"][y]["allowed_x"] == ["none"]
+    for y in ("volunteer_gap", "volunteer_gap_needs"):
+        assert body["tickets"][y]["allowed_x"] == ["category", "date", "none"]
+        # The trend is daily whatever x_granularity says, and the catalog says so; the rest do both.
+        assert body["tickets"][y]["allowed_x_granularities"] == ["day"]
+        assert body["tickets"][y]["max_range_days"] == MAX_TREND_DAYS
     assert body["tickets"]["volunteers_needed"]["allowed_x"] == ["category", "none"]
-    # The gap trend is daily whatever x_granularity says, and the catalog says so; the rest do both.
-    assert body["tickets"]["volunteer_gap"]["allowed_x_granularities"] == ["day"]
     assert body["tickets"]["total_tickets"]["allowed_x_granularities"] == ["day", "week"]
-    assert "依異動紀錄還原" in body["tickets"]["volunteer_gap"]["description"]
+    assert "趨勢固定按天" in body["tickets"]["volunteer_gap_needs"]["description"]
     operating = body["stations"]["operating_station_count"]
-    assert (operating["label"], operating["unit"]) == ("營運中站點數", "站")
+    assert (operating["label"], operating["unit"]) == ("開設中站點數", "站")
     assert "不受日期影響" in operating["description"]
     # default_style is what the chart endpoints use when `style` is omitted.
     assert body["default_style"]["palette"][0] == "#E3791E"
@@ -419,7 +444,7 @@ async def test_station_status_count_always_groups_by_status(client, db_session, 
     assert res.status_code == 200
     pie = res.json()["data"][0]
     # Labels are the zh-TW display names, not the raw operational_status values.
-    assert pie["labels"] == ["營運中", "暫停營運", "永久關閉"]
+    assert pie["labels"] == ["開設中", "暫停服務", "已關閉"]
     assert pie["values"] == [1, 1, 1]
 
 
@@ -1130,6 +1155,97 @@ async def test_volunteer_metrics_over_value_data_and_chart(client, db_session, r
     assert figure.json()["data"][0]["y"] == [0, 3, 3]
 
 
+TICKET_STATS = "query { ticketStats { gapPeople gapNeeds } }"
+
+
+@pytest.mark.asyncio
+async def test_the_dashboard_gap_is_the_ticket_boards(client, db_session, redis, fresh_app_engine):
+    """volunteer_gap and volunteer_gap_needs are ticketStats' gapPeople and gapNeeds, so both pages agree.
+
+    The needs cover each way the two used to differ: a need with more people than it asks for, needs
+    left open on tickets closed by hand, and needs of a type that is not 人力.
+    """
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    pending, working, completed, cancelled, deleted = [
+        await _filed(db_session, user_uuid, task_type="hr", status=status)
+        for status in ("pending", "in_progress", "completed", "cancelled", "pending")
+    ]
+    deleted.delete_at = datetime.now(UTC)
+    yesterday = datetime.now(UTC) - timedelta(days=1)
+
+    def need(ticket, quantity: int, status: str = "pending", kind: str = "hr") -> TicketTask:
+        return TicketTask(
+            ticket_uuid=ticket.uuid,
+            task_type=kind,
+            task_name="n",
+            source="user",
+            created_by=user_uuid,
+            status=status,
+            quantity=quantity,
+            created_at=yesterday,
+            completed_at=yesterday if status == "fulfilled" else None,
+        )
+
+    short, over = need(pending, 5), need(working, 1)
+    people = [User(name=f"volunteer {n}") for n in range(3)]
+    db_session.add_all(
+        [
+            short,  # 2 on it: short 3
+            need(pending, 2, status="in_progress"),  # written before needs stopped taking in_progress
+            over,  # 3 on it: short of nobody
+            need(working, 4, status="fulfilled"),
+            *(need(closed, 9) for closed in (completed, cancelled, deleted)),
+            *(need(pending, 84, kind=kind) for kind in ("supply", "rescue", "medical")),
+            *people,
+        ]
+    )
+    await db_session.flush()
+    db_session.add_all(
+        [
+            TaskAssignment(task_uuid=task.uuid, actor_uuid=person.uuid, assigned_at=yesterday)
+            for task, on_it in ((short, people[:2]), (over, people))
+            for person in on_it
+        ]
+    )
+    await db_session.commit()
+
+    res = await client.post("/graphql", json={"query": TICKET_STATS}, headers=headers)
+    stats = res.json()["data"]["ticketStats"]
+    assert stats == {"gapPeople": 5, "gapNeeds": 2}
+    assert await _total(client, headers, y="volunteer_gap") == stats["gapPeople"]
+    assert await _total(client, headers, y="volunteer_gap_needs") == stats["gapNeeds"]
+
+
+@pytest.mark.asyncio
+async def test_supply_needs_are_counted_over_value(client, db_session, redis):
+    """One per need however many it asks for, and how many have nobody on them; a total has no trend."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    ticket = await _filed(db_session, user_uuid, task_type="supply")  # a supply need nobody took
+    yesterday = datetime.now(UTC) - timedelta(days=1)
+    lunch = TicketTask(
+        ticket_uuid=ticket.uuid,
+        task_type="supply",
+        task_name="便當",
+        source="user",
+        created_by=user_uuid,
+        status="pending",
+        quantity=84,
+        created_at=yesterday,
+    )
+    db_session.add(lunch)
+    await db_session.flush()
+    db_session.add(TaskAssignment(task_uuid=lunch.uuid, actor_uuid=user_uuid, assigned_at=yesterday))
+    await db_session.commit()
+
+    assert await _total(client, headers, y="supply_needs") == 2
+    assert await _total(client, headers, y="supply_needs_unclaimed") == 1
+    assert await _total(client, headers, y="volunteers_needed") == 0
+    refused = await client.get(
+        TICKETS_DATA_URL, params={"tz": "UTC", "y": "supply_needs", "x": "date"}, headers=headers
+    )
+    assert refused.status_code == 422
+
+
 @pytest.mark.asyncio
 async def test_ticket_filters_by_task_type_and_status(client, db_session, redis):
     """task_type and status each narrow the count, and combine."""
@@ -1557,9 +1673,9 @@ async def test_catalog_publishes_the_filter_values(client, db_session, redis):
         {"value": "water", "label": "加水"},
     ]
     assert stations["statuses"] == [
-        {"value": "active", "label": "營運中"},
-        {"value": "temporarily_closed", "label": "暫停營運"},
-        {"value": "permanently_closed", "label": "永久關閉"},
+        {"value": "active", "label": "開設中"},
+        {"value": "temporarily_closed", "label": "暫停服務"},
+        {"value": "permanently_closed", "label": "已關閉"},
     ]
     assert stations["areas"] == [
         {"county": "南投縣", "towns": [{"town": "埔里鎮", "villages": ["南村"]}]},

@@ -469,8 +469,9 @@ class RequestQuery:
 
         The same ticket.view gate and scope as `tickets`, computed in SQL so the board's stats
         strip does not load the board. `gapPeople` is the people still short across open needs
-        with a quantity (quantity less the people linked, never below 0); `gapNeeds` counts
-        those needs. Needs on completed or cancelled tickets add nothing.
+        of a volunteer type (VOLUNTEER_NEED_TYPES) with a quantity (quantity less the people
+        linked, never below 0); `gapNeeds` counts those needs. Needs on completed or cancelled
+        tickets add nothing. The dashboard's volunteer gap gives the same numbers (ADR-456).
 
         A guest may call it over every ticket, so it runs under the statement ceiling, as
         `ticketCells` does.

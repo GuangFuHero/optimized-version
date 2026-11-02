@@ -25,6 +25,7 @@ from app.graphql.shared import (
     TriState,
 )
 from app.services import ticket_audit
+from app.services.ticket_status import VOLUNTEER_NEED_TYPES
 
 
 async def ticket_detail_scope(info: strawberry.types.Info) -> Scope:
@@ -1365,10 +1366,13 @@ class TicketStatsType:
     completed: int
     cancelled: int
     gap_people: int = strawberry.field(
-        description="People still short across open needs with a quantity: quantity less the "
-        "people linked, never below 0. Needs on completed or cancelled tickets add nothing"
+        description=f"People still short across open {'/'.join(VOLUNTEER_NEED_TYPES)} needs with a quantity: "
+        "quantity less the people linked, never below 0. Other need types, and needs on completed or "
+        "cancelled tickets, add nothing. The dashboard's volunteer_gap gives the same number (ADR-456)"
     )
-    gap_needs: int = strawberry.field(description="How many open needs are short of people (gapPeople > 0)")
+    gap_needs: int = strawberry.field(
+        description="How many of those needs are short of people; the dashboard's volunteer_gap_needs"
+    )
 
 
 @strawberry.type(description="How many tickets match a `tickets` filter, and the box their map points span")

@@ -79,6 +79,11 @@ TICKET_METRIC_FNS = {
     TicketYMetric.volunteers_needed: partial(ticket_analytics.get_volunteer_metric, metric="needed"),
     TicketYMetric.volunteers_matched: partial(ticket_analytics.get_volunteer_metric, metric="matched"),
     TicketYMetric.volunteer_gap: partial(ticket_analytics.get_volunteer_metric, metric="gap"),
+    TicketYMetric.volunteer_gap_needs: partial(ticket_analytics.get_volunteer_metric, metric="gap_needs"),
+    TicketYMetric.supply_needs: partial(ticket_analytics.get_volunteer_metric, metric="supply_needs"),
+    TicketYMetric.supply_needs_unclaimed: partial(
+        ticket_analytics.get_volunteer_metric, metric="supply_unclaimed"
+    ),
 }
 
 STATION_METRIC_FNS = {
@@ -101,6 +106,9 @@ VALUE_KEYS = {
     TicketYMetric.volunteers_needed: "count",
     TicketYMetric.volunteers_matched: "count",
     TicketYMetric.volunteer_gap: "count",
+    TicketYMetric.volunteer_gap_needs: "count",
+    TicketYMetric.supply_needs: "count",
+    TicketYMetric.supply_needs_unclaimed: "count",
     StationYMetric.station_count: "count",
     StationYMetric.operating_station_count: "count",
 }
@@ -111,7 +119,7 @@ _Y_DESCRIPTION = (
 )
 _VALUE_Y_DESCRIPTION = (
     "Which metric's total to return. Only single-number metrics are accepted "
-    "(ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, "
+    "(ticket counts, completion_rate, duplicate_count, the volunteer and supply-need metrics, station_count, "
     "operating_station_count); a forced-shape or "
     "multi-series metric such as age_distribution or net_backlog_change is a 400. The "
     "number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."

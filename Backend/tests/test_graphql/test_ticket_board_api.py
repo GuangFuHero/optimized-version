@@ -64,12 +64,14 @@ async def _ticket(
         return str(ticket.uuid)
 
 
-async def _need(ticket: str, quantity: int | None, status: str = "pending", people: int = 0) -> str:
-    """Insert one need on `ticket` with `people` linked."""
+async def _need(
+    ticket: str, quantity: int | None, status: str = "pending", people: int = 0, task_type: str = "hr"
+) -> str:
+    """Insert one need of `task_type` on `ticket` with `people` linked."""
     async with gql_conftest.test_db() as db:
         task = TicketTask(
             ticket_uuid=ticket,
-            task_type="hr",
+            task_type=task_type,
             task_name="n",
             quantity=quantity,
             status=status,
@@ -269,6 +271,8 @@ async def test_ticket_stats_count_statuses_and_the_volunteer_gap(client, redis):
     await _need(working, 4, status="completed")  # closed need: no gap
     await _need(done, 9)  # ticket completed: no gap
     await _need(cancelled, 9)  # ticket cancelled: no gap
+    for kind in ("supply", "rescue", "medical"):
+        await _need(pending, 84, task_type=kind)  # not 人力: no gap
     removed = await _need(pending, 7)  # taken off: no gap
     async with gql_conftest.test_db() as db:
         task = (await db.execute(select(TicketTask).where(TicketTask.uuid == removed))).scalar_one()

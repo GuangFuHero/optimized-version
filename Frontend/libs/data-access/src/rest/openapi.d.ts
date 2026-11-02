@@ -4643,7 +4643,10 @@ export interface components {
       | 'duplicate_count'
       | 'volunteers_needed'
       | 'volunteers_matched'
-      | 'volunteer_gap';
+      | 'volunteer_gap'
+      | 'volunteer_gap_needs'
+      | 'supply_needs'
+      | 'supply_needs_unclaimed';
     /**
      * TicketsForReviewResponse
      * @description The ticket on each side of the card; null where that ticket is cancelled or deleted.
@@ -8332,7 +8335,7 @@ export interface operations {
   get_ticket_value_api_v1_analytics_tickets_value_get: {
     parameters: {
       query: {
-        /** @description Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction. */
+        /** @description Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer and supply-need metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction. */
         y: components['schemas']['TicketYMetric'];
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
@@ -8502,7 +8505,7 @@ export interface operations {
   get_station_value_api_v1_analytics_stations_value_get: {
     parameters: {
       query: {
-        /** @description Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction. */
+        /** @description Which metric's total to return. Only single-number metrics are accepted (ticket counts, completion_rate, duplicate_count, the volunteer and supply-need metrics, station_count, operating_station_count); a forced-shape or multi-series metric such as age_distribution or net_backlog_change is a 400. The number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction. */
         y: components['schemas']['StationYMetric'];
         /** @description Inclusive range start, local to `tz`. */
         start_date?: string | null;
