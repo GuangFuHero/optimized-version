@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildingEntries } from './building-entry';
+import { buildingEntries, buildingEntryWords } from './building-entry';
 import type { BuildingMapEntry } from './use-building-maps';
 
 function building(
@@ -73,5 +73,32 @@ describe('buildingEntries', () => {
 
   it('leaves none when nothing matches', () => {
     expect(buildingEntries([school, office], '鳳林')).toEqual([]);
+  });
+});
+
+describe('buildingEntryWords', () => {
+  it('gives a guest 看各樓層 and no 缺: a guest is given no counts', () => {
+    expect(buildingEntryWords({ ticketCount: null, shortfall: null })).toEqual({
+      count: '看各樓層',
+      short: null,
+    });
+  });
+
+  it('says 還沒有求助, never 0 件, for a building with no tickets', () => {
+    expect(buildingEntryWords({ ticketCount: 0, shortfall: 0 })).toEqual({
+      count: '還沒有求助',
+      short: null,
+    });
+  });
+
+  it('counts the tickets, and adds 缺 only while they are short of people', () => {
+    expect(buildingEntryWords({ ticketCount: 7, shortfall: 11 })).toEqual({
+      count: '7 件',
+      short: '缺 11',
+    });
+    expect(buildingEntryWords({ ticketCount: 2, shortfall: 0 })).toEqual({
+      count: '2 件',
+      short: null,
+    });
   });
 });

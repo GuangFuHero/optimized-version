@@ -9,7 +9,11 @@ import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { SiteBadge } from '../shell/site/site-badge';
-import { BUILDING_ENTRY_LIMIT, buildingEntries } from './building-entry';
+import {
+  BUILDING_ENTRY_LIMIT,
+  buildingEntries,
+  buildingEntryWords,
+} from './building-entry';
 import type { BuildingMapEntry } from './use-building-maps';
 
 const { color, radius, spacing } = designTokens;
@@ -19,6 +23,35 @@ const ellipsis = {
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
 } as const;
+
+/** A row's right side, in `buildingEntryWords`'s words. */
+function BuildingEntryCounts({ building }: { building: BuildingMapEntry }) {
+  const words = buildingEntryWords(building);
+
+  return (
+    <Stack
+      direction="row"
+      sx={{ flexShrink: 0, alignItems: 'center', gap: 0.75 }}
+    >
+      <Typography
+        sx={{
+          fontSize: displayTextSize[12],
+          fontWeight: 600,
+          lineHeight: 1,
+          whiteSpace: 'nowrap',
+          color: color.fg.neutral.subtle,
+        }}
+      >
+        {words.count}
+      </Typography>
+      {words.short ? (
+        <SiteBadge tone="danger" variant="solid">
+          {words.short}
+        </SiteBadge>
+      ) : null}
+    </Stack>
+  );
+}
 
 interface BuildingEntryListProps {
   /** Every open building (`useBuildingMaps`), read once by the page for this list and its drawer. */
@@ -141,31 +174,7 @@ export function BuildingEntryList({
               </Typography>
             ) : null}
           </Box>
-          <Stack
-            direction="row"
-            sx={{ flexShrink: 0, alignItems: 'center', gap: 0.75 }}
-          >
-            <Typography
-              sx={{
-                fontSize: displayTextSize[12],
-                fontWeight: 600,
-                lineHeight: 1,
-                whiteSpace: 'nowrap',
-                color: color.fg.neutral.subtle,
-              }}
-            >
-              {building.ticketCount === null
-                ? '看各樓層'
-                : building.ticketCount === 0
-                  ? '還沒有求助'
-                  : `${building.ticketCount} 件`}
-            </Typography>
-            {building.shortfall && building.shortfall > 0 ? (
-              <SiteBadge tone="danger" variant="solid">
-                缺 {building.shortfall}
-              </SiteBadge>
-            ) : null}
-          </Stack>
+          <BuildingEntryCounts building={building} />
           <Box sx={{ display: 'flex', color: color.fg.neutral.muted }}>
             <ChevronRight size={16} />
           </Box>

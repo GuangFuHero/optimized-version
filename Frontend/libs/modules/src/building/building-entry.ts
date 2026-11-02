@@ -31,3 +31,24 @@ export function buildingEntries(
         x.name.localeCompare(y.name, 'zh-Hant'),
     );
 }
+
+/**
+ * What a building's row says on its right, as its map entry does: its tickets, closed ones too
+ * (ADR-450), and the red 「缺 M」 when they are still short of people. 0 tickets is 還沒有求助; a
+ * guest, given no counts (SPACE-FE-104), gets 看各樓層 and no 缺.
+ */
+export function buildingEntryWords(
+  building: Pick<BuildingMapEntry, 'ticketCount' | 'shortfall'>,
+): { count: string; short: string | null } {
+  const { ticketCount, shortfall } = building;
+
+  return {
+    count:
+      ticketCount === null
+        ? '看各樓層'
+        : ticketCount === 0
+          ? '還沒有求助'
+          : `${ticketCount} 件`,
+    short: shortfall && shortfall > 0 ? `缺 ${shortfall}` : null,
+  };
+}
