@@ -42,18 +42,23 @@ export function toEventMapView(
 }
 
 /**
- * Where the event says maps open, once it is known: not until a read made since the map mounted has
- * answered, or the wait for one has run out. An answer held from earlier in this tab is not taken
- * alone: it may be from before the event's view was changed, and the map would open where the event
- * no longer says. A read that fails keeps the answer held before it; with none, `eventView` is
- * undefined, as for an event that could not be read.
+ * Where the event says maps open, once it is known. `fresh`: not until a read made since the map
+ * mounted has answered, or the wait for one has run out. An answer held from earlier in this tab is
+ * not taken alone then: it may be from before the event's view was changed, and the map would open
+ * where the event no longer says. Without `fresh`, an answer held is taken at once. A read that fails
+ * keeps the answer held before it; with none, `eventView` is undefined, as for an event that could not
+ * be read.
  */
 export function settleEventMapView(read: {
   data: { currentDisaster?: CurrentDisasterMapView | null } | undefined;
+  fresh: boolean;
   readSinceMount: boolean;
   waitedOut: boolean;
 }): { ready: boolean; eventView: EventMapView } {
-  if (!read.readSinceMount && !read.waitedOut) {
+  const answered =
+    read.readSinceMount || (!read.fresh && read.data !== undefined);
+
+  if (!answered && !read.waitedOut) {
     return { ready: false, eventView: undefined };
   }
 
@@ -73,6 +78,26 @@ export function resolveMapOpening(
   return remembered
     ? { view: remembered, restored: true }
     : { view: eventView ?? MAP_VIEW_TAIWAN, restored: false };
+}
+
+/**
+ * Whether a map remembers the view it opened at, as if it had been moved there: one that keeps its
+ * position in the address (`remembersOpening`, the site's), opened at the event's own view. Not one
+ * opened at a position in the address or where it was left. Nor when the event sets no view or could
+ * not be read: all of Taiwan would then stay, though the event sets a view later.
+ */
+export function remembersOpeningView(opened: {
+  remembersOpening: boolean;
+  addressHasPosition: boolean;
+  opening: MapOpening;
+  eventView: EventMapView;
+}): boolean {
+  return (
+    opened.remembersOpening &&
+    !opened.addressHasPosition &&
+    !opened.opening.restored &&
+    Boolean(opened.eventView)
+  );
 }
 
 function roundCoordinate(value: number) {

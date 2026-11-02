@@ -4,6 +4,7 @@ import { MAP_VIEW_TAIWAN } from './constants';
 import {
   parseRememberedMapView,
   recordMapView,
+  remembersOpeningView,
   resolveMapOpening,
   settleEventMapView,
   toEventMapView,
@@ -83,6 +84,7 @@ describe('settleEventMapView', () => {
     expect(
       settleEventMapView({
         data: HELD,
+        fresh: true,
         readSinceMount: false,
         waitedOut: false,
       }),
@@ -93,6 +95,7 @@ describe('settleEventMapView', () => {
     expect(
       settleEventMapView({
         data: HELD,
+        fresh: true,
         readSinceMount: true,
         waitedOut: false,
       }),
@@ -100,6 +103,7 @@ describe('settleEventMapView', () => {
     expect(
       settleEventMapView({
         data: { currentDisaster: { mapView: null } },
+        fresh: true,
         readSinceMount: true,
         waitedOut: false,
       }),
@@ -111,6 +115,7 @@ describe('settleEventMapView', () => {
     expect(
       settleEventMapView({
         data: HELD,
+        fresh: true,
         readSinceMount: false,
         waitedOut: true,
       }),
@@ -118,10 +123,76 @@ describe('settleEventMapView', () => {
     expect(
       settleEventMapView({
         data: undefined,
+        fresh: true,
         readSinceMount: true,
         waitedOut: false,
       }),
     ).toEqual({ ready: true, eventView: undefined });
+  });
+
+  it('takes an answer held at once when no fresh read is asked for, as the location picker', () => {
+    expect(
+      settleEventMapView({
+        data: HELD,
+        fresh: false,
+        readSinceMount: false,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: true, eventView: EVENT });
+    expect(
+      settleEventMapView({
+        data: undefined,
+        fresh: false,
+        readSinceMount: false,
+        waitedOut: false,
+      }),
+    ).toEqual({ ready: false, eventView: undefined });
+  });
+});
+
+describe('remembersOpeningView', () => {
+  const OPENED = {
+    remembersOpening: true,
+    addressHasPosition: false,
+    opening: { view: EVENT, restored: false },
+    eventView: EVENT,
+  };
+
+  it("remembers the site map's first opening at the event's view", () => {
+    expect(remembersOpeningView(OPENED)).toBe(true);
+  });
+
+  it('remembers nothing for a map that frames its data instead', () => {
+    expect(remembersOpeningView({ ...OPENED, remembersOpening: false })).toBe(
+      false,
+    );
+  });
+
+  it('remembers nothing opened at a position in the address, or where the map was left', () => {
+    expect(remembersOpeningView({ ...OPENED, addressHasPosition: true })).toBe(
+      false,
+    );
+    expect(
+      remembersOpeningView({
+        ...OPENED,
+        opening: { view: LEFT_AT, restored: true },
+      }),
+    ).toBe(false);
+  });
+
+  it('remembers nothing when the event sets no view, or could not be read', () => {
+    const taiwan = { view: MAP_VIEW_TAIWAN, restored: false };
+
+    expect(
+      remembersOpeningView({ ...OPENED, opening: taiwan, eventView: null }),
+    ).toBe(false);
+    expect(
+      remembersOpeningView({
+        ...OPENED,
+        opening: taiwan,
+        eventView: undefined,
+      }),
+    ).toBe(false);
   });
 });
 
