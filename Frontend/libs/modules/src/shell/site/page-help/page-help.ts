@@ -24,7 +24,7 @@ export interface PageHelp {
   /** 你可以 — what a person can do here. */
   can: readonly string[];
   sections?: readonly PageHelpSection[];
-  /** 誰可以做什麼: each role beside what it may do here, as two columns. */
+  /** 權限: each role beside what it may do here, as two columns. */
   roles?: ReadonlyArray<readonly [role: string, can: string]>;
   /** 注意, in a grey box at the foot. */
   note?: string;

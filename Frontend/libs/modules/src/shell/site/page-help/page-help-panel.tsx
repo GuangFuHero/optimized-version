@@ -163,7 +163,7 @@ export function PageHelpPanel({
 
       {help.roles?.length ? (
         <Box>
-          <Typography sx={LABEL_SX}>誰可以做什麼</Typography>
+          <Typography sx={LABEL_SX}>權限</Typography>
           <Box
             component="dl"
             sx={{
