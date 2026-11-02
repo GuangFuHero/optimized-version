@@ -319,7 +319,7 @@ class ResolveRequest(_Strict):
 
 
 class DuplicateHintRatesResponse(BaseModel):
-    """提示率 and the two 誤報率 estimates for one kind (ADR-455). A rate is null when nothing was counted."""
+    """提示率 and the two 誤報率 estimates for one kind (ADR-457). A rate is null when nothing was counted."""
 
     entity_kind: Literal["ticket_task", "station"]
     submissions: int = Field(

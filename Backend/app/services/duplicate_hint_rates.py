@@ -1,4 +1,4 @@
-"""提示率 and 誤報率 of the dedup fast layer, for the back office (Spec 025, ADR-455).
+"""提示率 and 誤報率 of the dedup fast layer, for the back office (Spec 025, ADR-457).
 
 Read-only. Everything comes from what the fast layer already records: a `hint_shown` event when a
 hint is shown, an `ignored_by_submitter` event and its pair card when the submitter files anyway,

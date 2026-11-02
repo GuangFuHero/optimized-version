@@ -1231,7 +1231,7 @@ export interface paths {
     };
     /**
      * Get Duplicate Hint Rates
-     * @description 提示率 and the two 誤報率 estimates for tasks and stations (ADR-455).
+     * @description 提示率 and the two 誤報率 estimates for tasks and stations (ADR-457).
      */
     get: operations['get_duplicate_hint_rates_api_v1_admin_duplicate_hint_rates_get'];
     put?: never;
@@ -2953,7 +2953,7 @@ export interface components {
     };
     /**
      * DuplicateHintRatesResponse
-     * @description 提示率 and the two 誤報率 estimates for one kind (ADR-455). A rate is null when nothing was counted.
+     * @description 提示率 and the two 誤報率 estimates for one kind (ADR-457). A rate is null when nothing was counted.
      */
     DuplicateHintRatesResponse: {
       /**

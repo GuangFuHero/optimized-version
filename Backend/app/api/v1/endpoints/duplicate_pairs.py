@@ -1,6 +1,6 @@
 """Back-office 重複審核: list the duplicate pair cards, read, decide, revoke or resolve one.
 
-Also the fast layer's hint rates (提示率, 誤報率) the review page shows (ADR-455).
+Also the fast layer's hint rates (提示率, 誤報率) the review page shows (ADR-457).
 
 Spec 025 §2 (ADR-338) for the queue and verdicts; Spec 028 for the whole tickets on the detail and
 the resolve. Mounted under /admin like role-requests. Endpoints stay thin (ADR-014): the capability
@@ -132,7 +132,7 @@ async def get_duplicate_hint_rates(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """提示率 and the two 誤報率 estimates for tasks and stations (ADR-455)."""
+    """提示率 and the two 誤報率 estimates for tasks and stations (ADR-457)."""
     until = until or datetime.now(UTC)
     since = since or until - timedelta(days=30)
     try:
