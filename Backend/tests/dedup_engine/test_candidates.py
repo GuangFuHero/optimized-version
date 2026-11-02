@@ -16,8 +16,9 @@ from sqlalchemy import cast, event, func, select
 from app.dedup_engine import candidates
 from app.dedup_engine.contract import GeoPoint
 from app.models.auth import User
-from app.models.geo import Station
+from app.models.geo import BuildingMap, BuildingMapTicketMap, Station
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TicketTask
 
 pytestmark = pytest.mark.asyncio
@@ -171,6 +172,70 @@ async def test_ticket_anchor(db):
     assert (await candidates.ticket_anchor(db, str(no_phone.uuid))).contact_phone is None
     for uuid in (str(deleted.uuid), str(uuid_mod.uuid4()), "nope"):
         assert await candidates.ticket_anchor(db, uuid) is None
+
+
+async def _building(db, owner, **overrides) -> str:
+    building = BuildingMap(
+        geometry=from_shape(Point(HERE.lon, HERE.lat), srid=4326),
+        created_by=owner,
+        name="光復國小",
+        floors_above_ground=3,
+        **overrides,
+    )
+    db.add(building)
+    await db.flush()
+    return str(building.uuid)
+
+
+async def _filed_in(db, ticket, building_uuid, floor) -> None:
+    """The ticket as `place_ticket` files it: linked to the building, its floor on its address row."""
+    db.add(BuildingMapTicketMap(building_map_uuid=building_uuid, ticket_uuid=ticket.uuid))
+    db.add(SecondaryLocation(geometry_uuid=ticket.uuid, location_type="address", floor=floor))
+    await db.flush()
+
+
+async def test_inside_one_building_a_task_on_another_floor_is_not_a_candidate(db):
+    """Same building and both floors given and different: out (ADR-451). Anything else stays in."""
+    owner = await _owner(db)
+    building = await _building(db, owner)
+    elsewhere = await _building(db, owner)
+    tasks = {}
+    for name, place in {
+        "same_floor": (building, "3F"),
+        "other_floor": (building, "2F"),
+        "no_floor": (building, None),
+        "other_building": (elsewhere, "2F"),
+        "outside": None,
+    }.items():
+        ticket = await _ticket(db, owner)
+        if place is not None:
+            await _filed_in(db, ticket, *place)
+        tasks[name] = await _task(db, owner, ticket)
+    everything = set(tasks.values())
+
+    assert await _open_task_uuids(db, building_map_uuid=building, floor="3F") == everything - {
+        tasks["other_floor"]
+    }
+    assert await _open_task_uuids(db, building_map_uuid=building, floor=None) == everything
+    assert await _open_task_uuids(db, building_map_uuid=None, floor="3F") == everything
+
+
+async def test_ticket_anchor_says_where_in_a_building_the_ticket_is(db):
+    """Its building and floor when filed in one; none outside, or once the building is deleted."""
+    owner = await _owner(db)
+    building = await _building(db, owner)
+    gone = await _building(db, owner, delete_at=NOW)
+    inside = await _ticket(db, owner)
+    await _filed_in(db, inside, building, "B1")
+    untied = await _ticket(db, owner)
+    await _filed_in(db, untied, gone, "B1")
+    outside = await _ticket(db, owner)
+
+    anchor = await candidates.ticket_anchor(db, str(inside.uuid))
+    assert (anchor.building_map_uuid, anchor.floor) == (building, "B1")
+    for ticket in (untied, outside):
+        anchor = await candidates.ticket_anchor(db, str(ticket.uuid))
+        assert (anchor.building_map_uuid, anchor.floor) == (None, None)
 
 
 async def test_open_stations_follow_the_station_rules(db):
