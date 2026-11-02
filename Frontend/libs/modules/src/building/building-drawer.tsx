@@ -290,15 +290,16 @@ interface BuildingDrawerProps {
   onOpenTicket: (marker: RescueMapMarkerItem) => void;
   /**
    * 在這一層請求協助 pressed, with the floor's label: the page opens 請求協助 on that floor. Left out,
-   * no floor offers it, and a guest gets the floors' names only.
+   * no floor offers it, and a guest gets only the sentence asking them to sign in, no floors.
    */
   onRequestHelpOnFloor?: (floorLabel: string) => void;
 }
 
 /**
- * A guest's drawer (SPACE-FE-104): the building and its floors, and nothing of what was reported on
- * them. A guest's tickets come back without a floor, so the floors' boxes would say 尚無通報 on every
- * one, where someone may be waiting: telling a guest there is nothing is worse than not telling.
+ * A guest's drawer (SPACE-FE-104): the building and, where they can ask for help on one, its floors,
+ * and nothing of what was reported on them. A guest's tickets come back without a floor, so the
+ * floors' boxes would say 尚無通報 on every one, where someone may be waiting: telling a guest there
+ * is nothing is worse than not telling.
  */
 function GuestBuildingFloors({
   building,
@@ -363,7 +364,10 @@ function GuestBuildingFloors({
                 在這一層請求協助
               </Typography>
               <ChevronRightRoundedIcon
-                sx={{ fontSize: 16, color: color.fg.neutral.muted }}
+                sx={{
+                  fontSize: designTokens.iconSize.md,
+                  color: color.fg.neutral.muted,
+                }}
               />
             </ButtonBase>
           ))

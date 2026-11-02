@@ -47,4 +47,13 @@ describe('filterRescueMapMarkers', () => {
       }).map(({ id }) => id),
     ).toEqual(['building:b-1']);
   });
+
+  it('keeps a building under any search, as its tickets are not drawn beside it', () => {
+    expect(
+      filterRescueMapMarkers(
+        [building, pending, marker({ id: 'ticket-3', title: '中正路物資' })],
+        { dataType: 'ticket', search: '清淤' },
+      ).map(({ id }) => id),
+    ).toEqual(['building:b-1', 'ticket-1']);
+  });
 });
