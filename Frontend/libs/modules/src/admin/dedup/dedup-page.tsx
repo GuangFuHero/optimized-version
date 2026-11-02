@@ -34,6 +34,7 @@ import {
   type PairTab,
   type PairView,
 } from './model';
+import { HintRates } from './hint-rates';
 import { LetterDot, muted, subtle } from './parts';
 
 const { color, radius, shadow, typography } = designTokens;
@@ -233,6 +234,8 @@ export function DedupReviewPage() {
           <option value="latest">最新建立的在前</option>
         </Box>
       </Stack>
+
+      <HintRates tab={tab} />
 
       {tab === 'station' ? (
         <Box component="span" sx={{ ...typography.body[300], ...muted }}>

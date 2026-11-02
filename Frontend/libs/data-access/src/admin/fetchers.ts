@@ -898,6 +898,27 @@ export function useAllDuplicatePairs(
   });
 }
 
+export type DuplicateHintRates =
+  components['schemas']['DuplicateHintRatesResponse'];
+
+/**
+ * The fast layer's 提示率 and 誤報率 for task and station (#242, Spec 025 ADR-455): one row each.
+ * Without `since` / `until` the backend takes the last 30 days. Needs `ai_duplicate.view`, as the
+ * review page does.
+ */
+export const duplicateHintRatesQuery = () =>
+  queryOptions({
+    queryKey: ['admin', 'duplicate-pairs', 'hint-rates'],
+    queryFn: ({ signal }) =>
+      adminRestClient
+        .GET('/api/v1/admin/duplicate-hint-rates', { signal })
+        .then(responseData),
+  });
+
+export function useDuplicateHintRates(options: AdminQueryOptions = {}) {
+  return useQuery({ ...duplicateHintRatesQuery(), enabled: options.enabled });
+}
+
 export const duplicatePairQuery = (pairUuid: string) =>
   queryOptions({
     queryKey: ['admin', 'duplicate-pairs', 'detail', pairUuid],
