@@ -69,6 +69,7 @@ export type {
 
 export {
   dedupeMarkersById,
+  floorHelpForOpenBuilding,
   MapCellsNotice,
   pinnedBesideBuildings,
   readLinkedSelection,

@@ -29,12 +29,16 @@ export interface BuildingMapEntry {
 /**
  * Every open building map (`GetBuildingMaps`), for the site's list and its map: one request between
  * them, as urql shares it. A guest gets them too. `totalCount` is how many there are, which is more than
- * `buildings` holds past `BUILDING_MAP_LIMIT`.
+ * `buildings` holds past `BUILDING_MAP_LIMIT`. Not `enabled`, nothing is read: the list of stations
+ * has no use for them.
  */
-export function useBuildingMaps() {
+export function useBuildingMaps({
+  enabled = true,
+}: { enabled?: boolean } = {}) {
   const [{ data, fetching, error }] = useQuery({
     query: GetBuildingMapsDocument,
     variables: { limit: BUILDING_MAP_LIMIT },
+    pause: !enabled,
     requestPolicy: 'cache-and-network',
     context: BUILDING_MAPS_QUERY_CONTEXT,
   });
