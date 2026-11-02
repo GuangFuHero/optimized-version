@@ -37,6 +37,20 @@ describe('submitErrorMessage', () => {
     );
   });
 
+  it('says what to do when the building, its floor or the area picked is refused', () => {
+    expect(submitErrorMessage(refusal('Building map not found'))).toBe(
+      '這一棟已經不在了，可能剛被刪除。請關掉後重新選地點。',
+    );
+    expect(
+      submitErrorMessage(refusal("Floor '9F' is not in this building")),
+    ).toBe('這一棟沒有這一層，請關掉後重新選一層。');
+    expect(
+      submitErrorMessage(
+        refusal("Room on 1F must be one of ['閱覽室', '健身房'] or '其他'"),
+      ),
+    ).toBe('請從清單選你在這一層的哪一區，清單裡沒有就選「其他」。');
+  });
+
   it('says only that it failed for every other refusal, whose words are about fields', () => {
     expect(submitErrorMessage(refusal('Unexpected error.'))).toBe(
       '送出失敗，請稍後再試一次。',
