@@ -72,6 +72,7 @@ import {
   Truck,
   User,
   UserCheck,
+  UserX,
   UserCog,
   UserMinus,
   UserRound,
@@ -181,6 +182,7 @@ export const Icons = {
   triangleAlert: themedIcon(TriangleAlert),
   user: themedIcon(User),
   userCheck: themedIcon(UserCheck),
+  userX: themedIcon(UserX),
   userMinus: themedIcon(UserMinus),
   users: themedIcon(Users),
   googleBrand(props: SvgIconProps) {

@@ -183,7 +183,7 @@ export function StopRecruitingDialog({
       onConfirm={onConfirm}
       title="停止招募這筆需求？"
       confirmLabel={submitting ? '停止中...' : '停止招募'}
-      confirmIcon={<Icons.userCheck />}
+      confirmIcon={<Icons.userX />}
       confirmDisabled={!need || settled}
       cancelLabel={settled || dialog.box === 'gone' ? '關閉' : '取消'}
       error={dialog.refusal}

@@ -150,7 +150,7 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
         {/* Not in the prototype's menu, which has no such page: added after 我的任務, the site's own
             thing, and before 登出. */}
         <MenuItem onClick={handleOpenSecurity} sx={{ gap: 1 }}>
-          <Icons.shield sx={{ fontSize: 18 }} />
+          <Icons.shieldCheck sx={{ fontSize: designTokens.iconSize.md }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>
             帳號安全
           </Typography>
