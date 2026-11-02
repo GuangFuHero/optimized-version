@@ -54,7 +54,6 @@ import {
   rangeAsOfCaption,
   rangeCreatedCaption,
   rangeLengthDays,
-  volunteerGapLine,
   VOLUNTEER_SHORT_LINES,
   type AnalyticsCatalog,
   type DashboardDateRange,
@@ -177,6 +176,7 @@ function KpiCard({
   spec,
   availability,
   query,
+  footnoteQuery,
   devMode,
   scope,
 }: {
@@ -184,6 +184,8 @@ function KpiCard({
   spec: MetricSpec | undefined;
   availability: KpiAvailability;
   query: ValueQuery;
+  /** `kpi.footnote`'s number, for a card that has one. */
+  footnoteQuery?: ValueQuery;
   devMode: boolean;
   /**
    * What the number counts, on the line under the title: `rangeCreatedCaption` (今日建立) for a
@@ -195,10 +197,16 @@ function KpiCard({
   const isGap = kpi.metric === 'volunteer_gap';
   // The design turns the whole gap card to the warning colours while anyone is missing.
   const warn = isGap && value !== undefined && value > 0;
-  const footer =
-    (isGap && volunteerGapLine(value)) ||
-    VOLUNTEER_SHORT_LINES[kpi.metric] ||
-    spec?.description;
+  const footnoteValue = footnoteQuery?.data?.value;
+  // A footnote card says nothing while its number is on the way, and falls back to the catalog's
+  // description if it cannot be read.
+  const footer = kpi.footnote
+    ? footnoteValue !== undefined
+      ? kpi.footnote.line(footnoteValue)
+      : footnoteQuery?.isError
+        ? spec?.description
+        : null
+    : VOLUNTEER_SHORT_LINES[kpi.metric] || spec?.description;
   return (
     <Box
       component="article"
@@ -288,10 +296,16 @@ function KpiCard({
  */
 function KpiGrid({
   columns,
+  even = false,
   children,
 }: {
   /** Tracks on desktop, as the design counts them. */
   columns: number;
+  /**
+   * A full row that stays whole on a tablet: two by two, then all in one row once each card can be
+   * `EVEN_ROW_MIN_CARD` wide beside the sidebar — never three and one left alone.
+   */
+  even?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -301,15 +315,32 @@ function KpiGrid({
         gap: '14px',
         gridTemplateColumns: {
           mobile: 'repeat(2, minmax(0, 1fr))',
-          tablet: 'repeat(3, minmax(0, 1fr))',
+          tablet: even
+            ? 'repeat(2, minmax(0, 1fr))'
+            : 'repeat(3, minmax(0, 1fr))',
           desktop: `repeat(${columns}, minmax(0, 1fr))`,
         },
+        ...(even
+          ? {
+              [`@media (min-width: ${EVEN_ROW_ONE_LINE}px)`]: {
+                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+              },
+            }
+          : {}),
       }}
     >
       {children}
     </Box>
   );
 }
+
+/** The design's narrowest card in a row of four, so a number like 1,537 人 is never cut. */
+const EVEN_ROW_MIN_CARD = 160;
+/**
+ * The window width from which four such cards fit on a tablet: the 252px sidebar, the page's 24px
+ * sides and three 14px gaps.
+ */
+const EVEN_ROW_ONE_LINE = 252 + 2 * 24 + 3 * 14 + 4 * EVEN_ROW_MIN_CARD;
 
 function ChartGrid({
   charts,
@@ -557,40 +588,61 @@ export function DashboardPage() {
     return { kpi, spec, availability: kpiAvailability(spec, range) };
   });
 
+  const valueQuery = (kpi: DashboardKpi, availability: KpiAvailability) => ({
+    ...kpiValueQuery(
+      kpi,
+      range,
+      timeZone,
+      filterQuery(kpi.domain, area, sections[kpi.domain], kpi.metric),
+    ),
+    ...(emptyPreview
+      ? {
+          queryKey: [
+            'admin',
+            'analytics',
+            'empty-preview',
+            kpi.domain,
+            kpi.metric,
+            'value',
+          ],
+          queryFn: async () => ({ value: 0 }),
+        }
+      : {}),
+    enabled:
+      catalog !== undefined &&
+      availability.kind === 'ready' &&
+      inArea(kpi.domain),
+    // Each card handles its own failure — a role without ticket.view would
+    // otherwise get one toast per ticket card.
+    meta: { [SILENT_ERROR_META]: true },
+  });
+
   const valueQueries = useQueries({
-    queries: cards.map(({ kpi, availability }) => ({
-      ...kpiValueQuery(
-        kpi,
-        range,
-        timeZone,
-        filterQuery(kpi.domain, area, sections[kpi.domain], kpi.metric),
-      ),
-      ...(emptyPreview
-        ? {
-            queryKey: [
-              'admin',
-              'analytics',
-              'empty-preview',
-              kpi.domain,
-              kpi.metric,
-              'value',
-            ],
-            queryFn: async () => ({ value: 0 }),
-          }
-        : {}),
-      enabled:
-        catalog !== undefined &&
-        availability.kind === 'ready' &&
-        inArea(kpi.domain),
-      // Each card handles its own failure — a role without ticket.view would
-      // otherwise get one toast per ticket card.
-      meta: { [SILENT_ERROR_META]: true },
-    })),
+    queries: cards.map(({ kpi, availability }) =>
+      valueQuery(kpi, availability),
+    ),
+  }) as ValueQuery[];
+  // A footnote is asked for as its card is, with only the metric swapped.
+  const footnoteQueries = useQueries({
+    queries: cards.flatMap(({ kpi, availability }) =>
+      kpi.footnote
+        ? [
+            valueQuery(
+              { ...kpi, domain: 'tickets', metric: kpi.footnote.metric },
+              availability,
+            ),
+          ]
+        : [],
+    ),
   }) as ValueQuery[];
 
+  let footnotesRead = 0;
   const cardsWithQuery = cards.map((card, index) => ({
     ...card,
     query: valueQueries[index],
+    footnoteQuery: card.kpi.footnote
+      ? footnoteQueries[footnotesRead++]
+      : undefined,
   }));
   // Forbidden domains retain their headings and show a permission message.
   const domainCards = (domain: DashboardKpi['domain']) => {
@@ -603,8 +655,12 @@ export function DashboardPage() {
   const tickets = domainCards('tickets');
   const stations = domainCards('stations');
 
-  const renderKpis = (visible: typeof cardsWithQuery, columns: number) => (
-    <KpiGrid columns={columns}>
+  const renderKpis = (
+    visible: typeof cardsWithQuery,
+    columns: number,
+    even = false,
+  ) => (
+    <KpiGrid columns={columns} even={even}>
       {visible.map((card) => (
         <KpiCard
           key={`${card.kpi.domain}.${card.kpi.metric}`}
@@ -695,7 +751,8 @@ export function DashboardPage() {
                 <Stack sx={{ gap: '8px' }}>
                   {renderKpis(
                     tickets.visible.filter((card) => card.kpi.asOf),
-                    3,
+                    4,
+                    true,
                   )}
                   <Typography sx={caption}>
                     {`「${asOfCaption}」的總數。志工只算人力（不含物資、搜救）；缺口只算還在招募的，不是前兩個相減。`}

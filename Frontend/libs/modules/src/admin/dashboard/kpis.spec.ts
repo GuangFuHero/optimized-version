@@ -8,7 +8,8 @@ import {
   kpiQueryRange,
   rangeAsOfCaption,
   VOLUNTEER_KPIS,
-  volunteerGapLine,
+  gapNeedsLine,
+  supplyUnclaimedLine,
   isValidDateRange,
   DASHBOARD_QUICK_RANGES,
   DASHBOARD_TIME_ZONES,
@@ -305,11 +306,27 @@ describe('the volunteer cards', () => {
   const today = '2026-11-01';
   const range = { start_date: '2026-10-03', end_date: today };
 
-  it('are the three running totals, in the design order, each asked for at the end date only', () => {
+  it('are the four running totals, 物資 first, each asked for at the end date only', () => {
     expect(VOLUNTEER_KPIS.map((kpi) => kpi.metric)).toEqual([
+      'supply_needs',
       'volunteers_needed',
       'volunteers_matched',
       'volunteer_gap',
+    ]);
+    // 物資 is a 需求 like 志工需求人數, so it shares its accent, and never takes the warning colours.
+    expect(VOLUNTEER_KPIS.map((kpi) => kpi.accent)).toEqual([
+      'secondary',
+      'secondary',
+      'success',
+      'warning',
+    ]);
+    expect(
+      VOLUNTEER_KPIS.flatMap((kpi) =>
+        kpi.footnote ? [[kpi.metric, kpi.footnote.metric]] : [],
+      ),
+    ).toEqual([
+      ['supply_needs', 'supply_needs_unclaimed'],
+      ['volunteer_gap', 'volunteer_gap_needs'],
     ]);
     for (const kpi of VOLUNTEER_KPIS) {
       expect(kpiQueryRange(kpi, range)).toEqual({ end_date: today });
@@ -324,10 +341,15 @@ describe('the volunteer cards', () => {
     );
   });
 
-  it('say nothing is missing only when the gap is exactly zero', () => {
-    expect(volunteerGapLine(0)).toBe('目前沒有缺人的需求');
-    expect(volunteerGapLine(3)).toBeNull();
-    expect(volunteerGapLine(undefined)).toBeNull();
+  it('say how many needs are short, or that none is', () => {
+    expect(gapNeedsLine(3)).toBe('3 項需求還缺人');
+    expect(gapNeedsLine(1234)).toBe('1,234 項需求還缺人');
+    expect(gapNeedsLine(0)).toBe('目前沒有缺人的需求');
+  });
+
+  it('say how many 物資 needs nobody has taken, or that all have been', () => {
+    expect(supplyUnclaimedLine(2)).toBe('還沒人接 2 筆');
+    expect(supplyUnclaimedLine(0)).toBe('都有人接了');
   });
 });
 

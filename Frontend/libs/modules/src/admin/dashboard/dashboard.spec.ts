@@ -40,6 +40,9 @@ vi.mock('@rescue-frontend/data-access/admin', () => {
       'volunteers_needed',
       'volunteers_matched',
       'volunteer_gap',
+      'volunteer_gap_needs',
+      'supply_needs',
+      'supply_needs_unclaimed',
     ],
     stations: [
       'station_count',
@@ -62,8 +65,8 @@ vi.mock('@rescue-frontend/data-access/admin', () => {
               allowed_chart_types: ['bar', 'line', 'pie'],
               default_chart_type: 'bar',
               requires_date_range: false,
-              // As the real catalog: the gap's trend comes by day only, at most 366 days.
-              ...(name === 'volunteer_gap'
+              // As the real catalog: the gap's trends come by day only, at most 366 days.
+              ...(name.startsWith('volunteer_gap')
                 ? { allowed_x_granularities: ['day'], max_range_days: 366 }
                 : {}),
             },
@@ -206,8 +209,9 @@ describe('dashboard states and filters', () => {
     expect(container.textContent).not.toContain('還沒有任何資料');
     expect(container.textContent?.match(/這段期間沒有資料/g)).toHaveLength(7);
     expect(container.textContent).toContain('目前為無資料預覽');
-    // Every value is 0 in the preview, the gap's too: nothing is missing.
+    // Every value is 0 in the preview, the footnotes' too: nothing is missing or unclaimed.
     expect(container.textContent).toContain('目前沒有缺人的需求');
+    expect(container.textContent).toContain('都有人接了');
     expect(container.querySelectorAll('[role="img"]')).toHaveLength(0);
     expect(state.requests).toHaveLength(0);
     expect(preview?.getAttribute('aria-pressed')).toBe('true');
@@ -437,19 +441,22 @@ describe('dashboard states and filters', () => {
     expect(container.textContent).toContain('「全部」只畫最近 30 天');
   });
 
-  it('asks for the volunteer cards at the end date only and captions them 截至', async () => {
+  it('asks for the four cards and their footnotes at the end date only and captions them 截至', async () => {
     await mount();
-    const volunteer = state.requests.filter(
+    const asOf = state.requests.filter(
       ({ kind, query }) =>
-        kind === 'value' && String(query.y).startsWith('volunteer'),
+        kind === 'value' && /^(volunteer|supply_)/.test(String(query.y)),
     );
-    expect(volunteer.map(({ query }) => query.y)).toEqual([
-      'volunteers_needed',
-      'volunteers_matched',
+    expect(asOf.map(({ query }) => String(query.y)).sort()).toEqual([
+      'supply_needs',
+      'supply_needs_unclaimed',
       'volunteer_gap',
+      'volunteer_gap_needs',
+      'volunteers_matched',
+      'volunteers_needed',
     ]);
     expect(
-      volunteer.every(
+      asOf.every(
         ({ query }) =>
           query.start_date === undefined && typeof query.end_date === 'string',
       ),
@@ -458,10 +465,37 @@ describe('dashboard states and filters', () => {
     expect(container.textContent).toContain('近 30 天建立');
     // The range is on its own line now, not in the title.
     expect(container.textContent).not.toContain('（近 30 天建立）');
-    // A gap above zero keeps the catalog's description; how many needs are short is not in the API.
-    expect(container.textContent).not.toContain('目前沒有缺人的需求');
-    expect(container.textContent).toContain('說明-volunteer_gap');
     expect(container.textContent).toContain('志工缺口每天的變化');
+  });
+
+  it('puts the 物資 card first in the row, and the footnotes on the 物資 and gap cards', async () => {
+    await mount();
+    const row = Array.from(container.querySelectorAll('article'))
+      .map((card) => card.getAttribute('aria-label') ?? '')
+      .filter((label) => label.endsWith('，截至今日'));
+    expect(row).toEqual([
+      '後端-supply_needs，截至今日',
+      '後端-volunteers_needed，截至今日',
+      '後端-volunteers_matched，截至今日',
+      '後端-volunteer_gap，截至今日',
+    ]);
+    const card = (metric: string) =>
+      container.querySelector(`article[aria-label^="後端-${metric}，"]`);
+    expect(card('supply_needs')?.textContent).toContain('還沒人接 12 筆');
+    expect(card('volunteer_gap')?.textContent).toContain('12 項需求還缺人');
+    expect(card('volunteer_gap')?.textContent).not.toContain(
+      '說明-volunteer_gap',
+    );
+  });
+
+  it("falls back to the catalog's description when a footnote cannot be read", async () => {
+    state.failed = 'volunteer_gap_needs';
+    await mount();
+    const gap = container.querySelector(
+      'article[aria-label^="後端-volunteer_gap，"]',
+    );
+    expect(gap?.textContent).toContain('說明-volunteer_gap');
+    expect(gap?.textContent).not.toContain('讀取失敗');
   });
 
   it('puts the short lines under the needed and matched cards, the whole description in the title', async () => {
@@ -571,16 +605,16 @@ describe('dashboard states and filters', () => {
     expect(select('dashboard-county')?.value).toBe('');
   });
 
-  it("applies a section's status to its own counts and charts, not to the volunteer numbers", async () => {
+  it("applies a section's status to its own counts and charts, not to the volunteer and 物資 numbers", async () => {
     await mount();
     state.requests = [];
     await pick('dashboard-tickets-status', 'pending');
     const tickets = state.requests.filter(({ domain }) => domain === 'tickets');
     expect(tickets.length).toBeGreaterThan(0);
     expect(tickets.every(({ query }) => query.status === 'pending')).toBe(true);
-    // The volunteer numbers do not take the status, so they are not asked again.
+    // The volunteer and 物資 numbers do not take the status, so they are not asked again.
     expect(
-      tickets.some(({ query }) => String(query.y).startsWith('volunteer')),
+      tickets.some(({ query }) => /^(volunteer|supply_)/.test(String(query.y))),
     ).toBe(false);
     expect(state.requests.some(({ domain }) => domain === 'stations')).toBe(
       false,
@@ -600,14 +634,14 @@ describe('dashboard states and filters', () => {
     }
   });
 
-  it('applies the need type to the volunteer numbers too', async () => {
+  it('applies the need type to the volunteer and 物資 numbers too', async () => {
     await mount();
     state.requests = [];
     await pick('dashboard-tickets-type', 'rescue');
     const volunteer = state.requests.filter(({ query }) =>
-      String(query.y).startsWith('volunteer'),
+      /^(volunteer|supply_)/.test(String(query.y)),
     );
-    expect(volunteer.length).toBeGreaterThan(0);
+    expect(volunteer.map(({ query }) => query.y)).toContain('supply_needs');
     expect(volunteer.every(({ query }) => query.task_type === 'rescue')).toBe(
       true,
     );

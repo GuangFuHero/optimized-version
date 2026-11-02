@@ -70,9 +70,16 @@ export function domainHasArea(
 }
 
 /**
+ * The volunteer and 物資 numbers: counts of needs as they stand, which the design keeps off the
+ * status filter.
+ */
+const statusless = (metric: string) =>
+  metric.startsWith('volunteer') || metric.startsWith('supply_');
+
+/**
  * The filter params of one query in a section: the area, the section's type, and its status — but
- * no status for the volunteer metrics, which the design keeps off that filter. A 村里 goes with its
- * town and county, as the same name can repeat across towns.
+ * no status for the need counts (`statusless`). A 村里 goes with its town and county, as the same
+ * name can repeat across towns.
  */
 export function filterQuery(
   domain: DashboardDomain,
@@ -87,7 +94,7 @@ export function filterQuery(
   if (section.type) {
     query[domain === 'tickets' ? 'task_type' : 'station_type'] = section.type;
   }
-  if (section.status && !metric.startsWith('volunteer')) {
+  if (section.status && !statusless(metric)) {
     query.status = section.status;
   }
   return query;

@@ -90,15 +90,22 @@ describe('filterQuery', () => {
     ).toEqual({ station_type: 'supply' });
   });
 
-  it('keeps the volunteer metrics off the status filter, and nothing else', () => {
+  it('keeps the volunteer and 物資 counts off the status filter, and nothing else', () => {
     const section = { type: 'rescue', status: 'pending' };
     expect(filterQuery('tickets', {}, section, 'unassigned_tickets')).toEqual({
       task_type: 'rescue',
       status: 'pending',
     });
-    expect(filterQuery('tickets', {}, section, 'volunteer_gap')).toEqual({
-      task_type: 'rescue',
-    });
+    for (const metric of [
+      'volunteer_gap',
+      'volunteer_gap_needs',
+      'supply_needs',
+      'supply_needs_unclaimed',
+    ]) {
+      expect(filterQuery('tickets', {}, section, metric)).toEqual({
+        task_type: 'rescue',
+      });
+    }
   });
 
   it('sends nothing when nothing is filtered', () => {
