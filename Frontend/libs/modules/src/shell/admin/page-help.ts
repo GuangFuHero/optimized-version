@@ -8,7 +8,7 @@
  *
  * Left out until the page they describe is in: 互助地圖 (its areas), 重複審核, 團隊, 成員與權限 —
  * the prototype has their words. The 誰可以做什麼 tables follow the permissions as decided, the
- * 政府隊's members importing tickets and reviewing every station's suggestions included.
+ * 政府隊's members holding what its admins hold here, as BE-RBAC-3 has it.
  */
 
 import type { PageHelp } from '../site/page-help/page-help';
@@ -34,13 +34,13 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
         body: '同棟大樓多人求助時，可在地圖建立空間，填寫名稱及地上、地下樓層數（系統自動新增頂樓 RF）。可查看樓層需求、編輯或刪除（不影響任務單）。任務單填寫 RF 或「頂樓」皆會歸入頂樓。',
       },
     ],
-    // As decided (BE-RBAC-3, B3): the 政府隊's members import and export tickets too; NGO members do not.
+    // As decided (BE-RBAC-3, B3): the 政府隊's members import, export and open spaces as its admins do;
+    // NGO members do not. 責任區 go to NGO teams only.
     roles: [
       ['超級管理員', '全部功能'],
-      ['政府隊管理員', '建立、修改、匯入、匯出、開啟空間'],
-      ['政府隊成員', '建立、修改、匯入、匯出'],
-      ['團隊管理員', '建立、修改、匯入、匯出'],
-      ['團隊成員', '建立、修改'],
+      ['政府隊（管理員、成員）', '建立、修改、匯入、匯出、開啟空間'],
+      ['非政府組織隊管理員', '建立、修改、匯入、匯出'],
+      ['非政府組織隊成員', '建立、修改'],
       ['資料檢核員', '查看全部任務與紀錄、匯出、重複審核'],
     ],
   },
@@ -64,10 +64,10 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
       ['超級管理員', '全部功能'],
       [
         '政府隊（管理員、成員）',
-        '新增、編輯站點、指派團隊、審核全部站點的修改建議',
+        '新增、編輯站點、指派團隊、審核全部站點的修改建議；匯入、匯出',
       ],
-      ['團隊管理員', '新增站點、編輯／刪除／審核本隊站點；匯入、匯出'],
-      ['團隊成員', '新增站點、編輯本隊站點'],
+      ['非政府組織隊管理員', '新增站點、編輯／刪除／審核本隊站點；匯入、匯出'],
+      ['非政府組織隊成員', '新增站點、編輯本隊站點'],
       ['資料檢核員', '審核、撤銷所有修改建議；匯出'],
     ],
     note: '所有後台人員皆可查看站點。',
