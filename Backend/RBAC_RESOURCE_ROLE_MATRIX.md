@@ -252,6 +252,9 @@
 > `taskPropertyConfigs` 的規則（`dynamic_field.view`，停用的另要 `dynamic_field.edit`，ADR-226）不同，但不衝突：
 > 這裡只給「卡上兩張單已經有的細項」那幾筆設定，不是整份欄位定義；審核員要知道一個停用欄位在畫面上怎麼顯示、
 > 怎麼編輯，才比對得了。資料檢核員因此看得到這幾筆停用設定，仍然呼叫不了 `taskPropertyConfigs`。
+>
+> 任務單上的「疑似重複」不受這三個權限管：`TicketType.verificationStatus`（025/ADR-443、ADR-455）和
+> `suspectedDuplicateOf`（025/ADR-454）有 `ticket.view` 就讀得到，也就是所有角色和訪客。
 
 ## 補充說明
 

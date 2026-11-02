@@ -109,13 +109,15 @@ describe('validateTicketForm', () => {
     ).toBeTruthy();
   });
 
-  it('requires quantity except for rescue', () => {
+  it('requires quantity, for a rescue too', () => {
     const check = (n: ReturnType<typeof need>) =>
       validateTicketForm({ ...valid, needs: [n] }, 'create');
     expect(
       Object.keys(check(need({ taskType: 'supply', quantity: '' }))),
     ).toEqual(['needs.0.quantity']);
-    expect(check(need({ taskType: 'rescue', quantity: '' }))).toEqual({});
+    expect(
+      Object.keys(check(need({ taskType: 'rescue', quantity: '' }))),
+    ).toEqual(['needs.0.quantity']);
     expect(
       Object.keys(check(need({ taskType: 'rescue', quantity: '0' }))),
     ).toEqual(['needs.0.quantity']);
@@ -165,7 +167,7 @@ describe('toCreateTicketInput', () => {
       photoUrls: ['https://a.jpg', 'https://b.jpg'],
       needs: [
         need({ quantity: '3' }),
-        need({ taskType: 'rescue', taskName: '受困', quantity: '' }),
+        need({ taskType: 'rescue', taskName: '受困', quantity: '2' }),
       ],
     });
     expect(input).toEqual({
@@ -188,7 +190,7 @@ describe('toCreateTicketInput', () => {
         {
           taskType: 'rescue',
           taskName: '受困',
-          quantity: null,
+          quantity: 2,
           taskDescription: null,
         },
       ],

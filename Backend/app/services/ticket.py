@@ -72,11 +72,6 @@ CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 # still stores whatever it is sent. The site's GraphQL input lists them as `NeedKind`
 # (graphql/tickets/types.py): keep the two in step.
 TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
-# Every need but a rescue must say how many (ADR-291 point 7): without a quantity a need never
-# fills, so its ticket never completes. A rescue may not know how many it takes, as the design
-# leaves it out of the 缺額 count; it alone may come without one, and then has no cap. Written as
-# the exception rather than a list, so a kind the back office configured itself (ADR-214) counts too.
-QUANTITY_OPTIONAL_TASK_TYPES = frozenset({"rescue"})
 # `tickets.title` and `ticket_tasks.task_name` are both String(200).
 TICKET_TITLE_MAX_LENGTH = 200
 TASK_NAME_MAX_LENGTH = 200
@@ -311,19 +306,23 @@ def _validate_help_request_task(task: dict) -> None:
     _validate_need_size(task["task_type"], task["task_name"], task.get("quantity"))
 
 
-def _validate_need_size(task_type: str, task_name: str, quantity: int | None) -> None:
-    """Refuse a name its column cannot hold, a quantity that asks for nobody, or none where needed.
-
-    Past the column's limit the database raises an error the client only sees as "Unexpected
-    error."; a zero quantity would read as full the moment it was filed (`_lock_task_with_room`);
-    and a need of a kind that counts heads without one would never fill (ADR-291 point 7).
-    """
+def _validate_need_name(task_name: str) -> None:
+    """Refuse a name its column cannot hold, which the client would only see as "Unexpected error"."""
     if len(task_name) > TASK_NAME_MAX_LENGTH:
         raise ValueError(f"task_name must be at most {TASK_NAME_MAX_LENGTH} characters")
+
+
+def _validate_need_size(task_type: str, task_name: str, quantity: int | None) -> None:
+    """Refuse a name its column cannot hold, or a quantity missing or asking for nobody.
+
+    A zero quantity would read as full the moment it was filed (`_lock_task_with_room`); and a need
+    without one would never fill, so its ticket would never complete (ADR-291 point 7). Every kind:
+    a rescue, and one the back office configured itself (ADR-214), too.
+    """
+    _validate_need_name(task_name)
     if quantity is None:
-        if task_type not in QUANTITY_OPTIONAL_TASK_TYPES:
-            raise ValueError(f"quantity is required for a {task_type} task")
-    elif quantity < 1:
+        raise ValueError(f"quantity is required for a {task_type} task")
+    if quantity < 1:
         raise ValueError("quantity must be at least 1")
 
 
@@ -356,7 +355,7 @@ async def validate_help_request(
     db: AsyncSession,
     *,
     actor: User,
-    geometry: dict,
+    geometry: dict | None,
     title: str,
     description: str | None,
     contact_name: str,
@@ -365,12 +364,16 @@ async def validate_help_request(
     tasks: list[dict],
     photo_urls: list[str] | None = None,
     contact_email: str | None = None,
+    building_map_uuid: str | None = None,
 ) -> HelpRequestFields:
     """Every check the site's help request (「請求協助」) must pass, without writing anything.
 
     The site never asks how urgent a request is: priority is `medium`, and staff adjust it
     afterwards. The ticket's own `task_type` is the first need's, as the admin form sets it. An
     email is optional; the account's own is never filled in for it.
+
+    Filed inside a building, it is placed as `validate_ticket` places a ticket there: the building's
+    point and address, and the reporter's floor and area checked against its layout (`place_ticket`).
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
     if not title.strip():
@@ -386,12 +389,20 @@ async def validate_help_request(
     for task in tasks:
         _validate_help_request_task(task)
     photo_links = _checked_photo_links(photo_urls)
+    if building_map_uuid:
+        geometry, secondary_location = await place_ticket(db, building_map_uuid, geometry, secondary_location)
+    if geometry is None:
+        raise ValueError("geometry or buildingMapUuid is required")
     validate_point(geometry, entity="Ticket")
     contacts = normalize_contact_fields(
         {"contact_name": contact_name, "contact_email": contact_email, "contact_phone": contact_phone},
         required=frozenset({"contact_name"}),
     )
-    secondary_location = apply_address(secondary_location, point=point_of(geometry))
+    if building_map_uuid:
+        # The building's address is copied in already split and graded.
+        check_address_lengths(secondary_location)
+    else:
+        secondary_location = apply_address(secondary_location, point=point_of(geometry))
     return HelpRequestFields(
         ticket=TicketFields(
             point=geometry,
@@ -403,6 +414,7 @@ async def validate_help_request(
                 "task_type": tasks[0]["task_type"],
             },
             secondary_location=secondary_location,
+            building_map_uuid=building_map_uuid,
             photo_links=tuple(photo_links),
         ),
         needs=tuple(

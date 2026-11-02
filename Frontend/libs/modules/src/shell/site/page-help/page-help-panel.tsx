@@ -1,10 +1,8 @@
 'use client';
 
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import { Box, IconButton, Stack, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { helpTextRuns, type PageHelp } from './page-help';
 
@@ -70,7 +68,7 @@ export function FreshDot({
 export function PageHelpIcon({ fresh }: { fresh: boolean }) {
   return (
     <Box component="span" sx={{ position: 'relative', display: 'inline-flex' }}>
-      <HelpOutlineRoundedIcon />
+      <Icons.support />
       {/* The row's icon is 15px: a full-size dot on it would cover the ？. */}
       {fresh ? (
         <FreshDot ringColor={color.bg.neutral.default} size={6} inset={-4} />
@@ -95,9 +93,7 @@ export function PageHelpPanel({
   return (
     <Stack spacing={1.5}>
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
-        <HelpOutlineRoundedIcon
-          sx={{ fontSize: 18, color: color.bg.primary.default }}
-        />
+        <Icons.support sx={{ fontSize: 18, color: color.bg.primary.default }} />
         <Typography
           id={titleId}
           sx={{
@@ -115,7 +111,7 @@ export function PageHelpPanel({
           onClick={onClose}
           sx={{ mr: -0.5, color: color.fg.neutral.muted }}
         >
-          <CloseRoundedIcon sx={{ fontSize: 18 }} />
+          <Icons.close sx={{ fontSize: 18 }} />
         </IconButton>
       </Stack>
 

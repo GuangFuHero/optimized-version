@@ -10,6 +10,7 @@ import type {
 
 import type { PickedPoint } from '../../map/components/location-picker/types';
 import { toAddressInput, type FilledAddress } from '../address-lookup';
+import type { HelpRequestPlace } from './open-help-request';
 
 export type { PickedPoint };
 
@@ -97,14 +98,36 @@ export interface NeedDraft {
   need: SiteNeedValue | null;
   name: string;
   /**
-   * Text as typed. Required but for a rescue, whose count nobody knows yet: blank is sent as
-   * null, which the server takes for a rescue only (`QUANTITY_REQUIRED_TASK_TYPES`).
+   * Text as typed. Required for every kind: a rescue too asks for at least one person, and stops
+   * recruiting once they come.
    */
   quantity: string;
 }
 
 export function emptyNeed(): NeedDraft {
   return { need: null, name: '', quantity: '' };
+}
+
+/** A rescue starts at one person, the least it may ask for, when nothing is typed yet. */
+const RESCUE_DEFAULT_QUANTITY = '1';
+
+/**
+ * The row with `value` chosen. A rescue with nothing typed starts at `RESCUE_DEFAULT_QUANTITY`; one
+ * still at it when another kind is picked goes back to blank, so that kind is counted by the
+ * requester rather than by the default. Any other count typed stays.
+ */
+export function chooseNeed(row: NeedDraft, value: SiteNeedValue): NeedDraft {
+  const toRescue = getNeedOption(value)?.kind === 'rescue';
+  const fromRescue = getNeedOption(row.need)?.kind === 'rescue';
+  const typed = row.quantity.trim();
+
+  if (toRescue && !typed) {
+    return { ...row, need: value, quantity: RESCUE_DEFAULT_QUANTITY };
+  }
+  if (!toRescue && fromRescue && typed === RESCUE_DEFAULT_QUANTITY) {
+    return { ...row, need: value, quantity: '' };
+  }
+  return { ...row, need: value };
 }
 
 /** The most needs one request files (backend `HELP_REQUEST_NEED_MAX`); 「再加一件」 adds more later. */
@@ -114,11 +137,9 @@ export function canAddNeedRow(needs: readonly NeedDraft[]): boolean {
   return needs.length < MAX_NEEDS;
 }
 
-/** A chosen need but a rescue, with no quantity typed. A row with no kind yet is not asked. */
+/** A chosen need with no quantity typed. A row with no kind yet is not asked. */
 export function isQuantityMissing(row: NeedDraft): boolean {
-  const option = getNeedOption(row.need);
-
-  return Boolean(option) && option?.kind !== 'rescue' && !row.quantity.trim();
+  return Boolean(getNeedOption(row.need)) && !row.quantity.trim();
 }
 
 export interface HelpRequestForm {
@@ -141,14 +162,16 @@ export interface HelpRequestForm {
   photoUrls: string[];
 }
 
+/** At `place`, a building's floor, the form starts with its address and that floor filled in. */
 export function emptyHelpRequestForm(
   landmark: PickedPoint | null = null,
+  place: HelpRequestPlace | null = null,
 ): HelpRequestForm {
   return {
     title: '',
     landmark,
-    address: '',
-    floor: '',
+    address: place?.address ?? '',
+    floor: place?.floor ?? '',
     room: '',
     addressFilled: null,
     addressKept: null,
@@ -183,7 +206,7 @@ function chosenNeeds(needs: readonly NeedDraft[]) {
 
 /**
  * What still has to be filled in, in the form's order from the top, so the first is the one to
- * scroll to. At least one need is required, and how many of each but a rescue.
+ * scroll to. At least one need is required, and how many of each.
  */
 export function findMissingFields(form: HelpRequestForm): MissingField[] {
   const missing: MissingField[] = [];
@@ -211,18 +234,21 @@ export function findMissingFields(form: HelpRequestForm): MissingField[] {
 }
 
 /**
- * Someone trapped or hurt: the form then shows the 119 notice, and sets no flag — as in the
- * prototype, it asks nothing about how dangerous it is.
+ * The row the 119 notice goes under: the first with someone trapped or hurt, or -1 for none. It
+ * sets no flag — as in the prototype, the form asks nothing about how dangerous it is.
  */
-export function hasRescueNeed(needs: readonly NeedDraft[]): boolean {
-  return chosenNeeds(needs).some(({ option }) => option.kind === 'rescue');
+export function rescueNeedRow(needs: readonly NeedDraft[]): number {
+  return needs.findIndex((row) => getNeedOption(row.need)?.kind === 'rescue');
 }
 
 function textOrNull(value: string): string | null {
   return value.trim() || null;
 }
 
-/** Blank is not known yet; anything typed asks for at least one, as the prototype rounds it. */
+/**
+ * Anything typed asks for at least one, as the prototype rounds it. Blank, which the form does not
+ * send (`isQuantityMissing`), is null.
+ */
 function readQuantity(value: string): number | null {
   if (!value.trim()) {
     return null;

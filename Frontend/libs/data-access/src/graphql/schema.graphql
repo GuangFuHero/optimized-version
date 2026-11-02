@@ -564,9 +564,7 @@ input CreateTicketTaskInput {
   taskName: String!
   taskDescription: String = null
 
-  """
-  People or units needed, at least 1; required except for a 'rescue' task, which may omit it
-  """
+  """People or units needed, at least 1; required, for a 'rescue' task too"""
   quantity: Int = null
 
   """Optional UUID of an associated route"""
@@ -720,9 +718,7 @@ input HelpRequestTaskInput {
   taskName: String!
   taskDescription: String = null
 
-  """
-  People or units needed, at least 1; required except for a 'rescue' need, which may omit it
-  """
+  """People or units needed, at least 1; required, for a 'rescue' need too"""
   quantity: Int = null
 
   """

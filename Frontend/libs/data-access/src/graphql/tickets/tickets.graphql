@@ -4,6 +4,8 @@ fragment TicketFields on TicketType {
   geometry
   # H3 cell `geometry` stands in for when the caller only gets a region (ADR-281); null = exact.
   locationCell
+  # The building it was filed in, whose entry on the map takes its pin; null to a guest, as the point is.
+  buildingMapUuid
   title
   description
   contactName

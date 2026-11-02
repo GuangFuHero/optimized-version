@@ -53,7 +53,8 @@ export { SiteListView } from './list';
 
 export { BuildingDrawer } from './building';
 
-export { Map, readRescueMapMarkers } from './map';
+export { Map, preloadRescueMapCanvas, readRescueMapMarkers } from './map';
+export { DEFAULT_TILE_ORIGIN } from './map/constants';
 export { hasRescueMapDetailItem } from './map/location-cells';
 export type {
   RescueMapBaseLayer,
@@ -69,7 +70,9 @@ export type {
 export {
   dedupeMarkersById,
   MapCellsNotice,
+  pinnedBesideBuildings,
   readLinkedSelection,
+  requestHelpOnBuildingFloor,
   SiteMapControls,
   SiteMapRouteProvider,
   useCellMembersLoader,
@@ -78,6 +81,7 @@ export {
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   usePaginatedRescueMapMarkers,
+  useSiteMapBuildings,
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
