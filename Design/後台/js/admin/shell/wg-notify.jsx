@@ -1,4 +1,5 @@
-// wg-notify.jsx — 頂欄鈴鐺 → 未讀徽章 → 右側通知 Drawer（四個後台共用）
+// wg-notify.jsx — 通知鈴鐺：頂欄鈴鐺 → 未讀數字 → 點開的通知清單（後台各頁共用）
+// 🔒 2026-11-03 Sucre：這個功能叫「通知鈴鐺」，不叫抽屜。
 //
 // 正典：identity-and-account / IAM-FEAT-002（AC-01、02、05、06、07、08、10）
 // 本地規格：IAM-FEAT-002-個人資料與通知/spec.md，規則編號 IAM-UP-101~113
@@ -17,13 +18,18 @@
 // ⚠️ 這支元件是後台專屬。前台（民眾 General User）的通知另有定義，不適用這裡的規則。
 //
 // 🆕 2026-10-31 空白畫面（Sucre：「通知要做空白畫面，前後台都要」）
-//    - 沒有任何通知時，Drawer 顯示專屬的空白狀態（`WGNotifyEmpty`），不再只是一行字。
+//    - 沒有任何通知時，通知清單顯示專屬的空白狀態（`WGNotifyEmpty`），不再只是一行字。
 //      與前台 `site-notify.jsx` 的 `SiteNotifyEmpty` 同一個形狀：圓形圖示 ＋ 標題 ＋ 會出現什麼。
 //    - 空的時候，「開啟這份清單只會清掉鈴鐺上的數字…」那一列整列不 render ——
 //      那句話解釋的是 IAM-UP-104（徽章與已讀是兩回事），而清單是空的，沒有任何一則可以談「已讀」。
 //      留著等於在空畫面上放一句沒有對象的說明。
-//    - 🧹 示意通知 `seed()` 與「每 20 秒長一則假通知」的模擬器已拿掉（同 2026-10-16 三頁的方向：
-//      真實頁面不該自己編通知，一開是空的就是上線第一天的樣子）。
+//    - 本地原型的示意通知保留（`seed()` 在 `WG_BLANK` 時回傳空）；要看空白畫面請開 /blank/ 版。
+// 🆕 2026-11-03 分兩組（Sucre）：後端已經會發通知給後台的人，8 月假設的三種類型（任務進度／資料審核結果／角色升級結果）
+//    換成後端實際會發的，照「要不要我去做事」分兩組：
+//      等你處理  — 站點修改建議待審、疑似重複待審核、管理權限申請（點了直接去處理）
+//      你的團隊  — 站點／責任區指派或解除、加入團隊、團隊暫停、站點營運狀態更新與新建
+//    「關閉單一對象的通知」拿掉（後端沒有這個功能）；示範通知只在原型，空白版 /blank/ 仍是空的。
+//    🚨 標題文字是前端改寫的（後端原文有 emoji、站點一律叫「物資站」、責任區叫「工作分區」），待確認。
 (function () {
   const { Avatar, Badge, Button } = window.WanGuardDesignSystem_9c8f68;
   const Icon = window.WGIcon;
@@ -46,19 +52,24 @@
       + "所以正典寫的兩段輪詢間隔目前無法實作。",
   };
 
-  // ── 三種類型（IAM-UP-101）────────────────────────────────────────────────
-  // 這三種是正典已批准的全部。Open decision Q1 未解之前不得新增第四種。
+  // ── 通知的種類與分組（2026-11-03）──────────────────────────────────────
+  // group：act＝等你處理（點了去處理）、team＝你的團隊（知道就好）。分組只看種類，不看已讀。
   const TYPES = {
-    task:   { label: "任務進度",     icon: "ClipboardList", tone: "info",    fg: "var(--color-fg-info)" },
-    review: { label: "資料審核結果", icon: "FileCheck",     tone: "success", fg: "var(--color-fg-success)" },
-    role:   { label: "角色升級結果", icon: "ShieldCheck",   tone: "warning", fg: "var(--color-fg-warning)" },
+    suggestion: { group: "act",  label: "站點修改建議", icon: "ClipboardCheck", tone: "warning", fg: "var(--color-fg-warning)" },
+    dedup:      { group: "act",  label: "疑似重複",     icon: "Copy",           tone: "warning", fg: "var(--color-fg-warning)" },
+    role:       { group: "act",  label: "權限申請",     icon: "UserPlus",       tone: "warning", fg: "var(--color-fg-warning)" },
+    assign:     { group: "team", label: "指派",         icon: "Flag",           tone: "info",    fg: "var(--color-fg-info)" },
+    team:       { group: "team", label: "團隊",         icon: "Users",          tone: "info",    fg: "var(--color-fg-info)" },
+    station:    { group: "team", label: "站點動態",     icon: "Building2",      tone: "neutral", fg: "var(--color-fg-neutral-subtle)" },
   };
+  const GROUPS = [
+    { key: "act",  title: "等你處理", hint: "點一下直接去處理" },
+    { key: "team", title: "你的團隊", hint: "跟你的團隊有關的動態" },
+  ];
 
-  // ── 通知資料 ────────────────────────────────────────────────────────────
-  // 🧹 2026-10-16：示意通知（指向測試任務單 T-10xx／站點 RS-01xx）已全部移除，鈴鐺一開是空的。
-  // ⚠️ 後端沒有任何通知表（見 wg-bridge.js 的 KEYS.notices 說明），正式版要開新表。
-  //    一筆的形狀：{ id, type: task|review|role, to: [userId], summary, detail, count,
-  //                  ts, seen, read, target: "任務單「標題」"（🔒 後端沒有單號，不寫 #T-…）, ref: { kind: ticket|station|role, id } }
+  // ── 原型資料 ────────────────────────────────────────────────────────────
+  // ⚠️ 全部是我編的示意內容，沒有資料來源。人名沿用 TK_PERSONAS，事件內容是虛構的。
+  // `to` 決定哪個角色看得到，只是為了讓切換角色視角時內容不一樣，不是權限規則。
   const MIN = 60 * 1000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 
   function refKey(ref) {
@@ -66,25 +77,61 @@
     return ref.kind === "role" ? "role" : ref.kind + ":" + ref.id;
   }
 
-  function seed() { return []; }
+  function seed() {
+    // 真實頁面不自己編通知：一開是空的就是上線第一天的樣子（10-31）。
+    // 要看兩組長什麼樣子，網址加 ?demo=1（跟重複審核頁一樣）。下面的站名、人名都是示範資料。
+    if (window.WG_BLANK || !/[?&]demo=1\b/.test(window.location.search)) return [];
+    const now = Date.now();
+    // 2026-11-03：內容照後端實際會發的通知（suggestion.py、dedup_review.py、role_request.py、station.py、area.py、admin.py）；
+    // 站名、人名是示範資料。`to`：林承翰＝超管、吳政憲＝政府、黃曉芳＝非政府組織管理員、張育成＝資料檢核員、李國豪＝成員
+    return [
+      { id: "n1", type: "suggestion", to: ["u-lin", "u-wu", "u-huang"],
+        summary: "「光復車站充電補給站」有一筆修改建議待審", detail: "營運狀態：開設中 → 暫停服務",
+        count: 1, ts: now - 6 * MIN, seen: false, read: false,
+        target: "站點「光復車站充電補給站」", ref: { kind: "station", id: "RS-0166" } },
+      { id: "n2", type: "dedup", to: ["u-lin", "u-chang"],
+        summary: "3 筆資料疑似重複，待審核", detail: "照樣建立的資料和既有的項目很像，請到「重複審核」判斷",
+        count: 1, ts: now - 25 * MIN, seen: false, read: false,
+        target: "重複審核", ref: { kind: "dedup", id: "queue" } },
+      { id: "n3", type: "role", to: ["u-lin"],
+        summary: "王志豪申請成為政府單位人員", detail: "申請加入：光復鄉公所",
+        count: 1, ts: now - 2 * HOUR, seen: false, read: false,
+        target: "成員與權限 · 審核佇列", ref: { kind: "role", id: "queue" } },
+      { id: "n4", type: "assign", to: ["u-huang"],
+        summary: "你的團隊被指派負責責任區「大平村」", detail: "請到任務管理篩選你的團隊，看區域內的任務",
+        count: 1, ts: now - 40 * MIN, seen: false, read: false,
+        target: "互助地圖「大平村」", ref: { kind: "zone", id: "Z-01" } },
+      { id: "n5", type: "assign", to: ["u-huang"],
+        summary: "你的團隊被指派負責站點「大進村物資集散中心」", detail: "可以編輯這個站點、處理它的修改建議",
+        count: 1, ts: now - 5 * HOUR, seen: true, read: false,
+        target: "站點「大進村物資集散中心」", ref: { kind: "station", id: "RS-0143" } },
+      { id: "n6", type: "station", to: ["u-lin", "u-wu"],
+        summary: "「糖廠加水站」營運狀態更新", detail: "營運狀態改為：暫停服務",
+        count: 1, ts: now - 3 * HOUR, seen: true, read: true,
+        target: "站點「糖廠加水站」", ref: { kind: "station", id: "RS-0151" } },
+      { id: "n7", type: "team", to: ["u-huang", "u-lee"],
+        summary: "歡迎加入團隊「慈濟基金會」", detail: "你的身分：成員",
+        count: 1, ts: now - 2 * DAY, seen: true, read: true,
+        target: "團隊「慈濟基金會」", ref: { kind: "team", id: "t-tzuchi" } },
+    ];
+  }
 
   // ── IAM-UP-108：導向對應物件 ────────────────────────────────────────────
-  // 兩段式：先問本頁能不能自己開（同頁直接開 Drawer，不重新載入），
+  // 兩段式：先問本頁能不能自己開（同頁直接開該物件的詳情，不重新載入），
   // 本頁處理不了才跨頁，並用 #open= 讓落地頁自己開。
   // 落點對照沿用 nav.js 的 PAGES，不另立一份。
   const NOTIFY_PAGES = {
     ticket:  "任務管理 Ticket Management.html",
     station: "資源站點管理 Resource Station v2.html",
+    dedup:   "重複審核 Duplicate Review.html",
+    zone:    "互助地圖 Mutual Aid Map.html",
+    role:    "成員管理 Member Management.html",
+    team:    "成員管理 Member Management.html",
   };
 
   function notifyGo(ref) {
     if (!ref) return { ok: false, why: "這則通知沒有指向任何物件" };
 
-    // 角色類：落點是個人設定 Drawer 的角色身份區塊（wg-profile.jsx）
-    if (ref.kind === "role") {
-      if (typeof window.wgOpenProfileDrawer === "function") { window.wgOpenProfileDrawer(); return { ok: true }; }
-      return { ok: false, why: "個人設定 Drawer 尚未載入" };
-    }
 
     // 本頁先試：有人 preventDefault 就代表本頁已經開起來了
     const ev = new CustomEvent("wg:notify-open", { detail: ref, cancelable: true });
@@ -132,72 +179,33 @@
   }
 
   // ── 單則通知 ────────────────────────────────────────────────────────────
-  // 外層用 div 不用 button：右邊的靜音鈕是獨立按鈕，按鈕不能巢在按鈕裡。
-  function NotifyRow({ item, muted, onOpen, onToggleMute }) {
+  function NotifyRow({ item, onOpen }) {
     const t = TYPES[item.type];
     const unread = !item.read;
-    const canMute = item.ref && item.ref.kind !== "role";
-    const bg = unread && !muted ? "var(--color-bg-info-subtle)" : "transparent";
     return (
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 4, padding: "0 8px 0 0",
-        borderBottom: "1px solid var(--color-bg-neutral-sunken)", background: bg, opacity: muted ? 0.62 : 1 }}>
-
-        <button type="button" onClick={() => onOpen(item)}
-          style={{ flex: 1, minWidth: 0, display: "flex", gap: 12, padding: "14px 8px 14px 16px", textAlign: "left",
-            cursor: "pointer", border: "none", background: "transparent" }}>
-
-          <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: "var(--radius-full)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--color-bg-neutral-subtle)" }}>
-            <Icon n={t.icon} s={18} c={t.fg} />
-          </span>
-
-          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-              <Badge tone={t.tone}>{t.label}</Badge>
-              {/* IAM-UP-106：同一任務多次更新聚合成一則，這裡標示聚合了幾則 */}
-              {item.count > 1 && (
-                <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)", display: "inline-flex", alignItems: "center", gap: 3 }}>
-                  <Icon n="Layers" s={12} c="var(--color-fg-neutral-muted)" />{item.count} 則更新
-                </span>
-              )}
-              {muted && (
-                <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)", display: "inline-flex", alignItems: "center", gap: 3 }}>
-                  <Icon n="BellOff" s={12} c="var(--color-fg-neutral-muted)" />已關閉
-                </span>
-              )}
-              <span style={{ marginLeft: "auto", font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)", whiteSpace: "nowrap" }}>
-                {ago(item.ts)}
-              </span>
-            </span>
-
-            <span style={{ font: "var(--font-body-400)", fontWeight: unread && !muted ? 700 : 400, color: "var(--color-fg-neutral-default)", overflowWrap: "anywhere" }}>
-              {item.summary}
-            </span>
-            <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-muted)", overflowWrap: "anywhere" }}>
-              {item.detail}
-            </span>
-            <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-subtle)", display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <Icon n="ArrowUpRight" s={12} c="currentColor" />{item.target}
+      <button type="button" onClick={() => onOpen(item)}
+        style={{ width: "100%", display: "flex", gap: 12, padding: "14px 16px", textAlign: "left", cursor: "pointer",
+          border: "none", borderBottom: "1px solid var(--color-bg-neutral-sunken)",
+          background: unread ? "var(--color-bg-info-subtle)" : "transparent" }}>
+        <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: "var(--radius-full)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--color-bg-neutral-subtle)" }}>
+          <Icon n={t.icon} s={18} c={t.fg} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <Badge tone={t.tone}>{t.label}</Badge>
+            <span style={{ marginLeft: "auto", font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)", whiteSpace: "nowrap" }}>
+              {ago(item.ts)}
             </span>
           </span>
-
-          {unread && !muted && <span aria-label="未讀" style={{ width: 9, height: 9, borderRadius: "var(--radius-full)", background: "var(--color-bg-primary)", flexShrink: 0, marginTop: 12 }}></span>}
-        </button>
-
-        {/* 關閉單一對象的後續通知（Sucre 2026-08-08 指示，正典沒有這條）*/}
-        {canMute && (
-          <button type="button" onClick={() => onToggleMute(item.ref)}
-            aria-label={muted ? `恢復「${item.target}」的通知` : `關閉「${item.target}」的後續通知`}
-            title={muted ? "恢復這個對象的通知" : "不再接收這個對象的通知"}
-            style={{ marginTop: 12, flexShrink: 0, width: 30, height: 30, borderRadius: "var(--radius-full)",
-              border: "none", background: "transparent", cursor: "pointer",
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              color: muted ? "var(--color-fg-warning)" : "var(--color-fg-neutral-muted)" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-bg-neutral-subtle)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-            <Icon n={muted ? "BellOff" : "Bell"} s={16} c="currentColor" />
-          </button>
-        )}
-      </div>
+          <span style={{ font: "var(--font-body-400)", fontWeight: unread ? 700 : 400, color: "var(--color-fg-neutral-default)", overflowWrap: "anywhere" }}>
+            {item.summary}
+          </span>
+          <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-neutral-muted)", overflowWrap: "anywhere" }}>
+            {item.detail}
+          </span>
+        </span>
+        {unread && <span aria-label="未讀" style={{ width: 9, height: 9, borderRadius: "var(--radius-full)", background: "var(--color-bg-primary)", flexShrink: 0, marginTop: 12 }}></span>}
+      </button>
     );
   }
 
@@ -208,9 +216,11 @@
   // ⚠️ 不放按鈕：通知是別人的動作長出來的，沒有一個「讓它出現」的操作可以放。
   function WGNotifyEmpty() {
     const kinds = [
-      { t: TYPES.task,   text: "你負責的任務有新進度" },
-      { t: TYPES.review, text: "你回報的資料有審核結果" },
-      { t: TYPES.role,   text: "角色升級申請有結果" },
+      { t: TYPES.suggestion, text: "站點有修改建議待你審核" },
+      { t: TYPES.dedup,      text: "有資料疑似重複，待審核" },
+      { t: TYPES.role,       text: "有人申請管理權限" },
+      { t: TYPES.assign,     text: "站點、責任區指派給你的團隊" },
+      { t: TYPES.team,       text: "加入團隊、團隊暫停" },
     ];
     return (
       <div role="status" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -239,11 +249,10 @@
     );
   }
 
-  // ── 通知 Drawer ─────────────────────────────────────────────────────────
-  function WGNotifyDrawer({ items, muted, onMarkRead, onMarkAllRead, onToggleMute, onClose }) {
+  // ── 通知清單（點開鈴鐺後出現）─────────────────────────────────────────────────────────
+  function WGNotifyDrawer({ items, onMarkRead, onMarkAllRead, onClose }) {
     const [toast, setToast] = React.useState(null);
-    const unreadCount = items.filter((i) => !i.read && muted.indexOf(refKey(i.ref)) < 0).length;
-    const mutedItems = items.filter((i) => muted.indexOf(refKey(i.ref)) >= 0);
+    const unreadCount = items.filter((i) => !i.read).length;
     const isEmpty = items.length === 0;
 
     React.useEffect(() => {
@@ -253,7 +262,7 @@
     }, [onClose]);
 
     // IAM-UP-108：點開 → 標為已讀 → 導向對應物件。
-    // 同頁能開就直接開（Drawer 順帶關掉）；要跨頁就換頁。真的開不了才留在原地說明。
+    // 同頁能開就直接開（通知清單順帶關掉）；要跨頁就換頁。真的開不了才留在原地說明。
     function open(item) {
       onMarkRead(item.id);
       const r = notifyGo(item.ref);
@@ -276,7 +285,7 @@
                 {unreadCount > 0 && <Badge tone="info">{unreadCount} 則未讀</Badge>}
               </h2>
               <div className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)", marginTop: 3 }}>
-                後台通知 · 任務進度／資料審核／角色升級
+                等你處理的事，以及跟你團隊有關的動態
               </div>
             </div>
             <button type="button" onClick={onClose} aria-label="關閉"
@@ -308,11 +317,24 @@
           <div style={{ flex: 1, overflow: "auto" }}>
             {isEmpty
               ? <WGNotifyEmpty />
-              : items.map((it) => (
-                  <NotifyRow key={it.id} item={it}
-                    muted={muted.indexOf(refKey(it.ref)) >= 0}
-                    onOpen={open} onToggleMute={onToggleMute} />
-                ))}
+              : GROUPS.map((g) => {
+                  const rows = items.filter((it) => TYPES[it.type].group === g.key);
+                  if (!rows.length) return null;
+                  const unread = rows.filter((it) => !it.read).length;
+                  return (
+                    <section key={g.key} aria-label={g.title}>
+                      {/* 分組標題：等你處理在上，你的團隊在下（2026-11-03） */}
+                      <div style={{ position: "sticky", top: 0, zIndex: 1, display: "flex", alignItems: "baseline", gap: 8,
+                        padding: "10px 16px 8px", background: "var(--color-bg-neutral-default)", borderBottom: "1px solid var(--color-border-default)" }}>
+                        <span style={{ font: "var(--font-label-400)", fontWeight: 700,
+                          color: g.key === "act" ? "var(--color-fg-warning)" : "var(--color-fg-neutral-subtle)" }}>{g.title}</span>
+                        {unread > 0 && <span style={{ font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>{unread} 則未讀</span>}
+                        <span style={{ marginLeft: "auto", font: "var(--font-body-300)", color: "var(--color-fg-neutral-muted)" }}>{g.hint}</span>
+                      </div>
+                      {rows.map((it) => <NotifyRow key={it.id} item={it} onOpen={open} />)}
+                    </section>
+                  );
+                })}
           </div>
 
           {/* footer */}
@@ -323,21 +345,9 @@
                 <span style={{ font: "var(--font-body-300)", color: "var(--color-fg-info)" }}>{toast}</span>
               </div>
             )}
-            {mutedItems.length > 0 && (
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 11px", borderRadius: "var(--radius-md)", background: "var(--color-bg-neutral-subtle)" }}>
-                <Icon n="BellOff" s={15} c="var(--color-fg-neutral-muted)" style={{ marginTop: 2, flexShrink: 0 }} />
-                <span style={{ flex: 1, minWidth: 0, font: "var(--font-body-300)", color: "var(--color-fg-neutral-muted)" }}>
-                  已關閉 {mutedItems.length} 個對象的通知：{mutedItems.map((i) => i.target).join("、")}。
-                  它們的既有通知仍在清單裡，之後不會再有新的。
-                </span>
-              </div>
-            )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>
                 只保留 90 天內的通知
-              </span>
-              <span style={{ marginLeft: "auto" }}>
-                <window.ShellPendingChip info={window.WG_NOTIFY_PENDING} label="通知後端待建置" />
               </span>
             </div>
           </div>
@@ -352,7 +362,7 @@
     // ── 已讀／已關閉狀態跨頁同步（2026-08-15）───────────────────────────
     // 原本 seed() 每次掛載都重跑、muted 只存在記憶體，所以在任務管理點掉的未讀，
     // 跳到成員管理又全部變回未讀。三個後台是三個 HTML 檔，只能靠 localStorage。
-    const ST_KEY = "wg.notify." + (pid || "anon");
+    const ST_KEY = "wg.notify.v2." + (pid || "anon");  // v2：2026-11-03 換成兩組的示範通知，舊的已讀紀錄不沿用
     const readState = () => {
       try { return JSON.parse(localStorage.getItem(ST_KEY)) || { seen: [], read: [], muted: [] }; }
       catch (e) { return { seen: [], read: [], muted: [] }; }
@@ -375,31 +385,13 @@
     });
     const [open, setOpen] = React.useState(false);
     const [nudge, setNudge] = React.useState(false);
-    // 已關閉通知的對象（形如 "ticket:<id>" / "station:<id>"）
-    // ⚠️ 正典沒有這個功能，Sucre 2026-08-08 指示要做。原型只存在記憶體，重整就沒了。
-    const [muted, setMuted] = React.useState(() => readState().muted);
-
     const items = React.useMemo(
       () => all.filter((i) => !pid || i.to.indexOf(pid) >= 0).sort((a, b) => b.ts - a.ts),
       [all, pid]
     );
-    // 已關閉的對象不計入徽章
-    const unseen = items.filter((i) => !i.seen && muted.indexOf(refKey(i.ref)) < 0).length;
-
-    const toggleMute = React.useCallback((ref) => {
-      const k = refKey(ref);
-      if (!k) return;
-      setMuted((m) => {
-        const next = m.indexOf(k) >= 0 ? m.filter((x) => x !== k) : [...m, k];
-        writeState({ muted: next });
-        return next;
-      });
-    }, [pid]);
-
-    // ── IAM-UP-103 輪詢 ─────────────────────────────────────────────────
-    // 🧹 2026-10-16：原型每 20 秒「隨機長出一則假通知」的模擬器已移除 —— 真實頁面不該自己編通知。
-    // 正式版：每 N 秒重抓通知（正典：平常 60 秒、災害啟動期間 15〜30 秒；Open decision Q2 未解），
-    // 抓回來 setAll(...)。在那之前鈴鐺只顯示 seed()（目前為空）。
+    // 🔒 2026-11-03 Sucre：站點營運狀態更新、新建站點（站點動態）不算進鈴鐺數字 ——
+    //    政府隊每個站點一改就收到一則，災害期間一天幾十則，會把「等你處理」的淹沒。通知清單裡照樣列出。
+    const unseen = items.filter((i) => !i.seen && i.type !== "station").length;
 
     // IAM-UP-104：開清單 → 清徽章（seen），但 read 一律不動
     function openDrawer() {
@@ -433,8 +425,8 @@
         </button>
 
         {open && (
-          <WGNotifyDrawer items={items} muted={muted}
-            onMarkRead={markRead} onMarkAllRead={markAllRead} onToggleMute={toggleMute}
+          <WGNotifyDrawer items={items}
+            onMarkRead={markRead} onMarkAllRead={markAllRead}
             onClose={() => setOpen(false)} />
         )}
       </React.Fragment>
