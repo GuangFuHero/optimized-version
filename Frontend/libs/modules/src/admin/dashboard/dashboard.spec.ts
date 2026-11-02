@@ -489,7 +489,7 @@ describe('dashboard states and filters', () => {
     expect(container.textContent).toContain('目前沒有缺人的需求');
   });
 
-  it('draws the three volunteer metrics by need type in the detail charts, at the end date', async () => {
+  it('draws no volunteer chart by need type in the detail charts', async () => {
     await mount();
     state.requests = [];
     await act(async () =>
@@ -498,23 +498,12 @@ describe('dashboard states and filters', () => {
         ?.click(),
     );
     await settle();
-    const byType = state.requests.filter(
-      ({ kind, query }) => kind === 'chart' && query.x === 'category',
-    );
+    expect(state.requests.length).toBeGreaterThan(0);
     expect(
-      byType
-        .filter(({ query }) => String(query.y).startsWith('volunteer'))
-        .map(({ query }) => [query.y, query.start_date, query.chart_type]),
-    ).toEqual([
-      ['volunteers_needed', undefined, 'bar'],
-      ['volunteers_matched', undefined, 'bar'],
-      ['volunteer_gap', undefined, 'bar'],
-    ]);
-    expect(
-      container.querySelector(
-        '[aria-label="各需求類型：需求／已媒合／缺口圖表"]',
+      state.requests.some(({ query }) =>
+        String(query.y).startsWith('volunteer'),
       ),
-    ).not.toBeNull();
+    ).toBe(false);
   });
 
   async function pick(id: string, value: string) {

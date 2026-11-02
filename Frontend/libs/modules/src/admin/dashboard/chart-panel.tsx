@@ -68,7 +68,7 @@ function chartQuery(
  * The plot keeps its slot while anything is pending, so the card never changes height: a state is
  * drawn over it instead of in place of it.
  */
-export function ChartCard({
+function ChartCard({
   title,
   description,
   controls,

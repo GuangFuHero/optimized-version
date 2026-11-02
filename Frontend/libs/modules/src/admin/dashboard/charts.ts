@@ -8,8 +8,6 @@ import {
   type MetricSpec,
 } from './kpis';
 
-type TicketMetric = Extract<DashboardMetric, { domain: 'tickets' }>['metric'];
-
 export type ChartType = components['schemas']['ChartType'];
 export type ChartGranularity = components['schemas']['ChartXGranularity'];
 /** The catalog's `allowed_x` values; `none` is the ungrouped aggregate and is sent as no `x`. */
@@ -207,55 +205,12 @@ export function chartGranularity(
   return allowed[0];
 }
 
-/**
- * The three volunteer metrics side by side for each need type, in the detail charts: needed, matched
- * and missing, in the colours of their cards.
- */
-export const VOLUNTEER_TYPE_SERIES: readonly {
-  metric: TicketMetric;
-  tone: DashboardKpiAccent;
-}[] = [
-  { metric: 'volunteers_needed', tone: 'secondary' },
-  { metric: 'volunteers_matched', tone: 'success' },
-  { metric: 'volunteer_gap', tone: 'warning' },
-];
-
 /** A one-series figure drawn in `color`, which the backend would otherwise take from its palette. */
 export function toneFigure(
   figure: AnalyticsChartFigure,
   color: string,
 ): AnalyticsChartFigure {
   return { ...figure, layout: { ...figure.layout, colorway: [color] } };
-}
-
-/**
- * One grouped bar chart from one-series bar figures of the same grouping: each trace is named and
- * coloured as its part says, and the legend shown under the plot. The layout is the first part's.
- */
-export function groupedBarFigure(
-  parts: readonly {
-    figure: AnalyticsChartFigure;
-    name: string;
-    color: string;
-  }[],
-): AnalyticsChartFigure {
-  const data = parts.flatMap(({ figure, name, color }) =>
-    figure.data.map((trace) => ({
-      ...trace,
-      name,
-      marker: { ...(trace.marker as object | undefined), color },
-    })),
-  );
-  return {
-    data,
-    layout: {
-      ...parts[0]?.figure.layout,
-      barmode: 'group',
-      showlegend: true,
-      legend: { orientation: 'h', x: 0, y: -0.2 },
-    },
-    config: parts[0]?.figure.config ?? {},
-  };
 }
 
 /** Empty traces and null samples have no data; zero remains a valid measurement. */

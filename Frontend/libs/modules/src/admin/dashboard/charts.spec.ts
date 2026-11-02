@@ -4,7 +4,6 @@ import {
   CHART_TYPE_LABELS,
   chartGranularity,
   chartQueryParams,
-  groupedBarFigure,
   knownOptions,
   hasChartData,
   toneFigure,
@@ -159,26 +158,6 @@ describe('the volunteer charts', () => {
     data: [{ type: 'bar', x, y, name: 'backend' }],
     layout: { showlegend: false },
     config: { displayModeBar: false },
-  });
-
-  it('puts the three by-type figures side by side, named and coloured, legend shown', () => {
-    const figure = groupedBarFigure([
-      { figure: bar(['搜救', '物資'], [4, 2]), name: '需求', color: 'blue' },
-      { figure: bar(['搜救', '物資'], [3, 2]), name: '已媒合', color: 'green' },
-      { figure: bar(['搜救'], [1]), name: '缺口', color: 'orange' },
-    ]);
-    expect(
-      figure.data.map((trace) => [
-        trace.name,
-        (trace.marker as { color: string }).color,
-      ]),
-    ).toEqual([
-      ['需求', 'blue'],
-      ['已媒合', 'green'],
-      ['缺口', 'orange'],
-    ]);
-    expect(figure.layout).toMatchObject({ barmode: 'group', showlegend: true });
-    expect(figure.config).toEqual({ displayModeBar: false });
   });
 
   it('draws the gap trend in the colour of its card', () => {

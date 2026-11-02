@@ -71,7 +71,6 @@ import {
   type SectionFilter,
 } from './filter-query';
 import { ACCENT_COLORS } from './tones';
-import { VolunteerTypesPanel } from './volunteer-types-panel';
 
 const { color, typography, radius, shadow } = designTokens;
 
@@ -322,7 +321,6 @@ function ChartGrid({
   emptyPreview,
   area,
   section,
-  leading,
 }: {
   charts: readonly DashboardChart[];
   catalog: AnalyticsCatalog | undefined;
@@ -334,8 +332,6 @@ function ChartGrid({
   area: DashboardArea;
   /** The 類型 and 狀態 of the section the charts are in. */
   section: SectionFilter;
-  /** A panel drawn before the charts, in the same grid. */
-  leading?: React.ReactNode;
 }) {
   return (
     <Box
@@ -345,7 +341,6 @@ function ChartGrid({
         gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
       }}
     >
-      {leading}
       {charts.map((chart) => (
         <ChartPanel
           key={`${chart.domain}.${chart.metric}`}
@@ -744,7 +739,7 @@ export function DashboardPage() {
                     )}
                     {showDetails
                       ? '收起細部分析'
-                      : '展開細部分析（各需求類型志工、完成率、等待時間、處理耗時、重複單）'}
+                      : '展開細部分析（完成率、等待時間、處理耗時、重複單）'}
                   </ButtonBase>
                 </Box>
                 {showDetails ? (
@@ -758,18 +753,6 @@ export function DashboardPage() {
                     emptyPreview={emptyPreview}
                     area={area}
                     section={sections.tickets}
-                    leading={
-                      <VolunteerTypesPanel
-                        catalog={catalog}
-                        range={range}
-                        timeZone={timeZone}
-                        area={area}
-                        section={sections.tickets}
-                        asOfCaption={asOfCaption}
-                        devMode={devMode}
-                        emptyPreview={emptyPreview}
-                      />
-                    }
                   />
                 ) : null}
               </>
