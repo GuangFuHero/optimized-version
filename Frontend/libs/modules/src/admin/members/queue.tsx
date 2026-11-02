@@ -3,14 +3,12 @@
 import { Check, Inbox, X } from 'lucide-react';
 
 import { Chip, Stack, Typography } from '@mui/material';
-import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
 import { ApiError } from '@rescue-frontend/data-access';
 import {
-  teamsQuery,
   useApproveRoleRequest,
   useRejectRoleRequest,
   useRoleRequests,
@@ -36,7 +34,6 @@ import {
   decisionConflict,
   newTeamHref,
   requestKind,
-  teamUuidByName,
   type RequestKind,
   type RoleRequest,
 } from './requests';
@@ -242,7 +239,6 @@ const KIND_FILTERS: { id: KindFilter; label: string }[] = [
  */
 export function RoleRequestQueue({ teamUuid }: { teamUuid?: string }) {
   const { data, isPending, isError } = usePendingRoleRequests(teamUuid);
-  const queryClient = useQueryClient();
   const router = useRouter();
   const approve = useApproveRoleRequest();
   const reject = useRejectRoleRequest();
@@ -299,19 +295,12 @@ export function RoleRequestQueue({ teamUuid }: { teamUuid?: string }) {
               approve.mutate(
                 { params: { path: { request_uuid: request.uuid } }, body: {} },
                 {
-                  onSuccess: async (approved) => {
+                  onSuccess: (approved) => {
                     toast.success(approvedMessage(request, kind));
                     if (kind !== 'new_team') return;
-                    // Story 5 step 3: a new team leads to its applicant, now its admin.
-                    const teamUuid =
-                      approved.team_uuid ??
-                      teamUuidByName(
-                        await queryClient.fetchQuery({
-                          ...teamsQuery(),
-                          staleTime: 0,
-                        }),
-                        request.new_team_name,
-                      );
+                    // Story 5 step 3: a new team leads to its applicant, now its admin. The approval
+                    // names the team it created in granted_team_uuid (ADR-411, #157).
+                    const teamUuid = approved.granted_team_uuid;
                     if (teamUuid) {
                       router.push(
                         newTeamHref(teamUuid, request.applicant_uuid),

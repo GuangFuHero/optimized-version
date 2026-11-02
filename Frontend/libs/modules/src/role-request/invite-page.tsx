@@ -19,7 +19,6 @@ import { designTokens } from '@rescue-frontend/ui';
 import { getCurrentUserAsync } from '../auth/api/client';
 import { authHref } from '../auth/login/utils/auth-href';
 import { useAuthSession } from '../session/auth-session';
-import { SiteTextScale } from '../shell/site/site-text-scale';
 import { readApplicantAccount } from './applicant';
 import { ApplicantSection } from './applicant-section';
 import {
@@ -75,79 +74,77 @@ export function TeamInvitePage({ token }: { token: string }) {
   const authLink = authHref('/login', { callbackUrl });
 
   return (
-    <SiteTextScale>
-      <Container
-        component="main"
-        maxWidth="sm"
-        sx={{ py: { mobile: 3, tablet: 6 } }}
+    <Container
+      component="main"
+      maxWidth="sm"
+      sx={{ py: { mobile: 3, tablet: 6 } }}
+    >
+      <Stack
+        sx={{
+          gap: 3,
+          p: { mobile: 2, tablet: 4 },
+          border: `1px solid ${color.border.default}`,
+          borderRadius: `${radius.lg}px`,
+          bgcolor: color.bg.neutral.default,
+        }}
       >
-        <Stack
-          sx={{
-            gap: 3,
-            p: { mobile: 2, tablet: 4 },
-            border: `1px solid ${color.border.default}`,
-            borderRadius: `${radius.lg}px`,
-            bgcolor: color.bg.neutral.default,
-          }}
-        >
-          <Typography component="h1" variant="h5">
-            加入團隊
-          </Typography>
-          {status === 'loading' ? (
-            <Typography role="status">確認登入狀態中…</Typography>
-          ) : status !== 'authenticated' ? (
-            <>
-              <Typography>
-                請先登入或註冊，接著即可查看團隊並申請加入。
-              </Typography>
-              <Button variant="contained" href={authLink}>
-                登入後繼續
+        <Typography component="h1" variant="h5">
+          加入團隊
+        </Typography>
+        {status === 'loading' ? (
+          <Typography role="status">確認登入狀態中…</Typography>
+        ) : status !== 'authenticated' ? (
+          <>
+            <Typography>
+              請先登入或註冊，接著即可查看團隊並申請加入。
+            </Typography>
+            <Button variant="contained" href={authLink}>
+              登入後繼續
+            </Button>
+            <Button href={authHref('/register', { callbackUrl })}>
+              註冊帳號
+            </Button>
+          </>
+        ) : invite.isPending || applicant.isPending ? (
+          <Typography role="status">載入邀請中…</Typography>
+        ) : invite.isError || applicant.isError ? (
+          <>
+            <Alert severity="error">
+              {inviteError(invite.error ?? applicant.error)}
+            </Alert>
+            {invite.error instanceof ApiError &&
+            invite.error.status === 404 ? null : (
+              <Button
+                onClick={() => {
+                  void invite.refetch();
+                  void applicant.refetch();
+                }}
+              >
+                重新載入
               </Button>
-              <Button href={authHref('/register', { callbackUrl })}>
-                註冊帳號
-              </Button>
-            </>
-          ) : invite.isPending || applicant.isPending ? (
-            <Typography role="status">載入邀請中…</Typography>
-          ) : invite.isError || applicant.isError ? (
-            <>
-              <Alert severity="error">
-                {inviteError(invite.error ?? applicant.error)}
-              </Alert>
-              {invite.error instanceof ApiError &&
-              invite.error.status === 404 ? null : (
-                <Button
-                  onClick={() => {
-                    void invite.refetch();
-                    void applicant.refetch();
-                  }}
-                >
-                  重新載入
-                </Button>
-              )}
-              {(invite.error instanceof ApiError &&
-                invite.error.status === 401) ||
-              (applicant.error instanceof ApiError &&
-                applicant.error.status === 401) ? (
-                <Button href={authLink}>重新登入</Button>
-              ) : null}
-            </>
-          ) : (
-            <InviteDetails
-              key={`${user?.uuid}:${token}`}
-              token={token}
-              invite={invite.data}
-              user={applicant.data}
-              refreshInvite={() => void invite.refetch()}
-              refreshAccount={() => void applicant.refetch()}
-            />
-          )}
-          <Button href="/map" variant="text">
-            回到公開地圖
-          </Button>
-        </Stack>
-      </Container>
-    </SiteTextScale>
+            )}
+            {(invite.error instanceof ApiError &&
+              invite.error.status === 401) ||
+            (applicant.error instanceof ApiError &&
+              applicant.error.status === 401) ? (
+              <Button href={authLink}>重新登入</Button>
+            ) : null}
+          </>
+        ) : (
+          <InviteDetails
+            key={`${user?.uuid}:${token}`}
+            token={token}
+            invite={invite.data}
+            user={applicant.data}
+            refreshInvite={() => void invite.refetch()}
+            refreshAccount={() => void applicant.refetch()}
+          />
+        )}
+        <Button href="/map" variant="text">
+          回到公開地圖
+        </Button>
+      </Stack>
+    </Container>
   );
 }
 

@@ -5,7 +5,6 @@ import {
   decisionConflict,
   newTeamHref,
   requestKind,
-  teamUuidByName,
   type RoleRequest,
 } from './requests';
 
@@ -96,23 +95,5 @@ describe('decisionConflict', () => {
 describe('newTeamHref', () => {
   it('opens the new team on 團隊 with its applicant marked', () => {
     expect(newTeamHref('t-1', 'u-2')).toBe('/teams?team=t-1&member=u-2');
-  });
-});
-
-describe('teamUuidByName', () => {
-  const teams = [
-    { uuid: 't-1', name: '光復清淤志工隊' },
-    { uuid: 't-2', name: 'Red Cross Hualien' },
-  ];
-
-  it('finds the new team the way the backend compares names: trimmed, ignoring case', () => {
-    expect(teamUuidByName(teams, ' 光復清淤志工隊 ')).toBe('t-1');
-    expect(teamUuidByName(teams, 'red cross hualien')).toBe('t-2');
-  });
-
-  it('finds nothing for an unknown or empty name', () => {
-    expect(teamUuidByName(teams, '不存在的隊')).toBeNull();
-    expect(teamUuidByName(teams, null)).toBeNull();
-    expect(teamUuidByName(teams, '  ')).toBeNull();
   });
 });

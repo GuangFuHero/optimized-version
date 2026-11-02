@@ -6,6 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./briefing": "./src/briefing/index.ts",
+    "./invite": "./src/role-request/invite-entry.ts",
+    "./members": "./src/admin/members/index.ts",
     "./session": "./src/session/index.ts",
     "./server": "./src/server.ts",
     "./document": "./src/document-layout.tsx",

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { MembersPermissionsPage } from '@rescue-frontend/modules';
+import { MembersPermissionsPage } from '@rescue-frontend/modules/members';
 
 export const metadata: Metadata = {
   title: '成員與權限 - 島嶼守望管理平台',

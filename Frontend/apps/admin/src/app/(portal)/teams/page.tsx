@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { TeamsPage } from '@rescue-frontend/modules';
+import { TeamsPage } from '@rescue-frontend/modules/members';
 
 export const metadata: Metadata = {
   title: '團隊 - 島嶼守望管理平台',

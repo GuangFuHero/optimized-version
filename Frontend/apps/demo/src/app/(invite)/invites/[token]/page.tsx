@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { TeamInvitePage } from '@rescue-frontend/modules';
+import { TeamInvitePage } from '@rescue-frontend/modules/invite';
 
 export const metadata: Metadata = {
   title: '加入團隊 - 島嶼守望',
