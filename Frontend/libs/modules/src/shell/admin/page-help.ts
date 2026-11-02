@@ -34,11 +34,11 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
         body: '同棟大樓多人求助時，可在地圖建立空間，填寫名稱及地上、地下樓層數（系統自動新增頂樓 RF）。可查看樓層需求、編輯或刪除（不影響任務單）。任務單填寫 RF 或「頂樓」皆會歸入頂樓。',
       },
     ],
-    // As decided: the 政府隊's members import tickets too. Exporting stays with team admins.
+    // As decided (BE-RBAC-3, B3): the 政府隊's members import and export tickets too; NGO members do not.
     roles: [
       ['超級管理員', '全部功能'],
       ['政府隊管理員', '建立、修改、匯入、匯出、開啟空間'],
-      ['政府隊成員', '建立、修改、匯入'],
+      ['政府隊成員', '建立、修改、匯入、匯出'],
       ['團隊管理員', '建立、修改、匯入、匯出'],
       ['團隊成員', '建立、修改'],
       ['資料檢核員', '查看全部任務與紀錄、匯出、重複審核'],
@@ -77,7 +77,7 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
     what: '發布會出現在每一頁最上方的紅色公告。',
     can: [
       '分別對前台（民眾與志工）或後台發布',
-      '隨時關閉公告',
+      '超級管理員可以隨時關閉公告',
       '查看以前發過的公告',
     ],
     note: '只有超級管理員可以發布。發出去所有人都會看到，請確認內容再送出。',
@@ -96,6 +96,7 @@ export const ADMIN_PAGE_HELP: Partial<Record<string, PageHelp>> = {
       '設定地圖預設位置：前台與後台的地圖第一次打開就停在災區，之後停在每個人自己上次看的地方（沒設定會顯示全台）',
       '選這次用到哪幾種災害',
     ],
+    note: '只有超級管理員可以修改。',
   },
 };
 
