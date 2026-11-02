@@ -120,7 +120,7 @@ export const BASE_LAYER_CONFIG: Record<
     tileSourceType: 'satellite',
     tileSource: 'nlsc',
     icon: Satellite,
-    licenseNote: '依國土測繪圖資服務雲服務使用條款，授權待確認',
+    licenseNote: '依國土測繪圖資服務雲服務使用條款',
   },
   sinica: {
     label: '衛星影像（中研院）',
