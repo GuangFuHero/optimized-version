@@ -1,15 +1,35 @@
 'use client';
 
 import { Box, Typography } from '@mui/material';
-import { Button, designTokens, SplitButton } from '@rescue-frontend/ui';
-import { Plus, Upload } from 'lucide-react';
+import { Button, designTokens } from '@rescue-frontend/ui';
+import { Upload } from 'lucide-react';
 import { type ReactNode } from 'react';
 
+import { NewSplitButton } from '../../../admin/shared/new-split-button';
 import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
 import { boardCountLine } from '../space/board-count';
 import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
 
 const { color, typography } = designTokens;
+
+/** 新增任務 ▾, the same in the toolbar and on the empty board. */
+export function NewTicketButton({
+  onCreate,
+  onImport,
+}: {
+  onCreate: () => void;
+  onImport?: () => void;
+}) {
+  return (
+    <NewSplitButton
+      label="新增任務"
+      newItem="新增一張"
+      importItem="從 CSV／Excel 匯入多張"
+      onNew={onCreate}
+      onImport={onImport}
+    />
+  );
+}
 
 interface TicketToolbarProps {
   caps: TicketCapabilities;
@@ -94,26 +114,9 @@ export function TicketToolbar({
       {spaceControl}
 
       {canCreate ? (
-        <SplitButton
-          label="新增任務"
-          startIcon={<Plus size={17} />}
-          onClick={onCreate}
-          items={
-            caps.canImport
-              ? [
-                  {
-                    label: '新增一張',
-                    icon: <Plus size={16} />,
-                    onClick: onCreate,
-                  },
-                  {
-                    label: '從 CSV／Excel 匯入多張',
-                    icon: <Upload size={16} />,
-                    onClick: onImport,
-                  },
-                ]
-              : undefined
-          }
+        <NewTicketButton
+          onCreate={onCreate}
+          onImport={caps.canImport ? onImport : undefined}
         />
       ) : caps.canImport ? (
         <Button

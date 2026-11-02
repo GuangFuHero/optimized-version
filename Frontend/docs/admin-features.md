@@ -59,9 +59,9 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 刪除站點、列表上直接改營運狀態與指派 Team；後台（`/stations`、後台地圖）新增的站點帶 `source: "official"`；前台 `/map` 不能新增站點
 - 前台修改建議審查：依欄位決定採用／不採用（可改寫入值），一次送出附一則審核備註（`mergeStationSuggestions` 只收一個 `reviewNote`；ticket 寫「每一則附備註」，為了保持一次送出不可分割，維持一則）
 - 批次匯入（試算 → 欄位對應 → 確認，失敗列可下載）與匯出（單一類型，CSV／Excel）
-- 匯入是新增站點的一種方式：放在「新增站點」的下拉，列表空的時候也在「新增站點」旁；要同時有 `station.add` 和 `station.import` 才看得到，沒有新增權限的人不顯示（糖 2026-10-31）
+- 匯入是新增站點的一種方式：放在「新增站點 ▾」的下拉，列表空的時候也是同一顆「新增站點 ▾」；要同時有 `station.add` 和 `station.import` 才看得到，沒有新增權限的人不顯示（糖 2026-10-31）
 - 匯入一律官方：後端批次匯入新增的站點一律存 `source: "official"`，不看檔案的 source 欄（CSV、Excel、貼上的內容都一樣）
-- 匯入新增的站點用預設營運狀態（營運中），和其他新增的站點一樣；更新既有站點不改營運狀態
+- 匯入新增的站點用預設營運狀態（開設中），和其他新增的站點一樣；更新既有站點不改營運狀態
 - 匯入視窗依設計稿：欄位對應一列三組、「試算結果」只列失敗的列（第幾列／欄位／原因）
 - .xlsx 表頭列上方的標題列（Numbers 匯出時會把表格名稱放在第一列）或空白列，由後端略過
 - 權限一律看後端回的 capabilities（`station.add/edit/delete/review/assign/import/export/view_history/view_pii`）
@@ -88,7 +88,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - 匯出只能選一種類型，不套用列表篩選
 - 站點照片只能附 URL，沒有上傳端點
 - 站點群（大場地底下掛多個子站，列表縮排、子站標「屬：○○」）：後端已有欄位（`stations.child_station_uuid`，指向母站），但 GraphQL 還沒開放，前端讀不到；開放後再做（糖 2026-10-31）
-- 營運狀態文字（開設中／暫時關閉／永久關閉）待產品確認是否改為兩態，只需改 `station/operational-status.ts`
+- 營運狀態三種：開設中／暫停服務／已關閉（`station/operational-status.ts`，跟前台同名，標籤一律淡底，糖 2026-11-01）。設計要暫停服務寫一行原因（`pauseReason`），後端還沒有這個欄位
 
 ### `/tickets`
 

@@ -1,4 +1,4 @@
-import type { BadgeTone } from '@rescue-frontend/ui';
+import type { TagTone } from '@rescue-frontend/ui';
 
 export type OperationalStatus =
   | 'active'
@@ -22,7 +22,7 @@ export const OPERATIONAL_STATUS_OPTIONS: readonly {
 export function getOperationalStatusMeta(value: string | null | undefined): {
   value: string;
   label: string;
-  tone: BadgeTone;
+  tone: TagTone;
 } {
   if (!value) return { value: '', label: '—', tone: 'neutral' };
   const option = OPERATIONAL_STATUS_OPTIONS.find((o) => o.value === value);

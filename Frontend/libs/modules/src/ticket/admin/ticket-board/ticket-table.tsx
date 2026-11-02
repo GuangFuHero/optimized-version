@@ -18,7 +18,6 @@ import {
   Flag,
   Image as ImageIcon,
   PanelRightOpen,
-  Plus,
   SearchX,
   Trash2,
   UserPlus,
@@ -48,6 +47,7 @@ import {
   type TaskRow,
   type TicketRow,
 } from './model/ticket-row';
+import { NewTicketButton } from './ticket-toolbar';
 
 const { color, radius, typography } = designTokens;
 
@@ -83,8 +83,10 @@ interface TicketTableProps {
   onOpenTicket: (uuid: string) => void;
   /** 刪除任務單 from a row's ⋯; offered only where the ticket's `viewerCanDelete` allows. */
   onDeleteTicket: (row: TicketRow) => void;
-  /** 新增任務 in the empty board; unset when the viewer may not add. */
+  /** 新增任務 ▾ in the empty board; unset when the viewer may not add. */
   onCreate?: () => void;
+  /** The import in that ▾; unset when the viewer may not import. */
+  onImport?: () => void;
   /**
    * The spaces the filters let through, in order. The tickets come paged and sorted by the
    * server, so the spaces sit above them on the first page.
@@ -109,6 +111,7 @@ export function TicketTable({
   onOpenTicket,
   onDeleteTicket,
   onCreate,
+  onImport,
   spaces = NO_SPACES,
   spaceTags = NO_TAGS,
   onOpenSpace,
@@ -233,16 +236,10 @@ export function TicketTable({
             <EmptyState
               icon={<ClipboardList />}
               title="還沒有任何任務單"
-              description="民眾在前台報案，或後台人員按「新增任務」代為登錄後，任務單會出現在這裡。"
+              description="民眾在前台報案、後台人員按「新增任務」代為登錄，或從「新增任務 ▾」匯入 CSV／Excel 後，任務單會出現在這裡。"
               action={
                 onCreate ? (
-                  <Button
-                    size="sm"
-                    startIcon={<Plus size={15} />}
-                    onClick={onCreate}
-                  >
-                    新增任務
-                  </Button>
+                  <NewTicketButton onCreate={onCreate} onImport={onImport} />
                 ) : null
               }
             />
@@ -476,7 +473,7 @@ export function NeedProgressBar({
       value={progress.total - progress.waiting}
       max={progress.total}
       valueText={progress.label}
-      complete={progress.fulfilled === progress.total}
+      complete={progress.done}
       tone="neutral"
       size={size}
     />

@@ -238,7 +238,7 @@ export function toTicketRow(ticket: TicketListItem): TicketRow {
   };
 }
 
-/** 需求 · 承接進度 for one row: how many of its needs still wait for someone, and the bar's fill. */
+/** 需求 · 承接進度 for one row: how many of its needs still wait for someone, and whether all are met. */
 export interface NeedProgress {
   /** Needs counted: every one but a cancelled one. */
   total: number;
@@ -248,8 +248,8 @@ export interface NeedProgress {
   fulfilled: number;
   /** The line over the bar; null when there is no need to count. */
   label: string | null;
-  /** The bar's fill, 0–1: the share of needs not waiting. */
-  ratio: number;
+  /** Every need has everyone it asked for: the bar turns green. 在途 3／3, all taken, is not yet. */
+  done: boolean;
 }
 
 /**
@@ -274,7 +274,7 @@ export function needProgress(tasks: readonly TaskRow[]): NeedProgress {
     waiting,
     fulfilled,
     label,
-    ratio: total > 0 ? (total - waiting) / total : 0,
+    done: total > 0 && fulfilled === total,
   };
 }
 

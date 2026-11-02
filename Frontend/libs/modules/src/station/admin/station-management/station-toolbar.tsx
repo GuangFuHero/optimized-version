@@ -1,15 +1,35 @@
 'use client';
 
 import { Box, Typography } from '@mui/material';
-import { Button, designTokens, SplitButton } from '@rescue-frontend/ui';
-import { GitPullRequestArrow, Plus, Upload } from 'lucide-react';
+import { Button, designTokens } from '@rescue-frontend/ui';
+import { GitPullRequestArrow } from 'lucide-react';
 import { type ReactNode } from 'react';
 
+import { NewSplitButton } from '../../../admin/shared/new-split-button';
 import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
 import type { StationCapabilities } from './hooks/use-station-capabilities';
 import { offersImport } from './model/import';
 
 const { color, typography } = designTokens;
+
+/** 新增站點 ▾, the same in the toolbar and on the empty list. */
+export function NewStationButton({
+  onNew,
+  onImport,
+}: {
+  onNew: () => void;
+  onImport?: () => void;
+}) {
+  return (
+    <NewSplitButton
+      label="新增站點"
+      newItem="新增一個"
+      importItem="從 CSV／Excel 匯入多個"
+      onNew={onNew}
+      onImport={onImport}
+    />
+  );
+}
 
 interface StationToolbarProps {
   caps: StationCapabilities;
@@ -89,26 +109,9 @@ export function StationToolbar({
 
       {/* Its ▾ holds 新增一個 and the import, for a viewer who may import; a plain button otherwise. */}
       {caps.canAdd ? (
-        <SplitButton
-          label="新增站點"
-          startIcon={<Plus size={17} />}
-          onClick={onNew}
-          items={
-            offersImport(caps)
-              ? [
-                  {
-                    label: '新增一個',
-                    icon: <Plus size={16} />,
-                    onClick: onNew,
-                  },
-                  {
-                    label: '從 CSV／Excel 匯入多個',
-                    icon: <Upload size={16} />,
-                    onClick: onImport,
-                  },
-                ]
-              : undefined
-          }
+        <NewStationButton
+          onNew={onNew}
+          onImport={offersImport(caps) ? onImport : undefined}
         />
       ) : null}
     </Box>

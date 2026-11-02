@@ -157,7 +157,7 @@ describe('needProgress', () => {
       ),
     );
     expect(progress.label).toBe('待承接 1／2');
-    expect(progress.ratio).toBe(0.5);
+    expect(progress.done).toBe(false);
   });
 
   it('counts an open need with no quantity as waiting until someone is on it', () => {
@@ -174,7 +174,19 @@ describe('needProgress', () => {
       rows({ status: 'fulfilled', quantity: 1, assignedCount: 1 }),
     );
     expect(progress.label).toBe('1／1 已滿足');
-    expect(progress.ratio).toBe(1);
+    expect(progress.done).toBe(true);
+  });
+
+  it('is not done while every need has its people but they are still on the way', () => {
+    const progress = needProgress(
+      rows(
+        { quantity: 1, assignedCount: 1 },
+        { quantity: 2, assignedCount: 2 },
+        { quantity: 1, assignedCount: 1 },
+      ),
+    );
+    expect(progress.label).toBe('在途 3／3');
+    expect(progress.done).toBe(false);
   });
 
   it('leaves a cancelled need out', () => {
@@ -190,6 +202,7 @@ describe('needProgress', () => {
 
   it('has no line without a need to count', () => {
     expect(needProgress([]).label).toBeNull();
+    expect(needProgress([]).done).toBe(false);
     expect(needProgress(rows({ status: 'canceled' })).label).toBeNull();
   });
 });

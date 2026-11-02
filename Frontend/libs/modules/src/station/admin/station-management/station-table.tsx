@@ -2,7 +2,6 @@
 
 import { Box, Typography } from '@mui/material';
 import {
-  Button,
   Callout,
   DataTable,
   designTokens,
@@ -14,10 +13,8 @@ import {
   ChevronRight,
   MapPin,
   MapPinPlus,
-  Plus,
   SearchX,
   ShieldCheck,
-  Upload,
   type LucideIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -26,6 +23,7 @@ import { Muted } from '../../../admin/shared/muted';
 import { getStationTypeIcon, type StationTypeValue } from '../../type-options';
 import { FreshnessCell } from '../../../admin/shared/freshness-cell';
 import { StatusBadge, TypeChip } from './station-cells';
+import { NewStationButton } from './station-toolbar';
 import type { StationRow } from './model/station-row';
 
 const { color, radius, typography } = designTokens;
@@ -65,7 +63,7 @@ interface StationTableProps {
   now: Date;
   /** Set when the viewer may create stations: the no-stations state offers it. */
   onNew?: () => void;
-  /** Set when the viewer may import: the no-stations state offers it. */
+  /** Set when the viewer may import: the no-stations state offers it in 新增站點 ▾. */
   onImport?: () => void;
   onOpenStation: (uuid: string) => void;
   renderStatus?: (row: StationRow) => ReactNode;
@@ -180,8 +178,8 @@ export function StationTable({
 }
 
 /**
- * "No stations yet" offers whichever of import and create the viewer may do; "nothing matches"
- * only asks them to loosen the filters.
+ * "No stations yet" offers the toolbar's 新增站點 ▾, the import in its ▾ for a viewer who may import;
+ * "nothing matches" only asks them to loosen the filters.
  */
 export function StationEmptyState({
   hasAnyStation,
@@ -205,26 +203,10 @@ export function StationEmptyState({
     <StationEmptyLook
       icon={MapPinPlus}
       title="還沒有任何資源站點"
-      caption="新增站點或從 CSV 匯入後，會出現在這裡。"
+      caption="從「新增站點 ▾」一筆筆建立或從 CSV／Excel 匯入後，會出現在這裡。"
       actions={
-        onNew || onImport ? (
-          <>
-            {onImport ? (
-              <Button
-                size="sm"
-                variant="outline"
-                startIcon={<Upload size={15} />}
-                onClick={onImport}
-              >
-                匯入 CSV
-              </Button>
-            ) : null}
-            {onNew ? (
-              <Button size="sm" startIcon={<Plus size={15} />} onClick={onNew}>
-                新增站點
-              </Button>
-            ) : null}
-          </>
+        onNew ? (
+          <NewStationButton onNew={onNew} onImport={onImport} />
         ) : undefined
       }
     />

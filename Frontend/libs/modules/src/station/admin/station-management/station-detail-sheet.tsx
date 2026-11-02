@@ -21,7 +21,6 @@ import {
   StationForm,
   StationFormLayout,
 } from '../../form';
-import { getOperationalStatusMeta } from '../../operational-status';
 import type { StationCapabilities } from './hooks/use-station-capabilities';
 import {
   readOnlyCaption,
@@ -35,7 +34,6 @@ import {
   StationHistoryPanel,
   useLoadedStationVersion,
 } from './station-history-panel';
-import { tagToneOf } from '../../../admin/shared/tag-tone';
 
 const { color, radius, typography } = designTokens;
 
@@ -153,7 +151,6 @@ function StationDetailContent({
   const view = toStationDetailView(station, {
     canViewPii: station.viewerCanViewPii,
   });
-  const status = getOperationalStatusMeta(station.operationalStatus);
   const version = useLoadedStationVersion(station.uuid);
   const teamName = useCurrentUser().data?.active_identity?.team ?? null;
 
@@ -171,8 +168,8 @@ function StationDetailContent({
               gap: '8px',
             }}
           >
-            {/* Pale, as in the table: solid is only for what must be seen at once (TAG-103). */}
-            <Tag tone={tagToneOf(status.tone)}>{status.label}</Tag>
+            {/* The table's own tag, pale: solid is only for what must be seen at once (TAG-103). */}
+            <StatusBadge status={station.operationalStatus} />
             {view.isOfficial ? (
               <Tag tone="info" icon={<ShieldCheck size={13} />}>
                 官方
