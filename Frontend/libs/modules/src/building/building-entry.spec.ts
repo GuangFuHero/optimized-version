@@ -55,6 +55,15 @@ describe('buildingEntries', () => {
     ).toEqual(['丙', '丁', '乙', '戊', '甲']);
   });
 
+  it('does not put more tickets first: they may all be done, as closed ones count too', () => {
+    expect(
+      buildingEntries(
+        [counted('光復鄉公所', 9, 0), counted('大進國小', 1, 0)],
+        undefined,
+      ).map((b) => b.name),
+    ).toEqual(['大進國小', '光復鄉公所']);
+  });
+
   it('goes back to name order between buildings as short and as full as each other', () => {
     expect(
       buildingEntries(
