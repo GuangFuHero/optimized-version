@@ -122,6 +122,9 @@ handoff 版已搬進 `libs/ui`（`Button`、`SplitButton`）；標「未實作�
 - **z 軸 base 沒有陰影**；卡片的 `shadow.md` 跟著卡片走。
 - **前台字級**：民眾在戶外用手機看、很多是長輩，所以**手機的字比桌機大**（`textSize`），與設計系統自己的 `typographyMobile`（手機縮小）方向相反，兩者不要混用。
 - **handoff 元件的規則**：Tag（TAG-101〜106，說明用、不能點，24px）、Progress（PRG-101〜105，膠囊、一定有數字，「已滿」只看人數）、SearchField（INP-103，工具列的搜尋框是膠囊 44px）、設定元件（SET-101〜104，立即生效用 Switch、要儲存才生效用 Checkbox）已在 `libs/ui`，全文在各元件檔頭。站點圖示（ICON-101〜103，前台、後台都用原型的 Lucide 圖示）在 `libs/modules/src/station/station-type-icon.tsx`，見「圖示」。
+- **管理平台工具列放不下一排**（例：1024 寬＋側欄）：「N 筆任務」「N 站」先掉到下一行，「新增 ▾」留在第一排
+  最右（BTN-115）；搜尋框放不下完整提示時只寫規則「至少打 2 個字」（INP-105），框變寬再換回。做法在
+  `libs/modules` 的 `admin/shared/admin-toolbar.tsx`、`toolbar-search.tsx`。
 
 ## 圖示
 

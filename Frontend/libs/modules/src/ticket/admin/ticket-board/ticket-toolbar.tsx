@@ -1,16 +1,14 @@
 'use client';
 
-import { Box, Typography } from '@mui/material';
-import { Button, designTokens } from '@rescue-frontend/ui';
+import { Button } from '@rescue-frontend/ui';
 import { Upload } from 'lucide-react';
 import { type ReactNode } from 'react';
 
+import { AdminToolbar } from '../../../admin/shared/admin-toolbar';
 import { NewSplitButton } from '../../../admin/shared/new-split-button';
 import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
 import { boardCountLine } from '../space/board-count';
 import type { TicketCapabilities } from './hooks/use-ticket-capabilities';
-
-const { color, typography } = designTokens;
 
 /** 新增任務 ▾, the same in the toolbar and on the empty board. */
 export function NewTicketButton({
@@ -76,40 +74,30 @@ export function TicketToolbar({
   exportControl,
 }: TicketToolbarProps) {
   const canCreate = caps.canAdd && onCreate !== undefined;
+  // `q` matches the title, the description, and the needs' names and properties — never the
+  // address or the contact, which it leaves out on purpose (tickets resolver).
+  const search = (
+    <ToolbarSearch
+      query={query}
+      onQueryChange={onQueryChange}
+      activeFilterCount={activeFilterCount}
+      filterOpen={filterOpen}
+      onToggleFilter={onToggleFilter}
+      onClear={onClear}
+      placeholder="打 2 個字以上搜尋標題／描述／需求…"
+      shortPlaceholder="至少打 2 個字"
+      ariaLabel="搜尋任務單"
+    />
+  );
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        gap: '8px',
-      }}
-    >
-      {/* `q` matches the title, the description, and the needs' names and properties — never
-          the address or the contact, which it leaves out on purpose (tickets resolver). */}
-      <ToolbarSearch
-        query={query}
-        onQueryChange={onQueryChange}
-        activeFilterCount={activeFilterCount}
-        filterOpen={filterOpen}
-        onToggleFilter={onToggleFilter}
-        onClear={onClear}
-        placeholder="打 2 個字以上搜尋標題／描述／需求…"
-        ariaLabel="搜尋任務單"
-      />
-
-      <Typography
-        sx={{
-          ...typography.body[300],
-          color: color.fg.neutral.muted,
-          ml: 'auto',
-        }}
-      >
-        {count === null
+    <AdminToolbar
+      search={search}
+      count={
+        count === null
           ? '— 筆任務'
-          : boardCountLine(count, spaceCount, moreSpaces)}
-      </Typography>
-
+          : boardCountLine(count, spaceCount, moreSpaces)
+      }
+    >
       {caps.canExport ? exportControl : null}
       {spaceControl}
 
@@ -127,6 +115,6 @@ export function TicketToolbar({
           匯入任務單
         </Button>
       ) : null}
-    </Box>
+    </AdminToolbar>
   );
 }

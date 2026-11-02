@@ -1,16 +1,14 @@
 'use client';
 
-import { Box, Typography } from '@mui/material';
-import { Button, designTokens } from '@rescue-frontend/ui';
+import { Button } from '@rescue-frontend/ui';
 import { GitPullRequestArrow } from 'lucide-react';
 import { type ReactNode } from 'react';
 
+import { AdminToolbar } from '../../../admin/shared/admin-toolbar';
 import { NewSplitButton } from '../../../admin/shared/new-split-button';
 import { ToolbarSearch } from '../../../admin/shared/toolbar-search';
 import type { StationCapabilities } from './hooks/use-station-capabilities';
 import { offersImport } from './model/import';
-
-const { color, typography } = designTokens;
 
 /** 新增站點 ▾, the same in the toolbar and on the empty list. */
 export function NewStationButton({
@@ -63,35 +61,22 @@ export function StationToolbar({
   exportControl,
 }: StationToolbarProps) {
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        gap: '8px',
-      }}
+    <AdminToolbar
+      search={
+        <ToolbarSearch
+          query={query}
+          onQueryChange={onQueryChange}
+          activeFilterCount={activeFilterCount}
+          filterOpen={filterOpen}
+          onToggleFilter={onToggleFilter}
+          onClear={onClear}
+          placeholder="打 2 個字以上搜尋站名／地址…"
+          shortPlaceholder="至少打 2 個字"
+          ariaLabel="搜尋站點"
+        />
+      }
+      count={`${count} 站`}
     >
-      <ToolbarSearch
-        query={query}
-        onQueryChange={onQueryChange}
-        activeFilterCount={activeFilterCount}
-        filterOpen={filterOpen}
-        onToggleFilter={onToggleFilter}
-        onClear={onClear}
-        placeholder="打 2 個字以上搜尋站名／地址…"
-        ariaLabel="搜尋站點"
-      />
-
-      <Typography
-        sx={{
-          ...typography.body[300],
-          color: color.fg.neutral.muted,
-          ml: 'auto',
-        }}
-      >
-        {count} 站
-      </Typography>
-
       {caps.canReview ? (
         <Button
           variant="neutral"
@@ -114,6 +99,6 @@ export function StationToolbar({
           onImport={offersImport(caps) ? onImport : undefined}
         />
       ) : null}
-    </Box>
+    </AdminToolbar>
   );
 }
