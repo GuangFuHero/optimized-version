@@ -1,7 +1,7 @@
 """Whether 重複審核 still waits on a ticket, read from its cards.
 
-TicketType.verificationStatus tells a reviewer (ADR-443); suspectedDuplicateOf tells anyone which
-tickets those are, and nothing more (ADR-454).
+TicketType.verificationStatus tells anyone the state and the tickets (ADR-443, ADR-455);
+suspectedDuplicateOf tells anyone which tickets those are, and nothing more (ADR-454).
 """
 
 import uuid as uuid_mod
@@ -33,6 +33,14 @@ query($q: String!) {
 SUSPECTED = """
 query($q: String!) {
     tickets(q: $q, limit: 200) { items { title suspectedDuplicateOf { uuid title } } }
+}
+"""
+
+BOTH = """
+query($q: String!) {
+    tickets(q: $q, limit: 200) {
+        items { title verificationStatus { state } suspectedDuplicateOf { uuid } }
+    }
 }
 """
 
@@ -283,15 +291,17 @@ async def test_a_need_card_counts_on_the_ticket_the_need_is_on_now(client, redis
 
 
 @pytest.mark.asyncio
-async def test_only_a_caller_with_ai_duplicate_view_is_told(client, redis):
-    """The 重複審核 page's own capability; anyone else, signed in or not, reads null."""
+async def test_every_caller_is_told_without_ai_duplicate_view(client, redis):
+    """Every role sees the 疑似重複 tag (ADR-455): signed in without the capability, or not at all."""
     _, viewer = await _create_user_with_grants(redis, [(Perm.TICKET_VIEW, "all")])
     tag = uuid_mod.uuid4().hex[:10]
     a, b = await _ticket(f"{tag} a"), await _ticket(f"{tag} b")
+    await _ticket(f"{tag} alone")
     await _card(await _need(a), await _need(b))
 
-    assert await _states(client, viewer, tag) == {"a": None, "b": None}
-    assert await _states(client, None, tag) == {"a": None, "b": None}
+    told = {"a": _disputed((b, f"{tag} b")), "b": _disputed((a, f"{tag} a")), "alone": None}
+    assert await _states(client, viewer, tag) == told
+    assert await _states(client, None, tag) == told
 
 
 async def _card_statements(client, token: str | None, tag: str, query: str = LIST) -> tuple[dict, int]:
@@ -311,23 +321,23 @@ async def _card_statements(client, token: str | None, tag: str, query: str = LIS
 
 
 @pytest.mark.asyncio
-async def test_a_page_reads_the_cards_once_and_not_at_all_without_the_capability(client, redis):
-    """One statement on the cards for a page of 2 or 8 tickets; none for a caller the field is null to."""
+async def test_a_page_reads_the_cards_once_whoever_asks(client, redis):
+    """One statement on the cards for a page of 2 or 8 tickets, for a reviewer and a guest alike.
+
+    Asked with suspectedDuplicateOf in the same query, the two share it: still one.
+    """
     _, reviewer = await _create_user_with_grants(redis, REVIEWER)
-    _, viewer = await _create_user_with_grants(redis, [(Perm.TICKET_VIEW, "all")])
     counts = []
     for size in (1, 4):
         tag = uuid_mod.uuid4().hex[:10]
         for i in range(size):
             a, b = await _ticket(f"{tag} a{i}"), await _ticket(f"{tag} b{i}")
             await _card(await _need(a), await _need(b))
-        states, statements = await _card_statements(client, reviewer, tag)
-        assert len(states) == 2 * size and all(states.values())
-        counts.append(statements)
-    assert counts == [1, 1]
-
-    _, statements = await _card_statements(client, viewer, tag)
-    assert statements == 0
+        for token, query in ((reviewer, LIST), (None, LIST), (None, BOTH)):
+            states, statements = await _card_statements(client, token, tag, query)
+            assert len(states) == 2 * size and all(states.values())
+            counts.append(statements)
+    assert counts == [1] * 6
 
 
 @pytest.mark.asyncio

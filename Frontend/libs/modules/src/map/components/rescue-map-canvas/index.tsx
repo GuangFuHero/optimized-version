@@ -167,7 +167,19 @@ type MarkerClusterConstructor = new (
 function getPinnedMarkers(
   markers: readonly RescueMapMarkerItem[],
 ): RescueMapMarkerItem[] {
-  return markers.filter((marker) => !isCoarseTicket(marker));
+  return markers.filter(
+    (marker) => !isCoarseTicket(marker) && !marker.building,
+  );
+}
+
+/**
+ * Open buildings' entries, kept out of the clusters: a building is never counted among the tickets
+ * around it, and its entry stays in sight at any zoom.
+ */
+function getBuildingMarkers(
+  markers: readonly RescueMapMarkerItem[],
+): RescueMapMarkerItem[] {
+  return markers.filter((marker) => marker.building);
 }
 
 /** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定 —— 另加選用的 pin／tooltip。 */
@@ -205,8 +217,15 @@ function syncMarkerTooltip(marker: L.Marker, item: RescueMapMarkerItem) {
   });
 }
 
-/** A selected opt-in pin rises above its neighbours. */
+/**
+ * A selected opt-in pin rises above its neighbours. A building's entry lies under the rest, a guest's
+ * cell counts included: they are what may be waiting there.
+ */
 function getMarkerZIndexOffset(item: RescueMapMarkerItem): number {
+  if (item.building) {
+    return -1000;
+  }
+
   return item.pin?.selected ? 1000 : 0;
 }
 
@@ -895,6 +914,8 @@ export function RescueMapCanvas({
   const markerLayerRef = useRef<MarkerClusterGroupLike | null>(null);
   const overlayLayerRef = useRef<L.LayerGroup | null>(null);
   const cellLayerRef = useRef<L.LayerGroup | null>(null);
+  const buildingLayerRef = useRef<L.LayerGroup | null>(null);
+  const buildingHandlesRef = useRef<Map<string, MarkerHandle>>(new Map());
   const cellLayerSignatureRef = useRef<string | null>(null);
   const cellLabelsRef = useRef<LocationCellLabel[]>([]);
   const previewMarkerRef = useRef<L.Marker | null>(null);
@@ -973,7 +994,9 @@ export function RescueMapCanvas({
 
     const overlayLayer = L.layerGroup();
     const cellLayer = L.layerGroup();
+    const buildingLayer = L.layerGroup();
     const markerHandles = markerHandlesRef.current;
+    const buildingHandles = buildingHandlesRef.current;
     const closureAreaHandles = closureAreaHandlesRef.current;
     const publicZoneHandles = publicZoneHandlesRef.current;
     let cancelled = false;
@@ -981,10 +1004,19 @@ export function RescueMapCanvas({
     mapRef.current = map;
     overlayLayerRef.current = overlayLayer;
     cellLayerRef.current = cellLayer;
+    buildingLayerRef.current = buildingLayer;
 
     overlayLayer.addTo(map);
     // Drawn by the cell effect below, which runs after this one in the same commit.
     cellLayer.addTo(map);
+    buildingLayer.addTo(map);
+    syncMarkerLayer({
+      markerLayer: buildingLayer,
+      items: getBuildingMarkers(controllerRef.current.markers),
+      handles: buildingHandles,
+      leaflet: L,
+      onMarkerClickRef,
+    });
 
     void import(MARKER_CLUSTER_MODULE_ID).then(() => {
       if (cancelled || !mapRef.current) {
@@ -1184,11 +1216,13 @@ export function RescueMapCanvas({
       cancelled = true;
 
       markerHandles.clear();
+      buildingHandles.clear();
       closureAreaHandles.clear();
       publicZoneHandles.clear();
       markerLayerRef.current = null;
       overlayLayerRef.current = null;
       cellLayerRef.current = null;
+      buildingLayerRef.current = null;
       cellLayerSignatureRef.current = null;
       cellLabelsRef.current = [];
       queueAreaLabelsRef.current = null;
@@ -1319,6 +1353,18 @@ export function RescueMapCanvas({
   // 以 id 增量同步 marker：只移除消失的、加入新增的，內容相同時不動 DOM，
   // 避免每次資料刷新都整批 clearLayers 再重建造成閃爍。
   useEffect(() => {
+    const buildingLayer = buildingLayerRef.current;
+
+    if (buildingLayer) {
+      syncMarkerLayer({
+        markerLayer: buildingLayer,
+        items: getBuildingMarkers(controller.markers),
+        handles: buildingHandlesRef.current,
+        leaflet: L,
+        onMarkerClickRef,
+      });
+    }
+
     const markerLayer = markerLayerRef.current;
 
     if (!markerLayer) {

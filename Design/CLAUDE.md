@@ -26,7 +26,7 @@ Design/
 ```
 
 - 給工程師的程式碼放 `handoff/<元件名>/index.tsx`。現在放在 `components/` 的，下次交付時搬到 `handoff/`，並在 CHANGELOG 記一筆。
-- handoff 的 TSX：給前台畫面的用 MUI 圖示（`@mui/icons-material`），給後台畫面的用 Lucide（`lucide-react`）。
+- handoff 的 TSX：前台、後台畫面都用 Lucide（`lucide-react`），不用 `@mui/icons-material`。
 - 只改 `Design/` 底下的檔案。`Design/` 以外的改動（根目錄 `README.md`、`logo/`、`Frontend/`…）不要自己做：程式碼放 `handoff/`，其他在 #uiux 告訴工程師，由他們開 PR 到 `main`。
 - 不要改名或搬動既有路徑，除非在 CHANGELOG 記下「舊路徑 → 新路徑」：前端文件與程式註解連結到這些路徑。
 - 不要新增大型二進位檔（影片、大圖、新字型）。截圖壓到合理大小再放。

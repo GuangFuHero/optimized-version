@@ -641,8 +641,8 @@ async def get_volunteer_metric(
 
     Each instant reads every need and assignment as of then from audit_logs (see _versions_at), so a
     released claim, a stopped need or a merge changes only the days after it. The caller's scope and
-    the type, status and area filters read today's ticket rows, and so does the check for a need left
-    open on a closed ticket (`left_open` below).
+    the type, status and area filters read today's ticket rows, and so do the checks for a need left
+    on a closed ticket (`left_open` and `left_cancelled` below).
     """
     instants = _as_of_instants(x, start_date, end_date, tz)
     days = values(column("t", DateTime(timezone=True)), name="days").data([(t,) for _, t in instants])
@@ -673,14 +673,21 @@ async def get_volunteer_metric(
     # the needs too, so their history says when they stopped; these have none and recruit on no
     # day. The ticket is the need's own now, since a merge may have moved the need off another.
     left_need, its_ticket = aliased(TicketTask, name="left_need"), aliased(Tickets, name="its_ticket")
-    left_open = (
+    left_on_its_ticket = (
         select(left_need.uuid)
         .join(its_ticket, its_ticket.uuid == left_need.ticket_uuid)
-        .where(
-            left_need.delete_at.is_(None),
-            left_need.status.in_(OPEN_NEED_STATUSES),
-            or_(its_ticket.delete_at.is_not(None), its_ticket.status.notin_(OPEN_TICKET_STATUSES)),
-        )
+        .where(left_need.delete_at.is_(None))
+    )
+    left_open = left_on_its_ticket.where(
+        left_need.status.in_(OPEN_NEED_STATUSES),
+        or_(its_ticket.delete_at.is_not(None), its_ticket.status.notin_(OPEN_TICKET_STATUSES)),
+    )
+    # Deleting a ticket, or merging it away, cancels or moves every need on it, filled ones included.
+    # A need still standing on a ticket cancelled or deleted now was left there by a hand close too, and
+    # counts as canceled on every day. One left on a completed ticket still stands, as ended.
+    left_cancelled = left_on_its_ticket.where(
+        left_need.status != "canceled",
+        or_(its_ticket.delete_at.is_not(None), its_ticket.status == "cancelled"),
     )
     needs = (
         select(
@@ -693,6 +700,7 @@ async def get_volunteer_metric(
             need_type.label("task_type"),
             func.coalesce(claims.c.people, 0).label("matched"),
             need.c.row_id.in_(left_open).label("left_open"),
+            need.c.row_id.in_(left_cancelled).label("left_cancelled"),
         )
         .select_from(need)
         .join(Tickets, Tickets.uuid == field(need, "ticket_uuid", UUID))
@@ -701,8 +709,8 @@ async def get_volunteer_metric(
         .subquery()
     )
     c = needs.c
-    # Standing at `t`: created by then and neither canceled nor deleted.
-    live = and_(c.created_at < c.t, c.delete_at.is_(None), c.status != "canceled")
+    # Standing at `t`: created by then, neither canceled nor deleted, and not left on a cancelled ticket.
+    live = and_(c.created_at < c.t, c.delete_at.is_(None), c.status != "canceled", ~c.left_cancelled)
     # Recruiting at `t`: standing, not yet filled, not stopped by hand, not left open as above.
     recruiting = and_(live, c.status.in_(OPEN_NEED_STATUSES), c.stopped_at.is_(None), ~c.left_open)
     short = c.quantity - c.matched

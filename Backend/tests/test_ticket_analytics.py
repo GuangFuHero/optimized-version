@@ -645,6 +645,43 @@ async def test_the_gap_leaves_out_needs_left_open_on_a_closed_ticket(db):
 
 
 @pytest.mark.asyncio
+async def test_needs_left_on_a_cancelled_or_deleted_ticket_count_in_nothing(db):
+    """A ticket cancelled or deleted by hand kept its needs, open or filled; they count as canceled every day.
+
+    The needs left on a completed ticket still count in the totals, as ended, and recruit on no day.
+    """
+    owner, person = await _make_user(db), await _make_user(db)
+    completed, cancelled, deleted = (
+        _make_ticket(owner, status=s) for s in ("completed", "cancelled", "pending")
+    )
+    deleted.delete_at = datetime.now(UTC) - timedelta(days=5)
+    db.add_all([completed, cancelled, deleted])
+    await db.flush()
+    left = [
+        (
+            _need(str(closed.uuid), owner, quantity=3),
+            _need(str(closed.uuid), owner, quantity=1, status="fulfilled", completed_at=datetime.now(UTC)),
+            _need(str(closed.uuid), owner, quantity=20, task_type="supply"),
+        )
+        for closed in (completed, cancelled, deleted)
+    ]
+    db.add_all([need for needs in left for need in needs])
+    await db.flush()
+    taken_at = datetime.now(UTC) - timedelta(days=9)
+    db.add_all([claim for need, _, _ in left for claim in _taken(need, [person], at=taken_at)])
+    db.add_all([claim for _, filled, _ in left for claim in _taken(filled, [person], at=taken_at)])
+    await db.flush()
+
+    # The completed ticket's alone: 3 + 1 people asked for, a place taken on each, one supply need.
+    for end_date in (None, date.today() - timedelta(days=7)):
+        assert await _volunteers(db, "needed", end_date=end_date) == [{"count": 4}]
+        assert await _volunteers(db, "matched", end_date=end_date) == [{"count": 2}]
+        assert await _volunteers(db, "supply_needs", end_date=end_date) == [{"count": 1}]
+    for metric in ("gap", "gap_needs", "supply_unclaimed"):
+        assert await _volunteers(db, metric) == [{"count": 0}]
+
+
+@pytest.mark.asyncio
 async def test_a_ticket_closed_since_shows_its_gap_on_the_days_before(db):
     """Closing a ticket now closes its needs with it, so their history says when they stopped being short.
 

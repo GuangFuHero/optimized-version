@@ -20,7 +20,24 @@ export interface SubmitError {
 const REFUSALS: Record<string, string> = {
   ...QUANTITY_REFUSALS,
   'At most 20 tasks are allowed': '一次最多 20 項需求。',
+  'Building map not found':
+    '這一棟已經不在了，可能剛被刪除。請關掉後重新選地點。',
 };
+
+/**
+ * Filed in a building (`place_ticket`), refusals that quote what was sent: the floor, or the floor
+ * with its areas. Matched by their fixed part.
+ */
+const BUILDING_REFUSALS: ReadonlyArray<[RegExp, string]> = [
+  [
+    /^Floor '.*' is not in this building$/,
+    '這一棟沒有這一層，請關掉後重新選一層。',
+  ],
+  [
+    /^Room on .* must be one of /,
+    '請從清單選你在這一層的哪一區，清單裡沒有就選「其他」。',
+  ],
+];
 
 export function submitErrorMessage(error: SubmitError | undefined): string {
   // A sign-in that ran out comes two ways, and the first looks like a dropped connection, so it is
@@ -36,8 +53,11 @@ export function submitErrorMessage(error: SubmitError | undefined): string {
     return '連線失敗，請確認網路後再試一次。';
   }
 
+  const message = error?.graphQLErrors?.[0]?.message ?? '';
+
   return (
-    REFUSALS[error?.graphQLErrors?.[0]?.message ?? ''] ??
+    REFUSALS[message] ??
+    BUILDING_REFUSALS.find(([pattern]) => pattern.test(message))?.[1] ??
     '送出失敗，請稍後再試一次。'
   );
 }

@@ -97,7 +97,7 @@ def _ticket(**overrides) -> dict:
 
 
 def _task(name, ack=None) -> TaskSubmission:
-    return TaskSubmission(task_type="rescue", task_name=name, acknowledged_duplicate_of=ack)
+    return TaskSubmission(task_type="rescue", task_name=name, quantity=1, acknowledged_duplicate_of=ack)
 
 
 async def _count(db, model) -> int:
@@ -245,7 +245,7 @@ async def test_a_station_acknowledging_another_station_is_still_held(db, engine,
 
 
 def _help_request(*names, **overrides) -> dict:
-    """The site's request with one rescue need per name (a rescue may leave out how many)."""
+    """The site's request with one rescue need per name, each for one person."""
     fields = {
         "geometry": POINT,
         "title": "民生街淹水",
@@ -253,7 +253,7 @@ def _help_request(*names, **overrides) -> dict:
         "contact_name": "王小明",
         "contact_phone": "0912345678",
         "secondary_location": None,
-        "tasks": [{"task_type": "rescue", "task_name": name} for name in names],
+        "tasks": [{"task_type": "rescue", "task_name": name, "quantity": 1} for name in names],
         "photo_urls": ["https://duk.tw/flood.jpg"],
     }
     return fields | overrides
@@ -568,7 +568,9 @@ async def test_end_to_end_with_fast_v2(db, monkeypatch):
     )
     await db.commit()
     await db.refresh(actor)
-    pump = TaskSubmission(task_type="rescue", task_name="一樓淹水需要抽水機", task_description="水深及膝")
+    pump = TaskSubmission(
+        task_type="rescue", task_name="一樓淹水需要抽水機", task_description="水深及膝", quantity=1
+    )
 
     held = await submit_new_ticket(db, actor=actor, tasks=[pump], **_ticket())
     assert isinstance(held, SubmissionHeld)
@@ -580,6 +582,7 @@ async def test_end_to_end_with_fast_v2(db, monkeypatch):
         task_type="rescue",
         task_name=pump.task_name,
         task_description=pump.task_description,
+        quantity=1,
         acknowledged_duplicate_of=suspect.related_uuid,
     )
     filed = await submit_new_ticket(db, actor=actor, tasks=[acked], **_ticket())
@@ -622,7 +625,7 @@ async def test_with_the_real_engine_acknowledging_a_task_far_away_does_not_file_
     await db.commit()
     await db.refresh(actor)
     pump = TaskSubmission(
-        task_type="rescue", task_name="一樓淹水需要抽水機", acknowledged_duplicate_of=far_task
+        task_type="rescue", task_name="一樓淹水需要抽水機", quantity=1, acknowledged_duplicate_of=far_task
     )
 
     result = await submit_new_ticket(db, actor=actor, tasks=[pump], **_ticket())

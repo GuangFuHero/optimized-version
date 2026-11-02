@@ -24,6 +24,7 @@ function ticket(overrides: Record<string, unknown> = {}) {
     priority: 'high',
     taskType: 'hr',
     auditStatus: 'no_audit',
+    suspectedDuplicateOf: [],
     createdBy: 'user-1',
     createdAt: null,
     updatedAt: null,
@@ -78,6 +79,24 @@ describe('withTicketStatus', () => {
     expect(updated.title).toBe(marker.title);
     expect(updated.position).toEqual(marker.position);
     expect(updated.ticketMeta?.createdBy).toBe('user-1');
+  });
+});
+
+describe('mapTicketToMarker', () => {
+  it('carries the tickets this one may repeat, for the list card and the detail', () => {
+    const others = [{ uuid: 'ticket-2', title: '光復路 28 號一樓清淤' }];
+
+    expect(
+      markerOf({ suspectedDuplicateOf: others }).ticketMeta
+        ?.suspectedDuplicateOf,
+    ).toEqual(others);
+    expect(markerOf().ticketMeta?.suspectedDuplicateOf).toEqual([]);
+  });
+
+  it('carries none for a ticket read without them, as one just filed or read in a building', () => {
+    const marker = markerOf({ suspectedDuplicateOf: undefined });
+
+    expect(marker.ticketMeta?.suspectedDuplicateOf).toBeUndefined();
   });
 });
 

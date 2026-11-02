@@ -1,26 +1,21 @@
 'use client';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
-import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded';
-import MedicalServicesRoundedIcon from '@mui/icons-material/MedicalServicesRounded';
-import SupportRoundedIcon from '@mui/icons-material/SupportRounded';
 import { Box } from '@mui/material';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, Icons } from '@rescue-frontend/ui';
 
 const { color, radius } = designTokens;
 
 /** A glyph for each `task_type` that `formatTicketTypeLabel` names; anything else gets a clipboard. */
-const NEED_TYPE_ICONS: Record<string, typeof AssignmentRoundedIcon> = {
-  rescue: SupportRoundedIcon,
-  hr: GroupsRoundedIcon,
-  supply: Inventory2RoundedIcon,
-  medical: MedicalServicesRoundedIcon,
+const NEED_TYPE_ICONS: Record<string, typeof Icons.clipboardList> = {
+  rescue: Icons.lifeBuoy,
+  hr: Icons.users,
+  supply: Icons.resources,
+  medical: Icons.briefcaseMedical,
 };
 
 export function needTypeIcon(taskType: string) {
-  return NEED_TYPE_ICONS[taskType.trim().toLowerCase()] ?? AssignmentRoundedIcon;
+  return NEED_TYPE_ICONS[taskType.trim().toLowerCase()] ?? Icons.clipboardList;
 }
 
 interface NeedProgressBarProps {

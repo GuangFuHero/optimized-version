@@ -119,7 +119,7 @@ describe('validateNeedDraft', () => {
     description: '',
   };
 
-  it('needs a name, and a quantity unless the need is a rescue', () => {
+  it('needs a name, and a quantity, a rescue too', () => {
     expect(validateNeedDraft(draft)).toEqual({});
     expect(validateNeedDraft({ ...draft, taskName: '  ' })).toEqual({
       taskName: '請填寫需求名稱',
@@ -129,7 +129,7 @@ describe('validateNeedDraft', () => {
     });
     expect(
       validateNeedDraft({ ...draft, taskType: 'rescue', quantity: '' }),
-    ).toEqual({});
+    ).toEqual({ quantity: '請填寫數量' });
   });
 
   it('takes only a whole number of at least 1', () => {

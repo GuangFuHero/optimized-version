@@ -10,6 +10,7 @@ import {
   parseTicketFilters,
   parseTicketPage,
   searchHint,
+  ticketFiltersKey,
   TICKET_MAP_AREA_KEYS,
   TICKET_PAGE_KEYS,
   toExtentVariables,
@@ -240,5 +241,15 @@ describe('NEED_FILTER_TYPES', () => {
   it('lists the design order 搜救 / 人力 / 物資 first, then every other need type once', () => {
     expect(NEED_FILTER_TYPES.slice(0, 3)).toEqual(['rescue', 'hr', 'supply']);
     expect([...NEED_FILTER_TYPES].sort()).toEqual([...NEED_TYPES].sort());
+  });
+
+  it('keys the filters as the server takes them, so a keyword too short to send is no new set', () => {
+    const pending = { ...EMPTY_TICKET_FILTERS, status: 'pending' as const };
+    expect(ticketFiltersKey({ ...pending, q: '水' })).toBe(
+      ticketFiltersKey(pending),
+    );
+    expect(ticketFiltersKey({ ...pending, q: '水管' })).not.toBe(
+      ticketFiltersKey(pending),
+    );
   });
 });

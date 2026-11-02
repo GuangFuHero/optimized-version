@@ -106,12 +106,11 @@ async def test_a_citizen_files_a_help_request_with_its_needs(db):
         },
         tasks=[
             {"task_type": "hr", "task_name": "清淤人力", "task_description": None, "quantity": 3},
-            # A rescue need alone may leave out how many (ADR-291 point 7).
             {
                 "task_type": "rescue",
                 "task_name": "人員受困／急難",
                 "task_description": None,
-                "quantity": None,
+                "quantity": 1,
             },
         ],
     )
@@ -142,7 +141,7 @@ async def test_a_citizen_files_a_help_request_with_its_needs(db):
     address = await _address_of(db, ticket.uuid)
     assert (address.landmark_note, address.floor, address.room) == ("花蓮縣光復鄉中山路100號", "1", "2")
     assert await _needs_of(db, ticket.uuid) == [
-        ("人員受困／急難", "rescue", None, "user"),
+        ("人員受困／急難", "rescue", 1, "user"),
         ("清淤人力", "hr", 3, "user"),
     ]
 
@@ -201,7 +200,7 @@ GOOD_NEED = {"task_type": "hr", "task_name": "清淤人力", "task_description":
             "^task_name must be at most 200 characters$",
         ),
         ({"task_type": "hr", "task_name": "搬運", "quantity": 0}, "^quantity must be at least 1$"),
-        # Any need but a rescue must say how many (ADR-291 point 7).
+        # Every need must say how many, a rescue too (ADR-291 point 7).
         ({"task_type": "hr", "task_name": "搬運", "quantity": None}, "^quantity is required for a hr task$"),
         (
             {"task_type": "supply", "task_name": "便當", "quantity": None},
@@ -210,6 +209,10 @@ GOOD_NEED = {"task_type": "hr", "task_name": "清淤人力", "task_description":
         (
             {"task_type": "medical", "task_name": "換藥", "quantity": None},
             "^quantity is required for a medical task$",
+        ),
+        (
+            {"task_type": "rescue", "task_name": "人員受困", "quantity": None},
+            "^quantity is required for a rescue task$",
         ),
     ],
     ids=[
@@ -220,6 +223,7 @@ GOOD_NEED = {"task_type": "hr", "task_name": "清淤人力", "task_description":
         "hr-no-quantity",
         "supply-no-quantity",
         "medical-no-quantity",
+        "rescue-no-quantity",
     ],
 )
 async def test_one_bad_need_refuses_the_whole_request(db, bad_need, message):

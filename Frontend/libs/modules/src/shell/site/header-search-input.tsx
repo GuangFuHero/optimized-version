@@ -1,6 +1,5 @@
 'use client';
 
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import { Box, InputBase } from '@mui/material';
 import { usePathname } from 'next/navigation';
 import {
@@ -82,7 +81,7 @@ function SiteHeaderSearchField({
           'aria-label': '搜尋',
         }}
         startAdornment={
-          <SearchRoundedIcon
+          <Icons.search
             sx={{
               fontSize: compact ? 18 : 20,
               color: color.fg.neutral.muted,

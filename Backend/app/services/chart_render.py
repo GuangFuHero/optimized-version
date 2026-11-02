@@ -134,8 +134,8 @@ _TICKET_CATALOG = {
         "default_chart_type": "bar",
         "allowed_chart_types": ("bar", "pie"),
     },
-    # The dashboard's volunteer cards say up to which day on a line of their own, so the two totals
-    # leave it out of their descriptions.
+    # The dashboard's three volunteer cards say up to which day on a line of their own and show these
+    # descriptions as they are, on the card and on hover, so the three leave the day out.
     "volunteers_needed": {
         "label": "志工需求人數",
         "unit": "人",
@@ -148,7 +148,7 @@ _TICKET_CATALOG = {
         "label": "已媒合",
         "unit": "人次",
         "description": (
-            f"沒取消的{_VOLUNTEER_KINDS}需求已經有幾個人承接，同一人接兩項算兩次"
+            f"沒取消的{_VOLUNTEER_KINDS}需求上已經被承接的名額，同一人接兩筆算 2"
             "（含已額滿、已結束；只算有寫人數的）"
         ),
         "allowed_x": (None, "category"),
@@ -159,8 +159,8 @@ _TICKET_CATALOG = {
         "label": "志工缺口",
         "unit": "人",
         "description": (
-            f"還在招募的{_VOLUNTEER_KINDS}需求尚缺幾人；截至查詢期間最後一天，未指定則為今日。"
-            "趨勢固定按天，為每天結束時的缺口，依異動紀錄還原當天的任務與志工"
+            f"還在招募的{_VOLUNTEER_KINDS}需求還差幾人（不是需求人數減已媒合）。"
+            "跟任務管理列表上方的「志工缺口」是同一個數字"
         ),
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar",

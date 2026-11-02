@@ -1,12 +1,11 @@
 'use client';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import { Alert, Button, ButtonBase, Stack, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useMutation } from 'urql';
 
 import { CreateTicketTaskDocument } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { addNeedErrorMessage } from '../needs/claim-error';
 import { useNeedClaim } from '../needs/need-claim-provider';
@@ -18,9 +17,11 @@ import {
 } from './add-need';
 import type { SuspectTicket } from './duplicate-suspects';
 import { DuplicateWarnDialog } from './duplicate-warn-dialog';
+import { EmergencyCallNotice } from './emergency-call-notice';
 import {
   emptyNeed,
   isQuantityMissing,
+  rescueNeedRow,
   type NeedDraft,
 } from './help-request-form';
 import { NeedDraftRow } from './need-draft-row';
@@ -159,7 +160,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
             fontWeight: 500,
           }}
         >
-          <AddRoundedIcon sx={{ fontSize: 16 }} />
+          <Icons.plus sx={{ fontSize: 16 }} />
           再加一件需要的幫忙
         </ButtonBase>
         {dialog}
@@ -203,6 +204,8 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
         onChange={setDraft}
         onRemove={close}
       />
+      {/* As in a new request: right under the need, once it is someone trapped or hurt. */}
+      {rescueNeedRow([draft]) === 0 ? <EmergencyCallNotice /> : null}
       {error ? <Alert severity="error">{error}</Alert> : null}
       <Stack direction="row" spacing={1}>
         <Button
