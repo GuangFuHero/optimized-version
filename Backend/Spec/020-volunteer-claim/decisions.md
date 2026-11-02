@@ -202,7 +202,8 @@ asks for things (84 lunch boxes are not 84 volunteers), and a rescue's head coun
 signing up. Supply needs are counted instead: how many there are, and how many nobody has taken yet. The
 dashboard's 志工缺口 and the one above the ticket board give the same number, and the dashboard can also say
 how many needs are still short of people. A need with more people than it asks for no longer lowers the
-gap, and a need left open on a request closed by hand no longer raises it.
+gap, and a need left open on a request closed by hand no longer raises it. A need left on a request
+deleted by hand counts nowhere, as if it had been deleted with it.
 
 **Context**: Two queries count the gap. The ticket board's `ticketStats` (`tickets_repository.stats`)
 reads today's rows: an open need with a quantity, on a request that is neither completed, cancelled nor
@@ -238,12 +239,17 @@ dashboard's biggest bar of volunteers.
    The request is the one the need is on now, so a need a merge moved is judged by the request it moved
    to. Every other need keeps its history from audit_logs: a request completed or merged away since still
    shows its needs' gap on the days before. An unclaimed supply need follows the same rule.
+   A need still standing today, open or filled, on a request cancelled or deleted today counts as
+   canceled on every day, in every number here, `volunteers_needed`, `volunteers_matched` and
+   `supply_needs` included: deleting a request or merging it away cancels or moves every need on it,
+   filled ones included, so such a need was left by a hand close too. One left on a completed request
+   still counts in those three, as ended.
 6. **Today the two agree** for the same caller: both read `ticket.view`'s scope, and
    `test_the_dashboard_gap_is_the_ticket_boards` (`tests/test_analytics_api.py`) checks `volunteer_gap`
    and `volunteer_gap_needs` against `gapPeople` and `gapNeeds` over needs covering each old difference.
 7. **`volunteers_needed` and `volunteers_matched` count as before, over 人力 needs.** They count every such
-   need not canceled, full and stopped ones included, so the gap is not their difference, and the
-   dashboard does not show it as one.
+   need not canceled, full and stopped ones included (and none left on a cancelled request, point 5), so
+   the gap is not their difference, and the dashboard does not show it as one.
 
 **Consequences**:
 ➕ The dashboard and the ticket board show one 志工缺口, in people, and both can say how many needs are short.
@@ -252,8 +258,9 @@ dashboard's biggest bar of volunteers.
 it counts 人力 needs.
 ➖ The dashboard's per-type volunteer chart is left with one bar, 人力. The designer asked whether to drop it
 or split it by need name; that is the frontend's to draw, and nothing here changes for it.
-➖ A request closed by hand before 2026-09-28 leaves its open needs out of the days before its close too:
-the gap reads the history of needs and claims, not of requests.
+➖ A request closed by hand before 2026-09-28 leaves its open needs out of the gap on the days before its
+close too, and a cancelled or deleted one all its needs out of every number: the counts read the history
+of needs and claims, not of requests.
 ➖ The rule lives in two queries. A change to it goes into both `tickets_repository.stats` and
 `get_volunteer_metric`; the test in point 6 is there to catch a change made to only one.
 ◾ The scope, type and area filters still read today's request rows, as before.

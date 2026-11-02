@@ -353,26 +353,30 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
         ("supply_needs_unclaimed", "還沒人接的物資需求", "筆"),
     ):
         assert (body["tickets"][y]["label"], body["tickets"][y]["unit"]) == (label, unit)
-    # The cards say up to which day on their own line, so the two totals do not repeat it; the gap
-    # and its needs, which also have a trend, still say how a day is read. All four say they count
-    # 人力 needs only.
+    # The three cards show their descriptions as the designer worded them and say up to which day on
+    # their own line, so these do not repeat it; each says it counts 人力 needs only. The gap's needs,
+    # which no card describes, still say how a day is read.
     assert body["tickets"]["volunteers_needed"]["description"] == (
         "沒取消的人力需求總共要幾個人（含已額滿、已結束；只算有寫人數的）"
     )
-    assert "截至" not in body["tickets"]["volunteers_matched"]["description"]
-    for y in ("volunteers_matched", "volunteer_gap", "volunteer_gap_needs"):
-        assert "人力需求" in body["tickets"][y]["description"]
+    assert body["tickets"]["volunteers_matched"]["description"] == (
+        "沒取消的人力需求上已經被承接的名額，同一人接兩筆算 2（含已額滿、已結束；只算有寫人數的）"
+    )
+    assert body["tickets"]["volunteer_gap"]["description"] == (
+        "還在招募的人力需求還差幾人（不是需求人數減已媒合）。跟任務管理列表上方的「志工缺口」是同一個數字"
+    )
+    assert "人力需求" in body["tickets"]["volunteer_gap_needs"]["description"]
+    assert "截至查詢期間最後一天" in body["tickets"]["volunteer_gap_needs"]["description"]
     for y in ("supply_needs", "supply_needs_unclaimed"):
         assert body["tickets"][y]["allowed_x"] == ["none"]
     for y in ("volunteer_gap", "volunteer_gap_needs"):
-        assert "截至查詢期間最後一天" in body["tickets"][y]["description"]
         assert body["tickets"][y]["allowed_x"] == ["category", "date", "none"]
         # The trend is daily whatever x_granularity says, and the catalog says so; the rest do both.
         assert body["tickets"][y]["allowed_x_granularities"] == ["day"]
         assert body["tickets"][y]["max_range_days"] == MAX_TREND_DAYS
     assert body["tickets"]["volunteers_needed"]["allowed_x"] == ["category", "none"]
     assert body["tickets"]["total_tickets"]["allowed_x_granularities"] == ["day", "week"]
-    assert "依異動紀錄還原" in body["tickets"]["volunteer_gap"]["description"]
+    assert "趨勢固定按天" in body["tickets"]["volunteer_gap_needs"]["description"]
     operating = body["stations"]["operating_station_count"]
     assert (operating["label"], operating["unit"]) == ("開設中站點數", "站")
     assert "不受日期影響" in operating["description"]
