@@ -48,7 +48,8 @@ export function TicketStatsStrip({
             icon: <Users size={15} />,
             tone: 'warning',
             count: gap,
-            title: '還沒結束的單裡，有寫數量的需求還差幾人',
+            title:
+              '還沒結束的單裡，還在招募的人力需求還差幾人（只算有寫人數的）',
           },
         ]}
       />

@@ -11,9 +11,9 @@ import type { TicketStatus } from './ticket-row';
 export interface TicketStats {
   total: number;
   byStatus: Record<TicketStatus, number>;
-  /** People still missing across open tickets. */
+  /** People still missing across the 人力 needs still recruiting on open tickets; other types add none. */
   gapPeople: number;
-  /** Open needs still missing at least one person. */
+  /** Those needs still missing at least one person. */
   gapNeeds: number;
 }
 
