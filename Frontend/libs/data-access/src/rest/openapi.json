@@ -5827,7 +5827,7 @@
           "地圖圖磚"
         ],
         "summary": "Get Tile",
-        "description": "Proxy a map tile from an upstream source with 7-day Redis caching.\n\n**type** — `satellite` or `road`\n\n**source** — one of:\n- satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)\n- road: `osm` (image/png), `carto` (image/png)\n\n**z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)\n\n**layer** — Required only for `source=sinica`. Pass the Sinica layer name\n(e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/\nfor available layers. Ignored for all other sources.\n\nReturns the raw tile image bytes with the upstream Content-Type header.\nOn upstream error, returns a 1×1 transparent PNG.",
+        "description": "Proxy a map tile from an upstream source with 7-day Redis caching.\n\n**type** — `satellite` or `road`\n\n**source** — one of:\n- satellite: `nasa_gibs` (image/png), `eox` (image/jpeg), `nlsc` (image/jpeg), `sinica` (image/png)\n- road: `osm` (image/png), `carto` (image/png)\n\n**z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)\n\n**layer** — Required only for `source=sinica`. Pass the Sinica layer name\n(e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/\nfor available layers. Ignored for all other sources.\n\nReturns the raw tile image bytes with the upstream Content-Type header.\nOn upstream error, returns a 1×1 transparent PNG.",
         "operationId": "get_tile_api_v1_map_tile__type____source___z___x___y__get",
         "parameters": [
           {
