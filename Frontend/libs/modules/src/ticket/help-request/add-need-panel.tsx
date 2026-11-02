@@ -18,9 +18,11 @@ import {
 } from './add-need';
 import type { SuspectTicket } from './duplicate-suspects';
 import { DuplicateWarnDialog } from './duplicate-warn-dialog';
+import { EmergencyCallNotice } from './emergency-call-notice';
 import {
   emptyNeed,
   isQuantityMissing,
+  rescueNeedRow,
   type NeedDraft,
 } from './help-request-form';
 import { NeedDraftRow } from './need-draft-row';
@@ -203,6 +205,8 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
         onChange={setDraft}
         onRemove={close}
       />
+      {/* As in a new request: right under the need, once it is someone trapped or hurt. */}
+      {rescueNeedRow([draft]) === 0 ? <EmergencyCallNotice /> : null}
       {error ? <Alert severity="error">{error}</Alert> : null}
       <Stack direction="row" spacing={1}>
         <Button
