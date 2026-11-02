@@ -37,10 +37,12 @@ class MyStationSuggestionType:
     )
     new_value: str = strawberry.field(description="The value suggested, the latest if sent again")
     comment: str | None
-    status: str = strawberry.field(description="'pending', 'approved', 'rejected', or 'revoked'")
+    status: str = strawberry.field(
+        description="'pending', 'approved', 'adopted_edited', 'not_adopted', 'rejected', or 'revoked'"
+    )
     applied_value: str | None = strawberry.field(
-        description="Approved or revoked: the value the reviewer wrote, which may differ from newValue. "
-        "Otherwise null, as for an approval from before merges were recorded"
+        description="Approved, adopted_edited or revoked: the value the reviewer wrote, which may differ "
+        "from newValue. Otherwise null, as for an approval from before merges were recorded"
     )
     submitted_at: datetime = strawberry.field(description="When it was first sent")
     decided_at: datetime | None = strawberry.field(
@@ -52,11 +54,12 @@ class MyStationSuggestionType:
 def _applied_value(item: suggestion_service.MySuggestion) -> str | None:
     """The value the deciding merge wrote for this row's field, as text.
 
-    Only for a row the merge approved. A station's `comment` is left out: merges before ADR-332 could
-    write that internal note, and the reviewer's text is not the submitter's to read.
+    Only for a row whose value the merge took, as suggested or edited. A station's `comment` is left
+    out: merges before ADR-332 could write that internal note, and the reviewer's text is not the
+    submitter's to read.
     """
     row, merge = item.suggestion, item.merge
-    if merge is None or row.status not in ("approved", "revoked"):
+    if merge is None or row.status not in ("approved", "adopted_edited", "revoked"):
         return None
     if row.target_type == "station" and row.field_name == "comment":
         return None

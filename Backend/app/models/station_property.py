@@ -40,8 +40,10 @@ class StationUpdateSuggestion(Base, UUIDPKMixin, TimestampMixin):
 
     Polymorphic target (like ``photos.ref_type``/``ref_uuid``): ``target_type`` selects
     the table and ``target_uuid`` the row. ``new_value`` is stored as text. A reviewer decides
-    every pending row on a field at once through a merge, which sets ``merge_uuid``; a revoked
-    merge moves its approved rows to ``revoked``.
+    every pending row on a field at once through a merge, which sets ``merge_uuid``: rows whose
+    value an approval wrote are ``approved`` and the rest ``not_adopted``, or all ``adopted_edited``
+    when the written value matches none; a rejection rejects them all. A revoked merge moves its
+    ``approved`` and ``adopted_edited`` rows to ``revoked``.
     """
 
     __tablename__ = "station_update_suggestions"
@@ -52,7 +54,8 @@ class StationUpdateSuggestion(Base, UUIDPKMixin, TimestampMixin):
     # The field's value at the last submit, as text ('' for none); null on rows from before ADR-420.
     previous_value: Mapped[str | None] = mapped_column(String)
     comment: Mapped[str | None] = mapped_column(String)
-    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/approved/rejected/revoked
+    # pending/approved/adopted_edited/not_adopted/rejected/revoked
+    status: Mapped[str] = mapped_column(String(20), default="pending")
     review_note: Mapped[str | None] = mapped_column(String)
     reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"))
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
@@ -61,13 +64,18 @@ class StationUpdateSuggestion(Base, UUIDPKMixin, TimestampMixin):
     __table_args__ = (
         # The public pending-field lookup runs on every station list, so it gets its own index.
         Index(
-            "ix_station_update_suggestions_pending", "target_uuid",
+            "ix_station_update_suggestions_pending",
+            "target_uuid",
             postgresql_where=text("status = 'pending'"),
         ),
         # One open suggestion per person per field: resubmitting updates it instead.
         Index(
-            "uq_station_update_suggestions_pending_author", "created_by", "target_uuid", "field_name",
-            unique=True, postgresql_where=text("status = 'pending'"),
+            "uq_station_update_suggestions_pending_author",
+            "created_by",
+            "target_uuid",
+            "field_name",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
         ),
     )
 

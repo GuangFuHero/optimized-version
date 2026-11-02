@@ -3,13 +3,15 @@
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects import postgresql
 
+from app.core.permissions import Perm
 from app.graphql.geo.queries import _has_pending_suggestion
 from app.models.geo import Station
+from app.models.notification import Notification
 from app.models.station_property import StationProperty, StationSuggestionMerge, StationUpdateSuggestion
-from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
+from tests.test_graphql.conftest import _create_user_with_grants, _create_user_with_role, auth_header, test_db
 
 # ---------------------------------------------------------------------------
 # GraphQL query strings
@@ -66,13 +68,22 @@ query($uuid: UUID!) {
 
 async def _create(client, token, target_type, target_uuid, field_name, new_value, comment=None):
     """Helper: POST a createStationSuggestion mutation, return the JSON body."""
-    resp = await client.post("/graphql", json={
-        "query": CREATE_SUGGESTION,
-        "variables": {"input": {
-            "targetType": target_type, "targetUuid": target_uuid,
-            "fieldName": field_name, "newValue": new_value, "comment": comment,
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_SUGGESTION,
+            "variables": {
+                "input": {
+                    "targetType": target_type,
+                    "targetUuid": target_uuid,
+                    "fieldName": field_name,
+                    "newValue": new_value,
+                    "comment": comment,
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     return resp.json()
 
 
@@ -80,12 +91,17 @@ async def _create(client, token, target_type, target_uuid, field_name, new_value
 # suggestableFields query
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_suggestable_fields_exposes_enum_options(client):
     """The schema query returns data types and enum options for station fields."""
-    resp = await client.post("/graphql", json={
-        "query": SUGGESTABLE_FIELDS, "variables": {"t": "station"},
-    })
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": SUGGESTABLE_FIELDS,
+            "variables": {"t": "station"},
+        },
+    )
     fields = {f["fieldName"]: f for f in resp.json()["data"]["suggestableFields"]}
     assert fields["type"]["dataType"] == "string"
     assert fields["type"]["enumOptions"] is None
@@ -98,15 +114,20 @@ async def test_suggestable_fields_exposes_enum_options(client):
 @pytest.mark.asyncio
 async def test_suggestable_fields_rejects_unknown_target(client):
     """An unknown target type surfaces an error."""
-    resp = await client.post("/graphql", json={
-        "query": SUGGESTABLE_FIELDS, "variables": {"t": "nonsense"},
-    })
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": SUGGESTABLE_FIELDS,
+            "variables": {"t": "nonsense"},
+        },
+    )
     assert any("Unknown target_type" in e["message"] for e in resp.json()["errors"])
 
 
 # ---------------------------------------------------------------------------
 # createStationSuggestion
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_login_user_can_suggest_station_field(client, login_user_auth, sample_station):
@@ -121,9 +142,7 @@ async def test_login_user_can_suggest_station_field(client, login_user_auth, sam
 
 
 @pytest.mark.asyncio
-async def test_login_user_can_suggest_property_field(
-    client, login_user_auth, sample_station_property
-):
+async def test_login_user_can_suggest_property_field(client, login_user_auth, sample_station_property):
     """A suggestion can target a station_property row."""
     _, token = login_user_auth
     body = await _create(client, token, "station_property", sample_station_property, "quantity", "10")
@@ -173,9 +192,7 @@ async def test_create_rejects_non_integer(client, login_user_auth, sample_statio
 async def test_create_rejects_missing_target(client, login_user_auth):
     """Suggesting against a non-existent station errors."""
     _, token = login_user_auth
-    body = await _create(
-        client, token, "station", "00000000-0000-0000-0000-000000000000", "name", "X"
-    )
+    body = await _create(client, token, "station", "00000000-0000-0000-0000-000000000000", "name", "X")
     assert any("not found" in e["message"].lower() for e in body["errors"])
 
 
@@ -200,6 +217,7 @@ async def test_create_rejects_malformed_target_uuid(client, login_user_auth):
 # ---------------------------------------------------------------------------
 # mergeStationSuggestions / revokeStationSuggestionMerge
 # ---------------------------------------------------------------------------
+
 
 async def _gql(client, token, query, variables):
     """Helper: POST a GraphQL request, with a token when given, and return the JSON body."""
@@ -227,14 +245,21 @@ async def test_merge_applies_edited_values_across_station_and_property(
     await _create(client, user_token, "station", sample_station, "op_hour", "24h")
     await _create(client, user_token, "station_property", sample_station_property, "quantity", "42")
 
-    body = await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", "00:00-24:00"),  # edited by the reviewer
-        _decide(sample_station_property, "quantity", "42"),
-    ], note="checked by phone")
+    body = await _merge(
+        client,
+        auditor_token,
+        sample_station,
+        [
+            _decide(sample_station, "op_hour", "00:00-24:00"),  # edited by the reviewer
+            _decide(sample_station_property, "quantity", "42"),
+        ],
+        note="checked by phone",
+    )
     merge = body["data"]["mergeStationSuggestions"]
     assert merge["status"] == "applied"
     assert {(c["fieldName"], c["before"], c["after"]) for c in merge["changes"]} == {
-        ("op_hour", "08:00-18:00", "00:00-24:00"), ("quantity", "2", "42"),
+        ("op_hour", "08:00-18:00", "00:00-24:00"),
+        ("quantity", "2", "42"),
     }
 
     view = (await _gql(client, auditor_token, REVIEW_VIEW, {"uuid": sample_station}))["data"]["station"]
@@ -263,13 +288,312 @@ async def test_merge_decides_every_suggestion_on_a_field_and_leaves_others_pendi
     view = (await _gql(client, auditor_token, REVIEW_VIEW, {"uuid": sample_station}))["data"]["station"]
     assert view["pendingSuggestedFields"] == ["op_hour"]
     async with test_db() as db:
-        statuses = (await db.execute(
-            select(StationUpdateSuggestion.status).where(
-                StationUpdateSuggestion.target_uuid == sample_station,
-                StationUpdateSuggestion.field_name == "name",
+        statuses = (
+            (
+                await db.execute(
+                    select(StationUpdateSuggestion.status).where(
+                        StationUpdateSuggestion.target_uuid == sample_station,
+                        StationUpdateSuggestion.field_name == "name",
+                    )
+                )
             )
-        )).scalars().all()
+            .scalars()
+            .all()
+        )
     assert statuses == ["rejected", "rejected"]
+
+
+async def _field_statuses(target_uuid, field_name):
+    """Every suggestion on one field as (proposed value, status, merge uuid), sorted."""
+    async with test_db() as db:
+        rows = (
+            await db.execute(
+                select(
+                    StationUpdateSuggestion.new_value,
+                    StationUpdateSuggestion.status,
+                    StationUpdateSuggestion.merge_uuid,
+                ).where(
+                    StationUpdateSuggestion.target_uuid == target_uuid,
+                    StationUpdateSuggestion.field_name == field_name,
+                )
+            )
+        ).all()
+    return sorted((value, status, str(merge)) for value, status, merge in rows)
+
+
+@pytest.mark.asyncio
+async def test_approving_a_field_approves_only_the_suggestions_whose_value_it_wrote(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """Of two values on one field, the one written is approved and the other not adopted."""
+    _, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second = (await _create_user_with_role(redis, "Login User"))[1]
+    third = (await _create_user_with_role(redis, "Login User"))[1]
+    await _create(client, first, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, second, "station", sample_station, "op_hour", "09:00-17:00")
+    await _create(client, third, "station", sample_station, "op_hour", "08:00-20:00")
+
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "08:00-20:00"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
+
+    assert await _field_statuses(sample_station, "op_hour") == [
+        ("08:00-20:00", "approved", merge["uuid"]),
+        ("08:00-20:00", "approved", merge["uuid"]),
+        ("09:00-17:00", "not_adopted", merge["uuid"]),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_value_matching_no_suggestion_marks_them_all_adopted_edited(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """A value the reviewer typed is written, and every suggestion on the field counts as consulted."""
+    _, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second = (await _create_user_with_role(redis, "Login User"))[1]
+    await _create(client, first, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, second, "station", sample_station, "op_hour", "09:00-17:00")
+
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "08:00-17:00"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
+
+    assert merge["changes"][0]["after"] == "08:00-17:00"
+    assert [status for _, status, _ in await _field_statuses(sample_station, "op_hour")] == [
+        "adopted_edited",
+        "adopted_edited",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_suggestion_is_matched_as_the_merge_reads_it(
+    client, redis, auditor_auth, login_user_auth, sample_station, sample_station_property
+):
+    """A quantity matches as a number and a blank supply status as none, not as raw text."""
+    _, first = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, first, "station_property", sample_station_property, "quantity", "42")
+    await _create(client, first, "station", sample_station, "supply_status", "")
+
+    await _merge(
+        client,
+        auditor_token,
+        sample_station,
+        [
+            _decide(sample_station_property, "quantity", "042"),
+            _decide(sample_station, "supply_status", " "),
+        ],
+    )
+
+    assert [status for _, status, _ in await _field_statuses(sample_station_property, "quantity")] == [
+        "approved",
+    ]
+    assert [status for _, status, _ in await _field_statuses(sample_station, "supply_status")] == [
+        "approved",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_revoking_a_merge_revokes_only_the_adopted_suggestions(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """Approved and adopted_edited rows become revoked, the others stay, and nobody is notified."""
+    _, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second = (await _create_user_with_role(redis, "Login User"))[1]
+    await _create(client, first, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, second, "station", sample_station, "op_hour", "09:00-17:00")
+    await _create(client, first, "station", sample_station, "name", "東站")
+    await _create(client, second, "station", sample_station, "level", "5")
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "08:00-20:00"),
+                _decide(sample_station, "name", "東站（臨時）"),
+                _decide(sample_station, "level", approve=False),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
+    async with test_db() as db:
+        before = await db.scalar(select(func.count()).select_from(Notification))
+
+    revoked = await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
+
+    assert revoked["data"]["revokeStationSuggestionMerge"]["status"] == "revoked"
+    assert [(value, status) for value, status, _ in await _field_statuses(sample_station, "op_hour")] == [
+        ("08:00-20:00", "revoked"),
+        ("09:00-17:00", "not_adopted"),
+    ]
+    assert [status for _, status, _ in await _field_statuses(sample_station, "name")] == ["revoked"]
+    assert [status for _, status, _ in await _field_statuses(sample_station, "level")] == ["rejected"]
+    async with test_db() as db:
+        assert await db.scalar(select(func.count()).select_from(Notification)) == before
+
+
+@pytest.mark.asyncio
+async def test_each_suggester_is_told_whether_their_suggestion_was_adopted(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """A decision notifies each suggester, adopted or not; a rejected field is not adopted."""
+    first_uuid, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second_uuid, second = await _create_user_with_role(redis, "Login User")
+    await _create(client, first, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, second, "station", sample_station, "op_hour", "03:00-03:10")
+    await _create(client, second, "station", sample_station, "name", "來亂站")
+
+    await _merge(
+        client,
+        auditor_token,
+        sample_station,
+        [
+            _decide(sample_station, "op_hour", "08:00-20:00"),
+            _decide(sample_station, "name", approve=False),
+        ],
+    )
+
+    async with test_db() as db:
+        sent = (
+            await db.execute(
+                select(Notification.recipient_uuid, Notification.type, Notification.body).where(
+                    Notification.type.like("station_suggestion_%adopted%"),
+                    Notification.recipient_uuid.in_([first_uuid, second_uuid]),
+                )
+            )
+        ).all()
+    assert sorted((str(r), kind) for r, kind, _ in sent) == sorted(
+        [
+            (str(first_uuid), "station_suggestion_adopted"),
+            (str(second_uuid), "station_suggestion_not_adopted"),
+            (str(second_uuid), "station_suggestion_not_adopted"),
+        ]
+    )
+    assert sorted(body[body.rindex("「") :] for _, _, body in sent) == [
+        "「服務時間」的修改建議已採用。",
+        "「服務時間」的修改建議未採用。",
+        "「站點名稱」的修改建議未採用。",
+    ]
+
+
+async def _suggestion_notices(*recipients):
+    """The suggestion-outcome notices sent to the given users, as sorted (recipient, type, body)."""
+    async with test_db() as db:
+        sent = (
+            await db.execute(
+                select(Notification.recipient_uuid, Notification.type, Notification.body).where(
+                    Notification.type.like("station_suggestion_%adopted%"),
+                    Notification.recipient_uuid.in_(recipients),
+                )
+            )
+        ).all()
+    return sorted((str(r), kind, body) for r, kind, body in sent)
+
+
+async def _name_station(station_uuid, name):
+    async with test_db() as db:
+        await db.execute(update(Station).where(Station.uuid == station_uuid).values(name=name))
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_tidied_single_suggestion_is_adopted_edited_and_told_so(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """A reviewer who tidies the only suggestion marks it adopted_edited and says it was consulted."""
+    first_uuid, first = login_user_auth
+    _, auditor_token = auditor_auth
+    await _name_station(sample_station, "北站")
+    await _create(client, first, "station", sample_station, "op_hour", "8-20")
+
+    await _merge(client, auditor_token, sample_station, [_decide(sample_station, "op_hour", "08:00-20:00")])
+
+    assert [status for _, status, _ in await _field_statuses(sample_station, "op_hour")] == ["adopted_edited"]
+    assert await _suggestion_notices(first_uuid) == [
+        (str(first_uuid), "station_suggestion_adopted_edited", "「北站」的「服務時間」已參考你的建議修改。"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_typed_value_tells_every_suggester_it_was_consulted(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """Several suggestions and a value matching none: each suggester gets the adopted-with-edits notice."""
+    first_uuid, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second_uuid, second = await _create_user_with_role(redis, "Login User")
+    await _create(client, first, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, second, "station", sample_station, "op_hour", "09:00-17:00")
+
+    await _merge(client, auditor_token, sample_station, [_decide(sample_station, "op_hour", "08:00-17:00")])
+
+    assert [kind for _, kind, _ in await _suggestion_notices(first_uuid, second_uuid)] == [
+        "station_suggestion_adopted_edited",
+        "station_suggestion_adopted_edited",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_notices_name_the_station_as_it_was_before_a_rename(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """A merge that renames the station still names it the way the suggesters knew it."""
+    first_uuid, first = login_user_auth
+    _, auditor_token = auditor_auth
+    second_uuid, second = await _create_user_with_role(redis, "Login User")
+    await _name_station(sample_station, "舊站名")
+    await _create(client, first, "station", sample_station, "name", "新站名")
+    await _create(client, second, "station", sample_station, "name", "別的站名")
+
+    await _merge(client, auditor_token, sample_station, [_decide(sample_station, "name", "新站名")])
+
+    assert sorted(body for _, _, body in await _suggestion_notices(first_uuid, second_uuid)) == [
+        "你對「舊站名」的「站點名稱」的修改建議已採用。",
+        "你對「舊站名」的「站點名稱」的修改建議未採用。",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_reviewer_who_suggested_is_not_notified(client, redis, login_user_auth, sample_station):
+    """The reviewer's own suggestion is decided like any other, but they get no notice about it."""
+    first_uuid, first = login_user_auth
+    reviewer_uuid, reviewer = await _create_user_with_grants(
+        redis, ((Perm.STATION_CONTRIBUTE, "all"), (Perm.STATION_REVIEW, "all"))
+    )
+    await _create(client, reviewer, "station", sample_station, "op_hour", "08:00-20:00")
+    await _create(client, first, "station", sample_station, "op_hour", "09:00-17:00")
+
+    await _merge(client, reviewer, sample_station, [_decide(sample_station, "op_hour", "08:00-20:00")])
+
+    assert [status for _, status, _ in await _field_statuses(sample_station, "op_hour")] == [
+        "approved",
+        "not_adopted",
+    ]
+    assert [kind for _, kind, _ in await _suggestion_notices(first_uuid, reviewer_uuid)] == [
+        "station_suggestion_not_adopted",
+    ]
+    assert all(
+        recipient == str(first_uuid)
+        for recipient, _, _ in await _suggestion_notices(first_uuid, reviewer_uuid)
+    )
 
 
 @pytest.mark.asyncio
@@ -285,9 +609,15 @@ async def test_merge_refuses_unsuggested_field_and_duplicates(
         client, auditor_token, sample_station, [_decide(sample_station, "op_hour", "24h")]
     )
     assert "No pending suggestion" in unsuggested["errors"][0]["message"]
-    twice = await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "name", "A"), _decide(sample_station, "name", "B"),
-    ])
+    twice = await _merge(
+        client,
+        auditor_token,
+        sample_station,
+        [
+            _decide(sample_station, "name", "A"),
+            _decide(sample_station, "name", "B"),
+        ],
+    )
     assert "only once" in twice["errors"][0]["message"]
 
 
@@ -309,10 +639,16 @@ async def test_a_comment_suggestion_left_pending_can_still_be_rejected(
     login_uuid, _ = login_user_auth
     _, auditor_token = auditor_auth
     async with test_db() as db:
-        db.add(StationUpdateSuggestion(
-            target_type="station", target_uuid=sample_station, field_name="comment",
-            new_value="X", status="pending", created_by=login_uuid,
-        ))
+        db.add(
+            StationUpdateSuggestion(
+                target_type="station",
+                target_uuid=sample_station,
+                field_name="comment",
+                new_value="X",
+                status="pending",
+                created_by=login_uuid,
+            )
+        )
 
     approve = await _merge(client, auditor_token, sample_station, [_decide(sample_station, "comment", "X")])
     assert any("not suggestable" in e["message"] for e in approve["errors"])
@@ -325,16 +661,21 @@ async def test_a_comment_suggestion_left_pending_can_still_be_rejected(
 
 
 @pytest.mark.asyncio
-async def test_revoke_restores_before_values(
-    client, auditor_auth, login_user_auth, sample_station
-):
+async def test_revoke_restores_before_values(client, auditor_auth, login_user_auth, sample_station):
     """Revoking a merge writes the old value back and marks the merge revoked."""
     _, user_token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, user_token, "station", sample_station, "op_hour", "24h")
-    merge = (await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", "24h"),
-    ]))["data"]["mergeStationSuggestions"]
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "24h"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
 
     revoked = (await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]}))["data"]
     assert revoked["revokeStationSuggestionMerge"]["status"] == "revoked"
@@ -347,16 +688,21 @@ async def test_revoke_restores_before_values(
 
 
 @pytest.mark.asyncio
-async def test_revoke_refused_after_a_later_edit(
-    client, auditor_auth, login_user_auth, sample_station
-):
+async def test_revoke_refused_after_a_later_edit(client, auditor_auth, login_user_auth, sample_station):
     """A revoke never overwrites a value changed after the merge."""
     _, user_token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, user_token, "station", sample_station, "op_hour", "24h")
-    first = (await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", "24h"),
-    ]))["data"]["mergeStationSuggestions"]
+    first = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "24h"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
     await _create(client, user_token, "station", sample_station, "op_hour", "10:00-12:00")
     await _merge(client, auditor_token, sample_station, [_decide(sample_station, "op_hour", "10:00-12:00")])
 
@@ -373,9 +719,17 @@ async def test_revoke_skips_a_property_deleted_since_the_merge(
     _, auditor_token = auditor_auth
     await _create(client, user_token, "station", sample_station, "op_hour", "24h")
     await _create(client, user_token, "station_property", sample_station_property, "quantity", "42")
-    merge = (await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", "24h"), _decide(sample_station_property, "quantity", "42"),
-    ]))["data"]["mergeStationSuggestions"]
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "24h"),
+                _decide(sample_station_property, "quantity", "42"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
     async with test_db() as db:
         await db.execute(
             update(StationProperty)
@@ -397,9 +751,16 @@ async def test_revoke_refused_for_a_merge_that_only_rejected(
     _, user_token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, user_token, "station", sample_station, "op_hour", "24h")
-    merge = (await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", approve=False),
-    ]))["data"]["mergeStationSuggestions"]
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", approve=False),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
 
     body = await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
     assert "Nothing to revoke" in body["errors"][0]["message"]
@@ -415,9 +776,16 @@ async def test_revoke_denied_for_reviewer_without_station_revoke(
     _, user_token = login_user_auth
     _, coordinator_token = coordinator_auth
     await _create(client, user_token, "station", sample_station, "op_hour", "24h")
-    merge = (await _merge(client, coordinator_token, sample_station, [
-        _decide(sample_station, "op_hour", "24h"),
-    ]))["data"]["mergeStationSuggestions"]
+    merge = (
+        await _merge(
+            client,
+            coordinator_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "24h"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
 
     body = await _gql(client, coordinator_token, REVOKE, {"uuid": merge["uuid"]})
     assert any("Permission Denied." in e["message"] for e in body["errors"])
@@ -426,6 +794,7 @@ async def test_revoke_denied_for_reviewer_without_station_revoke(
 # ---------------------------------------------------------------------------
 # Reads: public pending names, pooled review view, review queue
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_guest_sees_pending_field_names_only(
@@ -490,9 +859,19 @@ async def test_many_submits_in_a_row_keep_working(client, redis, login_user_auth
 @pytest.mark.asyncio
 async def test_guest_cannot_suggest(client, sample_station):
     """Submitting needs an account."""
-    body = await _gql(client, None, CREATE_SUGGESTION, {"input": {
-        "targetType": "station", "targetUuid": sample_station, "fieldName": "name", "newValue": "X",
-    }})
+    body = await _gql(
+        client,
+        None,
+        CREATE_SUGGESTION,
+        {
+            "input": {
+                "targetType": "station",
+                "targetUuid": sample_station,
+                "fieldName": "name",
+                "newValue": "X",
+            }
+        },
+    )
     assert "errors" in body
 
 
@@ -507,9 +886,14 @@ async def test_operational_status_merge_stamps_status_changed_at(
     before = (await _gql(client, auditor_token, status_query, {"uuid": sample_station}))["data"]["station"]
     await _create(client, user_token, "station", sample_station, "operational_status", "temporarily_closed")
 
-    await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "operational_status", "temporarily_closed"),
-    ])
+    await _merge(
+        client,
+        auditor_token,
+        sample_station,
+        [
+            _decide(sample_station, "operational_status", "temporarily_closed"),
+        ],
+    )
 
     after = (await _gql(client, auditor_token, status_query, {"uuid": sample_station}))["data"]["station"]
     assert after["operationalStatus"] == "temporarily_closed"
@@ -517,18 +901,23 @@ async def test_operational_status_merge_stamps_status_changed_at(
 
 
 @pytest.mark.asyncio
-async def test_revoke_restores_status_changed_at(
-    client, auditor_auth, login_user_auth, sample_station
-):
+async def test_revoke_restores_status_changed_at(client, auditor_auth, login_user_auth, sample_station):
     """Undoing a wrong closure puts back when the old status began, not the time of the revoke."""
     _, user_token = login_user_auth
     _, auditor_token = auditor_auth
     status_query = "query($uuid: UUID!) { station(uuid: $uuid) { operationalStatus statusChangedAt } }"
     before = (await _gql(client, auditor_token, status_query, {"uuid": sample_station}))["data"]["station"]
     await _create(client, user_token, "station", sample_station, "operational_status", "temporarily_closed")
-    merge = (await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "operational_status", "temporarily_closed"),
-    ]))["data"]["mergeStationSuggestions"]
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "operational_status", "temporarily_closed"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
 
     await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
 
@@ -557,9 +946,14 @@ async def test_supply_status_merge_stamps_it(client, auditor_auth, login_user_au
     _, auditor_token = auditor_auth
     await _create(client, user_token, "station", sample_station, "supply_status", "飲用水見底")
 
-    await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "supply_status", "飲用水見底"),
-    ])
+    await _merge(
+        client,
+        auditor_token,
+        sample_station,
+        [
+            _decide(sample_station, "supply_status", "飲用水見底"),
+        ],
+    )
 
     after = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
     assert after["supplyStatus"] == "飲用水見底"
@@ -591,15 +985,24 @@ async def test_revoke_restores_supply_status_and_when_it_was_set(
     _, auditor_token = auditor_auth
     async with test_db() as db:
         await db.execute(
-            update(Station).where(Station.uuid == sample_station).values(
+            update(Station)
+            .where(Station.uuid == sample_station)
+            .values(
                 supply_status="尿布不足", supply_status_updated_at=datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
             )
         )
     before = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
     await _create(client, user_token, "station", sample_station, "supply_status", "飲用水見底")
-    merge = (await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "supply_status", "飲用水見底"),
-    ]))["data"]["mergeStationSuggestions"]
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "supply_status", "飲用水見底"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
 
     await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
 
@@ -608,9 +1011,7 @@ async def test_revoke_restores_supply_status_and_when_it_was_set(
 
 
 @pytest.mark.asyncio
-async def test_free_text_over_the_limit_is_refused(
-    client, auditor_auth, login_user_auth, sample_station
-):
+async def test_free_text_over_the_limit_is_refused(client, auditor_auth, login_user_auth, sample_station):
     """A comment or review note past 1000 characters is a clear error, not a stored blob."""
     _, user_token = login_user_auth
     _, auditor_token = auditor_auth
@@ -683,9 +1084,16 @@ async def test_a_merge_whose_reviewer_is_gone_reads_a_null_reviewer(
     _, user_token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, user_token, "station", sample_station, "op_hour", "24h")
-    merge = (await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", "24h"),
-    ]))["data"]["mergeStationSuggestions"]
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "24h"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
     async with test_db() as db:
         await db.execute(
             update(StationSuggestionMerge)
@@ -736,10 +1144,16 @@ async def test_my_suggestions_list_only_yours_with_the_value_you_saw(
     assert len(rows) == 1
     row = rows[0]
     assert (row["targetType"], row["fieldName"], row["previousValue"], row["newValue"]) == (
-        "station", "op_hour", "08:00-18:00", "24h",
+        "station",
+        "op_hour",
+        "08:00-18:00",
+        "24h",
     )
     assert (row["comment"], row["status"], row["appliedValue"], row["decidedAt"]) == (
-        "the sign says so", "pending", None, None,
+        "the sign says so",
+        "pending",
+        None,
+        None,
     )
     assert row["submittedAt"]
     assert row["station"] == {"uuid": sample_station, "opHour": "08:00-18:00"}
@@ -766,19 +1180,25 @@ async def test_a_field_without_a_value_was_recorded_as_empty(client, login_user_
 async def test_my_suggestions_show_what_the_reviewer_wrote_and_when(
     client, auditor_auth, login_user_auth, sample_station
 ):
-    """Approved with the reviewer's own value, and rejected: each says how it ended, and when."""
+    """Adopted with the reviewer's own value, and rejected: each says how it ended, and when."""
     _, token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, token, "station", sample_station, "op_hour", "24h")
     await _create(client, token, "station", sample_station, "name", "光復國小")
-    await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", "00:00-24:00"),
-        _decide(sample_station, "name", approve=False),
-    ], note="for the review record")
+    await _merge(
+        client,
+        auditor_token,
+        sample_station,
+        [
+            _decide(sample_station, "op_hour", "00:00-24:00"),
+            _decide(sample_station, "name", approve=False),
+        ],
+        note="for the review record",
+    )
 
     rows = {r["fieldName"]: r for r in await _mine(client, token)}
 
-    assert rows["op_hour"]["status"] == "approved"
+    assert rows["op_hour"]["status"] == "adopted_edited"
     assert rows["op_hour"]["newValue"] == "24h"
     assert rows["op_hour"]["appliedValue"] == "00:00-24:00"
     assert rows["op_hour"]["previousValue"] == "08:00-18:00"
@@ -795,9 +1215,16 @@ async def test_a_revoked_suggestion_keeps_what_was_applied_and_dates_the_revoke(
     _, token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, token, "station", sample_station, "op_hour", "24h")
-    merge = (await _merge(client, auditor_token, sample_station, [
-        _decide(sample_station, "op_hour", "24h"),
-    ]))["data"]["mergeStationSuggestions"]
+    merge = (
+        await _merge(
+            client,
+            auditor_token,
+            sample_station,
+            [
+                _decide(sample_station, "op_hour", "24h"),
+            ],
+        )
+    )["data"]["mergeStationSuggestions"]
     approved_at = (await _mine(client, token))[0]["decidedAt"]
     await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
 
@@ -808,10 +1235,10 @@ async def test_a_revoked_suggestion_keeps_what_was_applied_and_dates_the_revoke(
 
 
 @pytest.mark.asyncio
-async def test_an_approved_property_suggestion_shows_the_value_applied(
+async def test_an_adopted_property_suggestion_shows_the_value_applied(
     client, auditor_auth, login_user_auth, sample_station, sample_station_property
 ):
-    """A property's approval is read from the merge too, with the reviewer's value."""
+    """A property's adoption is read from the merge too, with the reviewer's value."""
     _, token = login_user_auth
     _, auditor_token = auditor_auth
     await _create(client, token, "station_property", sample_station_property, "quantity", "10")
@@ -819,7 +1246,25 @@ async def test_an_approved_property_suggestion_shows_the_value_applied(
 
     row = (await _mine(client, token))[0]
 
-    assert (row["status"], row["newValue"], row["appliedValue"]) == ("approved", "10", "12")
+    assert (row["status"], row["newValue"], row["appliedValue"]) == ("adopted_edited", "10", "12")
+
+
+@pytest.mark.asyncio
+async def test_a_suggestion_not_adopted_shows_no_applied_value(
+    client, redis, auditor_auth, login_user_auth, sample_station
+):
+    """When another suggester's value was taken, the row reads not_adopted, dated by the merge."""
+    _, token = login_user_auth
+    _, auditor_token = auditor_auth
+    other = (await _create_user_with_role(redis, "Login User"))[1]
+    await _create(client, token, "station", sample_station, "op_hour", "03:00-03:10")
+    await _create(client, other, "station", sample_station, "op_hour", "08:00-20:00")
+    await _merge(client, auditor_token, sample_station, [_decide(sample_station, "op_hour", "08:00-20:00")])
+
+    row = (await _mine(client, token))[0]
+
+    assert (row["status"], row["newValue"], row["appliedValue"]) == ("not_adopted", "03:00-03:10", None)
+    assert row["decidedAt"]
 
 
 @pytest.mark.asyncio
@@ -862,8 +1307,13 @@ async def test_an_old_comment_approval_keeps_the_reviewers_note_from_the_submitt
             station_uuid=sample_station,
             reviewed_by=auditor_uuid,
             changes=[
-                {"target_type": "station", "target_uuid": sample_station, "field_name": field,
-                 "before": before, "after": after}
+                {
+                    "target_type": "station",
+                    "target_uuid": sample_station,
+                    "field_name": field,
+                    "before": before,
+                    "after": after,
+                }
                 for field, before, after in (
                     ("comment", "Test station", "內部：負責人電話另存"),
                     ("op_hour", "08:00-18:00", "24h"),
@@ -873,10 +1323,18 @@ async def test_an_old_comment_approval_keeps_the_reviewers_note_from_the_submitt
         db.add(merge)
         await db.flush()
         for field, value in (("comment", "請更新備註"), ("op_hour", "24h")):
-            db.add(StationUpdateSuggestion(
-                target_type="station", target_uuid=sample_station, field_name=field, new_value=value,
-                status="approved", created_by=user_uuid, reviewed_by=auditor_uuid, merge_uuid=merge.uuid,
-            ))
+            db.add(
+                StationUpdateSuggestion(
+                    target_type="station",
+                    target_uuid=sample_station,
+                    field_name=field,
+                    new_value=value,
+                    status="approved",
+                    created_by=user_uuid,
+                    reviewed_by=auditor_uuid,
+                    merge_uuid=merge.uuid,
+                )
+            )
 
     rows = {r["fieldName"]: r for r in await _mine(client, token)}
 

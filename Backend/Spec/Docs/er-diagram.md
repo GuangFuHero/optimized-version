@@ -347,7 +347,9 @@ users ||--o{ announcements : "last published"
 %% type values: announcement_published, zone_assigned, zone_unassigned, team_member_added,
 %%   ticket_task_moderation_update, task_assignment_created, task_assignment_removed, task_claimed,
 %%   task_full, task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
-%%   station_assigned, station_unassigned, station_suggestion_created, dedup_review_pending,
+%%   station_assigned, station_unassigned, station_suggestion_created,
+%%   station_suggestion_adopted, station_suggestion_adopted_edited, station_suggestion_not_adopted,
+%%   dedup_review_pending,
 %%   dedup_task_merged, dedup_task_canceled, dedup_ticket_merged, dedup_ticket_updated,
 %%   dedup_ticket_contact_changed,
 %%   role_request_submitted, role_request_approved, role_request_rejected, team_suspended
@@ -683,7 +685,7 @@ station_update_suggestions {
     string new_value "stored as text; coerced to the field's data type on approval"
     string previous_value "nullable, the field's value at the last submit ('' for none); ADR-420"
     string comment "nullable, submitter's rationale"
-    string status "pending/approved/rejected/revoked, String(20), default pending"
+    string status "pending/approved/adopted_edited/not_adopted/rejected/revoked, String(20), default pending"
     string review_note "nullable, reviewer's rationale"
     uuid reviewed_by FK "nullable, FK to users; NULL until reviewed"
     uuid created_by FK "FK to users; one pending row per (created_by, target_uuid, field_name)"
