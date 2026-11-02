@@ -68,6 +68,8 @@ async def get_context(request: Request):
             "_ticket_history_visible": {},
             # Same, for ticket.audit; see ticket_audit_visible.
             "_ticket_audit_visible": {},
+            # Task[DataLoader | None], made on first use; see geo/types.py:_building_counts_loader.
+            "_building_counts_loader": None,
         }
     finally:
         await db_gen.aclose()

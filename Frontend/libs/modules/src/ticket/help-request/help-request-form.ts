@@ -10,6 +10,7 @@ import type {
 
 import type { PickedPoint } from '../../map/components/location-picker/types';
 import { toAddressInput, type FilledAddress } from '../address-lookup';
+import type { HelpRequestPlace } from './open-help-request';
 
 export type { PickedPoint };
 
@@ -97,14 +98,36 @@ export interface NeedDraft {
   need: SiteNeedValue | null;
   name: string;
   /**
-   * Text as typed. Required but for a rescue, whose count nobody knows yet: blank is sent as
-   * null, which the server takes for a rescue only (`QUANTITY_REQUIRED_TASK_TYPES`).
+   * Text as typed. Required for every kind: a rescue too asks for at least one person, and stops
+   * recruiting once they come.
    */
   quantity: string;
 }
 
 export function emptyNeed(): NeedDraft {
   return { need: null, name: '', quantity: '' };
+}
+
+/** A rescue starts at one person, the least it may ask for, when nothing is typed yet. */
+const RESCUE_DEFAULT_QUANTITY = '1';
+
+/**
+ * The row with `value` chosen. A rescue with nothing typed starts at `RESCUE_DEFAULT_QUANTITY`; one
+ * still at it when another kind is picked goes back to blank, so that kind is counted by the
+ * requester rather than by the default. Any other count typed stays.
+ */
+export function chooseNeed(row: NeedDraft, value: SiteNeedValue): NeedDraft {
+  const toRescue = getNeedOption(value)?.kind === 'rescue';
+  const fromRescue = getNeedOption(row.need)?.kind === 'rescue';
+  const typed = row.quantity.trim();
+
+  if (toRescue && !typed) {
+    return { ...row, need: value, quantity: RESCUE_DEFAULT_QUANTITY };
+  }
+  if (!toRescue && fromRescue && typed === RESCUE_DEFAULT_QUANTITY) {
+    return { ...row, need: value, quantity: '' };
+  }
+  return { ...row, need: value };
 }
 
 /** The most needs one request files (backend `HELP_REQUEST_NEED_MAX`); 「再加一件」 adds more later. */
@@ -114,11 +137,9 @@ export function canAddNeedRow(needs: readonly NeedDraft[]): boolean {
   return needs.length < MAX_NEEDS;
 }
 
-/** A chosen need but a rescue, with no quantity typed. A row with no kind yet is not asked. */
+/** A chosen need with no quantity typed. A row with no kind yet is not asked. */
 export function isQuantityMissing(row: NeedDraft): boolean {
-  const option = getNeedOption(row.need);
-
-  return Boolean(option) && option?.kind !== 'rescue' && !row.quantity.trim();
+  return Boolean(getNeedOption(row.need)) && !row.quantity.trim();
 }
 
 export interface HelpRequestForm {
@@ -139,16 +160,28 @@ export interface HelpRequestForm {
   description: string;
   /** Links to scene photos kept elsewhere, each checked as it was added. Optional. */
   photoUrls: string[];
+  /**
+   * The open building (開啟空間) it is filed in, from 在這一層請求協助: the point and the address are
+   * the building's, `floor` is one of its floors, and `room` one of that floor's areas where it has
+   * them. Null for any other request.
+   */
+  building: string | null;
 }
 
+/**
+ * At `place`, a building's floor, the form is filed in that building, on that floor; its address is
+ * filled in too, should the building be dropped.
+ */
 export function emptyHelpRequestForm(
   landmark: PickedPoint | null = null,
+  place: HelpRequestPlace | null = null,
 ): HelpRequestForm {
   return {
     title: '',
     landmark,
-    address: '',
-    floor: '',
+    building: place?.buildingUuid ?? null,
+    address: place?.address ?? '',
+    floor: place?.floor ?? '',
     room: '',
     addressFilled: null,
     addressKept: null,
@@ -165,6 +198,7 @@ export type HelpRequestFieldKey =
   | 'title'
   | 'landmark'
   | 'address'
+  | 'area'
   | 'contact'
   | 'needs'
   | 'quantity';
@@ -183,19 +217,32 @@ function chosenNeeds(needs: readonly NeedDraft[]) {
 
 /**
  * What still has to be filled in, in the form's order from the top, so the first is the one to
- * scroll to. At least one need is required, and how many of each but a rescue.
+ * scroll to. At least one need is required, and how many of each. Filed in a building, the place is
+ * the building's: no landmark or address is asked for. `floorAreas` are the areas of its floor
+ * (`useBuilding`), which end with 其他: on a floor with them, one must be picked, as the backend
+ * takes nothing else.
  */
-export function findMissingFields(form: HelpRequestForm): MissingField[] {
+export function findMissingFields(
+  form: HelpRequestForm,
+  floorAreas: readonly string[] = [],
+): MissingField[] {
   const missing: MissingField[] = [];
 
   if (!form.title.trim()) {
     missing.push({ key: 'title', label: '標題' });
   }
-  if (!form.landmark) {
+  if (!form.building && !form.landmark) {
     missing.push({ key: 'landmark', label: '地標' });
   }
-  if (!form.address.trim()) {
+  if (!form.building && !form.address.trim()) {
     missing.push({ key: 'address', label: '地址' });
+  }
+  if (
+    form.building &&
+    floorAreas.length > 0 &&
+    !floorAreas.includes(form.room)
+  ) {
+    missing.push({ key: 'area', label: '在這一層的哪一區' });
   }
   if (!form.contactName.trim()) {
     missing.push({ key: 'contact', label: '現場聯絡人' });
@@ -222,13 +269,51 @@ function textOrNull(value: string): string | null {
   return value.trim() || null;
 }
 
-/** Blank is not known yet; anything typed asks for at least one, as the prototype rounds it. */
+/**
+ * Anything typed asks for at least one, as the prototype rounds it. Blank, which the form does not
+ * send (`isQuantityMissing`), is null.
+ */
 function readQuantity(value: string): number | null {
   if (!value.trim()) {
     return null;
   }
 
   return Math.max(1, Number.parseInt(value, 10) || 1);
+}
+
+/**
+ * Where the request is: filed in a building, the building, whose point and address the backend
+ * copies (and refuses a point beside it), with the floor and room alone; else the landmark and the
+ * address line.
+ */
+function toPlaceInput(
+  form: HelpRequestForm,
+): Pick<
+  CreateHelpRequestInput,
+  'geometry' | 'buildingMapUuid' | 'secondaryLocation'
+> {
+  if (form.building) {
+    return {
+      buildingMapUuid: form.building,
+      secondaryLocation: {
+        floor: textOrNull(form.floor),
+        room: textOrNull(form.room),
+      },
+    };
+  }
+
+  const landmark = form.landmark;
+
+  if (!landmark) {
+    throw new Error('toHelpRequestInput needs a form with its landmark set');
+  }
+
+  return {
+    geometry: { type: 'Point', coordinates: [landmark.lng, landmark.lat] },
+    // One line, as the lookup filled it in or as typed: the backend splits it, and keeps what it
+    // cannot split as it is.
+    secondaryLocation: toAddressInput(form),
+  };
 }
 
 /**
@@ -240,21 +325,12 @@ export function toHelpRequestInput(
   form: HelpRequestForm,
   acknowledged: Readonly<Record<number, string>> = {},
 ): CreateHelpRequestInput {
-  const landmark = form.landmark;
-
-  if (!landmark) {
-    throw new Error('toHelpRequestInput needs a form with its landmark set');
-  }
-
   return {
     title: form.title.trim(),
     description: textOrNull(form.description),
-    geometry: { type: 'Point', coordinates: [landmark.lng, landmark.lat] },
+    ...toPlaceInput(form),
     contactName: form.contactName.trim(),
     contactPhone: textOrNull(form.contactPhone),
-    // One line, as the lookup filled it in or as typed: the backend splits it, and keeps what it
-    // cannot split as it is.
-    secondaryLocation: toAddressInput(form),
     tasks: form.needs
       .flatMap((row) => {
         const need = toNeedInput(row);

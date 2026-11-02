@@ -1,6 +1,12 @@
+export { pinnedBesideBuildings } from './building-markers';
 export { readLinkedSelection } from './linked-ticket';
 export { MapCellsNotice } from './map-cells-notice';
 export { dedupeMarkersById } from './markers';
+export {
+  floorHelpForOpenBuilding,
+  requestHelpOnBuildingFloor,
+  useSiteMapBuildings,
+} from './use-site-map-buildings';
 export { SiteMapControls } from './site-map-controls';
 export { useCreatedTicketMarker } from './use-created-ticket-marker';
 export {

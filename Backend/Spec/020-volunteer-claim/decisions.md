@@ -2,7 +2,8 @@
 
 Part of the site revamp: a volunteer claims one need of a request, not the whole request, and a
 request's owner can stop recruiting for one need. Numbering continues the repo-wide ADR sequence: this
-spec holds ADR-291 to ADR-293 (`Spec/019-role-requests` holds ADR-287 to ADR-290 and ADR-294).
+spec holds ADR-291 to ADR-293, ADR-448 and ADR-456 (`Spec/019-role-requests` holds ADR-287 to ADR-290
+and ADR-294).
 
 The rules below were set by the team on 2026-09-28 and by the product owner between 2026-09-26 and
 2026-09-30.
@@ -79,6 +80,7 @@ remembered to change it.
    import, whose preview fails the row before its ticket is written. A `rescue` need may leave it out —
    whoever is trapped does not know how many it takes, and the design leaves rescues out of the 缺額
    count — and then has no cap, as point 1 says. Needs filed before this keep their null quantity.
+   *The rescue exception was removed on 2026-11-01: every need says how many (ADR-448).*
 
 **Consequences**:
 ➕ "Full" and "fulfilled" are kept by the backend, not by someone remembering to set them.
@@ -186,3 +188,133 @@ on the site.
 ➖ Needs still carrying a status from before (`in_progress`, `completed`) are not migrated. The claim check
 takes both as open, like `pending`; working out a request's status (`OPEN_NEED_STATUSES`) counts
 `in_progress` as open but not `completed`. Reset or migrate such data before relying on either.
+
+---
+
+### ADR-448 A rescue need says how many too: at least one person
+
+> **Status: ACCEPTED (2026-11-01).** The product owner's call on 2026-10-31: a rescue follows the rule
+> every other need does, at least one person. Approved for the backend on 2026-11-01; point 4, how a
+> merge treats a need filed blank, was set the same day, once the review page was found to have no field
+> to give it a count, and narrowed on 2026-11-02: a blank need that absorbs another must take a count.
+
+**In plain words**: a rescue need must say how many people it takes, as every other need does. Leaving it
+blank is refused, on the site and in the back office alike. Rescue needs filed blank before this stay as
+they are.
+
+**Context**: ADR-291 point 7 let a rescue leave its quantity out, since whoever is trapped may not know how
+many it takes (`QUANTITY_OPTIONAL_TASK_TYPES`). Such a need never fills, so its request never completes on
+its own: its owner or a coordinator has to stop recruiting by hand. The site's form and the back office's
+already ask for a count on every other need.
+
+**Decision**:
+
+1. **Every need says how many, at least 1, rescue included.** `_validate_need_size` refuses a missing
+   quantity for any kind with `quantity is required for a {kind} task`. That is every path that files a need:
+   a help request (`createHelpRequest`), the needs of `createTicket`, adding one (`createTicketTask`, the
+   site's 「再加一件」 and the back office alike), and a bulk import, whose preview fails the row with
+   「每個需求都要填人數」 before its ticket is written. `QUANTITY_OPTIONAL_TASK_TYPES` is gone.
+2. **The GraphQL inputs keep `quantity: Int`, nullable.** Only the descriptions change. A blank sent by a
+   form not yet updated gets the error above, not a schema failure for the whole request.
+3. **Needs already stored without a quantity are left as they are.** They read and take claims as before,
+   with no cap (ADR-291 point 1). No data is changed and there is no migration.
+4. **A merge checks the quantity it writes (ADR-370).** A quantity the reviewer sends must be at least 1,
+   for a rescue too, and cannot be cleared. A need filed blank that is kept or moved on its own, with its
+   quantity left alone, stays blank with no cap, as point 3 leaves it: the review page can keep or drop
+   such a need without giving it a count, so refusing it would leave its ticket unmergeable. A need that
+   absorbs another must have a quantity, its own or one the merge gives it, checked against everyone on
+   the needs folded together; left blank it is refused, since it would take in the other need's people
+   and, with no cap, never fill. The review page asks for the count of needs it folds together, so it
+   asks for a rescue's too. This holds for a blank need of any kind, so one filed before ADR-291 point 7,
+   refused until now, merges too when it is kept on its own.
+
+**Consequences**:
+➕ A rescue need fills once its people are on it, and its request completes on its own like any other.
+➕ A ticket holding a need filed blank can still be merged from the review page, and a merge never
+leaves a need with people from both tickets and no cap.
+➖ The site's and the back office's forms must ask for a count on a rescue before this is deployed, or a
+blank one is refused with the error above. That frontend change is a separate PR.
+➖ The review page must ask for a count when it folds needs into one filed blank, a rescue's included.
+➖ A rescue need filed blank before this still never fills; it is stopped by hand, as before.
+◾ The site's 缺額 still leaves rescues out: that count is the frontend's, and it does not change here.
+
+---
+
+### ADR-456 Volunteer numbers count 人力 needs only, and the dashboard's gap is the ticket board's
+
+> **Status: ACCEPTED (2026-11-02).** The designer's calls on 2026-11-01 and 2026-11-02: the dashboard's
+> 志工缺口 shows the number the ticket board's stats strip shows, counting the needs still recruiting only,
+> and says how many needs are short, as the strip does; then, on #247 on 2026-11-02, the volunteer numbers
+> on both pages count 人力 needs only, and supply needs get counts of their own. Scheduled for the backend
+> on 2026-11-02. Whether 醫療 counts as 人力 is still being asked (point 1).
+
+**In plain words**: the volunteer numbers count only the needs volunteers sign up for, 人力. A supply need
+asks for things (84 lunch boxes are not 84 volunteers), and a rescue's head count is not filled by people
+signing up. Supply needs are counted instead: how many there are, and how many nobody has taken yet. The
+dashboard's 志工缺口 and the one above the ticket board give the same number, and the dashboard can also say
+how many needs are still short of people. A need with more people than it asks for no longer lowers the
+gap, and a need left open on a request closed by hand no longer raises it. A need left on a request
+deleted by hand counts nowhere, as if it had been deleted with it.
+
+**Context**: Two queries count the gap. The ticket board's `ticketStats` (`tickets_repository.stats`)
+reads today's rows: an open need with a quantity, on a request that is neither completed, cancelled nor
+deleted, adds what it is short by the people on it, and only when it is short; `gapNeeds` counts those
+needs. The dashboard's `volunteer_gap` (`ticket_analytics.get_volunteer_metric`) rebuilds each day from
+audit_logs, and differed twice. It summed `quantity - matched` as it was, so a need whose quantity was cut
+below its people (`update_ticket_task` allows that) took people off the other needs' gap. And it read no
+request's status, so a need left open on a request closed by hand, before a request's status followed its
+needs (2026-09-28, with no data migration), still counted. It had no count of needs either. Both counted
+every type of need, so a supply need's items were added up as people, and on the demo data 物資 was the
+dashboard's biggest bar of volunteers.
+
+**Decision**:
+
+1. **Only 人力 needs count as volunteers**: `volunteers_needed`, `volunteers_matched`, `volunteer_gap`,
+   `volunteer_gap_needs`, and `ticketStats.gapPeople` and `gapNeeds`. Supply, rescue and 醫療 needs add
+   nothing to them. The types are listed once, in `VOLUNTEER_NEED_TYPES` (`app/services/ticket_status.py`):
+   both queries read it, and so do the catalog's descriptions, which name the types. If 醫療 is to count,
+   it is added there.
+2. **The gap counts each need from 0.** Of the needs recruiting at that instant (standing, open, not
+   stopped by hand), each adds `quantity - matched` when that is above 0, and nothing otherwise.
+3. **`volunteer_gap_needs`**, a new y-metric (還缺人的需求, 項), counts those needs. It has every shape
+   `volunteer_gap` has: a total, one per need type, and a daily trend capped like the gap's.
+4. **Supply needs are counted, one each**, in 筆, since 便當, 箱水 and 鏟子 do not add up:
+   `supply_needs` (物資需求) counts the supply needs standing, full and stopped ones included, and
+   `supply_needs_unclaimed` (還沒人接的物資需求) those recruiting with nobody on them. A supply need with no
+   quantity counts too. Each is a total as of now or the end of `end_date`, read from audit_logs like the
+   rest, for the dashboard's 物資需求 card; neither has a trend or a breakdown.
+5. **A need left open on a request closed now is short on no day.** Since 2026-09-28 every way a request
+   closes closes its needs in the same commit: it completes once none is open, and deleting it or merging
+   it away cancels or moves them. A need still open today on a request completed, cancelled or deleted
+   today was therefore left open by a hand close before then, and nobody can claim it (ADR-291 point 4).
+   The request is the one the need is on now, so a need a merge moved is judged by the request it moved
+   to. Every other need keeps its history from audit_logs: a request completed or merged away since still
+   shows its needs' gap on the days before. An unclaimed supply need follows the same rule.
+   A need still standing today, open or filled, on a request cancelled or deleted today counts as
+   canceled on every day, in every number here, `volunteers_needed`, `volunteers_matched` and
+   `supply_needs` included: deleting a request or merging it away cancels or moves every need on it,
+   filled ones included, so such a need was left by a hand close too. One left on a completed request
+   still counts in those three, as ended.
+6. **Today the two agree** for the same caller: both read `ticket.view`'s scope, and
+   `test_the_dashboard_gap_is_the_ticket_boards` (`tests/test_analytics_api.py`) checks `volunteer_gap`
+   and `volunteer_gap_needs` against `gapPeople` and `gapNeeds` over needs covering each old difference.
+7. **`volunteers_needed` and `volunteers_matched` count as before, over 人力 needs.** They count every such
+   need not canceled, full and stopped ones included (and none left on a cancelled request, point 5), so
+   the gap is not their difference, and the dashboard does not show it as one.
+
+**Consequences**:
+➕ The dashboard and the ticket board show one 志工缺口, in people, and both can say how many needs are short.
+➕ Supply needs still show, in 筆, without their items passing for volunteers.
+➖ The ticket board's 志工缺口 goes down where tickets ask for supplies or rescue; its tooltip should say
+it counts 人力 needs.
+➖ The dashboard's per-type volunteer chart is left with one bar, 人力. The designer asked whether to drop it
+or split it by need name; that is the frontend's to draw, and nothing here changes for it.
+➖ A request closed by hand before 2026-09-28 leaves its open needs out of the gap on the days before its
+close too, and a cancelled or deleted one all its needs out of every number: the counts read the history
+of needs and claims, not of requests.
+➖ The rule lives in two queries. A change to it goes into both `tickets_repository.stats` and
+`get_volunteer_metric`; the test in point 6 is there to catch a change made to only one.
+◾ The scope, type and area filters still read today's request rows, as before.
+◾ A building's shortfall (ADR-450) still adds 人力 and supply needs; whether it follows point 1 is being
+asked. A supply need's quantity is still its number of places to claim, so the site's progress bars count
+it as people; that is a separate question.

@@ -287,6 +287,10 @@ export type BuildingMapType = {
   name: Scalars['String']['output'];
   /** The building's street address. Public, like a station's */
   secondaryLocation?: Maybe<SecondaryLocationType>;
+  /** How much this building is still short, people and supplies together (ADR-450): over its tickets not completed or cancelled, each pending 'hr' or 'supply' need with a quantity adds that quantity less assignedCount, never below 0. Rescue and medical needs, and needs with no quantity, add nothing. Null to a caller without ticket.view_detail */
+  shortfall?: Maybe<Scalars['Int']['output']>;
+  /** How many tickets are filed in this building and not deleted, completed and cancelled ones too: every one buildingMapTickets lists, past any page (ADR-450). Null to a caller without ticket.view_detail, to whom those tickets are not placed in the building */
+  ticketCount?: Maybe<Scalars['Int']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };
@@ -479,7 +483,7 @@ export type CreateTicketResult = DuplicatesSuspected | TicketCreated;
 export type CreateTicketTaskDraft = {
   /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
   acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
-  /** Number of people or units needed */
+  /** People or units needed, at least 1; required, for a 'rescue' task too */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
   /**
@@ -494,7 +498,7 @@ export type CreateTicketTaskDraft = {
 };
 
 export type CreateTicketTaskInput = {
-  /** People or units needed, at least 1; required except for a 'rescue' task, which may omit it */
+  /** People or units needed, at least 1; required, for a 'rescue' task too */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
   routeUuid?: InputMaybe<Scalars['UUID']['input']>;
@@ -622,7 +626,7 @@ export type HazardousZoneType = {
 export type HelpRequestTaskInput = {
   /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
   acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
-  /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
+  /** People or units needed, at least 1; required, for a 'rescue' need too */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   /** What is needed, at most 200 characters */
@@ -969,6 +973,29 @@ export type MyRoleRequestsType = {
   requests: Array<RoleRequestType>;
 };
 
+export type MyStationSuggestionType = {
+  __typename?: 'MyStationSuggestionType';
+  /** Approved or revoked: the value the reviewer wrote, which may differ from newValue. Otherwise null, as for an approval from before merges were recorded */
+  appliedValue?: Maybe<Scalars['String']['output']>;
+  comment?: Maybe<Scalars['String']['output']>;
+  /** When it was approved or rejected, or for a revoked one when the approval was undone; for one decided before merges were recorded, when the row last changed. Null while pending */
+  decidedAt?: Maybe<Scalars['DateTime']['output']>;
+  fieldName: Scalars['String']['output'];
+  /** The value suggested, the latest if sent again */
+  newValue: Scalars['String']['output'];
+  /** The field's value when last sent, as text ('' for none); null for a suggestion sent before this was recorded */
+  previousValue?: Maybe<Scalars['String']['output']>;
+  /** The station it is about, or its property's; null once deleted or out of the caller's view, by the rules of `station` */
+  station?: Maybe<StationType>;
+  /** 'pending', 'approved', 'rejected', or 'revoked' */
+  status: Scalars['String']['output'];
+  /** When it was first sent */
+  submittedAt: Scalars['DateTime']['output'];
+  /** 'station' or 'station_property' */
+  targetType: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+};
+
 /** One of the caller's claims, with the need and the ticket it is for */
 export type MyTaskAssignmentType = {
   __typename?: 'MyTaskAssignmentType';
@@ -1033,6 +1060,7 @@ export type Query = {
   hazardousZone?: Maybe<HazardousZoneType>;
   hazardousZones: HazardousZoneConnection;
   myRoleRequests: MyRoleRequestsType;
+  myStationSuggestions: Array<MyStationSuggestionType>;
   myTaskAssignments: Array<MyTaskAssignmentType>;
   myTickets: Array<TicketType>;
   /** Look a typed address up in TGOS before saving it (exact matches only). Pass the map pin as lat/lng to check the two agree. Signed-in callers only, 30 lookups a minute shared with reverseGeocode */
@@ -1122,6 +1150,11 @@ export type QueryHazardousZoneArgs = {
 
 export type QueryHazardousZonesArgs = {
   bounds?: InputMaybe<BoundsInput>;
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+};
+
+export type QueryMyStationSuggestionsArgs = {
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
 };
@@ -1249,6 +1282,7 @@ export type QueryTicketsArgs = {
   needType?: InputMaybe<Scalars['String']['input']>;
   openNeedsOnly?: Scalars['Boolean']['input'];
   order?: TicketListOrder;
+  outsideBounds?: InputMaybe<BoundsInput>;
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
@@ -1904,9 +1938,9 @@ export type TicketStatsType = {
   __typename?: 'TicketStatsType';
   cancelled: Scalars['Int']['output'];
   completed: Scalars['Int']['output'];
-  /** How many open needs are short of people (gapPeople > 0) */
+  /** How many of those needs are short of people; the dashboard's volunteer_gap_needs */
   gapNeeds: Scalars['Int']['output'];
-  /** People still short across open needs with a quantity: quantity less the people linked, never below 0. Needs on completed or cancelled tickets add nothing */
+  /** People still short across open hr needs with a quantity: quantity less the people linked, never below 0. Other need types, and needs on completed or cancelled tickets, add nothing. The dashboard's volunteer_gap gives the same number (ADR-456) */
   gapPeople: Scalars['Int']['output'];
   inProgress: Scalars['Int']['output'];
   pending: Scalars['Int']['output'];
@@ -1941,7 +1975,7 @@ export type TicketTaskType = {
   /** Current progress update written by the assignee. Null to a caller without ticket.view_detail on the parent ticket */
   progressNote?: Maybe<Scalars['String']['output']>;
   properties: Array<TaskPropertyType>;
-  /** Number of people or units needed. Null means unspecified and uncapped: a rescue need may leave it out, and needs filed before every other kind had to give one */
+  /** Number of people or units needed. Null only on a need filed before every need had to give one: unspecified and uncapped */
   quantity?: Maybe<Scalars['Int']['output']>;
   /** When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back */
   recruitingStoppedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -2681,6 +2715,21 @@ export type AdminTicketTasksQuery = {
       updatedAt?: string | null;
     }>;
   }>;
+};
+
+export type AdminStationFacetsQueryVariables = Exact<{ [key: string]: never }>;
+
+export type AdminStationFacetsQuery = {
+  __typename?: 'Query';
+  stationFacets: {
+    __typename?: 'StationFacetsType';
+    total: number;
+    byStatus: Array<{
+      __typename?: 'StationStatusCountType';
+      status: string;
+      count: number;
+    }>;
+  };
 };
 
 export type AdminStationsQueryVariables = Exact<{
@@ -5964,6 +6013,48 @@ export const AdminTicketTasksDocument = {
 } as unknown as DocumentNode<
   AdminTicketTasksQuery,
   AdminTicketTasksQueryVariables
+>;
+export const AdminStationFacetsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'AdminStationFacets' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'stationFacets' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'total' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'byStatus' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'status' },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'count' } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AdminStationFacetsQuery,
+  AdminStationFacetsQueryVariables
 >;
 export const AdminStationsDocument = {
   kind: 'Document',

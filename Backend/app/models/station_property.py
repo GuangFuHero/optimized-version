@@ -51,6 +51,8 @@ class StationUpdateSuggestion(Base, UUIDPKMixin, TimestampMixin):
     target_uuid: Mapped[str] = mapped_column(String)  # no FK — polymorphic target
     field_name: Mapped[str] = mapped_column(String(100))
     new_value: Mapped[str] = mapped_column(String)
+    # The field's value at the last submit, as text ('' for none); null on rows from before ADR-420.
+    previous_value: Mapped[str | None] = mapped_column(String)
     comment: Mapped[str | None] = mapped_column(String)
     # pending/approved/adopted_edited/not_adopted/rejected/revoked
     status: Mapped[str] = mapped_column(String(20), default="pending")

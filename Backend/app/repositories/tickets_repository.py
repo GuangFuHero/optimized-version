@@ -1,8 +1,24 @@
 """Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
 from geoalchemy2 import Geography
-from sqlalchemy import ARRAY, Row, String, and_, case, cast, delete, exists, false, func, not_, or_, select
+from sqlalchemy import (
+    ARRAY,
+    Row,
+    String,
+    and_,
+    case,
+    cast,
+    delete,
+    distinct,
+    exists,
+    false,
+    func,
+    not_,
+    or_,
+    select,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
 from app.db.h3 import (
@@ -14,15 +30,19 @@ from app.db.h3 import (
     h3_centroid,
 )
 from app.infrastructure.repository.base import GenericRepository
+from app.models.geo import BaseGeometry, BuildingMapTicketMap
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
-from app.services.ticket_status import OPEN_NEED_STATUSES, OPEN_TICKET_STATUSES
+from app.services.ticket_status import OPEN_NEED_STATUSES, OPEN_TICKET_STATUSES, VOLUNTEER_NEED_TYPES
 
 # How list_active can order the tickets (TicketListOrder in app/graphql/tickets/types.py, ADR-419).
 TICKET_ORDERS = frozenset({"newest", "needs_first"})
 # The need type the site list puts first (a need's task_type, TASK_TYPES in app/services/ticket.py).
 _RESCUE = "rescue"
+# The needs a building's shortfall adds (ADR-450): people and supplies, the ones sign-ups fill. A
+# rescue's count is not one volunteers close, so the site's 缺額 leaves it out, and medical too.
+SHORTFALL_NEED_TYPES = ("hr", "supply")
 
 # The site colours a ticket urgent unless its priority, trimmed and lowercased, is one of these, or
 # it is in progress (`map/site/markers.ts` resolveTicketVariant); priority is not validated on
@@ -86,6 +106,7 @@ class TicketRepository(GenericRepository[Tickets]):
         self,
         *,
         bounds=None,
+        outside_bounds=None,
         status: str | None = None,
         statuses: list[str] | None = None,
         priority: str | None = None,
@@ -117,6 +138,8 @@ class TicketRepository(GenericRepository[Tickets]):
 
         `statuses` keeps the rows in any of them, as the map's filter ticks several; an empty
         list keeps none, so unticking every status shows nothing. With `status` too, both apply.
+
+        `outside_bounds` keeps the rows `bounds` would leave out for that box (ADR-452).
         """
         conditions = [self.model.delete_at.is_(None), *extra_filters]
         seen = self._seen(detail_filters)
@@ -135,26 +158,14 @@ class TicketRepository(GenericRepository[Tickets]):
             )
             conditions.append(h3_cell_text(self.model.geometry, coarse_resolution) == location_cell)
         if bounds:
-            envelope = func.ST_MakeEnvelope(
-                bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
-            )
-            exact = func.ST_Intersects(self.model.geometry, envelope)
-            if seen is None:
-                conditions.append(exact)
-            else:
-                # The coarse branch uses the cell centre at the resolution the caller is
-                # shown, so every row returned lies inside the box it asked about. The centre
-                # is an expression no index can serve, so a pre-filter comes first: a row
-                # whose centre is in the box has its point within one cell of it, and "point
-                # in the grown box" is a question the GIST index on `geometry` answers. Only
-                # ever a superset — the centre test below still decides every row, so the
-                # pre-filter narrows the scan without widening what can be learned (ADR-282).
-                dx, dy = coarse_margin_degrees(
-                    coarse_resolution, max(abs(bounds.min_lat), abs(bounds.max_lat))
-                )
-                conditions.append(func.ST_Intersects(self.model.geometry, func.ST_Expand(envelope, dx, dy)))
-                coarse = func.ST_Intersects(h3_centroid(self.model.geometry, coarse_resolution), envelope)
-                conditions.append(or_(and_(seen, exact), and_(not_(seen), coarse)))
+            in_box, pre_filter = self._in_box(bounds, seen, coarse_resolution)
+            conditions += [*pre_filter, in_box]
+        if outside_bounds:
+            # Exactly the rows `bounds` would not keep for the same box, decided row by row the same
+            # way, so the two split every match between them (ADR-452). No pre-filter: the rows outside
+            # a box are most of them, and a grown box cannot narrow that. A row with no point is outside.
+            in_box, _ = self._in_box(outside_bounds, seen, coarse_resolution)
+            conditions.append(not_(func.coalesce(in_box, false())))
         conditions += self._column_conditions(
             status=status, statuses=statuses, priority=priority, disaster_type=disaster_type
         )
@@ -172,6 +183,25 @@ class TicketRepository(GenericRepository[Tickets]):
                     )
                 )
         return conditions
+
+    def _in_box(self, bounds, seen, coarse_resolution: int) -> tuple:
+        """Whether a row lies in `bounds` as its caller sees it, and conditions to narrow the scan first.
+
+        A row whose point the caller sees is matched by that point. One it is shown as a cell is matched by
+        the cell centre at the resolution it is shown, so every row returned lies inside the box asked about.
+        The centre is an expression no index can serve, so a pre-filter comes with it: a row whose centre is
+        in the box has its point within one cell of it, and "point in the grown box" is a question the GIST
+        index on `geometry` answers. Only ever a superset — the centre test still decides every row, so the
+        pre-filter narrows the scan without widening what can be learned (ADR-282).
+        """
+        envelope = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
+        exact = func.ST_Intersects(self.model.geometry, envelope)
+        if seen is None:
+            return exact, []
+        dx, dy = coarse_margin_degrees(coarse_resolution, max(abs(bounds.min_lat), abs(bounds.max_lat)))
+        pre_filter = func.ST_Intersects(self.model.geometry, func.ST_Expand(envelope, dx, dy))
+        coarse = func.ST_Intersects(h3_centroid(self.model.geometry, coarse_resolution), envelope)
+        return or_(and_(seen, exact), and_(not_(seen), coarse)), [pre_filter]
 
     @staticmethod
     def _seen(detail_filters):
@@ -294,6 +324,7 @@ class TicketRepository(GenericRepository[Tickets]):
         db: AsyncSession,
         *,
         bounds=None,
+        outside_bounds=None,
         status: str | None = None,
         statuses: list[str] | None = None,
         priority: str | None = None,
@@ -310,8 +341,8 @@ class TicketRepository(GenericRepository[Tickets]):
     ) -> list[Tickets]:
         """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope.
 
-        `statuses` / `detail_filters` / `coarse_resolution` / `location_cell`: see
-        _active_conditions (ADR-281/282/387).
+        `outside_bounds` / `statuses` / `detail_filters` / `coarse_resolution` / `location_cell`: see
+        _active_conditions (ADR-281/282/387/452).
 
         `order` is one of TICKET_ORDERS. "needs_first" puts _needs_tier ahead of the standing
         order — ahead of relevance too, when searching (ADR-419) — and `viewer_uuid`, the caller
@@ -322,6 +353,7 @@ class TicketRepository(GenericRepository[Tickets]):
         term = normalize_query(q)
         conditions = self._active_conditions(
             bounds=bounds,
+            outside_bounds=outside_bounds,
             status=status,
             statuses=statuses,
             priority=priority,
@@ -352,6 +384,7 @@ class TicketRepository(GenericRepository[Tickets]):
         db: AsyncSession,
         *,
         bounds=None,
+        outside_bounds=None,
         status: str | None = None,
         statuses: list[str] | None = None,
         priority: str | None = None,
@@ -365,6 +398,7 @@ class TicketRepository(GenericRepository[Tickets]):
         """Count active tickets — MUST use the same conditions as list_active()."""
         conditions = self._active_conditions(
             bounds=bounds,
+            outside_bounds=outside_bounds,
             status=status,
             statuses=statuses,
             priority=priority,
@@ -470,9 +504,10 @@ class TicketRepository(GenericRepository[Tickets]):
         """Counts by status and the volunteer gap over the active tickets `extra_filters` leaves.
 
         Two statements, no per-ticket work. The gap counts a need the way the board's cards do:
-        an open need (OPEN_NEED_STATUSES) with a quantity, on a ticket not completed or
-        cancelled, short of `quantity` by the people linked to it. Linked people are every
-        task_assignments row, as the `assignedCount` loader reads them.
+        an open need (OPEN_NEED_STATUSES) of a volunteer type (VOLUNTEER_NEED_TYPES) with a
+        quantity, on a ticket not completed or cancelled, short of `quantity` by the people
+        linked to it. Linked people are every task_assignments row, as the `assignedCount` loader
+        reads them. The dashboard's volunteer_gap counts by the same rule (ADR-456).
         """
         base = [self.model.delete_at.is_(None), *extra_filters]
         by_status = dict(
@@ -502,6 +537,7 @@ class TicketRepository(GenericRepository[Tickets]):
                     self.model.status.notin_(("completed", "cancelled")),
                     TicketTask.delete_at.is_(None),
                     TicketTask.status.in_(OPEN_NEED_STATUSES),
+                    TicketTask.task_type.in_(VOLUNTEER_NEED_TYPES),
                     TicketTask.quantity.is_not(None),
                     gap > 0,
                 )
@@ -516,6 +552,67 @@ class TicketRepository(GenericRepository[Tickets]):
             "gap_people": int(row[0]),
             "gap_needs": int(row[1]),
         }
+
+    async def building_counts(
+        self, db: AsyncSession, building_uuids: list[str], *, extra_filters=()
+    ) -> dict[str, tuple[int, int]]:
+        """Each building's (tickets, shortfall), for the buildings that hold any (ADR-450).
+
+        Every live ticket filed in a live building counts, completed and cancelled ones too, as
+        `buildingMapTickets` lists them; `extra_filters` narrow them as it does. The shortfall adds,
+        over the tickets still open, each pending people or supply need with a quantity: that
+        quantity less the people linked to it, never below 0, as the site's floor drawer adds it.
+        A supply need's quantity counts items, so the sum is people and supplies together. Linked
+        people are every task_assignments row, as for `stats`. One statement.
+        """
+        # Aliased: a ticket's own row in base_geometries is already in the FROM clause.
+        building = aliased(BaseGeometry)
+        tickets = (
+            select(
+                BuildingMapTicketMap.building_map_uuid.label("building_uuid"),
+                self.model.uuid.label("ticket_uuid"),
+                self.model.status.label("status"),
+            )
+            .join(self.model, self.model.uuid == BuildingMapTicketMap.ticket_uuid)
+            .join(building, building.uuid == BuildingMapTicketMap.building_map_uuid)
+            .where(
+                BuildingMapTicketMap.building_map_uuid.in_(building_uuids),
+                building.delete_at.is_(None),
+                self.model.delete_at.is_(None),
+                *extra_filters,
+            )
+            .subquery()
+        )
+        linked = (
+            select(func.count())
+            .where(TaskAssignment.task_uuid == TicketTask.uuid)
+            .correlate(TicketTask)
+            .scalar_subquery()
+        )
+        rows = await db.execute(
+            select(
+                tickets.c.building_uuid,
+                func.count(distinct(tickets.c.ticket_uuid)),
+                func.coalesce(func.sum(func.greatest(TicketTask.quantity - linked, 0)), 0),
+            )
+            .select_from(tickets)
+            .outerjoin(
+                TicketTask,
+                and_(
+                    TicketTask.ticket_uuid == tickets.c.ticket_uuid,
+                    # Closed as `stats` and the site read a ticket: completed or cancelled.
+                    tickets.c.status.notin_(("completed", "cancelled")),
+                    TicketTask.delete_at.is_(None),
+                    # Open as the site reads a need: `pending` alone.
+                    TicketTask.status == "pending",
+                    TicketTask.task_type.in_(SHORTFALL_NEED_TYPES),
+                    TicketTask.quantity > 0,
+                ),
+            )
+            .group_by(tickets.c.building_uuid)
+        )
+        # sum() over integers is numeric in Postgres, which arrives as a Decimal.
+        return {str(uuid): (count, int(short)) for uuid, count, short in rows}
 
 
 class TicketTaskRepository(GenericRepository[TicketTask]):
