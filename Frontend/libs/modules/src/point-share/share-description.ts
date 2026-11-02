@@ -7,7 +7,10 @@
  * a guest (ADR-281); a signed-in volunteer pressing 分享 would otherwise post it to a public group.
  */
 
-import { readOpHour } from '../station/availability';
+import {
+  readOpHour,
+  resolveStationAvailability,
+} from '../station/availability';
 import {
   STATION_TYPE_OPTIONS,
   normalizeStationType,
@@ -58,22 +61,34 @@ export function describeTicketForShare({
  * description, under the name the site gives it, 位置說明 — on its own, a note such as 「操場東側帳篷」
  * would not say what the station is. Never its level: the site does not show it, and a station with
  * nothing else read 「等級 0」.
+ *
+ * A station closed for now or for good says so in brackets after what it is, in the words its page
+ * uses, so that nobody passes on a station one cannot go to; one closed for good has no hours left
+ * to give.
  */
 export function describeStationForShare({
   type,
   description,
   opHour,
+  operationalStatus,
 }: {
   type?: string | null;
   description?: string | null;
   opHour?: string | null;
+  operationalStatus?: string | null;
 }): string {
   const normalizedType = normalizeStationType(type);
   const label = STATION_TYPE_OPTIONS.find(
     (option) => option.value === normalizedType,
   )?.label;
-  const hours = readOpHour(opHour);
+  const closed =
+    operationalStatus === 'temporarily_closed' ||
+    operationalStatus === 'permanently_closed'
+      ? resolveStationAvailability({ operationalStatus }).headline
+      : null;
+  const hours =
+    operationalStatus === 'permanently_closed' ? null : readOpHour(opHour);
   const note = description?.trim();
 
-  return `${PLATFORM}｜${label ? `${label}站點` : '救災站點'}${hours ? `，服務時間 ${hours}` : ''}${note ? `。位置說明：${note}` : ''}`;
+  return `${PLATFORM}｜${label ? `${label}站點` : '救災站點'}${closed ? `（${closed}）` : ''}${hours ? `，服務時間 ${hours}` : ''}${note ? `。位置說明：${note}` : ''}`;
 }

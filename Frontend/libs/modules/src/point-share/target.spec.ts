@@ -50,4 +50,18 @@ describe('createPointShareTarget', () => {
 
     expect(target.description).toBe('島嶼守望｜加水站點');
   });
+
+  it("says a marker's station is closed: the list and the map share it from their markers", () => {
+    const target = createPointShareTarget({
+      marker: {
+        ...station,
+        stationMeta: { type: 'water', operationalStatus: 'temporarily_closed' },
+      },
+      module: 'map',
+      state: {},
+      origin: 'https://example.test',
+    });
+
+    expect(target.description).toBe('島嶼守望｜加水站點（暫停服務）');
+  });
 });

@@ -35,6 +35,7 @@ type PointShareMarker = {
     type?: string | null;
     description?: string | null;
     opHour?: string | null;
+    operationalStatus?: string | null;
   };
 };
 
@@ -66,6 +67,7 @@ function toPointShareMarkerFromStation(
       type: station.type,
       description: station.description,
       opHour: station.opHour,
+      operationalStatus: station.operationalStatus,
     },
   };
 }

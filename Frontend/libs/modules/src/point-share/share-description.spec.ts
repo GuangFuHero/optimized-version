@@ -103,6 +103,32 @@ describe('describeStationForShare', () => {
     ).toBe('島嶼守望｜加水站點');
   });
 
+  it('says in brackets that a station is closed, as its page does, and drops the hours of one closed for good', () => {
+    const station = {
+      type: 'water',
+      description: '操場東側帳篷',
+      opHour: '08:00-20:00',
+    };
+
+    expect(
+      describeStationForShare({ ...station, operationalStatus: 'active' }),
+    ).toBe('島嶼守望｜加水站點，服務時間 08:00-20:00。位置說明：操場東側帳篷');
+    expect(
+      describeStationForShare({
+        ...station,
+        operationalStatus: 'temporarily_closed',
+      }),
+    ).toBe(
+      '島嶼守望｜加水站點（暫停服務），服務時間 08:00-20:00。位置說明：操場東側帳篷',
+    );
+    expect(
+      describeStationForShare({
+        ...station,
+        operationalStatus: 'permanently_closed',
+      }),
+    ).toBe('島嶼守望｜加水站點（已關閉）。位置說明：操場東側帳篷');
+  });
+
   it('never says its level, and calls a station of no known kind a 救災站點', () => {
     for (const station of [
       { level: 0 },
