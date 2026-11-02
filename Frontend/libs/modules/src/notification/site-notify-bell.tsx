@@ -1,11 +1,10 @@
 'use client';
 
-import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
 import { ButtonBase } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { CountBadge, designTokens } from '@rescue-frontend/ui';
+import { CountBadge, designTokens, Icons } from '@rescue-frontend/ui';
 
 import { siteNotificationKeys } from './api';
 import { bellLabel } from './site-notices';
@@ -58,7 +57,7 @@ export function SiteNotifyBell({ size, ringColor }: SiteNotifyBellProps) {
           },
         }}
       >
-        <NotificationsNoneRoundedIcon sx={{ fontSize: 24 }} />
+        <Icons.bell sx={{ fontSize: 24 }} />
         {/* 9+ past nine, as the prototype's 16px dot holds; none at zero, where CountBadge says 0. */}
         {unread > 0 ? (
           <CountBadge

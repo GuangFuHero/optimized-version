@@ -261,8 +261,11 @@ async def test_refreshing_a_revoked_session_is_401_and_clears(client, db_session
     _assert_cleared(response)
 
 
-async def test_refreshing_a_revoked_identity_is_401_and_clears(client, db_session):
-    """The identity the session acts as is gone: signed out rather than downgraded (ADR-096)."""
+async def test_refreshing_a_revoked_identity_is_reset_and_keeps_the_cookies(client, db_session):
+    """The identity the session acts as is gone: reset, not signed out (Spec 029, ADR-403).
+
+    Nothing is rotated, so the same cookies refresh again, now on the default identity.
+    """
     account = await _account(db_session)
     access, refresh = _assert_signed_in(await _sign_in(client))
     await db_session.execute(delete(UserRoleAssign).where(UserRoleAssign.user_uuid == account))
@@ -271,8 +274,10 @@ async def test_refreshing_a_revoked_identity_is_401_and_clears(client, db_sessio
     response = await client.post(REFRESH, headers=_cookies(access, refresh))
 
     assert response.status_code == 401, response.text
-    assert response.json()["code"] == "identity_revoked"
-    _assert_cleared(response)
+    assert response.json()["code"] == "identity_reset"
+    assert cookies_set_by(response) == {}
+    again = await client.post(REFRESH, headers=_cookies(access, refresh))
+    assert again.status_code == 204, again.text
 
 
 async def test_a_failed_bearer_refresh_clears_nothing(client):

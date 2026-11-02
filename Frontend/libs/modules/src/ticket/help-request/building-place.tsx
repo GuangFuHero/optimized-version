@@ -1,6 +1,5 @@
 'use client';
 
-import ApartmentRoundedIcon from '@mui/icons-material/ApartmentRounded';
 import {
   Box,
   Button,
@@ -10,7 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { floorName } from '../../building/floors';
 import { useBuilding } from '../../building/use-building';
@@ -62,7 +61,7 @@ export function BuildingPlace({
           border: `1px solid ${color.border.default}`,
         }}
       >
-        <ApartmentRoundedIcon
+        <Icons.building
           sx={{ fontSize: 18, color: color.fg.neutral.subtle }}
         />
         <Box sx={{ flex: 1, minWidth: 0 }}>

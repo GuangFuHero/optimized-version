@@ -176,3 +176,113 @@ async def test_only_a_super_admin_changes_a_teams_status(client, db_session, red
     response = await world.set(client, "suspended", headers=world.headers["team admin"])
 
     assert response.status_code == 403
+
+
+async def _notices(db, kind: str = "team_suspended") -> list[Notification]:
+    return list((await db.execute(select(Notification).where(Notification.type == kind))).scalars())
+
+
+@pytest.mark.asyncio
+async def test_suspending_tells_everyone_in_the_team_once(client, db_session, redis):
+    """Spec 029 (ADR-405): the member and the team admin each get one `team_suspended`."""
+    world = await World().build(db_session, redis)
+    captain = (await db_session.execute(select(User.uuid).where(User.name == "隊長"))).scalar_one()
+    db_session.add(
+        UserRoleAssign(user_uuid=captain, role_uuid=world.member_role, team_uuid=world.team)
+    )
+    await db_session.commit()
+
+    await world.set(client, "suspended")
+
+    notices = await _notices(db_session)
+    names = {(await db_session.get(User, notice.recipient_uuid)).name: notice for notice in notices}
+    assert len(notices) == 2
+    assert set(names) == {"隊員", "隊長"}
+    notice = names["隊員"]
+    assert (notice.ref_type, str(notice.ref_uuid)) == ("team", world.team)
+    assert notice.title == "「光復隊」已暫停"
+    assert "光復隊" in notice.body
+
+
+@pytest.mark.asyncio
+async def test_the_super_admin_who_suspends_is_not_told(client, db_session, redis):
+    """The actor never hears of their own change, even when they are in the team."""
+    world = await World().build(db_session, redis)
+    boss = (await db_session.execute(select(User.uuid).where(User.name == "超管"))).scalar_one()
+    db_session.add(
+        UserRoleAssign(user_uuid=boss, role_uuid=world.member_role, team_uuid=world.team)
+    )
+    await db_session.commit()
+
+    await world.set(client, "suspended")
+
+    recipients = {notice.recipient_uuid for notice in await _notices(db_session)}
+    assert boss not in recipients
+    assert len(recipients) == 2
+
+
+@pytest.mark.asyncio
+async def test_restoring_or_suspending_again_tells_nobody(client, db_session, redis):
+    """Only the change to `suspended` is news; restoring and a repeated suspend are not (ADR-405)."""
+    world = await World().build(db_session, redis)
+    await world.set(client, "suspended")
+    await world.set(client, "suspended")
+    await world.set(client, "active")
+
+    assert len(await _notices(db_session)) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_notice_that_fails_does_not_undo_the_suspension(client, db_session, redis, monkeypatch):
+    """Sent after the commit; a failure is logged, the team stays suspended."""
+    from app.services import notification_service
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("notification store down")
+
+    world = await World().build(db_session, redis)
+    monkeypatch.setattr(notification_service.NotificationService, "dispatch", broken)
+
+    response = await world.set(client, "suspended")
+
+    assert (response.status_code, response.json()["status"]) == (200, "suspended")
+
+
+def _failing_for(monkeypatch, event_type: str):
+    """Make `dispatch` raise for one kind of notice and work as usual for the rest."""
+    from app.services import notification_service
+
+    real = notification_service.NotificationService.dispatch
+
+    async def flaky(db, **kwargs):
+        if kwargs["event_type"] == event_type:
+            raise RuntimeError("notification store down")
+        return await real(db, **kwargs)
+
+    monkeypatch.setattr(notification_service.NotificationService, "dispatch", flaky)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_rejection_notice_still_tells_the_members(client, db_session, redis, monkeypatch):
+    """One applicant's notice failing must not silence the whole team (#154 review)."""
+    world = await World().build(db_session, redis)
+    _failing_for(monkeypatch, "role_request_rejected")
+
+    response = await world.set(client, "suspended")
+
+    assert response.status_code == 200
+    assert len(await _notices(db_session)) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_failed_member_notice_still_tells_the_applicant(client, db_session, redis, monkeypatch):
+    """And the other way round: the applicant still hears why the request was closed."""
+    world = await World().build(db_session, redis)
+    _failing_for(monkeypatch, "team_suspended")
+
+    response = await world.set(client, "suspended")
+
+    assert response.status_code == 200
+    assert [notice.recipient_uuid for notice in await _notices(db_session, "role_request_rejected")] == [
+        world.applicant
+    ]

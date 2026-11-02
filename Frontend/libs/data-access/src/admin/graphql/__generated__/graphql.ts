@@ -350,6 +350,8 @@ export type CreateCrowdSourcingInput = {
 };
 
 export type CreateHelpRequestInput = {
+  /** File the request inside this building map, as createTicket does: its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it */
+  buildingMapUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Optional; the account's own email is never filled in for it */
   contactEmail?: InputMaybe<Scalars['String']['input']>;
   /** Who to ask for at the place */
@@ -357,8 +359,8 @@ export type CreateHelpRequestInput = {
   /** Phone number or LINE ID, as the person typed it */
   contactPhone?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
-  /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
-  geometry: Scalars['GeoJSON']['input'];
+  /** GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted */
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
   /** Scene photos as links to images kept elsewhere — the platform stores no image. At most 10, each an https:// URL of at most 500 characters */
   photoUrls?: InputMaybe<Array<Scalars['String']['input']>>;
   /** The address line goes in `fullAddress` (with its `addressToken` if looked up), with `floor` and `room` */
@@ -2013,6 +2015,8 @@ export type TicketType = {
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
   status: Scalars['String']['output'];
+  /** Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them */
+  suspectedDuplicateOf: Array<TicketDuplicateRefType>;
   /** Type of help needed: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: Maybe<Scalars['String']['output']>;
   tasks: Array<TicketTaskType>;
@@ -2021,7 +2025,7 @@ export type TicketType = {
   /** When anything visible about this ticket last changed: a field, its address, disaster details, photos, a need or its items, its status, or a duplicate merge. A sign-up moves it only when it changes the status; a review verdict never does */
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
-  /** Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not, and to a caller without ai_duplicate.view here. Not the data check: that is `auditStatus` */
+  /** Whether 重複審核 still waits on this ticket, and on which other tickets (ADR-443). Null when it does not. Anyone can read it (ADR-455): it names the tickets `suspectedDuplicateOf` does. Not the data check: that is `auditStatus` */
   verificationStatus?: Maybe<TicketVerificationType>;
   /** Whether the caller holds ticket.delete over this ticket, so a page offers a delete control only where the delete would be allowed */
   viewerCanDelete: Scalars['Boolean']['output'];

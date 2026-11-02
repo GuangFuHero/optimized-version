@@ -24,11 +24,8 @@ import {
   TypeChip,
 } from '../../../admin/shared/import-dialog-parts';
 import { Muted } from '../../../admin/shared/muted';
-import {
-  getStationTypeIcon,
-  getStationTypeLabel,
-  STATION_TYPE_OPTIONS,
-} from '../../type-options';
+import { getStationTypeIcon } from '../../station-type-icon';
+import { getStationTypeLabel, STATION_TYPE_OPTIONS } from '../../type-options';
 import {
   downloadBlob,
   importSummary,

@@ -1,1 +1,1 @@
-export { Icons } from '../../components/Icon';
+export { Icons, themedIcon } from '../../components/Icon';

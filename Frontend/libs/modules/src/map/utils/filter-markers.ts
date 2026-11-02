@@ -9,7 +9,9 @@ function markerMatchesSearch(
   marker: RescueMapMarkerItem,
   searchTerm: string,
 ): boolean {
-  if (!searchTerm) {
+  // A building stays under any search, as under any status: its tickets, the ones searched for,
+  // are not drawn beside it.
+  if (!searchTerm || marker.building) {
     return true;
   }
 

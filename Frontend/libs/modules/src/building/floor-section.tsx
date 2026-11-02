@@ -1,12 +1,14 @@
 'use client';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
-import { Box, Button, ButtonBase, Stack, Typography } from '@mui/material';
+import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useId, useMemo } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { resolveNeedClaim } from '../ticket/needs/need-claim';
@@ -332,7 +334,7 @@ export function FloorSection({
       ? sorted
       : sorted.filter((ticket) => !isClosedTicket(ticket));
   }, [showClosed, tickets]);
-  const ChevronIcon = open ? ExpandMoreRoundedIcon : ChevronRightRoundedIcon;
+  const ChevronIcon = open ? Icons.chevronDown : Icons.chevronRight;
   const bodyText = {
     fontSize: displayTextSize[13],
     lineHeight: 1.6,
@@ -468,11 +470,12 @@ export function FloorSection({
           )}
           {onRequestHelp ? (
             <Button
-              variant="text"
-              size="small"
-              startIcon={<AddRoundedIcon />}
+              variant="ghost"
+              startIcon={
+                <Icons.plus sx={{ fontSize: designTokens.iconSize.md }} />
+              }
               onClick={onRequestHelp}
-              sx={{ mt: 1, minHeight: 44 }}
+              sx={{ mt: 1 }}
             >
               在這一層請求協助
             </Button>

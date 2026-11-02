@@ -1,12 +1,9 @@
 'use client';
 
-import ApartmentRoundedIcon from '@mui/icons-material/ApartmentRounded';
-import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { Button, Stack, Typography } from '@mui/material';
 import { useMemo } from 'react';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { buildingTicketOrder } from './summary';
@@ -63,7 +60,7 @@ export function BuildingTicketNavigation({
     <Stack spacing={1} sx={{ pt: 1 }}>
       <Button
         variant="outlined"
-        startIcon={<ApartmentRoundedIcon />}
+        startIcon={<Icons.building />}
         onClick={() => onOpenBuilding(buildingUuid)}
         sx={{ minHeight: 44 }}
       >
@@ -78,7 +75,7 @@ export function BuildingTicketNavigation({
             onClick={
               previous ? () => onSelectTicket(previous.marker) : undefined
             }
-            startIcon={<ChevronLeftRoundedIcon />}
+            startIcon={<Icons.chevronLeft />}
             sx={STEP_BUTTON_SX}
           >
             上一張
@@ -97,7 +94,7 @@ export function BuildingTicketNavigation({
             variant="text"
             disabled={!next}
             onClick={next ? () => onSelectTicket(next.marker) : undefined}
-            endIcon={<ChevronRightRoundedIcon />}
+            endIcon={<Icons.chevronRight />}
             sx={STEP_BUTTON_SX}
           >
             下一張

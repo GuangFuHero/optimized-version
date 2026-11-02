@@ -1,10 +1,8 @@
 'use client';
 
-import AddLocationAltRoundedIcon from '@mui/icons-material/AddLocationAltRounded';
-import OpenWithRoundedIcon from '@mui/icons-material/OpenWithRounded';
 import { Box, ButtonBase, Typography } from '@mui/material';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { openHelpRequest, type HelpRequestSeed } from './open-help-request';
 
@@ -52,7 +50,7 @@ export function PlaceHereAction({ point, onPlaced }: PlaceHereActionProps) {
           whiteSpace: 'nowrap',
         }}
       >
-        <OpenWithRoundedIcon sx={{ fontSize: 12 }} />
+        <Icons.move sx={{ fontSize: 12 }} />
         <Typography
           component="span"
           sx={{ fontSize: displayTextSize[11], lineHeight: 1.5 }}
@@ -79,7 +77,7 @@ export function PlaceHereAction({ point, onPlaced }: PlaceHereActionProps) {
           '&:hover': { bgcolor: color.bg.primary.hover },
         }}
       >
-        <AddLocationAltRoundedIcon sx={{ fontSize: 16 }} />
+        <Icons.mapPinPlus sx={{ fontSize: 16 }} />
         在這裡新增
       </ButtonBase>
     </Box>
