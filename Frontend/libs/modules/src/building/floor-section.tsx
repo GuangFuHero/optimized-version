@@ -3,7 +3,12 @@
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useId, useMemo } from 'react';
 
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  Button,
+  designTokens,
+  displayTextSize,
+  Icons,
+} from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import { resolveNeedClaim } from '../ticket/needs/need-claim';
@@ -294,6 +299,8 @@ interface FloorSectionProps {
   /** A line under the header, for 未定位. */
   note?: string;
   onOpenTicket: (marker: RescueMapMarkerItem) => void;
+  /** 在這一層請求協助, at the foot of the open floor; left out when not given. */
+  onRequestHelp?: () => void;
 }
 
 /**
@@ -313,6 +320,7 @@ export function FloorSection({
   isAuthenticated,
   note,
   onOpenTicket,
+  onRequestHelp,
 }: FloorSectionProps) {
   const bodyId = useId();
   const summary = summarizeTickets(tickets);
@@ -460,6 +468,18 @@ export function FloorSection({
               ))}
             </Stack>
           )}
+          {onRequestHelp ? (
+            <Button
+              variant="ghost"
+              startIcon={
+                <Icons.plus sx={{ fontSize: designTokens.iconSize.md }} />
+              }
+              onClick={onRequestHelp}
+              sx={{ mt: 1 }}
+            >
+              在這一層請求協助
+            </Button>
+          ) : null}
         </Box>
       ) : null}
     </Box>

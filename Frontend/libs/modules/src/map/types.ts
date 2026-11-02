@@ -209,11 +209,13 @@ export interface RescueMapMarkerItem {
       | 'status'
       | 'priority'
       | 'taskType'
+      | 'buildingMapUuid'
       | 'contactName'
       | 'contactEmail'
       | 'contactPhone'
       | 'createdBy'
       | 'auditStatus'
+      | 'suspectedDuplicateOf'
       | 'createdAt'
       | 'updatedAt'
     >
@@ -231,6 +233,11 @@ export interface RescueMapMarkerItem {
   pin?: RescueMapPinAppearance;
   /** Shown on hover. Absent: no tooltip. */
   tooltip?: RescueMapMarkerTooltip;
+  /**
+   * An open building (開啟空間) drawn as its entry: a tap opens its floors (`Map`'s `onOpenBuilding`)
+   * and selects nothing. Absent on every ticket and station.
+   */
+  building?: { uuid: string };
 }
 
 /**

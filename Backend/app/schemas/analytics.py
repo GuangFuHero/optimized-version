@@ -28,6 +28,9 @@ class TicketYMetric(str, Enum):
     volunteers_needed = "volunteers_needed"
     volunteers_matched = "volunteers_matched"
     volunteer_gap = "volunteer_gap"
+    volunteer_gap_needs = "volunteer_gap_needs"
+    supply_needs = "supply_needs"
+    supply_needs_unclaimed = "supply_needs_unclaimed"
 
 
 class StationYMetric(str, Enum):

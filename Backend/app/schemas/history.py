@@ -67,3 +67,47 @@ class HistoryResponse(BaseModel):
     success: bool = True
     data: list[HistoryEventResponse]
     meta: HistoryMeta
+
+
+class PublicNeedResponse(BaseModel):
+    """A need in an event: its name as it is now, and how many were coming of how many asked right after."""
+
+    name: str | None = Field(description="需求現在的名稱（不是當時的，ADR-421）")
+    matched: int = Field(description="已承接人數")
+    required: int | None = Field(description="需要人數；沒填為 null")
+
+
+class PublicHistoryEventResponse(BaseModel):
+    """What happened to a ticket, and in what role, with nobody's name (ADR-421)."""
+
+    kind: str = Field(
+        description=(
+            "ticket_created / ticket_updated / ticket_merged / need_added / need_updated / need_filled / "
+            "need_stopped / need_reopened / need_removed / volunteer_joined / volunteer_left"
+        )
+    )
+    at: datetime
+    actor_role: str = Field(description="requester / volunteer / staff / system")
+    need: PublicNeedResponse | None = Field(default=None, description="這個事件的需求（需求與承接事件）")
+    needs: list[PublicNeedResponse] | None = Field(
+        default=None,
+        description=(
+            "建單時的需求（ticket_created）；重複審核合併帶進來的需求（ticket_merged）：整件搬過來的，"
+            "和收下另一張單同類需求的，人數是合併後的"
+        ),
+    )
+    changes: list[ChangeResponse] = Field(
+        default_factory=list,
+        description=(
+            "改了什麼。標題、說明、地點、聯絡方式、受困／危險、需求名稱、進度備註、需求細項只有 "
+            "changed=true；檢核不列（ADR-421）"
+        ),
+    )
+
+
+class PublicHistoryResponse(BaseModel):
+    """The standard envelope around a page of the public timeline."""
+
+    success: bool = True
+    data: list[PublicHistoryEventResponse]
+    meta: HistoryMeta

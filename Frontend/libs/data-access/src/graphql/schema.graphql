@@ -368,9 +368,14 @@ input CreateHelpRequestInput {
   description: String = null
 
   """
-  GeoJSON Point for the location where help is needed — [longitude, latitude]
+  GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted
   """
-  geometry: GeoJSON!
+  geometry: GeoJSON = null
+
+  """
+  File the request inside this building map, as createTicket does: its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it
+  """
+  buildingMapUuid: UUID = null
 
   """Who to ask for at the place"""
   contactName: String!
@@ -564,9 +569,7 @@ input CreateTicketTaskInput {
   taskName: String!
   taskDescription: String = null
 
-  """
-  People or units needed, at least 1; required except for a 'rescue' task, which may omit it
-  """
+  """People or units needed, at least 1; required, for a 'rescue' task too"""
   quantity: Int = null
 
   """Optional UUID of an associated route"""
@@ -720,9 +723,7 @@ input HelpRequestTaskInput {
   taskName: String!
   taskDescription: String = null
 
-  """
-  People or units needed, at least 1; required except for a 'rescue' need, which may omit it
-  """
+  """People or units needed, at least 1; required, for a 'rescue' need too"""
   quantity: Int = null
 
   """
@@ -1684,6 +1685,12 @@ type TicketDisasterDetailType {
   value: String!
 }
 
+"""Another ticket a disputed ticket may duplicate"""
+type TicketDuplicateRefType {
+  uuid: UUID!
+  title: String!
+}
+
 enum TicketListOrder {
   NEWEST
   NEEDS_FIRST
@@ -1867,6 +1874,11 @@ type TicketType {
   A fingerprint of the ticket's content as it now stands, to pass back to auditTicket so the verdict is refused if the ticket changes in between. Null to a caller without ticket.audit here. Read it on one ticket at a time
   """
   auditContentHash: String
+
+  """
+  Other tickets this one may repeat, to anyone (ADR-454): the tickets verificationStatus names, each once, oldest card first; empty when there are none. Not whether a verdict was given on them
+  """
+  suspectedDuplicateOf: [TicketDuplicateRefType!]!
 
   """
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here

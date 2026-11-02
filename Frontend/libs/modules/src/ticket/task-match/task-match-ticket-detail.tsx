@@ -17,6 +17,8 @@ interface TaskMatchTicketDetailOptions {
   onOpenBuilding?: (buildingUuid: string) => void;
   /** Its 上一張／下一張: open that ticket of the same building instead. */
   onSelectTicket?: (marker: RescueMapMarkerItem) => void;
+  /** Its 看那張: open a ticket it may repeat, by uuid, as a share link would. */
+  onOpenTicket?: (ticketUuid: string) => void;
 }
 
 /**
@@ -47,6 +49,7 @@ export function createTaskMatchTicketDetailOverrides({
   onShare,
   onOpenBuilding,
   onSelectTicket,
+  onOpenTicket,
 }: TaskMatchTicketDetailOptions): RescueMapTicketDetailOverrides {
   return {
     // The requester's ⋯ — 刪除整張單 — at the top, where the team put it.
@@ -64,6 +67,7 @@ export function createTaskMatchTicketDetailOverrides({
         isAuthenticated={isAuthenticated}
         onOpenBuilding={onOpenBuilding}
         onSelectTicket={onSelectTicket}
+        onOpenTicket={onOpenTicket}
       />
     ),
     // Claiming is the footer's lead: a volunteer claims a need, and `NeedClaimFooter` is the one that
