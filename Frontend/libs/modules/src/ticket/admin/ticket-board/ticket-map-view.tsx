@@ -29,12 +29,13 @@ import {
   boxFitsWhole,
   framingMove,
   framingStep,
-  outsideCount,
   selectedFocusStep,
+  shownOutsideCount,
   TICKET_MAP_FIT_PADDING,
   TICKET_MAP_HEIGHT,
   ticketMapNotice,
   type MapPoint,
+  type ShownOutside,
 } from './model/map-framing';
 import { ticketPriorityLabel } from './model/ticket-detail-view';
 import {
@@ -166,14 +167,26 @@ export function TicketMapView({
     matchingTotal: framing.totalCount,
     wentHome: framing.wentHome,
   });
-  const outside =
-    notice === 'error'
-      ? null
-      : outsideCount({
-          wentHome: framing.wentHome,
-          inViewTotal,
-          matchingTotal: framing.totalCount,
-        });
+  const settled = useSettledSince(framing.framed, viewport);
+  const [shownOutside, setShownOutside] = useState<ShownOutside>({
+    framing: 0,
+    count: null,
+  });
+  const nextOutside = shownOutsideCount(shownOutside, {
+    framing: framing.framed,
+    settled,
+    wentHome: framing.wentHome,
+    inViewTotal,
+    matchingTotal: framing.totalCount,
+  });
+  // Held from one render to the next, so the last N stays up while a pan's count loads.
+  if (
+    nextOutside.framing !== shownOutside.framing ||
+    nextOutside.count !== shownOutside.count
+  ) {
+    setShownOutside(nextOutside);
+  }
+  const outside = notice === 'error' ? null : nextOutside.count;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -273,8 +286,9 @@ export function TicketMapView({
  * on the station map, unless 顯示全部 asked; no match keeps it too; so does the first framing of a
  * map that opened where it was left, unless a link brought other filters. A box too wide to show
  * whole sends the map to the event's view, where maps open by default (`framingMove`), and
- * `wentHome` says so until the next framing. `ready` turns true once the first framing is decided
- * and the map has settled there (or the extent failed to load).
+ * `wentHome` says so until the next framing; framing waits for that view to be read, as a map
+ * opened where it was left doesn't. `ready` turns true once the first framing is decided and the
+ * map has settled there (or the extent failed to load).
  */
 function useFrameMatching(
   map: LeafletMap | null,
@@ -289,6 +303,7 @@ function useFrameMatching(
   const extent = useTicketsExtent(variables);
   const [ready, setReady] = useState(false);
   const [wentHome, setWentHome] = useState(false);
+  const [framed, setFramed] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const filtersKey = ticketFiltersKey(filters);
   const request = `${filtersKey}#${attempt}`;
@@ -297,9 +312,9 @@ function useFrameMatching(
   selectedRef.current = selectedUuid;
   const askedRef = useRef(false);
   // The event's view, not where this map opened: that may be where it was left.
-  const home = useEventMapView().view;
-  const homeRef = useRef(home);
-  homeRef.current = home;
+  const event = useEventMapView();
+  const homeRef = useRef(event.view);
+  homeRef.current = event.view;
 
   const box = extent.data?.ticketsExtent;
   const failed = extent.error != null;
@@ -307,7 +322,8 @@ function useFrameMatching(
     if (map && failed) setReady(true);
   }, [map, failed]);
   useEffect(() => {
-    if (!map || !box) return;
+    // Not before the event's view is read: a box too wide would go to all of Taiwan instead.
+    if (!map || !box || !event.ready) return;
     const step = framingStep(
       framedRef.current,
       request,
@@ -322,6 +338,7 @@ function useFrameMatching(
       boxFitsWhole(bounds, map.getSize(), map.getMinZoom()),
     );
     setWentHome(move.kind === 'home');
+    setFramed((n) => n + 1);
     // Kept, the view is final: the pins load the current view now, not on a moveend.
     if (move.kind === 'stay') {
       setReady(true);
@@ -341,13 +358,23 @@ function useFrameMatching(
         padding: FIT_PADDING,
       });
     }
-  }, [map, box, request, filtersKey, restoredRef, arrivedWithNewFilters]);
+  }, [
+    map,
+    box,
+    event.ready,
+    request,
+    filtersKey,
+    restoredRef,
+    arrivedWithNewFilters,
+  ]);
 
   return {
     /** The map may load the tickets in view. */
     ready,
     /** The last framing went to the event's view, its box too wide to show. */
     wentHome,
+    /** How many framings the map has applied: each one counts up. */
+    framed,
     /** Matching tickets anywhere, null until known. */
     totalCount: box?.count ?? null,
     failed,
@@ -391,6 +418,22 @@ function useFocusSelected(
       map.setView(latLng(step.point), Math.max(map.getZoom(), FOCUS_ZOOM));
     }
   }, [map, selectedUuid, detailLoaded, ticket]);
+}
+
+/**
+ * Whether the view has settled since framing `framed` moved the map. Until it has, the view is the
+ * one from before the move, as is the count in it: a settle waits out the debounce after moveend.
+ */
+function useSettledSince(
+  framed: number,
+  viewport: MapViewport | null,
+): boolean {
+  const [movedFrom, setMovedFrom] = useState({ framed, viewport });
+  // The render that first sees a framing still has the view from before its move.
+  if (movedFrom.framed !== framed) {
+    setMovedFrom({ framed, viewport });
+  }
+  return movedFrom.framed === framed && viewport !== movedFrom.viewport;
 }
 
 /** The area the map shows, settled after each move; null until the map is built. */
