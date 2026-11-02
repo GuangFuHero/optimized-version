@@ -6,7 +6,12 @@ import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
-import { BUILDING_ENTRY_LIMIT, buildingEntries } from './building-entry';
+import { SiteBadge } from '../shell/site/site-badge';
+import {
+  BUILDING_ENTRY_LIMIT,
+  buildingEntries,
+  buildingEntryWords,
+} from './building-entry';
 import type { BuildingMapEntry } from './use-building-maps';
 
 const { color, iconSize, radius, spacing } = designTokens;
@@ -16,6 +21,35 @@ const ellipsis = {
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
 } as const;
+
+/** A row's right side, in `buildingEntryWords`'s words. */
+function BuildingEntryCounts({ building }: { building: BuildingMapEntry }) {
+  const words = buildingEntryWords(building);
+
+  return (
+    <Stack
+      direction="row"
+      sx={{ flexShrink: 0, alignItems: 'center', gap: 0.75 }}
+    >
+      <Typography
+        sx={{
+          fontSize: displayTextSize[12],
+          fontWeight: 600,
+          lineHeight: 1,
+          whiteSpace: 'nowrap',
+          color: color.fg.neutral.subtle,
+        }}
+      >
+        {words.count}
+      </Typography>
+      {words.short ? (
+        <SiteBadge tone="danger" variant="solid">
+          {words.short}
+        </SiteBadge>
+      ) : null}
+    </Stack>
+  );
+}
 
 interface BuildingEntryListProps {
   /** Every open building (`useBuildingMaps`), read once by the page for this list and its drawer. */
@@ -29,8 +63,9 @@ interface BuildingEntryListProps {
 /**
  * 列表「任務」最上面的「這些大樓可以看各樓層」（原型 `SpaceEntryList`，SPACE-FE-103）：後台開了空間的大樓，
  * 0 張單的也在，一棟一列，點了開同一個樓層抽屜。跟著搜尋框走、不受子分類影響（大樓不是任務單），放在
- * 「沒有符合條件的資料」外面，搜尋某條街沒有單時那棟樓仍找得到。超過 3 棟先收起。件數和缺額等後端的
- * 聚合，現在一律寫「看各樓層」，訪客也一樣（SPACE-FE-104）。
+ * 「沒有符合條件的資料」外面，搜尋某條街沒有單時那棟樓仍找得到。超過 3 棟先收起。登入後每列寫件數
+ * （含已結案，ADR-450）和紅底的「缺 M」，跟地圖的大樓標記同一套；0 件寫「還沒有求助」。訪客不給數字，
+ * 一律寫「看各樓層」（SPACE-FE-104）。排序見 `building-entry.ts`。
  */
 export function BuildingEntryList({
   buildings,
@@ -139,17 +174,7 @@ export function BuildingEntryList({
               </Typography>
             ) : null}
           </Box>
-          <Typography
-            sx={{
-              flexShrink: 0,
-              fontSize: displayTextSize[12],
-              fontWeight: 600,
-              lineHeight: 1,
-              color: color.fg.neutral.subtle,
-            }}
-          >
-            看各樓層
-          </Typography>
+          <BuildingEntryCounts building={building} />
           <Box sx={{ display: 'flex', color: color.fg.neutral.muted }}>
             {/* The prototype's 16 isn't on the scale: md, as the floors' chevron is. */}
             <Icons.chevronRight sx={{ fontSize: iconSize.md }} />

@@ -14,6 +14,8 @@ const building: BuildingMapEntry = {
   address: '光復鄉大進村大進路 12 號',
   point: [23.67, 121.43],
   floors: [{ label: '2F' }, { label: '1F' }],
+  ticketCount: 7,
+  shortfall: 3,
 };
 
 function ticket(id: string, buildingMapUuid: string | null) {
@@ -38,9 +40,16 @@ describe('toBuildingMarker', () => {
       subtitle: '光復鄉大進村大進路 12 號',
       label: '大進國宅 A 棟',
       position: [23.67, 121.43],
-      building: { uuid: 'building-1' },
+      building: { uuid: 'building-1', ticketCount: 7, shortfall: 3 },
     });
     expect(marker && buildingOfMarker(marker)).toBe('building-1');
+  });
+
+  it('carries no counts for a guest, who is given none', () => {
+    expect(
+      toBuildingMarker({ ...building, ticketCount: null, shortfall: null })
+        ?.building,
+    ).toEqual({ uuid: 'building-1', ticketCount: null, shortfall: null });
   });
 
   it('never takes a ticket’s or a location cell’s id', () => {

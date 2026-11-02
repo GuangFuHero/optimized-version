@@ -48,6 +48,10 @@ query GetBuildingMaps($limit: Int! = 200) {
         fullAddress
         landmarkNote
       }
+      # Its tickets and the people they are still short (ADR-450), as its drawer adds them up; null to a
+      # guest, who is given no counts (SPACE-FE-104).
+      ticketCount
+      shortfall
     }
     pageInfo {
       totalCount

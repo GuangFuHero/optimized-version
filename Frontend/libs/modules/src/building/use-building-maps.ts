@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery } from 'urql';
 
 import { GetBuildingMapsDocument } from '@rescue-frontend/data-access';
 
 import { stationPoint } from '../station/station-point';
 import { formatTicketStreet } from '../ticket/address';
+import { onTicketCreated, onTicketReread } from '../ticket/ticket-changes';
 import type { BuildingFloor } from './floors';
 
 // The list and the map show their own loading line instead of suspending the page.
@@ -24,24 +25,46 @@ export interface BuildingMapEntry {
   /** Its point as Leaflet's `[lat, lng]`; null when it has none, and then no marker. */
   point: [number, number] | null;
   floors: readonly Pick<BuildingFloor, 'label'>[];
+  /**
+   * Its tickets, closed ones too, and the people they are still short, as its drawer adds them up
+   * (ADR-450). Null to a guest, who is given no counts (SPACE-FE-104); 0 is a building with none.
+   */
+  ticketCount: number | null;
+  shortfall: number | null;
 }
 
 /**
  * Every open building map (`GetBuildingMaps`), for the site's list and its map: one request between
  * them, as urql shares it. A guest gets them too. `totalCount` is how many there are, which is more than
  * `buildings` holds past `BUILDING_MAP_LIMIT`. Not `enabled`, nothing is read: the list of stations
- * has no use for them.
+ * has no use for them. Read again, as the drawer is, when a ticket is read again after a change
+ * (`onTicketReread`), and when one is filed (`onTicketCreated`): its building's counts move with it.
  */
 export function useBuildingMaps({
   enabled = true,
 }: { enabled?: boolean } = {}) {
-  const [{ data, fetching, error }] = useQuery({
+  const [{ data, fetching, error }, reexecute] = useQuery({
     query: GetBuildingMapsDocument,
     variables: { limit: BUILDING_MAP_LIMIT },
     pause: !enabled,
     requestPolicy: 'cache-and-network',
     context: BUILDING_MAPS_QUERY_CONTEXT,
   });
+
+  useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
+    const reread = () => reexecute({ requestPolicy: 'network-only' });
+    const stopOnReread = onTicketReread(reread);
+    const stopOnCreated = onTicketCreated(reread);
+
+    return () => {
+      stopOnReread();
+      stopOnCreated();
+    };
+  }, [enabled, reexecute]);
 
   const buildings = useMemo<BuildingMapEntry[]>(
     () =>
@@ -51,6 +74,8 @@ export function useBuildingMaps({
         address: formatTicketStreet(map.secondaryLocation),
         point: stationPoint(map.geometry),
         floors: map.floors,
+        ticketCount: map.ticketCount ?? null,
+        shortfall: map.shortfall ?? null,
       })),
     [data?.buildingMaps.items],
   );

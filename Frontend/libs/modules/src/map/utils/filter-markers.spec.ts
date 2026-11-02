@@ -26,7 +26,7 @@ const building = marker({
   title: '大進國小',
   label: '大進國小',
   variant: 'in-progress',
-  building: { uuid: 'b-1' },
+  building: { uuid: 'b-1', ticketCount: 0, shortfall: 0 },
 });
 
 describe('filterRescueMapMarkers', () => {
