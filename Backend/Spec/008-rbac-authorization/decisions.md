@@ -1316,7 +1316,7 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 > **狀態：ACCEPTED（2026-10-01）。** PR #57 review（jujuyuzu）指出 seed 已發出這兩個能力、但與 ADR-049 矛盾，使用者決定保留並補記本條。
 >
-> **2026-11-01 補充**：同一欄位的待審建議還是一次決定，按採用時，只有建議值和合併寫入的值相同的那幾筆記 `approved`，其他記新的狀態 `not_adopted`（未採用）；如果寫入的值和每一筆都不同（審核者自己打或整理過），該欄位的每一筆都記 `adopted_edited`（參考修改）。按不採用照舊全部記 `rejected`。撤銷合併時，`approved` 和 `adopted_edited` 改成 `revoked`，`not_adopted`、`rejected` 不變。審完會通知每個建議者：`approved` 收到 `station_suggestion_adopted`（已採用），`adopted_edited` 收到 `station_suggestion_adopted_edited`（已參考你的建議修改），`not_adopted` 或 `rejected` 收到 `station_suggestion_not_adopted`（未採用），對建議者來說後兩種一樣。撤銷不另外通知。
+> **補充**：同一欄位的待審建議還是一次決定，按採用時，只有建議值和合併寫入的值相同的那幾筆記 `approved`，其他記新的狀態 `not_adopted`（未採用）；如果寫入的值和每一筆都不同（審核者自己打或整理過），該欄位的每一筆都記 `adopted_edited`（參考修改）。按不採用照舊全部記 `rejected`。撤銷合併時，`approved` 和 `adopted_edited` 改成 `revoked`，`not_adopted`、`rejected` 不變。審完會通知每個建議者：`approved` 收到 `station_suggestion_adopted`（已採用），`adopted_edited` 收到 `station_suggestion_adopted_edited`（已參考你的建議修改），`not_adopted` 或 `rejected` 收到 `station_suggestion_not_adopted`（未採用），對建議者來說後兩種一樣。撤銷不另外通知。
 
 **白話**：稽核員仍然不能直接改站點，但可以決定群眾的修改建議，也可以把任何一次決定撤回。
 
