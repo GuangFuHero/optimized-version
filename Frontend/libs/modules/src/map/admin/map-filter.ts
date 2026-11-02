@@ -17,10 +17,13 @@ export const ADMIN_MAP_PRIORITIES = [
   { value: 'low', label: '低', color: color.fg.neutral.muted },
 ] as const;
 
-/** 已指派: the ticket lies in a 責任區 that has a team. 未指派: it lies in none. */
+/**
+ * 未指派: the ticket lies in no 責任區 that has a team. 已指派: it does. Picked one at a time, or
+ * neither, which the panel shows as 全部 (prototype order).
+ */
 export const ADMIN_MAP_ASSIGNMENTS = [
-  { value: 'assigned', label: '已指派' },
   { value: 'unassigned', label: '未指派' },
+  { value: 'assigned', label: '已指派' },
 ] as const;
 
 export const ADMIN_MAP_STATUSES = [

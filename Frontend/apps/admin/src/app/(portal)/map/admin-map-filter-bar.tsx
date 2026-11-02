@@ -292,6 +292,12 @@ export function AdminMapFilterBar({
           </Row>
           {canFilterByAssignment ? (
             <Row label="任務單 · 指派">
+              <Chip
+                on={filters.assignments.length === 0}
+                onClick={() => onChange({ ...filters, assignments: [] })}
+              >
+                全部
+              </Chip>
               {ADMIN_MAP_ASSIGNMENTS.map((assignment) => (
                 <Chip
                   key={assignment.value}

@@ -58,7 +58,7 @@ import {
 } from './admin-area-list-panel';
 import { designTokens } from '@rescue-frontend/ui';
 
-const { color } = designTokens;
+const { color, shadow, typography } = designTokens;
 
 // 危險區 has no status in the UI (Carol: skip it; areas can be edited and deleted directly, so no
 // open/closed state is needed). The backend still refuses a blank one, and nothing reads it, so this
@@ -66,6 +66,9 @@ const { color } = designTokens;
 const DEFAULT_HAZARD_STATUS = 'dangerous';
 
 const NO_AREAS: never[] = [];
+
+// Two clicks on one corner this close are a double-click.
+const DOUBLE_CLICK_MS = 500;
 
 // Everything but where the map looks: the view goes to its own store, so panning does not
 // re-render this page.
@@ -313,6 +316,7 @@ export function AdminMapPageClient() {
   const [formValues, setFormValues] = useState<AreaFormValues>(EMPTY_AREA_FORM);
   // The outline of an area sent for creation, kept on the map through the 5 seconds it can be undone.
   const [heldPoints, setHeldPoints] = useState<[number, number][] | null>(null);
+  const lastCornerAtRef = useRef(0);
   const drawStepRef = useRef(drawStep);
   drawStepRef.current = drawStep;
   const isDrawing = drawStep !== 'idle';
@@ -705,14 +709,24 @@ export function AdminMapPageClient() {
 
   const handleMapClick = (position: [number, number]) => {
     if (drawStep === 'drawing') {
-      // A double-click is two clicks on one spot: the second is not a corner.
-      setDrawPoints((current) => {
-        const last = current[current.length - 1];
+      const last = drawPoints[drawPoints.length - 1];
+      const now = Date.now();
 
-        return last && last[0] === position[0] && last[1] === position[1]
-          ? current
-          : [...current, position];
-      });
+      // A double-click is two clicks on one spot: the second is not a corner, and finishes the
+      // outline (as Enter does) when it can be finished.
+      if (last && last[0] === position[0] && last[1] === position[1]) {
+        if (
+          now - lastCornerAtRef.current < DOUBLE_CLICK_MS &&
+          canFinishOutline
+        ) {
+          setDrawStep('form');
+        }
+
+        return;
+      }
+
+      lastCornerAtRef.current = now;
+      setDrawPoints((current) => [...current, position]);
       return;
     }
 
@@ -790,6 +804,29 @@ export function AdminMapPageClient() {
                     disabled={isBusy}
                   />
                 </Stack>
+                {drawStep === 'drawing' ? (
+                  <Box
+                    role="note"
+                    sx={{
+                      position: 'absolute',
+                      left: '50%',
+                      bottom: 28,
+                      transform: 'translateX(-50%)',
+                      maxWidth: 'calc(100% - 24px)',
+                      px: 2,
+                      py: 1,
+                      borderRadius: '999px',
+                      bgcolor: color.fg.neutral.default,
+                      color: color.fg.inverse,
+                      boxShadow: shadow.md,
+                      ...typography.label[300],
+                      textAlign: 'center',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    點地圖加轉角 · Backspace 退回 · Enter 或雙擊完成 · Esc 取消
+                  </Box>
+                ) : null}
                 {/* Put away while drawing: what is wanted then is the counts, not the colours. */}
                 {!isBusy ? (
                   <Box
