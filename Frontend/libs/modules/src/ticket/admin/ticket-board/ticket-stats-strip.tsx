@@ -10,7 +10,10 @@ import type { TicketStatus } from './model/ticket-row';
 interface TicketStatsStripProps {
   /** Null while loading or after a failure: an unknown count shows as —, never as 0 (STAT-108). */
   stats: TicketStats | null;
-  /** The counts did not load: its own 重試, as the list may have loaded fine. */
+  /**
+   * The counts did not load: its own 重試, as the list may have loaded fine. Counts from an earlier
+   * load are no longer known either, so every tile reads — (STAT-109).
+   */
   failed: boolean;
   retrying: boolean;
   onRetry: () => void;
@@ -30,7 +33,7 @@ export function TicketStatsStrip({
   status,
   onStatusChange,
 }: TicketStatsStripProps) {
-  const { items, gap } = ticketStatTiles(stats);
+  const { items, gap } = ticketStatTiles(failed ? null : stats);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
